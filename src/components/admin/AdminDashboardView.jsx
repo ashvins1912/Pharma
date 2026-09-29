@@ -11,16 +11,18 @@ export default function AdminDashboardView() {
   const [adminTab, setAdminTab] = useState('fulfillment'); // 'fulfillment' | 'inventory' | 'routes' | 'audits'
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [ordersError, setOrdersError] = useState('');
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState([]);
 
   const loadAllOrders = async () => {
     try {
       setLoadingOrders(true);
+      setOrdersError('');
       const res = await apiClient.get('/api/orders/admin/all');
       setOrders(res.data || []);
-    } catch {
-      // ignore
+    } catch (err) {
+      setOrdersError(err.message || 'Could not load the order queue.');
     } finally {
       setLoadingOrders(false);
     }
@@ -44,7 +46,9 @@ export default function AdminDashboardView() {
   // Derived Metrics
   const processingCount = orders.filter(o => o.orderStatus === 'Processing Order').length;
   const readyCount = orders.filter(o => o.orderStatus === 'Ready to Dispatch').length;
+  const dispatchedCount = orders.filter(o => o.orderStatus === 'Dispatched').length;
   const deliveredCount = orders.filter(o => o.orderStatus === 'Delivered').length;
+  const activeCount = processingCount + readyCount + dispatchedCount;
   const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.finalTotal) || 0), 0);
 
   return (
@@ -91,11 +95,11 @@ export default function AdminDashboardView() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-slate-800">
           <div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
             <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
-              Active Orders
+              All Orders
             </span>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-black text-slate-900">{orders.length}</span>
-              <span className="text-[11px] font-bold text-amber-600">({processingCount + readyCount} pending)</span>
+              <span className="text-[11px] font-bold text-amber-600">({activeCount} ongoing)</span>
             </div>
           </div>
 
@@ -206,7 +210,33 @@ export default function AdminDashboardView() {
 
       {/* Tab Content Display */}
       {adminTab === 'fulfillment' && (
-        <AdminFulfillmentKanban orders={orders} onRefresh={loadAllOrders} />
+        <div className="space-y-3">
+          {ordersError && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+              <span>{ordersError}</span>
+              <button
+                type="button"
+                onClick={loadAllOrders}
+                disabled={loadingOrders}
+                className="shrink-0 font-bold underline disabled:opacity-50"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {loadingOrders && orders.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center text-sm text-slate-500">
+              Loading ongoing and delivered orders…
+            </div>
+          ) : (
+            <AdminFulfillmentKanban orders={orders} onRefresh={loadAllOrders} />
+          )}
+          {!loadingOrders && !ordersError && orders.length > 0 && (
+            <p className="text-center text-[11px] text-slate-500">
+              Showing all orders: {activeCount} ongoing and {deliveredCount} delivered.
+            </p>
+          )}
+        </div>
       )}
 
       {adminTab === 'inventory' && (

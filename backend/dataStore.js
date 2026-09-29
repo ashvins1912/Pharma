@@ -1,5 +1,6 @@
 // Comprehensive in-memory and MongoDB data store layer
 import { getIsConnected } from './config/db.js';
+import mongoose from 'mongoose';
 import Medicine from './models/Medicine.js';
 import Order from './models/Order.js';
 import Coupon from './models/Coupon.js';
@@ -591,13 +592,10 @@ export const dataStore = {
             throw new Error(`Order checkout rejected due to inventory validation: ${invalidItems.join('; ')}`);
         }
 
-        const shortId = `ord-${Date.now().toString().slice(-4)}`;
-        const orderObj = {
-            _id: shortId,
+        const orderDataWithStatus = {
             ...orderData,
             orderStatus: 'Processing Order',
             paymentMethod: orderData.paymentMethod || "Cash on Delivery (COD)",
-            createdAt: new Date(),
             statusHistory: [
                 {
                     previousStatus: null,
@@ -609,7 +607,10 @@ export const dataStore = {
             ]
         };
 
-        inMemoryOrders.unshift(orderObj);
+        const orderObj = getIsConnected()
+            ? (await Order.create(orderDataWithStatus)).toObject()
+            : { _id: `ord-${Date.now().toString().slice(-4)}`, ...orderDataWithStatus, createdAt: new Date() };
+        if (!getIsConnected()) inMemoryOrders.unshift(orderObj);
 
         // Deduct inventory atomically
         for (const item of (orderData.items || [])) {
@@ -620,7 +621,7 @@ export const dataStore = {
             }
         }
 
-        this.logAudit(actor, 'ORDER_CREATED', 'ORDER', shortId, {
+        this.logAudit(actor, 'ORDER_CREATED', 'ORDER', orderObj._id.toString(), {
             finalTotal: orderData.finalTotal,
             itemCount: orderData.items?.length
         });
@@ -629,16 +630,25 @@ export const dataStore = {
     },
 
     async getAllOrders() {
+        if (getIsConnected()) {
+            return Order.find().sort({ createdAt: -1 }).lean();
+        }
         return [...inMemoryOrders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     },
 
     async getUserOrders(userId) {
+        if (getIsConnected()) {
+            return Order.find({ userId }).sort({ createdAt: -1 }).lean();
+        }
         return inMemoryOrders.filter(o => o.userId === userId)
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     },
 
     async transitionOrderStatus(orderId, newStatus, actor = 'Pharmacist', riderInfo = null) {
-        const order = inMemoryOrders.find(o => o._id === orderId || o._id.toString() === orderId);
+        let order = inMemoryOrders.find(o => o._id.toString() === orderId);
+        if (!order && getIsConnected() && mongoose.isValidObjectId(orderId)) {
+            order = await Order.findById(orderId);
+        }
         if (!order) throw new Error("Order not found");
 
         const validTransitions = {
@@ -674,6 +684,7 @@ export const dataStore = {
             timestamp: new Date(),
             notes: riderInfo ? `Rider assigned: ${riderInfo.riderName} (${riderInfo.riderMobile})` : ''
         });
+        if (order.save) await order.save();
 
         this.logAudit(actor, 'ORDER_STATUS_CHANGED', 'ORDER', orderId, {
             previousStatus: prevStatus,
@@ -810,13 +821,18 @@ export const dataStore = {
             const addresses = await UserAddress.find({ userId }).sort({ isDefault: -1, createdAt: 1 }).lean();
             if (addresses.length) return addresses;
 
-            const profile = await UserProfile.findOne({ userId }).lean();
+            const profile = await UserProfile.collection.findOne({ userId });
             if (profile?.addresses?.length) {
                 const legacyAddresses = profile.addresses.map((address, index) =>
                     normalizeAddress(address, userId, { isDefault: index === 0 })
                 );
                 const migrated = await UserAddress.insertMany(legacyAddresses);
-                await UserProfile.collection.updateOne({ userId }, { $unset: { addresses: '' } });
+                try {
+                    await UserProfile.collection.updateOne({ userId }, { $unset: { addresses: '' } });
+                } catch (error) {
+                    await UserAddress.deleteMany({ userId });
+                    throw error;
+                }
                 return migrated.map(address => address.toObject());
             }
             return [];
