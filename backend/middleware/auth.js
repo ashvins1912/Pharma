@@ -1,113 +1,73 @@
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import 'dotenv/config';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { verifyDemoAdminToken } from '../config/demoAdmin.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 let SUPABASE_JWKS = null;
 
-if (SUPABASE_URL && SUPABASE_URL.startsWith("http")) {
+if (SUPABASE_URL && SUPABASE_URL.startsWith('https://')) {
     try {
         SUPABASE_JWKS = createRemoteJWKSet(
             new URL(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`)
         );
-    } catch (e) {
-        console.warn("⚠️ Failed to initialize Supabase JWKS:", e.message);
+    } catch (error) {
+        console.error('Failed to initialize Supabase JWKS:', error);
     }
 }
 
+const isDemoAuthEnabled = process.env.NODE_ENV !== 'production';
+
 export const authenticateUser = async (req, res, next) => {
     const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
 
-    let token = null;
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-        token = authHeader.substring(7).trim();
+    if (!token || token === 'undefined' || token === 'null') {
+        return res.status(401).json({ message: 'Authentication required.' });
     }
 
-    // If no token provided or literal 'undefined'/'null', assign demo customer
-    if (!token || token === "undefined" || token === "null") {
+    if (isDemoAuthEnabled && token === 'demo-customer-token') {
         req.user = {
-            sub: "demo-customer-id",
-            email: "customer@ashvinpharma.com",
-            role: "customer",
-            user_metadata: { role: "customer", name: "Ashvin Singh" }
+            sub: 'demo-customer-id',
+            email: 'customer@ashvinpharma.com',
+            app_metadata: { role: 'customer' },
+            user_metadata: { name: 'Ashvin Singh', mobile: '+91 95899 16475' }
         };
         return next();
     }
 
-    // Support demo/guest tokens for testing without external Supabase credentials
-    if (token === "demo-admin-token" || token.includes("demo-admin")) {
-        req.user = {
-            sub: "demo-admin-id",
-            email: "admin@ashvinpharma.com",
-            role: "admin",
-            user_metadata: { role: "admin", name: "Admin Pharmacist" }
-        };
+    const demoAdmin = await verifyDemoAdminToken(token);
+    if (demoAdmin) {
+        req.user = demoAdmin;
         return next();
     }
 
-    if (token === "demo-customer-token" || token.includes("demo-customer") || token.includes("demo-token")) {
-        req.user = {
-            sub: "demo-customer-id",
-            email: "customer@ashvinpharma.com",
-            role: "customer",
-            user_metadata: { role: "customer", name: "Ashvin Singh" }
-        };
-        return next();
+    if (!SUPABASE_JWKS || !SUPABASE_URL) {
+        return res.status(503).json({ message: 'Authentication service is not configured.' });
     }
 
-    // Try Supabase verification if configured
-    if (SUPABASE_JWKS && SUPABASE_URL) {
-        try {
-            const { payload } = await jwtVerify(token, SUPABASE_JWKS, {
-                issuer: `${SUPABASE_URL}/auth/v1`,
-                audience: "authenticated"
-            });
-            req.user = payload;
-            return next();
-        } catch (error) {
-            console.warn("Supabase JWT verification fallback:", error.message);
-        }
-    }
-
-    // Fallback: decode JWT payload without verification if Supabase not configured
     try {
-        const parts = token.split('.');
-        if (parts.length === 3) {
-            const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
-            if (payload && (payload.sub || payload.id)) {
-                req.user = {
-                    sub: payload.sub || payload.id,
-                    email: payload.email || "customer@ashvinpharma.com",
-                    role: payload.role || payload.user_metadata?.role || "customer",
-                    user_metadata: payload.user_metadata || { name: payload.name || "Ashvin Singh" }
-                };
-                return next();
-            }
+        const { payload } = await jwtVerify(token, SUPABASE_JWKS, {
+            issuer: `${SUPABASE_URL}/auth/v1`,
+            audience: 'authenticated'
+        });
+        if (typeof payload.sub !== 'string' || !payload.sub) {
+            return res.status(401).json({ message: 'Invalid authentication token.' });
         }
-    } catch {
-        // payload decode error ignored
+        req.user = payload;
+        return next();
+    } catch (error) {
+        console.warn('Authentication token rejected:', error.message);
+        return res.status(401).json({ message: 'Invalid or expired authentication token.' });
     }
-
-    // Resilient fallback for preview environment
-    req.user = {
-        sub: "demo-customer-id",
-        email: "customer@ashvinpharma.com",
-        role: "customer",
-        user_metadata: { role: "customer", name: "Ashvin Singh" }
-    };
-    return next();
 };
 
 export const isAdmin = (req, res, next) => {
-    const role = req.user?.role || req.user?.user_metadata?.role;
-    if (role !== "admin") {
+    if (req.user?.app_metadata?.role !== 'admin') {
         return res.status(403).json({
-            message: "Access denied. Admin authorization required."
+            message: 'Access denied. Admin authorization required.'
         });
     }
-
-    next();
+    return next();
 };
 
-export default {
-    authenticateUser,
-    isAdmin
-};
+export default { authenticateUser, isAdmin };

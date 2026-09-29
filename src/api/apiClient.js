@@ -10,14 +10,25 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(async (config) => {
     let token = null;
 
-    // 1. Check active Supabase session
+    // Keep the server-issued local demo admin token ahead of any prior Supabase session.
+    try {
+        const savedDemo = localStorage.getItem('demo_session');
+        if (savedDemo) {
+            const parsed = JSON.parse(savedDemo);
+            if (parsed?.user?.id === 'admin' && parsed?.access_token) {
+                token = parsed.access_token;
+            }
+        }
+    } catch {}
+
+    // Check active Supabase session
     try {
         const { data } = await supabase.auth.getSession();
-        if (data?.session?.access_token) {
+        if (!token && data?.session?.access_token) {
             token = data.session.access_token;
         }
     } catch {
-        // ignore Supabase error
+        // Continue with the saved demo token when Supabase is unavailable.
     }
 
     // 2. Check demo auth token in localStorage
@@ -36,12 +47,11 @@ apiClient.interceptors.request.use(async (config) => {
         } catch {}
     }
 
-    // 4. Default to customer demo token for development preview
-    if (!token) {
-        token = 'demo-customer-token';
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    } else {
+        delete config.headers.Authorization;
     }
-
-    config.headers.Authorization = `Bearer ${token}`;
     return config;
 }, (error) => Promise.reject(error));
 

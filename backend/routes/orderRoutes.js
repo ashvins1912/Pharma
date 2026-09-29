@@ -156,7 +156,7 @@ router.get('/prescriptions/:fileId', authenticateUser, async (req, res) => {
     try {
         const prescription = await getPrescription(req.params.fileId);
         if (!prescription) return res.status(404).json({ message: 'Prescription file not found.' });
-        const role = req.user?.role || req.user?.user_metadata?.role;
+        const role = req.user?.app_metadata?.role;
         if (prescription.ownerId !== req.user.sub && role !== 'admin') {
             return res.status(403).json({ message: 'You are not authorized to view this prescription.' });
         }
@@ -217,14 +217,70 @@ router.put('/:id/dispatch', authenticateUser, isAdmin, async (req, res) => {
     }
 });
 
+router.put('/:id/modify', authenticateUser, handlePrescriptionUpload, async (req, res) => {
+    let uploadedPrescriptionUrl = null;
+    let newlyUploadedPrescriptionUrl = null;
+    try {
+        if (req.user?.app_metadata?.role === 'admin') {
+            return res.status(403).json({ message: 'Customers can only modify their own orders.' });
+        }
+        const items = parseCheckoutItems(req.body.items);
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ message: 'An order must contain at least one medicine.' });
+        }
+        const previousPrescriptionUrl = req.body.previousPrescriptionUrl || null;
+        if (previousPrescriptionUrl && !previousPrescriptionUrl.startsWith('/api/orders/prescriptions/')) {
+            return res.status(400).json({ message: 'Prescription URL must refer to a private uploaded prescription.' });
+        }
+        if (previousPrescriptionUrl) {
+            const previousPrescription = await getPrescription(previousPrescriptionUrl.split('/').at(-1));
+            if (!previousPrescription || previousPrescription.ownerId !== req.user.sub) {
+                return res.status(403).json({ message: 'The uploaded prescription does not belong to this account.' });
+            }
+        }
+        if (req.file) {
+            uploadedPrescriptionUrl = await savePrescription(req.file, req.user.sub);
+            newlyUploadedPrescriptionUrl = uploadedPrescriptionUrl;
+        } else {
+            uploadedPrescriptionUrl = previousPrescriptionUrl || undefined;
+        }
+        const order = await dataStore.updateCustomerOrder(
+            req.params.id,
+            req.user.sub,
+            items,
+            uploadedPrescriptionUrl,
+            req.user.user_metadata?.name || req.user.email || 'Customer'
+        );
+        if (previousPrescriptionUrl && newlyUploadedPrescriptionUrl && previousPrescriptionUrl !== newlyUploadedPrescriptionUrl) {
+            try {
+                await removePrescription(previousPrescriptionUrl);
+            } catch (cleanupError) {
+                console.error('Replaced prescription cleanup failed:', cleanupError);
+            }
+        }
+        res.json({ message: 'Order updated and sent for pharmacist review.', order });
+    } catch (err) {
+        if (newlyUploadedPrescriptionUrl) {
+            try {
+                await removePrescription(newlyUploadedPrescriptionUrl);
+            } catch (cleanupError) {
+                console.error('Prescription cleanup failed after order update error:', cleanupError);
+            }
+        }
+        console.error('Customer order update failed:', err);
+        res.status(getErrorStatus(err)).json({ message: err.message || 'Failed to update order.' });
+    }
+});
+
 router.put('/:id/cancel', authenticateUser, async (req, res) => {
     try {
-        const role = req.user?.role || req.user?.user_metadata?.role;
-        const customerId = role === 'admin' ? null : req.user.sub;
+        if (req.user?.app_metadata?.role === 'admin') {
+            return res.status(403).json({ message: 'Customers can only cancel their own orders.' });
+        }
         const order = await dataStore.cancelOrder(
             req.params.id,
             req.user.user_metadata?.name || req.user.email || 'Customer',
-            customerId
+            req.user.sub
         );
         res.json({ message: 'Order cancelled and reserved stock released.', order });
     } catch (err) {

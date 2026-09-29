@@ -1,13 +1,93 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import apiClient from '../api/apiClient';
+import { useToast } from '../context/ToastContext';
 
 export default function OrderHistoryView({ onTrackOrder }) {
-  const { orders, loadingOrders, loadUserOrders } = useApp();
+  const { orders, medicines, loadingOrders, loadUserOrders } = useApp();
+  const { addToast } = useToast();
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [draftItems, setDraftItems] = useState([]);
+  const [prescriptionFile, setPrescriptionFile] = useState(null);
+  const [savingOrder, setSavingOrder] = useState(false);
+  const editableStatuses = ['Pending_Review', 'Approved', 'Processing Order', 'Ready to Dispatch'];
+  const editorMedicines = editingOrder
+    ? [...medicines, ...(editingOrder.medicineItems || editingOrder.items || []).map(item => ({
+      _id: String(item.medicineId?._id || item.medicineId || item._id || ''),
+      name: item.name,
+      price: item.price,
+      isPrescriptionRequired: item.isPrescriptionRequired
+    }))].filter((medicine, index, all) => medicine._id && all.findIndex(entry => entry._id === medicine._id) === index)
+    : medicines;
+
+  const startEditing = (order) => {
+    const initialItems = (order.medicineItems || []).map(item => ({
+      medicineId: String(item.medicineId?._id || item.medicineId),
+      quantity: item.quantity
+    }));
+    setEditingOrder(order);
+    setDraftItems(initialItems.length ? initialItems : [{ medicineId: '', quantity: 1 }]);
+    setPrescriptionFile(null);
+  };
+
+  const cancelOrder = async (order) => {
+    if (!window.confirm('Cancel this order? Reserved stock will be released.')) return;
+    try {
+      await apiClient.put(`/api/orders/${order._id}/cancel`);
+      addToast('Order cancelled and stock released.', 'success');
+      await loadUserOrders();
+    } catch (error) {
+      addToast(error.message || 'Could not cancel this order.', 'error');
+    }
+  };
+
+  const saveOrderChanges = async (event) => {
+    event.preventDefault();
+    if (!editingOrder || savingOrder) return;
+    if (draftItems.some(item => !item.medicineId || !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1)) {
+      addToast('Choose a medicine and enter a positive whole-number quantity for each item.', 'warning');
+      return;
+    }
+    const selectedRequiresPrescription = draftItems.some(item => {
+      const medicine = editorMedicines.find(entry => String(entry._id) === item.medicineId);
+      return Boolean(medicine?.isPrescriptionRequired ?? medicine?.requiresPrescription);
+    });
+    if (selectedRequiresPrescription && !editingOrder.prescriptionUrl && !prescriptionFile) {
+      addToast('A prescription is required for the selected medicines.', 'warning');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('items', JSON.stringify(draftItems));
+    if (editingOrder.prescriptionUrl) formData.append('previousPrescriptionUrl', editingOrder.prescriptionUrl);
+    if (prescriptionFile) formData.append('prescription', prescriptionFile);
+    setSavingOrder(true);
+    try {
+      const response = await apiClient.put(`/api/orders/${editingOrder._id}/modify`, formData);
+      addToast(response.data?.message || 'Order updated and sent for pharmacist review.', 'success');
+      setEditingOrder(null);
+      await loadUserOrders();
+    } catch (error) {
+      addToast(error.message || 'Could not update this order.', 'error');
+    } finally {
+      setSavingOrder(false);
+    }
+  };
+
+  const updateDraftItem = (index, field, value) => {
+    setDraftItems(current => current.map((item, itemIndex) => (
+      itemIndex === index ? { ...item, [field]: value } : item
+    )));
+  };
 
   const getStatusBadge = (status) => {
     switch (status) {
       case 'Delivered':
         return <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full">Delivered</span>;
+      case 'Cancelled':
+        return <span className="bg-slate-100 text-slate-600 text-[10px] font-black px-2 py-0.5 rounded-full">Cancelled</span>;
+      case 'Rejected':
+        return <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full">Rejected</span>;
       case 'Dispatched':
         return <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full">Out for Delivery</span>;
       case 'Ready to Dispatch':
@@ -75,7 +155,25 @@ export default function OrderHistoryView({ onTrackOrder }) {
                         {getStatusBadge(order.orderStatus)}
                       </td>
                       <td className="py-3.5 px-3 text-right">
-                        {order.orderStatus !== 'Delivered' && (
+                        {editableStatuses.includes(order.orderStatus) && order.medicineItems?.length > 0 && (
+                          <>
+                            <button
+                              onClick={() => startEditing(order)}
+                              className="mr-2 bg-amber-50 hover:bg-amber-100 text-amber-800 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition"
+                            >
+                              Edit
+                            </button>
+                          </>
+                        )}
+                        {editableStatuses.includes(order.orderStatus) && (
+                          <button
+                            onClick={() => cancelOrder(order)}
+                            className="mr-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                        {!['Delivered', 'Cancelled', 'Rejected'].includes(order.orderStatus) && (
                           <button
                             onClick={() => onTrackOrder(order)}
                             className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition"
@@ -116,20 +214,103 @@ export default function OrderHistoryView({ onTrackOrder }) {
                       <span className="text-[10px] text-slate-400 block font-bold">TOTAL</span>
                       <span className="font-extrabold text-emerald-600 text-sm">₹{order.finalTotal}</span>
                     </div>
-                    {order.orderStatus !== 'Delivered' && (
-                      <button
-                        onClick={() => onTrackOrder(order)}
-                        className="bg-blue-600 text-white font-extrabold text-xs px-4 py-1.5 rounded-xl cursor-pointer"
-                      >
-                        Track Order
-                      </button>
-                    )}
+                    <div className="flex gap-2">
+                      {editableStatuses.includes(order.orderStatus) && (
+                        <>
+                          {order.medicineItems?.length > 0 && (
+                            <button
+                              onClick={() => startEditing(order)}
+                              className="bg-amber-100 text-amber-800 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                          )}
+                          <button
+                            onClick={() => cancelOrder(order)}
+                            className="bg-rose-100 text-rose-700 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      )}
+                      {!['Delivered', 'Cancelled', 'Rejected'].includes(order.orderStatus) && (
+                        <button
+                          onClick={() => onTrackOrder(order)}
+                          className="bg-blue-600 text-white font-extrabold text-xs px-4 py-1.5 rounded-xl cursor-pointer"
+                        >
+                          Track
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
         </>
+      )}
+
+      {editingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" aria-labelledby="edit-order-title">
+          <form onSubmit={saveOrderChanges} className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-7 space-y-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 id="edit-order-title" className="text-lg font-black text-slate-900">Edit order</h3>
+                <p className="mt-1 text-xs text-slate-500">Changes reserve stock again and send the order back for pharmacist review.</p>
+              </div>
+              <button type="button" onClick={() => setEditingOrder(null)} className="rounded-lg px-2 py-1 text-slate-500 hover:bg-slate-100" aria-label="Close">✕</button>
+            </div>
+
+            <div className="space-y-3">
+              {draftItems.map((item, index) => (
+                <div key={`${index}-${item.medicineId}`} className="flex flex-col gap-2 sm:flex-row">
+                  <select
+                    value={item.medicineId}
+                    onChange={event => updateDraftItem(index, 'medicineId', event.target.value)}
+                    required
+                    className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  >
+                    <option value="">Select medicine</option>
+                    {medicines.map(medicine => (
+                      <option key={medicine._id} value={medicine._id}>{medicine.name} — ₹{medicine.price}</option>
+                    ))}
+                    {editorMedicines.filter(medicine => !medicines.some(entry => String(entry._id) === String(medicine._id))).map(medicine => (
+                      <option key={medicine._id} value={medicine._id}>{medicine.name} — ₹{medicine.price}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={item.quantity}
+                    onChange={event => updateDraftItem(index, 'quantity', event.target.value)}
+                    required
+                    aria-label="Quantity"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm sm:w-24"
+                  />
+                  <button type="button" onClick={() => setDraftItems(current => current.filter((_, itemIndex) => itemIndex !== index))} className="rounded-xl px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Remove</button>
+                </div>
+              ))}
+              <button type="button" onClick={() => setDraftItems(current => [...current, { medicineId: '', quantity: 1 }])} className="text-xs font-extrabold text-blue-700 hover:text-blue-900">+ Add medicine</button>
+            </div>
+
+            {(editingOrder.prescriptionRequired || draftItems.some(item => {
+              const medicine = editorMedicines.find(entry => String(entry._id) === item.medicineId);
+              return Boolean(medicine?.isPrescriptionRequired ?? medicine?.requiresPrescription);
+            })) && (
+              <label className="block rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+                Prescription required. Upload a clear image or PDF to replace the current file.
+                <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={event => setPrescriptionFile(event.target.files?.[0] || null)} className="mt-2 block w-full text-xs" />
+                {editingOrder.prescriptionUrl && !prescriptionFile && <span className="mt-1 block text-emerald-700">Current prescription will be kept.</span>}
+              </label>
+            )}
+
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+              <button type="button" onClick={() => setEditingOrder(null)} className="rounded-xl bg-slate-100 px-4 py-2 text-xs font-extrabold text-slate-700">Keep current order</button>
+              <button type="submit" disabled={savingOrder} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-extrabold text-white disabled:opacity-50">{savingOrder ? 'Saving...' : 'Save changes'}</button>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   );

@@ -10,6 +10,13 @@ import couponRoutes from './routes/couponRoutes.js';
 import whatsappRoutes from './routes/whatsappRoutes.js';
 import dataStore from './dataStore.js';
 import { authenticateUser, isAdmin } from './middleware/auth.js';
+import {
+    getDemoAdminIdentity,
+    isDemoAdminEnabled,
+    isInstantDemoAdminEnabled,
+    issueDemoAdminToken,
+    verifyDemoAdminPassword
+} from './config/demoAdmin.js';
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -23,6 +30,39 @@ app.use('/api/medicines', medicineRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/admin/whatsapp', whatsappRoutes);
+
+app.post('/api/auth/demo-admin', async (req, res) => {
+    if (!isDemoAdminEnabled()) {
+        return res.status(404).json({ message: 'Demo admin sign-in is disabled.' });
+    }
+    if (!verifyDemoAdminPassword(req.body?.email, req.body?.password)) {
+        return res.status(401).json({ message: 'Invalid demo admin email or password.' });
+    }
+    try {
+        const access_token = await issueDemoAdminToken();
+        res.json({ access_token, token_type: 'Bearer', expires_in: 3600, user: getDemoAdminIdentity() });
+    } catch (error) {
+        console.error('Demo admin token creation failed:', error);
+        res.status(503).json({ message: 'Demo admin sign-in is not configured correctly.' });
+    }
+});
+
+app.post('/api/auth/demo-admin/instant', async (req, res) => {
+    if (!isDemoAdminEnabled() || !isInstantDemoAdminEnabled()) {
+        return res.status(404).json({ message: 'Instant demo admin access is disabled.' });
+    }
+    try {
+        const access_token = await issueDemoAdminToken(true);
+        res.json({ access_token, token_type: 'Bearer', expires_in: 3600, user: getDemoAdminIdentity() });
+    } catch (error) {
+        console.error('Instant demo admin sign-in failed:', error);
+        res.status(503).json({ message: 'Instant demo admin access is not configured correctly.' });
+    }
+});
+
+app.get('/api/auth/session', authenticateUser, (req, res) => {
+    res.json(req.user);
+});
 
 // User Profile & Addresses
 app.post('/api/user/profile', authenticateUser, async (req, res) => {
@@ -103,7 +143,7 @@ app.get('/api/admin/audit-logs', authenticateUser, isAdmin, async (req, res) => 
 });
 
 // Seed data
-app.post('/api/test/seed-medicines', async (req, res) => {
+app.post('/api/test/seed-medicines', authenticateUser, isAdmin, async (req, res) => {
     try {
         await dataStore.seedMedicines();
         res.status(201).json({ message: "✅ Mock pharmacy catalog with images, stock counts, and expiry dates safely seeded!" });

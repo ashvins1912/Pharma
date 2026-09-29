@@ -7,6 +7,7 @@
     "dev": "tsx server.ts",
     "build": "vite build",
     "lint": "tsc --noEmit",
+    "admin:promote": "node scripts/promote-admin.mjs",
     "prestart": "npm run build",
     "start": "tsx server.ts"
   },

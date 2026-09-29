@@ -17,6 +17,7 @@ const medicineSchema = new mongoose.Schema({
     expiryDate: { type: Date, required: true },
     isPrescriptionRequired: { type: Boolean, default: undefined },
     requiresPrescription: { type: Boolean, default: false },
+    isActive: { type: Boolean, default: true, index: true },
     imageUrl: { type: String, default: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&q=80" },
     manufacturer: { type: String, default: "Pharma Labs" }
 }, { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });

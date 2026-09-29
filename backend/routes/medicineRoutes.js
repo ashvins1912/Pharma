@@ -6,11 +6,64 @@ import { authenticateUser, isAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 const uploadMemory = multer({ storage: multer.memoryStorage() });
+const publicMedicine = medicine => {
+    const { stockQuantity, reservedQuantity, ...visibleMedicine } = medicine;
+    const availableQuantity = medicine.availableQuantity ?? medicine.stock ?? medicine.quantity ?? 0;
+    return {
+        ...visibleMedicine,
+        availableQuantity,
+        stock: availableQuantity,
+        quantity: availableQuantity
+    };
+};
+
+const getErrorStatus = error => error.statusCode
+    || (error.name === 'ValidationError' || error.name === 'CastError' ? 400 : 500);
+
+// Full inventory and CRUD are available only to verified administrators.
+router.get('/admin/inventory', authenticateUser, isAdmin, async (req, res) => {
+    try {
+        const { search, category, sort, page, limit } = req.query;
+        res.json(await dataStore.getMedicines(search, false, category, sort, page, limit, true));
+    } catch (error) {
+        console.error('Admin inventory retrieval failed:', error);
+        res.status(500).json({ message: 'Failed to retrieve admin inventory.' });
+    }
+});
+
+router.post('/', authenticateUser, isAdmin, async (req, res) => {
+    try {
+        const medicine = await dataStore.createMedicine(req.body || {});
+        res.status(201).json(medicine);
+    } catch (error) {
+        console.error('Medicine creation failed:', error);
+        res.status(getErrorStatus(error)).json({ message: error.message || 'Failed to create medicine.' });
+    }
+});
+
+router.put('/:medicineId', authenticateUser, isAdmin, async (req, res) => {
+    try {
+        const medicine = await dataStore.updateMedicine(req.params.medicineId, req.body || {});
+        res.json(medicine);
+    } catch (error) {
+        console.error('Medicine update failed:', error);
+        res.status(getErrorStatus(error)).json({ message: error.message || 'Failed to update medicine.' });
+    }
+});
+
+router.delete('/:medicineId', authenticateUser, isAdmin, async (req, res) => {
+    try {
+        res.json(await dataStore.deleteMedicine(req.params.medicineId));
+    } catch (error) {
+        console.error('Medicine archival failed:', error);
+        res.status(getErrorStatus(error)).json({ message: error.message || 'Failed to delete medicine.' });
+    }
+});
 
 // Public catalog search, filter & pagination
 router.get('/', async (req, res) => {
     try {
-        const { search, hideRx, category, sort, page, limit, includeOutOfStock, paginate } = req.query;
+        const { search, hideRx, category, sort, page, limit, paginate } = req.query;
         const result = await dataStore.getMedicines(
             search,
             hideRx,
@@ -18,14 +71,15 @@ router.get('/', async (req, res) => {
             sort,
             page,
             limit,
-            includeOutOfStock === 'true'
+            false
         );
+        const medicines = result.medicines.map(publicMedicine);
 
         if (paginate === 'false') {
-            return res.json(result.medicines);
+            return res.json(medicines);
         }
 
-        res.json(result);
+        res.json({ ...result, medicines });
     } catch (err) {
         console.error("Error fetching medicines:", err);
         res.status(500).json({ message: "Failed to fetch medicines" });

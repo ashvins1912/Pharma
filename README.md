@@ -42,6 +42,39 @@ that return to the app origin. Make sure the deployed origin is in Supabase's
 allowed redirect URLs and configure SMTP under **Project Settings → Auth →
 SMTP Settings** for reliable production email delivery.
 
+## Local demo administrator
+
+The demo administrator is disabled by default and cannot authenticate when
+`NODE_ENV=production`. For local development only, set `DEMO_ADMIN_ENABLED=true`,
+`DEMO_ADMIN_USER_ID=admin`, `DEMO_ADMIN_EMAIL=ashvinsingh25@gmail.com`, and
+`DEMO_ADMIN_PASSWORD` in `.env`. Set `DEMO_ADMIN_JWT_SECRET` to a private random
+secret of at least 32 characters (for example, generate one with
+`openssl rand -hex 32`) and set `VITE_DEMO_ADMIN_ENABLED=true` plus
+`VITE_DEMO_ADMIN_EMAIL=ashvinsingh25@gmail.com` for the Vite frontend. Use the
+regular email/password sign-in form. The example password `admin` may be used
+for an isolated local demo only; never use it on a network-accessible or
+production deployment. The backend issues a one-hour signed token and validates
+it on every protected request; the demo account is not seeded into production
+MongoDB or accepted as a production credential.
+
+To show the login screen's **Instant Demo Access** buttons in local development,
+also set `DEMO_ADMIN_INSTANT_ACCESS_ENABLED=true` and
+`VITE_INSTANT_DEMO_ACCESS_ENABLED=true`. The latter controls whether the buttons
+are rendered; the backend flag separately guards the passwordless admin-token
+endpoint. Set both to `false` (or remove them) to disable instant access. This
+passwordless shortcut is unavailable in production.
+
+## Promoting a Supabase administrator
+
+After the intended account has signed in to this Supabase project at least once,
+set `SUPABASE_SERVICE_ROLE_KEY` in the local, git-ignored `.env` file using the
+project's server-side service-role/secret key. Never use a `VITE_` variable or
+share this key. Run `npm run admin:promote` to grant `app_metadata.role=admin`
+to `ashvinsingh25@gmail.com`, or pass another existing account email as an
+argument. The script searches Supabase Auth and updates the trusted
+`app_metadata` field without changing user metadata or passwords. Sign out and
+back in afterward so the account receives a fresh token.
+
 ## Google Maps address suggestions
 
 Set `VITE_GOOGLE_MAPS_API_KEY` in `.env` and in the Render service environment,

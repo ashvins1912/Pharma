@@ -17,6 +17,7 @@ const orderSchema = new mongoose.Schema({
     items: { type: Array, default: [] },
     prescriptionUrl: { type: String, default: null },
     prescriptionRequired: { type: Boolean, default: false },
+    couponCode: { type: String, default: null },
     subtotal: { type: Number, min: 0 },
     discountApplied: { type: Number, default: 0 },
     deliveryFee: { type: Number, default: 0 },

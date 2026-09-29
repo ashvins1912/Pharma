@@ -160,9 +160,9 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                         {/* Items list preview */}
                         <div className="bg-slate-50 p-2 rounded-xl text-[10px] text-slate-500 space-y-0.5">
                           {(order.items || []).map((i, idx) => (
-                            <div key={idx} className="flex justify-between">
-                              <span className="truncate max-w-[130px]">• {i.name}</span>
-                              <span className="font-bold text-slate-700">x{i.quantity}</span>
+                            <div key={idx} className="flex items-start justify-between gap-2">
+                              <span className="min-w-0 flex-1 whitespace-normal break-words" title={i.name || 'Medicine name unavailable'}>• {i.name}</span>
+                              <span className="shrink-0 font-bold text-slate-700">x{i.quantity}</span>
                             </div>
                           ))}
                         </div>

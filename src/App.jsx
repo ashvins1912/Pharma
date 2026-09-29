@@ -61,10 +61,11 @@ function MainApp() {
     if (!user && (activeTab === 'orders' || activeTab === 'addresses' || activeTab === 'admin')) {
       setActiveTab('store');
     }
+    if (!isAdmin && activeTab === 'admin') setActiveTab('store');
     if (!user && activeTrackingOrder) {
       setActiveTrackingOrder(null);
     }
-  }, [user, activeTab, activeTrackingOrder, setActiveTrackingOrder]);
+  }, [user, isAdmin, activeTab, activeTrackingOrder, setActiveTrackingOrder]);
 
   // Admin WhatsApp Verification Flow:
   // When an admin logs in and WhatsApp is not connected, automatically show the pairing QR popup
@@ -220,23 +221,7 @@ function MainApp() {
 
         {/* TAB 4: ADMIN OPERATIONS DASHBOARD (Guarded) */}
         {activeTab === 'admin' && (
-          isAdmin ? (
-            <AdminDashboardView />
-          ) : (
-            <div className="max-w-md mx-auto text-center py-20 space-y-4">
-              <span className="text-4xl">🔒</span>
-              <h3 className="text-lg font-black text-slate-900">Access Restricted</h3>
-              <p className="text-xs text-slate-500">
-                You must be authenticated with verified pharmacist/administrator credentials to access the operations hub.
-              </p>
-              <button
-                onClick={() => setAuthOpen(true)}
-                className="bg-purple-600 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl cursor-pointer"
-              >
-                Sign in with Admin Credentials
-              </button>
-            </div>
-          )
+          isAdmin && <AdminDashboardView />
         )}
 
         {/* POST-ORDER SUCCESS CONFIRMATION VIEW */}

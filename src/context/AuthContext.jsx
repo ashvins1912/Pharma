@@ -17,9 +17,7 @@ export function AuthProvider({ children }) {
     if (currSession?.user) {
       setUser(currSession.user);
       const userRole =
-        currSession.user.user_metadata?.role ||
         currSession.user.app_metadata?.role ||
-        currSession.user.role ||
         'customer';
       setRole(userRole === 'admin' ? 'admin' : 'customer');
       if (currSession.access_token) {
@@ -35,15 +33,39 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     // Check for saved demo session first
     const savedDemo = localStorage.getItem('demo_session');
+    let restoreAdminSession = null;
     if (savedDemo) {
       try {
         const parsed = JSON.parse(savedDemo);
-        syncSession(parsed);
-      } catch {}
+        if (import.meta.env.DEV && parsed?.access_token === 'demo-customer-token' && parsed?.user) {
+          syncSession({
+            ...parsed,
+            user: {
+              ...parsed.user,
+              app_metadata: { role: 'customer' },
+              role: 'customer'
+            }
+          });
+        } else if (import.meta.env.DEV && parsed?.user?.id === 'admin' && parsed?.access_token) {
+          localStorage.setItem('demo_auth_token', parsed.access_token);
+          restoreAdminSession = apiClient.get('/api/auth/session')
+            .then(({ data: verifiedUser }) => {
+              syncSession({ ...parsed, user: verifiedUser });
+            })
+            .catch(() => {
+              localStorage.removeItem('demo_session');
+              localStorage.removeItem('demo_auth_token');
+            });
+        } else {
+          localStorage.removeItem('demo_session');
+        }
+      } catch {
+        localStorage.removeItem('demo_session');
+      }
     }
 
     if (!isSupabaseConfigured) {
-      setLoading(false);
+      Promise.resolve(restoreAdminSession).finally(() => setLoading(false));
       return undefined;
     }
 
@@ -93,6 +115,20 @@ export function AuthProvider({ children }) {
   };
 
   const loginWithEmail = async (email, password) => {
+    const demoAdminEnabled = import.meta.env.DEV && import.meta.env.VITE_DEMO_ADMIN_ENABLED === 'true';
+    const demoAdminEmail = (import.meta.env.VITE_DEMO_ADMIN_EMAIL || 'amdin@ashvinpharmcy.com').toLowerCase();
+    if (demoAdminEnabled && email.trim().toLowerCase() === demoAdminEmail) {
+      const { data } = await apiClient.post('/api/auth/demo-admin', { email, password });
+      if (isSupabaseConfigured) {
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) throw signOutError;
+      }
+      const demoSession = { ...data, user: data.user };
+      localStorage.setItem('demo_session', JSON.stringify(demoSession));
+      syncSession(demoSession);
+      return { session: demoSession, user: data.user };
+    }
+
     if (!isSupabaseConfigured) {
       throw new Error('Email sign-in is unavailable until Supabase is configured. Use demo access to try the store.');
     }
@@ -175,22 +211,19 @@ export function AuthProvider({ children }) {
     syncSession(demo);
   };
 
-  const loginDemoAdmin = () => {
-    const demo = {
-      access_token: 'demo-admin-token',
-      user: {
-        id: 'demo-admin-id',
-        email: 'admin@ashvinpharma.com',
-        role: 'admin',
-        user_metadata: {
-          name: 'Pharmacist Admin',
-          role: 'admin',
-          mobile: '+91 98450 12345'
-        }
-      }
-    };
-    localStorage.setItem('demo_session', JSON.stringify(demo));
-    syncSession(demo);
+  const loginDemoAdmin = async () => {
+    if (!import.meta.env.DEV || import.meta.env.VITE_INSTANT_DEMO_ACCESS_ENABLED !== 'true') {
+      throw new Error('Instant demo admin access is disabled.');
+    }
+    const { data } = await apiClient.post('/api/auth/demo-admin/instant');
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    }
+    const demoSession = { ...data, user: data.user };
+    localStorage.setItem('demo_session', JSON.stringify(demoSession));
+    syncSession(demoSession);
+    return data.user;
   };
 
   const logout = async () => {
