@@ -9,6 +9,7 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [role, setRole] = useState('customer'); // 'customer' | 'admin'
   const [loading, setLoading] = useState(true);
+  const [passwordRecoveryRequired, setPasswordRecoveryRequired] = useState(false);
 
   // Synchronize role and session state
   const syncSession = (currSession) => {
@@ -54,7 +55,10 @@ export function AuthProvider({ children }) {
         }
       }).catch(() => {}).finally(() => setLoading(false));
 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, supaSession) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, supaSession) => {
+        if (event === 'PASSWORD_RECOVERY') {
+          setPasswordRecoveryRequired(true);
+        }
         if (supaSession) {
           localStorage.removeItem('demo_session');
           syncSession(supaSession);
@@ -89,24 +93,26 @@ export function AuthProvider({ children }) {
   };
 
   const loginWithEmail = async (email, password) => {
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-      if (error) throw error;
-      syncSession(data.session);
-      return data;
-    } catch (err) {
-      // In development/demo, if credentials aren't found in real Supabase, provide fallback
-      if (email.includes('admin')) {
-        loginDemoAdmin();
-        return { user: { email, role: 'admin' } };
-      } else {
-        loginDemoCustomer(email);
-        return { user: { email, role: 'customer' } };
-      }
+    if (!isSupabaseConfigured) {
+      throw new Error('Email sign-in is unavailable until Supabase is configured. Use demo access to try the store.');
     }
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      if (error.code === 'email_not_confirmed' || error.message.toLowerCase().includes('email not confirmed')) {
+        throw new Error('Please verify your email using the confirmation link we sent before signing in.');
+      }
+      if (error.code === 'invalid_credentials' || error.message.toLowerCase().includes('invalid login credentials')) {
+        throw new Error('Invalid email or password. Please check your credentials and try again.');
+      }
+      throw error;
+    }
+    if (!data.session || !data.user?.email_confirmed_at) {
+      await supabase.auth.signOut();
+      throw new Error('Please verify your email using the confirmation link we sent before signing in.');
+    }
+    syncSession(data.session);
+    return data;
   };
 
   const signUpWithEmail = async (email, password, name = '', mobile = '') => {
@@ -122,8 +128,33 @@ export function AuthProvider({ children }) {
       }
     });
     if (error) throw error;
-    if (data.session) syncSession(data.session);
+    if (data.user && data.user.identities?.length === 0) {
+      throw new Error('An account with this email already exists. Try signing in or resetting your password.');
+    }
+    if (data.session && !data.user?.email_confirmed_at) {
+      await supabase.auth.signOut();
+      throw new Error('Email verification is not enabled for this project. Enable Confirm email in Supabase before creating accounts.');
+    }
+    if (data.session) {
+      syncSession(data.session);
+    }
     return data;
+  };
+
+  const sendPasswordResetEmail = async (email) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Password reset is unavailable until Supabase is configured.');
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin
+    });
+    if (error) throw error;
+  };
+
+  const updatePassword = async (password) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+    setPasswordRecoveryRequired(false);
   };
 
   const loginDemoCustomer = (email = 'customer@ashvinpharma.com', name = 'Ashvin Singh') => {
@@ -179,9 +210,12 @@ export function AuthProvider({ children }) {
         role,
         isAdmin: role === 'admin',
         loading,
+        passwordRecoveryRequired,
         loginWithGoogle,
         loginWithEmail,
         signUpWithEmail,
+        sendPasswordResetEmail,
+        updatePassword,
         loginDemoCustomer,
         loginDemoAdmin,
         logout

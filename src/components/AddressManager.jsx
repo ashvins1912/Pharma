@@ -1,6 +1,39 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
+
+const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+let googlePlacesScriptPromise;
+
+function loadGooglePlaces() {
+  if (window.google?.maps?.places?.PlaceAutocompleteElement || window.google?.maps?.places?.Autocomplete) {
+    return Promise.resolve(window.google.maps.places);
+  }
+  if (googlePlacesScriptPromise) return googlePlacesScriptPromise;
+
+  googlePlacesScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.id = 'google-maps-places-script';
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(googleMapsApiKey)}&libraries=places&v=weekly`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      if (window.google?.maps?.places?.PlaceAutocompleteElement || window.google?.maps?.places?.Autocomplete) {
+        resolve(window.google.maps.places);
+      } else {
+        googlePlacesScriptPromise = null;
+        reject(new Error('Google Places library did not load.'));
+      }
+    };
+    script.onerror = () => {
+      googlePlacesScriptPromise = null;
+      reject(new Error('Google Maps could not be loaded.'));
+    };
+    document.head.appendChild(script);
+  });
+
+  return googlePlacesScriptPromise;
+}
 
 export default function AddressManager({ isSelectOnly = false, onAddressSelected }) {
   const { addresses, selectedAddressId, setSelectedAddressId, saveAddress } = useApp();
@@ -9,6 +42,10 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
   const [showAddForm, setShowAddForm] = useState(false);
   const [gpsStatus, setGpsStatus] = useState('');
   const [locating, setLocating] = useState(false);
+  const [placesStatus, setPlacesStatus] = useState('');
+  const [modernPlacesEnabled, setModernPlacesEnabled] = useState(false);
+  const addressInputRef = useRef(null);
+  const placesWidgetRef = useRef(null);
 
   // Form Fields
   const [label, setLabel] = useState('Home');
@@ -22,6 +59,114 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
   const [landmark, setLandmark] = useState('');
   const [coords, setCoords] = useState({ lat: 12.9716, lng: 77.5946 });
   const [isDefault, setIsDefault] = useState(false);
+
+  useEffect(() => {
+    if (!showAddForm) return undefined;
+    if (!googleMapsApiKey) {
+      setPlacesStatus('Address suggestions are not configured. You can still enter your address manually.');
+      return undefined;
+    }
+
+    let cancelled = false;
+    let autocompleteListener;
+    let placeAutocomplete;
+    let placeSelectedListener;
+    const applyPlace = (place) => {
+      const components = place.addressComponents || place.address_components || [];
+      const getComponent = (type, format = 'long') => {
+        const component = components.find((item) => item.types.includes(type));
+        return component?.[format === 'short' ? 'shortText' : 'longText'] ||
+          component?.[format === 'short' ? 'short_name' : 'long_name'] || '';
+      };
+      const street = [
+        getComponent('subpremise'),
+        getComponent('street_number'),
+        getComponent('route')
+      ].filter(Boolean).join(' ');
+
+      setAddressLine1(
+        street || place.displayName || place.name || place.formattedAddress || place.formatted_address || ''
+      );
+      setAddressLine2(
+        getComponent('sublocality_level_1') ||
+        getComponent('sublocality') ||
+        getComponent('neighborhood')
+      );
+      setCity(
+        getComponent('locality') ||
+        getComponent('postal_town') ||
+        getComponent('administrative_area_level_2') ||
+        city
+      );
+      setState(getComponent('administrative_area_level_1') || state);
+      setPincode(getComponent('postal_code') || pincode);
+
+      const location = place.location || place.geometry?.location;
+      if (location) {
+        setCoords({ lat: location.lat(), lng: location.lng() });
+      }
+      setPlacesStatus('✅ Address selected from Google Maps suggestions.');
+    };
+
+    loadGooglePlaces()
+      .then((places) => {
+        if (cancelled) return;
+
+        if (places.PlaceAutocompleteElement && placesWidgetRef.current) {
+          placeAutocomplete = new places.PlaceAutocompleteElement({
+            includedRegionCodes: ['in']
+          });
+          placeAutocomplete.style.display = 'block';
+          placeAutocomplete.style.width = '100%';
+          placeAutocomplete.placeholder = 'Search for your delivery address';
+          placeSelectedListener = async (event) => {
+            try {
+              const place = event.placePrediction.toPlace();
+              await place.fetchFields({
+                fields: ['addressComponents', 'displayName', 'formattedAddress', 'location']
+              });
+              applyPlace(place);
+            } catch {
+              setPlacesStatus('Could not load that address. Please choose another suggestion or enter it manually.');
+            }
+          };
+          placeAutocomplete.addEventListener('gmp-select', placeSelectedListener);
+          placesWidgetRef.current.replaceChildren(placeAutocomplete);
+          setModernPlacesEnabled(true);
+          setPlacesStatus('Type an address and choose a Google Maps suggestion to autofill the details.');
+          return;
+        }
+
+        if (!places.Autocomplete || !addressInputRef.current) {
+          throw new Error('Google Places autocomplete is unavailable.');
+        }
+
+        const autocomplete = new places.Autocomplete(addressInputRef.current, {
+          componentRestrictions: { country: 'in' },
+          fields: ['address_components', 'formatted_address', 'geometry', 'name']
+        });
+        autocompleteListener = autocomplete.addListener('place_changed', () => {
+          applyPlace(autocomplete.getPlace());
+          setPlacesStatus('✅ Address selected from Google Maps suggestions.');
+        });
+        setPlacesStatus('Type an address and choose a Google Maps suggestion to autofill the details.');
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setModernPlacesEnabled(false);
+          setPlacesStatus('Address suggestions could not be loaded. You can enter your address manually.');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      autocompleteListener?.remove();
+      if (placeAutocomplete && placeSelectedListener) {
+        placeAutocomplete.removeEventListener('gmp-select', placeSelectedListener);
+        placeAutocomplete.remove();
+      }
+    };
+  }, [showAddForm]);
 
   const getLabelIcon = (lbl) => {
     switch (lbl) {
@@ -71,7 +216,10 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!addressLine1.trim()) return;
+    if (!addressLine1.trim()) {
+      setPlacesStatus('Choose a suggested location or enter your street address before saving.');
+      return;
+    }
 
     const fullLine = `${addressLine1} ${addressLine2 ? `, ${addressLine2}` : ''}, ${city}, ${state} - ${pincode}`;
     const newAddress = {
@@ -284,15 +432,23 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
               <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                 Flat / House No. / Building / Street
               </label>
-              <input
-                type="text"
-                placeholder="e.g. Flat 402, Greenfield Heights, Richmond Road"
-                value={addressLine1}
-                onChange={(e) => setAddressLine1(e.target.value)}
-                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500"
-                required
-              />
+              <div ref={placesWidgetRef}>
+                <input
+                  ref={addressInputRef}
+                  type="text"
+                  placeholder="e.g. Flat 402, Greenfield Heights, Richmond Road"
+                  value={addressLine1}
+                  onChange={(e) => setAddressLine1(e.target.value)}
+                  className={`w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 ${modernPlacesEnabled ? 'hidden' : ''}`}
+                  required={!modernPlacesEnabled}
+                />
+              </div>
             </div>
+            {placesStatus && (
+              <p className={`text-[11px] font-medium ${placesStatus.includes('✅') ? 'text-emerald-700' : 'text-slate-500'}`}>
+                {placesStatus}
+              </p>
+            )}
             <div>
               <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                 Area / Colony / Sector

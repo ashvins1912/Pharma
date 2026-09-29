@@ -34,3 +34,20 @@ configure its OAuth client credentials. Add
 redirect URI in Google Cloud. In **Authentication → URL Configuration**, set
 the site URL to the deployed app origin and add both the deployed origin and
 `http://localhost:3000` to the redirect URL allow list.
+
+For email/password accounts, enable **Confirm email** under **Authentication →
+Providers → Email** in Supabase. The app sends the Supabase confirmation link
+during sign-up, rejects unverified sign-ins, and supports password reset links
+that return to the app origin. Make sure the deployed origin is in Supabase's
+allowed redirect URLs and configure SMTP under **Project Settings → Auth →
+SMTP Settings** for reliable production email delivery.
+
+## Google Maps address suggestions
+
+Set `VITE_GOOGLE_MAPS_API_KEY` in `.env` and in the Render service environment,
+then rebuild/redeploy. Enable billing and the **Maps JavaScript API** and
+**Places API** for that key in Google Cloud. Restrict the key to your deployed
+website and local development origins using HTTP referrer restrictions, and
+restrict its API access to those Maps APIs. Address suggestions autofill the
+street, area, city, state, postal code, and map coordinates; manual entry
+remains available if the key or service is unavailable.

@@ -19,7 +19,7 @@ import AdminDashboardView from './components/admin/AdminDashboardView';
 import WhatsAppConnectModal from './components/admin/WhatsAppConnectModal';
 
 function MainApp() {
-  const { user, isAdmin, role } = useAuth();
+  const { user, isAdmin, role, passwordRecoveryRequired } = useAuth();
   const {
     cart,
     activeTrackingOrder,
@@ -82,6 +82,10 @@ function MainApp() {
       adminCheckedRef.current = false;
     }
   }, [isAdmin, loadWhatsAppStatus, setWhatsappModalOpen]);
+
+  React.useEffect(() => {
+    if (passwordRecoveryRequired) setAuthOpen(true);
+  }, [passwordRecoveryRequired]);
 
   const displayName = user?.user_metadata?.name || user?.email?.split('@')[0] || "Friend";
 
