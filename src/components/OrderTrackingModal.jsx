@@ -8,7 +8,7 @@ const STAGES = [
 ];
 
 export default function OrderTrackingModal({ order, onClose }) {
-  if (!order) return null;
+  if (!order || order.orderStatus === 'Delivered') return null;
 
   const orderId = (order._id || '').slice(-6).toUpperCase();
   const currentStatus = order.orderStatus || 'Processing Order';

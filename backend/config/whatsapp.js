@@ -3,9 +3,10 @@
 import path from 'node:path';
 import { rm } from 'node:fs/promises';
 import QRCode from 'qrcode';
-import makeWASocket, {
+import {
     DisconnectReason,
     fetchLatestBaileysVersion,
+    makeWASocket,
     useMultiFileAuthState
 } from '@whiskeysockets/baileys';
 

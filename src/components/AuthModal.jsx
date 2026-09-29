@@ -9,6 +9,9 @@ export default function AuthModal({ isOpen, onClose }) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,8 +26,18 @@ export default function AuthModal({ isOpen, onClose }) {
 
     try {
       if (isSignUp) {
-        await signUpWithEmail(email, password, name, mobile);
-        addToast('Account created successfully!', 'success');
+        if (password !== confirmPassword) {
+          setErrorMsg('Passwords do not match.');
+          setLoading(false);
+          return;
+        }
+        const result = await signUpWithEmail(email, password, name, mobile);
+        addToast(
+          result.session
+            ? 'Account created successfully!'
+            : 'Account created. Check your email to confirm your account.',
+          'success'
+        );
       } else {
         await loginWithEmail(email, password);
         addToast('Signed in successfully!', 'success');
@@ -146,15 +159,53 @@ export default function AuthModal({ isOpen, onClose }) {
                 </button>
               )}
             </div>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
-              required
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3.5 py-2.5 pr-16 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((visible) => !visible)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute inset-y-0 right-3 text-[11px] font-bold text-blue-600 hover:text-blue-800"
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
           </div>
+
+          {isSignUp && (
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Retype Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Retype your password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-3.5 py-2.5 pr-16 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                  autoComplete="new-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((visible) => !visible)}
+                  aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'}
+                  className="absolute inset-y-0 right-3 text-[11px] font-bold text-blue-600 hover:text-blue-800"
+                >
+                  {showConfirmPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </div>
+          )}
 
           <button
             type="submit"

@@ -75,12 +75,14 @@ export default function OrderHistoryView({ onTrackOrder }) {
                         {getStatusBadge(order.orderStatus)}
                       </td>
                       <td className="py-3.5 px-3 text-right">
-                        <button
-                          onClick={() => onTrackOrder(order)}
-                          className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition"
-                        >
-                          Track
-                        </button>
+                        {order.orderStatus !== 'Delivered' && (
+                          <button
+                            onClick={() => onTrackOrder(order)}
+                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition"
+                          >
+                            Track
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -114,12 +116,14 @@ export default function OrderHistoryView({ onTrackOrder }) {
                       <span className="text-[10px] text-slate-400 block font-bold">TOTAL</span>
                       <span className="font-extrabold text-emerald-600 text-sm">₹{order.finalTotal}</span>
                     </div>
-                    <button
-                      onClick={() => onTrackOrder(order)}
-                      className="bg-blue-600 text-white font-extrabold text-xs px-4 py-1.5 rounded-xl cursor-pointer"
-                    >
-                      Track Order
-                    </button>
+                    {order.orderStatus !== 'Delivered' && (
+                      <button
+                        onClick={() => onTrackOrder(order)}
+                        className="bg-blue-600 text-white font-extrabold text-xs px-4 py-1.5 rounded-xl cursor-pointer"
+                      >
+                        Track Order
+                      </button>
+                    )}
                   </div>
                 </div>
               );

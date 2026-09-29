@@ -609,7 +609,7 @@ export const dataStore = {
     },
 
     async getUserOrders(userId) {
-        return inMemoryOrders.filter(o => o.userId === userId || o.userId === "demo-customer-id")
+        return inMemoryOrders.filter(o => o.userId === userId)
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     },
 

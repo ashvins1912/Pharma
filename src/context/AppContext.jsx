@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../api/apiClient';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
@@ -38,6 +38,7 @@ export function AppProvider({ children }) {
   const [orders, setOrders] = useState([]);
   const [activeTrackingOrder, setActiveTrackingOrder] = useState(null);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const orderLoadSequence = useRef(0);
 
   // Customer Notifications State
   const [notifications, setNotifications] = useState([
@@ -220,23 +221,37 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (user) {
       loadAddresses();
-      loadUserOrders();
     }
   }, [user, loadAddresses]);
 
   // Fetch Orders
-  const loadUserOrders = async () => {
-    if (!user) return;
+  const loadUserOrders = useCallback(async () => {
+    const requestSequence = ++orderLoadSequence.current;
+    if (!user?.id) {
+      setOrders([]);
+      setLoadingOrders(false);
+      return;
+    }
+
+    setOrders([]);
     try {
       setLoadingOrders(true);
       const res = await apiClient.get('/api/orders/history');
-      setOrders(res.data || []);
+      if (requestSequence === orderLoadSequence.current) {
+        setOrders(res.data || []);
+      }
     } catch {
       // ignore
     } finally {
-      setLoadingOrders(false);
+      if (requestSequence === orderLoadSequence.current) {
+        setLoadingOrders(false);
+      }
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => {
+    loadUserOrders();
+  }, [loadUserOrders]);
 
   // Fetch Admin Inventory Alerts
   const loadInventoryAlerts = useCallback(async () => {

@@ -110,22 +110,20 @@ export function AuthProvider({ children }) {
   };
 
   const signUpWithEmail = async (email, password, name = '', mobile = '') => {
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { name, mobile, role: 'customer' }
-        }
-      });
-      if (error) throw error;
-      if (data.session) syncSession(data.session);
-      return data;
-    } catch (err) {
-      // Fallback in demo mode
-      loginDemoCustomer(email, name);
-      return { user: { email, role: 'customer' } };
+    if (!isSupabaseConfigured) {
+      throw new Error('Account creation is unavailable until Supabase is configured. Use demo access to try the store.');
     }
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name, mobile, role: 'customer' }
+      }
+    });
+    if (error) throw error;
+    if (data.session) syncSession(data.session);
+    return data;
   };
 
   const loginDemoCustomer = (email = 'customer@ashvinpharma.com', name = 'Ashvin Singh') => {

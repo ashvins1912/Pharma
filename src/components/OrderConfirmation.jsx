@@ -50,12 +50,14 @@ export default function OrderConfirmation({ order, onTrackOrder, onContinueShopp
 
       {/* Action Buttons */}
       <div className="space-y-2.5 pt-2">
-        <button
-          onClick={onTrackOrder}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3 rounded-2xl text-xs shadow-md shadow-blue-600/25 transition cursor-pointer"
-        >
-          📦 Track Order Status
-        </button>
+        {order?.orderStatus !== 'Delivered' && (
+          <button
+            onClick={onTrackOrder}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3 rounded-2xl text-xs shadow-md shadow-blue-600/25 transition cursor-pointer"
+          >
+            📦 Track Order Status
+          </button>
+        )}
         <button
           onClick={onContinueShopping}
           className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-2xl text-xs transition cursor-pointer"
