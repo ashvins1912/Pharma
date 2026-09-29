@@ -34,8 +34,13 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
 
   const handleUseCurrentLocation = () => {
     setGpsStatus('');
+    if (!window.isSecureContext && window.location.hostname !== 'localhost') {
+      setGpsStatus('Location requires a secure HTTPS connection. Enter your address manually or open this site over HTTPS.');
+      return;
+    }
+
     if (!navigator.geolocation) {
-      setGpsStatus('Location permission was unavailable. You can enter your address manually.');
+      setGpsStatus('Location is not supported by this browser. You can enter your address manually.');
       return;
     }
 
@@ -44,18 +49,23 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
       (position) => {
         const { latitude, longitude } = position.coords;
         setCoords({ lat: latitude, lng: longitude });
-        setAddressLine1(`Location Coordinates: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
-        setLandmark('GPS Mapped Location');
-        setGpsStatus('✅ Location detected successfully via device GPS.');
+        setGpsStatus(`✅ Location pinned (${latitude.toFixed(4)}, ${longitude.toFixed(4)}). Enter your street address below.`);
         setLocating(false);
         addToast('Location pinned from device GPS!', 'success');
       },
       (error) => {
         setLocating(false);
-        setGpsStatus('Location permission was unavailable. You can enter your address manually.');
-        setCoords({ lat: 12.9716, lng: 77.5946 });
+        if (error.code === error.PERMISSION_DENIED) {
+          setGpsStatus('Location access is blocked. Allow location access for this site in your browser settings, then try again.');
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          setGpsStatus('Your device could not determine your location. Turn on location services or enter your address manually.');
+        } else if (error.code === error.TIMEOUT) {
+          setGpsStatus('Location request timed out. Check your device location services and try again, or enter your address manually.');
+        } else {
+          setGpsStatus('Could not detect your location. Check browser permissions and device location services, or enter your address manually.');
+        }
       },
-      { timeout: 7000, enableHighAccuracy: true }
+      { timeout: 15000, enableHighAccuracy: false, maximumAge: 60_000 }
     );
   };
 
