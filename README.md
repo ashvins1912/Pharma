@@ -17,3 +17,20 @@ MongoDB connection string. For MongoDB Atlas, allow the Render service's
 outbound IP addresses in the Atlas network access list. Without a reachable
 MongoDB database, the app logs a warning and uses in-memory data, which is not
 persistent.
+
+## Google sign-in
+
+Google sign-in requires a Supabase project; demo access works without one. Set
+`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the local `.env` file and
+in the Render service's **Environment** settings, then redeploy. For a new
+service created from `render.yaml`, Render prompts for these `sync: false`
+values. For an existing Render service, add both variables manually. These
+`VITE_` values are embedded into the frontend during the build, so changing
+them requires a redeploy.
+
+In Supabase, enable Google under **Authentication → Providers → Google** and
+configure its OAuth client credentials. Add
+`https://<your-project-ref>.supabase.co/auth/v1/callback` as an authorized
+redirect URI in Google Cloud. In **Authentication → URL Configuration**, set
+the site URL to the deployed app origin and add both the deployed origin and
+`http://localhost:3000` to the redirect URL allow list.

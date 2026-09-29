@@ -13,6 +13,7 @@ const router = express.Router();
 // Get current WhatsApp connection status
 router.get('/status', authenticateUser, isAdmin, async (req, res) => {
     try {
+        res.set('Cache-Control', 'no-store');
         res.json(await ensureWhatsAppSession());
     } catch (err) {
         console.error("WhatsApp status check error:", err);
@@ -20,9 +21,10 @@ router.get('/status', authenticateUser, isAdmin, async (req, res) => {
     }
 });
 
-// Generate / Refresh QR code or add another device (supports custom phone number or device name)
+// Generate a fresh WhatsApp Web pairing QR code
 router.post('/generate-qr', authenticateUser, isAdmin, async (req, res) => {
     try {
+        res.set('Cache-Control', 'no-store');
         const status = await generateWhatsAppQR();
         dataStore.logAudit(req.user?.sub || 'Admin', 'WHATSAPP_QR_GENERATED', 'SYSTEM', 'WHATSAPP_GATEWAY', {
             deviceName: 'WhatsApp Linked Device'

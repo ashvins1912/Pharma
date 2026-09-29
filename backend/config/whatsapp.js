@@ -5,6 +5,7 @@ import { rm } from 'node:fs/promises';
 import QRCode from 'qrcode';
 import makeWASocket, {
     DisconnectReason,
+    fetchLatestBaileysVersion,
     useMultiFileAuthState
 } from '@whiskeysockets/baileys';
 
@@ -60,16 +61,20 @@ const startWhatsAppSession = async (forceRefresh = false) => {
         const { state, saveCreds } = await useMultiFileAuthState(authDirectory);
         if (generation !== sessionGeneration) return getWhatsAppStatus();
 
+        const { version } = await fetchLatestBaileysVersion({ timeout: 5000 });
+        if (generation !== sessionGeneration) return getWhatsAppStatus();
+
         const client = makeWASocket({
             auth: state,
-            printQRInTerminal: false,
-            browser: ['Ashvin Pharmacy', 'Chrome', '1.0.0']
+            version,
+            printQRInTerminal: false
         });
         socket = client;
         client.ev.on('creds.update', saveCreds);
 
         return new Promise((resolve, reject) => {
             let settled = false;
+            let qrUpdateSequence = 0;
             const timeout = setTimeout(() => {
                 if (generation !== sessionGeneration) return;
                 client.end(new Error('Timed out waiting for WhatsApp QR code'));
@@ -87,13 +92,14 @@ const startWhatsAppSession = async (forceRefresh = false) => {
                 if (generation !== sessionGeneration) return;
 
                 if (qr) {
+                    const currentQrUpdate = ++qrUpdateSequence;
                     try {
                         const qrCode = await QRCode.toDataURL(qr, {
                             errorCorrectionLevel: 'M',
                             margin: 2,
                             width: 280
                         });
-                        if (generation !== sessionGeneration) return;
+                        if (generation !== sessionGeneration || currentQrUpdate !== qrUpdateSequence) return;
                         whatsappState = {
                             ...whatsappState,
                             isConnected: false,
