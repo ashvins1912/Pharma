@@ -56,3 +56,7 @@ coverage/
 # Operating System specific files
 .DS_Store
 Thumbs.db
+/backend/.idea/
+/backend/.wwebjs_auth/
+/backend/.wwebjs_cache/
+/backend/node_modules/
