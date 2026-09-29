@@ -187,7 +187,13 @@ export const disconnectWhatsApp = async () => {
     return getWhatsAppStatus();
 };
 
-const normalizeWhatsAppNumber = (phone) => String(phone || '').replace(/\D/g, '');
+const normalizeWhatsAppNumber = (phone) => {
+    let digits = String(phone || '').replace(/\D/g, '');
+    if (digits.startsWith('00')) digits = digits.slice(2);
+    if (digits.startsWith('0')) digits = digits.slice(1);
+    if (digits.length === 10) digits = `91${digits}`;
+    return digits;
+};
 
 const getCompleteAddress = (order) => {
     const details = order.addressDetails || {};
@@ -205,11 +211,16 @@ const getCompleteAddress = (order) => {
     return order.deliveryAddress || locality.join(', ') || 'Address not provided';
 };
 
-const buildMessageBody = (order, status, recipientPhone) => {
+const getOrderItems = (order) => (order.items || [])
+    .map(item => `• ${item.name || 'Item'} x${item.quantity || 1}`)
+    .join('\n');
+
+const buildMessageBody = (order, status, recipientPhone, audience) => {
     const orderId = order?._id?.toString() || 'UNKNOWN';
     const shortId = orderId.slice(-6).toUpperCase();
+    const items = getOrderItems(order);
 
-    if (status === 'Dispatched') {
+    if (audience === 'rider' && status === 'Dispatched') {
         const coordinates = order.coordinates || {};
         const hasCoordinates = Number.isFinite(Number(coordinates.lat))
             && Number.isFinite(Number(coordinates.lng))
@@ -217,19 +228,27 @@ const buildMessageBody = (order, status, recipientPhone) => {
         const mapsLink = hasCoordinates
             ? `https://www.google.com/maps/search/?api=1&query=${coordinates.lat},${coordinates.lng}`
             : null;
-        const items = (order.items || []).map(item => `• ${item.name || 'Item'} x${item.quantity || 1}`).join('\n');
-        const outForDeliveryAt = order.outForDeliveryAt
-            ? new Date(order.outForDeliveryAt).toLocaleString()
-            : new Date().toLocaleString();
         return [
-            `🚚 ORDER OUT FOR DELIVERY — #${shortId}`,
+            `🚚 NEW DELIVERY ASSIGNED — Order #${shortId}`,
             `Rider: ${order.rider?.riderName || 'Assigned Rider'}`,
-            `Rider contact: ${recipientPhone || 'Not provided'}`,
             `Customer: ${order.addressDetails?.fullName || order.customerName || 'Customer'}`,
             `Customer contact: ${order.customerMobile || order.addressDetails?.mobile || 'Not provided'}`,
             `Complete delivery address: ${getCompleteAddress(order)}`,
             mapsLink && `Google Maps: ${mapsLink}`,
-            `Out for delivery at: ${outForDeliveryAt}`,
+            `Out for delivery at: ${order.outForDeliveryAt ? new Date(order.outForDeliveryAt).toLocaleString() : new Date().toLocaleString()}`,
+            `COD amount: ₹${order.finalTotal}`,
+            items && `Order items:\n${items}`
+        ].filter(Boolean).join('\n');
+    }
+
+    if (status === 'Dispatched') {
+        return [
+            `🚚 YOUR ORDER IS OUT FOR DELIVERY — #${shortId}`,
+            `Status: Out for Delivery`,
+            `Rider: ${order.rider?.riderName || 'Assigned Rider'}`,
+            `Rider contact: ${recipientPhone || 'Not provided'}`,
+            `Delivery address: ${getCompleteAddress(order)}`,
+            `Out for delivery at: ${order.outForDeliveryAt ? new Date(order.outForDeliveryAt).toLocaleString() : new Date().toLocaleString()}`,
             `COD amount: ₹${order.finalTotal}`,
             items && `Order items:\n${items}`
         ].filter(Boolean).join('\n');
@@ -237,11 +256,26 @@ const buildMessageBody = (order, status, recipientPhone) => {
 
     switch (status) {
         case 'Placed':
-            return `🎉 ORDER PLACED SUCCESSFULLY!\nOrder #${shortId}\nTotal: ₹${order.finalTotal}\nStatus: Processing COD Delivery`;
+            return [
+                `🎉 ORDER PLACED SUCCESSFULLY — #${shortId}`,
+                `Status: ${order.orderStatus || 'Processing Order'}`,
+                `Customer: ${order.addressDetails?.fullName || order.customerName || 'Customer'}`,
+                `Delivery address: ${getCompleteAddress(order)}`,
+                `Total: ₹${order.finalTotal} (${order.paymentMethod || 'Cash on Delivery'})`,
+                items && `Order items:\n${items}`,
+                'We will send you updates as your order progresses.'
+            ].filter(Boolean).join('\n');
         case 'Ready to Dispatch':
-            return `🔬 ORDER VERIFIED & SECURED\nOrder #${shortId} has been verified by the pharmacist and is Ready to Dispatch!`;
+            return `🔬 ORDER UPDATE — #${shortId}\nStatus: Ready to Dispatch\nYour order is packed and awaiting a delivery rider.\nTotal: ₹${order.finalTotal}\n${items ? `Order items:\n${items}` : ''}`;
         case 'Delivered':
-            return `🏁 ORDER SAFELY DELIVERED\nThank you for choosing Ashvin Pharmacy! Order #${shortId} was delivered at ${order.deliveredAt ? new Date(order.deliveredAt).toLocaleString() : new Date().toLocaleString()}.`;
+            return [
+                `🏁 ORDER DELIVERED — #${shortId}`,
+                `Delivered at: ${order.deliveredAt ? new Date(order.deliveredAt).toLocaleString() : new Date().toLocaleString()}`,
+                `Order items:\n${items || 'Items not available'}`,
+                `Total: ₹${order.finalTotal}`,
+                'Thank you for choosing Ashvin Pharmacy! We appreciate your trust.',
+                'Please visit us again for your healthcare needs. 💚'
+            ].join('\n');
         default:
             return `ℹ️ Order #${shortId} status update: ${status}`;
     }
@@ -295,6 +329,9 @@ const flushQueuedNotifications = async () => {
             const record = mongoRecord.toObject();
             sentNotifications.set(record.dedupeKey, record);
             await transmitWhatsAppMessage(record, mongoRecord);
+            if (record.eventType === 'Delivered' && record.status === 'SENT') {
+                await clearOrderNotifications(record.orderId);
+            }
         }
         return;
     }
@@ -302,67 +339,90 @@ const flushQueuedNotifications = async () => {
     for (const record of sentNotifications.values()) {
         if (record.status === 'QUEUED_OFFLINE' && new Date(record.expiresAt) > new Date()) {
             await transmitWhatsAppMessage(record, null);
+            if (record.eventType === 'Delivered' && record.status === 'SENT') {
+                await clearOrderNotifications(record.orderId);
+            }
         }
+    }
+};
+
+const clearOrderNotifications = async (orderId) => {
+    if (getIsConnected()) await WhatsAppMessage.deleteMany({ orderId: String(orderId) });
+    for (const [key, notification] of sentNotifications.entries()) {
+        if (notification.orderId === String(orderId)) sentNotifications.delete(key);
     }
 };
 
 export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryMobile = null) => {
     const orderId = order?._id ? order._id.toString() : 'UNKNOWN';
-    const recipient = statusUpdateText === 'Dispatched'
-        ? deliveryMobile || order.rider?.riderMobile || ''
-        : order.customerMobile || order.addressDetails?.mobile || '';
-    const dedupeKey = `${orderId}:${statusUpdateText}:${normalizeWhatsAppNumber(recipient) || 'missing'}`;
+    const customerPhone = order.customerMobile || order.addressDetails?.mobile || '';
+    const riderPhone = deliveryMobile || order.rider?.riderMobile || '';
+    const recipients = [
+        { audience: 'customer', phone: customerPhone },
+        ...(statusUpdateText === 'Dispatched' && riderPhone
+            ? [{ audience: 'rider', phone: riderPhone }]
+            : [])
+    ];
+    const records = [];
 
-    if (sentNotifications.has(dedupeKey)) return sentNotifications.get(dedupeKey);
-
-    if (getIsConnected()) {
-        const existing = await WhatsAppMessage.findOne({
-            dedupeKey,
-            expiresAt: { $gt: new Date() }
-        });
-        if (existing) {
-            const record = existing.toObject();
-            sentNotifications.set(dedupeKey, record);
-            return record;
+    for (const { audience, phone } of recipients) {
+        const recipient = normalizeWhatsAppNumber(phone);
+        const dedupeKey = `${orderId}:${statusUpdateText}:${audience}:${recipient || 'missing'}`;
+        if (sentNotifications.has(dedupeKey)) {
+            records.push(sentNotifications.get(dedupeKey));
+            continue;
         }
-    }
 
-    const createdAt = new Date();
-    const record = {
-        orderId,
-        eventType: statusUpdateText,
-        recipient: recipient || 'Not provided',
-        dedupeKey,
-        messageBody: buildMessageBody(order, statusUpdateText, recipient),
-        status: 'PENDING',
-        channel: 'WHATSAPP',
-        sentAt: null,
-        attempts: 1,
-        messageId: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        createdAt,
-        expiresAt: new Date(createdAt.getTime() + messageRetentionMs)
-    };
-
-    let mongoRecord = null;
-    if (getIsConnected()) {
-        mongoRecord = await WhatsAppMessage.create(record);
-    }
-    sentNotifications.set(dedupeKey, record);
-
-    if (statusUpdateText === 'Delivered') {
-        try {
-            await transmitWhatsAppMessage(record, mongoRecord);
-        } finally {
-            if (getIsConnected()) await WhatsAppMessage.deleteMany({ orderId });
-            for (const [key, notification] of sentNotifications.entries()) {
-                if (notification.orderId === orderId) sentNotifications.delete(key);
+        if (getIsConnected()) {
+            const existing = await WhatsAppMessage.findOne({
+                dedupeKey,
+                expiresAt: { $gt: new Date() }
+            });
+            if (existing) {
+                const record = existing.toObject();
+                sentNotifications.set(dedupeKey, record);
+                records.push(record);
+                continue;
             }
         }
-        return record;
+
+        const createdAt = new Date();
+        const record = {
+            orderId,
+            eventType: statusUpdateText,
+            recipient: recipient || 'Not provided',
+            dedupeKey,
+            messageBody: buildMessageBody(order, statusUpdateText, phone, audience),
+            status: 'PENDING',
+            channel: 'WHATSAPP',
+            sentAt: null,
+            attempts: 1,
+            messageId: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            createdAt,
+            expiresAt: new Date(createdAt.getTime() + messageRetentionMs)
+        };
+
+        const mongoRecord = getIsConnected() ? await WhatsAppMessage.create(record) : null;
+        sentNotifications.set(dedupeKey, record);
+        records.push(record);
+        await transmitWhatsAppMessage(record, mongoRecord);
+
+        if (statusUpdateText === 'Delivered') {
+            if (record.status === 'SENT' || record.status === 'MISSING_RECIPIENT') {
+                await clearOrderNotifications(orderId);
+            } else if (getIsConnected()) {
+                await WhatsAppMessage.deleteMany({ orderId, _id: { $ne: mongoRecord?._id } });
+            } else {
+                for (const [key, notification] of sentNotifications.entries()) {
+                    if (notification.orderId === orderId && notification.eventType !== 'Delivered') {
+                        sentNotifications.delete(key);
+                    }
+                }
+            }
+        }
     }
 
-    await transmitWhatsAppMessage(record, mongoRecord);
-    return record;
+    return records;
 };
 
 export const getNotificationLog = async () => {
