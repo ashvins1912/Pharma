@@ -25,7 +25,6 @@ router.post('/checkout', authenticateUser, async (req, res) => {
 
         if (!chosenAddressLine) {
             chosenAddressLine = "Bengaluru City Center Delivery Address";
-            chosenCoords = { lat: 12.9716, lng: 77.5946 };
         }
 
         const customerName = req.user.user_metadata?.name || req.user.email?.split('@')[0] || "Customer";
@@ -49,8 +48,8 @@ router.post('/checkout', authenticateUser, async (req, res) => {
                 landmark: addressSnapshot.landmark,
                 coordinates: addressSnapshot.coordinates
             } : {},
-            coordinates: chosenCoords || { lat: 12.9716, lng: 77.5946 },
-            customerMobile: addressSnapshot?.mobile || req.body.mobile || "+91 95899 16475",
+            coordinates: chosenCoords,
+            customerMobile: addressSnapshot?.mobile || req.body.mobile || "",
             paymentMethod: paymentMethod || "Cash on Delivery (COD)"
         }, customerName);
 
@@ -165,6 +164,7 @@ router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res
 
         const order = await dataStore.transitionOrderStatus(orderId, targetStatus, actor);
         if (step === 'ready') await sendCustomWhatsAppAlert(order, 'Ready to Dispatch');
+        if (step === 'dispatch') await sendCustomWhatsAppAlert(order, 'Dispatched', order.rider?.riderMobile);
         if (step === 'deliver') await sendCustomWhatsAppAlert(order, 'Delivered');
 
         res.json({ message: "Transaction status shifted safely.", order });
@@ -196,7 +196,12 @@ router.get('/history', authenticateUser, async (req, res) => {
 
 // Notification logs audit
 router.get('/notifications/logs', authenticateUser, isAdmin, async (req, res) => {
-    res.json(getNotificationLog());
+    try {
+        res.json(await getNotificationLog());
+    } catch (err) {
+        console.error("Notification log retrieval failed:", err);
+        res.status(500).json({ message: "Failed to retrieve notification logs" });
+    }
 });
 
 export default router;

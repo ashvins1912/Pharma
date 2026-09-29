@@ -663,6 +663,7 @@ export const dataStore = {
             throw new Error(`Invalid state transition: Cannot change order from '${order.orderStatus}' to '${newStatus}'`);
         }
 
+        const transitionAt = new Date();
         const prevStatus = order.orderStatus;
         order.orderStatus = newStatus;
 
@@ -676,12 +677,20 @@ export const dataStore = {
             order.deliveryPersonMobile = riderInfo.riderMobile;
         }
 
+        if (newStatus === 'Dispatched') {
+            order.outForDeliveryAt = transitionAt;
+            order.deliveredAt = null;
+        }
+        if (newStatus === 'Delivered') {
+            order.deliveredAt = transitionAt;
+        }
+
         if (!order.statusHistory) order.statusHistory = [];
         order.statusHistory.push({
             previousStatus: prevStatus,
             newStatus,
             changedBy: actor,
-            timestamp: new Date(),
+            timestamp: transitionAt,
             notes: riderInfo ? `Rider assigned: ${riderInfo.riderName} (${riderInfo.riderMobile})` : ''
         });
         if (order.save) await order.save();

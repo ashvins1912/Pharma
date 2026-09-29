@@ -39,8 +39,8 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         finalTotal: Math.round(finalTotal * 10) / 10,
         addressId: selectedAddress._id,
         deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
-        coordinates: selectedAddress.coordinates || { lat: 12.9716, lng: 77.5946 },
-        mobile: selectedAddress.mobile || user?.user_metadata?.mobile || '+91 95899 16475',
+        coordinates: selectedAddress.coordinates,
+        mobile: selectedAddress.mobile || user?.user_metadata?.mobile || '',
         paymentMethod: "Cash on Delivery (COD)"
       });
 

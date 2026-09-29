@@ -120,6 +120,23 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                           </div>
                         )}
 
+                        {(order.outForDeliveryAt || order.deliveredAt) && (
+                          <div className="bg-slate-50 p-2 rounded-xl text-[10px] text-slate-600 space-y-1">
+                            {order.outForDeliveryAt && (
+                              <p>
+                                <span className="font-bold">Out for delivery:</span>{' '}
+                                {new Date(order.outForDeliveryAt).toLocaleString()}
+                              </p>
+                            )}
+                            {order.deliveredAt && (
+                              <p>
+                                <span className="font-bold">Delivered:</span>{' '}
+                                {new Date(order.deliveredAt).toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
                         {/* Action Buttons according to allowed state transitions */}
                         <div className="pt-2 border-t border-slate-100">
                           {col.id === 'Processing Order' && (

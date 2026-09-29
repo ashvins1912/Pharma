@@ -12,9 +12,11 @@ const orderSchema = new mongoose.Schema({
     deliveryAddress: { type: String, required: true },
     addressDetails: { type: Object, default: {} },
     coordinates: {
-        lat: { type: Number, default: 12.9716 },
-        lng: { type: Number, default: 77.5946 }
+        lat: Number,
+        lng: Number
     },
+    outForDeliveryAt: { type: Date, default: null },
+    deliveredAt: { type: Date, default: null },
     paymentMethod: { type: String, default: "Cash on Delivery (COD)" },
     orderStatus: {
         type: String,

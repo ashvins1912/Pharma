@@ -54,7 +54,7 @@ router.post('/disconnect', authenticateUser, isAdmin, async (req, res) => {
 // Get log of dispatched WhatsApp notifications
 router.get('/logs', authenticateUser, isAdmin, async (req, res) => {
     try {
-        res.json(getNotificationLog());
+        res.json(await getNotificationLog());
     } catch (err) {
         res.status(500).json({ message: "Failed to load notification logs" });
     }
