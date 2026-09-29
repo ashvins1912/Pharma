@@ -1,14 +1,27 @@
 import mongoose from 'mongoose';
 
+const medicineItemSchema = new mongoose.Schema({
+    medicineId: { type: mongoose.Schema.Types.ObjectId, ref: 'Medicine', required: true },
+    quantity: { type: Number, required: true, min: 1 },
+    price: { type: Number, required: true, min: 0 },
+    name: { type: String, default: '' },
+    sku: { type: String, default: '' }
+}, { _id: false });
+
 const orderSchema = new mongoose.Schema({
-    userId: { type: String, required: true },
+    customerId: { type: String, index: true },
+    userId: { type: String, required: true, index: true },
     customerName: { type: String, default: "Valued Customer" },
     customerMobile: { type: String, default: "" },
-    items: Array,
-    subtotal: { type: Number, required: true },
+    medicineItems: { type: [medicineItemSchema], default: [] },
+    items: { type: Array, default: [] },
+    prescriptionUrl: { type: String, default: null },
+    prescriptionRequired: { type: Boolean, default: false },
+    subtotal: { type: Number, min: 0 },
     discountApplied: { type: Number, default: 0 },
     deliveryFee: { type: Number, default: 0 },
-    finalTotal: { type: Number, required: true },
+    totalAmount: { type: Number, min: 0 },
+    finalTotal: { type: Number, min: 0 },
     deliveryAddress: { type: String, required: true },
     addressDetails: { type: Object, default: {} },
     coordinates: {
@@ -20,8 +33,9 @@ const orderSchema = new mongoose.Schema({
     paymentMethod: { type: String, default: "Cash on Delivery (COD)" },
     orderStatus: {
         type: String,
-        enum: ['Processing Order', 'Ready to Dispatch', 'Dispatched', 'Delivered', 'Cancelled'],
-        default: 'Processing Order'
+        enum: ['Pending_Review', 'Approved', 'Rejected', 'Processing Order', 'Ready to Dispatch', 'Dispatched', 'Delivered', 'Cancelled'],
+        default: 'Pending_Review',
+        index: true
     },
     rider: {
         riderId: String,
@@ -40,6 +54,8 @@ const orderSchema = new mongoose.Schema({
         }
     ]
 }, { timestamps: true });
+
+orderSchema.index({ orderStatus: 1, createdAt: -1 });
 
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 export default Order;

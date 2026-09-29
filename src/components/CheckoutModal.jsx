@@ -12,10 +12,12 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [prescriptionFile, setPrescriptionFile] = useState(null);
 
   if (!isOpen) return null;
 
   const selectedAddress = addresses.find(a => a._id === selectedAddressId) || addresses[0];
+  const prescriptionRequired = cart.some(item => item.isPrescriptionRequired || item.requiresPrescription);
 
   const handlePlaceOrder = async () => {
     if (!selectedAddress) {
@@ -28,24 +30,35 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       setErrorMsg("Your cart is empty.");
       return;
     }
+    if (prescriptionRequired && !prescriptionFile) {
+      setErrorMsg("Upload a clear prescription image or PDF before placing this order.");
+      return;
+    }
 
     setLoading(true);
     setErrorMsg('');
 
     try {
-      const res = await apiClient.post('/api/orders/checkout', {
-        cartItems: cart,
-        totalAmount: subtotal,
-        finalTotal: Math.round(finalTotal * 10) / 10,
+      const checkoutData = {
+        items: JSON.stringify(cart.map(item => ({
+          medicineId: item._id,
+          quantity: item.quantity
+        }))),
         addressId: selectedAddress._id,
         deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
-        coordinates: selectedAddress.coordinates,
         mobile: selectedAddress.mobile || user?.user_metadata?.mobile || '',
+        couponCode: appliedCoupon?.code || '',
         paymentMethod: "Cash on Delivery (COD)"
-      });
+      };
+      const formData = new FormData();
+      Object.entries(checkoutData).forEach(([key, value]) => formData.append(key, value));
+      if (prescriptionFile) formData.append('prescription', prescriptionFile);
+
+      const res = await apiClient.post('/api/orders/checkout', formData);
 
       addToast("🎉 Order placed successfully! Dispensary queue assigned.", "success");
       clearCart();
+      setPrescriptionFile(null);
       onClose();
       if (onOrderPlaced) onOrderPlaced(res.data.order || { _id: res.data.orderId, finalTotal });
     } catch (err) {
@@ -99,6 +112,24 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2.5">
               2. Prescription & Medicine Items ({cart.length})
             </h3>
+            {prescriptionRequired && (
+              <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3">
+                <label htmlFor="prescription-upload" className="block text-xs font-bold text-rose-800">
+                  Prescription required. Please upload a clear image/PDF to proceed.
+                </label>
+                <input
+                  id="prescription-upload"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  onChange={event => setPrescriptionFile(event.target.files?.[0] || null)}
+                  className="mt-2 block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:font-bold file:text-rose-700"
+                  required
+                />
+                {prescriptionFile && (
+                  <p className="mt-1 text-[10px] text-rose-700">{prescriptionFile.name}</p>
+                )}
+              </div>
+            )}
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 max-h-48 overflow-y-auto space-y-2">
               {cart.map((item) => (
                 <div key={item._id} className="flex justify-between items-center text-xs">

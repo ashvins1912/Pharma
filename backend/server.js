@@ -15,7 +15,9 @@ const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-connectDB();
+connectDB()
+    .then(connected => connected && dataStore.ensureCatalogSeeded())
+    .catch(error => console.error('MongoDB catalog initialization failed:', error));
 
 app.use('/api/medicines', medicineRoutes);
 app.use('/api/orders', orderRoutes);

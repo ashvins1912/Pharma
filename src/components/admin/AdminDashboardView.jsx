@@ -45,10 +45,12 @@ export default function AdminDashboardView() {
 
   // Derived Metrics
   const processingCount = orders.filter(o => o.orderStatus === 'Processing Order').length;
+  const pendingReviewCount = orders.filter(o => o.orderStatus === 'Pending_Review').length;
+  const approvedCount = orders.filter(o => o.orderStatus === 'Approved').length;
   const readyCount = orders.filter(o => o.orderStatus === 'Ready to Dispatch').length;
   const dispatchedCount = orders.filter(o => o.orderStatus === 'Dispatched').length;
   const deliveredCount = orders.filter(o => o.orderStatus === 'Delivered').length;
-  const activeCount = processingCount + readyCount + dispatchedCount;
+  const activeCount = processingCount + pendingReviewCount + approvedCount + readyCount + dispatchedCount;
   const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.finalTotal) || 0), 0);
 
   return (

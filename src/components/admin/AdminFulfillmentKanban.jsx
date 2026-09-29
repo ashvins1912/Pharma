@@ -3,6 +3,9 @@ import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 
 const COLUMNS = [
+  { id: 'Pending_Review', title: 'Pending Review', color: 'border-amber-500 text-amber-800 bg-amber-50' },
+  { id: 'Approved', title: 'Approved', color: 'border-teal-500 text-teal-800 bg-teal-50' },
+  { id: 'Rejected', title: 'Rejected', color: 'border-rose-500 text-rose-800 bg-rose-50' },
   { id: 'Processing Order', title: 'Processing Order', color: 'border-amber-500 text-amber-800 bg-amber-50' },
   { id: 'Ready to Dispatch', title: 'Ready to Dispatch', color: 'border-indigo-500 text-indigo-800 bg-indigo-50' },
   { id: 'Dispatched', title: 'Dispatched', color: 'border-blue-500 text-blue-800 bg-blue-50' },
@@ -15,6 +18,8 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const [assignRiderModal, setAssignRiderModal] = useState(null);
   const [riderName, setRiderName] = useState('Suresh Kumar');
   const [riderMobile, setRiderMobile] = useState('+91 98765 43210');
+  const [verifiedOrderIds, setVerifiedOrderIds] = useState([]);
+  const [prescriptionPreview, setPrescriptionPreview] = useState(null);
 
   const handleTransition = async (orderId, newStatus, riderInfo = null) => {
     try {
@@ -32,6 +37,56 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       setUpdatingId(null);
       setAssignRiderModal(null);
     }
+  };
+
+  const reviewOrder = async (order, status) => {
+    if (status === 'Approved' && order.prescriptionRequired && !verifiedOrderIds.includes(order._id)) {
+      addToast('View and verify the uploaded prescription before approving.', 'warning');
+      return;
+    }
+    try {
+      setUpdatingId(order._id);
+      const res = await apiClient.put(`/api/orders/${encodeURIComponent(order._id)}/review`, {
+        status,
+        prescriptionVerified: status === 'Approved'
+      });
+      addToast(res.data.message || `Order ${status.toLowerCase()}.`, 'success');
+      setVerifiedOrderIds(prev => prev.filter(id => id !== order._id));
+      onRefresh();
+    } catch (err) {
+      addToast(err.message || 'Order review failed.', 'error');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const dispatchApprovedOrder = async (orderId, riderInfo) => {
+    try {
+      setUpdatingId(orderId);
+      const res = await apiClient.put(`/api/orders/${encodeURIComponent(orderId)}/dispatch`, { riderInfo });
+      addToast(res.data.message || 'Order dispatched.', 'success');
+      onRefresh();
+    } catch (err) {
+      addToast(err.message || 'Order dispatch failed.', 'error');
+    } finally {
+      setUpdatingId(null);
+      setAssignRiderModal(null);
+    }
+  };
+
+  const viewPrescription = async (order) => {
+    try {
+      const res = await apiClient.get(order.prescriptionUrl, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      setPrescriptionPreview(url);
+    } catch (err) {
+      addToast(err.message || 'Could not open prescription file.', 'error');
+    }
+  };
+
+  const closePrescriptionPreview = () => {
+    if (prescriptionPreview) URL.revokeObjectURL(prescriptionPreview);
+    setPrescriptionPreview(null);
   };
 
   return (
@@ -118,6 +173,69 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                             <span className="font-bold">🛵 Rider: {order.rider.riderName}</span>
                             <p className="text-blue-700">{order.rider.riderMobile}</p>
                           </div>
+                        )}
+
+                        {col.id === 'Pending_Review' && (
+                          <div className="space-y-2 border-t border-slate-100 pt-2">
+                            {order.prescriptionRequired && (
+                              <div className="rounded-xl bg-rose-50 p-2 text-[10px] text-rose-800">
+                                <p className="font-bold">Prescription required</p>
+                                {order.prescriptionUrl ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => viewPrescription(order)}
+                                    className="mt-1 font-bold underline"
+                                  >
+                                    View uploaded prescription
+                                  </button>
+                                ) : (
+                                  <p>Prescription file is missing.</p>
+                                )}
+                                <label className="mt-2 flex items-center gap-1.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={verifiedOrderIds.includes(order._id)}
+                                    disabled={!order.prescriptionUrl}
+                                    onChange={event => setVerifiedOrderIds(prev =>
+                                      event.target.checked
+                                        ? [...prev, order._id]
+                                        : prev.filter(id => id !== order._id)
+                                    )}
+                                  />
+                                  I verified the prescription
+                                </label>
+                              </div>
+                            )}
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => reviewOrder(order, 'Approved')}
+                                disabled={isProcessing || (order.prescriptionRequired && !order.prescriptionUrl)}
+                                className="flex-1 rounded-xl bg-emerald-600 py-2 text-[11px] font-extrabold text-white disabled:opacity-50"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => reviewOrder(order, 'Rejected')}
+                                disabled={isProcessing}
+                                className="flex-1 rounded-xl bg-rose-600 py-2 text-[11px] font-extrabold text-white disabled:opacity-50"
+                              >
+                                Reject & Release Stock
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {col.id === 'Approved' && (
+                          <button
+                            type="button"
+                            onClick={() => setAssignRiderModal(order)}
+                            disabled={isProcessing}
+                            className="w-full rounded-xl bg-blue-600 py-2 text-[11px] font-extrabold text-white disabled:opacity-50"
+                          >
+                            Assign Rider & Dispatch
+                          </button>
                         )}
 
                         {(order.outForDeliveryAt || order.deliveredAt) && (
@@ -239,17 +357,36 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                 Cancel
               </button>
               <button
-                onClick={() =>
-                  handleTransition(assignRiderModal._id, 'Dispatched', {
+                onClick={() => {
+                  const riderInfo = {
                     riderName,
                     riderMobile
-                  })
-                }
+                  };
+                  if (assignRiderModal.orderStatus === 'Approved') {
+                    dispatchApprovedOrder(assignRiderModal._id, riderInfo);
+                  } else {
+                    handleTransition(assignRiderModal._id, 'Dispatched', riderInfo);
+                  }
+                }}
                 className="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2 rounded-xl text-xs shadow-md shadow-blue-600/25"
               >
                 Dispatch Order
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {prescriptionPreview && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/70 p-4">
+          <div className="flex h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white">
+            <div className="flex items-center justify-between border-b p-3">
+              <h4 className="text-sm font-bold text-slate-800">Prescription review</h4>
+              <button type="button" onClick={closePrescriptionPreview} className="rounded-lg bg-slate-100 px-3 py-1 text-sm font-bold">
+                Close
+              </button>
+            </div>
+            <iframe title="Uploaded prescription" src={prescriptionPreview} className="h-full w-full" />
           </div>
         </div>
       )}

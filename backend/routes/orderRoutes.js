@@ -1,14 +1,79 @@
 import express from 'express';
+import multer from 'multer';
+import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
 import { authenticateUser, isAdmin } from '../middleware/auth.js';
 import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
+import { getPrescription, removePrescription, savePrescription } from '../config/prescriptionStorage.js';
 
 const router = express.Router();
+const getErrorStatus = (error) => {
+    if (error.statusCode) return error.statusCode;
+    if (['CastError', 'ValidationError'].includes(error.name)) return 400;
+    if (['MongoServerError', 'MongoNetworkError', 'MongooseError'].includes(error.name)) return 503;
+    return 500;
+};
+const allowedPrescriptionTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+const uploadPrescription = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+    fileFilter: (req, file, callback) => {
+        if (!allowedPrescriptionTypes.has(file.mimetype)) {
+            return callback(new Error('Prescription must be a PDF, JPEG, PNG, or WebP file.'));
+        }
+        callback(null, true);
+    }
+});
+
+const parseCheckoutItems = (items) => {
+    if (typeof items === 'string') {
+        try {
+            return JSON.parse(items);
+        } catch {
+            return null;
+        }
+    }
+    return items;
+};
+
+const hasValidPrescriptionSignature = (file) => {
+    if (!file) return true;
+    if (file.mimetype === 'application/pdf') return file.buffer.subarray(0, 5).toString() === '%PDF-';
+    if (file.mimetype === 'image/jpeg') {
+        return file.buffer.length >= 3
+            && file.buffer[0] === 0xff
+            && file.buffer[1] === 0xd8
+            && file.buffer[2] === 0xff;
+    }
+    if (file.mimetype === 'image/png') {
+        return file.buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    }
+    if (file.mimetype === 'image/webp') {
+        return file.buffer.subarray(0, 4).toString() === 'RIFF'
+            && file.buffer.subarray(8, 12).toString() === 'WEBP';
+    }
+    return false;
+};
+
+const handlePrescriptionUpload = (req, res, next) => {
+    uploadPrescription.single('prescription')(req, res, error => {
+        if (error) return res.status(400).json({ message: error.message || 'Invalid prescription upload.' });
+        if (!hasValidPrescriptionSignature(req.file)) {
+            return res.status(400).json({ message: 'The uploaded file does not match its declared image or PDF format.' });
+        }
+        next();
+    });
+};
 
 // Customer Checkout
-router.post('/checkout', authenticateUser, async (req, res) => {
+router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req, res) => {
+    let uploadedPrescriptionUrl = null;
     try {
-        const { cartItems, totalAmount, finalTotal, addressId, deliveryAddress, coordinates, paymentMethod } = req.body;
+        const { addressId, deliveryAddress, coordinates, paymentMethod, prescriptionUrl, couponCode } = req.body;
+        const cartItems = parseCheckoutItems(req.body.items || req.body.cartItems);
+        if (!Array.isArray(cartItems) || !cartItems.length) {
+            return res.status(400).json({ message: 'Add at least one medicine to your order.' });
+        }
         
         let chosenAddressLine = deliveryAddress;
         let chosenCoords = coordinates;
@@ -28,13 +93,26 @@ router.post('/checkout', authenticateUser, async (req, res) => {
         }
 
         const customerName = req.user.user_metadata?.name || req.user.email?.split('@')[0] || "Customer";
+        if (prescriptionUrl && !prescriptionUrl.startsWith('/api/orders/prescriptions/')) {
+            return res.status(400).json({ message: 'Prescription URL must refer to a private uploaded prescription.' });
+        }
+        uploadedPrescriptionUrl = req.file
+            ? await savePrescription(req.file, req.user.sub)
+            : (prescriptionUrl || null);
+        if (prescriptionUrl && !req.file) {
+            const existingPrescription = await getPrescription(prescriptionUrl.split('/').at(-1));
+            if (!existingPrescription || existingPrescription.ownerId !== req.user.sub) {
+                return res.status(403).json({ message: 'The uploaded prescription does not belong to this account.' });
+            }
+        }
 
-        const order = await dataStore.createOrder({
+        const order = await dataStore.reserveOrder({
             userId: req.user.sub,
             customerName,
-            items: cartItems || [],
-            subtotal: totalAmount || 0,
-            finalTotal: finalTotal || totalAmount || 0,
+            customerMobile: addressSnapshot?.mobile || req.body.mobile || req.user.user_metadata?.mobile || '',
+            items: cartItems,
+            couponCode,
+            prescriptionUrl: uploadedPrescriptionUrl,
             deliveryAddress: chosenAddressLine,
             addressDetails: addressSnapshot ? {
                 label: addressSnapshot.label,
@@ -49,7 +127,6 @@ router.post('/checkout', authenticateUser, async (req, res) => {
                 coordinates: addressSnapshot.coordinates
             } : {},
             coordinates: chosenCoords,
-            customerMobile: addressSnapshot?.mobile || req.body.mobile || "",
             paymentMethod: paymentMethod || "Cash on Delivery (COD)"
         }, customerName);
 
@@ -62,8 +139,97 @@ router.post('/checkout', authenticateUser, async (req, res) => {
             order
         });
     } catch (err) {
+        if (uploadedPrescriptionUrl?.startsWith('/api/orders/prescriptions/')) {
+            try {
+                await removePrescription(uploadedPrescriptionUrl);
+            } catch (cleanupError) {
+                console.error('Prescription cleanup failed after checkout error:', cleanupError);
+            }
+        }
         console.error("Checkout failed:", err);
-        res.status(400).json({ message: err.message || "Checkout failed" });
+        res.status(getErrorStatus(err)).json({ message: err.message || "Checkout failed" });
+    }
+});
+
+// Prescription uploads are private files backed by MongoDB GridFS when configured.
+router.get('/prescriptions/:fileId', authenticateUser, async (req, res) => {
+    try {
+        const prescription = await getPrescription(req.params.fileId);
+        if (!prescription) return res.status(404).json({ message: 'Prescription file not found.' });
+        const role = req.user?.role || req.user?.user_metadata?.role;
+        if (prescription.ownerId !== req.user.sub && role !== 'admin') {
+            return res.status(403).json({ message: 'You are not authorized to view this prescription.' });
+        }
+        res.set('Content-Type', prescription.contentType);
+        res.set('Content-Disposition', 'inline; filename="prescription"');
+        res.set('X-Content-Type-Options', 'nosniff');
+        res.set('Cache-Control', 'private, no-store');
+        if (prescription.stream) {
+            prescription.stream.on('error', error => {
+                console.error('Prescription download failed:', error);
+                if (!res.headersSent) res.status(500).end();
+            });
+            prescription.stream.pipe(res);
+        } else {
+            res.send(prescription.buffer);
+        }
+    } catch (err) {
+        console.error('Prescription retrieval failed:', err);
+        res.status(500).json({ message: 'Failed to retrieve prescription.' });
+    }
+});
+
+router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
+    try {
+        const { status, decision } = req.body;
+        const reviewDecision = status || decision;
+        if (!['Approved', 'Rejected'].includes(reviewDecision)) {
+            return res.status(400).json({ message: 'Review status must be Approved or Rejected.' });
+        }
+        if (reviewDecision === 'Approved' && !req.body.prescriptionVerified) {
+            return res.status(400).json({ message: 'Confirm prescription verification before approving this order.' });
+        }
+
+        const order = await dataStore.reviewOrder(
+            req.params.id,
+            reviewDecision === 'Approved' ? 'approve' : 'reject',
+            req.user.user_metadata?.name || req.user.email || 'Admin'
+        );
+        res.json({ message: `Order ${reviewDecision.toLowerCase()}.`, order });
+    } catch (err) {
+        console.error('Order review failed:', err);
+        res.status(getErrorStatus(err)).json({ message: err.message || 'Failed to review order.' });
+    }
+});
+
+router.put('/:id/dispatch', authenticateUser, isAdmin, async (req, res) => {
+    try {
+        const order = await dataStore.dispatchOrder(
+            req.params.id,
+            req.user.user_metadata?.name || req.user.email || 'Admin',
+            req.body.riderInfo || null
+        );
+        await sendCustomWhatsAppAlert(order, 'Dispatched', order.rider?.riderMobile);
+        res.json({ message: 'Order dispatched and reserved inventory deducted.', order });
+    } catch (err) {
+        console.error('Order dispatch failed:', err);
+        res.status(getErrorStatus(err)).json({ message: err.message || 'Failed to dispatch order.' });
+    }
+});
+
+router.put('/:id/cancel', authenticateUser, async (req, res) => {
+    try {
+        const role = req.user?.role || req.user?.user_metadata?.role;
+        const customerId = role === 'admin' ? null : req.user.sub;
+        const order = await dataStore.cancelOrder(
+            req.params.id,
+            req.user.user_metadata?.name || req.user.email || 'Customer',
+            customerId
+        );
+        res.json({ message: 'Order cancelled and reserved stock released.', order });
+    } catch (err) {
+        console.error('Order cancellation failed:', err);
+        res.status(getErrorStatus(err)).json({ message: err.message || 'Failed to cancel order.' });
     }
 });
 

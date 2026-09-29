@@ -161,7 +161,7 @@ function generateEager1000Catalog() {
         for (const item of catGroup.items) {
             for (let vIdx = 0; vIdx < packageVariations.length; vIdx++) {
                 const variant = packageVariations[vIdx];
-                const skuCode = `MED-${catGroup.code}-${item.name.replace(/[^A-Za-z0-9]/g, '').substring(0, 4).toUpperCase()}-${String(vIdx + 1).padStart(2, '0')}`;
+                const skuCode = `MED-${catGroup.code}-${item.name.replace(/[^A-Za-z0-9]/g, '').substring(0, 4).toUpperCase()}-${String(medCounter).padStart(4, '0')}-${String(vIdx + 1).padStart(2, '0')}`;
                 
                 // Set stock: exactly every 11th item has stock = 0 to test out-of-stock search-only visibility
                 const isOutOfStock = medCounter % 11 === 0;
@@ -181,6 +181,8 @@ function generateEager1000Catalog() {
                     price,
                     quantity: stock,
                     stock,
+                    stockQuantity: stock,
+                    reservedQuantity: 0,
                     batchNumber: `BTH-${catGroup.code}-${2400 + (medCounter % 500)}`,
                     expiryDate,
                     requiresPrescription: item.rx,
@@ -257,6 +259,17 @@ let inMemoryOrders = [
     }
 ];
 
+const getPhysicalStock = (medicine) =>
+    Number(medicine.stockQuantity ?? medicine.stock ?? medicine.quantity ?? 0);
+
+const getReservedStock = (medicine) => Number(medicine.reservedQuantity || 0);
+
+const inventoryError = (message, statusCode = 400) => {
+    const error = new Error(message);
+    error.statusCode = statusCode;
+    return error;
+};
+
 let inMemoryProfiles = new Map();
 inMemoryProfiles.set("demo-customer-id", {
     userId: "demo-customer-id",
@@ -310,7 +323,16 @@ let inMemoryInventoryAudits = [];
 
 function formatMedicine(med) {
     const obj = med.toObject ? med.toObject() : { ...med };
-    obj.stock = obj.stock !== undefined ? obj.stock : (obj.quantity || 0);
+    const physicalStock = Number(obj.stockQuantity ?? obj.stock ?? obj.quantity ?? 0);
+    const reservedStock = Number(obj.reservedQuantity || 0);
+    const availableStock = Math.max(0, physicalStock - reservedStock);
+    obj.stockQuantity = physicalStock;
+    obj.reservedQuantity = reservedStock;
+    obj.availableQuantity = availableStock;
+    obj.stock = availableStock;
+    obj.quantity = availableStock;
+    obj.isPrescriptionRequired = Boolean(obj.isPrescriptionRequired ?? obj.requiresPrescription);
+    obj.requiresPrescription = obj.isPrescriptionRequired;
     const now = new Date();
     const expiry = new Date(obj.expiryDate);
     const daysUntilExpiry = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 3600 * 24));
@@ -318,7 +340,7 @@ function formatMedicine(med) {
     obj.daysUntilExpiry = daysUntilExpiry;
     obj.isExpired = daysUntilExpiry <= 0;
     obj.isExpiringSoon = daysUntilExpiry > 0 && daysUntilExpiry <= 30;
-    obj.isLowStock = obj.stock <= 3;
+    obj.isLowStock = availableStock <= 3;
     return obj;
 }
 
@@ -348,15 +370,71 @@ export const dataStore = {
 
     // Medicines: Supports server-side pagination & "out-of-stock only on search" logic
     async getMedicines(search = '', hideRx = false, category = 'All', sort = 'default', page = 1, limit = 16, includeOutOfStock = false) {
+        const isSearching = Boolean(search && search.toString().trim() !== '');
+        const parsedPage = Math.max(1, Number(page) || 1);
+        const parsedLimit = Math.max(1, Number(limit) || 16);
+
+        if (getIsConnected()) {
+            const filter = {};
+            if (isSearching) {
+                const escapedSearch = search.toString().trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                filter.$or = [
+                    { name: { $regex: escapedSearch, $options: 'i' } },
+                    { brand: { $regex: escapedSearch, $options: 'i' } },
+                    { composition: { $regex: escapedSearch, $options: 'i' } },
+                    { sku: { $regex: escapedSearch, $options: 'i' } }
+                ];
+            } else if (!includeOutOfStock) {
+                filter.expiryDate = { $gt: new Date() };
+                filter.$expr = {
+                    $gt: [
+                        {
+                            $subtract: [
+                                { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
+                                { $ifNull: ['$reservedQuantity', 0] }
+                            ]
+                        },
+                        0
+                    ]
+                };
+            }
+            if (hideRx === 'true' || hideRx === true) {
+                filter.$nor = [{ isPrescriptionRequired: true }, { requiresPrescription: true }];
+            }
+            if (category && category !== 'All') filter.category = category;
+
+            const sortOptions = {
+                'price-asc': { price: 1 },
+                'price-desc': { price: -1 },
+                'name-asc': { name: 1 },
+                'stock-asc': { stockQuantity: 1 },
+                default: { name: 1 }
+            };
+            const [total, medicines] = await Promise.all([
+                Medicine.countDocuments(filter),
+                Medicine.find(filter)
+                    .sort(sortOptions[sort] || sortOptions.default)
+                    .skip((parsedPage - 1) * parsedLimit)
+                    .limit(parsedLimit)
+            ]);
+            return {
+                medicines: medicines.map(formatMedicine),
+                total,
+                page: parsedPage,
+                limit: parsedLimit,
+                totalPages: Math.ceil(total / parsedLimit) || 1,
+                isSearching,
+                outOfStockHidden: !isSearching && !includeOutOfStock
+            };
+        }
+
         let filtered = inMemoryMedicines;
 
         // RULE: If search query is provided, out-of-stock items can display (with SOLD OUT badge).
         // If not searching, out-of-stock items are hidden from general browsing!
-        const isSearching = Boolean(search && search.toString().trim() !== '');
-
         if (!isSearching && !includeOutOfStock) {
             filtered = filtered.filter(m => {
-                const stock = m.stock !== undefined ? m.stock : m.quantity;
+                const stock = getPhysicalStock(m) - getReservedStock(m);
                 return stock > 0 && !m.isExpired;
             });
         }
@@ -387,13 +465,12 @@ export const dataStore = {
         } else if (sort === 'name-asc') {
             filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
         } else if (sort === 'stock-asc') {
-            filtered = [...filtered].sort((a, b) => a.stock - b.stock);
+            filtered = [...filtered].sort((a, b) =>
+                (getPhysicalStock(a) - getReservedStock(a)) - (getPhysicalStock(b) - getReservedStock(b)));
         }
 
         // Pagination Calculations
         const total = filtered.length;
-        const parsedPage = Math.max(1, Number(page) || 1);
-        const parsedLimit = Math.max(1, Number(limit) || 16);
         const totalPages = Math.ceil(total / parsedLimit) || 1;
         const startIndex = (parsedPage - 1) * parsedLimit;
         const paginatedMedicines = filtered.slice(startIndex, startIndex + parsedLimit).map(formatMedicine);
@@ -411,7 +488,8 @@ export const dataStore = {
 
     async getInventoryAlerts(lowStockThreshold = 3, expiringThresholdDays = 30) {
         // Inspect all medicines including out of stock for admin alerts
-        const allMeds = inMemoryMedicines.map(formatMedicine);
+        const inventory = getIsConnected() ? await Medicine.find() : inMemoryMedicines;
+        const allMeds = inventory.map(formatMedicine);
         const now = new Date();
 
         const expired = [];
@@ -446,8 +524,31 @@ export const dataStore = {
 
     async seedMedicines() {
         inMemoryMedicines = generateEager1000Catalog();
+        if (getIsConnected() && await Medicine.countDocuments() === 0) {
+            const mongoCatalog = inMemoryMedicines.map(({ _id, ...medicine }) => ({
+                ...medicine,
+                code: medicine.sku,
+                stockQuantity: getPhysicalStock(medicine),
+                reservedQuantity: 0,
+                isPrescriptionRequired: Boolean(medicine.requiresPrescription)
+            }));
+            await Medicine.insertMany(mongoCatalog, { ordered: false });
+        }
         this.logAudit('Admin', 'SEED_MEDICINES', 'INVENTORY', 'ALL', { count: inMemoryMedicines.length });
         return inMemoryMedicines;
+    },
+
+    async ensureCatalogSeeded() {
+        if (!getIsConnected() || await Medicine.countDocuments() > 0) return;
+        const mongoCatalog = defaultMedicines.map(({ _id, ...medicine }) => ({
+            ...medicine,
+            code: medicine.sku,
+            stockQuantity: getPhysicalStock(medicine),
+            reservedQuantity: 0,
+            isPrescriptionRequired: Boolean(medicine.requiresPrescription)
+        }));
+        await Medicine.insertMany(mongoCatalog, { ordered: false });
+        console.log(`Initialized MongoDB medicine catalog with ${mongoCatalog.length} medicines.`);
     },
 
     async importExcelInventory(rows, adminId = 'Admin') {
@@ -507,6 +608,7 @@ export const dataStore = {
 
                 prev.stock = (prev.stock || prev.quantity || 0) + stock;
                 prev.quantity = prev.stock;
+                prev.stockQuantity = prev.stock;
                 prev.price = price;
                 prev.expiryDate = expiryDate;
                 prev.batchNumber = batchNumber;
@@ -529,6 +631,8 @@ export const dataStore = {
                     price,
                     quantity: stock,
                     stock,
+                    stockQuantity: stock,
+                    reservedQuantity: 0,
                     batchNumber,
                     expiryDate,
                     requiresPrescription,
@@ -553,6 +657,56 @@ export const dataStore = {
                 inMemoryInventoryAudits.unshift(auditRecord);
                 importedCount++;
             }
+
+            if (getIsConnected()) {
+                const existingMedicine = await Medicine.findOne({
+                    $or: [{ sku }, { name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } }]
+                });
+                if (existingMedicine) {
+                    await Medicine.collection.updateOne({ _id: existingMedicine._id }, [{
+                        $set: {
+                            stockQuantity: {
+                                $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, stock]
+                            },
+                            stock: {
+                                $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, stock]
+                            },
+                            quantity: {
+                                $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, stock]
+                            },
+                            price,
+                            expiryDate,
+                            batchNumber,
+                            category,
+                            description: description || existingMedicine.description,
+                            imageUrl,
+                            isPrescriptionRequired: requiresPrescription,
+                            requiresPrescription
+                        }
+                    }]);
+                } else {
+                    await Medicine.create({
+                        sku,
+                        code: sku,
+                        name,
+                        brand,
+                        category,
+                        description,
+                        composition: 'Active Formulation',
+                        price,
+                        stockQuantity: stock,
+                        reservedQuantity: 0,
+                        stock,
+                        quantity: stock,
+                        batchNumber,
+                        expiryDate,
+                        isPrescriptionRequired: requiresPrescription,
+                        requiresPrescription,
+                        imageUrl,
+                        manufacturer
+                    });
+                }
+            }
         }
 
         this.logAudit(adminId, 'BULK_IMPORT_EXCEL', 'INVENTORY', importId, {
@@ -572,61 +726,515 @@ export const dataStore = {
 
     // Orders
     async createOrder(orderData, actor = 'Customer') {
-        const now = new Date();
-        const invalidItems = [];
+        return this.reserveOrder(orderData, actor);
+    },
 
-        for (const item of (orderData.items || [])) {
-            const med = inMemoryMedicines.find(m => m._id === item._id || m.sku === item.sku || m.name === item.name);
-            if (med) {
-                if (new Date(med.expiryDate) <= now) {
-                    invalidItems.push(`${med.name} (Expired on ${new Date(med.expiryDate).toLocaleDateString()})`);
-                }
-                const availableStock = med.stock !== undefined ? med.stock : med.quantity;
-                if (item.quantity > availableStock) {
-                    invalidItems.push(`${med.name} (Insufficient stock: requested ${item.quantity}, available ${availableStock})`);
-                }
+    async reserveOrder(orderData, actor = 'Customer') {
+        const requestedItems = orderData.medicineItems || orderData.items || [];
+        if (!Array.isArray(requestedItems) || requestedItems.length === 0) {
+            throw inventoryError('Add at least one medicine to the order.');
+        }
+
+        const quantities = new Map();
+        for (const item of requestedItems) {
+            const medicineId = String(item.medicineId || item._id || item.id || '');
+            const quantity = Number(item.quantity);
+            if (!medicineId || !Number.isInteger(quantity) || quantity < 1) {
+                throw inventoryError('Each order item requires a medicineId and a positive whole-number quantity.');
             }
+            quantities.set(medicineId, (quantities.get(medicineId) || 0) + quantity);
         }
 
-        if (invalidItems.length > 0) {
-            throw new Error(`Order checkout rejected due to inventory validation: ${invalidItems.join('; ')}`);
-        }
-
-        const orderDataWithStatus = {
-            ...orderData,
-            orderStatus: 'Processing Order',
-            paymentMethod: orderData.paymentMethod || "Cash on Delivery (COD)",
-            statusHistory: [
-                {
-                    previousStatus: null,
-                    newStatus: 'Processing Order',
-                    changedBy: actor,
-                    timestamp: new Date(),
-                    notes: 'Order confirmed and registered in dispensary system.'
-                }
-            ]
+        const now = new Date();
+        const statusEntry = {
+            previousStatus: null,
+            newStatus: 'Pending_Review',
+            changedBy: actor,
+            timestamp: now,
+            notes: 'Stock reserved; order is awaiting pharmacist review.'
         };
 
-        const orderObj = getIsConnected()
-            ? (await Order.create(orderDataWithStatus)).toObject()
-            : { _id: `ord-${Date.now().toString().slice(-4)}`, ...orderDataWithStatus, createdAt: new Date() };
-        if (!getIsConnected()) inMemoryOrders.unshift(orderObj);
+        if (getIsConnected()) {
+            const session = await mongoose.startSession();
+            let createdOrder;
+            try {
+                await session.withTransaction(async () => {
+                    const medicineItems = [];
+                    const itemSnapshots = [];
+                    let totalAmount = 0;
+                    let prescriptionRequired = false;
 
-        // Deduct inventory atomically
-        for (const item of (orderData.items || [])) {
-            const med = inMemoryMedicines.find(m => m._id === item._id || m.sku === item.sku || m.name === item.name);
-            if (med) {
-                med.stock = Math.max(0, (med.stock || med.quantity || 0) - (Number(item.quantity) || 1));
-                med.quantity = med.stock;
+                    for (const [medicineId, quantity] of quantities) {
+                        if (!mongoose.isValidObjectId(medicineId)) {
+                            throw inventoryError(`Invalid medicine ID: ${medicineId}`);
+                        }
+                        const medicine = await Medicine.findById(medicineId).session(session);
+                        if (!medicine) throw inventoryError(`Medicine ${medicineId} was not found.`, 404);
+                        if (medicine.expiryDate && new Date(medicine.expiryDate) <= now) {
+                            throw inventoryError(`${medicine.name} is expired and cannot be ordered.`);
+                        }
+                        const medicineRequiresPrescription = Boolean(medicine.isPrescriptionRequired ?? medicine.requiresPrescription);
+                        prescriptionRequired ||= medicineRequiresPrescription;
+                        if (medicineRequiresPrescription && !orderData.prescriptionUrl) {
+                            throw inventoryError(`A prescription is required for ${medicine.name}.`);
+                        }
+
+                        const reserved = await Medicine.findOneAndUpdate({
+                            _id: medicine._id,
+                            expiryDate: { $gt: now },
+                            $expr: {
+                                $gte: [
+                                    {
+                                        $subtract: [
+                                            { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
+                                            { $ifNull: ['$reservedQuantity', 0] }
+                                        ]
+                                    },
+                                    quantity
+                                ]
+                            }
+                        }, {
+                            $inc: { reservedQuantity: quantity }
+                        }, { new: true, session });
+
+                        if (!reserved) {
+                            throw inventoryError(`Insufficient available stock for ${medicine.name}.`, 409);
+                        }
+
+                        const price = Number(medicine.price);
+                        totalAmount += price * quantity;
+                        medicineItems.push({
+                            medicineId: medicine._id,
+                            quantity,
+                            price,
+                            name: medicine.name,
+                            sku: medicine.sku || medicine.code || ''
+                        });
+                        itemSnapshots.push({
+                            _id: medicine._id.toString(),
+                            medicineId: medicine._id,
+                            name: medicine.name,
+                            sku: medicine.sku || medicine.code || '',
+                            price,
+                            quantity,
+                            stock: Math.max(0, getPhysicalStock(medicine) - getReservedStock(medicine) - quantity)
+                        });
+                    }
+
+                    const coupon = orderData.couponCode
+                        ? await this.validateCoupon(orderData.couponCode, totalAmount)
+                        : { valid: true, discountPercentage: 0 };
+                    if (!coupon.valid) throw inventoryError(coupon.message || 'Coupon is invalid.');
+                    const discountApplied = Math.round(totalAmount * (coupon.discountPercentage || 0)) / 100;
+                    const finalTotal = Math.max(0, Math.round((totalAmount - discountApplied) * 10) / 10);
+
+                    const [order] = await Order.create([{
+                        userId: orderData.userId,
+                        customerId: orderData.userId,
+                        customerName: orderData.customerName,
+                        customerMobile: orderData.customerMobile || '',
+                        medicineItems,
+                        items: itemSnapshots,
+                        prescriptionUrl: orderData.prescriptionUrl || null,
+                        prescriptionRequired,
+                        subtotal: totalAmount,
+                        discountApplied,
+                        totalAmount: finalTotal,
+                        finalTotal,
+                        deliveryAddress: orderData.deliveryAddress,
+                        addressDetails: orderData.addressDetails || {},
+                        coordinates: orderData.coordinates,
+                        paymentMethod: orderData.paymentMethod || 'Cash on Delivery (COD)',
+                        orderStatus: 'Pending_Review',
+                        statusHistory: [statusEntry]
+                    }], { session });
+                    createdOrder = order.toObject({ virtuals: true });
+                });
+            } finally {
+                await session.endSession();
             }
+
+            this.logAudit(actor, 'ORDER_CREATED', 'ORDER', createdOrder._id.toString(), {
+                totalAmount: createdOrder.totalAmount,
+                itemCount: createdOrder.medicineItems.length,
+                inventoryAction: 'RESERVED'
+            });
+            return createdOrder;
         }
 
-        this.logAudit(actor, 'ORDER_CREATED', 'ORDER', orderObj._id.toString(), {
-            finalTotal: orderData.finalTotal,
-            itemCount: orderData.items?.length
-        });
+        const reservedMedicines = [];
+        try {
+            const medicineItems = [];
+            const itemSnapshots = [];
+            let totalAmount = 0;
+            let prescriptionRequired = false;
 
-        return orderObj;
+            for (const [medicineId, quantity] of quantities) {
+                const medicine = inMemoryMedicines.find(item => String(item._id) === medicineId);
+                if (!medicine) throw inventoryError(`Medicine ${medicineId} was not found.`, 404);
+                if (medicine.expiryDate && new Date(medicine.expiryDate) <= now) {
+                    throw inventoryError(`${medicine.name} is expired and cannot be ordered.`);
+                }
+                const medicineRequiresPrescription = Boolean(medicine.isPrescriptionRequired ?? medicine.requiresPrescription);
+                prescriptionRequired ||= medicineRequiresPrescription;
+                if (medicineRequiresPrescription && !orderData.prescriptionUrl) {
+                    throw inventoryError(`A prescription is required for ${medicine.name}.`);
+                }
+
+                const physicalStock = getPhysicalStock(medicine);
+                const currentReserved = getReservedStock(medicine);
+                const available = physicalStock - currentReserved;
+                if (available < quantity) {
+                    throw inventoryError(`Insufficient available stock for ${medicine.name}.`, 409);
+                }
+
+                medicine.stockQuantity = physicalStock;
+                medicine.reservedQuantity = currentReserved + quantity;
+                reservedMedicines.push({ medicine, quantity });
+                const price = Number(medicine.price);
+                totalAmount += price * quantity;
+                medicineItems.push({
+                    medicineId,
+                    quantity,
+                    price,
+                    name: medicine.name,
+                    sku: medicine.sku || medicine.code || ''
+                });
+                itemSnapshots.push({
+                    _id: medicineId,
+                    medicineId,
+                    name: medicine.name,
+                    sku: medicine.sku || medicine.code || '',
+                    price,
+                    quantity,
+                    stock: available - quantity
+                });
+            }
+
+            const coupon = orderData.couponCode
+                ? await this.validateCoupon(orderData.couponCode, totalAmount)
+                : { valid: true, discountPercentage: 0 };
+            if (!coupon.valid) throw inventoryError(coupon.message || 'Coupon is invalid.');
+            const discountApplied = Math.round(totalAmount * (coupon.discountPercentage || 0)) / 100;
+            const finalTotal = Math.max(0, Math.round((totalAmount - discountApplied) * 10) / 10);
+
+            const order = {
+                _id: new mongoose.Types.ObjectId().toString(),
+                userId: orderData.userId,
+                customerId: orderData.userId,
+                customerName: orderData.customerName,
+                customerMobile: orderData.customerMobile || '',
+                medicineItems,
+                items: itemSnapshots,
+                prescriptionUrl: orderData.prescriptionUrl || null,
+                prescriptionRequired,
+                subtotal: totalAmount,
+                discountApplied,
+                totalAmount: finalTotal,
+                finalTotal,
+                deliveryAddress: orderData.deliveryAddress,
+                addressDetails: orderData.addressDetails || {},
+                coordinates: orderData.coordinates,
+                paymentMethod: orderData.paymentMethod || 'Cash on Delivery (COD)',
+                orderStatus: 'Pending_Review',
+                statusHistory: [statusEntry],
+                createdAt: now,
+                updatedAt: now
+            };
+            inMemoryOrders.unshift(order);
+            this.logAudit(actor, 'ORDER_CREATED', 'ORDER', order._id, {
+                totalAmount,
+                itemCount: medicineItems.length,
+                inventoryAction: 'RESERVED'
+            });
+            return order;
+        } catch (error) {
+            for (const { medicine, quantity } of reservedMedicines) {
+                medicine.reservedQuantity = Math.max(0, getReservedStock(medicine) - quantity);
+            }
+            throw error;
+        }
+    },
+
+    async reviewOrder(orderId, decision, actor = 'Admin') {
+        const status = decision === 'approve' ? 'Approved' : 'Rejected';
+        if (getIsConnected()) {
+            if (!mongoose.isValidObjectId(orderId)) throw inventoryError('Invalid order ID.');
+            const session = await mongoose.startSession();
+            let reviewedOrder;
+            try {
+                await session.withTransaction(async () => {
+                    const order = await Order.findById(orderId).session(session);
+                    if (!order) throw inventoryError('Order not found.', 404);
+                    if (order.orderStatus !== 'Pending_Review') {
+                        throw inventoryError(`Only Pending_Review orders can be reviewed. Current status: ${order.orderStatus}`, 409);
+                    }
+
+                    if (status === 'Rejected') {
+                        for (const item of order.medicineItems) {
+                            const quantity = Number(item.quantity);
+                            const result = await Medicine.updateOne({
+                                _id: item.medicineId,
+                                $expr: { $gte: [{ $ifNull: ['$reservedQuantity', 0] }, quantity] }
+                            }, { $inc: { reservedQuantity: -quantity } }, { session });
+                            if (result.modifiedCount !== 1) {
+                                throw inventoryError('Could not safely release reserved medicine stock.', 409);
+                            }
+                        }
+                    }
+
+                    order.orderStatus = status;
+                    order.statusHistory.push({
+                        previousStatus: 'Pending_Review',
+                        newStatus: status,
+                        changedBy: actor,
+                        timestamp: new Date(),
+                        notes: status === 'Rejected' ? 'Prescription rejected; reserved inventory released.' : 'Prescription reviewed and approved.'
+                    });
+                    await order.save({ session });
+                    reviewedOrder = order.toObject({ virtuals: true });
+                });
+            } finally {
+                await session.endSession();
+            }
+            return reviewedOrder;
+        }
+
+        const order = inMemoryOrders.find(item => String(item._id) === String(orderId));
+        if (!order) throw inventoryError('Order not found.', 404);
+        if (order.orderStatus !== 'Pending_Review') {
+            throw inventoryError(`Only Pending_Review orders can be reviewed. Current status: ${order.orderStatus}`, 409);
+        }
+        if (status === 'Rejected') {
+            for (const item of order.medicineItems || []) {
+                const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
+                if (!medicine || getReservedStock(medicine) < item.quantity) {
+                    throw inventoryError('Could not safely release reserved medicine stock.', 409);
+                }
+            }
+            for (const item of order.medicineItems || []) {
+                const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
+                medicine.reservedQuantity -= item.quantity;
+            }
+        }
+        order.orderStatus = status;
+        order.statusHistory.push({
+            previousStatus: 'Pending_Review',
+            newStatus: status,
+            changedBy: actor,
+            timestamp: new Date(),
+            notes: status === 'Rejected' ? 'Prescription rejected; reserved inventory released.' : 'Prescription reviewed and approved.'
+        });
+        return order;
+    },
+
+    async cancelOrder(orderId, actor = 'Customer', customerId = null) {
+        if (getIsConnected()) {
+            if (!mongoose.isValidObjectId(orderId)) throw inventoryError('Invalid order ID.');
+            const session = await mongoose.startSession();
+            let cancelledOrder;
+            try {
+                await session.withTransaction(async () => {
+                    const order = await Order.findById(orderId).session(session);
+                    if (!order) throw inventoryError('Order not found.', 404);
+                    if (customerId && order.userId !== customerId) {
+                        throw inventoryError('You are not authorized to cancel this order.', 403);
+                    }
+                    if (!['Pending_Review', 'Approved'].includes(order.orderStatus)) {
+                        throw inventoryError('Only orders awaiting review or dispatch can be cancelled.', 409);
+                    }
+
+                    for (const item of order.medicineItems) {
+                        const quantity = Number(item.quantity);
+                        const result = await Medicine.updateOne({
+                            _id: item.medicineId,
+                            $expr: { $gte: [{ $ifNull: ['$reservedQuantity', 0] }, quantity] }
+                        }, { $inc: { reservedQuantity: -quantity } }, { session });
+                        if (result.modifiedCount !== 1) {
+                            throw inventoryError('Could not safely release reserved medicine stock.', 409);
+                        }
+                    }
+
+                    order.orderStatus = 'Cancelled';
+                    order.statusHistory.push({
+                        previousStatus: order.statusHistory.at(-1)?.newStatus || 'Pending_Review',
+                        newStatus: 'Cancelled',
+                        changedBy: actor,
+                        timestamp: new Date(),
+                        notes: 'Order cancelled; reserved inventory released.'
+                    });
+                    await order.save({ session });
+                    cancelledOrder = order.toObject({ virtuals: true });
+                });
+            } finally {
+                await session.endSession();
+            }
+            return cancelledOrder;
+        }
+
+        const order = inMemoryOrders.find(item => String(item._id) === String(orderId));
+        if (!order) throw inventoryError('Order not found.', 404);
+        if (customerId && order.userId !== customerId) {
+            throw inventoryError('You are not authorized to cancel this order.', 403);
+        }
+        if (!['Pending_Review', 'Approved'].includes(order.orderStatus)) {
+            throw inventoryError('Only orders awaiting review or dispatch can be cancelled.', 409);
+        }
+        for (const item of order.medicineItems || []) {
+            const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
+            if (!medicine || getReservedStock(medicine) < item.quantity) {
+                throw inventoryError('Could not safely release reserved medicine stock.', 409);
+            }
+        }
+        for (const item of order.medicineItems || []) {
+            const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
+            medicine.reservedQuantity -= item.quantity;
+        }
+        const previousStatus = order.orderStatus;
+        order.orderStatus = 'Cancelled';
+        order.statusHistory.push({
+            previousStatus,
+            newStatus: 'Cancelled',
+            changedBy: actor,
+            timestamp: new Date(),
+            notes: 'Order cancelled; reserved inventory released.'
+        });
+        return order;
+    },
+
+    async dispatchOrder(orderId, actor = 'Admin', riderInfo = null) {
+        if (getIsConnected()) {
+            if (!mongoose.isValidObjectId(orderId)) throw inventoryError('Invalid order ID.');
+            const session = await mongoose.startSession();
+            let dispatchedOrder;
+            try {
+                await session.withTransaction(async () => {
+                    const order = await Order.findById(orderId).session(session);
+                    if (!order) throw inventoryError('Order not found.', 404);
+                    if (order.orderStatus !== 'Approved') {
+                        throw inventoryError(`Only Approved orders can be dispatched. Current status: ${order.orderStatus}`, 409);
+                    }
+
+                    for (const item of order.medicineItems) {
+                        const quantity = Number(item.quantity);
+                        const filter = {
+                            _id: item.medicineId,
+                            $expr: {
+                                $and: [
+                                    {
+                                        $gte: [
+                                            { $ifNull: ['$reservedQuantity', 0] },
+                                            quantity
+                                        ]
+                                    },
+                                    {
+                                        $gte: [
+                                            { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
+                                            quantity
+                                        ]
+                                    }
+                                ]
+                            }
+                        };
+                        const update = [{
+                            $set: {
+                                stockQuantity: {
+                                    $subtract: [
+                                        { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
+                                        quantity
+                                    ]
+                                },
+                                stock: {
+                                    $subtract: [
+                                        { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
+                                        quantity
+                                    ]
+                                },
+                                quantity: {
+                                    $subtract: [
+                                        { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
+                                        quantity
+                                    ]
+                                },
+                                reservedQuantity: {
+                                    $subtract: [{ $ifNull: ['$reservedQuantity', 0] }, quantity]
+                                }
+                            }
+                        }];
+                        const result = await Medicine.collection.updateOne(filter, update, { session });
+                        if (result.modifiedCount !== 1) {
+                            throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
+                        }
+                    }
+
+                    const transitionAt = new Date();
+                    if (riderInfo) {
+                        order.rider = {
+                            riderId: riderInfo.riderId || `r-${Date.now()}`,
+                            riderName: riderInfo.riderName || 'Assigned Courier',
+                            riderMobile: riderInfo.riderMobile || '',
+                            assignedAt: transitionAt
+                        };
+                        order.deliveryPersonMobile = riderInfo.riderMobile || '';
+                    }
+                    order.orderStatus = 'Dispatched';
+                    order.outForDeliveryAt = transitionAt;
+                    order.statusHistory.push({
+                        previousStatus: 'Approved',
+                        newStatus: 'Dispatched',
+                        changedBy: actor,
+                        timestamp: transitionAt,
+                        notes: 'Reserved stock deducted from inventory on dispatch.'
+                    });
+                    await order.save({ session });
+                    dispatchedOrder = order.toObject({ virtuals: true });
+                });
+            } finally {
+                await session.endSession();
+            }
+            return dispatchedOrder;
+        }
+
+        const order = inMemoryOrders.find(item => String(item._id) === String(orderId));
+        if (!order) throw inventoryError('Order not found.', 404);
+        if (order.orderStatus !== 'Approved') {
+            throw inventoryError(`Only Approved orders can be dispatched. Current status: ${order.orderStatus}`, 409);
+        }
+        const items = order.medicineItems || [];
+        for (const item of items) {
+            const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
+            if (!medicine || getReservedStock(medicine) < item.quantity || getPhysicalStock(medicine) < item.quantity) {
+                throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
+            }
+        }
+        for (const item of items) {
+            const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
+            const remainingStock = getPhysicalStock(medicine) - item.quantity;
+            medicine.stockQuantity = remainingStock;
+            medicine.stock = remainingStock;
+            medicine.quantity = remainingStock;
+            medicine.reservedQuantity = getReservedStock(medicine) - item.quantity;
+        }
+        const transitionAt = new Date();
+        if (riderInfo) {
+            order.rider = {
+                riderId: riderInfo.riderId || `r-${Date.now()}`,
+                riderName: riderInfo.riderName || 'Assigned Courier',
+                riderMobile: riderInfo.riderMobile || '',
+                assignedAt: transitionAt
+            };
+            order.deliveryPersonMobile = riderInfo.riderMobile || '';
+        }
+        order.orderStatus = 'Dispatched';
+        order.outForDeliveryAt = transitionAt;
+        order.statusHistory.push({
+            previousStatus: 'Approved',
+            newStatus: 'Dispatched',
+            changedBy: actor,
+            timestamp: transitionAt,
+            notes: 'Reserved stock deducted from inventory on dispatch.'
+        });
+        return order;
     },
 
     async getAllOrders() {
@@ -760,6 +1368,15 @@ export const dataStore = {
 
     async createCoupon(code, discountPercentage, minOrderValue = 0) {
         const uppercase = code.toUpperCase().trim();
+        if (getIsConnected()) {
+            await Coupon.findOneAndUpdate({ code: uppercase }, {
+                $set: {
+                    discountPercentage: Number(discountPercentage),
+                    minOrderValue: Number(minOrderValue) || 0,
+                    isActive: true
+                }
+            }, { upsert: true, new: true, setDefaultsOnInsert: true });
+        }
         const existing = inMemoryCoupons.find(c => c.code === uppercase);
         if (existing) {
             existing.discountPercentage = Number(discountPercentage);
@@ -779,7 +1396,9 @@ export const dataStore = {
 
     async validateCoupon(code, orderTotal = 0) {
         const uppercase = (code || '').toUpperCase().trim();
-        const c = inMemoryCoupons.find(x => x.code === uppercase && x.isActive);
+        const c = getIsConnected()
+            ? (await Coupon.findOne({ code: uppercase, isActive: true })) || inMemoryCoupons.find(x => x.code === uppercase && x.isActive)
+            : inMemoryCoupons.find(x => x.code === uppercase && x.isActive);
         if (!c) return { valid: false, message: "Invalid or expired promo code" };
         if (orderTotal < (c.minOrderValue || 0)) {
             return { valid: false, message: `Minimum order amount of ₹${c.minOrderValue} required for this coupon.` };

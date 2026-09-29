@@ -5,9 +5,9 @@ export default function ProductCard({ med }) {
   const { cart, addToCart, updateQuantity } = useApp();
   const [imageError, setImageError] = useState(false);
 
-  const stock = med.stock !== undefined ? med.stock : (med.quantity || 0);
+  const stock = med.availableQuantity ?? med.stock ?? med.quantity ?? 0;
   const isOut = stock <= 0 || med.isExpired;
-  const isLow = stock > 0 && stock <= 3;
+  const isLow = stock > 0 && stock < 5;
 
   // Find item in cart
   const cartItem = cart.find(item => item._id === med._id);
@@ -38,7 +38,7 @@ export default function ProductCard({ med }) {
 
           {/* Status Badges */}
           <div className="absolute top-1.5 left-1.5 flex flex-col gap-1">
-            {med.requiresPrescription && (
+            {(med.isPrescriptionRequired || med.requiresPrescription) && (
               <span className="bg-rose-600 text-white text-[8px] sm:text-[9px] font-black px-1.5 py-0.5 rounded shadow-xs tracking-wider uppercase">
                 Rx Only
               </span>
@@ -53,11 +53,16 @@ export default function ProductCard({ med }) {
                 Sold Out
               </span>
             )}
+            {!med.isExpired && !isOut && !isLow && (
+              <span className="bg-emerald-600 text-white text-[8px] sm:text-[9px] font-black px-1.5 py-0.5 rounded shadow-xs tracking-wider uppercase">
+                In Stock
+              </span>
+            )}
           </div>
 
           {isLow && !med.isExpired && (
             <span className="absolute bottom-1.5 right-1.5 bg-amber-500 text-white text-[8px] sm:text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow-xs">
-              {stock} Left
+              Only {stock} Left
             </span>
           )}
         </div>
@@ -77,6 +82,11 @@ export default function ProductCard({ med }) {
         <p className="text-[10px] sm:text-[11px] text-slate-500 line-clamp-1 leading-normal mb-2">
           {med.composition || med.description || 'Active pharmaceutical grade formulation.'}
         </p>
+        {med.expiryDate && (
+          <p className="mb-2 text-[9px] text-slate-400">
+            Expires: {new Date(med.expiryDate).toLocaleDateString()}
+          </p>
+        )}
       </div>
 
       {/* Card Footer: Always aligned at bottom */}
