@@ -1,9 +1,8 @@
 import express from 'express';
 import { authenticateUser, isAdmin } from '../middleware/auth.js';
 import {
-    getWhatsAppStatus,
+    ensureWhatsAppSession,
     generateWhatsAppQR,
-    confirmWhatsAppConnection,
     disconnectWhatsApp,
     getNotificationLog
 } from '../config/whatsapp.js';
@@ -14,12 +13,7 @@ const router = express.Router();
 // Get current WhatsApp connection status
 router.get('/status', authenticateUser, isAdmin, async (req, res) => {
     try {
-        let status = getWhatsAppStatus();
-        // If not connected and no QR exists, auto-generate initial pairing QR
-        if (!status.isConnected && !status.qrCode) {
-            status = await generateWhatsAppQR();
-        }
-        res.json(status);
+        res.json(await ensureWhatsAppSession());
     } catch (err) {
         console.error("WhatsApp status check error:", err);
         res.status(500).json({ message: "Failed to retrieve WhatsApp status" });
@@ -29,11 +23,9 @@ router.get('/status', authenticateUser, isAdmin, async (req, res) => {
 // Generate / Refresh QR code or add another device (supports custom phone number or device name)
 router.post('/generate-qr', authenticateUser, isAdmin, async (req, res) => {
     try {
-        const { phone, deviceName } = req.body || {};
-        const status = await generateWhatsAppQR(phone, deviceName);
+        const status = await generateWhatsAppQR();
         dataStore.logAudit(req.user?.sub || 'Admin', 'WHATSAPP_QR_GENERATED', 'SYSTEM', 'WHATSAPP_GATEWAY', {
-            phone: phone || 'Unspecified',
-            deviceName: deviceName || 'New Device'
+            deviceName: 'WhatsApp Linked Device'
         });
         res.json(status);
     } catch (err) {
@@ -42,29 +34,10 @@ router.post('/generate-qr', authenticateUser, isAdmin, async (req, res) => {
     }
 });
 
-// Confirm connection (simulated scan or verification)
-router.post('/connect', authenticateUser, isAdmin, async (req, res) => {
-    try {
-        const { phone, deviceName } = req.body || {};
-        const status = confirmWhatsAppConnection(phone, deviceName);
-        dataStore.logAudit(req.user?.sub || 'Admin', 'WHATSAPP_CONNECTED', 'SYSTEM', 'WHATSAPP_GATEWAY', {
-            phone: status.phone,
-            deviceName: status.deviceName
-        });
-        res.json({
-            message: "WhatsApp dispatch gateway successfully connected!",
-            status
-        });
-    } catch (err) {
-        console.error("WhatsApp connection error:", err);
-        res.status(500).json({ message: "Failed to connect WhatsApp" });
-    }
-});
-
 // Disconnect WhatsApp session
 router.post('/disconnect', authenticateUser, isAdmin, async (req, res) => {
     try {
-        const status = disconnectWhatsApp();
+        const status = await disconnectWhatsApp();
         dataStore.logAudit(req.user?.sub || 'Admin', 'WHATSAPP_DISCONNECTED', 'SYSTEM', 'WHATSAPP_GATEWAY', {});
         res.json({
             message: "WhatsApp device disconnected. Mobile notifications paused.",

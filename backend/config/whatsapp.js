@@ -1,65 +1,29 @@
 // WhatsApp notification service abstraction & device session manager
 // Provides idempotent messaging tracking, device pairing QR generation, and delivery status updates
+import path from 'node:path';
+import { rm } from 'node:fs/promises';
 import QRCode from 'qrcode';
+import makeWASocket, {
+    DisconnectReason,
+    useMultiFileAuthState
+} from '@whiskeysockets/baileys';
 
 const sentNotifications = new Map();
+const authDirectory = process.env.WHATSAPP_AUTH_DIR || path.resolve('data/whatsapp-auth');
+const qrLifetimeMs = 20_000;
 
-// In-memory WhatsApp connection session state
 let whatsappState = {
     isConnected: false,
     phone: null,
     deviceName: null,
     lastConnectedAt: null,
-    sessionToken: null,
     qrCode: null,
-    pairingCode: null,
     expiresAt: null
 };
 
-// Generates a WhatsApp Web linking QR code & pairing code
-export const generateWhatsAppQR = async (phone = '', deviceName = 'Admin Dispatch Phone') => {
-    const sessionToken = `wa-sess-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-    const pairingCode = `ASHV-${Math.floor(1000 + Math.random() * 9000)}`;
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min expiry
-
-    // Structured WhatsApp Web-compatible pairing payload
-    const pairingPayload = JSON.stringify({
-        app: "AshvinPharmacy-Dispatch",
-        sessionToken,
-        pairingCode,
-        targetPhone: phone || "ANY",
-        timestamp: Date.now(),
-        serverUrl: "https://ashvinpharma.com/whatsapp-webhook"
-    });
-
-    let qrDataUrl = '';
-    try {
-        qrDataUrl = await QRCode.toDataURL(pairingPayload, {
-            errorCorrectionLevel: 'H',
-            margin: 2,
-            width: 280,
-            color: {
-                dark: '#0f172a',
-                light: '#ffffff'
-            }
-        });
-    } catch (err) {
-        console.error("QR Code generation error:", err);
-    }
-
-    whatsappState = {
-        ...whatsappState,
-        isConnected: false,
-        sessionToken,
-        qrCode: qrDataUrl,
-        pairingCode,
-        phone: phone || whatsappState.phone,
-        deviceName: deviceName || whatsappState.deviceName || 'Admin Dispatch Phone',
-        expiresAt
-    };
-
-    return getWhatsAppStatus();
-};
+let socket = null;
+let sessionGeneration = 0;
+let sessionPromise = null;
 
 export const getWhatsAppStatus = () => {
     return {
@@ -68,35 +32,142 @@ export const getWhatsAppStatus = () => {
         deviceName: whatsappState.deviceName,
         lastConnectedAt: whatsappState.lastConnectedAt,
         qrCode: whatsappState.qrCode,
-        pairingCode: whatsappState.pairingCode,
         expiresAt: whatsappState.expiresAt
     };
 };
 
-export const confirmWhatsAppConnection = (phone = '+91 98450 12345', deviceName = 'Admin Dispatch Phone') => {
+const startWhatsAppSession = async (forceRefresh = false) => {
+    if (whatsappState.isConnected && !forceRefresh) return getWhatsAppStatus();
+    if (!forceRefresh && whatsappState.qrCode && new Date(whatsappState.expiresAt).getTime() > Date.now()) {
+        return getWhatsAppStatus();
+    }
+    if (!forceRefresh && sessionPromise) return sessionPromise;
+
+    const previousSocket = socket;
+    const generation = ++sessionGeneration;
+    socket = null;
+    sessionPromise = null;
+    previousSocket?.end(new Error('WhatsApp QR session replaced'));
+
     whatsappState = {
         ...whatsappState,
-        isConnected: true,
-        phone: phone || whatsappState.phone || '+91 98450 12345',
-        deviceName: deviceName || 'Admin Primary Mobile',
-        lastConnectedAt: new Date().toISOString(),
+        isConnected: false,
         qrCode: null,
-        pairingCode: null,
         expiresAt: null
     };
 
-    return getWhatsAppStatus();
+    const pendingSession = (async () => {
+        const { state, saveCreds } = await useMultiFileAuthState(authDirectory);
+        if (generation !== sessionGeneration) return getWhatsAppStatus();
+
+        const client = makeWASocket({
+            auth: state,
+            printQRInTerminal: false,
+            browser: ['Ashvin Pharmacy', 'Chrome', '1.0.0']
+        });
+        socket = client;
+        client.ev.on('creds.update', saveCreds);
+
+        return new Promise((resolve, reject) => {
+            let settled = false;
+            const timeout = setTimeout(() => {
+                if (generation !== sessionGeneration) return;
+                client.end(new Error('Timed out waiting for WhatsApp QR code'));
+                reject(new Error('Timed out waiting for WhatsApp QR code'));
+            }, 30_000);
+
+            const finish = (callback, value) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                callback(value);
+            };
+
+            client.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+                if (generation !== sessionGeneration) return;
+
+                if (qr) {
+                    try {
+                        const qrCode = await QRCode.toDataURL(qr, {
+                            errorCorrectionLevel: 'M',
+                            margin: 2,
+                            width: 280
+                        });
+                        if (generation !== sessionGeneration) return;
+                        whatsappState = {
+                            ...whatsappState,
+                            isConnected: false,
+                            qrCode,
+                            expiresAt: new Date(Date.now() + qrLifetimeMs)
+                        };
+                        finish(resolve, getWhatsAppStatus());
+                    } catch (error) {
+                        finish(reject, error);
+                    }
+                }
+
+                if (connection === 'open') {
+                    whatsappState = {
+                        ...whatsappState,
+                        isConnected: true,
+                        phone: client.user?.id?.split('@')[0]?.split(':')[0] || null,
+                        deviceName: 'WhatsApp Linked Device',
+                        lastConnectedAt: new Date().toISOString(),
+                        qrCode: null,
+                        expiresAt: null
+                    };
+                    finish(resolve, getWhatsAppStatus());
+                }
+
+                if (connection === 'close') {
+                    const statusCode = lastDisconnect?.error?.output?.statusCode;
+                    socket = null;
+                    whatsappState = {
+                        ...whatsappState,
+                        isConnected: false,
+                        qrCode: null,
+                        expiresAt: null
+                    };
+                    if (statusCode === DisconnectReason.loggedOut) {
+                        await rm(authDirectory, { recursive: true, force: true });
+                    }
+                    finish(reject, new Error(`WhatsApp connection closed (${statusCode ?? 'unknown reason'})`));
+                }
+            });
+        });
+    })();
+
+    sessionPromise = pendingSession;
+    try {
+        return await pendingSession;
+    } finally {
+        if (generation === sessionGeneration) sessionPromise = null;
+    }
 };
 
-export const disconnectWhatsApp = () => {
+export const generateWhatsAppQR = async () => startWhatsAppSession(true);
+
+export const ensureWhatsAppSession = async () => {
+    if (whatsappState.isConnected) return getWhatsAppStatus();
+    if (whatsappState.qrCode && new Date(whatsappState.expiresAt).getTime() > Date.now()) {
+        return getWhatsAppStatus();
+    }
+    return startWhatsAppSession();
+};
+
+export const disconnectWhatsApp = async () => {
+    const currentSocket = socket;
+    sessionGeneration += 1;
+    socket = null;
+    sessionPromise = null;
+    if (currentSocket) await currentSocket.logout();
+    await rm(authDirectory, { recursive: true, force: true });
     whatsappState = {
         isConnected: false,
         phone: null,
         deviceName: null,
         lastConnectedAt: null,
-        sessionToken: null,
         qrCode: null,
-        pairingCode: null,
         expiresAt: null
     };
 

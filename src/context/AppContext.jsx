@@ -68,7 +68,6 @@ export function AppProvider({ children }) {
     phone: null,
     deviceName: null,
     qrCode: null,
-    pairingCode: null,
     expiresAt: null
   });
   const [whatsappModalOpen, setWhatsappModalOpen] = useState(false);
@@ -82,6 +81,7 @@ export function AppProvider({ children }) {
         setWhatsappStatus(res.data);
         if (res.data.isConnected) {
           setWhatsappWarningActive(false);
+          setNotifications(prev => prev.filter(n => !n.id.startsWith('notif-wa')));
         }
         return res.data;
       }
@@ -91,31 +91,15 @@ export function AppProvider({ children }) {
     return null;
   }, []);
 
-  const generateWhatsAppQR = async (phone = '', deviceName = '') => {
+  const generateWhatsAppQR = async () => {
     try {
-      const res = await apiClient.post('/api/admin/whatsapp/generate-qr', { phone, deviceName });
+      const res = await apiClient.post('/api/admin/whatsapp/generate-qr');
       if (res.data) {
         setWhatsappStatus(res.data);
         return res.data;
       }
     } catch (err) {
       console.error("WhatsApp generate QR failed:", err);
-      throw err;
-    }
-  };
-
-  const connectWhatsApp = async (phone = '', deviceName = '') => {
-    try {
-      const res = await apiClient.post('/api/admin/whatsapp/connect', { phone, deviceName });
-      if (res.data?.status) {
-        setWhatsappStatus(res.data.status);
-        setWhatsappWarningActive(false);
-        // Mark warning notification read / dismissed
-        setNotifications(prev => prev.filter(n => !n.id.startsWith('notif-wa')));
-        return res.data.status;
-      }
-    } catch (err) {
-      console.error("WhatsApp connect failed:", err);
       throw err;
     }
   };
@@ -450,7 +434,6 @@ export function AppProvider({ children }) {
         whatsappWarningActive,
         loadWhatsAppStatus,
         generateWhatsAppQR,
-        connectWhatsApp,
         disconnectWhatsApp,
         triggerWhatsAppWarningNotification
       }}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 
@@ -6,16 +6,20 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
   const {
     whatsappStatus,
     generateWhatsAppQR,
-    connectWhatsApp,
     disconnectWhatsApp,
-    triggerWhatsAppWarningNotification
+    triggerWhatsAppWarningNotification,
+    loadWhatsAppStatus
   } = useApp();
   const { addToast } = useToast();
 
-  const [customPhone, setCustomPhone] = useState('');
-  const [customDeviceName, setCustomDeviceName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPhonePairing, setShowPhonePairing] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    loadWhatsAppStatus();
+    const statusPoll = setInterval(loadWhatsAppStatus, 3000);
+    return () => clearInterval(statusPoll);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -29,25 +33,10 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
   const handleRefreshQR = async () => {
     try {
       setLoading(true);
-      await generateWhatsAppQR(customPhone, customDeviceName || 'Admin Dispatch Phone');
+      await generateWhatsAppQR();
       addToast('New WhatsApp QR code generated.', 'info');
     } catch {
       addToast('Failed to regenerate QR code.', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSimulateScan = async () => {
-    try {
-      setLoading(true);
-      const phoneToUse = customPhone.trim() || '+91 98450 12345';
-      const deviceToUse = customDeviceName.trim() || 'Admin Primary Mobile';
-      await connectWhatsApp(phoneToUse, deviceToUse);
-      addToast(`🎉 WhatsApp device ${phoneToUse} linked successfully!`, 'success');
-      onClose();
-    } catch {
-      addToast('Failed to link WhatsApp device.', 'error');
     } finally {
       setLoading(false);
     }
@@ -61,23 +50,6 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
       await generateWhatsAppQR();
     } catch {
       addToast('Failed to disconnect WhatsApp.', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePairOtherDevice = async (e) => {
-    e.preventDefault();
-    if (!customPhone.trim()) {
-      addToast('Please enter a valid mobile number or device label.', 'warning');
-      return;
-    }
-    try {
-      setLoading(true);
-      await generateWhatsAppQR(customPhone.trim(), customDeviceName.trim() || `Device (${customPhone.trim()})`);
-      addToast(`Pairing code and QR updated for ${customPhone.trim()}`, 'success');
-    } catch {
-      addToast('Failed to generate pairing for device.', 'error');
     } finally {
       setLoading(false);
     }
@@ -232,88 +204,14 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
                     <li>Tap <strong>Link a Device</strong> and point your camera here</li>
                   </ol>
 
-                  {whatsappStatus.pairingCode && (
-                    <div className="mt-2 pt-2 border-t border-slate-200">
-                      <span className="text-[10px] text-slate-400 block font-bold uppercase">
-                        Or Use WhatsApp Pairing Code:
-                      </span>
-                      <div className="inline-block bg-slate-900 text-emerald-400 font-mono font-black text-sm px-2.5 py-1 rounded-lg mt-1 tracking-widest">
-                        {whatsappStatus.pairingCode}
-                      </div>
-                    </div>
-                  )}
                 </div>
-              </div>
-
-              {/* Add Any Other Device Field */}
-              <div className="border border-slate-200 rounded-2xl p-3.5 bg-white space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-black text-slate-800">
-                    <span>📱</span>
-                    <span>Add Any Other Device / Enter Phone Number</span>
-                  </div>
-                  <button
-                    onClick={() => setShowPhonePairing(!showPhonePairing)}
-                    className="text-[11px] text-blue-600 font-bold hover:underline cursor-pointer"
-                  >
-                    {showPhonePairing ? 'Hide' : 'Configure'}
-                  </button>
-                </div>
-
-                {showPhonePairing && (
-                  <form onSubmit={handlePairOtherDevice} className="space-y-2 pt-1 animate-fade-in">
-                    <p className="text-[11px] text-slate-500">
-                      Link another delivery smartphone, dispatcher tablet, or secondary WhatsApp Business account:
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">
-                          Device Mobile Number
-                        </label>
-                        <input
-                          type="tel"
-                          placeholder="+91 98450 12345"
-                          value={customPhone}
-                          onChange={(e) => setCustomPhone(e.target.value)}
-                          className="w-full text-xs px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 font-mono"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">
-                          Device Label (Optional)
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Rider Dispatch Phone #2"
-                          value={customDeviceName}
-                          onChange={(e) => setCustomDeviceName(e.target.value)}
-                          className="w-full text-xs px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500"
-                        />
-                      </div>
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs py-1.5 rounded-xl transition cursor-pointer"
-                    >
-                      {loading ? 'Updating Pairing QR...' : 'Generate QR & Code for This Device'}
-                    </button>
-                  </form>
-                )}
               </div>
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={handleSimulateScan}
-                  disabled={loading}
-                  className="w-full sm:flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2.5 rounded-xl transition cursor-pointer shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5"
-                >
-                  <span>✓</span>
-                  <span>{loading ? 'Verifying...' : 'Simulate Scan & Connect WhatsApp'}</span>
-                </button>
-
+                <p className="flex-1 text-[11px] text-slate-500">
+                  This QR is generated by WhatsApp and expires quickly. The connection status updates after it is scanned.
+                </p>
                 <button
                   type="button"
                   onClick={handleClose}
