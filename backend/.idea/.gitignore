@@ -1,0 +1,69 @@
+# Default ignored files
+/shelf/
+/workspace.xml
+# Editor-based HTTP Client requests
+/httpRequests/
+# Ignored default folder with query files
+/queries/
+# Datasource local storage ignored files
+/dataSources/
+/dataSources.local.xml
+
+# Dependency directories
+node_modules/
+jspm_packages/
+web_modules/
+.pnpm-store/
+
+# Vite production build output
+dist/
+dist-ssr/
+*.local
+
+# Vite and tooling caches
+.vite/
+.eslintcache
+.stylelintcache
+.turbo/
+.cache/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment variables & secrets (CRITICAL: Protect your API keys)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+# But do track your template file if you use one:
+!.env.example
+
+# Diagnostic reports and testing
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+coverage/
+.nyc_output/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# IDEs and Text Editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Operating System specific files
+.DS_Store
+Thumbs.db
