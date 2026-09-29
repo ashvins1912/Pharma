@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { isSupabaseConfigured, supabase } from '../supabaseClient';
 import apiClient from '../api/apiClient';
 
 const AuthContext = createContext(null);
@@ -41,6 +41,11 @@ export function AuthProvider({ children }) {
       } catch {}
     }
 
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return undefined;
+    }
+
     // Initialize Supabase session
     try {
       supabase.auth.getSession().then(({ data: { session: supaSession } }) => {
@@ -65,6 +70,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   const loginWithGoogle = async () => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Google sign-in is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then enable Google in your Supabase Auth providers.');
+    }
+
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
