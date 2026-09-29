@@ -1,0 +1,241 @@
+import React, { useState } from 'react';
+import apiClient from '../../api/apiClient';
+import { useToast } from '../../context/ToastContext';
+
+const COLUMNS = [
+  { id: 'Processing Order', title: 'Processing Order', color: 'border-amber-500 text-amber-800 bg-amber-50' },
+  { id: 'Ready to Dispatch', title: 'Ready to Dispatch', color: 'border-indigo-500 text-indigo-800 bg-indigo-50' },
+  { id: 'Dispatched', title: 'Dispatched', color: 'border-blue-500 text-blue-800 bg-blue-50' },
+  { id: 'Delivered', title: 'Delivered', color: 'border-emerald-500 text-emerald-800 bg-emerald-50' }
+];
+
+export default function AdminFulfillmentKanban({ orders, onRefresh }) {
+  const { addToast } = useToast();
+  const [updatingId, setUpdatingId] = useState(null);
+  const [assignRiderModal, setAssignRiderModal] = useState(null);
+  const [riderName, setRiderName] = useState('Suresh Kumar');
+  const [riderMobile, setRiderMobile] = useState('+91 98765 43210');
+
+  const handleTransition = async (orderId, newStatus, riderInfo = null) => {
+    try {
+      setUpdatingId(orderId);
+      const res = await apiClient.post('/api/orders/admin/transition', {
+        orderId,
+        newStatus,
+        riderInfo
+      });
+      addToast(res.data.message || `Order shifted to ${newStatus}`, 'success');
+      onRefresh();
+    } catch (err) {
+      addToast(err.message || 'State transition failed', 'error');
+    } finally {
+      setUpdatingId(null);
+      setAssignRiderModal(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="text-base font-black text-slate-900">📦 Order Fulfillment Pipeline</h3>
+          <p className="text-xs text-slate-500">Live order state machine & dispatch lifecycle</p>
+        </div>
+        <button
+          onClick={onRefresh}
+          className="text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl cursor-pointer transition"
+        >
+          🔄 Refresh Board
+        </button>
+      </div>
+
+      {/* 4-Column Kanban Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {COLUMNS.map((col) => {
+          const colOrders = orders.filter(o => o.orderStatus === col.id);
+
+          return (
+            <div key={col.id} className="bg-slate-100/70 border border-slate-200 rounded-3xl p-4 flex flex-col min-h-[500px]">
+              
+              {/* Column Header */}
+              <div className="flex justify-between items-center pb-3 border-b border-slate-200 mb-3">
+                <span className={`text-xs font-black px-2.5 py-1 rounded-xl uppercase tracking-wider ${col.color}`}>
+                  {col.title}
+                </span>
+                <span className="text-xs font-black text-slate-500 bg-white border border-slate-200 w-6 h-6 rounded-full flex items-center justify-center">
+                  {colOrders.length}
+                </span>
+              </div>
+
+              {/* Cards Container */}
+              <div className="space-y-3 flex-1 overflow-y-auto">
+                {colOrders.length === 0 ? (
+                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">
+                    No orders in this stage
+                  </div>
+                ) : (
+                  colOrders.map((order) => {
+                    const orderId = (order._id || '').slice(-6).toUpperCase();
+                    const isProcessing = updatingId === order._id;
+
+                    return (
+                      <div
+                        key={order._id}
+                        className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition space-y-3"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-black text-slate-900 text-xs">#{orderId}</span>
+                            <span className="text-[10px] text-slate-400 block">
+                              {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <span className="font-black text-emerald-600 text-xs bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">
+                            ₹{order.finalTotal} COD
+                          </span>
+                        </div>
+
+                        {/* Customer & Address */}
+                        <div className="text-[11px] text-slate-600 space-y-0.5 border-t border-slate-100 pt-2">
+                          <p className="font-bold text-slate-800">{order.customerName || 'Customer'}</p>
+                          <p className="text-slate-400">{order.customerMobile || 'No phone'}</p>
+                          <p className="text-slate-500 line-clamp-2 mt-1">📍 {order.deliveryAddress}</p>
+                        </div>
+
+                        {/* Items list preview */}
+                        <div className="bg-slate-50 p-2 rounded-xl text-[10px] text-slate-500 space-y-0.5">
+                          {(order.items || []).map((i, idx) => (
+                            <div key={idx} className="flex justify-between">
+                              <span className="truncate max-w-[130px]">• {i.name}</span>
+                              <span className="font-bold text-slate-700">x{i.quantity}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Rider details if assigned */}
+                        {order.rider && (
+                          <div className="bg-blue-50 p-2 rounded-xl text-[10px] text-blue-900">
+                            <span className="font-bold">🛵 Rider: {order.rider.riderName}</span>
+                            <p className="text-blue-700">{order.rider.riderMobile}</p>
+                          </div>
+                        )}
+
+                        {/* Action Buttons according to allowed state transitions */}
+                        <div className="pt-2 border-t border-slate-100">
+                          {col.id === 'Processing Order' && (
+                            <button
+                              onClick={() => handleTransition(order._id, 'Ready to Dispatch')}
+                              disabled={isProcessing}
+                              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[11px] py-2 rounded-xl transition cursor-pointer shadow-sm shadow-indigo-600/20"
+                            >
+                              {isProcessing ? 'Verifying...' : '🔬 Verify & Pack → Ready'}
+                            </button>
+                          )}
+
+                          {col.id === 'Ready to Dispatch' && (
+                            <button
+                              onClick={() => setAssignRiderModal(order)}
+                              disabled={isProcessing}
+                              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-600/20"
+                            >
+                              🛵 Assign Rider & Dispatch
+                            </button>
+                          )}
+
+                          {col.id === 'Dispatched' && (
+                            <button
+                              onClick={() => handleTransition(order._id, 'Delivered')}
+                              disabled={isProcessing}
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] py-2 rounded-xl transition cursor-pointer shadow-sm shadow-emerald-600/20"
+                            >
+                              {isProcessing ? 'Recording...' : '🏁 Confirm Delivered & Cash Collected'}
+                            </button>
+                          )}
+
+                          {col.id === 'Delivered' && (
+                            <div className="text-center text-[10px] font-extrabold text-emerald-700 bg-emerald-50 py-1.5 rounded-xl border border-emerald-100">
+                              ✓ Completed & Finalized
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Assign Rider Modal */}
+      {assignRiderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center">
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                🛵 Assign Delivery Rider
+              </h4>
+              <button
+                onClick={() => setAssignRiderModal(null)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Assign dispatch courier for Order #{(assignRiderModal._id || '').slice(-6).toUpperCase()}.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1">Rider Name</label>
+                <input
+                  type="text"
+                  value={riderName}
+                  onChange={(e) => setRiderName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1">Rider Phone (WhatsApp)</label>
+                <input
+                  type="tel"
+                  value={riderMobile}
+                  onChange={(e) => setRiderMobile(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setAssignRiderModal(null)}
+                className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() =>
+                  handleTransition(assignRiderModal._id, 'Dispatched', {
+                    riderName,
+                    riderMobile
+                  })
+                }
+                className="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2 rounded-xl text-xs shadow-md shadow-blue-600/25"
+              >
+                Dispatch Order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

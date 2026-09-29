@@ -1,0 +1,289 @@
+import React, { useState, useEffect } from 'react';
+import apiClient from '../../api/apiClient';
+import AdminFulfillmentKanban from './AdminFulfillmentKanban';
+import AdminInventoryTable from './AdminInventoryTable';
+import AdminRouteOptimizer from './AdminRouteOptimizer';
+import AdminBulkImportModal from './AdminBulkImportModal';
+import { useApp } from '../../context/AppContext';
+
+export default function AdminDashboardView() {
+  const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen } = useApp();
+  const [adminTab, setAdminTab] = useState('fulfillment'); // 'fulfillment' | 'inventory' | 'routes' | 'audits'
+  const [orders, setOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [auditLogs, setAuditLogs] = useState([]);
+
+  const loadAllOrders = async () => {
+    try {
+      setLoadingOrders(true);
+      const res = await apiClient.get('/api/orders/admin/all');
+      setOrders(res.data || []);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
+
+  const loadAuditLogs = async () => {
+    try {
+      const res = await apiClient.get('/api/medicines/audits');
+      setAuditLogs(res.data || []);
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    loadAllOrders();
+    loadInventoryAlerts();
+    if (adminTab === 'audits') loadAuditLogs();
+  }, [adminTab, loadInventoryAlerts]);
+
+  // Derived Metrics
+  const processingCount = orders.filter(o => o.orderStatus === 'Processing Order').length;
+  const readyCount = orders.filter(o => o.orderStatus === 'Ready to Dispatch').length;
+  const deliveredCount = orders.filter(o => o.orderStatus === 'Delivered').length;
+  const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.finalTotal) || 0), 0);
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      
+      {/* Top Banner & Metric Cards */}
+      <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-3xl p-6 shadow-md space-y-5">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div>
+            <span className="text-[11px] font-black uppercase tracking-wider text-indigo-400">
+              Dispensary Control Hub
+            </span>
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight">
+              Pharmacy Operations & Fulfillment Dashboard
+            </h2>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            {/* WhatsApp Gateway Status & Quick Action */}
+            <button
+              onClick={() => setWhatsappModalOpen(true)}
+              className={`font-extrabold text-xs px-3.5 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm ${
+                whatsappStatus.isConnected
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                  : 'bg-amber-500 hover:bg-amber-400 text-slate-900 animate-pulse'
+              }`}
+              title="Click to view WhatsApp QR pairing"
+            >
+              <span>📲</span>
+              <span>{whatsappStatus.isConnected ? 'WhatsApp: Connected' : 'WhatsApp: Offline'}</span>
+            </button>
+
+            <button
+              onClick={() => setImportModalOpen(true)}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer flex items-center gap-2"
+            >
+              <span>📥</span>
+              <span>Bulk Excel Ingestion</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 4 Metric Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-slate-800">
+          <div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+              Active Orders
+            </span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-black text-slate-900">{orders.length}</span>
+              <span className="text-[11px] font-bold text-amber-600">({processingCount + readyCount} pending)</span>
+            </div>
+          </div>
+
+          <div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+              Low Stock Warnings
+            </span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-black text-yellow-600">{inventoryAlerts.lowStockCount || 0}</span>
+              <span className="text-[11px] text-slate-400">medicines ≤ 3</span>
+            </div>
+          </div>
+
+          <div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+              Expiring ≤ 30 Days
+            </span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-black text-amber-600">{inventoryAlerts.expiringSoonCount || 0}</span>
+              <span className="text-[11px] text-red-500 font-bold">({inventoryAlerts.expiredCount || 0} expired)</span>
+            </div>
+          </div>
+
+          <div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+              Gross Queue Value
+            </span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-black text-emerald-600">₹{totalRevenue.toFixed(0)}</span>
+              <span className="text-[11px] text-slate-400">{deliveredCount} delivered</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* WhatsApp Disconnection Warning Banner */}
+      {!whatsappStatus.isConnected && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 shadow-sm animate-fade-in">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-200 text-amber-900 flex items-center justify-center text-xl flex-shrink-0">
+              ⚠️
+            </div>
+            <div>
+              <h4 className="font-extrabold text-xs sm:text-sm text-amber-950">
+                You may miss delivery updates on mobile!
+              </h4>
+              <p className="text-[11px] text-amber-800 mt-0.5">
+                WhatsApp dispatch gateway is disconnected. Automated order tracking messages, delivery verification OTPs, and courier route links cannot be sent to mobile devices.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setWhatsappModalOpen(true)}
+            className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 flex-shrink-0 shadow-sm"
+          >
+            <span>📲</span>
+            <span>Link WhatsApp QR Code →</span>
+          </button>
+        </div>
+      )}
+
+      {/* Admin Tab Navigation Bar */}
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar border-b border-slate-200 pb-2">
+        <button
+          onClick={() => setAdminTab('fulfillment')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
+            adminTab === 'fulfillment'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          📦 Fulfillment Queue ({orders.length})
+        </button>
+
+        <button
+          onClick={() => setAdminTab('inventory')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
+            adminTab === 'inventory'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          📊 Inventory & Catalog
+        </button>
+
+        <button
+          onClick={() => setAdminTab('routes')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
+            adminTab === 'routes'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          🗺️ Smart Route Clubbing
+        </button>
+
+        <button
+          onClick={() => setAdminTab('audits')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
+            adminTab === 'audits'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          📜 Inventory Merge Audits
+        </button>
+      </div>
+
+      {/* Tab Content Display */}
+      {adminTab === 'fulfillment' && (
+        <AdminFulfillmentKanban orders={orders} onRefresh={loadAllOrders} />
+      )}
+
+      {adminTab === 'inventory' && (
+        <AdminInventoryTable onOpenBulkImport={() => setImportModalOpen(true)} />
+      )}
+
+      {adminTab === 'routes' && (
+        <AdminRouteOptimizer onRefresh={loadAllOrders} />
+      )}
+
+      {adminTab === 'audits' && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-base font-black text-slate-900">📜 Inventory Merge Audit Trail</h3>
+              <p className="text-xs text-slate-500">Immutable tracking of SKU updates, price changes, and stock increments.</p>
+            </div>
+            <button
+              onClick={loadAuditLogs}
+              className="text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl cursor-pointer"
+            >
+              🔄 Refresh
+            </button>
+          </div>
+
+          {auditLogs.length === 0 ? (
+            <div className="py-12 text-center text-slate-400 text-xs">
+              No bulk imports logged in this session yet. Upload a spreadsheet via Bulk Import to generate audit logs.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
+                    <th className="py-2.5 px-3">Timestamp</th>
+                    <th className="py-2.5 px-3">Import ID</th>
+                    <th className="py-2.5 px-3">SKU & Medicine</th>
+                    <th className="py-2.5 px-3">Stock Shift</th>
+                    <th className="py-2.5 px-3">Price Shift</th>
+                    <th className="py-2.5 px-3">Authorized By</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {auditLogs.map((log, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="py-2.5 px-3 text-slate-500 text-[11px]">
+                        {new Date(log.timestamp).toLocaleTimeString()}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-500">{log.importId}</td>
+                      <td className="py-2.5 px-3">
+                        <span className="font-bold text-slate-900 block">{log.name}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">{log.sku}</span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className="text-slate-400">{log.previousStock}</span> →{' '}
+                        <strong className="text-emerald-700 font-bold">{log.newStock}</strong>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className="text-slate-400">₹{log.previousPrice}</span> →{' '}
+                        <strong className="text-slate-900 font-bold">₹{log.newPrice}</strong>
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600 font-medium">{log.adminId}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Bulk Excel Ingestion Modal */}
+      <AdminBulkImportModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+      />
+
+    </div>
+  );
+}

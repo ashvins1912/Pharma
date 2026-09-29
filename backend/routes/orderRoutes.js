@@ -1,85 +1,191 @@
-const express = require('express');
+import express from 'express';
+import dataStore from '../dataStore.js';
+import { authenticateUser, isAdmin } from '../middleware/auth.js';
+import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
+
 const router = express.Router();
-const Order = require('../models/Order');
-const Medicine = require('../models/Medicine');
-const UserProfile = require('../models/UserProfile');
-const { authenticateUser, isAdmin } = require('../middleware/auth');
-const { sendCustomWhatsAppAlert } = require('../config/whatsapp');
 
-function calculateDistanceInKm(lat1, lon1, lat2, lon2) {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
-}
-
+// Customer Checkout
 router.post('/checkout', authenticateUser, async (req, res) => {
     try {
-        const { cartItems, totalAmount, finalTotal, addressId } = req.body;
-        const profile = await UserProfile.findOne({ userId: req.user.sub });
-        const chosenAddress = profile.addresses.id(addressId);
+        const { cartItems, totalAmount, finalTotal, addressId, deliveryAddress, coordinates, paymentMethod } = req.body;
+        
+        let chosenAddressLine = deliveryAddress;
+        let chosenCoords = coordinates;
 
-        const order = new Order({
+        // Lookup profile address if addressId provided
+        if (addressId) {
+            const profile = await dataStore.getUserProfile(req.user.sub);
+            const found = (profile.addresses || []).find(a => (a._id && a._id.toString() === addressId) || a.id === addressId);
+            if (found) {
+                chosenAddressLine = found.addressLine || `${found.addressLine1}, ${found.city} - ${found.pincode}`;
+                chosenCoords = found.coordinates;
+            }
+        }
+
+        if (!chosenAddressLine) {
+            chosenAddressLine = "Bengaluru City Center Delivery Address";
+            chosenCoords = { lat: 12.9716, lng: 77.5946 };
+        }
+
+        const customerName = req.user.user_metadata?.name || req.user.email?.split('@')[0] || "Customer";
+        const customerMobile = req.body.mobile || "+91 95899 16475";
+
+        const order = await dataStore.createOrder({
             userId: req.user.sub,
-            items: cartItems,
-            subtotal: totalAmount,
-            finalTotal,
-            deliveryAddress: chosenAddress.addressLine,
-            coordinates: chosenAddress.coordinates
-        });
-        await order.save();
+            customerName,
+            customerMobile,
+            items: cartItems || [],
+            subtotal: totalAmount || 0,
+            finalTotal: finalTotal || totalAmount || 0,
+            deliveryAddress: chosenAddressLine,
+            coordinates: chosenCoords || { lat: 12.9716, lng: 77.5946 },
+            paymentMethod: paymentMethod || "Cash on Delivery (COD)"
+        }, customerName);
+
+        // Automated messaging trigger
         await sendCustomWhatsAppAlert(order, 'Placed');
-        res.status(201).json({ message: "🎉 Checkout invoice recorded into system maps!", orderId: order._id });
-    } catch (err) { res.status(500).json({ message: "Checkout failed" }); }
+
+        res.status(201).json({
+            message: "🎉 Cash-on-Delivery order registered into dispensary queue!",
+            orderId: order._id,
+            order
+        });
+    } catch (err) {
+        console.error("Checkout failed:", err);
+        res.status(400).json({ message: err.message || "Checkout failed" });
+    }
 });
 
+// Order State Machine Transition
+router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => {
+    try {
+        const { orderId, newStatus, riderInfo } = req.body;
+        if (!orderId || !newStatus) {
+            return res.status(400).json({ message: "orderId and newStatus are required." });
+        }
+
+        const actor = req.user.user_metadata?.name || req.user.email || 'Pharmacist Admin';
+        const updatedOrder = await dataStore.transitionOrderStatus(orderId, newStatus, actor, riderInfo);
+
+        // Trigger notification according to lifecycle
+        let eventType = null;
+        if (newStatus === 'Ready to Dispatch') eventType = 'Ready to Dispatch';
+        else if (newStatus === 'Dispatched') eventType = 'Dispatched';
+        else if (newStatus === 'Delivered') eventType = 'Delivered';
+
+        if (eventType) {
+            await sendCustomWhatsAppAlert(updatedOrder, eventType, updatedOrder.rider?.riderMobile);
+        }
+
+        res.json({
+            message: `Order transitioned to ${newStatus}`,
+            order: updatedOrder
+        });
+    } catch (err) {
+        console.error("Transition error:", err);
+        res.status(400).json({ message: err.message || "State transition failed" });
+    }
+});
+
+// Smart Delivery Route Clubbing & Google Maps link generation (Requirements 11, 12, 13, 14)
 router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, async (req, res) => {
     try {
-        const { deliveryPersonMobile, maxRadiusKm } = req.body;
-        const pending = await Order.find({ orderStatus: 'Ready to Dispatch' });
-        if (pending.length === 0) return res.status(400).json({ message: "No unassigned orders matching target parameters." });
+        const { deliveryPersonName, deliveryPersonMobile, maxRadiusKm, startLat, startLng } = req.body;
+        const result = await dataStore.clubDeliveryRoute(
+            deliveryPersonName,
+            deliveryPersonMobile,
+            maxRadiusKm,
+            Number(startLat) || 12.9716,
+            Number(startLng) || 77.5946
+        );
 
-        let batched = [];
-        const baseOrder = pending[0];
-        batched.push(baseOrder);
-
-        for (let i = 1; i < pending.length; i++) {
-            const dist = calculateDistanceInKm(baseOrder.coordinates.lat, baseOrder.coordinates.lng, pending[i].coordinates.lat, pending[i].coordinates.lng);
-            if (dist <= maxRadiusKm) batched.push(pending[i]);
-        }
-
-        for (const order of batched) {
-            order.orderStatus = 'Dispatched';
-            order.deliveryPersonMobile = deliveryPersonMobile;
-            await order.save();
-            await sendCustomWhatsAppAlert(order, 'Dispatched', deliveryPersonMobile);
-        }
-
-        res.json({ message: `Successfully clubbed and optimized ${batched.length} deliveries onto a single route.` });
-    } catch (e) { res.status(500).json({ message: "Routing optimization matrix failure." }); }
-});
-
-router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res) => {
-    const order = await Order.findById(req.params.orderId);
-    const step = req.params.step;
-
-    if (step === 'ready') { order.orderStatus = 'Ready to Dispatch'; await sendCustomWhatsAppAlert(order, 'Ready to Dispatch'); }
-    if (step === 'deliver') {
-        for (const item of order.items) { await Medicine.findByIdAndUpdate(item._id, { $inc: { quantity: -Math.abs(item.quantity) } }); }
-        order.orderStatus = 'Delivered';
-        await sendCustomWhatsAppAlert(order, 'Delivered');
+        res.json(result);
+    } catch (e) {
+        console.error("Routing optimization error:", e);
+        res.status(500).json({ message: "Routing optimization failed: " + e.message });
     }
-    await order.save();
-    res.json({ message: "Transaction status shifted safely.", order });
 });
 
+// Dispatch batch of clubbed orders to rider
+router.post('/admin/dispatch-batch', authenticateUser, isAdmin, async (req, res) => {
+    try {
+        const { orderIds, riderName, riderMobile } = req.body;
+        if (!Array.isArray(orderIds) || orderIds.length === 0) {
+            return res.status(400).json({ message: "No order IDs provided for dispatch." });
+        }
+
+        const actor = req.user.user_metadata?.name || req.user.email || 'Logistics Admin';
+        const riderInfo = {
+            riderId: `rider-${Date.now()}`,
+            riderName: riderName || "Rider",
+            riderMobile: riderMobile || ""
+        };
+
+        const dispatchedOrders = [];
+        for (const id of orderIds) {
+            try {
+                const updated = await dataStore.transitionOrderStatus(id, 'Dispatched', actor, riderInfo);
+                await sendCustomWhatsAppAlert(updated, 'Dispatched', riderMobile);
+                dispatchedOrders.push(updated);
+            } catch (err) {
+                console.warn(`Could not dispatch order ${id}:`, err.message);
+            }
+        }
+
+        res.json({
+            message: `Successfully assigned and dispatched ${dispatchedOrders.length} orders to courier ${riderName || riderMobile}!`,
+            dispatchedOrders
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Batch dispatch failed: " + err.message });
+    }
+});
+
+// Legacy single-step transition shortcut
+router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res) => {
+    try {
+        const { orderId, step } = req.params;
+        const actor = req.user.user_metadata?.name || req.user.email || 'Pharmacist Admin';
+        let targetStatus = 'Processing Order';
+        if (step === 'ready') targetStatus = 'Ready to Dispatch';
+        if (step === 'dispatch') targetStatus = 'Dispatched';
+        if (step === 'deliver') targetStatus = 'Delivered';
+
+        const order = await dataStore.transitionOrderStatus(orderId, targetStatus, actor);
+        if (step === 'ready') await sendCustomWhatsAppAlert(order, 'Ready to Dispatch');
+        if (step === 'deliver') await sendCustomWhatsAppAlert(order, 'Delivered');
+
+        res.json({ message: "Transaction status shifted safely.", order });
+    } catch (err) {
+        console.error("Order status update failed:", err);
+        res.status(400).json({ message: err.message || "Failed to update order status." });
+    }
+});
+
+// Admin All Orders
 router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
-    res.json(await Order.find().sort({ createdAt: -1 }));
+    try {
+        const orders = await dataStore.getAllOrders();
+        res.json(orders);
+    } catch (err) {
+        res.status(500).json({ message: "Failed to retrieve orders" });
+    }
 });
 
+// Customer History
 router.get('/history', authenticateUser, async (req, res) => {
-    res.json(await Order.find({ userId: req.user.sub }).sort({ createdAt: -1 }));
+    try {
+        const orders = await dataStore.getUserOrders(req.user.sub);
+        res.json(orders);
+    } catch (err) {
+        res.status(500).json({ message: "Failed to retrieve history" });
+    }
 });
 
-module.exports = router;
+// Notification logs audit
+router.get('/notifications/logs', authenticateUser, isAdmin, async (req, res) => {
+    res.json(getNotificationLog());
+});
+
+export default router;
