@@ -183,11 +183,11 @@ export function AppProvider({ children }) {
   const loadAddresses = useCallback(async () => {
     try {
       setLoadingAddresses(true);
-      const res = await apiClient.get('/api/user/profile');
-      if (res.data) {
-        const addrs = res.data.addresses || [];
+      const res = await apiClient.get('/api/user/addresses');
+      if (Array.isArray(res.data)) {
+        const addrs = res.data;
         setAddresses(addrs);
-        if (addrs.length > 0 && !selectedAddressId) {
+        if (addrs.length > 0 && !addrs.some(address => address._id === selectedAddressId)) {
           const defaultAddr = addrs.find(a => a.isDefault) || addrs[0];
           setSelectedAddressId(defaultAddr._id);
         }
@@ -362,18 +362,52 @@ export function AppProvider({ children }) {
   // Save address helper
   const saveAddress = async (addressData) => {
     try {
-      const updatedList = [...addresses, { ...addressData, _id: `addr-${Date.now()}` }];
-      const res = await apiClient.post('/api/user/profile', {
-        name: user?.user_metadata?.name || user?.email || '',
-        mobile: addressData.mobile || user?.user_metadata?.mobile || '',
-        addresses: updatedList
-      });
-      setAddresses(res.data.addresses || updatedList);
-      setSelectedAddressId(updatedList[updatedList.length - 1]._id);
+      const res = await apiClient.post('/api/user/addresses', addressData);
+      const savedAddress = res.data;
+      setAddresses(prev => [
+        ...(savedAddress.isDefault ? prev.map(address => ({ ...address, isDefault: false })) : prev),
+        savedAddress
+      ]);
+      setSelectedAddressId(savedAddress._id);
       addToast('Delivery address saved to directory!', 'success');
       return true;
     } catch (err) {
       addToast('Failed to save address: ' + err.message, 'error');
+      return false;
+    }
+  };
+
+  const updateAddress = async (addressId, addressData) => {
+    try {
+      const res = await apiClient.patch(`/api/user/addresses/${encodeURIComponent(addressId)}`, addressData);
+      const updatedAddress = res.data;
+      setAddresses(prev => prev.map(address => {
+        if (address._id === updatedAddress._id) return updatedAddress;
+        return updatedAddress.isDefault ? { ...address, isDefault: false } : address;
+      }));
+      addToast('Saved address updated. Existing orders keep their original delivery address.', 'success');
+      return true;
+    } catch (err) {
+      addToast('Failed to update address: ' + err.message, 'error');
+      return false;
+    }
+  };
+
+  const deleteAddress = async (addressId) => {
+    try {
+      await apiClient.delete(`/api/user/addresses/${encodeURIComponent(addressId)}`);
+      const remaining = addresses.filter(address => address._id !== addressId);
+      const nextAddresses = remaining.some(address => address.isDefault)
+        ? remaining
+        : remaining.map((address, index) => ({ ...address, isDefault: index === 0 }));
+      setAddresses(nextAddresses);
+      if (selectedAddressId === addressId) {
+        setSelectedAddressId(nextAddresses.find(address => address.isDefault)?._id || nextAddresses[0]?._id || '');
+      }
+      addToast('Saved address deleted. Existing orders keep their original delivery address.', 'success');
+      return true;
+    } catch (err) {
+      addToast('Failed to delete address: ' + err.message, 'error');
       return false;
     }
   };
@@ -424,6 +458,8 @@ export function AppProvider({ children }) {
         loadingAddresses,
         loadAddresses,
         saveAddress,
+        updateAddress,
+        deleteAddress,
 
         // Orders
         orders,

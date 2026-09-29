@@ -13,14 +13,14 @@ router.post('/checkout', authenticateUser, async (req, res) => {
         let chosenAddressLine = deliveryAddress;
         let chosenCoords = coordinates;
 
-        // Lookup profile address if addressId provided
+        let addressSnapshot = null;
         if (addressId) {
-            const profile = await dataStore.getUserProfile(req.user.sub);
-            const found = (profile.addresses || []).find(a => (a._id && a._id.toString() === addressId) || a.id === addressId);
-            if (found) {
-                chosenAddressLine = found.addressLine || `${found.addressLine1}, ${found.city} - ${found.pincode}`;
-                chosenCoords = found.coordinates;
+            addressSnapshot = await dataStore.getUserAddress(req.user.sub, addressId);
+            if (!addressSnapshot) {
+                return res.status(400).json({ message: "Selected delivery address was not found. Refresh your address list and try again." });
             }
+            chosenAddressLine = addressSnapshot.addressLine || `${addressSnapshot.addressLine1}, ${addressSnapshot.city} - ${addressSnapshot.pincode}`;
+            chosenCoords = addressSnapshot.coordinates;
         }
 
         if (!chosenAddressLine) {
@@ -29,17 +29,28 @@ router.post('/checkout', authenticateUser, async (req, res) => {
         }
 
         const customerName = req.user.user_metadata?.name || req.user.email?.split('@')[0] || "Customer";
-        const customerMobile = req.body.mobile || "+91 95899 16475";
 
         const order = await dataStore.createOrder({
             userId: req.user.sub,
             customerName,
-            customerMobile,
             items: cartItems || [],
             subtotal: totalAmount || 0,
             finalTotal: finalTotal || totalAmount || 0,
             deliveryAddress: chosenAddressLine,
+            addressDetails: addressSnapshot ? {
+                label: addressSnapshot.label,
+                fullName: addressSnapshot.fullName,
+                mobile: addressSnapshot.mobile,
+                addressLine1: addressSnapshot.addressLine1,
+                addressLine2: addressSnapshot.addressLine2,
+                city: addressSnapshot.city,
+                state: addressSnapshot.state,
+                pincode: addressSnapshot.pincode,
+                landmark: addressSnapshot.landmark,
+                coordinates: addressSnapshot.coordinates
+            } : {},
             coordinates: chosenCoords || { lat: 12.9716, lng: 77.5946 },
+            customerMobile: addressSnapshot?.mobile || req.body.mobile || "+91 95899 16475",
             paymentMethod: paymentMethod || "Cash on Delivery (COD)"
         }, customerName);
 

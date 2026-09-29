@@ -28,13 +28,60 @@ app.post('/api/user/profile', authenticateUser, async (req, res) => {
         const profile = await dataStore.saveUserProfile(req.user.sub, {
             name: req.body.name,
             email: req.user.email,
-            mobile: req.body.mobile,
-            addresses: req.body.addresses
+            mobile: req.body.mobile
         });
         res.json(profile);
     } catch (err) {
         console.error("Profile save error:", err);
         res.status(500).json({ message: "Failed to update profile" });
+    }
+});
+
+app.get('/api/user/addresses', authenticateUser, async (req, res) => {
+    try {
+        res.json(await dataStore.getUserAddresses(req.user.sub));
+    } catch (err) {
+        console.error("Address list error:", err);
+        res.status(500).json({ message: "Failed to fetch addresses" });
+    }
+});
+
+app.post('/api/user/addresses', authenticateUser, async (req, res) => {
+    try {
+        const address = req.body;
+        if (!address?.addressLine1?.trim()) {
+            return res.status(400).json({ message: "Street address is required." });
+        }
+        res.status(201).json(await dataStore.createUserAddress(req.user.sub, address));
+    } catch (err) {
+        console.error("Address create error:", err);
+        res.status(500).json({ message: "Failed to save address" });
+    }
+});
+
+app.patch('/api/user/addresses/:addressId', authenticateUser, async (req, res) => {
+    try {
+        const address = req.body;
+        if (!address?.addressLine1?.trim()) {
+            return res.status(400).json({ message: "Street address is required." });
+        }
+        const updated = await dataStore.updateUserAddress(req.user.sub, req.params.addressId, address);
+        if (!updated) return res.status(404).json({ message: "Address not found." });
+        res.json(updated);
+    } catch (err) {
+        console.error("Address update error:", err);
+        res.status(500).json({ message: "Failed to update address" });
+    }
+});
+
+app.delete('/api/user/addresses/:addressId', authenticateUser, async (req, res) => {
+    try {
+        const deleted = await dataStore.deleteUserAddress(req.user.sub, req.params.addressId);
+        if (!deleted) return res.status(404).json({ message: "Address not found." });
+        res.json({ message: "Address deleted." });
+    } catch (err) {
+        console.error("Address delete error:", err);
+        res.status(500).json({ message: "Failed to delete address" });
     }
 });
 

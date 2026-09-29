@@ -36,10 +36,18 @@ function loadGooglePlaces() {
 }
 
 export default function AddressManager({ isSelectOnly = false, onAddressSelected }) {
-  const { addresses, selectedAddressId, setSelectedAddressId, saveAddress } = useApp();
+  const {
+    addresses,
+    selectedAddressId,
+    setSelectedAddressId,
+    saveAddress,
+    updateAddress,
+    deleteAddress
+  } = useApp();
   const { addToast } = useToast();
 
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingAddress, setEditingAddress] = useState(null);
   const [gpsStatus, setGpsStatus] = useState('');
   const [locating, setLocating] = useState(false);
   const [placesStatus, setPlacesStatus] = useState('');
@@ -177,6 +185,52 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
     }
   };
 
+  const resetAddressForm = () => {
+    setEditingAddress(null);
+    setLabel('Home');
+    setFullName('');
+    setMobile('');
+    setAddressLine1('');
+    setAddressLine2('');
+    setCity('Bengaluru');
+    setState('Karnataka');
+    setPincode('560025');
+    setLandmark('');
+    setCoords({ lat: 12.9716, lng: 77.5946 });
+    setIsDefault(false);
+    setGpsStatus('');
+    setPlacesStatus('');
+  };
+
+  const startEditingAddress = (event, address) => {
+    event.stopPropagation();
+    setEditingAddress(address);
+    setLabel(address.label || 'Home');
+    setFullName(address.fullName || '');
+    setMobile(address.mobile || '');
+    setAddressLine1(address.addressLine1 || '');
+    setAddressLine2(address.addressLine2 || '');
+    setCity(address.city || 'Bengaluru');
+    setState(address.state || 'Karnataka');
+    setPincode(address.pincode || '560025');
+    setLandmark(address.landmark || '');
+    setCoords(address.coordinates || { lat: 12.9716, lng: 77.5946 });
+    setIsDefault(Boolean(address.isDefault));
+    setGpsStatus('');
+    setPlacesStatus('');
+    setShowAddForm(true);
+  };
+
+  const handleDeleteAddress = async (event, address) => {
+    event.stopPropagation();
+    if (!window.confirm(`Delete this ${address.label || ''} address? Existing orders will keep their original delivery address.`)) return;
+    const success = await deleteAddress(address._id);
+    if (success && editingAddress?._id === address._id) {
+      setShowAddForm(false);
+      resetAddressForm();
+    }
+  };
+
   const handleUseCurrentLocation = () => {
     setGpsStatus('');
     if (!window.isSecureContext && window.location.hostname !== 'localhost') {
@@ -237,14 +291,12 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
       isDefault
     };
 
-    const success = await saveAddress(newAddress);
+    const success = editingAddress
+      ? await updateAddress(editingAddress._id, newAddress)
+      : await saveAddress(newAddress);
     if (success) {
       setShowAddForm(false);
-      // Reset form
-      setAddressLine1('');
-      setAddressLine2('');
-      setLandmark('');
-      setGpsStatus('');
+      resetAddressForm();
     }
   };
 
@@ -264,7 +316,7 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
 
         {!showAddForm && (
           <button
-            onClick={() => setShowAddForm(true)}
+            onClick={() => { resetAddressForm(); setShowAddForm(true); }}
             className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5"
           >
             <span>+</span>
@@ -286,7 +338,7 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
                 setSelectedAddressId(id);
                 if (onAddressSelected) onAddressSelected(addr);
               }}
-              className={`p-4 rounded-2xl border-2 transition cursor-pointer flex items-start gap-3 relative ${
+              className={`p-4 pb-8 rounded-2xl border-2 transition cursor-pointer flex items-start gap-3 relative ${
                 isSelected
                   ? 'border-blue-600 bg-blue-50/50 shadow-sm'
                   : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
@@ -319,6 +371,26 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
               <div className="flex items-center justify-center w-5 h-5 rounded-full border-2 border-slate-300 mt-0.5 flex-shrink-0">
                 {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-blue-600"></div>}
               </div>
+              {!isSelectOnly && (
+                <div className="absolute right-3 bottom-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(event) => startEditingAddress(event, addr)}
+                    className="text-[10px] font-bold text-blue-700 hover:underline"
+                    aria-label={`Edit ${addr.label || 'saved'} address`}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => handleDeleteAddress(event, addr)}
+                    className="text-[10px] font-bold text-rose-600 hover:underline"
+                    aria-label={`Delete ${addr.label || 'saved'} address`}
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -330,7 +402,7 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
           <p className="text-xs font-bold text-slate-600">No saved addresses yet</p>
           <p className="text-[11px] text-slate-400">Add your home, office, or hospital address for delivery.</p>
           <button
-            onClick={() => setShowAddForm(true)}
+            onClick={() => { resetAddressForm(); setShowAddForm(true); }}
             className="mt-2 bg-blue-600 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer"
           >
             + Add First Address
@@ -343,11 +415,11 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
         <form onSubmit={handleSubmit} className="border-t border-slate-200 pt-5 space-y-4 animate-fade-in">
           <div className="flex justify-between items-center">
             <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-              ➕ Add New Delivery Address
+              {editingAddress ? '✏️ Edit Saved Delivery Address' : '➕ Add New Delivery Address'}
             </h4>
             <button
               type="button"
-              onClick={() => setShowAddForm(false)}
+              onClick={() => { setShowAddForm(false); resetAddressForm(); }}
               className="text-xs text-slate-400 hover:text-slate-600 font-bold"
             >
               Cancel
@@ -521,7 +593,7 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
             type="submit"
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2.5 rounded-xl text-xs shadow-md transition cursor-pointer"
           >
-            Save Address Node
+            {editingAddress ? 'Update Saved Address' : 'Save Address'}
           </button>
         </form>
       )}

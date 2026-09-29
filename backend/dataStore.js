@@ -4,6 +4,7 @@ import Medicine from './models/Medicine.js';
 import Order from './models/Order.js';
 import Coupon from './models/Coupon.js';
 import UserProfile from './models/UserProfile.js';
+import UserAddress from './models/UserAddress.js';
 
 // Generator to eagerly load 1,000+ realistic pharmaceutical items at startup
 function generateEager1000Catalog() {
@@ -260,25 +261,48 @@ inMemoryProfiles.set("demo-customer-id", {
     userId: "demo-customer-id",
     name: "Ashvin Singh",
     email: "customer@ashvinpharma.com",
-    mobile: "+91 95899 16475",
-    addresses: [
-        {
-            _id: "addr-1",
-            label: "Home",
-            fullName: "Ashvin Singh",
-            mobile: "+91 95899 16475",
-            addressLine1: "Flat 402, Greenfield Heights, Richmond Road",
-            addressLine2: "Shanthala Nagar",
-            city: "Bengaluru",
-            state: "Karnataka",
-            pincode: "560025",
-            landmark: "Near Richmond Circle",
-            addressLine: "Flat 402, Greenfield Heights, Richmond Road, Bengaluru - 560025",
-            coordinates: { lat: 12.9667, lng: 77.6000 },
-            isDefault: true
-        }
-    ]
+    mobile: "+91 95899 16475"
 });
+let inMemoryAddresses = new Map([["demo-customer-id", [{
+    _id: "addr-1",
+    userId: "demo-customer-id",
+    label: "Home",
+    fullName: "Ashvin Singh",
+    mobile: "+91 95899 16475",
+    addressLine1: "Flat 402, Greenfield Heights, Richmond Road",
+    addressLine2: "Shanthala Nagar",
+    city: "Bengaluru",
+    state: "Karnataka",
+    pincode: "560025",
+    landmark: "Near Richmond Circle",
+    addressLine: "Flat 402, Greenfield Heights, Richmond Road, Bengaluru - 560025",
+    coordinates: { lat: 12.9667, lng: 77.6000 },
+    isDefault: true
+}]]]);
+
+const normalizeAddress = (address, userId, existing = {}) => {
+    const addressLine1 = address.addressLine1 || address.addressLine || existing.addressLine1 || '';
+    const addressLine2 = address.addressLine2 ?? existing.addressLine2 ?? '';
+    const city = address.city || existing.city || 'Bengaluru';
+    const state = address.state || existing.state || 'Karnataka';
+    const pincode = address.pincode || existing.pincode || '560025';
+    return {
+        userId,
+        label: address.label || existing.label || 'Home',
+        fullName: address.fullName ?? existing.fullName ?? '',
+        mobile: address.mobile ?? existing.mobile ?? '',
+        addressLine1,
+        addressLine2,
+        city,
+        state,
+        pincode,
+        landmark: address.landmark ?? existing.landmark ?? '',
+        addressLine: address.addressLine ||
+            `${addressLine1} ${addressLine2 ? `, ${addressLine2}` : ''}, ${city}, ${state} - ${pincode}`,
+        coordinates: address.coordinates || existing.coordinates || { lat: 12.9716, lng: 77.5946 },
+        isDefault: Boolean(address.isDefault ?? existing.isDefault)
+    };
+};
 
 let inMemoryAuditLogs = [];
 let inMemoryInventoryAudits = [];
@@ -744,39 +768,148 @@ export const dataStore = {
     },
 
     async getUserProfile(userId) {
+        if (getIsConnected()) {
+            const profile = await UserProfile.collection.findOne({ userId });
+            return profile || {
+                userId,
+                name: "Customer",
+                email: "customer@ashvinpharma.com",
+                mobile: "+91 95899 16475"
+            };
+        }
         return inMemoryProfiles.get(userId) || {
             userId,
             name: "Customer",
             email: "customer@ashvinpharma.com",
-            mobile: "+91 95899 16475",
-            addresses: []
+            mobile: "+91 95899 16475"
         };
     },
 
     async saveUserProfile(userId, data) {
-        const existing = inMemoryProfiles.get(userId) || { userId, addresses: [] };
-        const updated = {
-            ...existing,
-            ...data,
+        const profileData = {
             userId,
-            addresses: data.addresses ? data.addresses.map((a, i) => ({
-                _id: a._id || `addr-${Date.now()}-${i}`,
-                label: a.label || 'Home',
-                fullName: a.fullName || existing.name || '',
-                mobile: a.mobile || existing.mobile || '',
-                addressLine1: a.addressLine1 || a.addressLine || '',
-                addressLine2: a.addressLine2 || '',
-                city: a.city || 'Bengaluru',
-                state: a.state || 'Karnataka',
-                pincode: a.pincode || '560025',
-                landmark: a.landmark || '',
-                addressLine: a.addressLine || `${a.addressLine1 || ''} ${a.addressLine2 || ''}, ${a.city || 'Bengaluru'} - ${a.pincode || '560025'}`.trim(),
-                coordinates: a.coordinates || { lat: 12.9716, lng: 77.5946 },
-                isDefault: Boolean(a.isDefault)
-            })) : existing.addresses
+            name: data.name || '',
+            email: data.email || '',
+            mobile: data.mobile || ''
         };
+        if (getIsConnected()) {
+            await UserProfile.collection.updateOne(
+                { userId },
+                { $set: profileData, $unset: { addresses: '' } },
+                { upsert: true }
+            );
+            return UserProfile.collection.findOne({ userId });
+        }
+        const updated = { ...inMemoryProfiles.get(userId), ...profileData };
         inMemoryProfiles.set(userId, updated);
         return updated;
+    },
+
+    async getUserAddresses(userId) {
+        if (getIsConnected()) {
+            const addresses = await UserAddress.find({ userId }).sort({ isDefault: -1, createdAt: 1 }).lean();
+            if (addresses.length) return addresses;
+
+            const profile = await UserProfile.findOne({ userId }).lean();
+            if (profile?.addresses?.length) {
+                const legacyAddresses = profile.addresses.map((address, index) =>
+                    normalizeAddress(address, userId, { isDefault: index === 0 })
+                );
+                const migrated = await UserAddress.insertMany(legacyAddresses);
+                await UserProfile.collection.updateOne({ userId }, { $unset: { addresses: '' } });
+                return migrated.map(address => address.toObject());
+            }
+            return [];
+        }
+
+        const addresses = inMemoryAddresses.get(userId) || [];
+        if (addresses.length) return addresses;
+        const legacyAddresses = inMemoryProfiles.get(userId)?.addresses;
+        if (!legacyAddresses?.length) return [];
+        const migrated = legacyAddresses.map((address, index) =>
+            normalizeAddress(address, userId, { isDefault: index === 0 })
+        );
+        inMemoryAddresses.set(userId, migrated);
+        const { addresses: _legacyAddresses, ...profile } = inMemoryProfiles.get(userId);
+        inMemoryProfiles.set(userId, profile);
+        return migrated;
+    },
+
+    async getUserAddress(userId, addressId) {
+        if (!addressId) return null;
+        if (getIsConnected()) {
+            return UserAddress.findOne({ _id: addressId, userId }).lean();
+        }
+        return (await this.getUserAddresses(userId)).find(address => address._id.toString() === addressId) || null;
+    },
+
+    async createUserAddress(userId, address) {
+        const existingAddresses = await this.getUserAddresses(userId);
+        const normalized = normalizeAddress(address, userId, {
+            isDefault: address.isDefault || existingAddresses.length === 0
+        });
+        if (getIsConnected()) {
+            if (normalized.isDefault) {
+                await UserAddress.updateMany({ userId }, { $set: { isDefault: false } });
+            }
+            const created = await UserAddress.create(normalized);
+            return created.toObject();
+        }
+        const created = { ...normalized, _id: `addr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` };
+        const updatedAddresses = normalized.isDefault
+            ? existingAddresses.map(item => ({ ...item, isDefault: false }))
+            : existingAddresses;
+        inMemoryAddresses.set(userId, [...updatedAddresses, created]);
+        return created;
+    },
+
+    async updateUserAddress(userId, addressId, address) {
+        const existing = await this.getUserAddress(userId, addressId);
+        if (!existing) return null;
+        const normalized = normalizeAddress(address, userId, existing);
+        const addresses = await this.getUserAddresses(userId);
+        const shouldBeDefault = normalized.isDefault || existing.isDefault || addresses.length === 1;
+        normalized.isDefault = shouldBeDefault;
+
+        if (getIsConnected()) {
+            if (shouldBeDefault) {
+                await UserAddress.updateMany({ userId }, { $set: { isDefault: false } });
+            }
+            const updated = await UserAddress.findOneAndUpdate(
+                { _id: addressId, userId },
+                { $set: normalized },
+                { new: true, runValidators: true }
+            );
+            return updated?.toObject() || null;
+        }
+        const updatedAddresses = addresses.map(item => {
+            if (item._id.toString() === addressId) return { ...normalized, _id: item._id };
+            return shouldBeDefault ? { ...item, isDefault: false } : item;
+        });
+        inMemoryAddresses.set(userId, updatedAddresses);
+        return updatedAddresses.find(item => item._id.toString() === addressId);
+    },
+
+    async deleteUserAddress(userId, addressId) {
+        const existing = await this.getUserAddress(userId, addressId);
+        if (!existing) return false;
+        if (getIsConnected()) {
+            const deleted = await UserAddress.findOneAndDelete({ _id: addressId, userId });
+            if (!deleted) return false;
+            if (deleted.isDefault) {
+                const nextAddress = await UserAddress.findOne({ userId }).sort({ createdAt: 1 });
+                if (nextAddress) {
+                    nextAddress.isDefault = true;
+                    await nextAddress.save();
+                }
+            }
+            return true;
+        }
+        const remaining = (await this.getUserAddresses(userId))
+            .filter(address => address._id.toString() !== addressId);
+        if (existing.isDefault && remaining.length) remaining[0].isDefault = true;
+        inMemoryAddresses.set(userId, remaining);
+        return true;
     }
 };
 
