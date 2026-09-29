@@ -79,7 +79,7 @@ const startWhatsAppSession = async (forceRefresh = false) => {
                 if (generation !== sessionGeneration) return;
                 client.end(new Error('Timed out waiting for WhatsApp QR code'));
                 reject(new Error('Timed out waiting for WhatsApp QR code'));
-            }, 30_000);
+            }, 40_000);
 
             const finish = (callback, value) => {
                 if (settled) return;

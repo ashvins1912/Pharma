@@ -76,7 +76,7 @@ export function AppProvider({ children }) {
   // Load WhatsApp status
   const loadWhatsAppStatus = useCallback(async () => {
     try {
-      const res = await apiClient.get('/api/admin/whatsapp/status');
+      const res = await apiClient.get('/api/admin/whatsapp/status', { timeout: 45000 });
       if (res.data) {
         setWhatsappStatus(res.data);
         if (res.data.isConnected) {
@@ -93,7 +93,7 @@ export function AppProvider({ children }) {
 
   const generateWhatsAppQR = async () => {
     try {
-      const res = await apiClient.post('/api/admin/whatsapp/generate-qr');
+      const res = await apiClient.post('/api/admin/whatsapp/generate-qr', null, { timeout: 45000 });
       if (res.data) {
         setWhatsappStatus(res.data);
         return res.data;

@@ -16,10 +16,20 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
 
   useEffect(() => {
     if (!isOpen) return undefined;
-    loadWhatsAppStatus();
-    const statusPoll = setInterval(loadWhatsAppStatus, 3000);
-    return () => clearInterval(statusPoll);
-  }, [isOpen]);
+    let cancelled = false;
+    let pollTimeout;
+
+    const pollStatus = async () => {
+      await loadWhatsAppStatus();
+      if (!cancelled) pollTimeout = setTimeout(pollStatus, 3000);
+    };
+
+    pollStatus();
+    return () => {
+      cancelled = true;
+      clearTimeout(pollTimeout);
+    };
+  }, [isOpen, loadWhatsAppStatus]);
 
   if (!isOpen) return null;
 
@@ -35,8 +45,8 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
       setLoading(true);
       await generateWhatsAppQR();
       addToast('New WhatsApp QR code generated.', 'info');
-    } catch {
-      addToast('Failed to regenerate QR code.', 'error');
+    } catch (err) {
+      addToast(err?.message || 'Failed to regenerate QR code.', 'error');
     } finally {
       setLoading(false);
     }

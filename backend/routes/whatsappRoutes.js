@@ -32,7 +32,7 @@ router.post('/generate-qr', authenticateUser, isAdmin, async (req, res) => {
         res.json(status);
     } catch (err) {
         console.error("WhatsApp QR generation error:", err);
-        res.status(500).json({ message: "Failed to generate WhatsApp QR code" });
+        res.status(502).json({ message: err.message || "Failed to generate WhatsApp QR code" });
     }
 });
 
