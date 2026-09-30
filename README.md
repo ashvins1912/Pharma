@@ -22,11 +22,13 @@ persistent.
 
 Google sign-in requires a Supabase project; demo access works without one. Set
 `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the local `.env` file and
-in the Render service's **Environment** settings, then redeploy. For a new
+in the Render service's **Environment** settings, then redeploy. Also set
+`SUPABASE_URL` to the same project URL so the server can validate signed-in
+users' tokens on protected API routes. For a new
 service created from `render.yaml`, Render prompts for these `sync: false`
-values. For an existing Render service, add both variables manually. These
-`VITE_` values are embedded into the frontend during the build, so changing
-them requires a redeploy.
+values. For an existing Render service, add all three Supabase variables
+manually. The `VITE_` values are embedded into the frontend during the build,
+so changing them requires a redeploy.
 
 In Supabase, enable Google under **Authentication → Providers → Google** and
 configure its OAuth client credentials. Add

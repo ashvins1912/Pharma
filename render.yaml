@@ -11,5 +11,7 @@ services:
         sync: false
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
+      - key: SUPABASE_URL
+        sync: false
       - key: VITE_GOOGLE_MAPS_API_KEY
         sync: false
