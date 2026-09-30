@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import { SignJWT, jwtVerify } from 'jose';
-import { supabase, isSupabaseConfigured } from '../../src/supabaseClient.js';
+import { supabase, isSupabaseConfigured } from '../config/supabase.js';
 import {
     encryptPII,
     decryptPII

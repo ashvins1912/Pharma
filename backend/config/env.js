@@ -1,10 +1,40 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+const mongoUriSchema = z.string().trim().refine(value => {
+    const match = value.match(/^(mongodb(?:\+srv)?):\/\/([^/?#]*)(.*)$/);
+    if (!match) return false;
+
+    const [, scheme, authority, suffix] = match;
+    const credentialsEnd = authority.lastIndexOf('@');
+    const credentials = credentialsEnd >= 0 ? authority.slice(0, credentialsEnd + 1) : '';
+    const hosts = authority.slice(credentialsEnd + 1).split(',');
+    if (hosts.some(host => !host) || (scheme === 'mongodb+srv' && hosts.length !== 1)) {
+        return false;
+    }
+
+    return hosts.every(host => {
+        try {
+            const uri = new URL(`${scheme}://${credentials}${host}${suffix}`);
+            return Boolean(uri.hostname) && (scheme !== 'mongodb+srv' || !uri.port);
+        } catch {
+            return false;
+        }
+    });
+}, {
+    message: 'Expected a valid MongoDB URI starting with mongodb:// or mongodb+srv://.'
+});
+
+const optionalAnonKeySchema = z.preprocess(
+    value => typeof value === 'string' && value.trim() === '' ? undefined : value,
+    z.string().trim().min(1).optional()
+);
+
 export const envSchema = z.object({
     PORT: z.coerce.number().int().min(1).max(65535).default(5000),
-    MONGO_URI: z.string().trim().url(),
+    MONGO_URI: mongoUriSchema,
     SUPABASE_URL: z.string().trim().url(),
+    SUPABASE_ANON_KEY: optionalAnonKeySchema,
     SUPABASE_SERVICE_ROLE_KEY: z.string().trim().min(20),
     NODE_ENV: z.enum(['development', 'production', 'test'])
 });

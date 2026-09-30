@@ -5,21 +5,24 @@
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 const TOTP_REGEX = /^\d{6}$/;
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 /**
  * Strips MongoDB operators ($gt, $ne, $where, etc.) from objects to prevent NoSQL injection
  */
 export function sanitizeInput(value) {
+    return sanitizeValue(value);
+}
+
+function sanitizeValue(value, key = '') {
     if (value === null || value === undefined) return value;
-    if (typeof value === 'string') return value.trim();
-    if (Array.isArray(value)) return value.map(sanitizeInput);
+    if (typeof value === 'string') return /password/i.test(key) ? value : value.trim();
+    if (Array.isArray(value)) return value.map(item => sanitizeValue(item, key));
     if (typeof value === 'object') {
         const sanitized = {};
         for (const [k, v] of Object.entries(value)) {
-            // Strip keys starting with '$' or containing '.'
-            if (!k.startsWith('$') && !k.includes('.')) {
-                sanitized[k] = sanitizeInput(v);
-            }
+            if (k.startsWith('$') || k.includes('.') || UNSAFE_KEYS.has(k)) continue;
+            sanitized[k] = sanitizeValue(v, k);
         }
         return sanitized;
     }
