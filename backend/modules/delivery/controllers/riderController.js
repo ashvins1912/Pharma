@@ -1,7 +1,11 @@
 import deliveryContainer from '../container.js';
+import { getIsConnected } from '../../../config/db.js';
 
 export const registerRider = async (req, res) => {
     try {
+        if (!getIsConnected()) {
+            return res.status(503).json({ message: 'Rider onboarding requires an active MongoDB connection.' });
+        }
         deliveryContainer.refreshDataLayer();
         const { name, mobile, vehicleType, longitude, latitude } = req.body;
 
@@ -30,6 +34,9 @@ export const registerRider = async (req, res) => {
 
 export const listRiders = async (req, res) => {
     try {
+        if (!getIsConnected()) {
+            return res.status(503).json({ message: 'Rider records are unavailable while MongoDB is disconnected.' });
+        }
         deliveryContainer.refreshDataLayer();
         const riders = await deliveryContainer.getRidersUseCase.execute({
             ...req.query,

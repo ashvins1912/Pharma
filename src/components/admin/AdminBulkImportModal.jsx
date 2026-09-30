@@ -105,14 +105,14 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-      <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-3xl w-full p-6 sm:p-8 my-8 relative">
+      <div className="my-auto max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl overflow-y-auto overflow-x-hidden bg-white border border-slate-200 rounded-3xl shadow-2xl p-4 sm:p-8 relative">
         
         {/* Header */}
-        <div className="flex justify-between items-start pb-4 border-b border-slate-100">
-          <div>
+        <div className="flex flex-wrap justify-between items-start gap-3 pb-4 border-b border-slate-100">
+        <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-2xl">📥</span>
-              <h2 className="text-base sm:text-lg font-black text-slate-900">
+              <h2 className="min-w-0 break-words text-base sm:text-lg font-black text-slate-900">
                 Bulk Inventory Excel Ingestion
               </h2>
             </div>
@@ -134,7 +134,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
             <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
-              className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-3xl p-8 sm:p-12 text-center transition bg-slate-50/50 hover:bg-blue-50/30 flex flex-col items-center justify-center space-y-3 cursor-pointer"
+              className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-3xl p-4 sm:p-12 text-center transition bg-slate-50/50 hover:bg-blue-50/30 flex flex-col items-center justify-center space-y-3 cursor-pointer"
               onClick={() => document.getElementById('excel-file-input').click()}
             >
               <div className="w-16 h-16 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center text-3xl">
@@ -165,8 +165,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
               </button>
             </div>
 
-            <div className="flex justify-between items-center text-xs text-slate-500 pt-2">
-              <span>Required: SKU, Medicine Name, Price, Stock, Expiry Date</span>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs text-slate-500 pt-2">
+              <span className="break-words">Required: SKU, Medicine Name, Price, Stock, Expiry Date</span>
               <button
                 type="button"
                 onClick={downloadSampleTemplate}
@@ -182,7 +182,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
         {previewData && (
           <div className="py-4 space-y-4 animate-fade-in">
             {/* Metric Summary Cards */}
-            <div className="grid grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <div className="bg-slate-50 border border-slate-200 p-3 rounded-2xl text-center">
                 <span className="text-[10px] font-bold text-slate-400 uppercase block">Total Rows</span>
                 <span className="text-lg font-black text-slate-900">{previewData.rowsDetected}</span>
@@ -204,7 +204,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
             {/* Error Review Banner if any */}
             {previewData.errorsCount > 0 && (
               <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs space-y-2">
-                <div className="flex justify-between items-center text-rose-800 font-bold">
+                <div className="flex flex-col sm:flex-row justify-between items-start gap-2 text-rose-800 font-bold">
                   <span>⚠️ {previewData.errorsCount} rows failed schema validation (excluded from import)</span>
                   <button
                     onClick={() => setShowErrorsOnly(!showErrorsOnly)}
@@ -230,10 +230,10 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
               <div className="border border-slate-200 rounded-2xl overflow-hidden">
                 <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 text-xs font-bold text-slate-700 flex justify-between">
                   <span>Import Preview (First 5 Rows)</span>
-                  <span className="text-slate-400">{file?.name}</span>
+                  <span className="min-w-0 max-w-full truncate text-slate-400">{file?.name}</span>
                 </div>
-                <div className="max-h-48 overflow-y-auto">
-                  <table className="w-full text-left text-[11px]">
+                <div className="max-h-48 overflow-auto">
+                  <table className="w-full min-w-[620px] text-left text-[11px]">
                     <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-500 font-bold">
                       <tr>
                         <th className="py-2 px-2.5">SKU</th>
@@ -262,10 +262,10 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
             )}
 
             {/* Actions */}
-            <div className="pt-3 border-t border-slate-100 flex justify-between gap-3">
+            <div className="pt-3 border-t border-slate-100 flex flex-col-reverse sm:flex-row justify-between gap-3">
               <button
                 onClick={() => { setPreviewData(null); setFile(null); }}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer"
+                className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer"
               >
                 Upload Different File
               </button>
@@ -273,7 +273,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
               <button
                 onClick={handleConfirmImport}
                 disabled={committing || previewData.validCount === 0}
-                className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md shadow-emerald-600/25 cursor-pointer transition flex items-center gap-1.5"
+                className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md shadow-emerald-600/25 cursor-pointer transition flex items-center gap-1.5"
               >
                 <span>{committing ? 'Merging Inventory...' : `Import ${previewData.validCount} Valid Rows`}</span>
                 <span>✓</span>

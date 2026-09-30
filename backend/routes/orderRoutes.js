@@ -351,6 +351,10 @@ router.put('/:id/modify', authenticateUser, handlePrescriptionUpload, async (req
     }
 });
 
+router.delete('/:id', authenticateUser, (req, res) => {
+    res.status(403).json({ message: 'Orders cannot be deleted. Cancel an eligible order instead.' });
+});
+
 router.put('/:id/cancel', authenticateUser, async (req, res) => {
     try {
         if (req.user?.app_metadata?.role === 'admin') {
@@ -432,54 +436,85 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
 // Smart Delivery Route Clubbing & Google Maps link generation (Requirements 11, 12, 13, 14)
 router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, async (req, res) => {
     try {
-        const { deliveryPersonName, deliveryPersonMobile, maxRadiusKm, startLat, startLng } = req.body;
+        if (!getIsConnected()) {
+            return res.status(503).json({ message: 'Route planning requires an active MongoDB connection.' });
+        }
+        deliveryContainer.refreshDataLayer();
+        const { riderId, maxRadiusKm, startLat, startLng } = req.body;
+        if (!riderId) return res.status(400).json({ message: 'Select an onboarded rider before planning a route.' });
+        const rider = await deliveryContainer.riderRepository.findById(riderId);
+        if (!rider || !rider.enabled) {
+            return res.status(404).json({ message: 'The selected onboarded rider is unavailable.' });
+        }
+        if (rider.status !== 'Available') {
+            return res.status(409).json({ message: 'The selected rider is no longer available.' });
+        }
         const result = await dataStore.clubDeliveryRoute(
-            deliveryPersonName,
-            deliveryPersonMobile,
+            rider.name,
+            rider.mobile,
             maxRadiusKm,
             Number(startLat) || 12.9716,
             Number(startLng) || 77.5946
         );
 
-        res.json(result);
+        res.json({ ...result, riderId: rider.id });
     } catch (e) {
         console.error("Routing optimization error:", e);
-        res.status(500).json({ message: "Routing optimization failed: " + e.message });
+        res.status(getErrorStatus(e)).json({ message: "Routing optimization failed: " + e.message });
     }
 });
 
 // Dispatch batch of clubbed orders to rider
 router.post('/admin/dispatch-batch', authenticateUser, isAdmin, async (req, res) => {
     try {
-        const { orderIds, riderName, riderMobile } = req.body;
+        if (!getIsConnected()) {
+            return res.status(503).json({ message: 'Batch dispatch requires an active MongoDB connection.' });
+        }
+        deliveryContainer.refreshDataLayer();
+        const { orderIds, riderId } = req.body;
         if (!Array.isArray(orderIds) || orderIds.length === 0) {
             return res.status(400).json({ message: "No order IDs provided for dispatch." });
+        }
+        if (!riderId) return res.status(400).json({ message: 'Select an onboarded rider before dispatching.' });
+        const rider = await deliveryContainer.riderRepository.findById(riderId);
+        if (!rider || !rider.enabled) {
+            return res.status(404).json({ message: 'The selected onboarded rider is unavailable.' });
+        }
+        if (rider.status !== 'Available') {
+            return res.status(409).json({ message: 'The selected rider is no longer available.' });
         }
 
         const actor = req.user.user_metadata?.name || req.user.email || 'Logistics Admin';
         const riderInfo = {
-            riderId: `rider-${Date.now()}`,
-            riderName: riderName || "Rider",
-            riderMobile: riderMobile || ""
+            riderId: rider.id,
+            riderName: rider.name,
+            riderMobile: rider.mobile
         };
 
         const dispatchedOrders = [];
+        const dispatchErrors = [];
         for (const id of orderIds) {
             try {
                 const updated = await dataStore.transitionOrderStatus(id, 'Dispatched', actor, riderInfo);
-                await sendCustomWhatsAppAlert(updated, 'Dispatched', riderMobile);
                 dispatchedOrders.push(updated);
+                try {
+                    await sendCustomWhatsAppAlert(updated, 'Dispatched', rider.mobile);
+                } catch (notificationError) {
+                    console.warn(`[WhatsApp] Batch dispatch notification failed for order ${id}:`, notificationError.message);
+                }
             } catch (err) {
                 console.warn(`Could not dispatch order ${id}:`, err.message);
+                dispatchErrors.push({ orderId: id, message: err.message });
             }
         }
 
         res.json({
-            message: `Successfully assigned and dispatched ${dispatchedOrders.length} orders to courier ${riderName || riderMobile}!`,
-            dispatchedOrders
+            message: `Successfully assigned and dispatched ${dispatchedOrders.length} orders to ${rider.name}.`,
+            dispatchedOrders,
+            dispatchErrors
         });
     } catch (err) {
-        res.status(500).json({ message: "Batch dispatch failed: " + err.message });
+        res.status(getErrorStatus(err)).json({ message: "Batch dispatch failed: " + err.message });
     }
 });
 
