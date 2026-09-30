@@ -5,6 +5,15 @@ import { useToast } from '../context/ToastContext';
 const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 let googlePlacesScriptPromise;
 
+const hasValidCoordinates = (coordinates) => {
+  if (coordinates?.lat == null || coordinates?.lng == null) return false;
+  const lat = Number(coordinates.lat);
+  const lng = Number(coordinates.lng);
+  return Number.isFinite(lat) && Number.isFinite(lng)
+    && lat >= -90 && lat <= 90
+    && lng >= -180 && lng <= 180;
+};
+
 function loadGooglePlaces() {
   if (window.google?.maps?.places?.PlaceAutocompleteElement || window.google?.maps?.places?.Autocomplete) {
     return Promise.resolve(window.google.maps.places);
@@ -54,6 +63,12 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
   const [modernPlacesEnabled, setModernPlacesEnabled] = useState(false);
   const addressInputRef = useRef(null);
   const placesWidgetRef = useRef(null);
+  const mapContainerRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const mapMarkerRef = useRef(null);
+  const locationRequestedForFormRef = useRef(false);
+  const [mapReady, setMapReady] = useState(false);
+  const [pinConfirmed, setPinConfirmed] = useState(false);
 
   // Form Fields
   const [label, setLabel] = useState('Home');
@@ -65,7 +80,7 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
   const [state, setState] = useState('Karnataka');
   const [pincode, setPincode] = useState('560025');
   const [landmark, setLandmark] = useState('');
-  const [coords, setCoords] = useState({ lat: 12.9716, lng: 77.5946 });
+  const [coords, setCoords] = useState(null);
   const [isDefault, setIsDefault] = useState(false);
 
   useEffect(() => {
@@ -112,6 +127,7 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
       const location = place.location || place.geometry?.location;
       if (location) {
         setCoords({ lat: location.lat(), lng: location.lng() });
+        setPinConfirmed(false);
       }
       setPlacesStatus('✅ Address selected from Google Maps suggestions.');
     };
@@ -176,6 +192,64 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
     };
   }, [showAddForm]);
 
+  useEffect(() => {
+    if (!showAddForm || !googleMapsApiKey || !mapContainerRef.current) return undefined;
+
+    let cancelled = false;
+    loadGooglePlaces()
+      .then(() => {
+        if (cancelled || !mapContainerRef.current || !window.google?.maps?.Map) return;
+        const map = new window.google.maps.Map(mapContainerRef.current, {
+          center: coords || { lat: 12.9716, lng: 77.5946 },
+          zoom: 15,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false
+        });
+        mapInstanceRef.current = map;
+        map.addListener('click', (event) => {
+          if (!event.latLng) return;
+          const position = { lat: event.latLng.lat(), lng: event.latLng.lng() };
+          setCoords(position);
+          setPinConfirmed(true);
+          setGpsStatus(`✅ Delivery pin selected (${position.lat.toFixed(5)}, ${position.lng.toFixed(5)}).`);
+        });
+        setMapReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setGpsStatus('Map could not be loaded. Check the Google Maps API key and try again.');
+      });
+
+    return () => {
+      cancelled = true;
+      mapInstanceRef.current = null;
+      mapMarkerRef.current = null;
+      setMapReady(false);
+    };
+  }, [showAddForm]);
+
+  useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current || !coords || !window.google?.maps?.Marker) return;
+    mapInstanceRef.current.setCenter(coords);
+    if (!mapMarkerRef.current) {
+      mapMarkerRef.current = new window.google.maps.Marker({
+        map: mapInstanceRef.current,
+        position: coords,
+        draggable: true,
+        title: 'Drag or tap the map to place the delivery pin'
+      });
+      mapMarkerRef.current.addListener('dragend', (event) => {
+        if (!event.latLng) return;
+        const position = { lat: event.latLng.lat(), lng: event.latLng.lng() };
+        setCoords(position);
+        setPinConfirmed(true);
+        setGpsStatus(`✅ Delivery pin selected (${position.lat.toFixed(5)}, ${position.lng.toFixed(5)}).`);
+      });
+    } else {
+      mapMarkerRef.current.setPosition(coords);
+    }
+  }, [coords, mapReady]);
+
   const getLabelIcon = (lbl) => {
     switch (lbl) {
       case 'Home': return '🏠';
@@ -196,7 +270,8 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
     setState('Karnataka');
     setPincode('560025');
     setLandmark('');
-    setCoords({ lat: 12.9716, lng: 77.5946 });
+    setCoords(null);
+    setPinConfirmed(false);
     setIsDefault(false);
     setGpsStatus('');
     setPlacesStatus('');
@@ -214,7 +289,8 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
     setState(address.state || 'Karnataka');
     setPincode(address.pincode || '560025');
     setLandmark(address.landmark || '');
-    setCoords(address.coordinates || { lat: 12.9716, lng: 77.5946 });
+    setCoords(address.coordinates || null);
+    setPinConfirmed(hasValidCoordinates(address.coordinates));
     setIsDefault(Boolean(address.isDefault));
     setGpsStatus('');
     setPlacesStatus('');
@@ -248,7 +324,8 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
       (position) => {
         const { latitude, longitude } = position.coords;
         setCoords({ lat: latitude, lng: longitude });
-        setGpsStatus(`✅ Location pinned (${latitude.toFixed(4)}, ${longitude.toFixed(4)}). Enter your street address below.`);
+        setPinConfirmed(false);
+        setGpsStatus(`GPS found (${latitude.toFixed(4)}, ${longitude.toFixed(4)}). Tap the map or drag the marker to confirm your delivery pin.`);
         setLocating(false);
         addToast('Location pinned from device GPS!', 'success');
       },
@@ -268,10 +345,25 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
     );
   };
 
+  useEffect(() => {
+    if (!showAddForm || editingAddress) {
+      locationRequestedForFormRef.current = false;
+      return;
+    }
+    if (!locationRequestedForFormRef.current) {
+      locationRequestedForFormRef.current = true;
+      handleUseCurrentLocation();
+    }
+  }, [showAddForm, editingAddress]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!addressLine1.trim()) {
       setPlacesStatus('Choose a suggested location or enter your street address before saving.');
+      return;
+    }
+    if (!pinConfirmed || !hasValidCoordinates(coords)) {
+      setGpsStatus('Select a delivery pin on the map before saving this address.');
       return;
     }
 
@@ -440,6 +532,28 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
             {gpsStatus && (
               <p className={`text-[11px] font-semibold text-center mt-1 ${gpsStatus.includes('✅') ? 'text-emerald-700' : 'text-amber-700'}`}>
                 {gpsStatus}
+              </p>
+            )}
+            <div
+              ref={mapContainerRef}
+              aria-label="Select delivery location on map"
+              className="h-52 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
+            />
+            {!pinConfirmed && coords && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPinConfirmed(true);
+                  setGpsStatus(`✅ Delivery pin confirmed (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}).`);
+                }}
+                className="w-full rounded-xl border border-blue-200 bg-blue-50 py-2 text-xs font-bold text-blue-700"
+              >
+                Use the displayed pin
+              </button>
+            )}
+            {!googleMapsApiKey && (
+              <p role="alert" className="text-[11px] text-rose-700">
+                Map pin selection is unavailable until a Google Maps browser API key is configured.
               </p>
             )}
           </div>

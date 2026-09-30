@@ -13,8 +13,8 @@ const userAddressSchema = new mongoose.Schema({
     landmark: { type: String, default: '' },
     addressLine: { type: String, default: '' },
     coordinates: {
-        lat: { type: Number, default: 12.9716 },
-        lng: { type: Number, default: 77.5946 }
+        lat: { type: Number, required: true, min: -90, max: 90 },
+        lng: { type: Number, required: true, min: -180, max: 180 }
     },
     isDefault: { type: Boolean, default: false }
 }, { timestamps: true });

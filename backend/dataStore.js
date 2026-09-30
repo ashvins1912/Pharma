@@ -7,6 +7,7 @@ import Coupon from './models/Coupon.js';
 import UserProfile from './models/UserProfile.js';
 import UserAddress from './models/UserAddress.js';
 import CustomerPointsLedger from './models/CustomerPointsLedger.js';
+import Rider from './models/Rider.js';
 import ProfitMarginRewardEngine from './strategies/ProfitMarginRewardEngine.js';
 import DefaultProfitRewardStrategy from './strategies/ProfitRewardStrategy.js';
 import FixedDeliveryRewardStrategy from './strategies/DeliveryRewardStrategy.js';
@@ -16,7 +17,7 @@ const profitMarginRewardEngine = new ProfitMarginRewardEngine({
 });
 const deliveryRewardStrategy = new FixedDeliveryRewardStrategy();
 
-const awardPointsOnce = async ({ customerId, accountType, points, order, description }) => {
+const awardPointsOnce = async ({ customerId, accountType, points, order, description, session = null }) => {
     if (!getIsConnected() || !customerId || !Number.isSafeInteger(points) || points <= 0) return false;
     const orderId = order._id;
     const entryType = 'EARNED';
@@ -35,12 +36,15 @@ const awardPointsOnce = async ({ customerId, accountType, points, order, descrip
             upsert: true,
             new: true,
             runValidators: true,
-            setDefaultsOnInsert: true
+            setDefaultsOnInsert: true,
+            ...(session ? { session } : {})
         });
         return Boolean(updated);
     } catch (error) {
-        if (error.code !== 11000) throw error;
-        const ledger = await CustomerPointsLedger.findOne({ customerId, accountType }).lean().exec();
+        if (error.code !== 11000 || session) throw error;
+        const ledgerQuery = CustomerPointsLedger.findOne({ customerId, accountType });
+        if (session) ledgerQuery.session(session);
+        const ledger = await ledgerQuery.lean().exec();
         if (ledger?.pointsHistory?.some(entry =>
             String(entry.orderId) === String(orderId) && entry.type === entryType
         )) return false;
@@ -48,14 +52,15 @@ const awardPointsOnce = async ({ customerId, accountType, points, order, descrip
     }
 };
 
-const awardDeliveredOrderPoints = async order => {
+const awardDeliveredOrderPoints = async (order, session = null) => {
     const customerPoints = Number(order.rewardPointsEarned || 0);
     const customerCredited = await awardPointsOnce({
         customerId: order.customerId || order.userId,
         accountType: 'CUSTOMER',
         points: customerPoints,
         order,
-        description: 'Points earned for a completed medicine order.'
+        description: 'Points earned for a completed medicine order.',
+        session
     });
     const riderId = order.rider?.riderId;
     const riderPoints = deliveryRewardStrategy.getPointsForCompletedDelivery(order);
@@ -64,9 +69,30 @@ const awardDeliveredOrderPoints = async order => {
         accountType: 'DELIVERY_PERSON',
         points: riderPoints,
         order,
-        description: 'Points earned for a completed delivery.'
+        description: 'Points earned for a completed delivery.',
+        session
     });
     return { customerCredited, riderCredited, riderPoints };
+};
+
+const roundMoney = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+
+const calculateCompletedOrderFinance = order => {
+    const revenue = Math.max(0, Number(order.finalTotal ?? order.totalAmount ?? 0));
+    const totalCostPrice = (order.medicineItems || []).reduce(
+        (sum, item) => sum + Number(item.baseCostPrice || 0) * Number(item.quantity || 0),
+        0
+    );
+    const netProfit = revenue - totalCostPrice
+        - Number(order.deliveryCost || 0)
+        - Number(order.paymentProcessingFee || 0);
+
+    return {
+        totalRevenue: roundMoney(revenue),
+        totalCostPrice: roundMoney(totalCostPrice),
+        netProfit: roundMoney(netProfit),
+        netMarginPercentage: revenue > 0 ? roundMoney((netProfit / revenue) * 100) : 0
+    };
 };
 
 // Generator to eagerly load 1,000+ realistic pharmaceutical items at startup
@@ -356,6 +382,16 @@ let inMemoryAddresses = new Map([["demo-customer-id", [{
     isDefault: true
 }]]]);
 
+const hasValidCoordinates = (coordinates) => {
+    if (coordinates?.lat == null || coordinates?.lng == null
+        || String(coordinates.lat).trim() === '' || String(coordinates.lng).trim() === '') return false;
+    const lat = Number(coordinates?.lat);
+    const lng = Number(coordinates?.lng);
+    return Number.isFinite(lat) && Number.isFinite(lng)
+        && lat >= -90 && lat <= 90
+        && lng >= -180 && lng <= 180;
+};
+
 const normalizeAddress = (address, userId, existing = {}) => {
     const addressLine1 = address.addressLine1 || address.addressLine || existing.addressLine1 || '';
     const addressLine2 = address.addressLine2 ?? existing.addressLine2 ?? '';
@@ -375,7 +411,7 @@ const normalizeAddress = (address, userId, existing = {}) => {
         landmark: address.landmark ?? existing.landmark ?? '',
         addressLine: address.addressLine ||
             `${addressLine1} ${addressLine2 ? `, ${addressLine2}` : ''}, ${city}, ${state} - ${pincode}`,
-        coordinates: address.coordinates || existing.coordinates || { lat: 12.9716, lng: 77.5946 },
+        coordinates: address.coordinates || existing.coordinates || null,
         isDefault: Boolean(address.isDefault ?? existing.isDefault)
     };
 };
@@ -820,6 +856,9 @@ export const dataStore = {
     },
 
     async reserveOrder(orderData, actor = 'Customer') {
+        if (!orderData.deliveryAddress?.trim() || !hasValidCoordinates(orderData.coordinates)) {
+            throw inventoryError('A delivery address with a confirmed map pin is required to place an order.');
+        }
         const requestedItems = orderData.medicineItems || orderData.items || [];
         if (!Array.isArray(requestedItems) || requestedItems.length === 0) {
             throw inventoryError('Add at least one medicine to the order.');
@@ -1718,75 +1757,171 @@ export const dataStore = {
     },
 
     async transitionOrderStatus(orderId, newStatus, actor = 'Pharmacist', riderInfo = null) {
-        let order = inMemoryOrders.find(o => o._id.toString() === orderId);
-        if (!order && getIsConnected() && mongoose.isValidObjectId(orderId)) {
-            order = await Order.findById(orderId);
-        }
-        if (!order) throw new Error("Order not found");
-        if (newStatus === 'Delivered' && order.orderStatus === 'Delivered') {
-            const rewards = await awardDeliveredOrderPoints(order);
-            return {
-                ...(order.toObject ? order.toObject({ virtuals: true }) : order),
-                deliveryRewards: rewards
-            };
-        }
-
         const validTransitions = {
             'Processing Order': ['Ready to Dispatch', 'Cancelled'],
             'Ready to Dispatch': ['Dispatched', 'Processing Order', 'Cancelled'],
             'Dispatched': ['Delivered', 'Ready to Dispatch'],
             'Delivered': []
         };
+        const completeOrder = async (order, session = null) => {
+            if (order.orderStatus === 'Delivered' && newStatus === 'Delivered') {
+                return {
+                    order: order.toObject ? order.toObject({ virtuals: true }) : { ...order },
+                    deliveryRewards: null,
+                    previousStatus: 'Delivered'
+                };
+            }
 
-        const allowed = validTransitions[order.orderStatus] || [];
-        if (!allowed.includes(newStatus)) {
-            throw new Error(`Invalid state transition: Cannot change order from '${order.orderStatus}' to '${newStatus}'`);
-        }
+            const allowed = validTransitions[order.orderStatus] || [];
+            if (!allowed.includes(newStatus)) {
+                throw inventoryError(
+                    `Invalid state transition: Cannot change order from '${order.orderStatus}' to '${newStatus}'`,
+                    409
+                );
+            }
 
-        const transitionAt = new Date();
-        const prevStatus = order.orderStatus;
-        order.orderStatus = newStatus;
+            const transitionAt = new Date();
+            const previousStatus = order.orderStatus;
+            order.orderStatus = newStatus;
 
-        if (riderInfo) {
-            order.rider = {
-                riderId: riderInfo.riderId || `r-${Date.now()}`,
-                riderName: riderInfo.riderName || 'Assigned Courier',
-                riderMobile: riderInfo.riderMobile || '',
-                assignedAt: new Date()
+            if (riderInfo) {
+                order.rider = {
+                    riderId: riderInfo.riderId || `r-${Date.now()}`,
+                    riderName: riderInfo.riderName || 'Assigned Courier',
+                    riderMobile: riderInfo.riderMobile || '',
+                    assignedAt: transitionAt
+                };
+                order.deliveryPersonMobile = riderInfo.riderMobile || '';
+            }
+
+            if (newStatus === 'Dispatched') {
+                order.outForDeliveryAt = transitionAt;
+                order.deliveredAt = null;
+            }
+
+            let deliveryRewards = null;
+            if (newStatus === 'Delivered') {
+                order.deliveredAt = transitionAt;
+                const outForDeliveryAt = order.outForDeliveryAt
+                    ? new Date(order.outForDeliveryAt).getTime()
+                    : NaN;
+                const elapsedMilliseconds = transitionAt.getTime() - outForDeliveryAt;
+                const deliveryMinutes = Number.isFinite(outForDeliveryAt) && elapsedMilliseconds >= 0
+                    ? elapsedMilliseconds / 60_000
+                    : null;
+                const onTime = deliveryMinutes !== null && deliveryMinutes <= 45;
+                const finance = calculateCompletedOrderFinance(order);
+
+                order.deliveryMinutes = deliveryMinutes;
+                order.systemRating = onTime ? 5 : null;
+                order.ratingPromptPending = onTime;
+                if (onTime) order.postTime = Number(order.postTime || 0) - 1;
+                order.rewardMetrics = finance;
+                order.netProfit = finance.netProfit;
+                order.netMarginPercentage = finance.netMarginPercentage;
+
+                if (session && order.rider?.riderId) {
+                    if (!mongoose.isValidObjectId(order.rider.riderId)) {
+                        throw inventoryError('The assigned rider record is invalid; delivery completion was not saved.', 409);
+                    }
+                    const rider = await Rider.findById(order.rider.riderId).session(session);
+                    if (!rider) {
+                        throw inventoryError('The assigned rider record was not found; delivery completion was not saved.', 409);
+                    }
+                    rider.totalDeliveries = Number(rider.totalDeliveries || 0) + 1;
+                    rider.activeOrderIds = (rider.activeOrderIds || [])
+                        .filter(activeOrderId => String(activeOrderId) !== String(order._id));
+                    if (rider.activeOrderIds.length === 0 && rider.status !== 'Off-duty') {
+                        rider.status = 'Available';
+                    }
+                    await rider.save({ session });
+                }
+
+                deliveryRewards = await awardDeliveredOrderPoints(order, session);
+            }
+
+            if (!order.statusHistory) order.statusHistory = [];
+            order.statusHistory.push({
+                previousStatus,
+                newStatus,
+                changedBy: actor,
+                timestamp: transitionAt,
+                notes: riderInfo ? `Rider assigned: ${riderInfo.riderName} (${riderInfo.riderMobile})` : ''
+            });
+            if (session) await order.save({ session });
+            else if (order.save) await order.save();
+
+            return {
+                order: order.toObject ? order.toObject({ virtuals: true }) : order,
+                deliveryRewards,
+                previousStatus
             };
-            order.deliveryPersonMobile = riderInfo.riderMobile;
+        };
+
+        let transitionResult;
+        if (getIsConnected()) {
+            if (!mongoose.isValidObjectId(orderId)) throw inventoryError('Invalid order ID.');
+            const session = await mongoose.startSession();
+            try {
+                await session.withTransaction(async () => {
+                    const order = await Order.findById(orderId).session(session);
+                    if (!order) throw inventoryError('Order not found.', 404);
+                    transitionResult = await completeOrder(order, session);
+                });
+            } finally {
+                await session.endSession();
+            }
+        } else {
+            const order = inMemoryOrders.find(item => String(item._id) === String(orderId));
+            if (!order) throw inventoryError('Order not found.', 404);
+            transitionResult = await completeOrder(order);
         }
 
-        if (newStatus === 'Dispatched') {
-            order.outForDeliveryAt = transitionAt;
-            order.deliveredAt = null;
+        if (transitionResult.previousStatus === 'Delivered' && newStatus === 'Delivered') {
+            return transitionResult.order;
         }
-        if (newStatus === 'Delivered') {
-            order.deliveredAt = transitionAt;
-        }
-
-        if (!order.statusHistory) order.statusHistory = [];
-        order.statusHistory.push({
-            previousStatus: prevStatus,
-            newStatus,
-            changedBy: actor,
-            timestamp: transitionAt,
-            notes: riderInfo ? `Rider assigned: ${riderInfo.riderName} (${riderInfo.riderMobile})` : ''
-        });
-        if (order.save) await order.save();
-        const deliveryRewards = newStatus === 'Delivered'
-            ? await awardDeliveredOrderPoints(order)
-            : null;
-
         this.logAudit(actor, 'ORDER_STATUS_CHANGED', 'ORDER', orderId, {
-            previousStatus: prevStatus,
+            previousStatus: transitionResult.previousStatus,
             newStatus,
-            rider: order.rider
+            rider: transitionResult.order.rider
         });
         return {
-            ...(order.toObject ? order.toObject({ virtuals: true }) : order),
-            ...(deliveryRewards ? { deliveryRewards } : {})
+            ...transitionResult.order,
+            ...(transitionResult.deliveryRewards ? { deliveryRewards: transitionResult.deliveryRewards } : {})
         };
+    },
+
+    async saveCustomerRating(orderId, customerId, rating, comment = '') {
+        if (getIsConnected()) {
+            if (!mongoose.isValidObjectId(orderId)) throw inventoryError('Invalid order ID.');
+            const order = await Order.findOneAndUpdate({
+                _id: orderId,
+                userId: customerId,
+                orderStatus: 'Delivered',
+                customerRating: { $exists: false }
+            }, {
+                $set: {
+                    customerRating: rating,
+                    customerComment: comment,
+                    ratingPromptPending: false
+                }
+            }, { new: true, runValidators: true });
+            if (order) return order.toObject({ virtuals: true });
+
+            const existing = await Order.findOne({ _id: orderId, userId: customerId }).lean();
+            if (!existing) throw inventoryError('Order not found.', 404);
+            if (existing.orderStatus !== 'Delivered') throw inventoryError('You can rate an order after delivery.', 409);
+            throw inventoryError('Feedback has already been submitted for this delivery.', 409);
+        }
+
+        const order = inMemoryOrders.find(item => String(item._id) === String(orderId));
+        if (!order || order.userId !== customerId) throw inventoryError('Order not found.', 404);
+        if (order.orderStatus !== 'Delivered') throw inventoryError('You can rate an order after delivery.', 409);
+        if (order.customerRating !== undefined) throw inventoryError('Feedback has already been submitted for this delivery.', 409);
+        order.customerRating = rating;
+        order.customerComment = comment;
+        order.ratingPromptPending = false;
+        return order;
     },
 
     async createMedicine(medicineData) {
@@ -2144,6 +2279,9 @@ export const dataStore = {
     },
 
     async createUserAddress(userId, address) {
+        if (!hasValidCoordinates(address.coordinates)) {
+            throw inventoryError('Select a valid delivery pin on the map before saving this address.');
+        }
         const existingAddresses = await this.getUserAddresses(userId);
         const normalized = normalizeAddress(address, userId, {
             isDefault: address.isDefault || existingAddresses.length === 0
@@ -2164,6 +2302,9 @@ export const dataStore = {
     },
 
     async updateUserAddress(userId, addressId, address) {
+        if (!hasValidCoordinates(address.coordinates)) {
+            throw inventoryError('Select a valid delivery pin on the map before saving this address.');
+        }
         const existing = await this.getUserAddress(userId, addressId);
         if (!existing) return null;
         const normalized = normalizeAddress(address, userId, existing);

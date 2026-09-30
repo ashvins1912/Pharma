@@ -77,6 +77,23 @@ export class OrderAssignmentEngine {
             order = orderOrId;
         }
 
+        const existingRiderId = order.rider?.riderId || order.assignedRiderId;
+        if (existingRiderId) {
+            const existingRider = await this.riderRepository.findById(existingRiderId);
+            return {
+                success: true,
+                order,
+                rider: existingRider || {
+                    id: existingRiderId,
+                    name: order.rider?.riderName || 'Assigned Rider',
+                    mobile: order.rider?.riderMobile || ''
+                },
+                strategyUsed: 'AlreadyAssigned',
+                reason: 'Order already has an assigned rider.',
+                auditTrail: []
+            };
+        }
+
         const auditTrail = [];
         let matchedResult = null;
 
