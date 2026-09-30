@@ -13,7 +13,10 @@ Root Directory to the repository root, Build Command to
 the frontend before launching the server, so the `dist` directory exists.
 
 The server validates its required environment variables before starting.
-Configure `MONGO_URI` with a reachable MongoDB connection string,
+Configure `MONGO_URI` with a reachable MongoDB connection string, such as
+`mongodb://localhost:27017/pharma` for a local database or the
+`mongodb+srv://...` connection string provided by Atlas. Do not leave the
+example value or Atlas placeholders in the URI,
 `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` in the Render service's
 Environment settings. The blueprint declares these as `sync: false`, so Render
 prompts for them when creating a new service; existing services must add them
