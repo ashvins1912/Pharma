@@ -74,6 +74,15 @@ are rendered; the backend flag separately guards the passwordless admin-token
 endpoint. Set both to `false` (or remove them) to disable instant access. This
 passwordless shortcut is unavailable in production.
 
+## Rider fleet lifecycle
+
+The fallback in-memory rider repository starts empty; riders must be onboarded
+by an administrator. Suspending or removing a rider disables the existing
+record and stores the admin's remark instead of deleting it. Disabled riders
+are excluded from the active fleet and assignment engine, but administrators
+can view and re-enable them. Onboarding a disabled rider with the same mobile
+number reactivates that record and preserves its delivery history.
+
 ## Promoting a Supabase administrator
 
 After the intended account has signed in to this Supabase project at least once,

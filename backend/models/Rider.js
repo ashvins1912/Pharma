@@ -22,6 +22,25 @@ const riderSchema = new mongoose.Schema({
         default: 'Available',
         index: true
     },
+    enabled: {
+        type: Boolean,
+        default: true,
+        index: true
+    },
+    disabledAction: {
+        type: String,
+        enum: ['Suspended', 'Removed', null],
+        default: null
+    },
+    disabledReason: {
+        type: String,
+        trim: true,
+        default: null
+    },
+    disabledAt: {
+        type: Date,
+        default: null
+    },
     vehicleType: {
         type: String,
         enum: ['Bike', 'Scooter', 'EV Bike', 'Cycle'],

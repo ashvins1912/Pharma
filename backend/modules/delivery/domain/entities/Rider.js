@@ -22,6 +22,10 @@ export class Rider {
         activeOrderIds = [],
         totalDeliveries = 0,
         rating = 4.9,
+        enabled = true,
+        disabledAction = null,
+        disabledReason = null,
+        disabledAt = null,
         createdAt = new Date(),
         updatedAt = new Date()
     }) {
@@ -57,23 +61,56 @@ export class Rider {
         this.activeOrderIds = Array.isArray(activeOrderIds) ? [...activeOrderIds] : [];
         this.totalDeliveries = Number(totalDeliveries) || 0;
         this.rating = Number(rating) || 4.9;
+        this.enabled = enabled !== false;
+        this.disabledAction = disabledAction || null;
+        this.disabledReason = disabledReason || null;
+        this.disabledAt = disabledAt ? new Date(disabledAt) : null;
         this.createdAt = createdAt instanceof Date ? createdAt : new Date(createdAt);
         this.updatedAt = updatedAt instanceof Date ? updatedAt : new Date(updatedAt);
     }
 
     isAvailable() {
-        return this.status === Rider.STATUSES.AVAILABLE;
+        return this.enabled && this.status === Rider.STATUSES.AVAILABLE;
     }
 
     isBusy() {
-        return this.status === Rider.STATUSES.BUSY;
+        return this.enabled && this.status === Rider.STATUSES.BUSY;
     }
 
     isOffDuty() {
-        return this.status === Rider.STATUSES.OFF_DUTY;
+        return !this.enabled || this.status === Rider.STATUSES.OFF_DUTY;
+    }
+
+    disable(action, reason) {
+        if (!['Suspended', 'Removed'].includes(action)) {
+            throw new Error('Rider action must be Suspended or Removed.');
+        }
+        if (!reason?.trim()) {
+            throw new Error('A remark is required to suspend or remove a rider.');
+        }
+        this.enabled = false;
+        this.disabledAction = action;
+        this.disabledReason = reason.trim();
+        this.disabledAt = new Date();
+        this.status = Rider.STATUSES.OFF_DUTY;
+        this.updatedAt = new Date();
+    }
+
+    enable() {
+        this.enabled = true;
+        this.disabledAction = null;
+        this.disabledReason = null;
+        this.disabledAt = null;
+        this.status = this.activeOrderIds.length
+            ? Rider.STATUSES.BUSY
+            : Rider.STATUSES.AVAILABLE;
+        this.updatedAt = new Date();
     }
 
     assignOrder(orderId) {
+        if (!this.enabled) {
+            throw new Error(`Cannot assign order to disabled rider ${this.name}.`);
+        }
         if (this.isOffDuty()) {
             throw new Error(`Cannot assign order to rider ${this.name} while Off-duty.`);
         }
@@ -96,6 +133,9 @@ export class Rider {
     }
 
     updateStatus(newStatus) {
+        if (!this.enabled) {
+            throw new Error(`Cannot update status for disabled rider ${this.name}.`);
+        }
         const validStatuses = Object.values(Rider.STATUSES);
         if (!validStatuses.includes(newStatus)) {
             throw new Error(`Invalid status: ${newStatus}`);
@@ -105,6 +145,9 @@ export class Rider {
     }
 
     updateLocation(longitude, latitude) {
+        if (!this.enabled) {
+            throw new Error(`Cannot update location for disabled rider ${this.name}.`);
+        }
         this.currentLocation = new Location(longitude, latitude);
         this.updatedAt = new Date();
     }
@@ -121,6 +164,10 @@ export class Rider {
             activeOrderIds: this.activeOrderIds,
             totalDeliveries: this.totalDeliveries,
             rating: this.rating,
+            enabled: this.enabled,
+            disabledAction: this.disabledAction,
+            disabledReason: this.disabledReason,
+            disabledAt: this.disabledAt,
             createdAt: this.createdAt,
             updatedAt: this.updatedAt
         };
