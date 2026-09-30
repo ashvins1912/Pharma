@@ -20,6 +20,8 @@ export class MongooseOrderRepository extends IOrderRepository {
             customerName: obj.customerName,
             customerMobile: obj.customerMobile || obj.addressDetails?.mobile || '',
             deliveryAddress: obj.deliveryAddress,
+            addressDetails: obj.addressDetails || {},
+            paymentMethod: obj.paymentMethod || 'Cash on Delivery (COD)',
             location: coords,
             orderStatus: obj.orderStatus,
             assignmentType: obj.assignmentType || 'Unassigned',

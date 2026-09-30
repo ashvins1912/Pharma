@@ -60,6 +60,14 @@ export default function AuthModal({ isOpen, onClose }) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [signupErrors, setSignupErrors] = useState({});
+  const instantDemoEnabled = import.meta.env.VITE_INSTANT_DEMO_ACCESS_ENABLED === 'true'
+    || (import.meta.env.DEV && import.meta.env.VITE_INSTANT_DEMO_ACCESS_ENABLED !== 'false');
+  const demoCustomerEnabled = instantDemoEnabled
+    && (import.meta.env.DEV || import.meta.env.VITE_DEMO_CUSTOMER_ENABLED === 'true');
+  const demoAdminEnabled = instantDemoEnabled
+    && (import.meta.env.DEV
+      ? import.meta.env.VITE_DEMO_ADMIN_ENABLED !== 'false'
+      : import.meta.env.VITE_DEMO_ADMIN_ENABLED === 'true');
 
   const resetForm = () => {
     setIsSignUp(false);
@@ -203,10 +211,18 @@ export default function AuthModal({ isOpen, onClose }) {
     }
   };
 
-  const handleDemoCustomer = () => {
-    loginDemoCustomer();
-    addToast('Logged in as Demo Customer!', 'success');
-    handleClose();
+  const handleDemoCustomer = async () => {
+    setErrorMsg('');
+    setLoading(true);
+    try {
+      await loginDemoCustomer();
+      addToast('Logged in as Demo Customer!', 'success');
+      handleClose();
+    } catch (err) {
+      setErrorMsg(err.message || 'Demo customer sign-in failed.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDemoAdmin = async () => {
@@ -336,7 +352,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
             {!resetEmailSent && (
               <form onSubmit={isForgotPassword ? handleSendPasswordReset : handleSubmit} className="space-y-3.5">
-                {import.meta.env.DEV && import.meta.env.VITE_DEMO_ADMIN_ENABLED !== 'false' && !isSignUp && !isForgotPassword && !passwordRecoveryRequired && (
+                {(import.meta.env.DEV || import.meta.env.VITE_DEMO_ADMIN_ENABLED === 'true') && import.meta.env.VITE_DEMO_ADMIN_ENABLED !== 'false' && !isSignUp && !isForgotPassword && !passwordRecoveryRequired && (
                   <div className="rounded-xl border border-purple-200 bg-purple-50 p-3 text-[11px] text-purple-800">
                     Local demo admin: sign in with email <span className="font-bold">ashvinsingh25@gmail.com</span> and password <span className="font-bold">Admin@123</span>, or click <span className="font-bold">🛡️ Demo Admin</span> below.
                   </div>
@@ -523,24 +539,28 @@ export default function AuthModal({ isOpen, onClose }) {
             )}
 
             {/* Quick Demo Access */}
-            {import.meta.env.DEV && import.meta.env.VITE_INSTANT_DEMO_ACCESS_ENABLED !== 'false' && !isForgotPassword && !passwordRecoveryRequired && (
+            {(demoCustomerEnabled || demoAdminEnabled) && !isForgotPassword && !passwordRecoveryRequired && (
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 text-center">Instant Demo Access</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <button
-                    onClick={handleDemoCustomer}
-                    disabled={loading}
-                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold py-1.5 px-2 rounded-xl text-[11px] cursor-pointer transition text-center"
-                  >
-                    🛒 Demo Customer
-                  </button>
-                  <button
-                    onClick={handleDemoAdmin}
-                    disabled={loading}
-                    className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold py-1.5 px-2 rounded-xl text-[11px] cursor-pointer transition text-center disabled:opacity-50"
-                  >
-                    🛡️ Demo Admin
-                  </button>
+                <div className={`grid grid-cols-1 ${demoCustomerEnabled && demoAdminEnabled ? 'sm:grid-cols-2' : ''} gap-2`}>
+                  {demoCustomerEnabled && (
+                    <button
+                      onClick={handleDemoCustomer}
+                      disabled={loading}
+                      className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold py-1.5 px-2 rounded-xl text-[11px] cursor-pointer transition text-center"
+                    >
+                      🛒 Demo Customer
+                    </button>
+                  )}
+                  {demoAdminEnabled && (
+                    <button
+                      onClick={handleDemoAdmin}
+                      disabled={loading}
+                      className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold py-1.5 px-2 rounded-xl text-[11px] cursor-pointer transition text-center disabled:opacity-50"
+                    >
+                      🛡️ Demo Admin
+                    </button>
+                  )}
                 </div>
               </div>
             )}

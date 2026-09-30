@@ -47,8 +47,9 @@ export function AuthProvider({ children }) {
 
         // Check active session via HttpOnly cookie
         const { data } = await apiClient.get('/api/auth/session');
-        if (mounted && data?.user) {
-          syncSession({ user: data.user }, data.user);
+        const sessionUser = data?.user || (data?.id ? data : null);
+        if (mounted && sessionUser) {
+          syncSession({ user: sessionUser }, sessionUser);
           setMfaEnabled(Boolean(data.mfaEnabled));
           setAal(data.aal || 'aal1');
         }
@@ -116,6 +117,17 @@ export function AuthProvider({ children }) {
     return { success: true, user: data.user };
   };
 
+  const loginWithGoogle = async () => {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error('Google sign-in is unavailable until Supabase is configured.');
+    }
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin }
+    });
+    if (error) throw error;
+  };
+
   /**
    * Step 2: Verify 6-digit TOTP code
    * Completes authentication and upgrades session to AAL2
@@ -178,23 +190,13 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const loginDemoCustomer = (email = 'customer@ashvinpharma.com', name = 'Ashvin Singh') => {
-    const demo = {
-      access_token: 'demo-customer-token',
-      user: {
-        id: 'demo-customer-id',
-        email,
-        role: 'customer',
-        user_metadata: {
-          name,
-          role: 'customer',
-          mobile: '+91 95899 16475'
-        }
-      }
-    };
+  const loginDemoCustomer = async () => {
+    const { data } = await apiClient.post('/api/auth/demo-customer');
+    const demo = { ...data, user: data.user };
     localStorage.setItem('demo_session', JSON.stringify(demo));
     syncSession(demo, demo.user);
     setMfaRequired(false);
+    return demo.user;
   };
 
   const loginDemoAdmin = async () => {
@@ -250,6 +252,7 @@ export function AuthProvider({ children }) {
         mfaEnabled,
         aal,
         passwordRecoveryRequired,
+        loginWithGoogle,
         loginWithEmail,
         verifyTotp,
         cancelMfa,

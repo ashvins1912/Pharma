@@ -81,6 +81,7 @@ export function csrfProtection(req, res, next) {
         '/api/auth/signup',
         '/api/auth/demo-admin',
         '/api/auth/demo-admin/instant',
+        '/api/auth/demo-customer',
         '/api/auth/mfa/challenge',
         '/api/auth/mfa/verify'
     ];

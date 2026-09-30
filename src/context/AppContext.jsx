@@ -6,7 +6,7 @@ import { useToast } from './ToastContext';
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, loading: authLoading } = useAuth();
   const { addToast } = useToast();
 
   // Catalog State
@@ -255,20 +255,20 @@ export function AppProvider({ children }) {
 
   // Fetch Admin Inventory Alerts
   const loadInventoryAlerts = useCallback(async () => {
-    if (!isAdmin) return;
+    if (authLoading || !isAdmin) return;
     try {
       const res = await apiClient.get('/api/medicines/alerts');
       setInventoryAlerts(res.data || {});
     } catch {
       // ignore
     }
-  }, [isAdmin]);
+  }, [authLoading, isAdmin]);
 
   useEffect(() => {
-    if (isAdmin) {
+    if (!authLoading && isAdmin) {
       loadInventoryAlerts();
     }
-  }, [isAdmin, loadInventoryAlerts]);
+  }, [authLoading, isAdmin, loadInventoryAlerts]);
 
   // Cart operations
   const addToCart = (med) => {

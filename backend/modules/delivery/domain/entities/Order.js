@@ -26,6 +26,8 @@ export class Order {
         customerName = 'Customer',
         customerMobile = '',
         deliveryAddress = '',
+        addressDetails = {},
+        paymentMethod = 'Cash on Delivery (COD)',
         coordinates = null,
         location = null,
         orderStatus = Order.STATUSES.PENDING_REVIEW,
@@ -45,6 +47,8 @@ export class Order {
         this.customerName = customerName;
         this.customerMobile = customerMobile;
         this.deliveryAddress = deliveryAddress;
+        this.addressDetails = addressDetails || {};
+        this.paymentMethod = paymentMethod;
 
         // Resolve GeoJSON Location
         if (location instanceof Location) {
@@ -116,6 +120,8 @@ export class Order {
             customerName: this.customerName,
             customerMobile: this.customerMobile,
             deliveryAddress: this.deliveryAddress,
+            addressDetails: this.addressDetails,
+            paymentMethod: this.paymentMethod,
             location: this.location.toGeoJSON(),
             coordinates: { lat: this.location.latitude, lng: this.location.longitude },
             orderStatus: this.orderStatus,

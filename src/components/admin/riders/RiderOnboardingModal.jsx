@@ -1,11 +1,14 @@
 import React from 'react';
 import { useRiderOnboarding } from '../../../hooks/useRiderOnboarding';
+import { useToast } from '../../../context/ToastContext';
 
 /**
  * Pure Presentation Component: RiderOnboardingModal
  * Business logic is completely delegated to useRiderOnboarding hook.
  */
 export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) {
+    const { addToast } = useToast();
+    const [locating, setLocating] = React.useState(false);
     const {
         values,
         photoPreview,
@@ -25,12 +28,32 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
 
     if (!isOpen) return null;
 
-    const setLocationPreset = (name, lat, lng) => {
-        setValues((prev) => ({
-            ...prev,
-            latitude: String(lat),
-            longitude: String(lng)
-        }));
+    const useCurrentLocation = () => {
+        if (!navigator.geolocation) {
+            addToast('Current location is not available in this browser.', 'error');
+            return;
+        }
+        setLocating(true);
+        navigator.geolocation.getCurrentPosition(
+            ({ coords }) => {
+                setValues(prev => ({
+                    ...prev,
+                    latitude: String(coords.latitude),
+                    longitude: String(coords.longitude)
+                }));
+                setLocating(false);
+            },
+            error => {
+                const message = error.code === error.PERMISSION_DENIED
+                    ? 'Allow location access in your browser to use your current location.'
+                    : error.code === error.POSITION_UNAVAILABLE
+                        ? 'Your current location could not be determined.'
+                        : 'Timed out while getting your current location. Try again.';
+                addToast(message, 'error');
+                setLocating(false);
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+        );
     };
 
     return (
@@ -159,35 +182,22 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
 
                     {/* Initial GPS Location & Presets */}
                     <div>
-                        <div className="flex items-center justify-between mb-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                                 Initial GPS Coordinates (GeoJSON)
                             </label>
-                            <span className="text-[10px] text-purple-600 font-bold">Quick Hubs</span>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5 mb-2">
                             <button
                                 type="button"
-                                onClick={() => setLocationPreset('Central Hub', 12.9716, 77.5946)}
-                                className="text-[10px] bg-slate-100 hover:bg-purple-100 hover:text-purple-700 px-2 py-1 rounded-lg font-semibold transition"
+                                onClick={useCurrentLocation}
+                                disabled={locating}
+                                className="text-[10px] bg-purple-50 hover:bg-purple-100 text-purple-700 px-2.5 py-1.5 rounded-lg font-bold transition disabled:opacity-50"
                             >
-                                📍 Central Pharmacy (0 km)
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setLocationPreset('Indiranagar', 12.9784, 77.6408)}
-                                className="text-[10px] bg-slate-100 hover:bg-purple-100 hover:text-purple-700 px-2 py-1 rounded-lg font-semibold transition"
-                            >
-                                📍 Indiranagar Zone
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setLocationPreset('Koramangala', 12.9352, 77.6245)}
-                                className="text-[10px] bg-slate-100 hover:bg-purple-100 hover:text-purple-700 px-2 py-1 rounded-lg font-semibold transition"
-                            >
-                                📍 Koramangala Zone
+                                {locating ? 'Getting location...' : 'Use my current location'}
                             </button>
                         </div>
+                        <p className="mb-2 text-[10px] text-slate-400">
+                            Use your device location or enter coordinates manually. Quick hub presets are disabled.
+                        </p>
 
                         <div className="grid grid-cols-2 gap-3">
                             <div>

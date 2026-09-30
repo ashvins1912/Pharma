@@ -249,6 +249,11 @@ router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
                 const assignResult = await deliveryContainer.assignmentEngine.assignOrder(req.params.id);
                 if (assignResult.success && assignResult.order) {
                     order = assignResult.order.toJSON ? assignResult.order.toJSON() : assignResult.order;
+                    await sendCustomWhatsAppAlert(
+                        order,
+                        'Assigned',
+                        assignResult.rider?.mobile || order.rider?.riderMobile
+                    );
                 }
             } catch (autoAssignErr) {
                 console.warn('[AutoAssign] Assignment engine notice during approval:', autoAssignErr.message);

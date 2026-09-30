@@ -19,6 +19,8 @@ export class InMemoryOrderRepository extends IOrderRepository {
             customerName: rawOrder.customerName || rawOrder.addressDetails?.fullName || 'Customer',
             customerMobile: rawOrder.customerMobile || rawOrder.addressDetails?.mobile || '',
             deliveryAddress: rawOrder.deliveryAddress || 'Central Dispensary Area',
+            addressDetails: rawOrder.addressDetails || {},
+            paymentMethod: rawOrder.paymentMethod || 'Cash on Delivery (COD)',
             location: coords,
             orderStatus: rawOrder.orderStatus || 'Pending_Review',
             assignmentType: rawOrder.assignmentType || 'Unassigned',

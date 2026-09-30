@@ -14,7 +14,11 @@ export const autoAssignOrder = async (req, res) => {
         // If assigned, trigger WhatsApp alert if rider info is available
         if (result.success && result.order?.rider) {
             try {
-                await sendCustomWhatsAppAlert(result.order.toJSON ? result.order.toJSON() : result.order, 'Dispatched');
+                await sendCustomWhatsAppAlert(
+                    result.order.toJSON ? result.order.toJSON() : result.order,
+                    'Assigned',
+                    result.rider?.mobile || result.order.rider.riderMobile
+                );
             } catch (waErr) {
                 console.warn('[AutoAssign] WhatsApp notification non-blocking warning:', waErr.message);
             }
@@ -48,7 +52,11 @@ export const manualAssignOrder = async (req, res) => {
 
         if (result.order?.rider) {
             try {
-                await sendCustomWhatsAppAlert(result.order.toJSON ? result.order.toJSON() : result.order, 'Dispatched');
+                await sendCustomWhatsAppAlert(
+                    result.order.toJSON ? result.order.toJSON() : result.order,
+                    'Assigned',
+                    result.rider?.mobile || result.order.rider.riderMobile
+                );
             } catch (waErr) {
                 console.warn('[ManualAssign] WhatsApp notification warning:', waErr.message);
             }

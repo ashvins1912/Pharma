@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { verifyDemoAdminToken } from '../config/demoAdmin.js';
+import { verifyDemoCustomerToken } from '../config/demoCustomer.js';
 import { env } from '../config/env.js';
 
 const { SUPABASE_URL } = env;
@@ -48,7 +49,18 @@ export const authenticateUser = async (req, res, next) => {
         });
     }
 
-    // 3. Demo Customer token in local dev
+    // 3. Signed demo customer sessions
+    const demoCustomer = await verifyDemoCustomerToken(token);
+    if (demoCustomer) {
+        req.user = {
+            ...demoCustomer,
+            id: demoCustomer.sub,
+            aal: 'aal1'
+        };
+        return next();
+    }
+
+    // Legacy local-only demo token
     if (isDemoAuthEnabled && token === 'demo-customer-token') {
         req.user = {
             sub: 'demo-customer-id',
