@@ -267,6 +267,16 @@ export const buildWhatsAppMessageBody = (order, status, audience) => {
         ].filter(Boolean).join('\n');
     }
 
+    if (status === 'Assigned') {
+        return [
+            `🛵 DELIVERY RIDER ASSIGNED — #${shortId}`,
+            `Rider: ${order.rider?.riderName || 'Assigned Rider'}`,
+            `Rider contact: ${order.rider?.riderMobile || 'Not provided'}`,
+            'Your order is packed and waiting for dispatch.',
+            `Complete delivery address: ${getCompleteAddress(order)}`
+        ].join('\n');
+    }
+
     switch (status) {
         case 'Placed':
             return [
@@ -371,7 +381,10 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
     const customerPhone = order.customerMobile || order.addressDetails?.mobile || '';
     const riderPhone = deliveryMobile || order.rider?.riderMobile || '';
     const recipients = statusUpdateText === 'Assigned'
-        ? (riderPhone ? [{ audience: 'rider', phone: riderPhone }] : [])
+        ? [
+            { audience: 'customer', phone: customerPhone },
+            ...(riderPhone ? [{ audience: 'rider', phone: riderPhone }] : [])
+        ]
         : [
             { audience: 'customer', phone: customerPhone },
             ...(statusUpdateText === 'Dispatched' && riderPhone

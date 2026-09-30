@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { isSupabaseConfigured, supabase } from '../supabaseClient';
 import apiClient from '../api/apiClient';
+import { env } from '../config/env';
 
 const AuthContext = createContext(null);
 
@@ -123,7 +124,7 @@ export function AuthProvider({ children }) {
     }
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin }
+      options: { redirectTo: env.VITE_FRONTEND_URL || window.location.origin }
     });
     if (error) throw error;
   };
@@ -225,7 +226,7 @@ export function AuthProvider({ children }) {
       throw new Error('Password reset is unavailable until Supabase is configured.');
     }
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin
+      redirectTo: env.VITE_FRONTEND_URL || window.location.origin
     });
     if (error) throw error;
   };

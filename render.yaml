@@ -7,6 +7,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: VITE_FRONTEND_URL
+        sync: false
       - key: MONGO_URI
         sync: false
       - key: VITE_SUPABASE_URL

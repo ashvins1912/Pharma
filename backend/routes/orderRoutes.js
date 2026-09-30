@@ -236,29 +236,11 @@ router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
             return res.status(400).json({ message: 'Confirm prescription verification before approving this order.' });
         }
 
-        let order = await dataStore.reviewOrder(
+        const order = await dataStore.reviewOrder(
             req.params.id,
             reviewDecision === 'Approved' ? 'approve' : 'reject',
             req.user.user_metadata?.name || req.user.email || 'Admin'
         );
-
-        // Feature 2: Trigger automated assignment engine when order status turns to "Approved"
-        if (reviewDecision === 'Approved') {
-            try {
-                deliveryContainer.refreshDataLayer();
-                const assignResult = await deliveryContainer.assignmentEngine.assignOrder(req.params.id);
-                if (assignResult.success && assignResult.order) {
-                    order = assignResult.order.toJSON ? assignResult.order.toJSON() : assignResult.order;
-                    await sendCustomWhatsAppAlert(
-                        order,
-                        'Assigned',
-                        assignResult.rider?.mobile || order.rider?.riderMobile
-                    );
-                }
-            } catch (autoAssignErr) {
-                console.warn('[AutoAssign] Assignment engine notice during approval:', autoAssignErr.message);
-            }
-        }
 
         res.json({ message: `Order ${reviewDecision.toLowerCase()}.`, order });
     } catch (err) {
@@ -363,20 +345,45 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
         }
 
         const actor = req.user.user_metadata?.name || req.user.email || 'Pharmacist Admin';
-        const updatedOrder = await dataStore.transitionOrderStatus(orderId, newStatus, actor, riderInfo);
+        let updatedOrder = await dataStore.transitionOrderStatus(orderId, newStatus, actor, riderInfo);
+        let assignmentMessage = '';
+        let notificationEvent = newStatus === 'Ready to Dispatch' ? 'Ready to Dispatch' : null;
+        let notificationMobile = updatedOrder.rider?.riderMobile;
+
+        if (newStatus === 'Ready to Dispatch') {
+            try {
+                deliveryContainer.refreshDataLayer();
+                const assignResult = await deliveryContainer.assignmentEngine.assignOrder(orderId);
+                if (assignResult.success && assignResult.order) {
+                    updatedOrder = assignResult.order.toJSON
+                        ? assignResult.order.toJSON()
+                        : assignResult.order;
+                    notificationEvent = 'Assigned';
+                    notificationMobile = assignResult.rider?.mobile || updatedOrder.rider?.riderMobile;
+                    assignmentMessage = ` Rider ${assignResult.rider.name} was assigned automatically.`;
+                } else {
+                    assignmentMessage = ' No available rider was found; assign one manually.';
+                }
+            } catch (assignmentError) {
+                console.warn('[AutoAssign] Assignment failed after order was readied:', assignmentError.message);
+                assignmentMessage = ' Automatic assignment failed; assign a rider manually.';
+            }
+        }
 
         // Trigger notification according to lifecycle
-        let eventType = null;
-        if (newStatus === 'Ready to Dispatch') eventType = 'Ready to Dispatch';
-        else if (newStatus === 'Dispatched') eventType = 'Dispatched';
-        else if (newStatus === 'Delivered') eventType = 'Delivered';
+        if (newStatus === 'Dispatched') notificationEvent = 'Dispatched';
+        else if (newStatus === 'Delivered') notificationEvent = 'Delivered';
 
-        if (eventType) {
-            await sendCustomWhatsAppAlert(updatedOrder, eventType, updatedOrder.rider?.riderMobile);
+        if (notificationEvent) {
+            try {
+                await sendCustomWhatsAppAlert(updatedOrder, notificationEvent, notificationMobile);
+            } catch (notificationError) {
+                console.warn(`[WhatsApp] ${notificationEvent} notification failed:`, notificationError.message);
+            }
         }
 
         res.json({
-            message: `Order transitioned to ${newStatus}`,
+            message: `Order transitioned to ${newStatus}.${assignmentMessage}`,
             order: updatedOrder,
             deliveryRewards: updatedOrder.deliveryRewards || null
         });
