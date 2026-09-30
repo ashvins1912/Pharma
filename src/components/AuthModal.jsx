@@ -1,7 +1,33 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { isSupabaseConfigured } from '../supabaseClient';
+
+const signupFields = ['name', 'mobile', 'email', 'password', 'confirmPassword'];
+
+function validateSignupField(field, values) {
+  switch (field) {
+    case 'name':
+      return values.name.trim().length < 2 ? 'Full name must be at least 2 characters.' : '';
+    case 'mobile':
+      return values.mobile.replace(/\D/g, '').length < 10 ? 'Mobile number must be at least 10 digits.' : '';
+    case 'email':
+      return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(values.email.trim())
+        ? ''
+        : 'Enter a valid email address.';
+    case 'password':
+      if (values.password.length < 8) return 'Password must contain at least 8 characters.';
+      if (!/[A-Z]/.test(values.password) || !/[a-z]/.test(values.password) || !/[0-9]/.test(values.password)) {
+        return 'Use at least one uppercase letter, one lowercase letter, and one number.';
+      }
+      return '';
+    case 'confirmPassword':
+      if (!values.confirmPassword) return 'Please confirm your password.';
+      return values.confirmPassword !== values.password ? 'Passwords do not match.' : '';
+    default:
+      return '';
+  }
+}
 
 export default function AuthModal({ isOpen, onClose }) {
   const {
@@ -33,18 +59,63 @@ export default function AuthModal({ isOpen, onClose }) {
   const [mobile, setMobile] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [signupErrors, setSignupErrors] = useState({});
+
+  const resetForm = () => {
+    setIsSignUp(false);
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setTotpCode('');
+    setIsForgotPassword(false);
+    setResetEmailSent(false);
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+    setName('');
+    setMobile('');
+    setLoading(false);
+    setErrorMsg('');
+    setSignupErrors({});
+  };
+
+  useEffect(() => {
+    if (!isOpen) resetForm();
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
+  const getSignupValues = () => ({ name, mobile, email, password, confirmPassword });
+  const validateSignup = () => {
+    const values = getSignupValues();
+    const errors = Object.fromEntries(
+      signupFields.map((field) => [field, validateSignupField(field, values)])
+    );
+    setSignupErrors(errors);
+    return Object.values(errors).every((error) => !error);
+  };
+  const handleSignupBlur = (field) => {
+    const values = getSignupValues();
+    setSignupErrors((current) => {
+      const updated = {
+        ...current,
+        [field]: validateSignupField(field, values)
+      };
+      if (field === 'password' && values.confirmPassword) {
+        updated.confirmPassword = validateSignupField('confirmPassword', values);
+      }
+      return updated;
+    });
+  };
+
   const handleClose = () => {
     cancelMfa();
-    setTotpCode('');
-    setErrorMsg('');
+    resetForm();
     onClose();
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSignUp && !passwordRecoveryRequired && !validateSignup()) return;
     setErrorMsg('');
     setLoading(true);
 
@@ -281,9 +352,12 @@ export default function AuthModal({ isOpen, onClose }) {
                       placeholder="e.g. Ashvin Singh"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
+                      onBlur={() => handleSignupBlur('name')}
+                      aria-invalid={Boolean(signupErrors.name)}
                       className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
                       required
                     />
+                    {signupErrors.name && <p className="mt-1 text-[11px] text-rose-600">{signupErrors.name}</p>}
                   </div>
                 )}
 
@@ -297,9 +371,12 @@ export default function AuthModal({ isOpen, onClose }) {
                       placeholder="e.g. +91 95899 16475"
                       value={mobile}
                       onChange={(e) => setMobile(e.target.value)}
+                      onBlur={() => handleSignupBlur('mobile')}
+                      aria-invalid={Boolean(signupErrors.mobile)}
                       className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
                       required
                     />
+                    {signupErrors.mobile && <p className="mt-1 text-[11px] text-rose-600">{signupErrors.mobile}</p>}
                   </div>
                 )}
 
@@ -312,10 +389,13 @@ export default function AuthModal({ isOpen, onClose }) {
                     placeholder="you@ashvinpharma.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    onBlur={isSignUp ? () => handleSignupBlur('email') : undefined}
+                    aria-invalid={isSignUp && Boolean(signupErrors.email)}
                     className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
                     autoComplete="email"
                     required
                   />
+                  {isSignUp && signupErrors.email && <p className="mt-1 text-[11px] text-rose-600">{signupErrors.email}</p>}
                 </div>
 
                 {!isForgotPassword && (
@@ -343,6 +423,8 @@ export default function AuthModal({ isOpen, onClose }) {
                         placeholder={passwordRecoveryRequired ? 'Enter new password' : '••••••••'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
+                        onBlur={isSignUp ? () => handleSignupBlur('password') : undefined}
+                        aria-invalid={isSignUp && Boolean(signupErrors.password)}
                         className="w-full px-3.5 py-2.5 pr-16 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
                         autoComplete={isSignUp ? 'new-password' : 'current-password'}
                         required
@@ -356,6 +438,7 @@ export default function AuthModal({ isOpen, onClose }) {
                         {showPassword ? 'Hide' : 'Show'}
                       </button>
                     </div>
+                    {isSignUp && signupErrors.password && <p className="mt-1 text-[11px] text-rose-600">{signupErrors.password}</p>}
                   </div>
                 )}
 
@@ -370,6 +453,10 @@ export default function AuthModal({ isOpen, onClose }) {
                         placeholder={passwordRecoveryRequired ? 'Confirm your new password' : 'Retype your password'}
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
+                        onBlur={() => {
+                          if (isSignUp && !passwordRecoveryRequired) handleSignupBlur('confirmPassword');
+                        }}
+                        aria-invalid={isSignUp && !passwordRecoveryRequired && Boolean(signupErrors.confirmPassword)}
                         className="w-full px-3.5 py-2.5 pr-16 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
                         autoComplete="new-password"
                         required
@@ -383,6 +470,9 @@ export default function AuthModal({ isOpen, onClose }) {
                         {showConfirmPassword ? 'Hide' : 'Show'}
                       </button>
                     </div>
+                    {isSignUp && !passwordRecoveryRequired && signupErrors.confirmPassword && (
+                      <p className="mt-1 text-[11px] text-rose-600">{signupErrors.confirmPassword}</p>
+                    )}
                   </div>
                 )}
 
@@ -470,6 +560,7 @@ export default function AuthModal({ isOpen, onClose }) {
                       setResetEmailSent(false);
                       setIsSignUp(isForgotPassword ? false : !isSignUp);
                       setErrorMsg('');
+                      setSignupErrors({});
                     }}
                     className="text-blue-600 font-extrabold hover:underline cursor-pointer"
                   >

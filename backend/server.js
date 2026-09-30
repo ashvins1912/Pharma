@@ -13,6 +13,7 @@ import riderRoutes from './modules/delivery/routes/riderRoutes.js';
 import assignmentRoutes from './modules/delivery/routes/assignmentRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import { csrfProtection } from './security/sessionCookie.js';
+import { sanitizeBodyMiddleware, validateLogin } from './security/validator.js';
 import dataStore from './dataStore.js';
 import DataMartRefreshService from './services/DataMartRefreshService.js';
 import { authenticateUser, isAdmin } from './middleware/auth.js';
@@ -63,7 +64,7 @@ app.use('/api/admin/whatsapp', whatsappRoutes);
 app.use('/api/admin/riders', riderRoutes);
 app.use('/api/admin/assignment', assignmentRoutes);
 
-app.post('/api/auth/demo-admin', async (req, res) => {
+app.post('/api/auth/demo-admin', sanitizeBodyMiddleware, validateLogin, async (req, res) => {
     if (!isDemoAdminEnabled()) {
         return res.status(404).json({ message: 'Demo admin sign-in is disabled.' });
     }

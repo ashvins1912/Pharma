@@ -8,6 +8,8 @@ export default function OrderHistoryView({ onTrackOrder }) {
   const { addToast } = useToast();
   const [editingOrder, setEditingOrder] = useState(null);
   const [draftItems, setDraftItems] = useState([]);
+  const [medicineSearches, setMedicineSearches] = useState({});
+  const [activeMedicineSearch, setActiveMedicineSearch] = useState(null);
   const [prescriptionFile, setPrescriptionFile] = useState(null);
   const [savingOrder, setSavingOrder] = useState(false);
   const editableStatuses = ['Pending_Review', 'Approved', 'Processing Order', 'Ready to Dispatch'];
@@ -27,6 +29,8 @@ export default function OrderHistoryView({ onTrackOrder }) {
     }));
     setEditingOrder(order);
     setDraftItems(initialItems.length ? initialItems : [{ medicineId: '', quantity: 1 }]);
+    setMedicineSearches({});
+    setActiveMedicineSearch(null);
     setPrescriptionFile(null);
   };
 
@@ -66,6 +70,8 @@ export default function OrderHistoryView({ onTrackOrder }) {
       const response = await apiClient.put(`/api/orders/${editingOrder._id}/modify`, formData);
       addToast(response.data?.message || 'Order updated and sent for pharmacist review.', 'success');
       setEditingOrder(null);
+      setMedicineSearches({});
+      setActiveMedicineSearch(null);
       await loadUserOrders();
     } catch (error) {
       addToast(error.message || 'Could not update this order.', 'error');
@@ -263,21 +269,73 @@ export default function OrderHistoryView({ onTrackOrder }) {
 
             <div className="space-y-3">
               {draftItems.map((item, index) => (
-                <div key={`${index}-${item.medicineId}`} className="flex flex-col gap-2 sm:flex-row">
-                  <select
-                    value={item.medicineId}
-                    onChange={event => updateDraftItem(index, 'medicineId', event.target.value)}
-                    required
-                    className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                  >
-                    <option value="">Select medicine</option>
-                    {medicines.map(medicine => (
-                      <option key={medicine._id} value={medicine._id}>{medicine.name} — ₹{medicine.price}</option>
-                    ))}
-                    {editorMedicines.filter(medicine => !medicines.some(entry => String(entry._id) === String(medicine._id))).map(medicine => (
-                      <option key={medicine._id} value={medicine._id}>{medicine.name} — ₹{medicine.price}</option>
-                    ))}
-                  </select>
+                <div key={index} className="flex flex-col gap-2 sm:flex-row">
+                  <div className="relative min-w-0 flex-1">
+                    <input
+                      type="search"
+                      value={Object.hasOwn(medicineSearches, index)
+                        ? medicineSearches[index]
+                        : editorMedicines.find(medicine => String(medicine._id) === item.medicineId)?.name || ''}
+                      onFocus={event => {
+                        if (!Object.hasOwn(medicineSearches, index)) event.currentTarget.select();
+                        setActiveMedicineSearch(index);
+                      }}
+                      onChange={event => {
+                        setMedicineSearches(current => ({ ...current, [index]: event.target.value }));
+                        updateDraftItem(index, 'medicineId', '');
+                        setActiveMedicineSearch(index);
+                      }}
+                      onBlur={() => setActiveMedicineSearch(current => current === index ? null : current)}
+                      onKeyDown={event => {
+                        if (event.key === 'Escape') setActiveMedicineSearch(null);
+                      }}
+                      placeholder="Enter at least 2 characters to search medicines"
+                      autoComplete="off"
+                      aria-label="Search medicines"
+                      aria-autocomplete="list"
+                      aria-expanded={
+                        activeMedicineSearch === index &&
+                        (medicineSearches[index] || '').trim().length >= 2
+                      }
+                      required={!item.medicineId}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    />
+                    {activeMedicineSearch === index && (medicineSearches[index] || '').trim().length >= 2 && (
+                      <ul
+                        role="listbox"
+                        className="absolute left-0 right-0 top-full z-10 mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg"
+                      >
+                        {editorMedicines
+                          .filter(medicine => medicine.name.toLowerCase().includes(medicineSearches[index].trim().toLowerCase()))
+                          .slice(0, 10)
+                          .map(medicine => (
+                            <li key={medicine._id} role="option" aria-selected={item.medicineId === String(medicine._id)}>
+                              <button
+                                type="button"
+                                onMouseDown={event => event.preventDefault()}
+                                onClick={() => {
+                                  updateDraftItem(index, 'medicineId', String(medicine._id));
+                                  setMedicineSearches(current => {
+                                    const next = { ...current };
+                                    delete next[index];
+                                    return next;
+                                  });
+                                  setActiveMedicineSearch(null);
+                                }}
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-blue-50"
+                              >
+                                {medicine.name} — ₹{medicine.price}
+                              </button>
+                            </li>
+                          ))}
+                        {!editorMedicines.some(medicine =>
+                          medicine.name.toLowerCase().includes(medicineSearches[index].trim().toLowerCase())
+                        ) && (
+                          <li className="px-3 py-2 text-sm text-slate-500">No medicines found.</li>
+                        )}
+                      </ul>
+                    )}
+                  </div>
                   <input
                     type="number"
                     min="1"
