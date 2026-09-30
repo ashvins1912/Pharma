@@ -380,9 +380,9 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
 
       {/* Assign Rider Modal */}
       {assignRiderModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center">
+        <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div role="dialog" aria-modal="true" className="max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto bg-white border border-slate-200 rounded-3xl p-6 space-y-4 shadow-2xl">
+            <div className="sticky top-0 z-10 flex justify-between items-center bg-white">
               <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
                 🛵 Assign Delivery Rider
               </h4>
@@ -446,7 +446,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
               )}
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="sticky bottom-0 flex gap-2 bg-white pt-2">
               <button
                 onClick={() => setAssignRiderModal(null)}
                 className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-xs"

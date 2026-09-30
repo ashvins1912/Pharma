@@ -42,6 +42,16 @@ const parseCheckoutItems = (items) => {
     return items;
 };
 
+const hasValidCoordinates = (coordinates) => {
+    if (coordinates?.lat == null || coordinates?.lng == null
+        || String(coordinates.lat).trim() === '' || String(coordinates.lng).trim() === '') return false;
+    const lat = Number(coordinates?.lat);
+    const lng = Number(coordinates?.lng);
+    return Number.isFinite(lat) && Number.isFinite(lng)
+        && lat >= -90 && lat <= 90
+        && lng >= -180 && lng <= 180;
+};
+
 const hasValidPrescriptionSignature = (file) => {
     if (!file) return true;
     if (file.mimetype === 'application/pdf') return file.buffer.subarray(0, 5).toString() === '%PDF-';
@@ -97,8 +107,8 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             chosenCoords = addressSnapshot.coordinates;
         }
 
-        if (!chosenAddressLine) {
-            chosenAddressLine = "Bengaluru City Center Delivery Address";
+        if (!chosenAddressLine?.trim() || !hasValidCoordinates(chosenCoords)) {
+            return res.status(400).json({ message: 'A delivery address with a confirmed map pin is required to place an order.' });
         }
 
         const customerName = req.user.user_metadata?.name || req.user.email?.split('@')[0] || "Customer";
@@ -236,13 +246,35 @@ router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
             return res.status(400).json({ message: 'Confirm prescription verification before approving this order.' });
         }
 
-        const order = await dataStore.reviewOrder(
+        let order = await dataStore.reviewOrder(
             req.params.id,
             reviewDecision === 'Approved' ? 'approve' : 'reject',
             req.user.user_metadata?.name || req.user.email || 'Admin'
         );
 
-        res.json({ message: `Order ${reviewDecision.toLowerCase()}.`, order });
+        let assignmentMessage = '';
+        if (reviewDecision === 'Approved') {
+            try {
+                deliveryContainer.refreshDataLayer();
+                const result = await deliveryContainer.assignmentEngine.assignOrder(String(order._id));
+                if (result.success) {
+                    order = result.order.toJSON ? result.order.toJSON() : result.order;
+                    assignmentMessage = ` Rider ${result.rider.name} was assigned automatically.`;
+                    try {
+                        await sendCustomWhatsAppAlert(order, 'Assigned', result.rider.mobile);
+                    } catch (notificationError) {
+                        console.warn(`[WhatsApp] Assignment notification failed for order ${order._id}:`, notificationError.message);
+                    }
+                } else {
+                    assignmentMessage = ' No available rider was found; assign one manually.';
+                }
+            } catch (assignmentError) {
+                console.error(`[AutoAssign] Assignment failed for approved order ${order._id}:`, assignmentError);
+                assignmentMessage = ' Automatic assignment failed; assign a rider manually.';
+            }
+        }
+
+        res.json({ message: `Order ${reviewDecision.toLowerCase()}.${assignmentMessage}`, order });
     } catch (err) {
         console.error('Order review failed:', err);
         res.status(getErrorStatus(err)).json({ message: err.message || 'Failed to review order.' });
@@ -350,7 +382,7 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
         let notificationEvent = newStatus === 'Ready to Dispatch' ? 'Ready to Dispatch' : null;
         let notificationMobile = updatedOrder.rider?.riderMobile;
 
-        if (newStatus === 'Ready to Dispatch') {
+        if (newStatus === 'Approved' || newStatus === 'Ready to Dispatch') {
             try {
                 deliveryContainer.refreshDataLayer();
                 const assignResult = await deliveryContainer.assignmentEngine.assignOrder(orderId);
@@ -358,14 +390,18 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
                     updatedOrder = assignResult.order.toJSON
                         ? assignResult.order.toJSON()
                         : assignResult.order;
-                    notificationEvent = 'Assigned';
-                    notificationMobile = assignResult.rider?.mobile || updatedOrder.rider?.riderMobile;
-                    assignmentMessage = ` Rider ${assignResult.rider.name} was assigned automatically.`;
+                    if (assignResult.strategyUsed === 'AlreadyAssigned') {
+                        assignmentMessage = ' The order already has an assigned rider.';
+                    } else {
+                        notificationEvent = 'Assigned';
+                        notificationMobile = assignResult.rider?.mobile || updatedOrder.rider?.riderMobile;
+                        assignmentMessage = ` Rider ${assignResult.rider.name} was assigned automatically.`;
+                    }
                 } else {
                     assignmentMessage = ' No available rider was found; assign one manually.';
                 }
             } catch (assignmentError) {
-                console.warn('[AutoAssign] Assignment failed after order was readied:', assignmentError.message);
+                console.error('[AutoAssign] Assignment failed after order status changed:', assignmentError);
                 assignmentMessage = ' Automatic assignment failed; assign a rider manually.';
             }
         }
@@ -457,12 +493,36 @@ router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res
         if (step === 'dispatch') targetStatus = 'Dispatched';
         if (step === 'deliver') targetStatus = 'Delivered';
 
-        const order = await dataStore.transitionOrderStatus(orderId, targetStatus, actor);
-        if (step === 'ready') await sendCustomWhatsAppAlert(order, 'Ready to Dispatch');
-        if (step === 'dispatch') await sendCustomWhatsAppAlert(order, 'Dispatched', order.rider?.riderMobile);
-        if (step === 'deliver') await sendCustomWhatsAppAlert(order, 'Delivered');
+        let order = await dataStore.transitionOrderStatus(orderId, targetStatus, actor);
+        let assignmentMessage = '';
+        let notificationEvent = step === 'ready' ? 'Ready to Dispatch' : null;
+        if (step === 'ready') {
+            try {
+                deliveryContainer.refreshDataLayer();
+                const result = await deliveryContainer.assignmentEngine.assignOrder(orderId);
+                if (result.success) {
+                    order = result.order.toJSON ? result.order.toJSON() : result.order;
+                    notificationEvent = 'Assigned';
+                    assignmentMessage = ` Rider ${result.rider.name} was assigned automatically.`;
+                } else {
+                    assignmentMessage = ' No available rider was found; assign one manually.';
+                }
+            } catch (assignmentError) {
+                console.error(`[AutoAssign] Assignment failed for ready order ${orderId}:`, assignmentError);
+                assignmentMessage = ' Automatic assignment failed; assign a rider manually.';
+            }
+        }
+        if (step === 'dispatch') notificationEvent = 'Dispatched';
+        else if (step === 'deliver') notificationEvent = 'Delivered';
+        if (notificationEvent) {
+            try {
+                await sendCustomWhatsAppAlert(order, notificationEvent, order.rider?.riderMobile);
+            } catch (notificationError) {
+                console.warn(`[WhatsApp] ${notificationEvent} notification failed for order ${orderId}:`, notificationError.message);
+            }
+        }
 
-        res.json({ message: "Transaction status shifted safely.", order });
+        res.json({ message: `Transaction status shifted safely.${assignmentMessage}`, order });
     } catch (err) {
         console.error("Order status update failed:", err);
         res.status(400).json({ message: err.message || "Failed to update order status." });
@@ -480,6 +540,28 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
 });
 
 // Customer History
+router.post('/:id/rating', authenticateUser, async (req, res) => {
+    try {
+        if (req.user?.app_metadata?.role === 'admin') {
+            return res.status(403).json({ message: 'Only the customer can rate this delivery.' });
+        }
+        const rating = Number(req.body?.rating);
+        if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+            return res.status(400).json({ message: 'Rating must be a whole number from 1 to 5.' });
+        }
+        const order = await dataStore.saveCustomerRating(
+            req.params.id,
+            req.user.sub,
+            rating,
+            String(req.body?.comment || '').trim().slice(0, 1000)
+        );
+        res.json({ message: 'Thank you for your feedback.', order });
+    } catch (error) {
+        console.error('Customer rating save failed:', error);
+        res.status(getErrorStatus(error)).json({ message: error.message || 'Could not save your rating.' });
+    }
+});
+
 router.get('/history', authenticateUser, async (req, res) => {
     try {
         const orders = await dataStore.getUserOrders(req.user.sub);

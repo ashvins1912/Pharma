@@ -11,6 +11,7 @@ import CartDrawer from './components/CartDrawer';
 import CheckoutModal from './components/CheckoutModal';
 import OrderConfirmation from './components/OrderConfirmation';
 import OrderTrackingModal from './components/OrderTrackingModal';
+import OrderRatingPrompt from './components/OrderRatingPrompt';
 import OrderHistoryView from './components/OrderHistoryView';
 import AddressManager from './components/AddressManager';
 import AuthModal from './components/AuthModal';
@@ -22,6 +23,8 @@ function MainApp() {
   const { user, isAdmin, role, passwordRecoveryRequired } = useAuth();
   const {
     cart,
+    orders,
+    loadUserOrders,
     activeTrackingOrder,
     setActiveTrackingOrder,
     whatsappModalOpen,
@@ -40,6 +43,8 @@ function MainApp() {
   const [authOpen, setAuthOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [placedOrder, setPlacedOrder] = useState(null);
+  const [ratingPromptOrder, setRatingPromptOrder] = useState(null);
+  const [dismissedRatingOrderIds, setDismissedRatingOrderIds] = useState([]);
 
   // Tab switch guard: Users must be signed in to access orders, tracking, or addresses
   const handleTabSwitch = (tab) => {
@@ -66,6 +71,21 @@ function MainApp() {
       setActiveTrackingOrder(null);
     }
   }, [user, isAdmin, activeTab, activeTrackingOrder, setActiveTrackingOrder]);
+
+  React.useEffect(() => {
+    if (!user) {
+      setRatingPromptOrder(null);
+      setDismissedRatingOrderIds([]);
+      return;
+    }
+    if (ratingPromptOrder) return;
+    const pendingOrder = orders.find((order) =>
+      order.ratingPromptPending
+      && !order.customerRating
+      && !dismissedRatingOrderIds.includes(String(order._id))
+    );
+    if (pendingOrder) setRatingPromptOrder(pendingOrder);
+  }, [user, orders, ratingPromptOrder, dismissedRatingOrderIds]);
 
   // Admin WhatsApp Verification Flow:
   // When an admin logs in and WhatsApp is not connected, automatically show the pairing QR popup
@@ -256,6 +276,18 @@ function MainApp() {
       <OrderTrackingModal
         order={activeTrackingOrder}
         onClose={() => setActiveTrackingOrder(null)}
+      />
+
+      <OrderRatingPrompt
+        order={ratingPromptOrder}
+        onClose={() => {
+          setDismissedRatingOrderIds((previous) => [...previous, String(ratingPromptOrder?._id)]);
+          setRatingPromptOrder(null);
+        }}
+        onSubmitted={async () => {
+          setRatingPromptOrder(null);
+          await loadUserOrders();
+        }}
       />
 
       {/* Authentication Modal */}

@@ -36,6 +36,16 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(csrfProtection);
 
+const hasValidCoordinates = (coordinates) => {
+    if (coordinates?.lat == null || coordinates?.lng == null
+        || String(coordinates.lat).trim() === '' || String(coordinates.lng).trim() === '') return false;
+    const lat = Number(coordinates?.lat);
+    const lng = Number(coordinates?.lng);
+    return Number.isFinite(lat) && Number.isFinite(lng)
+        && lat >= -90 && lat <= 90
+        && lng >= -180 && lng <= 180;
+};
+
 const dataMartRefreshService = new DataMartRefreshService();
 let isDataMartRefreshRunning = false;
 const refreshDataMart = async () => {
@@ -145,6 +155,9 @@ app.post('/api/user/addresses', authenticateUser, async (req, res) => {
         if (!address?.addressLine1?.trim()) {
             return res.status(400).json({ message: "Street address is required." });
         }
+        if (!hasValidCoordinates(address.coordinates)) {
+            return res.status(400).json({ message: "Select a valid delivery pin on the map before saving this address." });
+        }
         res.status(201).json(await dataStore.createUserAddress(req.user.sub, address));
     } catch (err) {
         console.error("Address create error:", err);
@@ -157,6 +170,9 @@ app.patch('/api/user/addresses/:addressId', authenticateUser, async (req, res) =
         const address = req.body;
         if (!address?.addressLine1?.trim()) {
             return res.status(400).json({ message: "Street address is required." });
+        }
+        if (!hasValidCoordinates(address.coordinates)) {
+            return res.status(400).json({ message: "Select a valid delivery pin on the map before saving this address." });
         }
         const updated = await dataStore.updateUserAddress(req.user.sub, req.params.addressId, address);
         if (!updated) return res.status(404).json({ message: "Address not found." });

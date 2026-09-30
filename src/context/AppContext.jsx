@@ -225,17 +225,15 @@ export function AppProvider({ children }) {
   }, [user, loadAddresses]);
 
   // Fetch Orders
-  const loadUserOrders = useCallback(async () => {
+  const loadUserOrders = useCallback(async ({ silent = false } = {}) => {
     const requestSequence = ++orderLoadSequence.current;
     if (!user?.id) {
       setOrders([]);
       setLoadingOrders(false);
       return;
     }
-
-    setOrders([]);
     try {
-      setLoadingOrders(true);
+      if (!silent) setLoadingOrders(true);
       const res = await apiClient.get('/api/orders/history');
       if (requestSequence === orderLoadSequence.current) {
         setOrders(res.data || []);
@@ -251,6 +249,8 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     loadUserOrders();
+    const refreshTimer = window.setInterval(() => loadUserOrders({ silent: true }), 15000);
+    return () => window.clearInterval(refreshTimer);
   }, [loadUserOrders]);
 
   // Fetch Admin Inventory Alerts
