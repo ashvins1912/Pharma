@@ -29,6 +29,11 @@ export class Rider {
         createdAt = new Date(),
         updatedAt = new Date()
     }) {
+        const normalizedStatus = {
+            offline: Rider.STATUSES.OFF_DUTY,
+            available: Rider.STATUSES.AVAILABLE,
+            delivering: Rider.STATUSES.BUSY
+        }[status] || status;
         if (!name || typeof name !== 'string' || !name.trim()) {
             throw new Error('Rider name is required.');
         }
@@ -37,7 +42,7 @@ export class Rider {
         }
 
         const validStatuses = Object.values(Rider.STATUSES);
-        if (!validStatuses.includes(status)) {
+        if (!validStatuses.includes(normalizedStatus)) {
             throw new Error(`Invalid rider status: ${status}. Must be one of: ${validStatuses.join(', ')}`);
         }
 
@@ -45,7 +50,7 @@ export class Rider {
         this.name = name.trim();
         this.mobile = mobile.trim();
         this.photoUrl = photoUrl;
-        this.status = status;
+        this.status = normalizedStatus;
         this.vehicleType = vehicleType;
 
         if (currentLocation instanceof Location) {

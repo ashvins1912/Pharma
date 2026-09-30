@@ -294,7 +294,7 @@ export default function AdminDashboardView() {
           <div className="flex justify-between items-center">
             <div>
               <h3 className="text-base font-black text-slate-900">📜 Inventory Merge Audit Trail</h3>
-              <p className="text-xs text-slate-500">Immutable tracking of SKU updates, price changes, and stock increments.</p>
+              <p className="text-xs text-slate-500">Bulk inventory changes and delivered order stock deductions.</p>
             </div>
             <button
               onClick={loadAuditLogs}
@@ -306,7 +306,7 @@ export default function AdminDashboardView() {
 
           {auditLogs.length === 0 ? (
             <div className="py-12 text-center text-slate-400 text-xs">
-              No bulk imports logged in this session yet. Upload a spreadsheet via Bulk Import to generate audit logs.
+              No inventory changes or delivered orders have been recorded yet.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -314,7 +314,7 @@ export default function AdminDashboardView() {
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
                     <th className="py-2.5 px-3">Timestamp</th>
-                    <th className="py-2.5 px-3">Import ID</th>
+                    <th className="py-2.5 px-3">Event / Reference</th>
                     <th className="py-2.5 px-3">SKU & Medicine</th>
                     <th className="py-2.5 px-3">Stock Shift</th>
                     <th className="py-2.5 px-3">Price Shift</th>
@@ -325,20 +325,35 @@ export default function AdminDashboardView() {
                   {auditLogs.map((log, idx) => (
                     <tr key={idx} className="hover:bg-slate-50">
                       <td className="py-2.5 px-3 text-slate-500 text-[11px]">
-                        {new Date(log.timestamp).toLocaleTimeString()}
+                        {new Date(log.timestamp).toLocaleString()}
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-500">{log.importId}</td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-500">
+                        <span className="block">{log.eventType === 'DELIVERY' ? 'Delivered order' : 'Bulk import'}</span>
+                        {log.importId}
+                      </td>
                       <td className="py-2.5 px-3">
                         <span className="font-bold text-slate-900 block">{log.name}</span>
                         <span className="text-[10px] text-slate-400 font-mono">{log.sku}</span>
                       </td>
                       <td className="py-2.5 px-3">
-                        <span className="text-slate-400">{log.previousStock}</span> →{' '}
-                        <strong className="text-emerald-700 font-bold">{log.newStock}</strong>
+                        {log.eventType === 'DELIVERY' ? (
+                          <strong className="font-bold text-rose-700">−{log.quantity} delivered</strong>
+                        ) : (
+                          <>
+                            <span className="text-slate-400">{log.previousStock}</span> →{' '}
+                            <strong className="text-emerald-700 font-bold">{log.newStock}</strong>
+                          </>
+                        )}
                       </td>
                       <td className="py-2.5 px-3">
-                        <span className="text-slate-400">₹{log.previousPrice}</span> →{' '}
-                        <strong className="text-slate-900 font-bold">₹{log.newPrice}</strong>
+                        {log.eventType === 'DELIVERY' ? (
+                          <span className="text-slate-500">₹{log.newPrice} per unit</span>
+                        ) : (
+                          <>
+                            <span className="text-slate-400">₹{log.previousPrice}</span> →{' '}
+                            <strong className="text-slate-900 font-bold">₹{log.newPrice}</strong>
+                          </>
+                        )}
                       </td>
                       <td className="py-2.5 px-3 text-slate-600 font-medium">{log.adminId}</td>
                     </tr>

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../api/apiClient';
+import { applyCouponCode } from '../api/couponService';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
 
@@ -324,7 +325,11 @@ export function AppProvider({ children }) {
 
   // Calculations
   const subtotal = cart.reduce((acc, item) => acc + (Number(item.price) || 0) * item.quantity, 0);
-  const discountAmount = appliedCoupon ? (subtotal * appliedCoupon.discountPercentage) / 100 : 0;
+  const discountAmount = appliedCoupon
+    ? appliedCoupon.discountType === 'fixed'
+      ? Math.min(appliedCoupon.discountValue, subtotal)
+      : (subtotal * appliedCoupon.discountPercentage) / 100
+    : 0;
   const finalTotal = Math.max(0, subtotal - discountAmount + deliveryFee);
 
   // Coupon logic
@@ -333,22 +338,18 @@ export function AppProvider({ children }) {
     if (!code) return;
     try {
       setCouponError('');
-      const res = await apiClient.get(`/api/coupons/validate/${code}`, {
-        params: { orderTotal: subtotal }
+      const result = await applyCouponCode(code, subtotal);
+      setAppliedCoupon({
+        code: result.coupon.code,
+        discountType: result.coupon.discountType,
+        discountValue: result.coupon.discountValue,
+        discountPercentage: result.coupon.discountType === 'percentage' ? result.coupon.discountValue : 0
       });
-      if (res.data.valid) {
-        setAppliedCoupon({
-          code: res.data.code || code.toUpperCase(),
-          discountPercentage: res.data.discountPercentage
-        });
-        addToast(`Coupon applied! ${res.data.discountPercentage}% discount saved.`, 'success');
-      } else {
-        setCouponError(res.data.message || 'Invalid coupon code');
-        addToast(res.data.message || 'Invalid coupon code', 'error');
-      }
+      addToast(`Coupon applied! ₹${result.discountAmount.toFixed(2)} saved.`, 'success');
     } catch (err) {
-      setCouponError('Invalid coupon code');
-      addToast('Invalid coupon code', 'error');
+      const message = err?.message || 'Invalid coupon code';
+      setCouponError(message);
+      addToast(message, 'error');
     }
   };
 

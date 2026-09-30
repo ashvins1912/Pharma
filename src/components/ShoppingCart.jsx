@@ -1,32 +1,36 @@
 import React, { useState } from 'react';
 import apiClient from '../api/apiClient';
 import { useApp } from '../context/AppContext';
+import { applyCouponCode } from '../api/couponService';
 
 export default function ShoppingCart() {
     const { cart, subtotal = 0, selectedAddressId, updateQuantity, clearCart } = useApp();
     const [code, setCode] = useState('');
     const [pct, setPct] = useState(0);
+    const [discountAmount, setDiscountAmount] = useState(0);
     const [msg, setMsg] = useState('');
     const [isSuccess, setIsSuccess] = useState(false);
     const [loading, setLoading] = useState(false);
 
     const checkCoupon = async () => {
         if (!code.trim()) return;
+        setLoading(true);
         try {
-            const res = await apiClient.get(`/api/coupons/validate/${code.trim()}`);
-            if (res.data.valid) {
-                setPct(res.data.discountPercentage);
-                setMsg(`✅ Applied! Saved ${res.data.discountPercentage}%`);
+            setMsg('');
+            const result = await applyCouponCode(code.trim(), subtotal);
+            if (result.success) {
+                setPct(result.coupon.discountType === 'percentage' ? result.coupon.discountValue : 0);
+                setDiscountAmount(result.discountAmount);
+                setMsg(`✅ Applied! Saved ₹${result.discountAmount.toFixed(2)}`);
                 setIsSuccess(true);
-            } else {
-                setPct(0);
-                setMsg('❌ Invalid coupon code');
-                setIsSuccess(false);
             }
-        } catch {
+        } catch (error) {
             setPct(0);
-            setMsg('❌ Invalid coupon code');
+            setDiscountAmount(0);
+            setMsg(`❌ ${error.message || 'Invalid coupon code'}`);
             setIsSuccess(false);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -43,19 +47,20 @@ export default function ShoppingCart() {
         }
         setLoading(true);
         try {
-            const discountAmount = (subtotal * pct) / 100;
             const finalAmt = Math.max(0, subtotal - discountAmount);
             const res = await apiClient.post('/api/orders/checkout', {
                 cartItems: cart,
                 totalAmount: subtotal,
                 finalTotal: finalAmt,
-                addressId: selectedAddressId
+                addressId: selectedAddressId,
+                couponCode: code.trim() || undefined
             });
             setMsg(res.data.message || "🎉 Cash-on-Delivery order logged successfully!");
             setIsSuccess(true);
             clearCart();
             setCode('');
             setPct(0);
+            setDiscountAmount(0);
         } catch (err) {
             setMsg(err.message || "Checkout transaction rejected.");
             setIsSuccess(false);
@@ -65,7 +70,6 @@ export default function ShoppingCart() {
     };
 
     const hasOverdraft = cart.some(i => i.stock !== undefined && i.quantity > i.stock);
-    const discountAmount = (subtotal * pct) / 100;
     const totalBill = Math.max(0, subtotal - discountAmount);
 
     return (
@@ -104,11 +108,12 @@ export default function ShoppingCart() {
             )}
 
             <div className="flex gap-2 pt-1">
-                <input type="text" placeholder="COUPON (e.g. FREEMED20)" value={code} onChange={e => setCode(e.target.value)}
+                <input type="text" placeholder="COUPON (e.g. FREEMED20)" value={code}
+                       onChange={e => { setCode(e.target.value); setDiscountAmount(0); setPct(0); setIsSuccess(false); }}
                        className="border border-slate-200 text-xs px-2.5 py-1.5 rounded-xl flex-1 uppercase outline-none focus:border-blue-500"/>
-                <button onClick={checkCoupon}
+                <button onClick={checkCoupon} disabled={loading}
                         className="bg-slate-800 hover:bg-slate-900 text-white text-xs px-3 py-1.5 rounded-xl font-bold cursor-pointer transition">
-                    Apply
+                    {loading ? 'Checking...' : 'Apply'}
                 </button>
             </div>
 
@@ -123,9 +128,9 @@ export default function ShoppingCart() {
                     <span>Subtotal:</span>
                     <span>₹{subtotal}</span>
                 </div>
-                {pct > 0 && (
+                {discountAmount > 0 && (
                     <div className="flex justify-between text-xs text-emerald-600">
-                        <span>Discount ({pct}%):</span>
+                        <span>Discount{pct > 0 ? ` (${pct}%)` : ''}:</span>
                         <span>-₹{discountAmount}</span>
                     </div>
                 )}

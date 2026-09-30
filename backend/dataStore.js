@@ -358,6 +358,29 @@ const inventoryError = (message, statusCode = 400) => {
     return error;
 };
 
+const consumeCouponUsage = async (code, session) => {
+    const now = new Date();
+    const coupon = await Coupon.findOneAndUpdate({
+        code: String(code).trim().toUpperCase(),
+        isActive: true,
+        $and: [
+            { $or: [{ expiryDate: null }, { expiryDate: { $exists: false } }, { expiryDate: { $gt: now } }] },
+            {
+                $or: [
+                    { usageLimit: null },
+                    { usageLimit: { $exists: false } },
+                    { $expr: { $lt: ['$usageCount', '$usageLimit'] } }
+                ]
+            }
+        ]
+    }, { $inc: { usageCount: 1 } }, {
+        new: true,
+        runValidators: true,
+        ...(session ? { session } : {})
+    });
+    if (!coupon) throw inventoryError('Coupon is expired, inactive, or its usage limit has been reached.', 409);
+};
+
 let inMemoryProfiles = new Map();
 inMemoryProfiles.set("demo-customer-id", {
     userId: "demo-customer-id",
@@ -442,6 +465,87 @@ function formatMedicine(med) {
     return obj;
 }
 
+const getOrderInventoryItems = (order) => {
+    if (order.medicineItems?.length) return order.medicineItems;
+    return (order.items || []).map(item => ({
+        medicineId: item.medicineId || item.productId || item._id,
+        quantity: item.quantity
+    }));
+};
+
+const orderInventoryWasDeducted = (order) => Boolean(
+    order.inventoryDeductedAt
+    || order.statusHistory?.some(entry =>
+        entry.newStatus === 'Dispatched'
+        && entry.notes?.includes('Reserved stock deducted from inventory on dispatch.')
+    )
+);
+
+const deductMongoOrderInventory = async (order, session) => {
+    if (orderInventoryWasDeducted(order)) return;
+    const items = getOrderInventoryItems(order);
+    if (!items.length) throw inventoryError('Order has no inventory records to deduct.', 409);
+    for (const item of items) {
+        const medicineId = item.medicineId;
+        const quantity = Number(item.quantity);
+        if (!mongoose.isValidObjectId(medicineId) || !Number.isInteger(quantity) || quantity < 1) {
+            throw inventoryError('Could not safely deduct stock for this order.', 409);
+        }
+        const result = await Medicine.collection.updateOne({
+            _id: new mongoose.Types.ObjectId(medicineId),
+            $expr: {
+                $and: [
+                    { $gte: [{ $ifNull: ['$reservedQuantity', 0] }, quantity] },
+                    { $gte: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity] }
+                ]
+            }
+        }, [{
+            $set: {
+                stockQuantity: {
+                    $subtract: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
+                },
+                stock: {
+                    $subtract: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
+                },
+                quantity: {
+                    $subtract: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
+                },
+                reservedQuantity: {
+                    $subtract: [{ $ifNull: ['$reservedQuantity', 0] }, quantity]
+                }
+            }
+        }], { session });
+        if (result.modifiedCount !== 1) {
+            throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
+        }
+    }
+    order.inventoryDeductedAt = new Date();
+};
+
+const deductInMemoryOrderInventory = (order) => {
+    if (orderInventoryWasDeducted(order)) return;
+    const items = getOrderInventoryItems(order);
+    if (!items.length) throw inventoryError('Order has no inventory records to deduct.', 409);
+    const medicineItems = items.map(item => {
+        const medicineId = item.medicineId;
+        const quantity = Number(item.quantity);
+        const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(medicineId));
+        if (!medicine || !Number.isInteger(quantity) || quantity < 1
+            || getReservedStock(medicine) < quantity || getPhysicalStock(medicine) < quantity) {
+            throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
+        }
+        return { medicine, quantity };
+    });
+    for (const { medicine, quantity } of medicineItems) {
+        const remainingStock = getPhysicalStock(medicine) - quantity;
+        medicine.stockQuantity = remainingStock;
+        medicine.stock = remainingStock;
+        medicine.quantity = remainingStock;
+        medicine.reservedQuantity = getReservedStock(medicine) - quantity;
+    }
+    order.inventoryDeductedAt = new Date();
+};
+
 export const dataStore = {
     // Audit Logging
     logAudit(actorId, action, resourceType, resourceId, details = {}) {
@@ -462,8 +566,37 @@ export const dataStore = {
         return inMemoryAuditLogs.slice(0, 50);
     },
 
-    getInventoryAudits() {
-        return inMemoryInventoryAudits.slice(0, 50);
+    async getInventoryAudits() {
+        const deliveredOrders = getIsConnected()
+            ? await Order.find({ orderStatus: 'Delivered' })
+                .select('_id deliveredAt createdAt customerName statusHistory medicineItems items')
+                .sort({ deliveredAt: -1, createdAt: -1 })
+                .limit(50)
+                .lean()
+            : inMemoryOrders.filter(order => order.orderStatus === 'Delivered')
+                .sort((a, b) => new Date(b.deliveredAt || b.createdAt) - new Date(a.deliveredAt || a.createdAt))
+                .slice(0, 50);
+        const deliveryAudits = deliveredOrders.flatMap(order => {
+            const actor = order.statusHistory?.findLast?.(entry => entry.newStatus === 'Delivered')?.changedBy
+                || 'Delivery';
+            return getOrderInventoryItems(order).map(item => ({
+                eventType: 'DELIVERY',
+                importId: `ORDER-${String(order._id).slice(-8).toUpperCase()}`,
+                orderId: String(order._id),
+                timestamp: order.deliveredAt || order.createdAt,
+                sku: item.sku || item.code || '—',
+                name: item.name || item.productName || 'Medicine',
+                quantity: Number(item.quantity) || 0,
+                previousStock: null,
+                newStock: null,
+                previousPrice: Number(item.price ?? item.unitPrice) || 0,
+                newPrice: Number(item.price ?? item.unitPrice) || 0,
+                adminId: actor
+            }));
+        });
+        return [...inMemoryInventoryAudits, ...deliveryAudits]
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+            .slice(0, 50);
     },
 
     // Medicines: Supports server-side pagination & "out-of-stock only on search" logic
@@ -971,8 +1104,9 @@ export const dataStore = {
                         ? await this.validateCoupon(orderData.couponCode, totalAmount)
                         : { valid: true, discountPercentage: 0 };
                     if (!coupon.valid) throw inventoryError(coupon.message || 'Coupon is invalid.');
-                    const discountApplied = Math.round(totalAmount * (coupon.discountPercentage || 0)) / 100;
-                    const couponRate = Number(coupon.discountPercentage || 0) / 100;
+                    const discountApplied = Number(coupon.discountAmount
+                        ?? (totalAmount * (coupon.discountPercentage || 0) / 100));
+                    const couponRate = totalAmount > 0 ? discountApplied / totalAmount : 0;
                     const rewardItems = medicineItems.map(item => ({
                         currentPrice: item.price * (1 - couponRate),
                         baseCostPrice: item.baseCostPrice,
@@ -1028,6 +1162,9 @@ export const dataStore = {
                         Math.round((totalAmount - discountApplied - pointsDiscount) * 10) / 10
                     );
 
+                    if (orderData.couponCode) {
+                        await consumeCouponUsage(orderData.couponCode, session);
+                    }
                     const [order] = await Order.create([{
                         _id: orderId,
                         userId: orderData.userId,
@@ -1129,7 +1266,8 @@ export const dataStore = {
                 ? await this.validateCoupon(orderData.couponCode, totalAmount)
                 : { valid: true, discountPercentage: 0 };
             if (!coupon.valid) throw inventoryError(coupon.message || 'Coupon is invalid.');
-            const discountApplied = Math.round(totalAmount * (coupon.discountPercentage || 0)) / 100;
+            const discountApplied = Number(coupon.discountAmount
+                ?? (totalAmount * (coupon.discountPercentage || 0) / 100));
             const finalTotal = Math.max(0, Math.round((totalAmount - discountApplied) * 10) / 10);
 
             const order = {
@@ -1156,6 +1294,16 @@ export const dataStore = {
                 createdAt: now,
                 updatedAt: now
             };
+            if (orderData.couponCode) {
+                const couponRecord = inMemoryCoupons.find(coupon =>
+                    coupon.code === String(orderData.couponCode).trim().toUpperCase() && coupon.isActive
+                );
+                if (couponRecord?.usageLimit != null
+                    && Number(couponRecord.usageCount || 0) >= Number(couponRecord.usageLimit)) {
+                    throw inventoryError('Coupon usage limit has been reached.', 409);
+                }
+                if (couponRecord) couponRecord.usageCount = Number(couponRecord.usageCount || 0) + 1;
+            }
             inMemoryOrders.unshift(order);
             this.logAudit(actor, 'ORDER_CREATED', 'ORDER', order._id, {
                 totalAmount,
@@ -1400,57 +1548,7 @@ export const dataStore = {
                         throw inventoryError(`Only Approved orders can be dispatched. Current status: ${order.orderStatus}`, 409);
                     }
 
-                    for (const item of order.medicineItems) {
-                        const quantity = Number(item.quantity);
-                        const filter = {
-                            _id: item.medicineId,
-                            $expr: {
-                                $and: [
-                                    {
-                                        $gte: [
-                                            { $ifNull: ['$reservedQuantity', 0] },
-                                            quantity
-                                        ]
-                                    },
-                                    {
-                                        $gte: [
-                                            { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
-                                            quantity
-                                        ]
-                                    }
-                                ]
-                            }
-                        };
-                        const update = [{
-                            $set: {
-                                stockQuantity: {
-                                    $subtract: [
-                                        { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
-                                        quantity
-                                    ]
-                                },
-                                stock: {
-                                    $subtract: [
-                                        { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
-                                        quantity
-                                    ]
-                                },
-                                quantity: {
-                                    $subtract: [
-                                        { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
-                                        quantity
-                                    ]
-                                },
-                                reservedQuantity: {
-                                    $subtract: [{ $ifNull: ['$reservedQuantity', 0] }, quantity]
-                                }
-                            }
-                        }];
-                        const result = await Medicine.collection.updateOne(filter, update, { session });
-                        if (result.modifiedCount !== 1) {
-                            throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
-                        }
-                    }
+                    await deductMongoOrderInventory(order, session);
 
                     const transitionAt = new Date();
                     if (riderInfo) {
@@ -1485,21 +1583,7 @@ export const dataStore = {
         if (order.orderStatus !== 'Approved') {
             throw inventoryError(`Only Approved orders can be dispatched. Current status: ${order.orderStatus}`, 409);
         }
-        const items = order.medicineItems || [];
-        for (const item of items) {
-            const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
-            if (!medicine || getReservedStock(medicine) < item.quantity || getPhysicalStock(medicine) < item.quantity) {
-                throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
-            }
-        }
-        for (const item of items) {
-            const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
-            const remainingStock = getPhysicalStock(medicine) - item.quantity;
-            medicine.stockQuantity = remainingStock;
-            medicine.stock = remainingStock;
-            medicine.quantity = remainingStock;
-            medicine.reservedQuantity = getReservedStock(medicine) - item.quantity;
-        }
+        deductInMemoryOrderInventory(order);
         const transitionAt = new Date();
         if (riderInfo) {
             order.rider = {
@@ -1546,6 +1630,12 @@ export const dataStore = {
         };
         const completeOrder = async (order, session = null) => {
             if (order.orderStatus === 'Delivered' && newStatus === 'Delivered') {
+                if (!orderInventoryWasDeducted(order)) {
+                    if (session) await deductMongoOrderInventory(order, session);
+                    else deductInMemoryOrderInventory(order);
+                    if (session) await order.save({ session });
+                    else if (order.save) await order.save();
+                }
                 return {
                     order: order.toObject ? order.toObject({ virtuals: true }) : { ...order },
                     deliveryRewards: null,
@@ -1563,6 +1653,14 @@ export const dataStore = {
 
             const transitionAt = new Date();
             const previousStatus = order.orderStatus;
+            if (newStatus === 'Dispatched') {
+                if (session) await deductMongoOrderInventory(order, session);
+                else deductInMemoryOrderInventory(order);
+            }
+            if (newStatus === 'Delivered' && !orderInventoryWasDeducted(order)) {
+                if (session) await deductMongoOrderInventory(order, session);
+                else deductInMemoryOrderInventory(order);
+            }
             order.orderStatus = newStatus;
 
             if (riderInfo) {
@@ -1627,7 +1725,9 @@ export const dataStore = {
                 newStatus,
                 changedBy: actor,
                 timestamp: transitionAt,
-                notes: riderInfo ? `Rider assigned: ${riderInfo.riderName} (${riderInfo.riderMobile})` : ''
+                notes: newStatus === 'Dispatched'
+                    ? 'Reserved stock deducted from inventory on dispatch.'
+                    : riderInfo ? `Rider assigned: ${riderInfo.riderName} (${riderInfo.riderMobile})` : ''
             });
             if (session) await order.save({ session });
             else if (order.save) await order.save();
@@ -1947,6 +2047,9 @@ export const dataStore = {
             await Coupon.findOneAndUpdate({ code: uppercase }, {
                 $set: {
                     discountPercentage: Number(discountPercentage),
+                    discountType: 'percentage',
+                    discountValue: Number(discountPercentage),
+                    minOrderAmount: Number(minOrderValue) || 0,
                     minOrderValue: Number(minOrderValue) || 0,
                     isActive: true
                 }
@@ -1962,7 +2065,10 @@ export const dataStore = {
                 _id: `c-${Date.now()}`,
                 code: uppercase,
                 discountPercentage: Number(discountPercentage),
+                discountType: 'percentage',
+                discountValue: Number(discountPercentage),
                 minOrderValue: Number(minOrderValue) || 0,
+                usageCount: 0,
                 isActive: true
             });
         }
@@ -1972,13 +2078,32 @@ export const dataStore = {
     async validateCoupon(code, orderTotal = 0) {
         const uppercase = (code || '').toUpperCase().trim();
         const c = getIsConnected()
-            ? (await Coupon.findOne({ code: uppercase, isActive: true })) || inMemoryCoupons.find(x => x.code === uppercase && x.isActive)
+            ? await Coupon.findOne({ code: uppercase, isActive: true }).lean()
             : inMemoryCoupons.find(x => x.code === uppercase && x.isActive);
         if (!c) return { valid: false, message: "Invalid or expired promo code" };
-        if (orderTotal < (c.minOrderValue || 0)) {
-            return { valid: false, message: `Minimum order amount of ₹${c.minOrderValue} required for this coupon.` };
+        if (c.expiryDate && new Date(c.expiryDate) <= new Date()) {
+            return { valid: false, message: 'Coupon has expired.' };
         }
-        return { valid: true, discountPercentage: c.discountPercentage, code: c.code };
+        if (c.usageLimit != null && Number(c.usageCount || 0) >= Number(c.usageLimit)) {
+            return { valid: false, message: 'Coupon usage limit has been reached.' };
+        }
+        const minimum = Number(c.minOrderAmount ?? c.minOrderValue ?? 0);
+        if (orderTotal < minimum) {
+            return { valid: false, message: `Minimum order amount of ₹${minimum} required for this coupon.` };
+        }
+        const discountType = c.discountType || 'percentage';
+        const discountValue = Number(c.discountValue ?? c.discountPercentage ?? 0);
+        const discountAmount = discountType === 'fixed'
+            ? Math.min(discountValue, Number(orderTotal) || 0)
+            : Math.round((Number(orderTotal) * discountValue / 100 + Number.EPSILON) * 100) / 100;
+        return {
+            valid: true,
+            discountPercentage: discountType === 'percentage' ? discountValue : 0,
+            discountType,
+            discountValue,
+            discountAmount,
+            code: c.code
+        };
     },
 
     async getUserProfile(userId) {
