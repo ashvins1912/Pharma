@@ -46,6 +46,14 @@ test('rider assignment alert contains order, customer contact, full address, and
     }
 });
 
+test('customer assignment alert includes assigned rider details and delivery address', () => {
+    const message = buildWhatsAppMessageBody(order, 'Assigned', 'customer');
+    assert.match(message, /DELIVERY RIDER ASSIGNED — #123456/);
+    assert.match(message, /Rider: Assigned Rider/);
+    assert.match(message, /Rider contact: \+919900001111/);
+    assert.match(message, /Complete delivery address:.*560001/);
+});
+
 test('new-order admin alert includes customer contact, delivery address, and items', () => {
     const message = buildWhatsAppMessageBody(order, 'Placed', 'admin');
     assert.match(message, /NEW ORDER RECEIVED — #123456/);

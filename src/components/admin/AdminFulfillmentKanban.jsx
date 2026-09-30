@@ -327,13 +327,27 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                           )}
 
                           {col.id === 'Ready to Dispatch' && (
-                            <button
-                              onClick={() => setAssignRiderModal(order)}
-                              disabled={isProcessing}
-                              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-600/20"
-                            >
-                              🛵 Assign Rider & Dispatch
-                            </button>
+                            order.rider?.riderId ? (
+                              <button
+                                onClick={() => handleTransition(order._id, 'Dispatched', {
+                                  riderId: order.rider.riderId,
+                                  riderName: order.rider.riderName,
+                                  riderMobile: order.rider.riderMobile
+                                })}
+                                disabled={isProcessing}
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-600/20"
+                              >
+                                🛵 Dispatch Assigned Rider
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => setAssignRiderModal(order)}
+                                disabled={isProcessing}
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-600/20"
+                              >
+                                🛵 Assign Rider & Dispatch
+                              </button>
+                            )
                           )}
 
                           {col.id === 'Dispatched' && (
