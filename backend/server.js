@@ -10,6 +10,8 @@ import orderRoutes from './routes/orderRoutes.js';
 import couponRoutes from './routes/couponRoutes.js';
 import whatsappRoutes from './routes/whatsappRoutes.js';
 import riderRoutes from './modules/delivery/routes/riderRoutes.js';
+import riderProfileRoutes from './routes/riderProfileRoutes.js';
+import profileRoutes from './routes/profileRoutes.js';
 import assignmentRoutes from './modules/delivery/routes/assignmentRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import { csrfProtection } from './security/sessionCookie.js';
@@ -74,6 +76,8 @@ connectDB()
 app.use('/api/auth', authRoutes);
 app.use('/api/medicines', medicineRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/riders', riderProfileRoutes);
+app.use('/api/profile', profileRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/admin/whatsapp', whatsappRoutes);
 app.use('/api/admin/riders', riderRoutes);

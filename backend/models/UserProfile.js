@@ -1,6 +1,11 @@
 import mongoose from 'mongoose';
 
 const userProfileSchema = new mongoose.Schema({
+    supabaseId: {
+        type: String,
+        trim: true,
+        default: undefined
+    },
     // Strictly isolate identity reference to Supabase User ID
     supabase_user_id: {
         type: String,
@@ -16,6 +21,8 @@ const userProfileSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    firstName: { type: String, trim: true, default: '' },
+    lastName: { type: String, trim: true, default: '' },
     email: {
         type: String,
         default: '',
@@ -54,6 +61,8 @@ const userProfileSchema = new mongoose.Schema({
         default: null
     }
 }, { timestamps: true });
+
+userProfileSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });
 
 const UserProfile = mongoose.models.UserProfile || mongoose.model('UserProfile', userProfileSchema);
 export default UserProfile;

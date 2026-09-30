@@ -1,9 +1,18 @@
 import mongoose from 'mongoose';
 
 const riderSchema = new mongoose.Schema({
+    supabaseId: {
+        type: String,
+        trim: true,
+        default: undefined
+    },
     name: {
         type: String,
         required: true,
+        trim: true
+    },
+    phone: {
+        type: String,
         trim: true
     },
     mobile: {
@@ -18,7 +27,7 @@ const riderSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Available', 'Busy', 'Off-duty'],
+        enum: ['Available', 'Busy', 'Off-duty', 'offline', 'available', 'delivering'],
         default: 'Available',
         index: true
     },
@@ -71,6 +80,13 @@ const riderSchema = new mongoose.Schema({
         default: 4.9
     }
 }, { timestamps: true, collection: 'riders' });
+
+// Sparse allows existing admin-onboarded riders to omit a Supabase account ID.
+riderSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });
+riderSchema.pre('validate', function syncPhoneAliases() {
+    if (this.phone && !this.mobile) this.mobile = this.phone;
+    if (this.mobile && !this.phone) this.phone = this.mobile;
+});
 
 // 2dsphere index for ultra-fast geospatial nearest rider queries
 riderSchema.index({ currentLocation: '2dsphere' });

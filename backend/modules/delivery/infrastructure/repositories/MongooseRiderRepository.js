@@ -47,7 +47,14 @@ export class MongooseRiderRepository extends IRiderRepository {
     async findAll(filter = {}) {
         const query = {};
         if (!filter.includeDisabled) query.enabled = { $ne: false };
-        if (filter.status) query.status = filter.status;
+        if (filter.status) {
+            const compatibleStatuses = {
+                Available: ['Available', 'available'],
+                Busy: ['Busy', 'delivering'],
+                'Off-duty': ['Off-duty', 'offline']
+            }[filter.status];
+            query.status = compatibleStatuses ? { $in: compatibleStatuses } : filter.status;
+        }
         if (filter.search) {
             query.$or = [
                 { name: { $regex: filter.search, $options: 'i' } },

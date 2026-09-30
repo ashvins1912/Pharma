@@ -358,6 +358,29 @@ const inventoryError = (message, statusCode = 400) => {
     return error;
 };
 
+const consumeCouponUsage = async (code, session) => {
+    const now = new Date();
+    const coupon = await Coupon.findOneAndUpdate({
+        code: String(code).trim().toUpperCase(),
+        isActive: true,
+        $and: [
+            { $or: [{ expiryDate: null }, { expiryDate: { $exists: false } }, { expiryDate: { $gt: now } }] },
+            {
+                $or: [
+                    { usageLimit: null },
+                    { usageLimit: { $exists: false } },
+                    { $expr: { $lt: ['$usageCount', '$usageLimit'] } }
+                ]
+            }
+        ]
+    }, { $inc: { usageCount: 1 } }, {
+        new: true,
+        runValidators: true,
+        ...(session ? { session } : {})
+    });
+    if (!coupon) throw inventoryError('Coupon is expired, inactive, or its usage limit has been reached.', 409);
+};
+
 let inMemoryProfiles = new Map();
 inMemoryProfiles.set("demo-customer-id", {
     userId: "demo-customer-id",
@@ -971,8 +994,9 @@ export const dataStore = {
                         ? await this.validateCoupon(orderData.couponCode, totalAmount)
                         : { valid: true, discountPercentage: 0 };
                     if (!coupon.valid) throw inventoryError(coupon.message || 'Coupon is invalid.');
-                    const discountApplied = Math.round(totalAmount * (coupon.discountPercentage || 0)) / 100;
-                    const couponRate = Number(coupon.discountPercentage || 0) / 100;
+                    const discountApplied = Number(coupon.discountAmount
+                        ?? (totalAmount * (coupon.discountPercentage || 0) / 100));
+                    const couponRate = totalAmount > 0 ? discountApplied / totalAmount : 0;
                     const rewardItems = medicineItems.map(item => ({
                         currentPrice: item.price * (1 - couponRate),
                         baseCostPrice: item.baseCostPrice,
@@ -1028,6 +1052,9 @@ export const dataStore = {
                         Math.round((totalAmount - discountApplied - pointsDiscount) * 10) / 10
                     );
 
+                    if (orderData.couponCode) {
+                        await consumeCouponUsage(orderData.couponCode, session);
+                    }
                     const [order] = await Order.create([{
                         _id: orderId,
                         userId: orderData.userId,
@@ -1129,7 +1156,8 @@ export const dataStore = {
                 ? await this.validateCoupon(orderData.couponCode, totalAmount)
                 : { valid: true, discountPercentage: 0 };
             if (!coupon.valid) throw inventoryError(coupon.message || 'Coupon is invalid.');
-            const discountApplied = Math.round(totalAmount * (coupon.discountPercentage || 0)) / 100;
+            const discountApplied = Number(coupon.discountAmount
+                ?? (totalAmount * (coupon.discountPercentage || 0) / 100));
             const finalTotal = Math.max(0, Math.round((totalAmount - discountApplied) * 10) / 10);
 
             const order = {
@@ -1156,6 +1184,16 @@ export const dataStore = {
                 createdAt: now,
                 updatedAt: now
             };
+            if (orderData.couponCode) {
+                const couponRecord = inMemoryCoupons.find(coupon =>
+                    coupon.code === String(orderData.couponCode).trim().toUpperCase() && coupon.isActive
+                );
+                if (couponRecord?.usageLimit != null
+                    && Number(couponRecord.usageCount || 0) >= Number(couponRecord.usageLimit)) {
+                    throw inventoryError('Coupon usage limit has been reached.', 409);
+                }
+                if (couponRecord) couponRecord.usageCount = Number(couponRecord.usageCount || 0) + 1;
+            }
             inMemoryOrders.unshift(order);
             this.logAudit(actor, 'ORDER_CREATED', 'ORDER', order._id, {
                 totalAmount,
@@ -1947,6 +1985,9 @@ export const dataStore = {
             await Coupon.findOneAndUpdate({ code: uppercase }, {
                 $set: {
                     discountPercentage: Number(discountPercentage),
+                    discountType: 'percentage',
+                    discountValue: Number(discountPercentage),
+                    minOrderAmount: Number(minOrderValue) || 0,
                     minOrderValue: Number(minOrderValue) || 0,
                     isActive: true
                 }
@@ -1962,7 +2003,10 @@ export const dataStore = {
                 _id: `c-${Date.now()}`,
                 code: uppercase,
                 discountPercentage: Number(discountPercentage),
+                discountType: 'percentage',
+                discountValue: Number(discountPercentage),
                 minOrderValue: Number(minOrderValue) || 0,
+                usageCount: 0,
                 isActive: true
             });
         }
@@ -1972,13 +2016,32 @@ export const dataStore = {
     async validateCoupon(code, orderTotal = 0) {
         const uppercase = (code || '').toUpperCase().trim();
         const c = getIsConnected()
-            ? (await Coupon.findOne({ code: uppercase, isActive: true })) || inMemoryCoupons.find(x => x.code === uppercase && x.isActive)
+            ? await Coupon.findOne({ code: uppercase, isActive: true }).lean()
             : inMemoryCoupons.find(x => x.code === uppercase && x.isActive);
         if (!c) return { valid: false, message: "Invalid or expired promo code" };
-        if (orderTotal < (c.minOrderValue || 0)) {
-            return { valid: false, message: `Minimum order amount of ₹${c.minOrderValue} required for this coupon.` };
+        if (c.expiryDate && new Date(c.expiryDate) <= new Date()) {
+            return { valid: false, message: 'Coupon has expired.' };
         }
-        return { valid: true, discountPercentage: c.discountPercentage, code: c.code };
+        if (c.usageLimit != null && Number(c.usageCount || 0) >= Number(c.usageLimit)) {
+            return { valid: false, message: 'Coupon usage limit has been reached.' };
+        }
+        const minimum = Number(c.minOrderAmount ?? c.minOrderValue ?? 0);
+        if (orderTotal < minimum) {
+            return { valid: false, message: `Minimum order amount of ₹${minimum} required for this coupon.` };
+        }
+        const discountType = c.discountType || 'percentage';
+        const discountValue = Number(c.discountValue ?? c.discountPercentage ?? 0);
+        const discountAmount = discountType === 'fixed'
+            ? Math.min(discountValue, Number(orderTotal) || 0)
+            : Math.round((Number(orderTotal) * discountValue / 100 + Number.EPSILON) * 100) / 100;
+        return {
+            valid: true,
+            discountPercentage: discountType === 'percentage' ? discountValue : 0,
+            discountType,
+            discountValue,
+            discountAmount,
+            code: c.code
+        };
     },
 
     async getUserProfile(userId) {

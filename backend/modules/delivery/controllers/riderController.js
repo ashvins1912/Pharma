@@ -1,11 +1,17 @@
 import deliveryContainer from '../container.js';
-import { getIsConnected } from '../../../config/db.js';
+import { connectDB, getIsConnected } from '../../../config/db.js';
+
+const requireMongoConnection = async (res) => {
+    if (getIsConnected() || await connectDB()) return true;
+    res.status(503).json({
+        message: 'Could not connect to MongoDB to access rider records. Verify MONGO_URI, Atlas Network Access IP allowlisting, and the database user credentials.'
+    });
+    return false;
+};
 
 export const registerRider = async (req, res) => {
     try {
-        if (!getIsConnected()) {
-            return res.status(503).json({ message: 'Rider onboarding requires an active MongoDB connection.' });
-        }
+        if (!await requireMongoConnection(res)) return;
         deliveryContainer.refreshDataLayer();
         const { name, mobile, vehicleType, longitude, latitude } = req.body;
 
@@ -34,9 +40,7 @@ export const registerRider = async (req, res) => {
 
 export const listRiders = async (req, res) => {
     try {
-        if (!getIsConnected()) {
-            return res.status(503).json({ message: 'Rider records are unavailable while MongoDB is disconnected.' });
-        }
+        if (!await requireMongoConnection(res)) return;
         deliveryContainer.refreshDataLayer();
         const riders = await deliveryContainer.getRidersUseCase.execute({
             ...req.query,
@@ -51,6 +55,7 @@ export const listRiders = async (req, res) => {
 
 export const setRiderEnabled = async (req, res) => {
     try {
+        if (!await requireMongoConnection(res)) return;
         deliveryContainer.refreshDataLayer();
         const { enabled, action, remark } = req.body;
         if (typeof enabled !== 'boolean') {
@@ -86,6 +91,7 @@ export const setRiderEnabled = async (req, res) => {
 
 export const updateRiderStatus = async (req, res) => {
     try {
+        if (!await requireMongoConnection(res)) return;
         deliveryContainer.refreshDataLayer();
         const { status } = req.body;
         const updated = await deliveryContainer.updateRiderStatusUseCase.execute(req.params.riderId, status);
@@ -101,6 +107,7 @@ export const updateRiderStatus = async (req, res) => {
 
 export const updateRiderLocation = async (req, res) => {
     try {
+        if (!await requireMongoConnection(res)) return;
         deliveryContainer.refreshDataLayer();
         const { lng, lat } = req.body;
         if (lng === undefined || lat === undefined) {

@@ -11,13 +11,26 @@ const medicineItemSchema = new mongoose.Schema({
     sku: { type: String, default: '' }
 }, { _id: false });
 
+const orderItemSchema = new mongoose.Schema({
+    productId: { type: String, trim: true },
+    medicineId: { type: mongoose.Schema.Types.Mixed },
+    name: { type: String, trim: true },
+    productName: { type: String, trim: true },
+    sku: { type: String, trim: true },
+    quantity: { type: Number, required: true, min: 1 },
+    price: { type: Number, min: 0 },
+    unitPrice: { type: Number, min: 0 },
+    totalPrice: { type: Number, min: 0 }
+}, { _id: false, strict: false });
+
 const orderSchema = new mongoose.Schema({
     customerId: { type: String, index: true },
+    riderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Rider', default: null, index: true },
     userId: { type: String, required: true, index: true },
     customerName: { type: String, default: "Valued Customer" },
     customerMobile: { type: String, default: "" },
     medicineItems: { type: [medicineItemSchema], default: [] },
-    items: { type: Array, default: [] },
+    items: { type: [orderItemSchema], default: [] },
     prescriptionUrl: { type: String, default: null },
     prescriptionRequired: { type: Boolean, default: false },
     couponCode: { type: String, default: null },
@@ -68,8 +81,14 @@ const orderSchema = new mongoose.Schema({
     paymentMethod: { type: String, default: "Cash on Delivery (COD)" },
     orderStatus: {
         type: String,
-        enum: ['Pending_Review', 'Approved', 'Rejected', 'Processing Order', 'Ready to Dispatch', 'Dispatched', 'Delivered', 'Cancelled'],
+        enum: ['Pending_Review', 'Approved', 'Rejected', 'Processing Order', 'Ready to Dispatch', 'Dispatched', 'Delivered', 'Cancelled', 'pending', 'accepted', 'out_for_delivery', 'delivered', 'cancelled'],
         default: 'Pending_Review',
+        index: true
+    },
+    status: {
+        type: String,
+        enum: ['pending', 'accepted', 'out_for_delivery', 'delivered', 'cancelled'],
+        default: 'pending',
         index: true
     },
     assignmentType: {
@@ -101,6 +120,43 @@ const orderSchema = new mongoose.Schema({
         }
     ]
 }, { timestamps: true });
+
+const normalizedOrderStatus = {
+    Pending_Review: 'pending',
+    Approved: 'accepted',
+    Rejected: 'cancelled',
+    'Processing Order': 'accepted',
+    'Ready to Dispatch': 'accepted',
+    Dispatched: 'out_for_delivery',
+    Delivered: 'delivered',
+    Cancelled: 'cancelled'
+};
+orderSchema.pre('validate', function syncOrderStatuses() {
+    if (!this.riderId && mongoose.isValidObjectId(this.rider?.riderId)) {
+        this.riderId = this.rider.riderId;
+    }
+    if (normalizedOrderStatus[this.orderStatus]) {
+        this.status = normalizedOrderStatus[this.orderStatus];
+    } else if (this.status) {
+        this.orderStatus = {
+            pending: 'Pending_Review',
+            accepted: 'Approved',
+            out_for_delivery: 'Dispatched',
+            delivered: 'Delivered',
+            cancelled: 'Cancelled'
+        }[this.status] || this.orderStatus;
+    }
+});
+orderSchema.pre('findOneAndUpdate', function syncUpdatedOrderStatus() {
+    const update = this.getUpdate() || {};
+    const fields = update.$set || update;
+    if (normalizedOrderStatus[fields.orderStatus]) {
+        fields.status = normalizedOrderStatus[fields.orderStatus];
+    }
+    if (mongoose.isValidObjectId(fields.rider?.riderId)) {
+        fields.riderId = fields.rider.riderId;
+    }
+});
 
 orderSchema.index({ orderStatus: 1, createdAt: -1 });
 

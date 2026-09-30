@@ -135,7 +135,11 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout }) {
                     <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-xl text-xs">
                       <div>
                         <span className="font-black text-emerald-800 uppercase">{appliedCoupon.code}</span>
-                        <span className="text-emerald-600 text-[11px] ml-2">({appliedCoupon.discountPercentage}% OFF)</span>
+                        <span className="text-emerald-600 text-[11px] ml-2">
+                          ({appliedCoupon.discountType === 'fixed'
+                            ? `₹${appliedCoupon.discountValue} OFF`
+                            : `${appliedCoupon.discountPercentage}% OFF`})
+                        </span>
                       </div>
                       <button
                         onClick={removeCoupon}
@@ -180,7 +184,11 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout }) {
                 </div>
                 {appliedCoupon && (
                   <div className="flex justify-between text-emerald-600 font-semibold">
-                    <span>Discount ({appliedCoupon.discountPercentage}%)</span>
+                    <span>
+                      Discount ({appliedCoupon.discountType === 'fixed'
+                        ? `₹${appliedCoupon.discountValue}`
+                        : `${appliedCoupon.discountPercentage}%`})
+                    </span>
                     <span>−₹{discountAmount.toFixed(1)}</span>
                   </div>
                 )}

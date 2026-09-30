@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 
@@ -50,6 +50,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const [loadingAvailableRiders, setLoadingAvailableRiders] = useState(false);
   const [availableRidersError, setAvailableRidersError] = useState(null);
   const [selectedRiderId, setSelectedRiderId] = useState('');
+  const [riderSearch, setRiderSearch] = useState('');
   const [verifiedOrderIds, setVerifiedOrderIds] = useState([]);
   const [prescriptionPreview, setPrescriptionPreview] = useState(null);
 
@@ -59,6 +60,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     let isCurrentRequest = true;
     setAvailableRiders([]);
     setSelectedRiderId('');
+    setRiderSearch('');
     setLoadingAvailableRiders(true);
     setAvailableRidersError(null);
 
@@ -79,6 +81,15 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       isCurrentRequest = false;
     };
   }, [assignRiderModal]);
+
+  const filteredAvailableRiders = useMemo(() => {
+    const search = riderSearch.trim().toLowerCase();
+    if (!search) return availableRiders;
+    return availableRiders.filter((rider) =>
+      rider.name.toLowerCase().includes(search) ||
+      rider.mobile.toLowerCase().includes(search)
+    );
+  }, [availableRiders, riderSearch]);
 
   const handleTransition = async (orderId, newStatus, riderInfo = null) => {
     try {
@@ -381,7 +392,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       {/* Assign Rider Modal */}
       {assignRiderModal && (
         <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div role="dialog" aria-modal="true" className="max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto bg-white border border-slate-200 rounded-3xl p-6 space-y-4 shadow-2xl">
+          <div role="dialog" aria-modal="true" className="max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto bg-white border border-slate-200 rounded-3xl p-4 sm:p-6 space-y-4 shadow-2xl">
             <div className="sticky top-0 z-10 flex justify-between items-center bg-white">
               <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
                 🛵 Assign Delivery Rider
@@ -410,8 +421,18 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                 <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">No riders are currently available.</p>
               )}
               {!loadingAvailableRiders && availableRiders.length > 0 && (
-                <div className="max-h-56 space-y-2 overflow-y-auto">
-                  {availableRiders.map((rider) => {
+                <div className="space-y-2">
+                  <label htmlFor="fulfillment-rider-search" className="sr-only">Search available riders</label>
+                  <input
+                    id="fulfillment-rider-search"
+                    type="search"
+                    value={riderSearch}
+                    onChange={(event) => setRiderSearch(event.target.value)}
+                    placeholder="Search by rider name or mobile"
+                    className="w-full min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-blue-500"
+                  />
+                  <div className="max-h-56 space-y-2 overflow-y-auto">
+                  {filteredAvailableRiders.map((rider) => {
                     const distance = getDistanceToPickup(rider, assignRiderModal);
                     return (
                       <label
@@ -442,14 +463,18 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                       </label>
                     );
                   })}
+                  {filteredAvailableRiders.length === 0 && (
+                    <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">No available riders match that search.</p>
+                  )}
+                  </div>
                 </div>
               )}
             </div>
 
-            <div className="sticky bottom-0 flex gap-2 bg-white pt-2">
+            <div className="sticky bottom-0 flex flex-col-reverse sm:flex-row gap-2 bg-white pt-2">
               <button
                 onClick={() => setAssignRiderModal(null)}
-                className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-xs"
+                className="w-full sm:w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-xs"
               >
                 Cancel
               </button>
@@ -470,7 +495,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                     handleTransition(assignRiderModal._id, 'Dispatched', riderInfo);
                   }
                 }}
-                className="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2 rounded-xl text-xs shadow-md shadow-blue-600/25 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full sm:w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2 rounded-xl text-xs shadow-md shadow-blue-600/25 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Dispatch Order
               </button>

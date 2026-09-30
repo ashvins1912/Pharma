@@ -2,7 +2,9 @@ import express from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
-import { authenticateUser, isAdmin } from '../middleware/auth.js';
+import Order from '../models/Order.js';
+import Rider from '../models/Rider.js';
+import { authenticateUser, authenticateSupabaseUser, isAdmin } from '../middleware/auth.js';
 import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
 import { getPrescription, removePrescription, savePrescription } from '../config/prescriptionStorage.js';
 import { getIsConnected } from '../config/db.js';
@@ -19,7 +21,31 @@ const getErrorStatus = (error) => {
     if (['MongoServerError', 'MongoNetworkError', 'MongooseError'].includes(error.name)) return 503;
     return 500;
 };
+const resolveDispatchRider = async (riderId, orderId = null) => {
+    if (!getIsConnected()) {
+        throw Object.assign(new Error('Dispatch requires an active MongoDB connection.'), { statusCode: 503 });
+    }
+    if (!riderId) {
+        throw Object.assign(new Error('Select an onboarded rider before dispatching.'), { statusCode: 400 });
+    }
+    deliveryContainer.refreshDataLayer();
+    const rider = await deliveryContainer.riderRepository.findById(riderId);
+    if (!rider || !rider.enabled) {
+        throw Object.assign(new Error('The selected onboarded rider is unavailable.'), { statusCode: 404 });
+    }
+    const alreadyAssigned = orderId != null &&
+        (rider.activeOrderIds || []).some(activeOrderId => String(activeOrderId) === String(orderId));
+    if (rider.status !== 'Available' && !alreadyAssigned) {
+        throw Object.assign(new Error('The selected rider is no longer available.'), { statusCode: 409 });
+    }
+    return {
+        riderId: rider.id,
+        riderName: rider.name,
+        riderMobile: rider.mobile
+    };
+};
 const allowedPrescriptionTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+const normalizedOrderStatuses = ['pending', 'accepted', 'out_for_delivery', 'delivered', 'cancelled'];
 const uploadPrescription = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024, files: 1 },
@@ -80,6 +106,85 @@ const handlePrescriptionUpload = (req, res, next) => {
         next();
     });
 };
+
+router.post('/', authenticateSupabaseUser, async (req, res) => {
+    if (!getIsConnected()) {
+        return res.status(503).json({ error: 'MongoDB is unavailable. Order was not created.' });
+    }
+    try {
+        const { items, totalAmount } = req.body || {};
+        if (!Array.isArray(items) || items.length === 0 || items.some(item =>
+            !item || typeof item !== 'object' || Array.isArray(item)
+            || !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1
+        )) {
+            return res.status(400).json({ error: 'Order items must be a non-empty list with a positive whole-number quantity per item.' });
+        }
+        const amount = Number(totalAmount);
+        if (!Number.isFinite(amount) || amount < 0) {
+            return res.status(400).json({ error: 'totalAmount must be a non-negative number.' });
+        }
+        if (typeof req.body.deliveryAddress !== 'string' || !req.body.deliveryAddress.trim()) {
+            return res.status(400).json({ error: 'A deliveryAddress is required for an order.' });
+        }
+        const order = await Order.create({
+            customerId: req.user.sub,
+            userId: req.user.sub,
+            riderId: null,
+            items,
+            totalAmount: amount,
+            finalTotal: amount,
+            deliveryAddress: req.body.deliveryAddress.trim(),
+            addressDetails: req.body.addressDetails || {},
+            coordinates: req.body.coordinates,
+            location: req.body.location,
+            customerName: req.user.user_metadata?.name || req.user.email || 'Customer',
+            customerMobile: req.user.user_metadata?.mobile || '',
+            paymentMethod: req.body.paymentMethod || 'Cash on Delivery (COD)',
+            status: 'pending',
+            orderStatus: 'Pending_Review'
+        });
+        return res.status(201).json({ order });
+    } catch (error) {
+        if (error.name === 'ValidationError' || error.name === 'CastError') {
+            return res.status(400).json({ error: error.message });
+        }
+        console.error('Order creation failed:', error);
+        return res.status(500).json({ error: 'Could not create order.' });
+    }
+});
+
+router.get('/', authenticateSupabaseUser, async (req, res) => {
+    if (!getIsConnected()) {
+        return res.status(503).json({ error: 'MongoDB is unavailable. Orders cannot be fetched.' });
+    }
+    try {
+        const { status, customerId, riderId } = req.query;
+        if (status && !normalizedOrderStatuses.includes(status)) {
+            return res.status(400).json({ error: `Status must be one of: ${normalizedOrderStatuses.join(', ')}.` });
+        }
+        if (riderId && !mongoose.isValidObjectId(riderId)) {
+            return res.status(400).json({ error: 'riderId must be a valid rider ID.' });
+        }
+        const isAdminUser = req.user?.app_metadata?.role === 'admin';
+        const query = {};
+        if (status) query.status = status;
+        if (isAdminUser) {
+            if (customerId) query.customerId = customerId;
+            if (riderId) query.riderId = riderId;
+        } else if (riderId) {
+            const rider = await Rider.findOne({ supabaseId: req.user.sub, _id: riderId }).select('_id').lean();
+            if (!rider) return res.status(403).json({ error: 'You can only fetch orders assigned to your rider profile.' });
+            query.riderId = rider._id;
+        } else {
+            query.customerId = req.user.sub;
+        }
+        const orders = await Order.find(query).sort({ createdAt: -1 }).lean();
+        return res.json({ orders });
+    } catch (error) {
+        console.error('Order retrieval failed:', error);
+        return res.status(500).json({ error: 'Could not fetch orders.' });
+    }
+});
 
 // Customer Checkout
 router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req, res) => {
@@ -283,10 +388,11 @@ router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
 
 router.put('/:id/dispatch', authenticateUser, isAdmin, async (req, res) => {
     try {
+        const riderInfo = await resolveDispatchRider(req.body.riderInfo?.riderId, req.params.id);
         const order = await dataStore.dispatchOrder(
             req.params.id,
             req.user.user_metadata?.name || req.user.email || 'Admin',
-            req.body.riderInfo || null
+            riderInfo
         );
         await sendCustomWhatsAppAlert(order, 'Dispatched', order.rider?.riderMobile);
         res.json({ message: 'Order dispatched and reserved inventory deducted.', order });
@@ -375,9 +481,18 @@ router.put('/:id/cancel', authenticateUser, async (req, res) => {
 // Order State Machine Transition
 router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => {
     try {
-        const { orderId, newStatus, riderInfo } = req.body;
+        const { orderId, newStatus } = req.body;
+        let { riderInfo } = req.body;
         if (!orderId || !newStatus) {
             return res.status(400).json({ message: "orderId and newStatus are required." });
+        }
+        if (newStatus === 'Dispatched') {
+            deliveryContainer.refreshDataLayer();
+            const currentOrder = await deliveryContainer.orderRepository.findById(orderId);
+            riderInfo = await resolveDispatchRider(
+                riderInfo?.riderId || currentOrder?.rider?.riderId,
+                orderId
+            );
         }
 
         const actor = req.user.user_metadata?.name || req.user.email || 'Pharmacist Admin';
@@ -475,21 +590,9 @@ router.post('/admin/dispatch-batch', authenticateUser, isAdmin, async (req, res)
         if (!Array.isArray(orderIds) || orderIds.length === 0) {
             return res.status(400).json({ message: "No order IDs provided for dispatch." });
         }
-        if (!riderId) return res.status(400).json({ message: 'Select an onboarded rider before dispatching.' });
-        const rider = await deliveryContainer.riderRepository.findById(riderId);
-        if (!rider || !rider.enabled) {
-            return res.status(404).json({ message: 'The selected onboarded rider is unavailable.' });
-        }
-        if (rider.status !== 'Available') {
-            return res.status(409).json({ message: 'The selected rider is no longer available.' });
-        }
+        const riderInfo = await resolveDispatchRider(riderId);
 
         const actor = req.user.user_metadata?.name || req.user.email || 'Logistics Admin';
-        const riderInfo = {
-            riderId: rider.id,
-            riderName: rider.name,
-            riderMobile: rider.mobile
-        };
 
         const dispatchedOrders = [];
         const dispatchErrors = [];
@@ -498,7 +601,7 @@ router.post('/admin/dispatch-batch', authenticateUser, isAdmin, async (req, res)
                 const updated = await dataStore.transitionOrderStatus(id, 'Dispatched', actor, riderInfo);
                 dispatchedOrders.push(updated);
                 try {
-                    await sendCustomWhatsAppAlert(updated, 'Dispatched', rider.mobile);
+                    await sendCustomWhatsAppAlert(updated, 'Dispatched', riderInfo.riderMobile);
                 } catch (notificationError) {
                     console.warn(`[WhatsApp] Batch dispatch notification failed for order ${id}:`, notificationError.message);
                 }
@@ -509,7 +612,7 @@ router.post('/admin/dispatch-batch', authenticateUser, isAdmin, async (req, res)
         }
 
         res.json({
-            message: `Successfully assigned and dispatched ${dispatchedOrders.length} orders to ${rider.name}.`,
+            message: `Successfully assigned and dispatched ${dispatchedOrders.length} orders to ${riderInfo.riderName}.`,
             dispatchedOrders,
             dispatchErrors
         });
@@ -528,7 +631,13 @@ router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res
         if (step === 'dispatch') targetStatus = 'Dispatched';
         if (step === 'deliver') targetStatus = 'Delivered';
 
-        let order = await dataStore.transitionOrderStatus(orderId, targetStatus, actor);
+        let riderInfo = null;
+        if (targetStatus === 'Dispatched') {
+            deliveryContainer.refreshDataLayer();
+            const currentOrder = await deliveryContainer.orderRepository.findById(orderId);
+            riderInfo = await resolveDispatchRider(currentOrder?.rider?.riderId, orderId);
+        }
+        let order = await dataStore.transitionOrderStatus(orderId, targetStatus, actor, riderInfo);
         let assignmentMessage = '';
         let notificationEvent = step === 'ready' ? 'Ready to Dispatch' : null;
         if (step === 'ready') {
