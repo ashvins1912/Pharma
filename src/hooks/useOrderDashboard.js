@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import apiClient from '../api/apiClient';
+import { useAuth } from '../context/AuthContext';
 
 /**
  * Custom Hook: useOrderDashboard
  * Decouples order assignment, review, and fulfillment workflows from presentation components.
  */
 export function useOrderDashboard() {
+    const { isAdmin, loading: authLoading } = useAuth();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -13,6 +15,7 @@ export function useOrderDashboard() {
     const [lastAssignmentResult, setLastAssignmentResult] = useState(null);
 
     const loadOrders = useCallback(async () => {
+        if (authLoading || !isAdmin) return;
         setLoading(true);
         setError(null);
         try {
@@ -23,10 +26,10 @@ export function useOrderDashboard() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [authLoading, isAdmin]);
 
     useEffect(() => {
-        loadOrders();
+        if (!authLoading && isAdmin) loadOrders();
     }, [loadOrders]);
 
     // Feature 2: Trigger automated assignment engine pipeline

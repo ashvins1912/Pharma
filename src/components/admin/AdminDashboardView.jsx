@@ -7,8 +7,10 @@ import AdminBulkImportModal from './AdminBulkImportModal';
 import RiderFleetView from './riders/RiderFleetView';
 import AdminOrderFinancials from './AdminOrderFinancials';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 
 export default function AdminDashboardView() {
+  const { isAdmin, loading: authLoading } = useAuth();
   const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen } = useApp();
   const [adminTab, setAdminTab] = useState('fulfillment'); // 'fulfillment' | 'inventory' | 'routes' | 'audits'
   const [orders, setOrders] = useState([]);
@@ -18,6 +20,7 @@ export default function AdminDashboardView() {
   const [auditLogs, setAuditLogs] = useState([]);
 
   const loadAllOrders = async () => {
+    if (authLoading || !isAdmin) return;
     try {
       setLoadingOrders(true);
       setOrdersError('');
@@ -31,6 +34,7 @@ export default function AdminDashboardView() {
   };
 
   const loadAuditLogs = async () => {
+    if (authLoading || !isAdmin) return;
     try {
       const res = await apiClient.get('/api/medicines/audits');
       setAuditLogs(res.data || []);
@@ -40,10 +44,11 @@ export default function AdminDashboardView() {
   };
 
   useEffect(() => {
+    if (authLoading || !isAdmin) return;
     loadAllOrders();
     loadInventoryAlerts();
     if (adminTab === 'audits') loadAuditLogs();
-  }, [adminTab, loadInventoryAlerts]);
+  }, [adminTab, authLoading, isAdmin, loadInventoryAlerts]);
 
   // Derived Metrics
   const processingCount = orders.filter(o => o.orderStatus === 'Processing Order').length;

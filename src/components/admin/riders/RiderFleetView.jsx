@@ -10,17 +10,18 @@ import AssignmentEngineMonitor from './AssignmentEngineMonitor';
  * Connects useRiderManagement and useOrderDashboard hooks with UI presentation components.
  */
 export default function RiderFleetView() {
+    const [showDisabledRiders, setShowDisabledRiders] = useState(false);
     const {
         riders,
         loadingRiders,
         ridersError,
         fetchRiders,
         updateStatus,
-        updateLocation,
+        setRiderEnabled,
         engineStatus,
         fetchEngineStatus,
         stats
-    } = useRiderManagement();
+    } = useRiderManagement({ includeDisabled: showDisabledRiders });
 
     const {
         groupedOrders,
@@ -40,7 +41,8 @@ export default function RiderFleetView() {
             r.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
             r.mobile.includes(searchFilter);
         const matchesStatus = !statusFilter || r.status === statusFilter;
-        return matchesSearch && matchesStatus;
+        const matchesEnabled = showDisabledRiders || r.enabled !== false;
+        return matchesSearch && matchesStatus && matchesEnabled;
     });
 
     const handleRiderAdded = () => {
@@ -173,6 +175,18 @@ export default function RiderFleetView() {
                             >
                                 Refresh
                             </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowDisabledRiders(show => !show)}
+                                aria-pressed={showDisabledRiders}
+                                className={`text-xs px-3 py-1.5 rounded-xl font-bold transition ${
+                                    showDisabledRiders
+                                        ? 'bg-rose-100 text-rose-700'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                            >
+                                {showDisabledRiders ? 'Hide disabled' : 'Show disabled'}
+                            </button>
                         </div>
                     </div>
 
@@ -198,7 +212,7 @@ export default function RiderFleetView() {
                                     key={rider.id}
                                     rider={rider}
                                     onStatusChange={updateStatus}
-                                    onLocationUpdate={updateLocation}
+                                    onEnabledChange={setRiderEnabled}
                                 />
                             ))}
                         </div>
@@ -211,7 +225,7 @@ export default function RiderFleetView() {
                 <AssignmentEngineMonitor
                     engineStatus={engineStatus}
                     unassignedOrders={groupedOrders.unassigned}
-                    riders={riders}
+                    riders={riders.filter(rider => rider.enabled !== false)}
                     onAutoAssign={handleAutoAssign}
                     onManualAssign={handleManualAssign}
                     executing={assignmentExecuting}

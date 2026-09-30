@@ -4,7 +4,7 @@ import React, { useState } from 'react';
  * Pure Presentation Component: RiderCard
  * Displays individual rider telemetry, active status, and GPS coordinates.
  */
-export default function RiderCard({ rider, onStatusChange, onLocationUpdate }) {
+export default function RiderCard({ rider, onStatusChange, onEnabledChange }) {
     const [updating, setUpdating] = useState(false);
 
     const handleStatus = async (status) => {
@@ -17,15 +17,21 @@ export default function RiderCard({ rider, onStatusChange, onLocationUpdate }) {
         }
     };
 
-    const handleSimulateMovement = async () => {
+    const handleEnabledChange = async (enabled, action) => {
+        const remark = enabled
+            ? undefined
+            : window.prompt(`Enter a remark to ${action.toLowerCase()} ${rider.name}:`);
+        if (!enabled && remark === null) return;
+        if (!enabled && !remark.trim()) {
+            window.alert('A remark is required.');
+            return;
+        }
+
         setUpdating(true);
         try {
-            const currentLng = rider.currentLocation?.coordinates?.[0] || 77.5946;
-            const currentLat = rider.currentLocation?.coordinates?.[1] || 12.9716;
-            // Nudge location slightly (~300m)
-            const deltaLat = (Math.random() - 0.5) * 0.006;
-            const deltaLng = (Math.random() - 0.5) * 0.006;
-            await onLocationUpdate(rider.id, currentLng + deltaLng, currentLat + deltaLat);
+            await onEnabledChange(rider.id, enabled, action, remark);
+        } catch (error) {
+            window.alert(error.message || 'Could not update rider.');
         } finally {
             setUpdating(false);
         }
@@ -70,7 +76,7 @@ export default function RiderCard({ rider, onStatusChange, onLocationUpdate }) {
                     <div className="flex items-center justify-between gap-1">
                         <h4 className="text-sm font-black text-slate-900 truncate">{rider.name}</h4>
                         <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${statusBadgeClass}`}>
-                            {rider.status}
+                            {rider.enabled === false ? rider.disabledAction || 'Disabled' : rider.status}
                         </span>
                     </div>
                     <p className="text-xs text-slate-500 font-medium truncate">{rider.mobile}</p>
@@ -81,6 +87,16 @@ export default function RiderCard({ rider, onStatusChange, onLocationUpdate }) {
                     </div>
                 </div>
             </div>
+
+            {rider.enabled === false && (
+                <div className="rounded-xl border border-rose-100 bg-rose-50 p-2.5 text-[11px] text-rose-800">
+                    <p className="font-bold">
+                        {rider.disabledAction || 'Disabled'}
+                        {rider.disabledAt && ` · ${new Date(rider.disabledAt).toLocaleDateString()}`}
+                    </p>
+                    <p className="mt-1">{rider.disabledReason || 'No remark recorded.'}</p>
+                </div>
+            )}
 
             {/* GPS & Active Load */}
             <div className="bg-slate-50 rounded-xl p-2.5 flex items-center justify-between text-[11px] border border-slate-100">
@@ -100,57 +116,78 @@ export default function RiderCard({ rider, onStatusChange, onLocationUpdate }) {
                 </div>
             </div>
 
-            {/* Actions: Status toggles & GPS simulate */}
-            <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-100">
-                <div className="flex items-center gap-1">
+            {/* Rider status and account actions */}
+            {rider.enabled !== false ? (
+                <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100">
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={() => handleStatus('Available')}
+                            disabled={updating || rider.status === 'Available'}
+                            className={`text-[10px] font-bold px-2 py-1 rounded-lg transition cursor-pointer ${
+                                rider.status === 'Available'
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600'
+                            }`}
+                            title="Set Available for Dispatch"
+                        >
+                            Available
+                        </button>
+                        <button
+                            onClick={() => handleStatus('Busy')}
+                            disabled={updating || rider.status === 'Busy'}
+                            className={`text-[10px] font-bold px-2 py-1 rounded-lg transition cursor-pointer ${
+                                rider.status === 'Busy'
+                                    ? 'bg-amber-500 text-white shadow-xs'
+                                    : 'bg-slate-100 hover:bg-amber-50 hover:text-amber-700 text-slate-600'
+                            }`}
+                            title="Set Busy"
+                        >
+                            Busy
+                        </button>
+                        <button
+                            onClick={() => handleStatus('Off-duty')}
+                            disabled={updating || rider.status === 'Off-duty'}
+                            className={`text-[10px] font-bold px-2 py-1 rounded-lg transition cursor-pointer ${
+                                rider.status === 'Off-duty'
+                                    ? 'bg-slate-700 text-white shadow-xs'
+                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                            }`}
+                            title="Set Off-duty"
+                        >
+                            Off-duty
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <div className="flex justify-end border-t border-slate-100 pt-2">
                     <button
-                        onClick={() => handleStatus('Available')}
-                        disabled={updating || rider.status === 'Available'}
-                        className={`text-[10px] font-bold px-2 py-1 rounded-lg transition cursor-pointer ${
-                            rider.status === 'Available'
-                                ? 'bg-emerald-600 text-white shadow-xs'
-                                : 'bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600'
-                        }`}
-                        title="Set Available for Dispatch"
+                        onClick={() => handleEnabledChange(true)}
+                        disabled={updating}
+                        className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
                     >
-                        Available
-                    </button>
-                    <button
-                        onClick={() => handleStatus('Busy')}
-                        disabled={updating || rider.status === 'Busy'}
-                        className={`text-[10px] font-bold px-2 py-1 rounded-lg transition cursor-pointer ${
-                            rider.status === 'Busy'
-                                ? 'bg-amber-500 text-white shadow-xs'
-                                : 'bg-slate-100 hover:bg-amber-50 hover:text-amber-700 text-slate-600'
-                        }`}
-                        title="Set Busy"
-                    >
-                        Busy
-                    </button>
-                    <button
-                        onClick={() => handleStatus('Off-duty')}
-                        disabled={updating || rider.status === 'Off-duty'}
-                        className={`text-[10px] font-bold px-2 py-1 rounded-lg transition cursor-pointer ${
-                            rider.status === 'Off-duty'
-                                ? 'bg-slate-700 text-white shadow-xs'
-                                : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                        }`}
-                        title="Set Off-duty"
-                    >
-                        Off-duty
+                        Re-enable rider
                     </button>
                 </div>
+            )}
 
-                <button
-                    onClick={handleSimulateMovement}
-                    disabled={updating}
-                    className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-lg transition cursor-pointer flex items-center gap-1"
-                    title="Simulate GPS movement in live zone"
-                >
-                    <span>🛰️</span>
-                    <span>Move</span>
-                </button>
-            </div>
+            {rider.enabled !== false && (
+                <div className="flex justify-end gap-2">
+                    <button
+                        onClick={() => handleEnabledChange(false, 'Suspended')}
+                        disabled={updating}
+                        className="rounded-lg bg-amber-50 px-3 py-1.5 text-[10px] font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                    >
+                        Suspend
+                    </button>
+                    <button
+                        onClick={() => handleEnabledChange(false, 'Removed')}
+                        disabled={updating}
+                        className="rounded-lg bg-rose-50 px-3 py-1.5 text-[10px] font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                    >
+                        Remove
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

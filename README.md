@@ -38,6 +38,12 @@ values. For an existing Render service, add all five Supabase variables
 manually. The `VITE_` values are embedded into the frontend during the build,
 so changing them requires a redeploy.
 
+The frontend and backend Supabase clients are configured separately: use
+`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for the browser, and
+`SUPABASE_URL` and `SUPABASE_ANON_KEY` for backend email/password auth. The
+service-role key is only used for privileged server operations and must never
+be exposed through a `VITE_` variable.
+
 In Supabase, enable Google under **Authentication → Providers → Google** and
 configure its OAuth client credentials. Add
 `https://<your-project-ref>.supabase.co/auth/v1/callback` as an authorized
@@ -54,25 +60,38 @@ SMTP Settings** for reliable production email delivery.
 
 ## Local demo administrator
 
-The demo administrator is disabled by default and cannot authenticate when
-`NODE_ENV=production`. For local development only, set `DEMO_ADMIN_ENABLED=true`,
+The demo administrator is disabled by default. To enable the demo buttons in
+Render, explicitly set `DEMO_ADMIN_ENABLED=true`,
 `DEMO_ADMIN_USER_ID=admin`, `DEMO_ADMIN_EMAIL=ashvinsingh25@gmail.com`, and
-`DEMO_ADMIN_PASSWORD` in `.env`. Set `DEMO_ADMIN_JWT_SECRET` to a private random
-secret of at least 32 characters (for example, generate one with
-`openssl rand -hex 32`) and set `VITE_DEMO_ADMIN_ENABLED=true` plus
-`VITE_DEMO_ADMIN_EMAIL=ashvinsingh25@gmail.com` for the Vite frontend. Use the
-regular email/password sign-in form. The example password `admin` may be used
-for an isolated local demo only; never use it on a network-accessible or
-production deployment. The backend issues a one-hour signed token and validates
-it on every protected request; the demo account is not seeded into production
-MongoDB or accepted as a production credential.
+`DEMO_ADMIN_JWT_SECRET` to a private random secret of at least 32 characters
+(for example, generate one with `openssl rand -hex 32`). Enable the passwordless
+admin demo button only for a trusted demo deployment by setting
+`DEMO_ADMIN_INSTANT_ACCESS_ENABLED=true` and
+`VITE_INSTANT_DEMO_ACCESS_ENABLED=true`. The button grants full administrator
+access, so do not enable it on a public production service. Keep
+`VITE_DEMO_ADMIN_ENABLED=true` to show the local admin login hint. The backend
+issues a one-hour signed token and validates it on every protected request.
 
-To show the login screen's **Instant Demo Access** buttons in local development,
-also set `DEMO_ADMIN_INSTANT_ACCESS_ENABLED=true` and
-`VITE_INSTANT_DEMO_ACCESS_ENABLED=true`. The latter controls whether the buttons
-are rendered; the backend flag separately guards the passwordless admin-token
-endpoint. Set both to `false` (or remove them) to disable instant access. This
-passwordless shortcut is unavailable in production.
+Demo customer access is also opt-in for production. Set
+`DEMO_CUSTOMER_ENABLED=true`, `DEMO_CUSTOMER_JWT_SECRET` to a separate private
+random secret of at least 32 characters, and `VITE_INSTANT_DEMO_ACCESS_ENABLED=true`
+plus `VITE_DEMO_CUSTOMER_ENABLED=true` to show the sign-in button. Set `DEMO_CUSTOMER_MOBILE` to a WhatsApp-capable
+number if demo orders should receive customer notifications. These demo
+credentials are test-only and should not contain real customer data.
+
+The Render blueprint prompts for these `sync: false` demo variables when
+creating a service; existing services must add them manually. Changes to
+`VITE_INSTANT_DEMO_ACCESS_ENABLED` require a redeploy because Vite embeds it
+during the build.
+
+## Rider fleet lifecycle
+
+The fallback in-memory rider repository starts empty; riders must be onboarded
+by an administrator. Suspending or removing a rider disables the existing
+record and stores the admin's remark instead of deleting it. Disabled riders
+are excluded from the active fleet and assignment engine, but administrators
+can view and re-enable them. Onboarding a disabled rider with the same mobile
+number reactivates that record and preserves its delivery history.
 
 ## Promoting a Supabase administrator
 

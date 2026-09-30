@@ -18,6 +18,7 @@ import { GetRidersUseCase } from './use-cases/GetRidersUseCase.js';
 import { UpdateRiderStatusUseCase } from './use-cases/UpdateRiderStatusUseCase.js';
 import { UpdateRiderLocationUseCase } from './use-cases/UpdateRiderLocationUseCase.js';
 import { ManualAssignOrderUseCase } from './use-cases/ManualAssignOrderUseCase.js';
+import { SetRiderEnabledUseCase } from './use-cases/SetRiderEnabledUseCase.js';
 
 /**
  * Composition Root / Dependency Injection Container
@@ -36,6 +37,7 @@ class DeliveryContainer {
         this.getRidersUseCase = null;
         this.updateRiderStatusUseCase = null;
         this.updateRiderLocationUseCase = null;
+        this.setRiderEnabledUseCase = null;
         this.manualAssignOrderUseCase = null;
 
         this.init();
@@ -93,6 +95,10 @@ class DeliveryContainer {
         });
 
         this.updateRiderLocationUseCase = new UpdateRiderLocationUseCase({
+            riderRepository: this.riderRepository
+        });
+
+        this.setRiderEnabledUseCase = new SetRiderEnabledUseCase({
             riderRepository: this.riderRepository
         });
 

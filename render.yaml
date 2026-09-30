@@ -19,5 +19,31 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: DEMO_CUSTOMER_ENABLED
+        sync: false
+      - key: DEMO_CUSTOMER_JWT_SECRET
+        sync: false
+      - key: DEMO_CUSTOMER_EMAIL
+        sync: false
+      - key: DEMO_CUSTOMER_NAME
+        sync: false
+      - key: DEMO_CUSTOMER_MOBILE
+        sync: false
+      - key: DEMO_ADMIN_ENABLED
+        sync: false
+      - key: DEMO_ADMIN_INSTANT_ACCESS_ENABLED
+        sync: false
+      - key: DEMO_ADMIN_EMAIL
+        sync: false
+      - key: DEMO_ADMIN_PASSWORD
+        sync: false
+      - key: DEMO_ADMIN_JWT_SECRET
+        sync: false
+      - key: VITE_DEMO_ADMIN_ENABLED
+        sync: false
+      - key: VITE_DEMO_CUSTOMER_ENABLED
+        sync: false
+      - key: VITE_INSTANT_DEMO_ACCESS_ENABLED
+        sync: false
       - key: VITE_GOOGLE_MAPS_API_KEY
         sync: false

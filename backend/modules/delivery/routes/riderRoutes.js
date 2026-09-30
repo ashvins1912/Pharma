@@ -4,6 +4,7 @@ import { authenticateUser, isAdmin } from '../../../middleware/auth.js';
 import {
     registerRider,
     listRiders,
+    setRiderEnabled,
     updateRiderStatus,
     updateRiderLocation
 } from '../controllers/riderController.js';
@@ -22,6 +23,9 @@ router.get('/', listRiders);
 
 // POST /api/admin/riders/onboard - Onboard new rider with photo upload
 router.post('/onboard', uploadPhoto.single('photo'), registerRider);
+
+// Soft-disable/restore a rider; rider records and remarks remain in the database.
+router.patch('/:riderId/enabled', setRiderEnabled);
 
 // PATCH /api/admin/riders/:riderId/status - Update rider status (Available, Busy, Off-duty)
 router.patch('/:riderId/status', updateRiderStatus);

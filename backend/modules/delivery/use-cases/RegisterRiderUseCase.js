@@ -41,9 +41,9 @@ export class RegisterRiderUseCase {
             throw new Error('Rider mobile number is required.');
         }
 
-        // Validate mobile uniqueness
+        // Reuse a disabled rider record so a returning rider keeps their history.
         const existingRider = await this.riderRepository.findByMobile(mobile);
-        if (existingRider) {
+        if (existingRider?.enabled) {
             throw new Error(`A rider with mobile number ${mobile} is already registered.`);
         }
 
@@ -71,6 +71,23 @@ export class RegisterRiderUseCase {
         let riderCoords = [77.5946, 12.9716];
         if (Array.isArray(coordinates) && coordinates.length === 2) {
             riderCoords = [Number(coordinates[0]), Number(coordinates[1])];
+        }
+
+        if (existingRider) {
+            return this.riderRepository.update(existingRider.id, {
+                name: name.trim(),
+                mobile: mobile.trim(),
+                photoUrl,
+                status: existingRider.activeOrderIds.length
+                    ? Rider.STATUSES.BUSY
+                    : Rider.STATUSES.AVAILABLE,
+                vehicleType,
+                currentLocation: { type: 'Point', coordinates: riderCoords },
+                enabled: true,
+                disabledAction: null,
+                disabledReason: null,
+                disabledAt: null
+            });
         }
 
         // Create domain entity

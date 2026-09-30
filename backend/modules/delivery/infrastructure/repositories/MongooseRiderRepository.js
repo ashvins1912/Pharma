@@ -17,6 +17,10 @@ export class MongooseRiderRepository extends IRiderRepository {
             activeOrderIds: obj.activeOrderIds || [],
             totalDeliveries: obj.totalDeliveries || 0,
             rating: obj.rating || 4.9,
+            enabled: obj.enabled !== false,
+            disabledAction: obj.disabledAction,
+            disabledReason: obj.disabledReason,
+            disabledAt: obj.disabledAt,
             createdAt: obj.createdAt,
             updatedAt: obj.updatedAt
         });
@@ -28,12 +32,21 @@ export class MongooseRiderRepository extends IRiderRepository {
     }
 
     async findByMobile(mobile) {
-        const doc = await RiderModel.findOne({ mobile: String(mobile).trim() });
+        const cleanMobile = String(mobile).trim();
+        let doc = await RiderModel.findOne({ mobile: cleanMobile });
+        if (!doc) {
+            const digits = cleanMobile.replace(/\D/g, '');
+            if (digits) {
+                const formattedMobile = new RegExp(`^\\D*${digits.split('').join('\\D*')}\\D*$`);
+                doc = await RiderModel.findOne({ mobile: formattedMobile });
+            }
+        }
         return this._toDomain(doc);
     }
 
     async findAll(filter = {}) {
         const query = {};
+        if (!filter.includeDisabled) query.enabled = { $ne: false };
         if (filter.status) query.status = filter.status;
         if (filter.search) {
             query.$or = [
@@ -67,6 +80,7 @@ export class MongooseRiderRepository extends IRiderRepository {
     async findAvailableNearby(coordinates, maxDistanceInMeters = 15000, limit = 5) {
         // Query MongoDB with 2dsphere near
         const docs = await RiderModel.find({
+            enabled: { $ne: false },
             status: Rider.STATUSES.AVAILABLE,
             currentLocation: {
                 $near: {

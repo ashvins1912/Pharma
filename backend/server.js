@@ -24,6 +24,11 @@ import {
     issueDemoAdminToken,
     verifyDemoAdminPassword
 } from './config/demoAdmin.js';
+import {
+    getDemoCustomerIdentity,
+    isDemoCustomerEnabled,
+    issueDemoCustomerToken
+} from './config/demoCustomer.js';
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -90,6 +95,19 @@ app.post('/api/auth/demo-admin/instant', async (req, res) => {
     } catch (error) {
         console.error('Instant demo admin sign-in failed:', error);
         res.status(503).json({ message: 'Instant demo admin access is not configured correctly.' });
+    }
+});
+
+app.post('/api/auth/demo-customer', async (req, res) => {
+    if (!isDemoCustomerEnabled()) {
+        return res.status(404).json({ message: 'Demo customer access is disabled.' });
+    }
+    try {
+        const access_token = await issueDemoCustomerToken();
+        res.json({ access_token, token_type: 'Bearer', expires_in: 3600, user: getDemoCustomerIdentity() });
+    } catch (error) {
+        console.error('Demo customer token creation failed:', error);
+        res.status(503).json({ message: 'Demo customer access is not configured correctly.' });
     }
 });
 

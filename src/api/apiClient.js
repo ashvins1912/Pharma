@@ -36,9 +36,11 @@ apiClient.interceptors.request.use(async (config) => {
 
     // Check active Supabase session
     try {
-        const { data } = await supabase.auth.getSession();
-        if (!token && data?.session?.access_token) {
-            token = data.session.access_token;
+        if (supabase) {
+            const { data } = await supabase.auth.getSession();
+            if (!token && data?.session?.access_token) {
+                token = data.session.access_token;
+            }
         }
     } catch {
         // Continue with the saved demo token when Supabase is unavailable.

@@ -215,12 +215,12 @@ const getOrderItems = (order) => (order.items || [])
     .map(item => `• ${item.name || 'Item'} x${item.quantity || 1}`)
     .join('\n');
 
-const buildMessageBody = (order, status, recipientPhone, audience) => {
-    const orderId = order?._id?.toString() || 'UNKNOWN';
+export const buildWhatsAppMessageBody = (order, status, audience) => {
+    const orderId = order?._id?.toString() || order?.id?.toString() || 'UNKNOWN';
     const shortId = orderId.slice(-6).toUpperCase();
     const items = getOrderItems(order);
 
-    if (audience === 'rider' && status === 'Dispatched') {
+    if (audience === 'rider' && ['Assigned', 'Dispatched'].includes(status)) {
         const coordinates = order.coordinates || {};
         const hasCoordinates = Number.isFinite(Number(coordinates.lat))
             && Number.isFinite(Number(coordinates.lng))
@@ -229,14 +229,27 @@ const buildMessageBody = (order, status, recipientPhone, audience) => {
             ? `https://www.google.com/maps/search/?api=1&query=${coordinates.lat},${coordinates.lng}`
             : null;
         return [
-            `🚚 NEW DELIVERY ASSIGNED — Order #${shortId}`,
+            `🚚 ${status === 'Assigned' ? 'NEW DELIVERY ASSIGNED' : 'ORDER OUT FOR DELIVERY'} — Order #${shortId}`,
             `Rider: ${order.rider?.riderName || 'Assigned Rider'}`,
             `Customer: ${order.addressDetails?.fullName || order.customerName || 'Customer'}`,
             `Customer contact: ${order.customerMobile || order.addressDetails?.mobile || 'Not provided'}`,
             `Complete delivery address: ${getCompleteAddress(order)}`,
             mapsLink && `Google Maps: ${mapsLink}`,
-            `Out for delivery at: ${order.outForDeliveryAt ? new Date(order.outForDeliveryAt).toLocaleString() : new Date().toLocaleString()}`,
+            status === 'Assigned'
+                ? `Assigned at: ${order.assignmentDetails?.assignedAt ? new Date(order.assignmentDetails.assignedAt).toLocaleString() : new Date().toLocaleString()}`
+                : `Out for delivery at: ${order.outForDeliveryAt ? new Date(order.outForDeliveryAt).toLocaleString() : new Date().toLocaleString()}`,
             `COD amount: ₹${order.finalTotal}`,
+            items && `Order items:\n${items}`
+        ].filter(Boolean).join('\n');
+    }
+
+    if (audience === 'admin' && status === 'Placed') {
+        return [
+            `🛎️ NEW ORDER RECEIVED — #${shortId}`,
+            `Customer: ${order.addressDetails?.fullName || order.customerName || 'Customer'}`,
+            `Customer contact: ${order.customerMobile || order.addressDetails?.mobile || 'Not provided'}`,
+            `Complete delivery address: ${getCompleteAddress(order)}`,
+            `Total: ₹${order.finalTotal} (${order.paymentMethod || 'Cash on Delivery'})`,
             items && `Order items:\n${items}`
         ].filter(Boolean).join('\n');
     }
@@ -246,7 +259,7 @@ const buildMessageBody = (order, status, recipientPhone, audience) => {
             `🚚 YOUR ORDER IS OUT FOR DELIVERY — #${shortId}`,
             `Status: Out for Delivery`,
             `Rider: ${order.rider?.riderName || 'Assigned Rider'}`,
-            `Rider contact: ${recipientPhone || 'Not provided'}`,
+            `Rider contact: ${order.rider?.riderMobile || 'Not provided'}`,
             `Delivery address: ${getCompleteAddress(order)}`,
             `Out for delivery at: ${order.outForDeliveryAt ? new Date(order.outForDeliveryAt).toLocaleString() : new Date().toLocaleString()}`,
             `COD amount: ₹${order.finalTotal}`,
@@ -354,15 +367,20 @@ const clearOrderNotifications = async (orderId) => {
 };
 
 export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryMobile = null) => {
-    const orderId = order?._id ? order._id.toString() : 'UNKNOWN';
+    const orderId = order?._id?.toString() || order?.id?.toString() || 'UNKNOWN';
     const customerPhone = order.customerMobile || order.addressDetails?.mobile || '';
     const riderPhone = deliveryMobile || order.rider?.riderMobile || '';
-    const recipients = [
-        { audience: 'customer', phone: customerPhone },
-        ...(statusUpdateText === 'Dispatched' && riderPhone
-            ? [{ audience: 'rider', phone: riderPhone }]
-            : [])
-    ];
+    const recipients = statusUpdateText === 'Assigned'
+        ? (riderPhone ? [{ audience: 'rider', phone: riderPhone }] : [])
+        : [
+            { audience: 'customer', phone: customerPhone },
+            ...(statusUpdateText === 'Dispatched' && riderPhone
+                ? [{ audience: 'rider', phone: riderPhone }]
+                : []),
+            ...(statusUpdateText === 'Placed' && whatsappState.isConnected && whatsappState.phone
+                ? [{ audience: 'admin', phone: whatsappState.phone }]
+                : [])
+        ];
     const records = [];
 
     for (const { audience, phone } of recipients) {
@@ -392,7 +410,7 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
             eventType: statusUpdateText,
             recipient: recipient || 'Not provided',
             dedupeKey,
-            messageBody: buildMessageBody(order, statusUpdateText, phone, audience),
+            messageBody: buildWhatsAppMessageBody(order, statusUpdateText, audience),
             status: 'PENDING',
             channel: 'WHATSAPP',
             sentAt: null,

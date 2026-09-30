@@ -19,7 +19,7 @@ export const registerRider = async (req, res) => {
         });
 
         res.status(201).json({
-            message: `Rider ${rider.name} successfully registered and ready for dispatch.`,
+            message: `Rider ${rider.name} successfully registered or re-enabled and ready for dispatch.`,
             rider: rider.toJSON()
         });
     } catch (error) {
@@ -31,11 +31,49 @@ export const registerRider = async (req, res) => {
 export const listRiders = async (req, res) => {
     try {
         deliveryContainer.refreshDataLayer();
-        const riders = await deliveryContainer.getRidersUseCase.execute(req.query);
+        const riders = await deliveryContainer.getRidersUseCase.execute({
+            ...req.query,
+            includeDisabled: req.query.includeDisabled === 'true'
+        });
         res.json(riders.map(r => r.toJSON()));
     } catch (error) {
         console.error('List riders error:', error);
         res.status(500).json({ message: 'Failed to retrieve riders.' });
+    }
+};
+
+export const setRiderEnabled = async (req, res) => {
+    try {
+        deliveryContainer.refreshDataLayer();
+        const { enabled, action, remark } = req.body;
+        if (typeof enabled !== 'boolean') {
+            return res.status(400).json({ message: 'Enabled must be a boolean.' });
+        }
+        if (!enabled && !['Suspended', 'Removed'].includes(action)) {
+            return res.status(400).json({ message: 'Action must be Suspended or Removed.' });
+        }
+        if (!enabled && (typeof remark !== 'string' || !remark.trim())) {
+            return res.status(400).json({ message: 'A remark is required to suspend or remove a rider.' });
+        }
+        if (remark?.length > 500) {
+            return res.status(400).json({ message: 'Remark cannot exceed 500 characters.' });
+        }
+
+        const updated = await deliveryContainer.setRiderEnabledUseCase.execute(
+            req.params.riderId,
+            enabled,
+            action,
+            remark
+        );
+        res.json({
+            message: enabled
+                ? `Rider ${updated.name} re-enabled.`
+                : `Rider ${action.toLowerCase()} with remark saved.`,
+            rider: updated.toJSON()
+        });
+    } catch (error) {
+        console.error('Set rider enabled error:', error);
+        res.status(400).json({ message: error.message || 'Could not update rider availability.' });
     }
 };
 

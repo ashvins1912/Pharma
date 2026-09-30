@@ -1,0 +1,55 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+process.env.MONGO_URI = 'mongodb://localhost:27017/pharma';
+process.env.SUPABASE_URL = 'https://example.supabase.co';
+process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key-with-sufficient-length';
+process.env.NODE_ENV = 'test';
+
+const { buildWhatsAppMessageBody } = await import('./whatsapp.js');
+
+const order = {
+    id: 'order-123456',
+    customerName: 'Customer Name',
+    customerMobile: '+919876543210',
+    deliveryAddress: 'House 10, Main Road, Bengaluru, Karnataka - 560001',
+    addressDetails: {
+        fullName: 'Customer Name',
+        mobile: '+919876543210',
+        addressLine1: 'House 10, Main Road',
+        addressLine2: 'Indiranagar',
+        landmark: 'Near Park',
+        city: 'Bengaluru',
+        state: 'Karnataka',
+        pincode: '560001'
+    },
+    coordinates: { lat: 12.9, lng: 77.6 },
+    rider: { riderName: 'Assigned Rider', riderMobile: '+919900001111' },
+    items: [{ name: 'Medicine A', quantity: 2 }],
+    finalTotal: 450,
+    paymentMethod: 'Cash on Delivery (COD)'
+};
+
+test('rider assignment alert contains order, customer contact, full address, and item details', () => {
+    const message = buildWhatsAppMessageBody(order, 'Assigned', 'rider');
+    for (const detail of [
+        'Order #123456',
+        'Customer: Customer Name',
+        'Customer contact: +919876543210',
+        'House 10, Main Road',
+        'Indiranagar',
+        'Near Park',
+        'Bengaluru, Karnataka, 560001',
+        'Medicine A x2'
+    ]) {
+        assert.ok(message.includes(detail), `Expected rider message to include: ${detail}`);
+    }
+});
+
+test('new-order admin alert includes customer contact, delivery address, and items', () => {
+    const message = buildWhatsAppMessageBody(order, 'Placed', 'admin');
+    assert.match(message, /NEW ORDER RECEIVED — #123456/);
+    assert.match(message, /Customer contact: \+919876543210/);
+    assert.match(message, /Complete delivery address:.*560001/);
+    assert.match(message, /Medicine A x2/);
+});
