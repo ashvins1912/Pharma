@@ -25,10 +25,16 @@ const mongoUriSchema = z.string().trim().refine(value => {
     message: 'Expected a valid MongoDB URI starting with mongodb:// or mongodb+srv://.'
 });
 
+const optionalAnonKeySchema = z.preprocess(
+    value => typeof value === 'string' && value.trim() === '' ? undefined : value,
+    z.string().trim().min(1).optional()
+);
+
 export const envSchema = z.object({
     PORT: z.coerce.number().int().min(1).max(65535).default(5000),
     MONGO_URI: mongoUriSchema,
     SUPABASE_URL: z.string().trim().url(),
+    SUPABASE_ANON_KEY: optionalAnonKeySchema,
     SUPABASE_SERVICE_ROLE_KEY: z.string().trim().min(20),
     NODE_ENV: z.enum(['development', 'production', 'test'])
 });
