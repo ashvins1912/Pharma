@@ -9,12 +9,22 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+html {
+  box-sizing: border-box;
+  -webkit-text-size-adjust: 100%;
+}
+
+*, *:before, *:after {
+  box-sizing: inherit;
+}
+
 body {
   margin: 0;
   padding: 0;
+  min-width: 320px;
   background-color: #f8fafc;
   color: #1e293b;
-  overflow-x: hidden;
+  line-height: 1.5;
 }
 
 #root {
@@ -22,6 +32,17 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+}
+
+/* Ensure images never exceed parent container width */
+img, svg, video, canvas, audio, iframe, embed, object {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Improve mobile touch responsiveness */
+button, a, input, select, textarea {
+  touch-action: manipulation;
 }
 
 /* Hide scrollbar for category pills while maintaining scroll capability */

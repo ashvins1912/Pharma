@@ -317,8 +317,8 @@ router.get('/prescriptions/:fileId', authenticateUser, async (req, res) => {
     try {
         const prescription = await getPrescription(req.params.fileId);
         if (!prescription) return res.status(404).json({ message: 'Prescription file not found.' });
-        const role = req.user?.app_metadata?.role;
-        if (prescription.ownerId !== req.user.sub && role !== 'admin') {
+        const role = req.user?.app_metadata?.role || req.user?.role;
+        if (prescription.ownerId !== req.user.sub && role !== 'admin' && role !== 'pharmacy') {
             return res.status(403).json({ message: 'You are not authorized to view this prescription.' });
         }
         res.set('Content-Type', prescription.contentType);

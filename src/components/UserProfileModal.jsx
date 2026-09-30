@@ -28,8 +28,8 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-        <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-sm w-full p-6 relative max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+        <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-sm w-full p-5 sm:p-6 relative max-h-[90vh] overflow-y-auto">
           <button
             onClick={onClose}
             className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition cursor-pointer"
@@ -110,6 +110,13 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
               className="w-full text-left px-3.5 py-2.5 rounded-xl hover:bg-slate-50 flex items-center justify-between cursor-pointer transition"
             >
               <span>📦 My Orders & Tracking</span>
+              <span className="text-slate-400">→</span>
+            </button>
+            <button
+              onClick={() => { onClose(); onNavigate('requests'); }}
+              className="w-full text-left px-3.5 py-2.5 rounded-xl hover:bg-slate-50 flex items-center justify-between cursor-pointer transition"
+            >
+              <span>📋 My Medicine Requests</span>
               <span className="text-slate-400">→</span>
             </button>
             <button

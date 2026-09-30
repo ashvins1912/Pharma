@@ -304,6 +304,71 @@ export const buildWhatsAppMessageBody = (order, status, audience) => {
     }
 };
 
+export const buildWhatsAppMedicineRequestBody = (request, eventType) => {
+    const reqNum = request?.requestNumber || 'MR-REQ';
+    const items = (request?.requestedItems || [])
+        .map(i => `${i.requestedName || 'Medicine'}${i.strength ? ' ' + i.strength : ''} (x${i.quantity || 1})`)
+        .join(', ') || 'Requested Medicine';
+    const proposal = request?.pharmacyProposal;
+
+    switch (eventType) {
+        case 'MedicineRequestCreated':
+        case 'NEW_REQUEST':
+            return [
+                `📋 NEW MEDICINE REQUEST RECEIVED — #${reqNum}`,
+                `Customer: ${request?.customerName || 'Valued Customer'}`,
+                `Requested: ${items}`,
+                `Delivery Preference: ${request?.preferredDeliveryPreference || 'Flexible'}`,
+                'Your medicine request has been received by Ashvin Pharmacy. Our pharmacy team will review it and update you with a proposal shortly.'
+            ].join('\n');
+
+        case 'MedicineProposalReady':
+        case 'PROPOSAL_SENT': {
+            const priceLabel = proposal?.priceType === 'APPROXIMATE' ? 'Approximate Price' : 'Final Price';
+            const priceVal = proposal?.finalPrice ?? proposal?.totalPrice ?? proposal?.approximatePrice ?? 0;
+            const slotLabel = proposal?.deliverySlot?.label
+                || `${proposal?.deliverySlot?.slotType || 'Flexible'} (${proposal?.deliverySlot?.date || 'Available date'})`;
+            return [
+                `💊 PHARMACY PROPOSAL READY — #${reqNum}`,
+                `Medicine: ${proposal?.proposedMedicineName || proposal?.medicineName || items}`,
+                `Quantity: ${proposal?.proposedQuantity || proposal?.quantity || 1}`,
+                `${priceLabel}: ₹${priceVal}`,
+                `Proposed Delivery: ${slotLabel}`,
+                proposal?.pharmacyNote || proposal?.pharmacyNotes ? `Pharmacy Note: ${proposal.pharmacyNote || proposal.pharmacyNotes}` : '',
+                'Please sign in to your Ashvin Pharmacy account to review and approve your proposal.'
+            ].filter(Boolean).join('\n');
+        }
+
+        case 'MedicineRequestApproved':
+        case 'CUSTOMER_APPROVED':
+            return [
+                `🎉 PROPOSAL APPROVED & ORDER CREATED — #${reqNum}`,
+                `Medicine: ${proposal?.proposedMedicineName || proposal?.medicineName || items}`,
+                'Your proposal has been approved and converted to an active pharmacy order for fulfillment! Thank you for choosing Ashvin Pharmacy.'
+            ].join('\n');
+
+        case 'MedicineRequestRejected':
+        case 'CUSTOMER_REJECTED':
+        case 'PHARMACY_REJECTED':
+            return [
+                `ℹ️ MEDICINE REQUEST UPDATE — #${reqNum}`,
+                `Medicine: ${items}`,
+                'This medicine request/proposal was declined. If you still require this medication, please submit a new request or contact Ashvin Pharmacy support.'
+            ].join('\n');
+
+        case 'MedicineProposalExpired':
+        case 'EXPIRED':
+            return [
+                `⏳ PROPOSAL EXPIRED — #${reqNum}`,
+                `Medicine: ${items}`,
+                'The proposal for your medicine request has expired. Please submit a new request if you still need this medication.'
+            ].join('\n');
+
+        default:
+            return `ℹ️ Medicine request #${reqNum} update: ${eventType}`;
+    }
+};
+
 const updateNotification = async (record, mongoRecord, updates) => {
     Object.assign(record, updates);
     if (mongoRecord) {
@@ -451,6 +516,63 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
                 }
             }
         }
+    }
+
+    return records;
+};
+
+export const sendWhatsAppMedicineRequestAlert = async (request, eventType) => {
+    const requestId = request?._id?.toString() || request?.id?.toString() || 'UNKNOWN';
+    const customerPhone = request?.customerPhone || '';
+    const recipients = [
+        { audience: 'customer', phone: customerPhone },
+        ...(eventType === 'MedicineRequestCreated' && whatsappState.isConnected && whatsappState.phone
+            ? [{ audience: 'admin', phone: whatsappState.phone }]
+            : [])
+    ];
+    const records = [];
+
+    for (const { audience, phone } of recipients) {
+        const recipient = normalizeWhatsAppNumber(phone);
+        const dedupeKey = `MR:${requestId}:${eventType}:${audience}:${recipient || 'missing'}`;
+        if (sentNotifications.has(dedupeKey)) {
+            records.push(sentNotifications.get(dedupeKey));
+            continue;
+        }
+
+        if (getIsConnected()) {
+            const existing = await WhatsAppMessage.findOne({
+                dedupeKey,
+                expiresAt: { $gt: new Date() }
+            });
+            if (existing) {
+                const record = existing.toObject();
+                sentNotifications.set(dedupeKey, record);
+                records.push(record);
+                continue;
+            }
+        }
+
+        const createdAt = new Date();
+        const record = {
+            orderId: `MR-${requestId}`,
+            eventType,
+            recipient: recipient || 'Not provided',
+            dedupeKey,
+            messageBody: buildWhatsAppMedicineRequestBody(request, eventType),
+            status: 'PENDING',
+            channel: 'WHATSAPP',
+            sentAt: null,
+            attempts: 1,
+            messageId: `msg-mr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            createdAt,
+            expiresAt: new Date(createdAt.getTime() + messageRetentionMs)
+        };
+
+        const mongoRecord = getIsConnected() ? await WhatsAppMessage.create(record) : null;
+        sentNotifications.set(dedupeKey, record);
+        records.push(record);
+        await transmitWhatsAppMessage(record, mongoRecord);
     }
 
     return records;

@@ -18,6 +18,9 @@ import AuthModal from './components/AuthModal';
 import UserProfileModal from './components/UserProfileModal';
 import AdminDashboardView from './components/admin/AdminDashboardView';
 import WhatsAppConnectModal from './components/admin/WhatsAppConnectModal';
+import CustomerRequestsView from './components/requests/CustomerRequestsView';
+import MedicineRequestModal from './components/requests/MedicineRequestModal';
+import CustomerProposalModal from './components/requests/CustomerProposalModal';
 
 function MainApp() {
   const { user, isAdmin, role, passwordRecoveryRequired } = useAuth();
@@ -30,11 +33,16 @@ function MainApp() {
     whatsappModalOpen,
     setWhatsappModalOpen,
     whatsappStatus,
-    loadWhatsAppStatus
+    loadWhatsAppStatus,
+    requestModalOpen,
+    setRequestModalOpen,
+    activeProposalRequest,
+    setActiveProposalRequest,
+    openProposalModal
   } = useApp();
   const { addToast } = useToast();
 
-  // Tab State: 'store' | 'orders' | 'addresses' | 'admin'
+  // Tab State: 'store' | 'orders' | 'requests' | 'addresses' | 'admin'
   const [activeTab, setActiveTab] = useState('store');
 
   // Modal Dialog States
@@ -46,10 +54,10 @@ function MainApp() {
   const [ratingPromptOrder, setRatingPromptOrder] = useState(null);
   const [dismissedRatingOrderIds, setDismissedRatingOrderIds] = useState([]);
 
-  // Tab switch guard: Users must be signed in to access orders, tracking, or addresses
+  // Tab switch guard: Users must be signed in to access orders, tracking, requests, or addresses
   const handleTabSwitch = (tab) => {
-    if ((tab === 'orders' || tab === 'addresses') && !user) {
-      addToast(`Please sign in to access ${tab === 'orders' ? 'your order history and live tracking' : 'your address directory'}.`, "info");
+    if ((tab === 'orders' || tab === 'addresses' || tab === 'requests') && !user) {
+      addToast(`Please sign in to access ${tab === 'orders' ? 'your order history and live tracking' : tab === 'requests' ? 'your medicine requests' : 'your address directory'}.`, "info");
       setAuthOpen(true);
       return;
     }
@@ -63,7 +71,7 @@ function MainApp() {
 
   // Reset tab to store if user signs out while on protected screens
   React.useEffect(() => {
-    if (!user && (activeTab === 'orders' || activeTab === 'addresses' || activeTab === 'admin')) {
+    if (!user && (activeTab === 'orders' || activeTab === 'addresses' || activeTab === 'admin' || activeTab === 'requests')) {
       setActiveTab('store');
     }
     if (!isAdmin && activeTab === 'admin') setActiveTab('store');
@@ -214,7 +222,38 @@ function MainApp() {
           )
         )}
 
-        {/* TAB 3: MULTI-ADDRESS DIRECTORY (Guarded - Sign in required) */}
+        {/* TAB 3: MEDICINE REQUESTS & PHARMACY PROPOSALS (Guarded - Sign in required) */}
+        {activeTab === 'requests' && (
+          user ? (
+            <div className="max-w-4xl mx-auto space-y-6">
+              <CustomerRequestsView
+                onOpenProposal={(req) => openProposalModal(req)}
+                onTrackOrder={(order) => {
+                  setActiveTrackingOrder(order);
+                  setActiveTab('orders');
+                }}
+              />
+            </div>
+          ) : (
+            <div className="max-w-md mx-auto my-12 bg-white border border-slate-200 rounded-3xl p-8 text-center space-y-4 shadow-sm animate-fade-in">
+              <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-2xl mx-auto">
+                🔒
+              </div>
+              <h3 className="text-base font-extrabold text-slate-900">Sign In Required</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                You must be signed in to view your medicine requests, pharmacist proposals, and approve procurement.
+              </p>
+              <button
+                onClick={() => setAuthOpen(true)}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 rounded-xl transition cursor-pointer shadow-sm"
+              >
+                Sign In to View Requests
+              </button>
+            </div>
+          )
+        )}
+
+        {/* TAB 4: MULTI-ADDRESS DIRECTORY (Guarded - Sign in required) */}
         {activeTab === 'addresses' && (
           user ? (
             <div className="max-w-3xl mx-auto space-y-6">
@@ -307,6 +346,27 @@ function MainApp() {
       <WhatsAppConnectModal
         isOpen={whatsappModalOpen}
         onClose={() => setWhatsappModalOpen(false)}
+      />
+
+      {/* Medicine Procurement Request Modal */}
+      <MedicineRequestModal
+        isOpen={requestModalOpen}
+        onClose={() => setRequestModalOpen(false)}
+      />
+
+      {/* Customer Proposal Review & Approval Modal */}
+      <CustomerProposalModal
+        isOpen={Boolean(activeProposalRequest)}
+        request={activeProposalRequest}
+        onClose={() => setActiveProposalRequest(null)}
+        onOrderCreated={(order) => {
+          setActiveProposalRequest(null);
+          if (order) {
+            handleOrderPlaced(order);
+          } else {
+            setActiveTab('orders');
+          }
+        }}
       />
 
     </div>
