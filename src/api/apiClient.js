@@ -3,11 +3,24 @@ import { supabase } from '../supabaseClient';
 
 const apiClient = axios.create({
     baseURL: import.meta.env.VITE_API_URL || '',
-    timeout: 10000
+    timeout: 10000,
+    withCredentials: true
 });
 
-// Resilient request interceptor that ensures a valid token is always sent
+function getCsrfCookie() {
+    if (typeof document === 'undefined') return null;
+    const match = document.cookie.match(new RegExp('(^|;\\s*)XSRF-TOKEN=([^;]*)'));
+    return match ? decodeURIComponent(match[2]) : null;
+}
+
+// Resilient request interceptor that ensures tokens and anti-CSRF headers are sent
 apiClient.interceptors.request.use(async (config) => {
+    // 1. Auto-attach Anti-CSRF Token header for Double Submit Cookie pattern
+    const csrfToken = getCsrfCookie();
+    if (csrfToken) {
+        config.headers['X-XSRF-TOKEN'] = csrfToken;
+    }
+
     let token = null;
 
     // Keep the server-issued local demo admin token ahead of any prior Supabase session.

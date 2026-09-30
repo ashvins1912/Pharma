@@ -4,6 +4,7 @@ import AdminFulfillmentKanban from './AdminFulfillmentKanban';
 import AdminInventoryTable from './AdminInventoryTable';
 import AdminRouteOptimizer from './AdminRouteOptimizer';
 import AdminBulkImportModal from './AdminBulkImportModal';
+import RiderFleetView from './riders/RiderFleetView';
 import { useApp } from '../../context/AppContext';
 
 export default function AdminDashboardView() {
@@ -177,6 +178,18 @@ export default function AdminDashboardView() {
         </button>
 
         <button
+          onClick={() => setAdminTab('riders')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+            adminTab === 'riders'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <span>🛵</span>
+          <span>Rider Fleet & Auto-Assignment</span>
+        </button>
+
+        <button
           onClick={() => setAdminTab('inventory')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
             adminTab === 'inventory'
@@ -239,6 +252,10 @@ export default function AdminDashboardView() {
             </p>
           )}
         </div>
+      )}
+
+      {adminTab === 'riders' && (
+        <RiderFleetView />
       )}
 
       {adminTab === 'inventory' && (

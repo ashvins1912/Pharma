@@ -5,6 +5,7 @@ import dataStore from '../dataStore.js';
 import { authenticateUser, isAdmin } from '../middleware/auth.js';
 import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
 import { getPrescription, removePrescription, savePrescription } from '../config/prescriptionStorage.js';
+import deliveryContainer from '../modules/delivery/container.js';
 
 const router = express.Router();
 const getErrorStatus = (error) => {
@@ -190,11 +191,25 @@ router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
             return res.status(400).json({ message: 'Confirm prescription verification before approving this order.' });
         }
 
-        const order = await dataStore.reviewOrder(
+        let order = await dataStore.reviewOrder(
             req.params.id,
             reviewDecision === 'Approved' ? 'approve' : 'reject',
             req.user.user_metadata?.name || req.user.email || 'Admin'
         );
+
+        // Feature 2: Trigger automated assignment engine when order status turns to "Approved"
+        if (reviewDecision === 'Approved') {
+            try {
+                deliveryContainer.refreshDataLayer();
+                const assignResult = await deliveryContainer.assignmentEngine.assignOrder(req.params.id);
+                if (assignResult.success && assignResult.order) {
+                    order = assignResult.order.toJSON ? assignResult.order.toJSON() : assignResult.order;
+                }
+            } catch (autoAssignErr) {
+                console.warn('[AutoAssign] Assignment engine notice during approval:', autoAssignErr.message);
+            }
+        }
+
         res.json({ message: `Order ${reviewDecision.toLowerCase()}.`, order });
     } catch (err) {
         console.error('Order review failed:', err);

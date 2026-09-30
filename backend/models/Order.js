@@ -29,6 +29,18 @@ const orderSchema = new mongoose.Schema({
         lat: Number,
         lng: Number
     },
+    location: {
+        type: {
+            type: String,
+            enum: ['Point'],
+            default: 'Point'
+        },
+        coordinates: {
+            type: [Number], // [lng, lat]
+            default: [77.5946, 12.9716]
+        }
+    },
+    expectedOutForDeliveryAt: { type: Date, default: null },
     outForDeliveryAt: { type: Date, default: null },
     deliveredAt: { type: Date, default: null },
     paymentMethod: { type: String, default: "Cash on Delivery (COD)" },
@@ -37,6 +49,18 @@ const orderSchema = new mongoose.Schema({
         enum: ['Pending_Review', 'Approved', 'Rejected', 'Processing Order', 'Ready to Dispatch', 'Dispatched', 'Delivered', 'Cancelled'],
         default: 'Pending_Review',
         index: true
+    },
+    assignmentType: {
+        type: String,
+        enum: ['Manual', 'Auto', 'Unassigned'],
+        default: 'Unassigned',
+        index: true
+    },
+    assignmentDetails: {
+        strategyUsed: { type: String, default: null },
+        note: { type: String, default: null },
+        assignedAt: { type: Date, default: null },
+        distanceInKm: { type: Number, default: null }
     },
     rider: {
         riderId: String,

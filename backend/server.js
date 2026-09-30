@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -8,6 +9,10 @@ import medicineRoutes from './routes/medicineRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
 import couponRoutes from './routes/couponRoutes.js';
 import whatsappRoutes from './routes/whatsappRoutes.js';
+import riderRoutes from './modules/delivery/routes/riderRoutes.js';
+import assignmentRoutes from './modules/delivery/routes/assignmentRoutes.js';
+import authRoutes from './routes/authRoutes.js';
+import { csrfProtection } from './security/sessionCookie.js';
 import dataStore from './dataStore.js';
 import { authenticateUser, isAdmin } from './middleware/auth.js';
 import {
@@ -21,15 +26,20 @@ import {
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+app.use(cookieParser());
+app.use(csrfProtection);
 
 connectDB()
     .then(connected => connected && dataStore.ensureCatalogSeeded())
     .catch(error => console.error('MongoDB catalog initialization failed:', error));
 
+app.use('/api/auth', authRoutes);
 app.use('/api/medicines', medicineRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/admin/whatsapp', whatsappRoutes);
+app.use('/api/admin/riders', riderRoutes);
+app.use('/api/admin/assignment', assignmentRoutes);
 
 app.post('/api/auth/demo-admin', async (req, res) => {
     if (!isDemoAdminEnabled()) {
@@ -152,8 +162,14 @@ app.post('/api/test/seed-medicines', authenticateUser, isAdmin, async (req, res)
     }
 });
 
-// Resilient Express error middleware
+// Resilient Express error middleware for API routes
 app.use((err, req, res, next) => {
+    if (!req.originalUrl?.startsWith('/api')) {
+        return next(err);
+    }
+    if (res.headersSent) {
+        return next(err);
+    }
     if (err.name === 'MongooseError' || err.name === 'MongoNetworkError' || (err.message && err.message.includes('buffering timed out'))) {
         console.warn('[AI Studio] Database offline — returning mock fallback response');
         if (req.method === 'GET') {

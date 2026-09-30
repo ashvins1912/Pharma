@@ -11,186 +11,171 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [passwordRecoveryRequired, setPasswordRecoveryRequired] = useState(false);
 
-  // Synchronize role and session state
-  const syncSession = (currSession) => {
+  // Zero-Cost TOTP Multi-Factor Authentication State
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaChallenge, setMfaChallenge] = useState(null); // { challengeToken, factorId, email }
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [aal, setAal] = useState('aal1'); // 'aal1' (Single Factor) | 'aal2' (MFA Verified)
+
+  // Synchronize user and role
+  const syncSession = (currSession, userData = null) => {
     setSession(currSession);
-    if (currSession?.user) {
-      setUser(currSession.user);
+    const resolvedUser = userData || currSession?.user;
+    if (resolvedUser) {
+      setUser(resolvedUser);
       const userRole =
-        currSession.user.app_metadata?.role ||
+        resolvedUser.app_metadata?.role ||
+        resolvedUser.role ||
         'customer';
       setRole(userRole === 'admin' ? 'admin' : 'customer');
-      if (currSession.access_token) {
-        localStorage.setItem('demo_auth_token', currSession.access_token);
-      }
     } else {
       setUser(null);
       setRole('customer');
-      localStorage.removeItem('demo_auth_token');
+      setMfaEnabled(false);
+      setAal('aal1');
     }
   };
 
+  // Check HttpOnly session on initial load and obtain CSRF token
   useEffect(() => {
-    // Check for saved demo session first
-    const savedDemo = localStorage.getItem('demo_session');
-    let restoreAdminSession = null;
-    if (savedDemo) {
+    let mounted = true;
+
+    async function initAuth() {
       try {
-        const parsed = JSON.parse(savedDemo);
-        if (import.meta.env.DEV && parsed?.access_token === 'demo-customer-token' && parsed?.user) {
-          syncSession({
-            ...parsed,
-            user: {
-              ...parsed.user,
-              app_metadata: { role: 'customer' },
-              role: 'customer'
-            }
-          });
-        } else if (import.meta.env.DEV && parsed?.user?.id === 'admin' && parsed?.access_token) {
-          localStorage.setItem('demo_auth_token', parsed.access_token);
-          restoreAdminSession = apiClient.get('/api/auth/session')
-            .then(({ data: verifiedUser }) => {
-              syncSession({ ...parsed, user: verifiedUser });
-            })
-            .catch(() => {
-              localStorage.removeItem('demo_session');
-              localStorage.removeItem('demo_auth_token');
-            });
-        } else {
-          localStorage.removeItem('demo_session');
+        // Initialize anti-CSRF token
+        await apiClient.get('/api/auth/csrf').catch(() => {});
+
+        // Check active session via HttpOnly cookie
+        const { data } = await apiClient.get('/api/auth/session');
+        if (mounted && data?.user) {
+          syncSession({ user: data.user }, data.user);
+          setMfaEnabled(Boolean(data.mfaEnabled));
+          setAal(data.aal || 'aal1');
         }
       } catch {
-        localStorage.removeItem('demo_session');
+        // Fallback to local demo session if available
+        const savedDemo = localStorage.getItem('demo_session');
+        if (savedDemo && mounted) {
+          try {
+            const parsed = JSON.parse(savedDemo);
+            if (parsed?.access_token === 'demo-customer-token') {
+              syncSession(parsed, parsed.user);
+            }
+          } catch {}
+        }
+      } finally {
+        if (mounted) setLoading(false);
       }
     }
 
-    if (!isSupabaseConfigured) {
-      Promise.resolve(restoreAdminSession).finally(() => setLoading(false));
-      return undefined;
-    }
+    initAuth();
 
-    // Initialize Supabase session
-    try {
-      supabase.auth.getSession().then(({ data: { session: supaSession } }) => {
-        if (supaSession) {
-          syncSession(supaSession);
-        }
-      }).catch(() => {}).finally(() => setLoading(false));
-
+    // Supabase Auth listener if configured
+    if (isSupabaseConfigured) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, supaSession) => {
         if (event === 'PASSWORD_RECOVERY') {
           setPasswordRecoveryRequired(true);
         }
-        if (supaSession) {
-          localStorage.removeItem('demo_session');
+        if (supaSession && mounted) {
           syncSession(supaSession);
-        } else if (!localStorage.getItem('demo_session')) {
-          syncSession(null);
         }
       });
-
-      return () => subscription?.unsubscribe();
-    } catch {
-      setLoading(false);
+      return () => {
+        mounted = false;
+        subscription?.unsubscribe();
+      };
     }
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const loginWithGoogle = async () => {
-    if (!isSupabaseConfigured) {
-      throw new Error('Google sign-in is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then enable Google in your Supabase Auth providers.');
+  /**
+   * Step 1: Login with Email & Password
+   * Detects if Zero-Cost TOTP MFA is enrolled.
+   */
+  const loginWithEmail = async (email, password) => {
+    const res = await apiClient.post('/api/auth/login', { email, password });
+    const data = res.data;
+
+    if (data.mfaRequired) {
+      setMfaRequired(true);
+      setMfaChallenge({
+        challengeToken: data.challengeToken,
+        factorId: data.factorId,
+        email: data.email
+      });
+      return { mfaRequired: true, email: data.email };
     }
 
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin
-        }
-      });
-      if (error) throw error;
-    } catch (err) {
-      console.warn("Supabase Google OAuth fallback:", err.message);
-      throw err;
-    }
+    syncSession({ user: data.user }, data.user);
+    setAal(data.aal || 'aal1');
+    setMfaRequired(false);
+    setMfaChallenge(null);
+    return { success: true, user: data.user };
   };
 
-  const loginWithEmail = async (email, password) => {
-    const demoAdminEnabled = import.meta.env.DEV && import.meta.env.VITE_DEMO_ADMIN_ENABLED === 'true';
-    const demoAdminEmail = (import.meta.env.VITE_DEMO_ADMIN_EMAIL || 'amdin@ashvinpharmcy.com').toLowerCase();
-    if (demoAdminEnabled && email.trim().toLowerCase() === demoAdminEmail) {
-      const { data } = await apiClient.post('/api/auth/demo-admin', { email, password });
-      if (isSupabaseConfigured) {
-        const { error: signOutError } = await supabase.auth.signOut();
-        if (signOutError) throw signOutError;
-      }
-      const demoSession = { ...data, user: data.user };
-      localStorage.setItem('demo_session', JSON.stringify(demoSession));
-      syncSession(demoSession);
-      return { session: demoSession, user: data.user };
+  /**
+   * Step 2: Verify 6-digit TOTP code
+   * Completes authentication and upgrades session to AAL2
+   */
+  const verifyTotp = async (code) => {
+    if (!mfaChallenge?.challengeToken) {
+      throw new Error('MFA challenge session expired. Please sign in again.');
     }
 
-    if (!isSupabaseConfigured) {
-      throw new Error('Email sign-in is unavailable until Supabase is configured. Use demo access to try the store.');
-    }
+    const { data } = await apiClient.post('/api/auth/mfa/verify', {
+      code,
+      challengeToken: mfaChallenge.challengeToken
+    });
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      if (error.code === 'email_not_confirmed' || error.message.toLowerCase().includes('email not confirmed')) {
-        throw new Error('Please verify your email using the confirmation link we sent before signing in.');
-      }
-      if (error.code === 'invalid_credentials' || error.message.toLowerCase().includes('invalid login credentials')) {
-        throw new Error('Invalid email or password. Please check your credentials and try again.');
-      }
-      throw error;
-    }
-    if (!data.session || !data.user?.email_confirmed_at) {
-      await supabase.auth.signOut();
-      throw new Error('Please verify your email using the confirmation link we sent before signing in.');
-    }
-    syncSession(data.session);
+    syncSession({ user: data.user }, data.user);
+    setAal('aal2');
+    setMfaEnabled(true);
+    setMfaRequired(false);
+    setMfaChallenge(null);
+    return data;
+  };
+
+  const cancelMfa = () => {
+    setMfaRequired(false);
+    setMfaChallenge(null);
+  };
+
+  /**
+   * MFA Enrollment Methods
+   */
+  const enrollMfa = async () => {
+    const { data } = await apiClient.post('/api/auth/mfa/enroll');
+    return data;
+  };
+
+  const confirmMfaEnroll = async (code) => {
+    const { data } = await apiClient.post('/api/auth/mfa/confirm-enroll', { code });
+    setMfaEnabled(true);
+    setAal('aal2');
+    return data;
+  };
+
+  const disableMfa = async () => {
+    const { data } = await apiClient.post('/api/auth/mfa/mfa-disable');
+    setMfaEnabled(false);
+    setAal('aal1');
     return data;
   };
 
   const signUpWithEmail = async (email, password, name = '', mobile = '') => {
-    if (!isSupabaseConfigured) {
-      throw new Error('Account creation is unavailable until Supabase is configured. Use demo access to try the store.');
-    }
-
-    const { data, error } = await supabase.auth.signUp({
+    const { data } = await apiClient.post('/api/auth/signup', {
       email,
       password,
-      options: {
-        data: { name, mobile, role: 'customer' }
-      }
+      name,
+      mobile
     });
-    if (error) throw error;
-    if (data.user && data.user.identities?.length === 0) {
-      throw new Error('An account with this email already exists. Try signing in or resetting your password.');
-    }
-    if (data.session && !data.user?.email_confirmed_at) {
-      await supabase.auth.signOut();
-      throw new Error('Email verification is not enabled for this project. Enable Confirm email in Supabase before creating accounts.');
-    }
-    if (data.session) {
-      syncSession(data.session);
+    if (data.user) {
+      syncSession({ user: data.user }, data.user);
     }
     return data;
-  };
-
-  const sendPasswordResetEmail = async (email) => {
-    if (!isSupabaseConfigured) {
-      throw new Error('Password reset is unavailable until Supabase is configured.');
-    }
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin
-    });
-    if (error) throw error;
-  };
-
-  const updatePassword = async (password) => {
-    const { error } = await supabase.auth.updateUser({ password });
-    if (error) throw error;
-    setPasswordRecoveryRequired(false);
   };
 
   const loginDemoCustomer = (email = 'customer@ashvinpharma.com', name = 'Ashvin Singh') => {
@@ -208,31 +193,48 @@ export function AuthProvider({ children }) {
       }
     };
     localStorage.setItem('demo_session', JSON.stringify(demo));
-    syncSession(demo);
+    syncSession(demo, demo.user);
+    setMfaRequired(false);
   };
 
   const loginDemoAdmin = async () => {
-    if (!import.meta.env.DEV || import.meta.env.VITE_INSTANT_DEMO_ACCESS_ENABLED !== 'true') {
-      throw new Error('Instant demo admin access is disabled.');
-    }
     const { data } = await apiClient.post('/api/auth/demo-admin/instant');
-    if (isSupabaseConfigured) {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-    }
     const demoSession = { ...data, user: data.user };
     localStorage.setItem('demo_session', JSON.stringify(demoSession));
-    syncSession(demoSession);
+    syncSession(demoSession, data.user);
+    setMfaRequired(false);
     return data.user;
   };
 
   const logout = async () => {
     try {
-      await supabase.auth.signOut();
+      await apiClient.post('/api/auth/logout');
+      if (isSupabaseConfigured) {
+        await supabase.auth.signOut().catch(() => {});
+      }
     } catch {}
     localStorage.removeItem('demo_session');
     localStorage.removeItem('demo_auth_token');
     syncSession(null);
+  };
+
+  const sendPasswordResetEmail = async (email) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Password reset is unavailable until Supabase is configured.');
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin
+    });
+    if (error) throw error;
+  };
+
+  const updatePassword = async (password) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Password reset is unavailable until Supabase is configured.');
+    }
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+    setPasswordRecoveryRequired(false);
   };
 
   return (
@@ -243,9 +245,17 @@ export function AuthProvider({ children }) {
         role,
         isAdmin: role === 'admin',
         loading,
+        mfaRequired,
+        mfaChallenge,
+        mfaEnabled,
+        aal,
         passwordRecoveryRequired,
-        loginWithGoogle,
         loginWithEmail,
+        verifyTotp,
+        cancelMfa,
+        enrollMfa,
+        confirmMfaEnroll,
+        disableMfa,
         signUpWithEmail,
         sendPasswordResetEmail,
         updatePassword,
