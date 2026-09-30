@@ -465,6 +465,87 @@ function formatMedicine(med) {
     return obj;
 }
 
+const getOrderInventoryItems = (order) => {
+    if (order.medicineItems?.length) return order.medicineItems;
+    return (order.items || []).map(item => ({
+        medicineId: item.medicineId || item.productId || item._id,
+        quantity: item.quantity
+    }));
+};
+
+const orderInventoryWasDeducted = (order) => Boolean(
+    order.inventoryDeductedAt
+    || order.statusHistory?.some(entry =>
+        entry.newStatus === 'Dispatched'
+        && entry.notes?.includes('Reserved stock deducted from inventory on dispatch.')
+    )
+);
+
+const deductMongoOrderInventory = async (order, session) => {
+    if (orderInventoryWasDeducted(order)) return;
+    const items = getOrderInventoryItems(order);
+    if (!items.length) throw inventoryError('Order has no inventory records to deduct.', 409);
+    for (const item of items) {
+        const medicineId = item.medicineId;
+        const quantity = Number(item.quantity);
+        if (!mongoose.isValidObjectId(medicineId) || !Number.isInteger(quantity) || quantity < 1) {
+            throw inventoryError('Could not safely deduct stock for this order.', 409);
+        }
+        const result = await Medicine.collection.updateOne({
+            _id: new mongoose.Types.ObjectId(medicineId),
+            $expr: {
+                $and: [
+                    { $gte: [{ $ifNull: ['$reservedQuantity', 0] }, quantity] },
+                    { $gte: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity] }
+                ]
+            }
+        }, [{
+            $set: {
+                stockQuantity: {
+                    $subtract: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
+                },
+                stock: {
+                    $subtract: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
+                },
+                quantity: {
+                    $subtract: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
+                },
+                reservedQuantity: {
+                    $subtract: [{ $ifNull: ['$reservedQuantity', 0] }, quantity]
+                }
+            }
+        }], { session });
+        if (result.modifiedCount !== 1) {
+            throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
+        }
+    }
+    order.inventoryDeductedAt = new Date();
+};
+
+const deductInMemoryOrderInventory = (order) => {
+    if (orderInventoryWasDeducted(order)) return;
+    const items = getOrderInventoryItems(order);
+    if (!items.length) throw inventoryError('Order has no inventory records to deduct.', 409);
+    const medicineItems = items.map(item => {
+        const medicineId = item.medicineId;
+        const quantity = Number(item.quantity);
+        const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(medicineId));
+        if (!medicine || !Number.isInteger(quantity) || quantity < 1
+            || getReservedStock(medicine) < quantity || getPhysicalStock(medicine) < quantity) {
+            throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
+        }
+        return { medicine, quantity };
+    });
+    for (const { medicine, quantity } of medicineItems) {
+        const remainingStock = getPhysicalStock(medicine) - quantity;
+        medicine.stockQuantity = remainingStock;
+        medicine.stock = remainingStock;
+        medicine.quantity = remainingStock;
+        medicine.reservedQuantity = getReservedStock(medicine) - quantity;
+    }
+    order.inventoryDeductedAt = new Date();
+};
+
 export const dataStore = {
     // Audit Logging
     logAudit(actorId, action, resourceType, resourceId, details = {}) {
@@ -485,8 +566,37 @@ export const dataStore = {
         return inMemoryAuditLogs.slice(0, 50);
     },
 
-    getInventoryAudits() {
-        return inMemoryInventoryAudits.slice(0, 50);
+    async getInventoryAudits() {
+        const deliveredOrders = getIsConnected()
+            ? await Order.find({ orderStatus: 'Delivered' })
+                .select('_id deliveredAt createdAt customerName statusHistory medicineItems items')
+                .sort({ deliveredAt: -1, createdAt: -1 })
+                .limit(50)
+                .lean()
+            : inMemoryOrders.filter(order => order.orderStatus === 'Delivered')
+                .sort((a, b) => new Date(b.deliveredAt || b.createdAt) - new Date(a.deliveredAt || a.createdAt))
+                .slice(0, 50);
+        const deliveryAudits = deliveredOrders.flatMap(order => {
+            const actor = order.statusHistory?.findLast?.(entry => entry.newStatus === 'Delivered')?.changedBy
+                || 'Delivery';
+            return getOrderInventoryItems(order).map(item => ({
+                eventType: 'DELIVERY',
+                importId: `ORDER-${String(order._id).slice(-8).toUpperCase()}`,
+                orderId: String(order._id),
+                timestamp: order.deliveredAt || order.createdAt,
+                sku: item.sku || item.code || '—',
+                name: item.name || item.productName || 'Medicine',
+                quantity: Number(item.quantity) || 0,
+                previousStock: null,
+                newStock: null,
+                previousPrice: Number(item.price ?? item.unitPrice) || 0,
+                newPrice: Number(item.price ?? item.unitPrice) || 0,
+                adminId: actor
+            }));
+        });
+        return [...inMemoryInventoryAudits, ...deliveryAudits]
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+            .slice(0, 50);
     },
 
     // Medicines: Supports server-side pagination & "out-of-stock only on search" logic
@@ -1438,57 +1548,7 @@ export const dataStore = {
                         throw inventoryError(`Only Approved orders can be dispatched. Current status: ${order.orderStatus}`, 409);
                     }
 
-                    for (const item of order.medicineItems) {
-                        const quantity = Number(item.quantity);
-                        const filter = {
-                            _id: item.medicineId,
-                            $expr: {
-                                $and: [
-                                    {
-                                        $gte: [
-                                            { $ifNull: ['$reservedQuantity', 0] },
-                                            quantity
-                                        ]
-                                    },
-                                    {
-                                        $gte: [
-                                            { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
-                                            quantity
-                                        ]
-                                    }
-                                ]
-                            }
-                        };
-                        const update = [{
-                            $set: {
-                                stockQuantity: {
-                                    $subtract: [
-                                        { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
-                                        quantity
-                                    ]
-                                },
-                                stock: {
-                                    $subtract: [
-                                        { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
-                                        quantity
-                                    ]
-                                },
-                                quantity: {
-                                    $subtract: [
-                                        { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
-                                        quantity
-                                    ]
-                                },
-                                reservedQuantity: {
-                                    $subtract: [{ $ifNull: ['$reservedQuantity', 0] }, quantity]
-                                }
-                            }
-                        }];
-                        const result = await Medicine.collection.updateOne(filter, update, { session });
-                        if (result.modifiedCount !== 1) {
-                            throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
-                        }
-                    }
+                    await deductMongoOrderInventory(order, session);
 
                     const transitionAt = new Date();
                     if (riderInfo) {
@@ -1523,21 +1583,7 @@ export const dataStore = {
         if (order.orderStatus !== 'Approved') {
             throw inventoryError(`Only Approved orders can be dispatched. Current status: ${order.orderStatus}`, 409);
         }
-        const items = order.medicineItems || [];
-        for (const item of items) {
-            const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
-            if (!medicine || getReservedStock(medicine) < item.quantity || getPhysicalStock(medicine) < item.quantity) {
-                throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
-            }
-        }
-        for (const item of items) {
-            const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
-            const remainingStock = getPhysicalStock(medicine) - item.quantity;
-            medicine.stockQuantity = remainingStock;
-            medicine.stock = remainingStock;
-            medicine.quantity = remainingStock;
-            medicine.reservedQuantity = getReservedStock(medicine) - item.quantity;
-        }
+        deductInMemoryOrderInventory(order);
         const transitionAt = new Date();
         if (riderInfo) {
             order.rider = {
@@ -1584,6 +1630,12 @@ export const dataStore = {
         };
         const completeOrder = async (order, session = null) => {
             if (order.orderStatus === 'Delivered' && newStatus === 'Delivered') {
+                if (!orderInventoryWasDeducted(order)) {
+                    if (session) await deductMongoOrderInventory(order, session);
+                    else deductInMemoryOrderInventory(order);
+                    if (session) await order.save({ session });
+                    else if (order.save) await order.save();
+                }
                 return {
                     order: order.toObject ? order.toObject({ virtuals: true }) : { ...order },
                     deliveryRewards: null,
@@ -1601,6 +1653,14 @@ export const dataStore = {
 
             const transitionAt = new Date();
             const previousStatus = order.orderStatus;
+            if (newStatus === 'Dispatched') {
+                if (session) await deductMongoOrderInventory(order, session);
+                else deductInMemoryOrderInventory(order);
+            }
+            if (newStatus === 'Delivered' && !orderInventoryWasDeducted(order)) {
+                if (session) await deductMongoOrderInventory(order, session);
+                else deductInMemoryOrderInventory(order);
+            }
             order.orderStatus = newStatus;
 
             if (riderInfo) {
@@ -1665,7 +1725,9 @@ export const dataStore = {
                 newStatus,
                 changedBy: actor,
                 timestamp: transitionAt,
-                notes: riderInfo ? `Rider assigned: ${riderInfo.riderName} (${riderInfo.riderMobile})` : ''
+                notes: newStatus === 'Dispatched'
+                    ? 'Reserved stock deducted from inventory on dispatch.'
+                    : riderInfo ? `Rider assigned: ${riderInfo.riderName} (${riderInfo.riderMobile})` : ''
             });
             if (session) await order.save({ session });
             else if (order.save) await order.save();

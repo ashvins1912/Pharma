@@ -325,7 +325,9 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
         const { latitude, longitude } = position.coords;
         setCoords({ lat: latitude, lng: longitude });
         setPinConfirmed(false);
-        setGpsStatus(`GPS found (${latitude.toFixed(4)}, ${longitude.toFixed(4)}). Tap the map or drag the marker to confirm your delivery pin.`);
+        setGpsStatus(googleMapsApiKey
+          ? `GPS found (${latitude.toFixed(4)}, ${longitude.toFixed(4)}). Tap the map or drag the marker to confirm your delivery pin.`
+          : `GPS found (${latitude.toFixed(4)}, ${longitude.toFixed(4)}). Confirm this location pin below.`);
         setLocating(false);
         addToast('Location pinned from device GPS!', 'success');
       },
@@ -534,11 +536,13 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
                 {gpsStatus}
               </p>
             )}
-            <div
-              ref={mapContainerRef}
-              aria-label="Select delivery location on map"
-              className="h-52 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
-            />
+            {googleMapsApiKey && (
+              <div
+                ref={mapContainerRef}
+                aria-label="Select delivery location on map"
+                className="h-52 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
+              />
+            )}
             {!pinConfirmed && coords && (
               <button
                 type="button"
@@ -548,13 +552,8 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
                 }}
                 className="w-full rounded-xl border border-blue-200 bg-blue-50 py-2 text-xs font-bold text-blue-700"
               >
-                Use the displayed pin
+                {googleMapsApiKey ? 'Use the displayed pin' : 'Use this location pin'}
               </button>
-            )}
-            {!googleMapsApiKey && (
-              <p role="alert" className="text-[11px] text-rose-700">
-                Map pin selection is unavailable until a Google Maps browser API key is configured.
-              </p>
             )}
           </div>
 

@@ -169,8 +169,9 @@ router.get('/alerts', authenticateUser, isAdmin, async (req, res) => {
 // Inventory merge audits
 router.get('/audits', authenticateUser, isAdmin, async (req, res) => {
     try {
-        res.json(dataStore.getInventoryAudits());
+        res.json(await dataStore.getInventoryAudits());
     } catch (err) {
+        console.error('Inventory audit list failed:', err);
         res.status(500).json({ message: "Failed to fetch audit logs" });
     }
 });

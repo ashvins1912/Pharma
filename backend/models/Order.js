@@ -72,6 +72,7 @@ const orderSchema = new mongoose.Schema({
     expectedOutForDeliveryAt: { type: Date, default: null },
     outForDeliveryAt: { type: Date, default: null },
     deliveredAt: { type: Date, default: null },
+    inventoryDeductedAt: { type: Date, default: null },
     deliveryMinutes: { type: Number, default: null },
     systemRating: { type: Number, min: 1, max: 5, default: null },
     postTime: { type: Number, default: 0 },
