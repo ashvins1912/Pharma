@@ -5,18 +5,21 @@ Pharma online store
 
 The `render.yaml` blueprint builds the Vite frontend before starting the Express
 server and sets `NODE_ENV=production`. The server listens on Render's assigned
-`PORT` (or port 3000 when running locally).
+`PORT` (or port 5000 by default).
 
 If deploying an existing Render service without using the blueprint, set its
 Root Directory to the repository root, Build Command to
 `npm install && npm run build`, and Start Command to `npm start`. The `npm start` lifecycle also builds
 the frontend before launching the server, so the `dist` directory exists.
 
-To persist data between deployments, configure `MONGO_URI` with a reachable
-MongoDB connection string. For MongoDB Atlas, allow the Render service's
-outbound IP addresses in the Atlas network access list. Without a reachable
-MongoDB database, the app logs a warning and uses in-memory data, which is not
-persistent.
+The server validates its required environment variables before starting.
+Configure `MONGO_URI` with a reachable MongoDB connection string,
+`SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` in the Render service's
+Environment settings. The blueprint declares these as `sync: false`, so Render
+prompts for them when creating a new service; existing services must add them
+manually. A local `.env` file is not deployed to Render. For MongoDB Atlas,
+allow the Render service's outbound IP addresses in the Atlas network access
+list. The server exits at startup if a required variable is missing or invalid.
 
 ## Google sign-in
 
