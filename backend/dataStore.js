@@ -6,6 +6,68 @@ import Order from './models/Order.js';
 import Coupon from './models/Coupon.js';
 import UserProfile from './models/UserProfile.js';
 import UserAddress from './models/UserAddress.js';
+import CustomerPointsLedger from './models/CustomerPointsLedger.js';
+import ProfitMarginRewardEngine from './strategies/ProfitMarginRewardEngine.js';
+import DefaultProfitRewardStrategy from './strategies/ProfitRewardStrategy.js';
+import FixedDeliveryRewardStrategy from './strategies/DeliveryRewardStrategy.js';
+
+const profitMarginRewardEngine = new ProfitMarginRewardEngine({
+    strategy: new DefaultProfitRewardStrategy()
+});
+const deliveryRewardStrategy = new FixedDeliveryRewardStrategy();
+
+const awardPointsOnce = async ({ customerId, accountType, points, order, description }) => {
+    if (!getIsConnected() || !customerId || !Number.isSafeInteger(points) || points <= 0) return false;
+    const orderId = order._id;
+    const entryType = 'EARNED';
+    const filter = {
+        customerId,
+        accountType,
+        pointsHistory: { $not: { $elemMatch: { orderId, type: entryType } } }
+    };
+    try {
+        const updated = await CustomerPointsLedger.findOneAndUpdate(filter, {
+            $inc: { availablePointsBalance: points },
+            $push: {
+                pointsHistory: { type: entryType, points, orderId, description }
+            }
+        }, {
+            upsert: true,
+            new: true,
+            runValidators: true,
+            setDefaultsOnInsert: true
+        });
+        return Boolean(updated);
+    } catch (error) {
+        if (error.code !== 11000) throw error;
+        const ledger = await CustomerPointsLedger.findOne({ customerId, accountType }).lean().exec();
+        if (ledger?.pointsHistory?.some(entry =>
+            String(entry.orderId) === String(orderId) && entry.type === entryType
+        )) return false;
+        throw error;
+    }
+};
+
+const awardDeliveredOrderPoints = async order => {
+    const customerPoints = Number(order.rewardPointsEarned || 0);
+    const customerCredited = await awardPointsOnce({
+        customerId: order.customerId || order.userId,
+        accountType: 'CUSTOMER',
+        points: customerPoints,
+        order,
+        description: 'Points earned for a completed medicine order.'
+    });
+    const riderId = order.rider?.riderId;
+    const riderPoints = deliveryRewardStrategy.getPointsForCompletedDelivery(order);
+    const riderCredited = await awardPointsOnce({
+        customerId: riderId,
+        accountType: 'DELIVERY_PERSON',
+        points: riderPoints,
+        order,
+        description: 'Points earned for a completed delivery.'
+    });
+    return { customerCredited, riderCredited, riderPoints };
+};
 
 // Generator to eagerly load 1,000+ realistic pharmaceutical items at startup
 function generateEager1000Catalog() {
@@ -567,10 +629,22 @@ export const dataStore = {
             if (!name) continue;
 
             const category = (row.Category || row.category || 'General Medicine').toString().trim();
+            const subCategory = (row['Sub-category'] || row.SubCategory || row.subCategory || 'Unclassified').toString().trim();
             const description = (row.Description || row.description || '').toString().trim();
             const brand = (row.Brand || row.brand || row.Manufacturer || 'Generic').toString().trim();
             const manufacturer = (row.Manufacturer || row.manufacturer || brand).toString().trim();
             const price = Number(row.Price || row.price) || 50;
+            const rawBaseCostPrice = row['Base Cost Price'] ?? row.baseCostPrice;
+            const baseCostPrice = rawBaseCostPrice === undefined || rawBaseCostPrice === ''
+                ? price
+                : Number(rawBaseCostPrice);
+            if (!Number.isFinite(baseCostPrice) || baseCostPrice < 0) {
+                throw inventoryError(`Invalid base cost price for ${name}.`);
+            }
+            const requestedMarginTier = String(row['Margin Tier'] || row.marginTier || 'LOW').trim().toUpperCase();
+            if (!['LOW', 'MID', 'HIGH'].includes(requestedMarginTier)) {
+                throw inventoryError(`Invalid margin tier for ${name}.`);
+            }
             const stock = Number(row.Stock || row.stock || row.Quantity || row.quantity) || 10;
             const batchNumber = (row['Batch Number'] || row.batchNumber || 'BATCH-NEW').toString().trim();
             const requiresPrescription = String(row['Requires Prescription'] || row.requiresPrescription || '').toLowerCase() === 'true';
@@ -614,9 +688,12 @@ export const dataStore = {
                 prev.quantity = prev.stock;
                 prev.stockQuantity = prev.stock;
                 prev.price = price;
+                prev.baseCostPrice = baseCostPrice;
+                prev.marginTier = requestedMarginTier;
                 prev.expiryDate = expiryDate;
                 prev.batchNumber = batchNumber;
                 prev.category = category;
+                prev.subCategory = subCategory;
                 prev.description = description || prev.description;
                 if (imageUrl) prev.imageUrl = imageUrl;
 
@@ -630,9 +707,12 @@ export const dataStore = {
                     name,
                     brand,
                     category,
+                    subCategory,
                     description,
                     composition: "Active Formulation",
                     price,
+                    baseCostPrice,
+                    marginTier: requestedMarginTier,
                     quantity: stock,
                     stock,
                     stockQuantity: stock,
@@ -679,9 +759,12 @@ export const dataStore = {
                                 $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, stock]
                             },
                             price,
+                            baseCostPrice,
+                            marginTier: requestedMarginTier,
                             expiryDate,
                             batchNumber,
                             category,
+                            subCategory,
                             description: description || existingMedicine.description,
                             imageUrl,
                             isPrescriptionRequired: requiresPrescription,
@@ -695,9 +778,12 @@ export const dataStore = {
                         name,
                         brand,
                         category,
+                        subCategory,
                         description,
                         composition: 'Active Formulation',
                         price,
+                        baseCostPrice,
+                        marginTier: requestedMarginTier,
                         stockQuantity: stock,
                         reservedQuantity: 0,
                         stock,
@@ -737,6 +823,13 @@ export const dataStore = {
         const requestedItems = orderData.medicineItems || orderData.items || [];
         if (!Array.isArray(requestedItems) || requestedItems.length === 0) {
             throw inventoryError('Add at least one medicine to the order.');
+        }
+        const requestedPoints = Number(orderData.pointsToRedeem || 0);
+        if (!Number.isSafeInteger(requestedPoints) || requestedPoints < 0) {
+            throw inventoryError('Points to redeem must be a non-negative whole number.');
+        }
+        if (requestedPoints > 0 && !getIsConnected()) {
+            throw inventoryError('Points redemption is temporarily unavailable.', 503);
         }
 
         const quantities = new Map();
@@ -811,6 +904,11 @@ export const dataStore = {
                             medicineId: medicine._id,
                             quantity,
                             price,
+                            baseCostPrice: Number(medicine.baseCostPrice ?? price),
+                            discountPercentage: Number(medicine.discountPercentage || 0),
+                            marginTier: ['LOW', 'MID', 'HIGH'].includes(medicine.marginTier)
+                                ? medicine.marginTier
+                                : 'LOW',
                             name: medicine.name,
                             sku: medicine.sku || medicine.code || ''
                         });
@@ -820,6 +918,11 @@ export const dataStore = {
                             name: medicine.name,
                             sku: medicine.sku || medicine.code || '',
                             price,
+                            baseCostPrice: Number(medicine.baseCostPrice ?? price),
+                            discountPercentage: Number(medicine.discountPercentage || 0),
+                            marginTier: ['LOW', 'MID', 'HIGH'].includes(medicine.marginTier)
+                                ? medicine.marginTier
+                                : 'LOW',
                             quantity,
                             stock: Math.max(0, getPhysicalStock(medicine) - getReservedStock(medicine) - quantity)
                         });
@@ -830,9 +933,64 @@ export const dataStore = {
                         : { valid: true, discountPercentage: 0 };
                     if (!coupon.valid) throw inventoryError(coupon.message || 'Coupon is invalid.');
                     const discountApplied = Math.round(totalAmount * (coupon.discountPercentage || 0)) / 100;
-                    const finalTotal = Math.max(0, Math.round((totalAmount - discountApplied) * 10) / 10);
+                    const couponRate = Number(coupon.discountPercentage || 0) / 100;
+                    const rewardItems = medicineItems.map(item => ({
+                        currentPrice: item.price * (1 - couponRate),
+                        baseCostPrice: item.baseCostPrice,
+                        marginTier: item.marginTier,
+                        quantity: item.quantity,
+                        isDiscounted: couponRate > 0 || Number(item.discountPercentage || 0) > 0
+                    }));
+                    const earnedPoints = profitMarginRewardEngine.calculateEarnedPoints(rewardItems);
+                    const orderId = new mongoose.Types.ObjectId();
+                    let allowedPoints = 0;
+                    let pointsDiscount = 0;
+                    let redemptionWarning = null;
+                    if (requestedPoints > 0) {
+                        const ledger = await CustomerPointsLedger.findOne({
+                            customerId: orderData.userId,
+                            accountType: 'CUSTOMER'
+                        }).session(session);
+                        const availablePoints = ledger?.availablePointsBalance || 0;
+                        const redemption = profitMarginRewardEngine.validateRedemptionEligibility(
+                            rewardItems,
+                            requestedPoints,
+                            availablePoints
+                        );
+                        if (redemption.eligible) {
+                            allowedPoints = redemption.allowedPoints;
+                            pointsDiscount = redemption.allowedDiscountAmount;
+                            redemptionWarning = redemption.reason;
+                            if (allowedPoints > 0) {
+                                const updatedLedger = await CustomerPointsLedger.findOneAndUpdate({
+                                    _id: ledger._id,
+                                    availablePointsBalance: { $gte: allowedPoints }
+                                }, {
+                                    $inc: { availablePointsBalance: -allowedPoints },
+                                    $push: {
+                                        pointsHistory: {
+                                            type: 'REDEEMED',
+                                            points: allowedPoints,
+                                            orderId,
+                                            description: 'Points redeemed at checkout.'
+                                        }
+                                    }
+                                }, { new: true, session, runValidators: true });
+                                if (!updatedLedger) {
+                                    throw inventoryError('Points balance changed during checkout. Please retry.', 409);
+                                }
+                            }
+                        } else {
+                            redemptionWarning = redemption.reason;
+                        }
+                    }
+                    const finalTotal = Math.max(
+                        0,
+                        Math.round((totalAmount - discountApplied - pointsDiscount) * 10) / 10
+                    );
 
                     const [order] = await Order.create([{
+                        _id: orderId,
                         userId: orderData.userId,
                         customerId: orderData.userId,
                         customerName: orderData.customerName,
@@ -844,6 +1002,17 @@ export const dataStore = {
                         couponCode: orderData.couponCode || null,
                         subtotal: totalAmount,
                         discountApplied,
+                        pointsRedeemed: allowedPoints,
+                        rewardPointsEarned: earnedPoints.pointsToAssign,
+                        pointsDiscountApplied: pointsDiscount,
+                        rewardMetrics: {
+                            totalRevenue: earnedPoints.totalRevenue,
+                            totalCostPrice: earnedPoints.totalCostPrice,
+                            netProfit: earnedPoints.netProfit - pointsDiscount,
+                            netMarginPercentage: earnedPoints.totalRevenue > 0
+                                ? ((earnedPoints.netProfit - pointsDiscount) / earnedPoints.totalRevenue) * 100
+                                : 0
+                        },
                         totalAmount: finalTotal,
                         finalTotal,
                         deliveryAddress: orderData.deliveryAddress,
@@ -854,6 +1023,7 @@ export const dataStore = {
                         statusHistory: [statusEntry]
                     }], { session });
                     createdOrder = order.toObject({ virtuals: true });
+                    createdOrder.rewardNotice = redemptionWarning;
                 });
             } finally {
                 await session.endSession();
@@ -1553,6 +1723,13 @@ export const dataStore = {
             order = await Order.findById(orderId);
         }
         if (!order) throw new Error("Order not found");
+        if (newStatus === 'Delivered' && order.orderStatus === 'Delivered') {
+            const rewards = await awardDeliveredOrderPoints(order);
+            return {
+                ...(order.toObject ? order.toObject({ virtuals: true }) : order),
+                deliveryRewards: rewards
+            };
+        }
 
         const validTransitions = {
             'Processing Order': ['Ready to Dispatch', 'Cancelled'],
@@ -1597,22 +1774,34 @@ export const dataStore = {
             notes: riderInfo ? `Rider assigned: ${riderInfo.riderName} (${riderInfo.riderMobile})` : ''
         });
         if (order.save) await order.save();
+        const deliveryRewards = newStatus === 'Delivered'
+            ? await awardDeliveredOrderPoints(order)
+            : null;
 
         this.logAudit(actor, 'ORDER_STATUS_CHANGED', 'ORDER', orderId, {
             previousStatus: prevStatus,
             newStatus,
             rider: order.rider
         });
-        return order;
+        return {
+            ...(order.toObject ? order.toObject({ virtuals: true }) : order),
+            ...(deliveryRewards ? { deliveryRewards } : {})
+        };
     },
 
     async createMedicine(medicineData) {
         const stockQuantity = Number(medicineData.stockQuantity ?? medicineData.quantity ?? medicineData.stock ?? 0);
+        const baseCostPrice = Number(medicineData.baseCostPrice ?? medicineData.price);
+        const discountPercentage = Number(medicineData.discountPercentage ?? 0);
+        const marginTier = medicineData.marginTier || 'LOW';
         if (!medicineData.name?.trim() || !medicineData.brand?.trim()
             || !Number.isFinite(Number(medicineData.price)) || Number(medicineData.price) < 0
+            || !Number.isFinite(baseCostPrice) || baseCostPrice < 0
+            || !Number.isFinite(discountPercentage) || discountPercentage < 0 || discountPercentage > 100
+            || !['LOW', 'MID', 'HIGH'].includes(marginTier)
             || !Number.isFinite(stockQuantity) || !Number.isInteger(stockQuantity) || stockQuantity < 0
             || !medicineData.expiryDate || Number.isNaN(new Date(medicineData.expiryDate).getTime())) {
-            throw inventoryError('Name, brand, non-negative price and stock, and a valid expiry date are required.');
+            throw inventoryError('Name, brand, valid price/cost/discount, stock, margin tier, and expiry date are required.');
         }
         const normalizedSku = String(medicineData.sku || medicineData.code || '').trim().toUpperCase();
         const values = {
@@ -1623,7 +1812,12 @@ export const dataStore = {
             description: medicineData.description || '',
             composition: medicineData.composition || '',
             category: medicineData.category || 'General Medicine',
+            subCategory: medicineData.subCategory || 'Unclassified',
             price: Number(medicineData.price),
+            baseCostPrice,
+            basePrice: medicineData.basePrice === undefined ? undefined : Number(medicineData.basePrice),
+            discountPercentage,
+            marginTier,
             stockQuantity,
             stock: stockQuantity,
             quantity: stockQuantity,
@@ -1654,8 +1848,9 @@ export const dataStore = {
 
     async updateMedicine(medicineId, updates) {
         const allowedFields = [
-            'name', 'brand', 'sku', 'code', 'description', 'composition', 'category',
-            'price', 'expiryDate', 'isPrescriptionRequired', 'requiresPrescription',
+            'name', 'brand', 'sku', 'code', 'description', 'composition', 'category', 'subCategory',
+            'price', 'basePrice', 'baseCostPrice', 'discountPercentage', 'marginTier',
+            'expiryDate', 'isPrescriptionRequired', 'requiresPrescription',
             'imageUrl', 'manufacturer', 'batchNumber'
         ];
         const values = {};
@@ -1679,6 +1874,28 @@ export const dataStore = {
             throw inventoryError('Medicine price must be a non-negative number.');
         }
         if (values.price !== undefined) values.price = Number(values.price);
+        if (values.basePrice !== undefined) {
+            if (!Number.isFinite(Number(values.basePrice)) || Number(values.basePrice) < 0) {
+                throw inventoryError('Base price must be a non-negative number.');
+            }
+            values.basePrice = Number(values.basePrice);
+        }
+        if (values.baseCostPrice !== undefined) {
+            if (!Number.isFinite(Number(values.baseCostPrice)) || Number(values.baseCostPrice) < 0) {
+                throw inventoryError('Base cost price must be a non-negative number.');
+            }
+            values.baseCostPrice = Number(values.baseCostPrice);
+        }
+        if (values.discountPercentage !== undefined) {
+            if (!Number.isFinite(Number(values.discountPercentage))
+                || Number(values.discountPercentage) < 0 || Number(values.discountPercentage) > 100) {
+                throw inventoryError('Discount percentage must be between 0 and 100.');
+            }
+            values.discountPercentage = Number(values.discountPercentage);
+        }
+        if (values.marginTier !== undefined && !['LOW', 'MID', 'HIGH'].includes(values.marginTier)) {
+            throw inventoryError('Margin tier must be LOW, MID, or HIGH.');
+        }
         if (values.expiryDate !== undefined) {
             const expiryDate = new Date(values.expiryDate);
             if (Number.isNaN(expiryDate.getTime())) throw inventoryError('A valid expiry date is required.');

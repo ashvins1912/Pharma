@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { env } from './backend/config/env.js';
 import backendApp from './backend/server.js';
 import { createServer as createViteServer } from 'vite';
 import express from 'express';
@@ -10,8 +11,8 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = backendApp;
-  const PORT = Number(process.env.PORT) || 3000;
-  const isProduction = process.env.NODE_ENV === 'production';
+  const { PORT, NODE_ENV } = env;
+  const isProduction = NODE_ENV === 'production';
 
   if (!isProduction) {
     const vite = await createViteServer({

@@ -5,9 +5,14 @@ import dataStore from '../dataStore.js';
 import { authenticateUser, isAdmin } from '../middleware/auth.js';
 import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
 import { getPrescription, removePrescription, savePrescription } from '../config/prescriptionStorage.js';
+import { getIsConnected } from '../config/db.js';
+import DynamicOrderService from '../services/DynamicOrderService.js';
 import deliveryContainer from '../modules/delivery/container.js';
 
 const router = express.Router();
+const dynamicOrderService = new DynamicOrderService({
+    couponValidator: (code, subtotal) => dataStore.validateCoupon(code, subtotal)
+});
 const getErrorStatus = (error) => {
     if (error.statusCode) return error.statusCode;
     if (['CastError', 'ValidationError'].includes(error.name)) return 400;
@@ -70,7 +75,10 @@ const handlePrescriptionUpload = (req, res, next) => {
 router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req, res) => {
     let uploadedPrescriptionUrl = null;
     try {
-        const { addressId, deliveryAddress, coordinates, paymentMethod, prescriptionUrl, couponCode } = req.body;
+        const {
+            addressId, deliveryAddress, coordinates, paymentMethod, prescriptionUrl, couponCode
+        } = req.body;
+        const pointsToRedeem = Number(req.body.pointsToRedeem || 0);
         const cartItems = parseCheckoutItems(req.body.items || req.body.cartItems);
         if (!Array.isArray(cartItems) || !cartItems.length) {
             return res.status(400).json({ message: 'Add at least one medicine to your order.' });
@@ -112,6 +120,7 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             customerName,
             customerMobile: addressSnapshot?.mobile || req.body.mobile || req.user.user_metadata?.mobile || '',
             items: cartItems,
+            pointsToRedeem,
             couponCode,
             prescriptionUrl: uploadedPrescriptionUrl,
             deliveryAddress: chosenAddressLine,
@@ -137,6 +146,7 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
         res.status(201).json({
             message: "🎉 Cash-on-Delivery order registered into dispensary queue!",
             orderId: order._id,
+            rewardNotice: order.rewardNotice || null,
             order
         });
     } catch (err) {
@@ -149,6 +159,41 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
         }
         console.error("Checkout failed:", err);
         res.status(getErrorStatus(err)).json({ message: err.message || "Checkout failed" });
+    }
+});
+
+router.get('/dynamic-restock', authenticateUser, async (req, res) => {
+    if (!getIsConnected()) {
+        return res.status(503).json({ message: 'Personalized restock is temporarily unavailable.' });
+    }
+    try {
+        const items = await dynamicOrderService.generateDynamicRestockBasket(req.user.sub);
+        return res.json({ items });
+    } catch (error) {
+        console.error('Dynamic restock generation failed:', error);
+        return res.status(500).json({ message: 'Failed to generate your restock basket.' });
+    }
+});
+
+router.post('/checkout/quote', authenticateUser, async (req, res) => {
+    if (!getIsConnected()) {
+        return res.status(503).json({ message: 'Reward quotes are temporarily unavailable.' });
+    }
+    try {
+        const items = parseCheckoutItems(req.body.items || req.body.cartItems);
+        const pointsToRedeem = Number(req.body.pointsToRedeem || 0);
+        const quote = await dynamicOrderService.evaluateCheckout(
+            items,
+            req.user.sub,
+            pointsToRedeem,
+            { couponCode: req.body.couponCode || undefined }
+        );
+        return res.json(quote);
+    } catch (error) {
+        console.error('Checkout reward quote failed:', error);
+        return res.status(error.statusCode || 400).json({
+            message: error.message || 'Unable to calculate the reward quote.'
+        });
     }
 });
 
@@ -327,7 +372,8 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
 
         res.json({
             message: `Order transitioned to ${newStatus}`,
-            order: updatedOrder
+            order: updatedOrder,
+            deliveryRewards: updatedOrder.deliveryRewards || null
         });
     } catch (err) {
         console.error("Transition error:", err);

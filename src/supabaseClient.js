@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { env } from './config/env.ts';
 
 const getEnvVar = (key) => {
   try {
@@ -20,6 +21,6 @@ const supabaseAnonKey = (getEnvVar('VITE_SUPABASE_ANON_KEY') || getEnvVar('SUPAB
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'development-anon-key'
+    env.VITE_SUPABASE_URL,
+    env.VITE_SUPABASE_ANON_KEY
 );

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
+import OrderSummaryCard from './OrderSummaryCard';
 
 export default function OrderConfirmation({ order, onTrackOrder, onContinueShopping }) {
   const { user } = useAuth();
@@ -36,15 +37,12 @@ export default function OrderConfirmation({ order, onTrackOrder, onContinueShopp
             <span>Payment Mode:</span>
             <span className="font-bold text-emerald-600">Cash on Delivery</span>
           </div>
-          <div className="flex justify-between text-slate-500">
-            <span>Total Payable:</span>
-            <span className="font-black text-slate-900 text-sm">₹{order.finalTotal}</span>
-          </div>
           {order.deliveryAddress && (
             <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-500">
               <span>📍 Delivery to: {order.deliveryAddress}</span>
             </div>
           )}
+          {order && <OrderSummaryCard order={order} />}
         </div>
       )}
 

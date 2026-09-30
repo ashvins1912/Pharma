@@ -1,8 +1,9 @@
 import 'dotenv/config';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { verifyDemoAdminToken } from '../config/demoAdmin.js';
+import { env } from '../config/env.js';
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
+const { SUPABASE_URL } = env;
 let SUPABASE_JWKS = null;
 
 if (SUPABASE_URL && SUPABASE_URL.startsWith('https://')) {
@@ -15,7 +16,7 @@ if (SUPABASE_URL && SUPABASE_URL.startsWith('https://')) {
     }
 }
 
-const isDemoAuthEnabled = process.env.NODE_ENV !== 'production';
+const isDemoAuthEnabled = env.NODE_ENV !== 'production';
 const JWT_SECRET = process.env.DEMO_ADMIN_JWT_SECRET
     || process.env.ENCRYPTION_SECRET_KEY
     || 'ashvin-pharmacy-demo-admin-jwt-secret-key-32chars!';

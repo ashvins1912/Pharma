@@ -2,10 +2,15 @@ import express from 'express';
 import multer from 'multer';
 import * as xlsx from 'xlsx';
 import dataStore from '../dataStore.js';
+import { getIsConnected } from '../config/db.js';
 import { authenticateUser, isAdmin } from '../middleware/auth.js';
+import ProductDiscoveryService from '../services/ProductDiscoveryService.js';
+import SearchMetricIngestionService from '../services/SearchMetricIngestionService.js';
 
 const router = express.Router();
 const uploadMemory = multer({ storage: multer.memoryStorage() });
+const productDiscovery = new ProductDiscoveryService();
+const searchMetricIngestion = new SearchMetricIngestionService();
 const publicMedicine = medicine => {
     const { stockQuantity, reservedQuantity, ...visibleMedicine } = medicine;
     const availableQuantity = medicine.availableQuantity ?? medicine.stock ?? medicine.quantity ?? 0;
@@ -74,6 +79,13 @@ router.get('/', async (req, res) => {
             false
         );
         const medicines = result.medicines.map(publicMedicine);
+        if (typeof search === 'string' && search.trim() && getIsConnected()) {
+            const skuIds = result.medicines
+                .map(medicine => medicine.sku || medicine.code)
+                .filter(skuId => typeof skuId === 'string' && skuId.trim());
+            void searchMetricIngestion.recordImpressionsForSkus({ skuIds })
+                .catch(error => console.error('Medicine search impression recording failed:', error));
+        }
 
         if (paginate === 'false') {
             return res.json(medicines);
@@ -83,6 +95,63 @@ router.get('/', async (req, res) => {
     } catch (err) {
         console.error("Error fetching medicines:", err);
         res.status(500).json({ message: "Failed to fetch medicines" });
+    }
+});
+
+router.get('/discovery', async (req, res) => {
+    try {
+        const readList = value => {
+            if (value === undefined) return [];
+            const values = Array.isArray(value) ? value : [value];
+            if (values.some(item => typeof item !== 'string')) {
+                const error = new TypeError('Discovery filters must be strings.');
+                error.statusCode = 400;
+                throw error;
+            }
+            return values.flatMap(item => item.split(',')).map(item => item.trim()).filter(Boolean);
+        };
+        const parseBoolean = value => {
+            if (value === undefined) return undefined;
+            if (value === 'true') return true;
+            if (value === 'false') return false;
+            const error = new TypeError('isRxRequired must be true or false.');
+            error.statusCode = 400;
+            throw error;
+        };
+        const categories = readList(req.query.category);
+        const subCategories = readList(req.query.subCategory);
+        const activeCartSkus = readList(req.query.cartSkus);
+        if (categories.length > 20 || subCategories.length > 20 || activeCartSkus.length > 50) {
+            return res.status(400).json({ message: 'Too many discovery filter values.' });
+        }
+
+        const maxPrice = req.query.maxPrice === undefined ? undefined : Number(req.query.maxPrice);
+        if (maxPrice !== undefined && (!Number.isFinite(maxPrice) || maxPrice < 0)) {
+            return res.status(400).json({ message: 'maxPrice must be a non-negative number.' });
+        }
+
+        const priceTier = req.query.priceTier;
+        if (priceTier !== undefined && !['LOW', 'MID', 'HIGH'].includes(priceTier)) {
+            return res.status(400).json({ message: 'priceTier must be LOW, MID, or HIGH.' });
+        }
+
+        const medicines = await productDiscovery.getPrioritizedMedicines(
+            {
+                categories,
+                subCategories,
+                maxPrice,
+                isRxRequired: parseBoolean(req.query.isRxRequired)
+            },
+            { activeCartSkus, priceTier },
+            { page: req.query.page, limit: req.query.limit }
+        );
+
+        return res.json({ count: medicines.length, data: medicines });
+    } catch (error) {
+        console.error('Prioritized medicine discovery failed:', error);
+        return res.status(error.statusCode || 500).json({
+            message: error.statusCode ? error.message : 'Failed to discover medicines.'
+        });
     }
 });
 

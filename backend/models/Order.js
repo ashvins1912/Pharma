@@ -4,6 +4,9 @@ const medicineItemSchema = new mongoose.Schema({
     medicineId: { type: mongoose.Schema.Types.ObjectId, ref: 'Medicine', required: true },
     quantity: { type: Number, required: true, min: 1 },
     price: { type: Number, required: true, min: 0 },
+    baseCostPrice: { type: Number, min: 0, default: 0 },
+    discountPercentage: { type: Number, min: 0, max: 100, default: 0 },
+    marginTier: { type: String, enum: ['LOW', 'MID', 'HIGH'], default: 'LOW' },
     name: { type: String, default: '' },
     sku: { type: String, default: '' }
 }, { _id: false });
@@ -20,6 +23,15 @@ const orderSchema = new mongoose.Schema({
     couponCode: { type: String, default: null },
     subtotal: { type: Number, min: 0 },
     discountApplied: { type: Number, default: 0 },
+    pointsRedeemed: { type: Number, default: 0, min: 0 },
+    rewardPointsEarned: { type: Number, default: 0, min: 0 },
+    pointsDiscountApplied: { type: Number, default: 0, min: 0 },
+    rewardMetrics: {
+        totalRevenue: { type: Number, default: 0 },
+        totalCostPrice: { type: Number, default: 0 },
+        netProfit: { type: Number, default: 0 },
+        netMarginPercentage: { type: Number, default: 0 }
+    },
     deliveryFee: { type: Number, default: 0 },
     totalAmount: { type: Number, min: 0 },
     finalTotal: { type: Number, min: 0 },

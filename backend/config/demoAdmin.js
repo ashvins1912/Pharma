@@ -1,8 +1,9 @@
 import 'dotenv/config';
 import { timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify } from 'jose';
+import { env } from './env.js';
 
-const demoAdminEnabled = process.env.NODE_ENV !== 'production'
+const demoAdminEnabled = env.NODE_ENV !== 'production'
     && process.env.DEMO_ADMIN_ENABLED !== 'false';
 const instantDemoAdminEnabled = demoAdminEnabled
     && process.env.DEMO_ADMIN_INSTANT_ACCESS_ENABLED !== 'false';
