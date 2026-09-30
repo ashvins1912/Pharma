@@ -1,6 +1,36 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
+
+const getDistanceToPickup = (rider, order) => {
+  const riderCoordinates = rider.currentLocation?.coordinates;
+  const pickupCoordinates = order.location?.coordinates
+    || (order.coordinates?.lng != null && order.coordinates?.lat != null
+      ? [order.coordinates.lng, order.coordinates.lat]
+      : null);
+
+  if (!riderCoordinates || riderCoordinates.length !== 2 || !pickupCoordinates || pickupCoordinates.length !== 2) {
+    return null;
+  }
+
+  const toRadians = (degrees) => (degrees * Math.PI) / 180;
+  const [riderLng, riderLat] = riderCoordinates.map(Number);
+  const [pickupLng, pickupLat] = pickupCoordinates.map(Number);
+  if (![riderLng, riderLat, pickupLng, pickupLat].every(Number.isFinite)) return null;
+
+  const latitudeDelta = toRadians(pickupLat - riderLat);
+  const longitudeDelta = toRadians(pickupLng - riderLng);
+  const a = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(toRadians(riderLat)) * Math.cos(toRadians(pickupLat))
+    * Math.sin(longitudeDelta / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const formatDistance = (distanceInKm) => {
+  if (distanceInKm == null) return 'Distance unavailable';
+  if (distanceInKm < 1) return `${Math.round(distanceInKm * 1000)} m to pickup`;
+  return `${distanceInKm.toFixed(1)} km to pickup`;
+};
 
 const COLUMNS = [
   { id: 'Pending_Review', title: 'Pending Review', color: 'border-amber-500 text-amber-800 bg-amber-50' },
@@ -16,10 +46,39 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const { addToast } = useToast();
   const [updatingId, setUpdatingId] = useState(null);
   const [assignRiderModal, setAssignRiderModal] = useState(null);
-  const [riderName, setRiderName] = useState('Suresh Kumar');
-  const [riderMobile, setRiderMobile] = useState('+91 98765 43210');
+  const [availableRiders, setAvailableRiders] = useState([]);
+  const [loadingAvailableRiders, setLoadingAvailableRiders] = useState(false);
+  const [availableRidersError, setAvailableRidersError] = useState(null);
+  const [selectedRiderId, setSelectedRiderId] = useState('');
   const [verifiedOrderIds, setVerifiedOrderIds] = useState([]);
   const [prescriptionPreview, setPrescriptionPreview] = useState(null);
+
+  useEffect(() => {
+    if (!assignRiderModal) return undefined;
+
+    let isCurrentRequest = true;
+    setAvailableRiders([]);
+    setSelectedRiderId('');
+    setLoadingAvailableRiders(true);
+    setAvailableRidersError(null);
+
+    apiClient.get('/api/admin/riders', { params: { status: 'Available' } })
+      .then((res) => {
+        if (isCurrentRequest) setAvailableRiders(res.data || []);
+      })
+      .catch((err) => {
+        if (isCurrentRequest) {
+          setAvailableRidersError(err.response?.data?.message || err.message || 'Could not load available riders.');
+        }
+      })
+      .finally(() => {
+        if (isCurrentRequest) setLoadingAvailableRiders(false);
+      });
+
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, [assignRiderModal]);
 
   const handleTransition = async (orderId, newStatus, riderInfo = null) => {
     try {
@@ -326,27 +385,51 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
             </p>
 
             <div className="space-y-3">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1">Rider Name</label>
-                <input
-                  type="text"
-                  value={riderName}
-                  onChange={(e) => setRiderName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1">Rider Phone (WhatsApp)</label>
-                <input
-                  type="tel"
-                  value={riderMobile}
-                  onChange={(e) => setRiderMobile(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none"
-                  required
-                />
-              </div>
+              <p className="text-[11px] font-bold text-slate-500">Available riders</p>
+              {loadingAvailableRiders && (
+                <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">Loading available riders...</p>
+              )}
+              {availableRidersError && (
+                <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{availableRidersError}</p>
+              )}
+              {!loadingAvailableRiders && !availableRidersError && availableRiders.length === 0 && (
+                <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">No riders are currently available.</p>
+              )}
+              {!loadingAvailableRiders && availableRiders.length > 0 && (
+                <div className="max-h-56 space-y-2 overflow-y-auto">
+                  {availableRiders.map((rider) => {
+                    const distance = getDistanceToPickup(rider, assignRiderModal);
+                    return (
+                      <label
+                        key={rider.id}
+                        className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${
+                          selectedRiderId === rider.id
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="delivery-rider"
+                          value={rider.id}
+                          checked={selectedRiderId === rider.id}
+                          onChange={() => setSelectedRiderId(rider.id)}
+                          className="mt-1 accent-blue-600"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-xs font-bold text-slate-800">{rider.name}</span>
+                          <span className="mt-0.5 block text-[11px] text-slate-500">
+                            {rider.mobile}{rider.vehicleType ? ` • ${rider.vehicleType}` : ''}
+                          </span>
+                          <span className="mt-1 block text-[10px] font-semibold text-blue-700">
+                            {formatDistance(distance)}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2 pt-2">
@@ -357,10 +440,15 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                 Cancel
               </button>
               <button
+                type="button"
+                disabled={loadingAvailableRiders || !selectedRiderId || Boolean(availableRidersError)}
                 onClick={() => {
+                  const rider = availableRiders.find((candidate) => candidate.id === selectedRiderId);
+                  if (!rider) return;
                   const riderInfo = {
-                    riderName,
-                    riderMobile
+                    riderId: rider.id,
+                    riderName: rider.name,
+                    riderMobile: rider.mobile
                   };
                   if (assignRiderModal.orderStatus === 'Approved') {
                     dispatchApprovedOrder(assignRiderModal._id, riderInfo);
@@ -368,7 +456,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                     handleTransition(assignRiderModal._id, 'Dispatched', riderInfo);
                   }
                 }}
-                className="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2 rounded-xl text-xs shadow-md shadow-blue-600/25"
+                className="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2 rounded-xl text-xs shadow-md shadow-blue-600/25 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Dispatch Order
               </button>
