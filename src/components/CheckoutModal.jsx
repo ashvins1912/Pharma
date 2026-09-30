@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -7,12 +7,71 @@ import AddressManager from './AddressManager';
 
 export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const { user } = useAuth();
-  const { cart, subtotal, discountAmount, deliveryFee, finalTotal, appliedCoupon, selectedAddressId, addresses, clearCart } = useApp();
+  const { cart, subtotal, discountAmount, deliveryFee, finalTotal, appliedCoupon, selectedAddressId, addresses, clearCart, addToCart } = useApp();
   const { addToast } = useToast();
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [prescriptionFile, setPrescriptionFile] = useState(null);
+  const [restockItems, setRestockItems] = useState([]);
+  const [restockLoading, setRestockLoading] = useState(false);
+  const [usePoints, setUsePoints] = useState(false);
+  const [pointsRequested, setPointsRequested] = useState(0);
+  const [rewardQuote, setRewardQuote] = useState(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState('');
+  const quoteRequestId = useRef(0);
+  const cartForQuote = JSON.stringify(cart.map(item => ({
+    medicineId: item._id,
+    quantity: item.quantity
+  })));
+
+  useEffect(() => {
+    if (!isOpen || cart.length === 0) {
+      setRewardQuote(null);
+      return undefined;
+    }
+    const requestId = ++quoteRequestId.current;
+    setQuoteLoading(true);
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await apiClient.post('/api/orders/checkout/quote', {
+          items: JSON.parse(cartForQuote),
+          pointsToRedeem: usePoints ? Number(pointsRequested) || 0 : 0,
+          couponCode: appliedCoupon?.code || ''
+        });
+        if (requestId === quoteRequestId.current) {
+          setRewardQuote(response.data);
+          setQuoteError('');
+        }
+      } catch (error) {
+        if (requestId === quoteRequestId.current) {
+          setRewardQuote(null);
+          setQuoteError(error.message || 'Reward quote is unavailable.');
+        }
+      } finally {
+        if (requestId === quoteRequestId.current) setQuoteLoading(false);
+      }
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [isOpen, cartForQuote, cart.length, usePoints, pointsRequested, appliedCoupon?.code]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    let active = true;
+    setRestockLoading(true);
+    apiClient.get('/api/orders/dynamic-restock')
+      .then(response => {
+        if (active) setRestockItems(response.data.items || []);
+      })
+      .catch(() => {
+        if (active) setRestockItems([]);
+      })
+      .finally(() => {
+        if (active) setRestockLoading(false);
+      });
+    return () => { active = false; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -48,6 +107,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
         mobile: selectedAddress.mobile || user?.user_metadata?.mobile || '',
         couponCode: appliedCoupon?.code || '',
+        pointsToRedeem: usePoints ? String(Number(pointsRequested) || 0) : '0',
         paymentMethod: "Cash on Delivery (COD)"
       };
       const formData = new FormData();
@@ -56,8 +116,15 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
       const res = await apiClient.post('/api/orders/checkout', formData);
 
-      addToast("🎉 Order placed successfully! Dispensary queue assigned.", "success");
+      addToast(
+        res.data.rewardNotice
+          ? `Order placed. ${res.data.rewardNotice}`
+          : "🎉 Order placed successfully! Dispensary queue assigned.",
+        res.data.rewardNotice ? "warning" : "success"
+      );
       clearCart();
+      setUsePoints(false);
+      setPointsRequested(0);
       setPrescriptionFile(null);
       onClose();
       if (onOrderPlaced) onOrderPlaced(res.data.order || { _id: res.data.orderId, finalTotal });
@@ -67,6 +134,19 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const addRestockItem = item => {
+    if (!item.price || !item.stock) {
+      addToast('This restock item is currently unavailable.', 'warning');
+      return;
+    }
+    addToCart({
+      ...item,
+      _id: String(item._id),
+      brand: item.manufacturer || 'Pharmacy',
+      quantity: 1
+    });
   };
 
   return (
@@ -143,6 +223,36 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             </div>
           </div>
 
+          {restockItems.length > 0 && (
+            <section className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-blue-950">Your regular restock</h3>
+                  <p className="mt-1 text-[11px] text-blue-800">Frequently purchased items from completed orders</p>
+                </div>
+                {restockLoading && <span className="text-[10px] text-blue-700">Updating…</span>}
+              </div>
+              <div className="space-y-2">
+                {restockItems.map(item => (
+                  <div key={String(item._id)} className="flex items-center justify-between gap-3 rounded-xl bg-white p-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-bold text-slate-800">{item.name}</p>
+                      <p className="text-[10px] text-slate-500">Ordered {item.orderCount} times · ₹{item.price}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => addRestockItem(item)}
+                      disabled={!item.stock}
+                      className="shrink-0 rounded-lg bg-blue-700 px-3 py-1.5 text-[10px] font-bold text-white disabled:bg-slate-300"
+                    >
+                      {item.stock ? 'Add' : 'Out of stock'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Section 3: Payment Method & Totals */}
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -163,13 +273,73 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                   <span>−₹{discountAmount.toFixed(1)}</span>
                 </div>
               )}
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <label className="flex cursor-pointer items-center gap-2 text-xs font-bold text-amber-950">
+                  <input
+                    type="checkbox"
+                    checked={usePoints}
+                    onChange={event => {
+                      setUsePoints(event.target.checked);
+                      if (event.target.checked) {
+                        setPointsRequested(String(rewardQuote?.availablePoints || 0));
+                      }
+                    }}
+                    disabled={!rewardQuote?.availablePoints}
+                  />
+                  Use loyalty points
+                  <span className="ml-auto text-[10px] font-medium">
+                    {rewardQuote?.availablePoints ?? '—'} available
+                  </span>
+                </label>
+                {usePoints && (
+                  <div className="mt-2">
+                    <label htmlFor="checkout-points" className="block text-[10px] text-amber-900">
+                      Points to redeem (₹0.10 per point)
+                    </label>
+                    <input
+                      id="checkout-points"
+                      type="number"
+                      min="0"
+                      max={rewardQuote?.availablePoints || 0}
+                      step="1"
+                      value={pointsRequested}
+                      onChange={event => setPointsRequested(event.target.value)}
+                      className="mt-1 w-full rounded-lg border border-amber-200 bg-white px-2 py-1.5 text-xs"
+                    />
+                  </div>
+                )}
+                <div className="mt-2 space-y-1 text-[11px] text-amber-950">
+                  <p>{quoteLoading ? 'Checking reward eligibility…' : `Points earned after delivery: ${rewardQuote?.earnedPoints ?? '—'}`}</p>
+                  {rewardQuote && (
+                    <p>Basket profit margin: {Number(rewardQuote.netMarginPercentage).toFixed(1)}%</p>
+                  )}
+                  {rewardQuote?.redemptionBlockedReason && (
+                    <p role="alert" className="font-bold text-rose-700">
+                      Redemption blocked: {rewardQuote.redemptionBlockedReason}
+                    </p>
+                  )}
+                  {rewardQuote?.redemptionEligible && !rewardQuote?.redemptionBlockedReason && (
+                    <p className="font-bold text-emerald-700">This basket meets the profit threshold for point redemption.</p>
+                  )}
+                  {usePoints && rewardQuote?.pointsAdjusted && (
+                    <p role="status" className="font-bold text-orange-700">
+                      {rewardQuote.warning} Allowed: {rewardQuote.allowedPoints} points.
+                    </p>
+                  )}
+                  {quoteError && <p role="alert" className="font-bold text-rose-700">{quoteError}</p>}
+                </div>
+              </div>
               <div className="flex justify-between text-slate-600">
                 <span>Delivery Charge</span>
                 <span className="text-emerald-600 font-bold">FREE</span>
               </div>
               <div className="border-t border-dashed border-slate-300 pt-2 flex justify-between items-center text-base font-black text-slate-900">
                 <span>Payable Amount:</span>
-                <span className="text-emerald-600 text-xl font-black">₹{finalTotal.toFixed(1)}</span>
+                <span className="text-emerald-600 text-xl font-black">
+                  ₹{(rewardQuote?.finalTotal ?? finalTotal) + deliveryFee > 0
+                    ? ((rewardQuote?.finalTotal ?? finalTotal) + deliveryFee).toFixed(1)
+                    : '0.0'}
+                </span>
               </div>
             </div>
           </div>

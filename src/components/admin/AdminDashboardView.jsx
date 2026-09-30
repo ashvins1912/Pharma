@@ -5,6 +5,7 @@ import AdminInventoryTable from './AdminInventoryTable';
 import AdminRouteOptimizer from './AdminRouteOptimizer';
 import AdminBulkImportModal from './AdminBulkImportModal';
 import RiderFleetView from './riders/RiderFleetView';
+import AdminOrderFinancials from './AdminOrderFinancials';
 import { useApp } from '../../context/AppContext';
 
 export default function AdminDashboardView() {
@@ -245,6 +246,23 @@ export default function AdminDashboardView() {
             </div>
           ) : (
             <AdminFulfillmentKanban orders={orders} onRefresh={loadAllOrders} />
+          )}
+          {!loadingOrders && orders.length > 0 && (
+            <section aria-labelledby="admin-financial-insights" className="space-y-3 pt-3">
+              <div>
+                <h3 id="admin-financial-insights" className="text-base font-black text-slate-900">
+                  Order financial insights
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Margin, discounts and loyalty activity for recent orders.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {orders.slice(0, 6).map(order => (
+                  <AdminOrderFinancials key={order._id} order={order} />
+                ))}
+              </div>
+            </section>
           )}
           {!loadingOrders && !ordersError && orders.length > 0 && (
             <p className="text-center text-[11px] text-slate-500">

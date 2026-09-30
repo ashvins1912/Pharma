@@ -14,6 +14,7 @@ import assignmentRoutes from './modules/delivery/routes/assignmentRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import { csrfProtection } from './security/sessionCookie.js';
 import dataStore from './dataStore.js';
+import DataMartRefreshService from './services/DataMartRefreshService.js';
 import { authenticateUser, isAdmin } from './middleware/auth.js';
 import {
     getDemoAdminIdentity,
@@ -29,8 +30,29 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(csrfProtection);
 
+const dataMartRefreshService = new DataMartRefreshService();
+let isDataMartRefreshRunning = false;
+const refreshDataMart = async () => {
+    if (isDataMartRefreshRunning) return;
+    isDataMartRefreshRunning = true;
+    try {
+        const result = await dataMartRefreshService.refresh();
+        console.info('Medicine data mart refreshed:', result.refreshedCount);
+    } catch (error) {
+        console.error('Medicine data mart refresh failed:', error);
+    } finally {
+        isDataMartRefreshRunning = false;
+    }
+};
+
 connectDB()
-    .then(connected => connected && dataStore.ensureCatalogSeeded())
+    .then(async connected => {
+        if (!connected) return;
+        await dataStore.ensureCatalogSeeded();
+        await refreshDataMart();
+        const refreshTimer = setInterval(() => void refreshDataMart(), 15 * 60 * 1000);
+        refreshTimer.unref();
+    })
     .catch(error => console.error('MongoDB catalog initialization failed:', error));
 
 app.use('/api/auth', authRoutes);
