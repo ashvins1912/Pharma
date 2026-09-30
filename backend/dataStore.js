@@ -1243,145 +1243,16 @@ export const dataStore = {
         return order;
     },
 
-    async updateCustomerOrder(orderId, customerId, requestedItems, prescriptionUrl, actor = 'Customer') {
+    async updateCustomerOrder(orderId, customerId) {
         if (!customerId) throw inventoryError('Customer authentication is required.', 401);
-        if (!Array.isArray(requestedItems) || requestedItems.length === 0) {
-            throw inventoryError('An order must contain at least one medicine.');
-        }
-
-        const quantities = new Map();
-        for (const item of requestedItems) {
-            const medicineId = String(item.medicineId || item._id || item.id || '');
-            const quantity = Number(item.quantity);
-            if (!medicineId || !Number.isInteger(quantity) || quantity < 1) {
-                throw inventoryError('Each item requires a medicine ID and a positive whole-number quantity.');
-            }
-            quantities.set(medicineId, (quantities.get(medicineId) || 0) + quantity);
-        }
-
-        const editableStatuses = ['Pending_Review', 'Approved', 'Processing Order', 'Ready to Dispatch'];
-        const now = new Date();
         if (getIsConnected()) {
             if (!mongoose.isValidObjectId(orderId)) throw inventoryError('Invalid order ID.');
-            const session = await mongoose.startSession();
-            let updatedOrder;
-            try {
-                await session.withTransaction(async () => {
-                    const order = await Order.findById(orderId).session(session);
-                    if (!order) throw inventoryError('Order not found.', 404);
-                    if (order.userId !== customerId && order.customerId !== customerId) {
-                        throw inventoryError('You are not authorized to modify this order.', 403);
-                    }
-                    if (!editableStatuses.includes(order.orderStatus)) {
-                        throw inventoryError('This order can no longer be modified after dispatch.', 409);
-                    }
-                    if (!order.medicineItems?.length) {
-                        throw inventoryError('This legacy order cannot be safely modified. Contact support for help.', 409);
-                    }
-
-                    const previousQuantities = new Map();
-                    for (const item of order.medicineItems) {
-                        const id = String(item.medicineId);
-                        previousQuantities.set(id, (previousQuantities.get(id) || 0) + Number(item.quantity));
-                    }
-
-                    const medicineItems = [];
-                    const itemSnapshots = [];
-                    let subtotal = 0;
-                    let prescriptionRequired = false;
-                    for (const [medicineId, quantity] of quantities) {
-                        if (!mongoose.isValidObjectId(medicineId)) throw inventoryError(`Invalid medicine ID: ${medicineId}`);
-                        const medicine = await Medicine.findById(medicineId).session(session);
-                        if (!medicine) throw inventoryError(`Medicine ${medicineId} was not found.`, 404);
-                        if (medicine.isActive === false) throw inventoryError(`${medicine.name} is no longer available.`);
-                        if (medicine.expiryDate && new Date(medicine.expiryDate) <= now) {
-                            throw inventoryError(`${medicine.name} is expired and cannot be ordered.`);
-                        }
-                        const required = Boolean(medicine.isPrescriptionRequired ?? medicine.requiresPrescription);
-                        prescriptionRequired ||= required;
-                        const price = Number(medicine.price);
-                        if (!Number.isFinite(price) || price < 0) throw inventoryError(`Invalid price for ${medicine.name}.`);
-                        subtotal += price * quantity;
-                        medicineItems.push({
-                            medicineId: medicine._id,
-                            quantity,
-                            price,
-                            name: medicine.name,
-                            sku: medicine.sku || medicine.code || ''
-                        });
-                        itemSnapshots.push({
-                            _id: medicine._id.toString(),
-                            medicineId: medicine._id,
-                            name: medicine.name,
-                            sku: medicine.sku || medicine.code || '',
-                            price,
-                            quantity
-                        });
-                    }
-
-                    const nextPrescriptionUrl = prescriptionUrl || order.prescriptionUrl || null;
-                    if (prescriptionRequired && !nextPrescriptionUrl) {
-                        throw inventoryError('A prescription is required for the selected medicines.');
-                    }
-
-                    const allMedicineIds = new Set([...previousQuantities.keys(), ...quantities.keys()]);
-                    for (const medicineId of allMedicineIds) {
-                        const delta = (quantities.get(medicineId) || 0) - (previousQuantities.get(medicineId) || 0);
-                        if (delta > 0) {
-                            const result = await Medicine.updateOne({
-                                _id: medicineId,
-                                $expr: {
-                                    $gte: [
-                                        {
-                                            $subtract: [
-                                                { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
-                                                { $ifNull: ['$reservedQuantity', 0] }
-                                            ]
-                                        },
-                                        delta
-                                    ]
-                                }
-                            }, { $inc: { reservedQuantity: delta } }, { session });
-                            if (result.modifiedCount !== 1) throw inventoryError('Insufficient available stock for the updated order.', 409);
-                        } else if (delta < 0) {
-                            const result = await Medicine.updateOne({
-                                _id: medicineId,
-                                $expr: { $gte: [{ $ifNull: ['$reservedQuantity', 0] }, -delta] }
-                            }, { $inc: { reservedQuantity: delta } }, { session });
-                            if (result.modifiedCount !== 1) throw inventoryError('Could not safely release the previous reservation.', 409);
-                        }
-                    }
-
-                    const coupon = order.couponCode
-                        ? await this.validateCoupon(order.couponCode, subtotal)
-                        : { valid: true, discountPercentage: 0 };
-                    if (!coupon.valid) throw inventoryError(coupon.message || 'The order coupon is no longer valid.');
-                    const discountApplied = Math.round(subtotal * (coupon.discountPercentage || 0)) / 100;
-                    const finalTotal = Math.max(0, Math.round((subtotal - discountApplied) * 10) / 10) + Number(order.deliveryFee || 0);
-                    const previousStatus = order.orderStatus;
-                    order.medicineItems = medicineItems;
-                    order.items = itemSnapshots;
-                    order.prescriptionUrl = nextPrescriptionUrl;
-                    order.prescriptionRequired = prescriptionRequired;
-                    order.subtotal = subtotal;
-                    order.discountApplied = discountApplied;
-                    order.totalAmount = finalTotal;
-                    order.finalTotal = finalTotal;
-                    order.orderStatus = 'Pending_Review';
-                    order.statusHistory.push({
-                        previousStatus,
-                        newStatus: 'Pending_Review',
-                        changedBy: actor,
-                        timestamp: now,
-                        notes: 'Customer updated the order; pharmacist review is required.'
-                    });
-                    await order.save({ session });
-                    updatedOrder = order.toObject({ virtuals: true });
-                });
-            } finally {
-                await session.endSession();
+            const order = await Order.findById(orderId).lean();
+            if (!order) throw inventoryError('Order not found.', 404);
+            if (order.userId !== customerId && order.customerId !== customerId) {
+                throw inventoryError('You are not authorized to modify this order.', 403);
             }
-            return updatedOrder;
+            throw inventoryError('Placed orders cannot be modified. Cancel the order and place a new one if needed.', 409);
         }
 
         const order = inMemoryOrders.find(item => String(item._id) === String(orderId));
@@ -1389,97 +1260,7 @@ export const dataStore = {
         if (order.userId !== customerId && order.customerId !== customerId) {
             throw inventoryError('You are not authorized to modify this order.', 403);
         }
-        if (!editableStatuses.includes(order.orderStatus)) {
-            throw inventoryError('This order can no longer be modified after dispatch.', 409);
-        }
-        if (!order.medicineItems?.length) {
-            throw inventoryError('This legacy order cannot be safely modified. Contact support for help.', 409);
-        }
-
-        const previousQuantities = new Map();
-        for (const item of order.medicineItems) {
-            const id = String(item.medicineId);
-            previousQuantities.set(id, (previousQuantities.get(id) || 0) + Number(item.quantity));
-        }
-        const medicineItems = [];
-        const itemSnapshots = [];
-        let subtotal = 0;
-        let prescriptionRequired = false;
-        for (const [medicineId, quantity] of quantities) {
-            const medicine = inMemoryMedicines.find(item => String(item._id) === medicineId);
-            if (!medicine) throw inventoryError(`Medicine ${medicineId} was not found.`, 404);
-            if (medicine.isActive === false) throw inventoryError(`${medicine.name} is no longer available.`);
-            if (medicine.expiryDate && new Date(medicine.expiryDate) <= now) {
-                throw inventoryError(`${medicine.name} is expired and cannot be ordered.`);
-            }
-            const required = Boolean(medicine.isPrescriptionRequired ?? medicine.requiresPrescription);
-            prescriptionRequired ||= required;
-            const price = Number(medicine.price);
-            if (!Number.isFinite(price) || price < 0) throw inventoryError(`Invalid price for ${medicine.name}.`);
-            subtotal += price * quantity;
-            medicineItems.push({
-                medicineId,
-                quantity,
-                price,
-                name: medicine.name,
-                sku: medicine.sku || medicine.code || ''
-            });
-            itemSnapshots.push({
-                _id: medicineId,
-                medicineId,
-                name: medicine.name,
-                sku: medicine.sku || medicine.code || '',
-                price,
-                quantity,
-                stock: Math.max(0, getPhysicalStock(medicine) - getReservedStock(medicine))
-            });
-        }
-
-        const nextPrescriptionUrl = prescriptionUrl || order.prescriptionUrl || null;
-        if (prescriptionRequired && !nextPrescriptionUrl) {
-            throw inventoryError('A prescription is required for the selected medicines.');
-        }
-        const deltas = [];
-        for (const medicineId of new Set([...previousQuantities.keys(), ...quantities.keys()])) {
-            const delta = (quantities.get(medicineId) || 0) - (previousQuantities.get(medicineId) || 0);
-            const medicine = inMemoryMedicines.find(item => String(item._id) === medicineId);
-            if (!medicine) throw inventoryError('Could not find the medicine reserved for this order.', 409);
-            if (delta > 0 && getPhysicalStock(medicine) - getReservedStock(medicine) < delta) {
-                throw inventoryError(`Insufficient available stock for ${medicine.name}.`, 409);
-            }
-            if (delta < 0 && getReservedStock(medicine) < -delta) {
-                throw inventoryError('Could not safely release the previous reservation.', 409);
-            }
-            deltas.push({ medicine, delta });
-        }
-        const coupon = order.couponCode
-            ? await this.validateCoupon(order.couponCode, subtotal)
-            : { valid: true, discountPercentage: 0 };
-        if (!coupon.valid) throw inventoryError(coupon.message || 'The order coupon is no longer valid.');
-        for (const { medicine, delta } of deltas) {
-            medicine.reservedQuantity = getReservedStock(medicine) + delta;
-        }
-        const discountApplied = Math.round(subtotal * (coupon.discountPercentage || 0)) / 100;
-        const finalTotal = Math.max(0, Math.round((subtotal - discountApplied) * 10) / 10) + Number(order.deliveryFee || 0);
-        const previousStatus = order.orderStatus;
-        order.medicineItems = medicineItems;
-        order.items = itemSnapshots;
-        order.prescriptionUrl = nextPrescriptionUrl;
-        order.prescriptionRequired = prescriptionRequired;
-        order.subtotal = subtotal;
-        order.discountApplied = discountApplied;
-        order.totalAmount = finalTotal;
-        order.finalTotal = finalTotal;
-        order.orderStatus = 'Pending_Review';
-        order.statusHistory.push({
-            previousStatus,
-            newStatus: 'Pending_Review',
-            changedBy: actor,
-            timestamp: now,
-            notes: 'Customer updated the order; pharmacist review is required.'
-        });
-        order.updatedAt = now;
-        return order;
+        throw inventoryError('Placed orders cannot be modified. Cancel the order and place a new one if needed.', 409);
     },
 
     async cancelOrder(orderId, actor = 'Customer', customerId = null) {
@@ -2115,17 +1896,20 @@ export const dataStore = {
     },
 
     async clubDeliveryRoute(riderName, riderMobile, radiusKm = 5, startLat = 12.9716, startLng = 77.5946) {
-        const eligibleOrders = inMemoryOrders.filter(o => o.orderStatus === 'Ready to Dispatch');
+        const eligibleOrders = getIsConnected()
+            ? await Order.find({ orderStatus: 'Ready to Dispatch' }).sort({ createdAt: 1 }).lean()
+            : inMemoryOrders.filter(o => o.orderStatus === 'Ready to Dispatch');
         const radius = Number(radiusKm) || 5;
 
         const matchingOrders = [];
         for (const order of eligibleOrders) {
-            const oLat = order.coordinates?.lat || startLat;
-            const oLng = order.coordinates?.lng || startLng;
+            const oLat = order.coordinates?.lat ?? order.location?.coordinates?.[1] ?? startLat;
+            const oLng = order.coordinates?.lng ?? order.location?.coordinates?.[0] ?? startLng;
             const distance = this.calculateDistanceInKm(startLat, startLng, oLat, oLng);
             if (distance <= radius) {
                 matchingOrders.push({
                     ...order,
+                    coordinates: { lat: oLat, lng: oLng },
                     distanceKm: Math.round(distance * 10) / 10
                 });
             }

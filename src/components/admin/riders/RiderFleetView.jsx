@@ -66,7 +66,7 @@ export default function RiderFleetView() {
         <div className="space-y-6 animate-fade-in">
             {/* Top Sub-tabs & Action bar */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                     <button
                         onClick={() => setActiveSubTab('fleet')}
                         className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
@@ -157,11 +157,11 @@ export default function RiderFleetView() {
                             />
                         </div>
 
-                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <div className="flex flex-col sm:flex-row items-stretch gap-2 w-full sm:w-auto">
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 outline-none font-bold text-slate-700"
+                                className="min-w-0 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 outline-none font-bold text-slate-700"
                             >
                                 <option value="">All Statuses</option>
                                 <option value="Available">🟢 Available Only</option>

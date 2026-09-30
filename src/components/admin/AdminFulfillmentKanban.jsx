@@ -150,7 +150,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <div>
           <h3 className="text-base font-black text-slate-900">📦 Order Fulfillment Pipeline</h3>
           <p className="text-xs text-slate-500">Live order state machine & dispatch lifecycle</p>

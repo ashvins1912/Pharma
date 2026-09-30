@@ -1,30 +1,62 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 
 export default function AdminRouteOptimizer({ onRefresh }) {
   const { addToast } = useToast();
 
-  const [riderName, setRiderName] = useState('Suresh Kumar');
-  const [riderMobile, setRiderMobile] = useState('+91 98765 43210');
+  const [riders, setRiders] = useState([]);
+  const [selectedRiderId, setSelectedRiderId] = useState('');
+  const [riderSearch, setRiderSearch] = useState('');
+  const [loadingRiders, setLoadingRiders] = useState(true);
+  const [ridersError, setRidersError] = useState('');
   const [radiusKm, setRadiusKm] = useState('5');
   const [searching, setSearching] = useState(false);
   const [dispatching, setDispatching] = useState(false);
   const [routeResult, setRouteResult] = useState(null);
 
+  useEffect(() => {
+    let isCurrentRequest = true;
+    apiClient.get('/api/admin/riders', { params: { status: 'Available' } })
+      .then(({ data }) => {
+        if (isCurrentRequest) setRiders(data || []);
+      })
+      .catch((err) => {
+        if (isCurrentRequest) {
+          setRidersError(err.response?.data?.message || err.message || 'Could not load onboarded riders.');
+        }
+      })
+      .finally(() => {
+        if (isCurrentRequest) setLoadingRiders(false);
+      });
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, []);
+
+  const filteredRiders = useMemo(() => {
+    const term = riderSearch.trim().toLowerCase();
+    if (!term) return riders;
+    return riders.filter((rider) =>
+      rider.name.toLowerCase().includes(term) || rider.mobile.toLowerCase().includes(term)
+    );
+  }, [riderSearch, riders]);
+
+  const selectedRider = riders.find((rider) => rider.id === selectedRiderId);
+
   const handleFindNearbyOrders = async (e) => {
     e.preventDefault();
+    if (!selectedRiderId) return;
     setSearching(true);
     try {
       const res = await apiClient.post('/api/orders/admin/optimize-and-club-routes', {
-        deliveryPersonName: riderName,
-        deliveryPersonMobile: riderMobile,
+        riderId: selectedRiderId,
         maxRadiusKm: Number(radiusKm) || 5,
         startLat: 12.9716, // Bengaluru Dispensary Coordinates
         startLng: 77.5946
       });
       setRouteResult(res.data);
-      addToast(`Found ${res.data.ordersFound} unassigned orders within ${radiusKm} KM corridor!`, 'info');
+      addToast(`Found ${res.data.ordersFound} orders within ${radiusKm} KM corridor!`, 'info');
     } catch (err) {
       addToast(err.message || 'Route discovery failed', 'error');
     } finally {
@@ -40,10 +72,12 @@ export default function AdminRouteOptimizer({ onRefresh }) {
       const orderIds = routeResult.orders.map(o => o._id);
       const res = await apiClient.post('/api/orders/admin/dispatch-batch', {
         orderIds,
-        riderName,
-        riderMobile
+        riderId: selectedRiderId
       });
       addToast(res.data.message || 'Batch dispatched successfully!', 'success');
+      if (res.data.dispatchErrors?.length) {
+        addToast(`${res.data.dispatchErrors.length} order(s) could not be dispatched.`, 'warning');
+      }
       setRouteResult(null);
       if (onRefresh) onRefresh();
     } catch (err) {
@@ -68,31 +102,42 @@ export default function AdminRouteOptimizer({ onRefresh }) {
       </div>
 
       {/* Input Parameters Form */}
-      <form onSubmit={handleFindNearbyOrders} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
-        <div>
-          <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-            Active Rider Name
+      <form onSubmit={handleFindNearbyOrders} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+        <div className="min-w-0">
+          <label htmlFor="route-rider-search" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+            Select Available Rider
           </label>
           <input
-            type="text"
-            value={riderName}
-            onChange={(e) => setRiderName(e.target.value)}
+            id="route-rider-search"
+            type="search"
+            value={riderSearch}
+            onChange={(event) => setRiderSearch(event.target.value)}
+            placeholder="Search by name or mobile"
             className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none font-bold text-slate-800"
-            required
           />
-        </div>
-
-        <div>
-          <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-            Rider Phone (WhatsApp)
-          </label>
-          <input
-            type="tel"
-            value={riderMobile}
-            onChange={(e) => setRiderMobile(e.target.value)}
-            className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none font-bold text-slate-800"
+          <select
+            value={selectedRiderId}
+            onChange={(event) => setSelectedRiderId(event.target.value)}
+            disabled={loadingRiders || Boolean(ridersError) || filteredRiders.length === 0}
+            className="mt-2 w-full min-w-0 px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none font-bold text-slate-800 disabled:bg-slate-100"
             required
-          />
+          >
+            <option value="">Choose an onboarded rider</option>
+            {filteredRiders.map((rider) => (
+              <option key={rider.id} value={rider.id}>
+                {rider.name} — {rider.mobile}{rider.vehicleType ? ` · ${rider.vehicleType}` : ''}
+              </option>
+            ))}
+          </select>
+          {loadingRiders && <p className="mt-1 text-[11px] text-slate-500">Loading riders...</p>}
+          {ridersError && <p role="alert" className="mt-1 text-[11px] text-rose-600">{ridersError}</p>}
+          {!loadingRiders && !ridersError && riders.length === 0 && (
+            <p className="mt-1 text-[11px] text-amber-700">No available onboarded riders found.</p>
+          )}
+          {!loadingRiders && !ridersError && riders.length > 0 && filteredRiders.length === 0 && (
+            <p className="mt-1 text-[11px] text-slate-500">No riders match that search.</p>
+          )}
+          {selectedRider && <p className="mt-1 text-[11px] text-slate-500">Selected: {selectedRider.name}</p>}
         </div>
 
         <div>
@@ -115,8 +160,8 @@ export default function AdminRouteOptimizer({ onRefresh }) {
 
         <button
           type="submit"
-          disabled={searching}
-          className="bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
+          disabled={searching || loadingRiders || Boolean(ridersError) || !selectedRiderId}
+          className="w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <span>{searching ? 'Computing Routes...' : 'Find Nearby Orders'}</span>
           <span>🔍</span>

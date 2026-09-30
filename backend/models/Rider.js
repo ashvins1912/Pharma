@@ -70,7 +70,7 @@ const riderSchema = new mongoose.Schema({
         type: Number,
         default: 4.9
     }
-}, { timestamps: true });
+}, { timestamps: true, collection: 'riders' });
 
 // 2dsphere index for ultra-fast geospatial nearest rider queries
 riderSchema.index({ currentLocation: '2dsphere' });

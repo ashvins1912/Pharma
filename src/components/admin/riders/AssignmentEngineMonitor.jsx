@@ -153,13 +153,13 @@ export default function AssignmentEngineMonitor({
                                         </p>
                                     </div>
 
-                                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                                         {isSelected ? (
-                                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                                                 <select
                                                     value={selectedRiderId}
                                                     onChange={(e) => setSelectedRiderId(e.target.value)}
-                                                    className="text-xs bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 outline-none font-medium"
+                                                    className="min-w-0 flex-1 text-xs bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 outline-none font-medium"
                                                 >
                                                     <option value="">Select Rider...</option>
                                                     {riders.filter(r => !r.isOffDuty?.()).map((r) => (
