@@ -112,6 +112,25 @@ are excluded from the active fleet and assignment engine, but administrators
 can view and re-enable them. Onboarding a disabled rider with the same mobile
 number reactivates that record and preserves its delivery history.
 
+## Bulk inventory imports
+
+Administrator inventory workbooks are stored privately in MongoDB GridFS and
+processed by persistent background import jobs. The importer stages source
+rows in batches, uses unordered bulk upserts, and records row-level failures
+without rolling back successful inventory updates. Admins can poll job
+progress and download an Excel report containing only failed rows and their
+original input columns.
+
+The importer defaults to 250 rows per batch, three concurrent batches per
+import, one concurrent import job, and a 100 MiB workbook upload limit.
+Configure these limits with `INVENTORY_IMPORT_BATCH_SIZE` (maximum 1,000),
+`INVENTORY_IMPORT_CONCURRENCY` (maximum 5),
+`INVENTORY_IMPORT_JOB_CONCURRENCY` (maximum 3), and
+`INVENTORY_IMPORT_MAX_FILE_BYTES`. Set these values according to the MongoDB
+deployment's available memory and connection pool. Import job and row
+progress is persisted in MongoDB, so queued imports can resume after a server
+restart.
+
 ## Promoting a Supabase administrator
 
 After the intended account has signed in to this Supabase project at least once,

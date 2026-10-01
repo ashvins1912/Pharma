@@ -1,14 +1,32 @@
 import express from 'express';
 import multer from 'multer';
-import * as xlsx from 'xlsx';
+import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
 import { getIsConnected } from '../config/db.js';
 import { authenticateUser, isAdmin } from '../middleware/auth.js';
 import ProductDiscoveryService from '../services/ProductDiscoveryService.js';
 import SearchMetricIngestionService from '../services/SearchMetricIngestionService.js';
+import {
+    buildFailedInventoryWorkbook,
+    createInventoryImport,
+    enqueueInventoryImport,
+    getInventoryImportFailedRows,
+    getInventoryImportStatus,
+    previewInventoryWorkbook,
+    retryInventoryImport,
+    createInventoryImportFromRows
+} from '../services/InventoryImportService.js';
 
 const router = express.Router();
-const uploadMemory = multer({ storage: multer.memoryStorage() });
+const importFileLimit = Number.parseInt(process.env.INVENTORY_IMPORT_MAX_FILE_BYTES || '', 10);
+const uploadMemory = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: Number.isInteger(importFileLimit) && importFileLimit > 0
+            ? importFileLimit
+            : 100 * 1024 * 1024
+    }
+});
 const productDiscovery = new ProductDiscoveryService();
 const searchMetricIngestion = new SearchMetricIngestionService();
 const publicMedicine = medicine => {
@@ -176,79 +194,121 @@ router.get('/audits', authenticateUser, isAdmin, async (req, res) => {
     }
 });
 
-// Excel Validation & Preview (Requirement 5)
+// Start a durable background import job. Source workbook is stored in private GridFS.
+router.post('/imports', authenticateUser, isAdmin, uploadMemory.single('excelFile'), async (req, res) => {
+    try {
+        if (!req.file?.buffer) return res.status(400).json({ message: 'No Excel file provided.' });
+        if (!/\.(xlsx|xls)$/i.test(req.file.originalname)) {
+            return res.status(400).json({ message: 'Upload an .xlsx or .xls workbook.' });
+        }
+        const job = await createInventoryImport({
+            fileName: req.file.originalname,
+            buffer: req.file.buffer,
+            adminId: req.user.sub
+        });
+        enqueueInventoryImport(job._id);
+        return res.status(202).json({
+            importId: String(job._id),
+            status: job.status,
+            totalRecords: 0,
+            processedRecords: 0,
+            successfulRecords: 0,
+            failedRecords: 0,
+            failedFileAvailable: false
+        });
+    } catch (error) {
+        console.error('Inventory import job creation failed:', {
+            adminId: req.user?.sub,
+            fileName: req.file?.originalname,
+            code: error.code || error.name,
+            message: error.message
+        });
+        return res.status(error.statusCode || 500).json({
+            message: error.statusCode ? error.message : 'Could not start inventory import.'
+        });
+    }
+});
+
+router.get('/imports/:importId/status', authenticateUser, isAdmin, async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.importId)) {
+        return res.status(404).json({ message: 'Inventory import was not found.' });
+    }
+    try {
+        const job = await getInventoryImportStatus(req.params.importId, req.user.sub);
+        if (!job) return res.status(404).json({ message: 'Inventory import was not found.' });
+        return res.json({
+            importId: String(job._id),
+            fileName: job.fileName,
+            status: job.status,
+            totalRecords: job.totalRecords,
+            processedRecords: job.processedRecords,
+            successfulRecords: job.successfulRecords,
+            failedRecords: job.failedRecords,
+            progress: job.totalRecords
+                ? Math.round((job.processedRecords / job.totalRecords) * 1000) / 10
+                : 0,
+            failedFileAvailable: job.status === 'COMPLETED_WITH_ERRORS' && job.failedRecords > 0,
+            errorMessage: job.errorMessage || undefined
+        });
+    } catch (error) {
+        console.error('Inventory import status retrieval failed:', error);
+        return res.status(500).json({ message: 'Could not retrieve inventory import status.' });
+    }
+});
+
+router.get('/imports/:importId/failed-records', authenticateUser, isAdmin, async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.importId)) {
+        return res.status(404).json({ message: 'Inventory import was not found.' });
+    }
+    try {
+        const result = await getInventoryImportFailedRows(req.params.importId, req.user.sub);
+        if (!result) return res.status(404).json({ message: 'Inventory import was not found.' });
+        if (!result.rows.length) return res.status(404).json({ message: 'This import has no failed records.' });
+        const workbook = buildFailedInventoryWorkbook(result.rows);
+        const date = new Date().toISOString().slice(0, 10);
+        const fileName = `Failed_Inventory_Import_${date}.xlsx`;
+        res.set({
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition': `attachment; filename="${fileName}"`,
+            'Cache-Control': 'private, no-store'
+        });
+        return res.send(workbook);
+    } catch (error) {
+        console.error('Failed inventory report generation failed:', {
+            importId: req.params.importId,
+            adminId: req.user?.sub,
+            code: error.code || error.name
+        });
+        return res.status(error.statusCode || 500).json({
+            message: error.statusCode ? error.message : 'Could not generate failed-record workbook.'
+        });
+    }
+});
+
+router.post('/imports/:importId/retry', authenticateUser, isAdmin, async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.importId)) {
+        return res.status(404).json({ message: 'Inventory import was not found.' });
+    }
+    try {
+        const job = await retryInventoryImport(req.params.importId, req.user.sub);
+        if (!job) return res.status(404).json({ message: 'A retryable import was not found.' });
+        return res.status(202).json({ importId: String(job._id), status: 'QUEUED' });
+    } catch (error) {
+        console.error('Inventory import retry failed:', error);
+        return res.status(500).json({ message: 'Could not retry inventory import.' });
+    }
+});
+
+// Workbook preview is chunked and returns only a small preview/error sample.
 router.post('/validate-import', authenticateUser, isAdmin, uploadMemory.single('excelFile'), async (req, res) => {
     try {
         if (!req.file || !req.file.buffer) {
             return res.status(400).json({ message: "No Excel file provided." });
         }
-
-        const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
-        const sheetName = workbook.SheetNames[0];
-        const rawRows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
-
-        if (rawRows.length === 0) {
-            return res.status(400).json({ message: "Spreadsheet is empty." });
-        }
-
-        const errors = [];
-        const warnings = [];
-        const validRows = [];
-
-        rawRows.forEach((row, index) => {
-            const rowNumber = index + 2; // header is row 1
-            const name = (row['Medicine Name'] || row.name || row.Name || '').toString().trim();
-            const sku = (row['SKU'] || row.sku || '').toString().trim();
-            const price = Number(row['Price'] || row.price);
-            const stock = Number(row['Stock'] || row.stock || row.quantity || 0);
-            const expiryRaw = row['Expiry Date'] || row.expiryDate;
-            const imageUrl = (row['Cloudinary Image URL'] || row.imageUrl || '').toString().trim();
-
-            const rowErrors = [];
-            const rowWarnings = [];
-
-            if (!name) rowErrors.push("Missing Medicine Name");
-            if (isNaN(price) || price <= 0) rowErrors.push("Invalid Price (must be > 0)");
-            if (isNaN(stock) || stock < 0) rowErrors.push("Invalid Stock count");
-
-            if (expiryRaw) {
-                const parsedExpiry = new Date(expiryRaw);
-                if (isNaN(parsedExpiry.getTime())) {
-                    rowErrors.push("Invalid Expiry Date format");
-                } else if (parsedExpiry <= new Date()) {
-                    rowWarnings.push("Medicine is already expired");
-                }
-            } else {
-                rowWarnings.push("No expiry date provided; defaulting to +1 year");
-            }
-
-            if (imageUrl && !imageUrl.startsWith('http')) {
-                rowWarnings.push("Image URL does not start with http/https");
-            }
-
-            if (rowErrors.length > 0) {
-                errors.push({ rowNumber, sku: sku || 'N/A', name: name || 'Unnamed', errors: rowErrors });
-            } else {
-                if (rowWarnings.length > 0) {
-                    warnings.push({ rowNumber, sku: sku || 'N/A', name, warnings: rowWarnings });
-                }
-                validRows.push(row);
-            }
-        });
-
-        res.json({
-            rowsDetected: rawRows.length,
-            validCount: validRows.length,
-            warningsCount: warnings.length,
-            errorsCount: errors.length,
-            errors,
-            warnings,
-            previewRows: validRows.slice(0, 10),
-            validRows
-        });
+        return res.json(previewInventoryWorkbook(req.file.buffer));
     } catch (err) {
         console.error("Workbook validation error:", err);
-        res.status(500).json({ message: "Workbook validation failed: " + err.message });
+        res.status(400).json({ message: "Workbook validation failed: " + err.message });
     }
 });
 
@@ -259,14 +319,12 @@ router.post('/confirm-import', authenticateUser, isAdmin, async (req, res) => {
         if (!Array.isArray(rows) || rows.length === 0) {
             return res.status(400).json({ message: "No valid rows provided for import." });
         }
-
-        const adminId = req.user?.email || req.user?.sub || 'Admin';
-        const result = await dataStore.importExcelInventory(rows, adminId);
-
-        res.status(200).json({
-            message: `Successfully processed ${result.totalRows} items (${result.importedCount} new, ${result.updatedCount} updated)`,
-            ...result
+        const job = await createInventoryImportFromRows({
+            rows,
+            fileName: 'Confirmed_inventory_rows.xlsx',
+            adminId: req.user.sub
         });
+        return res.status(202).json({ importId: String(job._id), status: job.status });
     } catch (err) {
         console.error("Import confirmation error:", err);
         res.status(500).json({ message: "Failed to import rows: " + err.message });
@@ -279,15 +337,13 @@ router.post('/upload-excel', authenticateUser, isAdmin, uploadMemory.single('exc
         if (!req.file || !req.file.buffer) {
             return res.status(400).json({ message: "No Excel file provided." });
         }
-        const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
-        const sheetName = workbook.SheetNames[0];
-        const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
-        const adminId = req.user?.email || 'Admin';
-        const result = await dataStore.importExcelInventory(rows, adminId);
-        res.json({
-            message: `Inventory synchronized! ${result.importedCount} new medicines added, ${result.updatedCount} existing stocks merged.`,
-            result
+        const job = await createInventoryImport({
+            fileName: req.file.originalname,
+            buffer: req.file.buffer,
+            adminId: req.user.sub
         });
+        enqueueInventoryImport(job._id);
+        return res.status(202).json({ importId: String(job._id), status: job.status });
     } catch (e) {
         console.error("Direct Excel upload error:", e);
         res.status(500).json({ message: "Excel import data stream parsing failed: " + e.message });

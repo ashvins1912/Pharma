@@ -49,3 +49,11 @@ services:
         sync: false
       - key: VITE_GOOGLE_MAPS_API_KEY
         sync: false
+      - key: INVENTORY_IMPORT_BATCH_SIZE
+        sync: false
+      - key: INVENTORY_IMPORT_CONCURRENCY
+        sync: false
+      - key: INVENTORY_IMPORT_JOB_CONCURRENCY
+        sync: false
+      - key: INVENTORY_IMPORT_MAX_FILE_BYTES
+        sync: false

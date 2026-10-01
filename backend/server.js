@@ -20,6 +20,7 @@ import { csrfProtection } from './security/sessionCookie.js';
 import { sanitizeBodyMiddleware, validateLogin } from './security/validator.js';
 import dataStore from './dataStore.js';
 import DataMartRefreshService from './services/DataMartRefreshService.js';
+import { recoverInventoryImports } from './services/InventoryImportService.js';
 import { authenticateUser, isAdmin } from './middleware/auth.js';
 import {
     getDemoAdminIdentity,
@@ -69,11 +70,19 @@ connectDB()
     .then(async connected => {
         if (!connected) return;
         await dataStore.ensureCatalogSeeded();
+        await recoverInventoryImports();
         await refreshDataMart();
         const refreshTimer = setInterval(() => void refreshDataMart(), 15 * 60 * 1000);
         refreshTimer.unref();
     })
     .catch(error => console.error('MongoDB catalog initialization failed:', error));
+
+const inventoryImportRecoveryTimer = setInterval(() => {
+    void recoverInventoryImports().catch(error => {
+        console.error('Inventory import recovery check failed:', error.message);
+    });
+}, 30_000);
+inventoryImportRecoveryTimer.unref();
 
 app.use('/api/auth', authRoutes);
 app.use('/api/medicines', medicineRoutes);
