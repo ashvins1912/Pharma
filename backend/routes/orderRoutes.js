@@ -725,14 +725,11 @@ router.get('/history', authenticateUser, async (req, res) => {
     }
 
     try {
-        const closedStatuses = ['Completed', 'Delivered', 'Cancelled', 'Rejected', 'completed', 'delivered', 'cancelled', 'rejected'];
-        const orders = await Order.find({
-            userId: req.user.sub,
-            $or: [
-                { orderStatus: { $in: closedStatuses } },
-                { status: { $in: closedStatuses } }
-            ]
-        }).sort({ createdAt: -1 }).lean();
+        const closedStatuses = new Set(['completed', 'delivered', 'cancelled', 'rejected']);
+        const userOrders = await dataStore.getUserOrders(req.user.sub);
+        const orders = userOrders.filter(order => closedStatuses.has(
+            String(order.orderStatus || order.status || '').toLowerCase()
+        )).sort({ createdAt: -1 })?.lean();
         res.status(200).json(orders);
     } catch (err) {
         console.error('Order history retrieval failed:', err);
