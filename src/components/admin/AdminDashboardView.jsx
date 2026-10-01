@@ -7,18 +7,55 @@ import AdminBulkImportModal from './AdminBulkImportModal';
 import RiderFleetView from './riders/RiderFleetView';
 import AdminOrderFinancials from './AdminOrderFinancials';
 import AdminMedicineRequestsTab from './requests/AdminMedicineRequestsTab';
+import { getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 
+function PendingMedicineRequestsNotice({ count, onOpen }) {
+  if (count < 1) return null;
+  const plural = count !== 1;
+
+  return (
+    <aside className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-950 shadow-sm" aria-live="polite">
+      <h3 className="text-sm font-black">
+        {count} Medicine Request{plural ? 's' : ''} Pending
+      </h3>
+      <p className="mt-1 text-xs text-rose-800">
+        {plural
+          ? `You have ${count} medicine requests waiting for review.`
+          : 'A medicine request is waiting for review.'}
+      </p>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="mt-3 text-xs font-extrabold text-rose-800 underline underline-offset-2 hover:text-rose-950"
+      >
+        Open Medicine Requests &amp; Proposals →
+      </button>
+    </aside>
+  );
+}
+
 export default function AdminDashboardView() {
-  const { isAdmin, role, loading: authLoading } = useAuth();
+  const { isAdmin, isPharmacyOrAdmin, role, loading: authLoading } = useAuth();
   const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen } = useApp();
   const [adminTab, setAdminTab] = useState('fulfillment'); // 'fulfillment' | 'inventory' | 'routes' | 'audits'
   const [orders, setOrders] = useState([]);
+  const [pendingMedicineRequestCount, setPendingMedicineRequestCount] = useState(0);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [ordersError, setOrdersError] = useState('');
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState([]);
+
+  const loadPendingMedicineRequestCount = async () => {
+    if (authLoading || !isPharmacyOrAdmin) return;
+    try {
+      const count = await getAdminPendingMedicineRequestCount();
+      setPendingMedicineRequestCount(Number.isInteger(count) && count > 0 ? count : 0);
+    } catch (error) {
+      console.error('Failed to load pending medicine request count:', error);
+    }
+  };
 
   const loadAllOrders = async () => {
     if (authLoading || !isAdmin) return;
@@ -43,6 +80,13 @@ export default function AdminDashboardView() {
       // ignore
     }
   };
+
+  useEffect(() => {
+    if (authLoading || !isPharmacyOrAdmin) return;
+    loadPendingMedicineRequestCount();
+    const timer = window.setInterval(loadPendingMedicineRequestCount, 15000);
+    return () => window.clearInterval(timer);
+  }, [authLoading, isPharmacyOrAdmin]);
 
   useEffect(() => {
     if (authLoading || !isAdmin) return;
@@ -75,7 +119,13 @@ export default function AdminDashboardView() {
             Review requests, prepare proposals, and wait for the customer to decide.
           </p>
         </div>
-        <AdminMedicineRequestsTab />
+        <PendingMedicineRequestsNotice
+          count={pendingMedicineRequestCount}
+          onOpen={() => document.getElementById('admin-medicine-requests')?.scrollIntoView({ behavior: 'smooth' })}
+        />
+        <div id="admin-medicine-requests">
+          <AdminMedicineRequestsTab onPendingCountRefresh={loadPendingMedicineRequestCount} />
+        </div>
       </div>
     );
   }
@@ -213,6 +263,11 @@ export default function AdminDashboardView() {
         >
           <span>📋</span>
           <span>Medicine Requests & Proposals</span>
+          {pendingMedicineRequestCount > 0 && (
+            <span className="inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[10px] font-black leading-none text-white">
+              {pendingMedicineRequestCount}
+            </span>
+          )}
         </button>
 
         <button

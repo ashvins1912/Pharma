@@ -276,6 +276,18 @@ router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
     }
 });
 
+// Admin/pharmacy pending-work count; count is always queried from persisted request statuses.
+router.get('/pending-count', authenticateUser, isPharmacyOrAdmin, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const count = await dataStore.getPendingMedicineRequestCount();
+        res.json({ count });
+    } catch (error) {
+        console.error('Pending medicine request count retrieval failed:', error);
+        res.status(500).json({ message: 'Failed to fetch pending medicine request count.' });
+    }
+});
+
 // View attachment securely
 router.get('/attachments/:fileId', authenticateUser, authorizeRequestDetails, async (req, res) => {
     try {

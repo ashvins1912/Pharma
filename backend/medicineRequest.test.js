@@ -82,6 +82,7 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
     assert.equal(createdReq.requestedItems[0].requestedName, 'Ursocol 300mg Tablet');
     assert.equal(createdReq.customerId, testUser.sub);
     assert.equal(createdReq.addressId, createPayload.addressId);
+    assert.equal(await dataStore.getPendingMedicineRequestCount(), 1);
     assert.equal(
         (await dataStore.getMedicineRequestById(createdReq._id, otherCustomer)),
         null,
@@ -122,6 +123,7 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
 
     const reviewRes = await dataStore.reviewMedicineRequest(createdReq._id, adminUser, 'Checking distributor stock.');
     assert.equal(reviewRes.status, 'UNDER_REVIEW');
+    assert.equal(await dataStore.getPendingMedicineRequestCount(), 1, 'Requests under review remain pending');
 
     // 3. Pharmacist creates a proposal with pricing and delivery slot
     const proposalPayload = {
@@ -150,6 +152,7 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
     assert.ok(proposedReq.pharmacyProposal, 'Proposal must be attached');
     assert.equal(proposedReq.pharmacyProposal.finalPrice, 1260);
     assert.equal(proposedReq.pharmacyProposal.deliverySlot.label, 'Tomorrow Evening (5:00 PM - 8:00 PM)');
+    assert.equal(await dataStore.getPendingMedicineRequestCount(), 0, 'Sent proposals are no longer pending pharmacy action');
 
     // 4. Customer approves the proposal -> Automatically converted to order
     await assert.rejects(
@@ -210,11 +213,13 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
         deliveryAddress: 'Somewhere 123'
     };
     const secondReq = await dataStore.createMedicineRequest(secondReqPayload, testUser);
+    assert.equal(await dataStore.getPendingMedicineRequestCount(), 1);
     await dataStore.reviewMedicineRequest(secondReq._id, adminUser);
     await dataStore.createOrUpdateProposal(secondReq._id, {
         proposedMedicineName: 'Alternative ABC',
         finalPrice: 900
     }, adminUser);
+    assert.equal(await dataStore.getPendingMedicineRequestCount(), 0);
 
     const rejectRes = await dataStore.rejectProposalByCustomer(secondReq._id, testUser, 'Price is too high for alternative');
     assert.equal(rejectRes.status, 'CUSTOMER_REJECTED');
@@ -230,8 +235,10 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
         requestedItems: [{ requestedName: 'Discontinued Salt Med', quantity: 1 }],
         addressId: 'saved-address-101'
     }, testUser);
+    assert.equal(await dataStore.getPendingMedicineRequestCount(), 1);
     await dataStore.reviewMedicineRequest(thirdReq._id, adminUser);
     const pharmacyReject = await dataStore.rejectMedicineRequestByPharmacy(thirdReq._id, adminUser, 'Salt discontinued by FDA');
     assert.equal(pharmacyReject.status, 'PHARMACY_REJECTED');
     assert.equal(pharmacyReject.pharmacyRejectionReason, 'Salt discontinued by FDA');
+    assert.equal(await dataStore.getPendingMedicineRequestCount(), 0);
 });

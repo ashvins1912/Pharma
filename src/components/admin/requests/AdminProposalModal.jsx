@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useToast } from '../../../context/ToastContext';
 import {
   sendPharmacyProposal,
@@ -41,6 +42,63 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
 
   const [saving, setSaving] = useState(false);
   const [reviewReady, setReviewReady] = useState(false);
+  const closeButtonRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const previousActiveElement = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    const appRoot = document.getElementById('root');
+    const previousInert = appRoot?.inert;
+    document.body.style.overflow = 'hidden';
+    if (appRoot) appRoot.inert = true;
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+      const dialog = closeButtonRef.current?.closest('[role="dialog"]');
+      const focusableElements = dialog?.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusableElements?.length) {
+        event.preventDefault();
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+      if (!dialog?.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? lastElement : firstElement).focus();
+      } else if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (appRoot) appRoot.inert = previousInert;
+      if (previousActiveElement instanceof HTMLElement) previousActiveElement.focus();
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     let active = true;
@@ -243,14 +301,25 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-3xl max-w-2xl w-full p-5 sm:p-7 shadow-2xl space-y-5 animate-fade-in max-h-[92vh] overflow-y-auto border border-slate-100">
-        
-        {/* Header */}
-        <div className="flex items-start justify-between border-b border-slate-100 pb-3">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/60 p-3 backdrop-blur-sm sm:p-4"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="medicine-request-details-title"
+        className="my-auto flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[92vh] animate-fade-in"
+      >
+        <header className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-4 py-4 sm:px-7">
+          <div className="min-w-0">
+            <h2 id="medicine-request-details-title" className="text-base font-black text-slate-900 sm:text-lg">
+              Medicine Procurement Request Details
+            </h2>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               <span className="text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
                 Dispensary Review & Quotation
               </span>
@@ -258,26 +327,28 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
                 #{request.requestNumber}
               </span>
               <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full font-bold">
-                Status: {request.status}
+                {request.status.replaceAll('_', ' ')}
               </span>
             </div>
-
             {request.status === 'PROPOSAL_SENT' && (
-              <div className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-bold text-purple-900">
+              <div className="mt-2 rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-bold text-purple-900">
                 Proposal sent — waiting for customer approval. Pharmacy cannot approve or reject on the customer’s behalf.
               </div>
             )}
-            <h3 className="text-base sm:text-lg font-black text-slate-900">
-              Formulate Pharmacy Proposal
-            </h3>
           </div>
           <button
+            ref={closeButtonRef}
+            type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 text-lg font-bold p-1 rounded-full hover:bg-slate-100 transition cursor-pointer"
+            aria-label="Close details"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xl font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            ✕
+            ×
           </button>
-        </div>
+        </header>
+
+        <div className="min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-7">
+          <div className="space-y-5">
 
         {/* Customer & Request Summary Banner */}
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2.5 text-xs">
@@ -680,7 +751,10 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
 
         </form>
 
-      </div>
-    </div>
+          </div>
+        </div>
+      </section>
+    </div>,
+    document.body
   );
 }

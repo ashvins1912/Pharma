@@ -5,7 +5,7 @@ import {
 } from '../../../api/medicineRequestService';
 import AdminProposalModal from './AdminProposalModal';
 
-export default function AdminMedicineRequestsTab() {
+export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
   const [requests, setRequests] = useState([]);
   const [metrics, setMetrics] = useState({
     totalRequests: 0,
@@ -41,6 +41,7 @@ export default function AdminMedicineRequestsTab() {
       console.error('Failed to load admin medicine requests:', err);
     } finally {
       setLoading(false);
+      onPendingCountRefresh?.();
     }
   };
 

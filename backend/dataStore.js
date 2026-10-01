@@ -3398,6 +3398,17 @@ export const dataStore = {
             expiredCount: expired,
             proposalAcceptanceRate: acceptanceRate
         };
+    },
+
+    async getPendingMedicineRequestCount() {
+        if (getIsConnected()) {
+            return MedicineRequest.countDocuments({
+                status: { $in: ['REQUESTED', 'UNDER_REVIEW'] }
+            });
+        }
+        return inMemoryMedicineRequests.filter(request =>
+            request.status === 'REQUESTED' || request.status === 'UNDER_REVIEW'
+        ).length;
     }
 };
 
