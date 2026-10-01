@@ -35,7 +35,10 @@ function MainApp() {
     whatsappStatus,
     loadWhatsAppStatus,
     requestModalOpen,
-    setRequestModalOpen,
+    closeRequestModal,
+    requestAuthPending,
+    cancelRequestAuthentication,
+    resumeRequestAfterAuthentication,
     activeProposalRequest,
     setActiveProposalRequest,
     openProposalModal
@@ -73,6 +76,14 @@ function MainApp() {
   useEffect(() => {
     if (!user && (activeTab === 'orders' || activeTab === 'addresses' || activeTab === 'admin' || activeTab === 'requests')) {
       setActiveTab('store');
+    }
+    if (!user) {
+      setCartOpen(false);
+      setCheckoutOpen(false);
+      setProfileOpen(false);
+      setPlacedOrder(null);
+      setRatingPromptOrder(null);
+      setDismissedRatingOrderIds([]);
     }
     if (!isAdmin && activeTab === 'admin') setActiveTab('store');
     if (!user && activeTrackingOrder) {
@@ -115,6 +126,20 @@ function MainApp() {
   useEffect(() => {
     if (passwordRecoveryRequired) setAuthOpen(true);
   }, [passwordRecoveryRequired]);
+
+  React.useEffect(() => {
+    if (!requestAuthPending) return;
+    if (user) {
+      resumeRequestAfterAuthentication();
+    } else {
+      setAuthOpen(true);
+    }
+  }, [requestAuthPending, user, resumeRequestAfterAuthentication]);
+
+  const handleAuthModalClose = ({ authenticated = false } = {}) => {
+    setAuthOpen(false);
+    if (!authenticated) cancelRequestAuthentication();
+  };
 
   const displayName = user?.user_metadata?.name || user?.email?.split('@')[0] || "Friend";
 
@@ -161,7 +186,7 @@ function MainApp() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="min-w-0 flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
         {/* TAB 1: MEDICINE STORE & CATALOG */}
         {activeTab === 'store' && (
@@ -332,7 +357,7 @@ function MainApp() {
       {/* Authentication Modal */}
       <AuthModal
         isOpen={authOpen}
-        onClose={() => setAuthOpen(false)}
+        onClose={handleAuthModalClose}
       />
 
       {/* User Profile Dropdown Modal */}
@@ -351,7 +376,7 @@ function MainApp() {
       {/* Medicine Procurement Request Modal */}
       <MedicineRequestModal
         isOpen={requestModalOpen}
-        onClose={() => setRequestModalOpen(false)}
+        onClose={closeRequestModal}
       />
 
       {/* Customer Proposal Review & Approval Modal */}

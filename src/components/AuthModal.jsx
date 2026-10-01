@@ -115,10 +115,10 @@ export default function AuthModal({ isOpen, onClose }) {
     });
   };
 
-  const handleClose = () => {
+  const handleClose = (authenticated = false) => {
     cancelMfa();
     resetForm();
-    onClose();
+    onClose({ authenticated });
   };
 
   const handleSubmit = async (e) => {
@@ -136,7 +136,7 @@ export default function AuthModal({ isOpen, onClose }) {
         }
         await updatePassword(password);
         addToast('Your password has been reset. You are now signed in.', 'success');
-        handleClose();
+        handleClose(true);
       } else if (isSignUp) {
         if (password !== confirmPassword) {
           setErrorMsg('Passwords do not match.');
@@ -145,7 +145,7 @@ export default function AuthModal({ isOpen, onClose }) {
         }
         await signUpWithEmail(email, password, name, mobile);
         addToast('Account created successfully!', 'success');
-        handleClose();
+        handleClose(true);
       } else {
         // Step 1: Submit primary credentials
         const result = await loginWithEmail(email, password);
@@ -154,7 +154,7 @@ export default function AuthModal({ isOpen, onClose }) {
           // Automatically transitions to Step 2 (TOTP verification UI)
         } else {
           addToast('Signed in successfully!', 'success');
-          handleClose();
+          handleClose(true);
         }
       }
     } catch (err) {
@@ -177,7 +177,7 @@ export default function AuthModal({ isOpen, onClose }) {
     try {
       await verifyTotp(totpCode.trim());
       addToast('🛡️ Two-Factor Authentication verified. Signed in!', 'success');
-      handleClose();
+      handleClose(true);
     } catch (err) {
       setErrorMsg(err.message || 'Invalid 6-digit code. Please verify in your authenticator app.');
     } finally {
@@ -204,7 +204,7 @@ export default function AuthModal({ isOpen, onClose }) {
     setLoading(true);
     try {
       await loginWithGoogle();
-      handleClose();
+      handleClose(true);
     } catch (err) {
       setErrorMsg(err.message || 'Google OAuth failed.');
       setLoading(false);
@@ -217,7 +217,7 @@ export default function AuthModal({ isOpen, onClose }) {
     try {
       await loginDemoCustomer();
       addToast('Logged in as Demo Customer!', 'success');
-      handleClose();
+      handleClose(true);
     } catch (err) {
       setErrorMsg(err.message || 'Demo customer sign-in failed.');
     } finally {
@@ -231,7 +231,7 @@ export default function AuthModal({ isOpen, onClose }) {
     try {
       await loginDemoAdmin();
       addToast('Logged in as Demo Admin!', 'success');
-      handleClose();
+      handleClose(true);
     } catch (err) {
       setErrorMsg(err.message || 'Demo admin sign-in failed.');
     } finally {

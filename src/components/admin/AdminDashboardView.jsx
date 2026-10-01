@@ -62,7 +62,7 @@ export default function AdminDashboardView() {
   const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.finalTotal) || 0), 0);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="min-w-0 space-y-6 animate-fade-in">
       
       {/* Top Banner & Metric Cards */}
       <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-3xl p-6 shadow-md space-y-5">

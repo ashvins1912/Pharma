@@ -2423,8 +2423,8 @@ export const dataStore = {
                 : 'NOT_IN_CATALOG'
         }));
 
-        if (!requestedItems.length || !requestedItems[0].requestedName) {
-            throw inventoryError('Please provide the medicine name you want to request.');
+        if (!requestedItems.length || requestedItems.some(item => !item.requestedName)) {
+            throw inventoryError('Please provide a medicine name for every requested item.');
         }
 
         const deliveryAddress = String(payload.deliveryAddress || '').trim() || 'Pending address confirmation';
@@ -2440,7 +2440,7 @@ export const dataStore = {
             actorId: customerId,
             role: 'Customer',
             timestamp: new Date(),
-            notes: `Requested ${requestedItems[0].requestedName} (x${requestedItems[0].quantity})`
+            notes: `Requested ${requestedItems.map(item => `${item.requestedName} (x${item.quantity})`).join(', ')}`
         };
 
         const requestDoc = {

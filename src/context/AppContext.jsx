@@ -35,6 +35,7 @@ export function AppProvider({ children }) {
   const [addresses, setAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [loadingAddresses, setLoadingAddresses] = useState(false);
+  const addressLoadSequence = useRef(0);
 
   // Orders & Tracking State
   const [orders, setOrders] = useState([]);
@@ -47,7 +48,10 @@ export function AppProvider({ children }) {
   const [loadingMedicineRequests, setLoadingMedicineRequests] = useState(false);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [requestPrefillData, setRequestPrefillData] = useState(null);
+  const [requestAuthPending, setRequestAuthPending] = useState(false);
   const [activeProposalRequest, setActiveProposalRequest] = useState(null);
+  const previousUserId = useRef(null);
+  const medicineRequestLoadSequence = useRef(0);
 
   // Customer Notifications State
   const [notifications, setNotifications] = useState([
@@ -198,10 +202,11 @@ export function AppProvider({ children }) {
 
   // Fetch User Addresses
   const loadAddresses = useCallback(async () => {
+    const requestSequence = ++addressLoadSequence.current;
     try {
       setLoadingAddresses(true);
       const res = await apiClient.get('/api/user/addresses');
-      if (Array.isArray(res.data)) {
+      if (requestSequence === addressLoadSequence.current && Array.isArray(res.data)) {
         const addrs = res.data;
         setAddresses(addrs);
         if (addrs.length > 0) {
@@ -215,6 +220,7 @@ export function AppProvider({ children }) {
         }
       }
     } catch (err) {
+      if (requestSequence !== addressLoadSequence.current) return;
       console.warn("Address directory notice:", err?.message || err);
       // Graceful fallback to initial address so addresses and checkout are immediately usable
       setAddresses((prev) => {
@@ -236,7 +242,43 @@ export function AppProvider({ children }) {
         return [initial];
       });
     } finally {
-      setLoadingAddresses(false);
+      if (requestSequence === addressLoadSequence.current) setLoadingAddresses(false);
+    }
+  }, [user, selectedAddressId]);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    const currentUserId = user?.id || null;
+    if (previousUserId.current !== currentUserId) {
+      if (previousUserId.current) {
+        addressLoadSequence.current += 1;
+        orderLoadSequence.current += 1;
+        medicineRequestLoadSequence.current += 1;
+        setAddresses([]);
+        setSelectedAddressId('');
+        setLoadingAddresses(false);
+        setOrders([]);
+        setLoadingOrders(false);
+        setMedicineRequests([]);
+        setLoadingMedicineRequests(false);
+        setCart([]);
+        setAppliedCoupon(null);
+        setCouponCode('');
+        setCouponError('');
+        setSearchQuery('');
+        setSelectedCategory('All');
+        setHideRx(false);
+        setSortOption('default');
+        setPage(1);
+        setActiveTrackingOrder(null);
+        setActiveProposalRequest(null);
+        setRequestModalOpen(false);
+        setRequestPrefillData(null);
+        setRequestAuthPending(false);
+        setNotifications(previous => previous.filter(notification => !notification.id.startsWith('notif-prop-')));
+      }
+      previousUserId.current = currentUserId;
     }
   }, [user?.id]);
 
@@ -259,7 +301,7 @@ export function AppProvider({ children }) {
     }
     try {
       if (!silent) setLoadingOrders(true);
-      const res = await apiClient.get('/api/orders/history');
+      const res = await apiClient.get('/api/orders/mine');
       if (requestSequence === orderLoadSequence.current) {
         setOrders(res.data || []);
       }
@@ -280,6 +322,7 @@ export function AppProvider({ children }) {
 
   // Load User Medicine Requests
   const loadUserMedicineRequests = useCallback(async ({ silent = false } = {}) => {
+    const requestSequence = ++medicineRequestLoadSequence.current;
     if (!user) {
       setMedicineRequests([]);
       setLoadingMedicineRequests(false);
@@ -288,6 +331,7 @@ export function AppProvider({ children }) {
     try {
       if (!silent) setLoadingMedicineRequests(true);
       const list = await getCustomerMedicineRequests();
+      if (requestSequence !== medicineRequestLoadSequence.current) return;
       setMedicineRequests(list || []);
 
       // Check if any proposals are ready to notify customer in notification bell
@@ -316,7 +360,7 @@ export function AppProvider({ children }) {
     } catch {
       // ignore
     } finally {
-      if (!silent) setLoadingMedicineRequests(false);
+      if (!silent && requestSequence === medicineRequestLoadSequence.current) setLoadingMedicineRequests(false);
     }
   }, [user?.id]);
 
@@ -328,6 +372,29 @@ export function AppProvider({ children }) {
 
   const openRequestModal = (prefill = null) => {
     setRequestPrefillData(prefill);
+    if (user) {
+      setRequestAuthPending(false);
+      setRequestModalOpen(true);
+    } else {
+      setRequestModalOpen(false);
+      setRequestAuthPending(true);
+    }
+  };
+
+  const closeRequestModal = () => {
+    setRequestModalOpen(false);
+    setRequestPrefillData(null);
+    setRequestAuthPending(false);
+  };
+
+  const cancelRequestAuthentication = () => {
+    setRequestPrefillData(null);
+    setRequestAuthPending(false);
+  };
+
+  const resumeRequestAfterAuthentication = () => {
+    if (!user) return;
+    setRequestAuthPending(false);
     setRequestModalOpen(true);
   };
 
@@ -360,42 +427,45 @@ export function AppProvider({ children }) {
       return;
     }
 
-    setCart((prev) => {
-      const existing = prev.find(item => item._id === med._id);
-      if (existing) {
-        if (existing.quantity >= stock) {
-          addToast(`Maximum available stock reached for ${med.name} (${stock} units).`, 'warning');
-          return prev;
-        }
-        addToast(`Increased ${med.name} quantity to ${existing.quantity + 1}`, 'success');
-        return prev.map(item =>
-          item._id === med._id ? { ...item, quantity: item.quantity + 1 } : item
-        );
+    const existing = cart.find(item => item._id === med._id);
+    if (existing) {
+      if (existing.quantity >= stock) {
+        addToast(`Maximum available stock reached for ${med.name} (${stock} units).`, 'warning');
+        return;
       }
-      addToast(`Added ${med.name} to cart`, 'success');
-      return [...prev, { ...med, quantity: 1, stock }];
-    });
+      const quantity = existing.quantity + 1;
+      setCart(cart.map(item =>
+        item._id === med._id ? { ...item, quantity } : item
+      ));
+      addToast(`Increased ${med.name} quantity to ${quantity}`, 'success');
+      return;
+    }
+
+    setCart([...cart, { ...med, quantity: 1, stock }]);
+    addToast(`Added ${med.name} to cart`, 'success');
   };
 
   const updateQuantity = (id, delta) => {
-    setCart((prev) => {
-      const item = prev.find(i => i._id === id);
-      if (!item) return prev;
-      const nextQty = item.quantity + delta;
-      if (nextQty <= 0) {
-        addToast(`Removed ${item.name} from cart`, 'info');
-        return prev.filter(i => i._id !== id);
-      }
-      if (nextQty > item.stock) {
-        addToast(`Only ${item.stock} units available in pharmacy stock.`, 'warning');
-        return prev;
-      }
-      return prev.map(i => i._id === id ? { ...i, quantity: nextQty } : i);
-    });
+    const item = cart.find(cartItem => cartItem._id === id);
+    if (!item) return;
+
+    const nextQty = item.quantity + delta;
+    if (nextQty <= 0) {
+      setCart(cart.filter(cartItem => cartItem._id !== id));
+      addToast(`Removed ${item.name} from cart`, 'info');
+      return;
+    }
+    if (nextQty > item.stock) {
+      addToast(`Only ${item.stock} units available in pharmacy stock.`, 'warning');
+      return;
+    }
+    setCart(cart.map(cartItem => cartItem._id === id ? { ...cartItem, quantity: nextQty } : cartItem));
   };
 
   const removeFromCart = (id) => {
-    setCart(prev => prev.filter(i => i._id !== id));
+    const item = cart.find(cartItem => cartItem._id === id);
+    if (!item) return;
+    setCart(cart.filter(cartItem => cartItem._id !== id));
     addToast('Item removed from cart', 'info');
   };
 
@@ -555,8 +625,12 @@ export function AppProvider({ children }) {
         loadingMedicineRequests,
         loadUserMedicineRequests,
         requestModalOpen,
-        setRequestModalOpen,
+        closeRequestModal,
         requestPrefillData,
+        requestAuthPending,
+        setRequestAuthPending,
+        cancelRequestAuthentication,
+        resumeRequestAfterAuthentication,
         openRequestModal,
         activeProposalRequest,
         setActiveProposalRequest,

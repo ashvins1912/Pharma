@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function ProductCard({ med }) {
   const { cart, addToCart, updateQuantity, openRequestModal } = useApp();
+  const { user } = useAuth();
   const [imageError, setImageError] = useState(false);
 
   const stock = med.availableQuantity ?? med.stock ?? med.quantity ?? 0;
@@ -113,7 +115,7 @@ export default function ProductCard({ med }) {
           </span>
         </div>
 
-        <div>
+        {user && <div>
           {isOut ? (
             <button
               onClick={() => openRequestModal({
@@ -162,7 +164,7 @@ export default function ProductCard({ med }) {
               <span>Add</span>
             </button>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );
