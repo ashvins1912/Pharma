@@ -4,12 +4,14 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "vite build",
-    "lint": "tsc --noEmit",
-    "admin:promote": "node scripts/promote-admin.mjs",
-    "prestart": "npm run build",
-    "start": "tsx server.ts"
+    "dev": "node scripts/dev.js",
+    "dev:legacy": "tsx server.ts",
+    "build": "npm --prefix frontend run build",
+    "lint": "npm --prefix frontend run lint",
+    "admin:promote": "npm --prefix backend run admin:promote",
+    "start": "npm --prefix api-gateway start",
+    "start:backend": "npm --prefix backend start",
+    "start:legacy": "tsx server.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

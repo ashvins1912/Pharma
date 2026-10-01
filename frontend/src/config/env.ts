@@ -11,6 +11,8 @@ const optionalString = z.preprocess(
 );
 
 const frontendEnvSchema = z.object({
+  VITE_API_URL: optionalUrl,
+  VITE_DEV_API_PROXY: optionalUrl,
   VITE_FRONTEND_URL: optionalUrl,
   VITE_SUPABASE_URL: optionalUrl,
   VITE_SUPABASE_ANON_KEY: optionalString
@@ -28,6 +30,8 @@ if (!parsedEnv.success) {
 }
 
 export const env = {
+  VITE_API_URL: parsedEnv.data.VITE_API_URL || '',
+  VITE_DEV_API_PROXY: parsedEnv.data.VITE_DEV_API_PROXY || '',
   VITE_FRONTEND_URL: parsedEnv.data.VITE_FRONTEND_URL || '',
   VITE_SUPABASE_URL: parsedEnv.data.VITE_SUPABASE_URL || '',
   VITE_SUPABASE_ANON_KEY: parsedEnv.data.VITE_SUPABASE_ANON_KEY || ''

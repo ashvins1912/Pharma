@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { createServer } from 'node:http';
 import { fileURLToPath } from 'url';
 import { env } from './backend/config/env.js';
 import backendApp from './backend/server.js';
@@ -10,17 +11,25 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
+  // Compatibility entrypoint for the existing combined Render deployment.
+  // New local development and API deployments use the independent projects.
   const app = backendApp;
   const { PORT, NODE_ENV } = env;
   const isProduction = NODE_ENV === 'production';
+  const server = createServer(app);
+  let viteServer;
 
   if (!isProduction) {
-    const vite = await createViteServer({
-      root: __dirname,
-      server: { middlewareMode: true },
+    const frontendPath = path.resolve(__dirname, 'frontend');
+    viteServer = await createViteServer({
+      root: frontendPath,
+      server: {
+        middlewareMode: true,
+        hmr: { server }
+      },
       appType: 'spa'
     });
-    app.use(vite.middlewares);
+    app.use(viteServer.middlewares);
 
     // Serve transformed index.html for SPA routes in dev
     app.use('*', async (req, res, next) => {
@@ -29,17 +38,17 @@ async function startServer() {
         return next();
       }
       try {
-        const indexPath = path.resolve(__dirname, 'index.html');
+        const indexPath = path.resolve(frontendPath, 'index.html');
         let template = fs.readFileSync(indexPath, 'utf-8');
-        template = await vite.transformIndexHtml(url, template);
+        template = await viteServer.transformIndexHtml(url, template);
         res.status(200).set({ 'Content-Type': 'text/html', 'Cache-Control': 'no-cache' }).end(template);
       } catch (e: any) {
-        vite.ssrFixStacktrace(e);
+        viteServer.ssrFixStacktrace(e);
         next(e);
       }
     });
   } else {
-    const distPath = path.resolve(__dirname, 'dist');
+    const distPath = path.resolve(__dirname, 'frontend/dist');
     app.use(express.static(distPath));
     app.get('*', (req: express.Request, res: express.Response, next: express.NextFunction) => {
       if (req.originalUrl.startsWith('/api')) {
@@ -56,13 +65,27 @@ async function startServer() {
     res.status(500).json({ message: err?.message || 'Internal server error' });
   });
 
-  const server = app.listen(PORT, '0.0.0.0', () => {
+  server.on('error', async error => {
+    if (viteServer) await viteServer.close();
+    if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use. Stop the other process or set PORT to an available port.`);
+    } else {
+      console.error('Pharmacy App server failed to listen:', error);
+    }
+    process.exit(1);
+  });
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Pharmacy App server running at http://0.0.0.0:${PORT}`);
   });
 
+  let shuttingDown = false;
   const shutdown = () => {
-    server.close(() => {
-      process.exit(0);
+    if (shuttingDown) return;
+    shuttingDown = true;
+    server.close(async error => {
+      if (error) console.error('Pharmacy App server shutdown failed:', error);
+      if (viteServer) await viteServer.close();
+      process.exitCode = error ? 1 : 0;
     });
   };
   process.on('SIGTERM', shutdown);

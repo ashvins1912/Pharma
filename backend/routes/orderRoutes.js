@@ -5,11 +5,12 @@ import dataStore from '../dataStore.js';
 import Order from '../models/Order.js';
 import Rider from '../models/Rider.js';
 import { authenticateUser, authenticateSupabaseUser, isAdmin } from '../middleware/auth.js';
-import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
+import { getNotificationLog } from '../config/whatsapp.js';
 import { getPrescription, removePrescription, savePrescription } from '../config/prescriptionStorage.js';
 import { getIsConnected } from '../config/db.js';
 import DynamicOrderService from '../services/DynamicOrderService.js';
 import deliveryContainer from '../modules/delivery/container.js';
+import { publishOrderEvent, toOrderEventType } from '../services/OrderEventService.js';
 
 const router = express.Router();
 const dynamicOrderService = new DynamicOrderService({
@@ -255,8 +256,8 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             paymentMethod: paymentMethod || "Cash on Delivery (COD)"
         }, customerName);
 
-        // Automated messaging trigger
-        await sendCustomWhatsAppAlert(order, 'Placed');
+        await publishOrderEvent(order, 'OrderCreated');
+        await publishOrderEvent(order, 'OrderInventoryReserved');
 
         res.status(201).json({
             message: "🎉 Cash-on-Delivery order registered into dispensary queue!",
@@ -356,6 +357,8 @@ router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
             reviewDecision === 'Approved' ? 'approve' : 'reject',
             req.user.user_metadata?.name || req.user.email || 'Admin'
         );
+        await publishOrderEvent(order, reviewDecision === 'Approved' ? 'OrderApproved' : 'OrderRejected');
+        if (reviewDecision === 'Rejected') await publishOrderEvent(order, 'OrderInventoryReleased');
 
         let assignmentMessage = '';
         if (reviewDecision === 'Approved') {
@@ -365,11 +368,7 @@ router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
                 if (result.success) {
                     order = result.order.toJSON ? result.order.toJSON() : result.order;
                     assignmentMessage = ` Rider ${result.rider.name} was assigned automatically.`;
-                    try {
-                        await sendCustomWhatsAppAlert(order, 'Assigned', result.rider.mobile);
-                    } catch (notificationError) {
-                        console.warn(`[WhatsApp] Assignment notification failed for order ${order._id}:`, notificationError.message);
-                    }
+                    await publishOrderEvent(order, 'OrderAssigned', { payload: { riderMobile: result.rider.mobile } });
                 } else {
                     assignmentMessage = ' No available rider was found; assign one manually.';
                 }
@@ -394,7 +393,8 @@ router.put('/:id/dispatch', authenticateUser, isAdmin, async (req, res) => {
             req.user.user_metadata?.name || req.user.email || 'Admin',
             riderInfo
         );
-        await sendCustomWhatsAppAlert(order, 'Dispatched', order.rider?.riderMobile);
+        await publishOrderEvent(order, 'OrderDispatched');
+        await publishOrderEvent(order, 'OrderInventoryDeducted');
         res.json({ message: 'Order dispatched and reserved inventory deducted.', order });
     } catch (err) {
         console.error('Order dispatch failed:', err);
@@ -436,6 +436,7 @@ router.put('/:id/modify', authenticateUser, handlePrescriptionUpload, async (req
             uploadedPrescriptionUrl,
             req.user.user_metadata?.name || req.user.email || 'Customer'
         );
+        await publishOrderEvent(order, 'OrderUpdated');
         if (previousPrescriptionUrl && newlyUploadedPrescriptionUrl && previousPrescriptionUrl !== newlyUploadedPrescriptionUrl) {
             try {
                 await removePrescription(previousPrescriptionUrl);
@@ -471,6 +472,8 @@ router.put('/:id/cancel', authenticateUser, async (req, res) => {
             req.user.user_metadata?.name || req.user.email || 'Customer',
             req.user.sub
         );
+        await publishOrderEvent(order, 'OrderCancelled');
+        await publishOrderEvent(order, 'OrderInventoryReleased');
         res.json({ message: 'Order cancelled and reserved stock released.', order });
     } catch (err) {
         console.error('Order cancellation failed:', err);
@@ -497,6 +500,8 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
 
         const actor = req.user.user_metadata?.name || req.user.email || 'Pharmacist Admin';
         let updatedOrder = await dataStore.transitionOrderStatus(orderId, newStatus, actor, riderInfo);
+        if (newStatus === 'Dispatched') await publishOrderEvent(updatedOrder, 'OrderInventoryDeducted');
+        if (newStatus === 'Cancelled') await publishOrderEvent(updatedOrder, 'OrderInventoryReleased');
         let assignmentMessage = '';
         let notificationEvent = newStatus === 'Ready to Dispatch' ? 'Ready to Dispatch' : null;
         let notificationMobile = updatedOrder.rider?.riderMobile;
@@ -525,16 +530,17 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
             }
         }
 
-        // Trigger notification according to lifecycle
-        if (newStatus === 'Dispatched') notificationEvent = 'Dispatched';
-        else if (newStatus === 'Delivered') notificationEvent = 'Delivered';
-
-        if (notificationEvent) {
-            try {
-                await sendCustomWhatsAppAlert(updatedOrder, notificationEvent, notificationMobile);
-            } catch (notificationError) {
-                console.warn(`[WhatsApp] ${notificationEvent} notification failed:`, notificationError.message);
+        if (notificationEvent === 'Assigned') {
+            const statusEvent = toOrderEventType(newStatus);
+            if (statusEvent) {
+                await publishOrderEvent(updatedOrder, statusEvent, { payload: { notificationSuppressed: true } });
             }
+            await publishOrderEvent(updatedOrder, 'OrderAssigned', { payload: { riderMobile: notificationMobile } });
+        } else if (notificationEvent === 'Ready to Dispatch') {
+            await publishOrderEvent(updatedOrder, 'OrderReadyForDispatch');
+        } else {
+            const statusEvent = toOrderEventType(newStatus);
+            if (statusEvent) await publishOrderEvent(updatedOrder, statusEvent);
         }
 
         res.json({
@@ -600,11 +606,8 @@ router.post('/admin/dispatch-batch', authenticateUser, isAdmin, async (req, res)
             try {
                 const updated = await dataStore.transitionOrderStatus(id, 'Dispatched', actor, riderInfo);
                 dispatchedOrders.push(updated);
-                try {
-                    await sendCustomWhatsAppAlert(updated, 'Dispatched', riderInfo.riderMobile);
-                } catch (notificationError) {
-                    console.warn(`[WhatsApp] Batch dispatch notification failed for order ${id}:`, notificationError.message);
-                }
+                await publishOrderEvent(updated, 'OrderDispatched');
+                await publishOrderEvent(updated, 'OrderInventoryDeducted');
             } catch (err) {
                 console.warn(`Could not dispatch order ${id}:`, err.message);
                 dispatchErrors.push({ orderId: id, message: err.message });
@@ -638,6 +641,8 @@ router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res
             riderInfo = await resolveDispatchRider(currentOrder?.rider?.riderId, orderId);
         }
         let order = await dataStore.transitionOrderStatus(orderId, targetStatus, actor, riderInfo);
+        if (targetStatus === 'Dispatched') await publishOrderEvent(order, 'OrderInventoryDeducted');
+        if (targetStatus === 'Cancelled') await publishOrderEvent(order, 'OrderInventoryReleased');
         let assignmentMessage = '';
         let notificationEvent = step === 'ready' ? 'Ready to Dispatch' : null;
         if (step === 'ready') {
@@ -659,11 +664,20 @@ router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res
         if (step === 'dispatch') notificationEvent = 'Dispatched';
         else if (step === 'deliver') notificationEvent = 'Delivered';
         if (notificationEvent) {
-            try {
-                await sendCustomWhatsAppAlert(order, notificationEvent, order.rider?.riderMobile);
-            } catch (notificationError) {
-                console.warn(`[WhatsApp] ${notificationEvent} notification failed for order ${orderId}:`, notificationError.message);
+            const event = notificationEvent === 'Dispatched'
+                ? 'OrderDispatched'
+                : notificationEvent === 'Delivered'
+                    ? 'OrderDelivered'
+                    : 'OrderReadyForDispatch';
+            if (notificationEvent === 'Assigned') {
+                await publishOrderEvent(order, 'OrderReadyForDispatch', { payload: { notificationSuppressed: true } });
+                await publishOrderEvent(order, 'OrderAssigned');
+            } else {
+                await publishOrderEvent(order, event);
             }
+        } else {
+            const orderEvent = toOrderEventType(targetStatus);
+            if (orderEvent) await publishOrderEvent(order, orderEvent);
         }
 
         res.json({ message: `Transaction status shifted safely.${assignmentMessage}`, order });

@@ -78,6 +78,22 @@ test('invalid records have readable validation errors and preserve original colu
     assert.equal(Object.keys(failedRecord).includes('Technical Error Code'), true);
 });
 
+test('inventory import preserves normalized generic name, strength, and form', () => {
+    const normalized = normalizeInventoryImportRow({
+        SKU: 'PARA-500',
+        'Medicine Name': 'Paracetamol 500mg',
+        'Generic Name': 'Paracetamol',
+        Strength: '500mg',
+        Form: 'Tablet',
+        Price: 45,
+        Stock: 10,
+        'Expiry Date': '2028-12-31'
+    });
+    assert.equal(normalized.value.genericName, 'Paracetamol');
+    assert.equal(normalized.value.strength, '500mg');
+    assert.equal(normalized.value.form, 'Tablet');
+});
+
 test('mixed workbook reports every invalid row while limiting preview error samples', () => {
     const rows = Array.from({ length: 10_000 }, (_, index) => ({
         SKU: `SKU-${index + 1}`,

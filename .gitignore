@@ -60,4 +60,11 @@ Thumbs.db
 /backend/.wwebjs_auth/
 /backend/.wwebjs_cache/
 /backend/node_modules/
+/frontend/node_modules/
+/frontend/dist/
+/backend/.env
+/services/inventory-service/data/
+/services/inventory-service/.env
+/services/order-service/.env
+/backend/data/whatsapp-auth/
 /data/whatsapp-auth/

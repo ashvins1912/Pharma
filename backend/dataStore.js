@@ -1,6 +1,7 @@
 // Comprehensive in-memory and MongoDB data store layer
 import { getIsConnected } from './config/db.js';
 import mongoose from 'mongoose';
+import { randomUUID } from 'node:crypto';
 import Medicine from './models/Medicine.js';
 import Order from './models/Order.js';
 import Coupon from './models/Coupon.js';
@@ -10,7 +11,8 @@ import Proposal from './models/Proposal.js';
 import CustomerPointsLedger from './models/CustomerPointsLedger.js';
 import Rider from './models/Rider.js';
 import MedicineRequest from './models/MedicineRequest.js';
-import { sendWhatsAppMedicineRequestAlert, sendCustomWhatsAppAlert } from './config/whatsapp.js';
+import { sendWhatsAppMedicineRequestAlert } from './config/whatsapp.js';
+import { publishOrderEvent, toOrderEventType } from './services/OrderEventService.js';
 import ProfitMarginRewardEngine from './strategies/ProfitMarginRewardEngine.js';
 import DefaultProfitRewardStrategy from './strategies/ProfitRewardStrategy.js';
 import FixedDeliveryRewardStrategy from './strategies/DeliveryRewardStrategy.js';
@@ -1139,6 +1141,34 @@ export const dataStore = {
             }
             quantities.set(medicineId, (quantities.get(medicineId) || 0) + quantity);
         }
+        const source = orderData.source || 'WEB';
+        const externalReference = typeof orderData.externalReference === 'string'
+            ? orderData.externalReference.trim()
+            : null;
+        const idempotencyKey = typeof orderData.idempotencyKey === 'string'
+            ? orderData.idempotencyKey.trim()
+            : null;
+        const findExistingOrder = async session => {
+            if (!getIsConnected() || (!externalReference && !idempotencyKey)) return null;
+            const predicates = [];
+            if (externalReference) predicates.push({ source, externalReference });
+            if (idempotencyKey) predicates.push({ source, idempotencyKey });
+            const existing = await Order.findOne({ $or: predicates }).session(session).lean();
+            if (!existing) return null;
+            if (existing.userId !== orderData.userId
+                || (externalReference && existing.externalReference !== externalReference)
+                || (idempotencyKey && existing.idempotencyKey !== idempotencyKey)) {
+                throw inventoryError('Order idempotency key or external reference belongs to a different client.', 409);
+            }
+            const requested = [...quantities].sort(([a], [b]) => a.localeCompare(b));
+            const existingItems = (existing.medicineItems || [])
+                .map(item => [String(item.medicineId), Number(item.quantity)])
+                .sort(([a], [b]) => a.localeCompare(b));
+            if (JSON.stringify(requested) !== JSON.stringify(existingItems)) {
+                throw inventoryError('Order idempotency key has already been used with different items.', 409);
+            }
+            return existing;
+        };
 
         const now = new Date();
         const statusEntry = {
@@ -1152,8 +1182,14 @@ export const dataStore = {
         if (getIsConnected()) {
             const session = await mongoose.startSession();
             let createdOrder;
+            let createdNewOrder = false;
             try {
                 await session.withTransaction(async () => {
+                    const existingOrder = await findExistingOrder(session);
+                    if (existingOrder) {
+                        createdOrder = existingOrder;
+                        return;
+                    }
                     const medicineItems = [];
                     const itemSnapshots = [];
                     let totalAmount = 0;
@@ -1212,16 +1248,27 @@ export const dataStore = {
                         });
                         itemSnapshots.push({
                             _id: medicine._id.toString(),
+                            productId: medicine._id.toString(),
                             medicineId: medicine._id,
                             name: medicine.name,
+                            productName: medicine.name,
                             sku: medicine.sku || medicine.code || '',
+                            genericName: medicine.genericName || medicine.composition || '',
+                            strength: medicine.strength || '',
+                            form: medicine.form || '',
+                            manufacturer: medicine.manufacturer || medicine.brand || '',
                             price,
+                            unitPrice: price,
+                            tax: 0,
+                            discount: 0,
+                            totalPrice: price * quantity,
                             baseCostPrice: Number(medicine.baseCostPrice ?? price),
                             discountPercentage: Number(medicine.discountPercentage || 0),
                             marginTier: ['LOW', 'MID', 'HIGH'].includes(medicine.marginTier)
                                 ? medicine.marginTier
                                 : 'LOW',
                             quantity,
+                            snapshotAt: now,
                             stock: Math.max(0, getPhysicalStock(medicine) - getReservedStock(medicine) - quantity)
                         });
                     }
@@ -1321,16 +1368,23 @@ export const dataStore = {
                         addressDetails: orderData.addressDetails || {},
                         coordinates: orderData.coordinates,
                         paymentMethod: orderData.paymentMethod || 'Cash on Delivery (COD)',
+                        source,
+                        externalReference: externalReference || null,
+                        idempotencyKey: idempotencyKey || null,
                         orderStatus: 'Pending_Review',
                         statusHistory: [statusEntry]
                     }], { session });
                     createdOrder = order.toObject({ virtuals: true });
                     createdOrder.rewardNotice = redemptionWarning;
+                    createdNewOrder = true;
+                    await publishOrderEvent(createdOrder, 'OrderCreated', { session });
+                    await publishOrderEvent(createdOrder, 'OrderInventoryReserved', { session });
                 });
             } finally {
                 await session.endSession();
             }
 
+            if (!createdNewOrder) return createdOrder;
             this.logAudit(actor, 'ORDER_CREATED', 'ORDER', createdOrder._id.toString(), {
                 totalAmount: createdOrder.totalAmount,
                 itemCount: createdOrder.medicineItems.length,
@@ -1379,11 +1433,22 @@ export const dataStore = {
                 });
                 itemSnapshots.push({
                     _id: medicineId,
+                    productId: medicineId,
                     medicineId,
                     name: medicine.name,
+                    productName: medicine.name,
                     sku: medicine.sku || medicine.code || '',
+                    genericName: medicine.genericName || medicine.composition || '',
+                    strength: medicine.strength || '',
+                    form: medicine.form || '',
+                    manufacturer: medicine.manufacturer || medicine.brand || '',
                     price,
+                    unitPrice: price,
+                    tax: 0,
+                    discount: 0,
+                    totalPrice: price * quantity,
                     quantity,
+                    snapshotAt: now,
                     stock: available - quantity
                 });
             }
@@ -1398,6 +1463,7 @@ export const dataStore = {
 
             const order = {
                 _id: new mongoose.Types.ObjectId().toString(),
+                orderNumber: `ORD-${randomUUID()}`,
                 userId: orderData.userId,
                 customerId: orderData.userId,
                 customerName: orderData.customerName,
@@ -1415,6 +1481,9 @@ export const dataStore = {
                 addressDetails: orderData.addressDetails || {},
                 coordinates: orderData.coordinates,
                 paymentMethod: orderData.paymentMethod || 'Cash on Delivery (COD)',
+                source,
+                externalReference: externalReference || null,
+                idempotencyKey: idempotencyKey || null,
                 orderStatus: 'Pending_Review',
                 statusHistory: [statusEntry],
                 createdAt: now,
@@ -1482,6 +1551,11 @@ export const dataStore = {
                     });
                     await order.save({ session });
                     reviewedOrder = order.toObject({ virtuals: true });
+                    const orderEvent = toOrderEventType(status);
+                    if (orderEvent) await publishOrderEvent(reviewedOrder, orderEvent, { session });
+                    if (status === 'Rejected') {
+                        await publishOrderEvent(reviewedOrder, 'OrderInventoryReleased', { session });
+                    }
                 });
             } finally {
                 await session.endSession();
@@ -1602,6 +1676,8 @@ export const dataStore = {
                     });
                     await order.save({ session });
                     cancelledOrder = order.toObject({ virtuals: true });
+                    await publishOrderEvent(cancelledOrder, 'OrderCancelled', { session });
+                    await publishOrderEvent(cancelledOrder, 'OrderInventoryReleased', { session });
                 });
             } finally {
                 await session.endSession();
@@ -1697,6 +1773,8 @@ export const dataStore = {
                     });
                     await order.save({ session });
                     dispatchedOrder = order.toObject({ virtuals: true });
+                    await publishOrderEvent(dispatchedOrder, 'OrderDispatched', { session });
+                    await publishOrderEvent(dispatchedOrder, 'OrderInventoryDeducted', { session });
                 });
             } finally {
                 await session.endSession();
@@ -1777,6 +1855,10 @@ export const dataStore = {
                     else deductInMemoryOrderInventory(order);
                     if (session) await order.save({ session });
                     else if (order.save) await order.save();
+                    if (session) {
+                        const eventOrder = order.toObject ? order.toObject({ virtuals: true }) : order;
+                        await publishOrderEvent(eventOrder, 'OrderInventoryDeducted', { session });
+                    }
                 }
                 return {
                     order: order.toObject ? order.toObject({ virtuals: true }) : { ...order },
@@ -1795,13 +1877,16 @@ export const dataStore = {
 
             const transitionAt = new Date();
             const previousStatus = order.orderStatus;
+            let inventoryDeducted = false;
             if (newStatus === 'Dispatched') {
                 if (session) await deductMongoOrderInventory(order, session);
                 else deductInMemoryOrderInventory(order);
+                inventoryDeducted = true;
             }
             if (newStatus === 'Delivered' && !orderInventoryWasDeducted(order)) {
                 if (session) await deductMongoOrderInventory(order, session);
                 else deductInMemoryOrderInventory(order);
+                inventoryDeducted = true;
             }
             order.orderStatus = newStatus;
 
@@ -1873,6 +1958,21 @@ export const dataStore = {
             });
             if (session) await order.save({ session });
             else if (order.save) await order.save();
+
+            if (session) {
+                const eventOrder = order.toObject ? order.toObject({ virtuals: true }) : order;
+                const orderEvent = toOrderEventType(newStatus);
+                if (orderEvent) await publishOrderEvent(eventOrder, orderEvent, { session });
+                if (newStatus === 'Dispatched') {
+                    await publishOrderEvent(eventOrder, 'OrderInventoryDeducted', { session });
+                }
+                if (newStatus === 'Cancelled') {
+                    await publishOrderEvent(eventOrder, 'OrderInventoryReleased', { session });
+                }
+                if (inventoryDeducted && newStatus === 'Delivered') {
+                    await publishOrderEvent(eventOrder, 'OrderInventoryDeducted', { session });
+                }
+            }
 
             return {
                 order: order.toObject ? order.toObject({ virtuals: true }) : order,
@@ -3188,16 +3288,25 @@ export const dataStore = {
             {
                 name: proposal.medicineName || `${proposal.proposedMedicineName || 'Medicine'}${proposal.strength ? ' ' + proposal.strength : ''}`,
                 productName: proposal.medicineName || proposal.proposedMedicineName || 'Medicine',
-                sku: 'MR-ARRANGED',
+                productId: proposal.productId ? String(proposal.productId) : undefined,
+                sku: '',
+                genericName: '',
+                strength: proposal.strength || '',
+                form: proposal.dosageForm || '',
+                manufacturer: proposal.manufacturer || '',
                 quantity: itemQuantity,
                 unitPrice: itemUnitPrice,
                 price: itemUnitPrice,
-                totalPrice: orderTotal
+                tax: 0,
+                discount: 0,
+                totalPrice: orderTotal,
+                snapshotAt: now
             }
         ];
 
         const orderData = {
             _id: orderId,
+            orderNumber: `ORD-${randomUUID()}`,
             userId: customerId,
             customerId,
             customerName: request.customerName,
@@ -3314,7 +3423,7 @@ export const dataStore = {
             // Trigger Notifications
             try {
                 await sendWhatsAppMedicineRequestAlert(finalRequest, 'MedicineRequestApproved');
-                await sendCustomWhatsAppAlert(createdOrder, 'Placed');
+                await publishOrderEvent(createdOrder, 'OrderCreated');
             } catch (err) {
                 console.warn('[WhatsApp] Alerts failed during order conversion:', err.message);
             }
@@ -3354,7 +3463,7 @@ export const dataStore = {
         // Trigger Notifications
         try {
             await sendWhatsAppMedicineRequestAlert(request, 'MedicineRequestApproved');
-            await sendCustomWhatsAppAlert(createdOrder, 'Placed');
+            await publishOrderEvent(createdOrder, 'OrderCreated');
         } catch (err) {
             console.warn('[WhatsApp] Alerts failed during order conversion:', err.message);
         }
