@@ -371,6 +371,12 @@ export function AppProvider({ children }) {
     setRequestAuthPending(false);
   };
 
+  const resumeRequestAfterAuthentication = () => {
+    if (!user) return;
+    setRequestAuthPending(false);
+    setRequestModalOpen(true);
+  };
+
   const openProposalModal = (request) => {
     setActiveProposalRequest(request);
   };
@@ -600,6 +606,7 @@ export function AppProvider({ children }) {
         requestAuthPending,
         setRequestAuthPending,
         cancelRequestAuthentication,
+        resumeRequestAfterAuthentication,
         openRequestModal,
         activeProposalRequest,
         setActiveProposalRequest,

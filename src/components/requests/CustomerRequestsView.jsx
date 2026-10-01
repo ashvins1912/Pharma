@@ -197,14 +197,20 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
                       Requested Medicine
                     </span>
-                    <p className="font-extrabold text-slate-900 text-sm">
-                      {firstItem.requestedName || 'Medicine'}
-                    </p>
-                    <p className="text-[11px] text-slate-500">
-                      {firstItem.dosageForm && `${firstItem.dosageForm} • `}
-                      {firstItem.strength && `${firstItem.strength} • `}
-                      Qty: {firstItem.quantity || 1}
-                    </p>
+                    <ul className="space-y-1">
+                      {(req.requestedItems || []).map((item, index) => (
+                        <li key={`${item.requestedName}-${index}`}>
+                          <p className="font-extrabold text-slate-900 text-sm">
+                            {item.requestedName || 'Medicine'}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {item.dosageForm && `${item.dosageForm} • `}
+                            {item.strength && `${item.strength} • `}
+                            Qty: {item.quantity || 1}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
 
                   <div className="space-y-0.5">

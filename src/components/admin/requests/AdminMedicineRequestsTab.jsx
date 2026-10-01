@@ -284,14 +284,24 @@ export default function AdminMedicineRequestsTab() {
                       </td>
 
                       <td className="py-3.5 px-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-900">{firstItem.requestedName || 'Medicine'}</span>
-                          {firstItem.originalAvailabilityStatus === 'OUT_OF_STOCK' && (
-                            <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded">
-                              Out of Stock
-                            </span>
-                          )}
-                        </div>
+                        <ul className="space-y-1">
+                          {(req.requestedItems || []).map((item, index) => (
+                            <li key={`${item.requestedName}-${index}`}>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-slate-900">{item.requestedName || 'Medicine'}</span>
+                                {item.originalAvailabilityStatus === 'OUT_OF_STOCK' && (
+                                  <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded">
+                                    Out of Stock
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[11px] text-slate-500 block">
+                                {item.strength && `${item.strength} • `}
+                                Qty: {item.quantity || 1}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
                         <span className="text-[11px] text-slate-500 block">
                           {firstItem.dosageForm && `${firstItem.dosageForm} • `}
                           {firstItem.strength && `${firstItem.strength} • `}

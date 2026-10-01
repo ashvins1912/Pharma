@@ -4,6 +4,16 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { createMedicineRequest } from '../../api/medicineRequestService';
 
+const createRequestedItem = (values = {}) => ({
+  requestedName: values.name || values.requestedName || '',
+  medicineId: values.medicineId || null,
+  strength: values.strength || '',
+  dosageForm: values.dosageForm || 'Tablet',
+  manufacturer: values.brand || values.manufacturer || '',
+  quantity: values.quantity || 1,
+  originalAvailabilityStatus: values.originalAvailabilityStatus || 'NOT_IN_CATALOG'
+});
+
 export default function MedicineRequestModal({ isOpen, onClose }) {
   const { user } = useAuth();
   const {
@@ -14,11 +24,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
   } = useApp();
   const { addToast } = useToast();
 
-  const [medicineName, setMedicineName] = useState('');
-  const [strength, setStrength] = useState('');
-  const [dosageForm, setDosageForm] = useState('Tablet');
-  const [manufacturer, setManufacturer] = useState('');
-  const [quantity, setQuantity] = useState(1);
+  const [requestedItems, setRequestedItems] = useState([createRequestedItem()]);
   const [deliveryPreference, setDeliveryPreference] = useState('Flexible');
   const [customerNote, setCustomerNote] = useState('');
 
@@ -44,11 +50,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
 
   useEffect(() => {
     if (!isOpen) {
-      setMedicineName('');
-      setStrength('');
-      setDosageForm('Tablet');
-      setManufacturer('');
-      setQuantity(1);
+      setRequestedItems([createRequestedItem()]);
       setDeliveryPreference('Flexible');
       setCustomerNote('');
       setChosenAddressId('');
@@ -61,19 +63,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       return;
     }
 
-    if (requestPrefillData) {
-      setMedicineName(requestPrefillData.name || requestPrefillData.requestedName || '');
-      setStrength(requestPrefillData.strength || '');
-      setDosageForm(requestPrefillData.dosageForm || 'Tablet');
-      setManufacturer(requestPrefillData.brand || requestPrefillData.manufacturer || '');
-      setQuantity(requestPrefillData.quantity || 1);
-    } else {
-      setMedicineName('');
-      setStrength('');
-      setDosageForm('Tablet');
-      setManufacturer('');
-      setQuantity(1);
-    }
+    setRequestedItems([createRequestedItem(requestPrefillData || {})]);
     setDeliveryPreference('Flexible');
     setCustomerNote('');
     setPrescriptionFile(null);
@@ -91,6 +81,22 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
   }, [isOpen, addresses, chosenAddressId]);
 
   if (!isOpen) return null;
+
+  const updateRequestedItem = (index, field, value) => {
+    setRequestedItems(items => items.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, [field]: value } : item
+    ));
+  };
+
+  const addRequestedItem = () => {
+    setRequestedItems(items => [...items, createRequestedItem()]);
+  };
+
+  const removeRequestedItem = (index) => {
+    setRequestedItems(items => items.length > 1
+      ? items.filter((_, itemIndex) => itemIndex !== index)
+      : items);
+  };
 
   const handlePrescriptionChange = (e) => {
     const file = e.target.files?.[0];
@@ -124,8 +130,8 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!medicineName.trim()) {
-      addToast('Please enter the medicine name.', 'warning');
+    if (requestedItems.some(item => !item.requestedName.trim())) {
+      addToast('Please enter a name for each requested medicine or remove the empty item.', 'warning');
       return;
     }
 
@@ -160,19 +166,16 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       setSubmitting(true);
       const formData = new FormData();
 
-      const requestedItems = [
-        {
-          requestedName: medicineName.trim(),
-          medicineId: requestPrefillData?.medicineId || null,
-          strength: strength.trim(),
-          dosageForm: dosageForm.trim(),
-          manufacturer: manufacturer.trim(),
-          quantity: Math.max(1, Number(quantity) || 1),
-          originalAvailabilityStatus: requestPrefillData?.originalAvailabilityStatus || 'NOT_IN_CATALOG'
-        }
-      ];
+      const requestItems = requestedItems.map(item => ({
+        ...item,
+        requestedName: item.requestedName.trim(),
+        strength: item.strength.trim(),
+        dosageForm: item.dosageForm.trim(),
+        manufacturer: item.manufacturer.trim(),
+        quantity: Math.max(1, Number(item.quantity) || 1)
+      }));
 
-      formData.append('requestedItems', JSON.stringify(requestedItems));
+      formData.append('requestedItems', JSON.stringify(requestItems));
       formData.append('deliveryAddress', deliveryAddress);
       formData.append('preferredDeliveryPreference', deliveryPreference);
       formData.append('customerNote', customerNote.trim());
@@ -239,82 +242,93 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
         {/* Request Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           
-          {/* Medicine Name (Required) */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Medicine / Product Name <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Paracetamol, Rifaximin 550mg, Augmentin 625 Duo"
-              value={medicineName}
-              onChange={(e) => setMedicineName(e.target.value)}
-              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 outline-none transition font-medium"
-            />
-          </div>
+          <div className="space-y-3">
+            {requestedItems.map((item, index) => (
+              <fieldset key={index} className="min-w-0 space-y-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 sm:p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <legend className="text-xs font-extrabold text-slate-800">
+                    Medicine / Product {requestedItems.length > 1 ? index + 1 : ''} <span className="text-rose-500">*</span>
+                  </legend>
+                  {requestedItems.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeRequestedItem(index)}
+                      className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-50"
+                      aria-label={`Remove product ${index + 1}`}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Paracetamol, Rifaximin 550mg"
+                  value={item.requestedName}
+                  onChange={(e) => updateRequestedItem(index, 'requestedName', e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium outline-none transition focus:border-blue-500"
+                />
 
-          {/* Strength, Dosage Form, Manufacturer Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                Strength (Optional)
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. 500mg, 10ml"
-                value={strength}
-                onChange={(e) => setStrength(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 outline-none"
-              />
-            </div>
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-bold text-slate-600">Strength (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 500mg, 10ml"
+                      value={item.strength}
+                      onChange={(e) => updateRequestedItem(index, 'strength', e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-bold text-slate-600">Preferred Manufacturer / Brand</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Cipla, Abbott"
+                      value={item.manufacturer}
+                      onChange={(e) => updateRequestedItem(index, 'manufacturer', e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-bold text-slate-600">Dosage Form</label>
+                    <select
+                      value={item.dosageForm}
+                      onChange={(e) => updateRequestedItem(index, 'dosageForm', e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium outline-none focus:border-blue-500"
+                    >
+                      <option value="Tablet">Tablet / Strip</option>
+                      <option value="Capsule">Capsule</option>
+                      <option value="Syrup">Syrup / Suspension</option>
+                      <option value="Ointment">Cream / Ointment</option>
+                      <option value="Injection">Injection / Vial</option>
+                      <option value="Drops">Eye / Ear Drops</option>
+                      <option value="Inhaler">Inhaler / Respule</option>
+                      <option value="Other">Other Medical Product</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-bold text-slate-600">Quantity <span className="text-rose-500">*</span></label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={item.quantity}
+                      onChange={(e) => updateRequestedItem(index, 'quantity', Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </fieldset>
+            ))}
 
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                Dosage Form
-              </label>
-              <select
-                value={dosageForm}
-                onChange={(e) => setDosageForm(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 outline-none font-medium"
-              >
-                <option value="Tablet">Tablet / Strip</option>
-                <option value="Capsule">Capsule</option>
-                <option value="Syrup">Syrup / Suspension</option>
-                <option value="Ointment">Cream / Ointment</option>
-                <option value="Injection">Injection / Vial</option>
-                <option value="Drops">Eye / Ear Drops</option>
-                <option value="Inhaler">Inhaler / Respule</option>
-                <option value="Other">Other Medical Product</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                Quantity <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="number"
-                min="1"
-                required
-                value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 outline-none font-bold"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold text-slate-600 mb-1">
-              Preferred Manufacturer / Brand (Optional)
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Cipla, Sun Pharma, Abbott, GlaxoSmithKline"
-              value={manufacturer}
-              onChange={(e) => setManufacturer(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 outline-none"
-            />
+            <button
+              type="button"
+              onClick={addRequestedItem}
+              className="min-h-10 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-extrabold text-blue-700 transition hover:bg-blue-100"
+            >
+              + Add another medicine / product
+            </button>
           </div>
 
           {/* Delivery Timing Preference */}

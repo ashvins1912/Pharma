@@ -37,8 +37,8 @@ function MainApp() {
     requestModalOpen,
     closeRequestModal,
     requestAuthPending,
-    setRequestAuthPending,
     cancelRequestAuthentication,
+    resumeRequestAfterAuthentication,
     activeProposalRequest,
     setActiveProposalRequest,
     openProposalModal
@@ -130,12 +130,11 @@ function MainApp() {
   React.useEffect(() => {
     if (!requestAuthPending) return;
     if (user) {
-      setRequestAuthPending(false);
-      setRequestModalOpen(true);
+      resumeRequestAfterAuthentication();
     } else {
       setAuthOpen(true);
     }
-  }, [requestAuthPending, user, setRequestAuthPending, setRequestModalOpen]);
+  }, [requestAuthPending, user, resumeRequestAfterAuthentication]);
 
   const handleAuthModalClose = ({ authenticated = false } = {}) => {
     setAuthOpen(false);
