@@ -1,6 +1,23 @@
 # Pharma
 Pharma online store
 
+## Deploying the frontend to Vercel
+
+Vercel can host the Vite frontend. Copy the values from
+`.env.vercel.example` into **Project Settings → Environment Variables** for
+each deployment environment, replacing every placeholder. Set
+`VITE_API_URL` to the public URL of the separately hosted Express backend
+(for example, the Render service URL). The backend still requires its own
+server-side environment variables such as `MONGO_URI`, `SUPABASE_URL`, and
+`SUPABASE_SERVICE_ROLE_KEY`; do not add private backend secrets as `VITE_`
+variables or expose them to the frontend.
+
+`VITE_` values are embedded when Vite builds the site, so redeploy after
+changing them. Set the deployed Vercel URL as `VITE_FRONTEND_URL` and add that
+origin to Supabase's allowed redirect URLs. Vercel Speed Insights is mounted
+in the app entry point; enable Speed Insights for the Vercel project to view
+collected metrics.
+
 ## Deploying to Render
 
 The `render.yaml` blueprint builds the Vite frontend before starting the Express
