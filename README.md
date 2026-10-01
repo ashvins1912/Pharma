@@ -3,14 +3,16 @@ Pharma online store
 
 ## Deploying the frontend to Vercel
 
-Vercel can host the Vite frontend. Copy the values from
+Vercel hosts the Vite frontend and the Express API through the catch-all
+function in `api/[...path].js`. Copy the values from
 `.env.vercel.example` into **Project Settings → Environment Variables** for
 each deployment environment, replacing every placeholder. Set
-`VITE_API_URL` to the public URL of the separately hosted Express backend
-(for example, the Render service URL). The backend still requires its own
-server-side environment variables such as `MONGO_URI`, `SUPABASE_URL`, and
-`SUPABASE_SERVICE_ROLE_KEY`; do not add private backend secrets as `VITE_`
-variables or expose them to the frontend.
+`VITE_API_URL` to an empty value to send API requests to the same Vercel
+deployment. Set server-side `MONGO_URI`, `SUPABASE_URL`,
+`SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in Vercel; do not add
+private backend secrets as `VITE_` variables or expose them to the frontend.
+If using a separately hosted Express backend instead, set `VITE_API_URL` to
+that backend's origin.
 
 `VITE_` values are embedded when Vite builds the site, so redeploy after
 changing them. Set the deployed Vercel URL as `VITE_FRONTEND_URL` and add that
