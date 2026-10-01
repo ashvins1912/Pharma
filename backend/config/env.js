@@ -25,18 +25,20 @@ const mongoUriSchema = z.string().trim().refine(value => {
     message: 'Expected a valid MongoDB URI starting with mongodb:// or mongodb+srv://.'
 });
 
-const optionalAnonKeySchema = z.preprocess(
+const isProduction = process.env.NODE_ENV === 'production';
+
+const optionalString = (schema) => z.preprocess(
     value => typeof value === 'string' && value.trim() === '' ? undefined : value,
-    z.string().trim().min(1).optional()
+    schema.optional()
 );
 
 export const envSchema = z.object({
-    PORT: z.coerce.number().int().min(1).max(65535).default(5000),
-    MONGO_URI: mongoUriSchema,
-    SUPABASE_URL: z.string().trim().url(),
-    SUPABASE_ANON_KEY: optionalAnonKeySchema,
-    SUPABASE_SERVICE_ROLE_KEY: z.string().trim().min(20),
-    NODE_ENV: z.enum(['development', 'production', 'test'])
+    PORT: z.coerce.number().int().min(1).max(65535).default(isProduction ? 5000 : 3000),
+    MONGO_URI: isProduction ? mongoUriSchema : optionalString(mongoUriSchema),
+    SUPABASE_URL: isProduction ? z.string().trim().url() : optionalString(z.string().trim().url()),
+    SUPABASE_ANON_KEY: optionalString(z.string().trim().min(1)),
+    SUPABASE_SERVICE_ROLE_KEY: isProduction ? z.string().trim().min(20) : optionalString(z.string().trim().min(20)),
+    NODE_ENV: z.enum(['development', 'production', 'test']).default('development')
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

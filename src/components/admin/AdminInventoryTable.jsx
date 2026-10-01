@@ -176,8 +176,8 @@ export default function AdminInventoryTable({ onOpenBulkImport }) {
         />
       </div>
 
-      {/* Table View */}
-      <div className="overflow-x-auto">
+      {/* Desktop/Tablet Table View */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="border-b border-slate-200 text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
@@ -262,14 +262,14 @@ export default function AdminInventoryTable({ onOpenBulkImport }) {
                       <button
                         type="button"
                         onClick={() => openMedicineForm(med)}
-                        className="mr-2 font-bold text-blue-700 hover:underline"
+                        className="mr-2 font-bold text-blue-700 hover:underline cursor-pointer"
                       >
                         Edit
                       </button>
                       <button
                         type="button"
                         onClick={() => archiveMedicine(med)}
-                        className="font-bold text-rose-700 hover:underline"
+                        className="font-bold text-rose-700 hover:underline cursor-pointer"
                       >
                         Archive
                       </button>
@@ -278,33 +278,104 @@ export default function AdminInventoryTable({ onOpenBulkImport }) {
                 );
               })
             )}
-
           </tbody>
         </table>
       </div>
 
+      {/* Mobile Card View (Section 16 Option B) */}
+      <div className="md:hidden space-y-3">
+        {loading ? (
+          <div className="py-8 text-center text-slate-400 text-xs">Loading catalog items...</div>
+        ) : adminMeds.length === 0 ? (
+          <div className="py-8 text-center text-slate-400 text-xs">No matching medicines found.</div>
+        ) : (
+          adminMeds.map((med) => {
+            const stock = med.availableQuantity ?? med.stock ?? med.quantity ?? 0;
+            const physicalStock = med.stockQuantity ?? stock;
+            return (
+              <div key={med._id} className="p-3.5 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-2.5">
+                <div className="flex items-start gap-2.5">
+                  <img
+                    src={med.imageUrl || "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=80&q=80"}
+                    alt={med.name}
+                    className="w-12 h-12 object-cover rounded-xl bg-white border border-slate-200 flex-shrink-0"
+                    onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=80&q=80"; }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-extrabold text-xs text-slate-900 leading-tight truncate">{med.name}</h4>
+                    <p className="text-[10px] text-slate-500 mt-0.5">{med.brand} • {med.category || 'General'}</p>
+                    <span className="font-mono text-[9px] text-slate-400">{med.sku || 'N/A'}</span>
+                  </div>
+                  <div>
+                    {getStatusBadge(med)}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-200 text-slate-600">
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Stock</span>
+                    <span className="font-black text-slate-900">{physicalStock} units</span>
+                    {(med.reservedQuantity || 0) > 0 && (
+                      <span className="text-[10px] text-slate-400 block">({stock} avail)</span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Unit Price</span>
+                    <span className="font-black text-emerald-700 text-sm">₹{med.price}</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center text-[10px] text-slate-500 pt-1">
+                  <span>Batch: <strong className="font-mono">{med.batchNumber || 'BTH-2024'}</strong></span>
+                  <span className={med.isExpired ? 'text-red-600 font-bold' : ''}>
+                    Exp: {new Date(med.expiryDate).toLocaleDateString()}
+                  </span>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openMedicineForm(med)}
+                    className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold hover:bg-blue-100 min-h-[36px]"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => archiveMedicine(med)}
+                    className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 min-h-[36px]"
+                  >
+                    Archive
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
       {/* Pagination Bar */}
       {adminTotalPages > 1 && (
-        <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-          <span className="text-slate-500 font-medium">
+        <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs">
+          <span className="text-slate-500 font-medium text-center sm:text-left">
             Page {adminPage} of {adminTotalPages} ({adminTotal.toLocaleString()} items)
           </span>
 
-          <div className="flex gap-1.5">
+          <div className="flex items-center gap-1.5 w-full sm:w-auto justify-between sm:justify-end">
             <button
               onClick={() => loadAdminInventory(adminPage - 1, searchTerm)}
               disabled={adminPage <= 1}
-              className="px-2.5 py-1 rounded-lg border border-slate-200 text-slate-700 font-bold disabled:opacity-40 cursor-pointer"
+              className="flex-1 sm:flex-initial px-3 py-2 rounded-xl border border-slate-200 text-slate-700 font-bold disabled:opacity-40 cursor-pointer min-h-[44px]"
             >
               ‹ Prev
             </button>
-            <span className="px-3 py-1 font-bold bg-slate-100 rounded-lg text-slate-800">
+            <span className="px-3 py-2 font-bold bg-slate-100 rounded-xl text-slate-800 min-h-[44px] flex items-center justify-center">
               {adminPage}
             </span>
             <button
               onClick={() => loadAdminInventory(adminPage + 1, searchTerm)}
               disabled={adminPage >= adminTotalPages}
-              className="px-2.5 py-1 rounded-lg border border-slate-200 text-slate-700 font-bold disabled:opacity-40 cursor-pointer"
+              className="flex-1 sm:flex-initial px-3 py-2 rounded-xl border border-slate-200 text-slate-700 font-bold disabled:opacity-40 cursor-pointer min-h-[44px]"
             >
               Next ›
             </button>
