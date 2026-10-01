@@ -253,6 +253,11 @@ export function AppProvider({ children }) {
         setAppliedCoupon(null);
         setCouponCode('');
         setCouponError('');
+        setSearchQuery('');
+        setSelectedCategory('All');
+        setHideRx(false);
+        setSortOption('default');
+        setPage(1);
         setActiveTrackingOrder(null);
         setActiveProposalRequest(null);
         setRequestModalOpen(false);
@@ -406,42 +411,45 @@ export function AppProvider({ children }) {
       return;
     }
 
-    setCart((prev) => {
-      const existing = prev.find(item => item._id === med._id);
-      if (existing) {
-        if (existing.quantity >= stock) {
-          addToast(`Maximum available stock reached for ${med.name} (${stock} units).`, 'warning');
-          return prev;
-        }
-        addToast(`Increased ${med.name} quantity to ${existing.quantity + 1}`, 'success');
-        return prev.map(item =>
-          item._id === med._id ? { ...item, quantity: item.quantity + 1 } : item
-        );
+    const existing = cart.find(item => item._id === med._id);
+    if (existing) {
+      if (existing.quantity >= stock) {
+        addToast(`Maximum available stock reached for ${med.name} (${stock} units).`, 'warning');
+        return;
       }
-      addToast(`Added ${med.name} to cart`, 'success');
-      return [...prev, { ...med, quantity: 1, stock }];
-    });
+      const quantity = existing.quantity + 1;
+      setCart(cart.map(item =>
+        item._id === med._id ? { ...item, quantity } : item
+      ));
+      addToast(`Increased ${med.name} quantity to ${quantity}`, 'success');
+      return;
+    }
+
+    setCart([...cart, { ...med, quantity: 1, stock }]);
+    addToast(`Added ${med.name} to cart`, 'success');
   };
 
   const updateQuantity = (id, delta) => {
-    setCart((prev) => {
-      const item = prev.find(i => i._id === id);
-      if (!item) return prev;
-      const nextQty = item.quantity + delta;
-      if (nextQty <= 0) {
-        addToast(`Removed ${item.name} from cart`, 'info');
-        return prev.filter(i => i._id !== id);
-      }
-      if (nextQty > item.stock) {
-        addToast(`Only ${item.stock} units available in pharmacy stock.`, 'warning');
-        return prev;
-      }
-      return prev.map(i => i._id === id ? { ...i, quantity: nextQty } : i);
-    });
+    const item = cart.find(cartItem => cartItem._id === id);
+    if (!item) return;
+
+    const nextQty = item.quantity + delta;
+    if (nextQty <= 0) {
+      setCart(cart.filter(cartItem => cartItem._id !== id));
+      addToast(`Removed ${item.name} from cart`, 'info');
+      return;
+    }
+    if (nextQty > item.stock) {
+      addToast(`Only ${item.stock} units available in pharmacy stock.`, 'warning');
+      return;
+    }
+    setCart(cart.map(cartItem => cartItem._id === id ? { ...cartItem, quantity: nextQty } : cartItem));
   };
 
   const removeFromCart = (id) => {
-    setCart(prev => prev.filter(i => i._id !== id));
+    const item = cart.find(cartItem => cartItem._id === id);
+    if (!item) return;
+    setCart(cart.filter(cartItem => cartItem._id !== id));
     addToast('Item removed from cart', 'info');
   };
 
