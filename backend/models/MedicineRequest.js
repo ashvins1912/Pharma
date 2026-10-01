@@ -75,7 +75,7 @@ const medicineRequestSchema = new mongoose.Schema({
     productImageUrl: { type: String, default: null },
 
     customerNote: { type: String, default: '', maxlength: 2000 },
-    deliveryAddress: { type: String, required: true },
+    deliveryAddress: { type: String, default: 'Pending address confirmation' },
     addressDetails: { type: Object, default: {} },
     coordinates: {
         lat: Number,

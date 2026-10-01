@@ -165,7 +165,15 @@ export function AppProvider({ children }) {
       if (selectedCategory && selectedCategory !== 'All') params.category = selectedCategory;
       if (sortOption !== 'default') params.sort = sortOption;
 
-      const res = await apiClient.get('/api/medicines', { params });
+      let res;
+      try {
+        res = await apiClient.get('/api/medicines', { params });
+      } catch (firstErr) {
+        // If initial attempt fails due to temporary connection or startup hiccup, retry once after 800ms
+        await new Promise(resolve => setTimeout(resolve, 800));
+        res = await apiClient.get('/api/medicines', { params });
+      }
+
       if (res.data && res.data.medicines) {
         setMedicines(res.data.medicines || []);
         setTotalMedicines(res.data.total || 0);
@@ -196,9 +204,14 @@ export function AppProvider({ children }) {
       if (Array.isArray(res.data)) {
         const addrs = res.data;
         setAddresses(addrs);
-        if (addrs.length > 0 && !addrs.some(address => address._id === selectedAddressId)) {
-          const defaultAddr = addrs.find(a => a.isDefault) || addrs[0];
-          setSelectedAddressId(defaultAddr._id);
+        if (addrs.length > 0) {
+          setSelectedAddressId(currentId => {
+            if (currentId && addrs.some(address => address._id === currentId)) {
+              return currentId;
+            }
+            const defaultAddr = addrs.find(a => a.isDefault) || addrs[0];
+            return defaultAddr?._id || '';
+          });
         }
       }
     } catch (err) {
@@ -219,19 +232,22 @@ export function AppProvider({ children }) {
           coordinates: { lat: 12.9667, lng: 77.6000 },
           isDefault: true
         };
-        setSelectedAddressId(initial._id);
+        setSelectedAddressId(cur => cur || initial._id);
         return [initial];
       });
     } finally {
       setLoadingAddresses(false);
     }
-  }, [user, selectedAddressId]);
+  }, [user?.id]);
 
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       loadAddresses();
+    } else {
+      setAddresses([]);
+      setSelectedAddressId('');
     }
-  }, [user, loadAddresses]);
+  }, [user?.id, loadAddresses]);
 
   // Fetch Orders
   const loadUserOrders = useCallback(async ({ silent = false } = {}) => {
@@ -302,7 +318,7 @@ export function AppProvider({ children }) {
     } finally {
       if (!silent) setLoadingMedicineRequests(false);
     }
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     loadUserMedicineRequests();

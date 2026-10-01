@@ -9,7 +9,7 @@ import UserAddress from './models/UserAddress.js';
 import CustomerPointsLedger from './models/CustomerPointsLedger.js';
 import Rider from './models/Rider.js';
 import MedicineRequest from './models/MedicineRequest.js';
-import { sendWhatsAppMedicineRequestAlert } from './config/whatsapp.js';
+import { sendWhatsAppMedicineRequestAlert, sendCustomWhatsAppAlert } from './config/whatsapp.js';
 import ProfitMarginRewardEngine from './strategies/ProfitMarginRewardEngine.js';
 import DefaultProfitRewardStrategy from './strategies/ProfitRewardStrategy.js';
 import FixedDeliveryRewardStrategy from './strategies/DeliveryRewardStrategy.js';
@@ -1742,8 +1742,24 @@ export const dataStore = {
         if (getIsConnected()) {
             return Order.find({ userId }).sort({ createdAt: -1 }).lean();
         }
-        return inMemoryOrders.filter(o => o.userId === userId)
+        return inMemoryOrders.filter(o => o.userId === userId || o.customerId === userId)
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    },
+
+    async getOrder(orderId) {
+        if (getIsConnected()) {
+            return mongoose.isValidObjectId(orderId)
+                ? await Order.findById(orderId).lean()
+                : await Order.findOne({ $or: [{ _id: orderId }, { id: orderId }] }).lean();
+        }
+        return inMemoryOrders.find(o => String(o._id) === String(orderId) || String(o.id) === String(orderId)) || null;
+    },
+
+    async getOrders(userId = null) {
+        if (userId) {
+            return this.getUserOrders(userId);
+        }
+        return this.getAllOrders();
     },
 
     async transitionOrderStatus(orderId, newStatus, actor = 'Pharmacist', riderInfo = null) {
@@ -2411,9 +2427,7 @@ export const dataStore = {
             throw inventoryError('Please provide the medicine name you want to request.');
         }
 
-        if (!payload.deliveryAddress?.trim()) {
-            throw inventoryError('A delivery address is required for your medicine request.');
-        }
+        const deliveryAddress = String(payload.deliveryAddress || '').trim() || 'Pending address confirmation';
 
         const validDeliveryPreferences = ['Morning', 'Evening', 'Next Day', 'Flexible'];
         const preferredDeliveryPreference = validDeliveryPreferences.includes(payload.preferredDeliveryPreference)
@@ -2439,7 +2453,7 @@ export const dataStore = {
             prescriptionUrl: payload.prescriptionUrl || null,
             productImageUrl: payload.productImageUrl || null,
             customerNote: String(payload.customerNote || '').trim(),
-            deliveryAddress: payload.deliveryAddress.trim(),
+            deliveryAddress,
             addressDetails: payload.addressDetails || {},
             coordinates: payload.coordinates || null,
             preferredDeliveryPreference,
@@ -2672,10 +2686,28 @@ export const dataStore = {
             throw inventoryError('Cannot alter proposal after customer approval or order conversion.', 400);
         }
 
-        const medicineName = String(proposalData.medicineName || request.requestedItems?.[0]?.requestedName || '').trim();
+        const actor = typeof actorName === 'object' && actorName !== null
+            ? (actorName.user_metadata?.name || actorName.email?.split('@')[0] || 'Pharmacist')
+            : (actorName || 'Pharmacist');
+        const role = typeof actorName === 'object' && actorName !== null
+            ? (actorName.app_metadata?.role || actorName.role || 'Pharmacist')
+            : actorRole;
+
+        const medicineName = String(
+            proposalData.medicineName
+            || proposalData.proposedMedicineName
+            || request.requestedItems?.[0]?.requestedName
+            || ''
+        ).trim();
         if (!medicineName) throw inventoryError('Medicine name is required in proposal.');
 
-        const quantity = Math.max(1, Number(proposalData.quantity) || 1);
+        const manufacturer = String(
+            proposalData.manufacturer
+            || proposalData.proposedManufacturer
+            || request.requestedItems?.[0]?.manufacturer
+            || ''
+        ).trim();
+        const quantity = Math.max(1, Number(proposalData.quantity || proposalData.proposedQuantity) || 1);
         const unitPrice = Math.max(0, Number(proposalData.unitPrice) || 0);
         const priceType = proposalData.priceType === 'FINAL' ? 'FINAL' : 'APPROXIMATE';
 
@@ -2717,19 +2749,25 @@ export const dataStore = {
             expiresAt = new Date(Date.now() + 48 * 3600000);
         }
 
+        const pharmacyNote = String(proposalData.pharmacyNote || proposalData.pharmacyNotes || '').trim();
+
         const proposal = {
             productId: proposalData.productId || null,
             medicineName,
-            manufacturer: String(proposalData.manufacturer || request.requestedItems?.[0]?.manufacturer || '').trim(),
+            proposedMedicineName: medicineName,
+            manufacturer,
+            proposedManufacturer: manufacturer,
             strength: String(proposalData.strength || request.requestedItems?.[0]?.strength || '').trim(),
             dosageForm: String(proposalData.dosageForm || request.requestedItems?.[0]?.dosageForm || '').trim(),
             quantity,
+            proposedQuantity: quantity,
             unitPrice,
             approximatePrice,
             finalPrice,
             totalPrice,
             priceType,
-            pharmacyNote: String(proposalData.pharmacyNote || '').trim(),
+            pharmacyNote,
+            pharmacyNotes: pharmacyNote,
             deliverySlot,
             prescriptionStatus,
             alternativeProduct: String(proposalData.alternativeProduct || '').trim()
@@ -2739,8 +2777,8 @@ export const dataStore = {
         const isUpdate = request.status === 'PROPOSAL_SENT';
         const audit = {
             action: isUpdate ? 'PROPOSAL_UPDATED' : 'PROPOSAL_SENT',
-            actorId: actorName,
-            role: actorRole,
+            actorId: actor,
+            role,
             timestamp: now,
             notes: `${isUpdate ? 'Updated' : 'Formulated'} proposal: ${medicineName} (${priceType} ₹${totalPrice})`
         };
@@ -2754,7 +2792,7 @@ export const dataStore = {
                         pharmacyProposal: proposal,
                         proposalSentAt: now,
                         expiresAt,
-                        reviewedBy: actorName,
+                        reviewedBy: actor,
                         reviewedAt: now
                     },
                     $push: { auditTrail: audit }
@@ -2774,7 +2812,7 @@ export const dataStore = {
         request.pharmacyProposal = proposal;
         request.proposalSentAt = now;
         request.expiresAt = expiresAt;
-        request.reviewedBy = actorName;
+        request.reviewedBy = actor;
         request.reviewedAt = now;
         request.auditTrail.push(audit);
 
@@ -2786,7 +2824,7 @@ export const dataStore = {
         return request;
     },
 
-    async rejectMedicineRequestByPharmacy(id, reason = '', actorName = 'Pharmacist', actorRole = 'Pharmacist') {
+    async rejectMedicineRequestByPharmacy(id, reasonOrActor = '', actorOrReason = 'Pharmacist', actorRole = 'Pharmacist') {
         const request = await this.getMedicineRequestById(id);
         if (!request) throw inventoryError('Medicine request not found.', 404);
 
@@ -2794,11 +2832,29 @@ export const dataStore = {
             throw inventoryError('Cannot reject request after customer approval or order conversion.', 400);
         }
 
+        let reason = '';
+        let actorName = 'Pharmacist';
+        let role = actorRole;
+
+        if (typeof reasonOrActor === 'object' && reasonOrActor !== null) {
+            actorName = reasonOrActor.user_metadata?.name || reasonOrActor.email?.split('@')[0] || 'Pharmacist';
+            role = reasonOrActor.app_metadata?.role || reasonOrActor.role || 'Pharmacist';
+            reason = typeof actorOrReason === 'string' ? actorOrReason : '';
+        } else {
+            reason = typeof reasonOrActor === 'string' ? reasonOrActor : '';
+            if (typeof actorOrReason === 'object' && actorOrReason !== null) {
+                actorName = actorOrReason.user_metadata?.name || actorOrReason.email?.split('@')[0] || 'Pharmacist';
+                role = actorOrReason.app_metadata?.role || actorOrReason.role || 'Pharmacist';
+            } else {
+                actorName = actorOrReason || 'Pharmacist';
+            }
+        }
+
         const now = new Date();
         const audit = {
             action: 'PHARMACY_REJECTED',
             actorId: actorName,
-            role: actorRole,
+            role,
             timestamp: now,
             notes: reason || 'Pharmacy unable to procure requested medicine from supplier network.'
         };
@@ -2809,7 +2865,8 @@ export const dataStore = {
                 {
                     $set: {
                         status: 'PHARMACY_REJECTED',
-                        rejectedAt: now
+                        rejectedAt: now,
+                        pharmacyRejectionReason: reason
                     },
                     $push: { auditTrail: audit }
                 },
@@ -2826,6 +2883,7 @@ export const dataStore = {
 
         request.status = 'PHARMACY_REJECTED';
         request.rejectedAt = now;
+        request.pharmacyRejectionReason = reason;
         request.auditTrail.push(audit);
 
         try {
@@ -2836,12 +2894,23 @@ export const dataStore = {
         return request;
     },
 
-    async rejectMedicineProposalByCustomer(id, reason = '', user) {
-        const customerId = user.sub || user.id;
+    async rejectMedicineProposalByCustomer(id, reasonOrUser = '', userOrReason = null) {
+        let user = null;
+        let reason = '';
+
+        if (typeof reasonOrUser === 'object' && reasonOrUser !== null) {
+            user = reasonOrUser;
+            reason = typeof userOrReason === 'string' ? userOrReason : (userOrReason?.reason || '');
+        } else {
+            reason = typeof reasonOrUser === 'string' ? reasonOrUser : '';
+            user = userOrReason;
+        }
+
+        const customerId = user?.sub || user?.id;
         const request = await this.getMedicineRequestById(id, user);
         if (!request) throw inventoryError('Medicine request not found.', 404);
 
-        if (request.customerId !== customerId) {
+        if (customerId && request.customerId !== customerId) {
             throw inventoryError('Unauthorized access to this medicine request.', 403);
         }
 
@@ -2852,7 +2921,7 @@ export const dataStore = {
         const now = new Date();
         const audit = {
             action: 'CUSTOMER_REJECTED',
-            actorId: customerId,
+            actorId: customerId || 'Customer',
             role: 'Customer',
             timestamp: now,
             notes: reason || 'Customer declined the proposed pricing or delivery schedule.'
@@ -2865,6 +2934,7 @@ export const dataStore = {
                     $set: {
                         status: 'CUSTOMER_REJECTED',
                         rejectedAt: now,
+                        customerRejectionReason: reason,
                         customerResponse: {
                             respondedAt: now,
                             responseNote: reason || 'Declined proposal'
@@ -2885,6 +2955,7 @@ export const dataStore = {
 
         request.status = 'CUSTOMER_REJECTED';
         request.rejectedAt = now;
+        request.customerRejectionReason = reason;
         request.customerResponse = {
             respondedAt: now,
             responseNote: reason || 'Declined proposal'
@@ -2899,13 +2970,32 @@ export const dataStore = {
         return request;
     },
 
+    rejectProposalByCustomer(id, ...args) {
+        return this.rejectMedicineProposalByCustomer(id, ...args);
+    },
+
     // CRITICAL IDEMPOTENT ORDER CONVERSION
-    async approveMedicineProposalAndConvertToOrder(id, approvalNote = '', user) {
-        const customerId = user.sub || user.id;
+    async approveMedicineProposalAndConvertToOrder(id, noteOrUser = '', userOrOptions = null) {
+        let user = null;
+        let approvalNote = '';
+
+        if (typeof noteOrUser === 'object' && noteOrUser !== null) {
+            user = noteOrUser;
+            if (typeof userOrOptions === 'string') {
+                approvalNote = userOrOptions;
+            } else if (typeof userOrOptions === 'object' && userOrOptions !== null) {
+                approvalNote = userOrOptions.customerResponseNote || userOrOptions.approvalNote || '';
+            }
+        } else {
+            approvalNote = typeof noteOrUser === 'string' ? noteOrUser : '';
+            user = userOrOptions;
+        }
+
+        const customerId = user?.sub || user?.id;
         const request = await this.getMedicineRequestById(id, user);
         if (!request) throw inventoryError('Medicine request not found.', 404);
 
-        if (request.customerId !== customerId) {
+        if (customerId && request.customerId !== customerId) {
             throw inventoryError('Unauthorized access to this proposal.', 403);
         }
 
@@ -2913,6 +3003,7 @@ export const dataStore = {
         if (request.convertedOrderId || request.status === 'CONVERTED_TO_ORDER') {
             const existingOrder = await this.getOrder(request.convertedOrderId);
             return {
+                success: true,
                 order: existingOrder,
                 request,
                 alreadyConverted: true,
@@ -2945,15 +3036,17 @@ export const dataStore = {
             : `ord-mr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
         const orderTotal = Math.max(0, Math.round(Number(proposal.totalPrice) * 100) / 100);
+        const itemQuantity = Math.max(1, Number(proposal.quantity) || 1);
+        const itemUnitPrice = Number(proposal.unitPrice || Math.round((orderTotal / itemQuantity) * 100) / 100);
 
         const orderItems = [
             {
-                name: `${proposal.medicineName}${proposal.strength ? ' ' + proposal.strength : ''}`,
-                productName: proposal.medicineName,
+                name: proposal.medicineName || `${proposal.proposedMedicineName || 'Medicine'}${proposal.strength ? ' ' + proposal.strength : ''}`,
+                productName: proposal.medicineName || proposal.proposedMedicineName || 'Medicine',
                 sku: 'MR-ARRANGED',
-                quantity: proposal.quantity,
-                unitPrice: proposal.unitPrice || Math.round((orderTotal / proposal.quantity) * 100) / 100,
-                price: orderTotal,
+                quantity: itemQuantity,
+                unitPrice: itemUnitPrice,
+                price: itemUnitPrice,
                 totalPrice: orderTotal
             }
         ];
@@ -3046,6 +3139,7 @@ export const dataStore = {
             }
 
             return {
+                success: true,
                 order: createdOrder,
                 request: updatedRequest,
                 alreadyConverted: false,
@@ -3099,11 +3193,16 @@ export const dataStore = {
         }
 
         return {
+            success: true,
             order: createdOrder,
             request,
             alreadyConverted: false,
             message: `🎉 Proposal approved! Order #${String(createdOrder._id).slice(-6).toUpperCase()} registered for fulfillment.`
         };
+    },
+
+    approveProposalAndConvertToOrder(id, ...args) {
+        return this.approveMedicineProposalAndConvertToOrder(id, ...args);
     },
 
     async getMedicineRequestMetrics() {

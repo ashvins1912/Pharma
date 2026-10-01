@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider, useToast } from './context/ToastContext';
 import { AppProvider, useApp } from './context/AppContext';
@@ -70,7 +70,7 @@ function MainApp() {
   };
 
   // Reset tab to store if user signs out while on protected screens
-  React.useEffect(() => {
+  useEffect(() => {
     if (!user && (activeTab === 'orders' || activeTab === 'addresses' || activeTab === 'admin' || activeTab === 'requests')) {
       setActiveTab('store');
     }
@@ -80,7 +80,7 @@ function MainApp() {
     }
   }, [user, isAdmin, activeTab, activeTrackingOrder, setActiveTrackingOrder]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!user) {
       setRatingPromptOrder(null);
       setDismissedRatingOrderIds([]);
@@ -97,9 +97,9 @@ function MainApp() {
 
   // Admin WhatsApp Verification Flow:
   // When an admin logs in and WhatsApp is not connected, automatically show the pairing QR popup
-  const adminCheckedRef = React.useRef(false);
+  const adminCheckedRef = useRef(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (isAdmin) {
       loadWhatsAppStatus().then((status) => {
         if (status && !status.isConnected && !adminCheckedRef.current) {
@@ -112,7 +112,7 @@ function MainApp() {
     }
   }, [isAdmin, loadWhatsAppStatus, setWhatsappModalOpen]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (passwordRecoveryRequired) setAuthOpen(true);
   }, [passwordRecoveryRequired]);
 

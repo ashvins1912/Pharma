@@ -32,6 +32,10 @@ export const connectDB = async () => {
 
     connectionAttempt = (async () => {
         try {
+            if (!env.MONGO_URI) {
+                console.warn('⚠️ No MONGO_URI provided - running with in-memory datastore fallback.');
+                return false;
+            }
             mongoose.set('bufferCommands', false);
             await mongoose.connect(env.MONGO_URI, { serverSelectionTimeoutMS: 5000 });
             await Rider.init();
