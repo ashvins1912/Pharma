@@ -35,7 +35,10 @@ function MainApp() {
     whatsappStatus,
     loadWhatsAppStatus,
     requestModalOpen,
-    setRequestModalOpen,
+    closeRequestModal,
+    requestAuthPending,
+    setRequestAuthPending,
+    cancelRequestAuthentication,
     activeProposalRequest,
     setActiveProposalRequest,
     openProposalModal
@@ -73,6 +76,14 @@ function MainApp() {
   React.useEffect(() => {
     if (!user && (activeTab === 'orders' || activeTab === 'addresses' || activeTab === 'admin' || activeTab === 'requests')) {
       setActiveTab('store');
+    }
+    if (!user) {
+      setCartOpen(false);
+      setCheckoutOpen(false);
+      setProfileOpen(false);
+      setPlacedOrder(null);
+      setRatingPromptOrder(null);
+      setDismissedRatingOrderIds([]);
     }
     if (!isAdmin && activeTab === 'admin') setActiveTab('store');
     if (!user && activeTrackingOrder) {
@@ -115,6 +126,21 @@ function MainApp() {
   React.useEffect(() => {
     if (passwordRecoveryRequired) setAuthOpen(true);
   }, [passwordRecoveryRequired]);
+
+  React.useEffect(() => {
+    if (!requestAuthPending) return;
+    if (user) {
+      setRequestAuthPending(false);
+      setRequestModalOpen(true);
+    } else {
+      setAuthOpen(true);
+    }
+  }, [requestAuthPending, user, setRequestAuthPending, setRequestModalOpen]);
+
+  const handleAuthModalClose = ({ authenticated = false } = {}) => {
+    setAuthOpen(false);
+    if (!authenticated) cancelRequestAuthentication();
+  };
 
   const displayName = user?.user_metadata?.name || user?.email?.split('@')[0] || "Friend";
 
@@ -332,7 +358,7 @@ function MainApp() {
       {/* Authentication Modal */}
       <AuthModal
         isOpen={authOpen}
-        onClose={() => setAuthOpen(false)}
+        onClose={handleAuthModalClose}
       />
 
       {/* User Profile Dropdown Modal */}
@@ -351,7 +377,7 @@ function MainApp() {
       {/* Medicine Procurement Request Modal */}
       <MedicineRequestModal
         isOpen={requestModalOpen}
-        onClose={() => setRequestModalOpen(false)}
+        onClose={closeRequestModal}
       />
 
       {/* Customer Proposal Review & Approval Modal */}

@@ -706,12 +706,37 @@ router.post('/:id/rating', authenticateUser, async (req, res) => {
     }
 });
 
-router.get('/history', authenticateUser, async (req, res) => {
+router.get('/mine', authenticateUser, async (req, res) => {
     try {
         const orders = await dataStore.getUserOrders(req.user.sub);
         res.json(orders);
     } catch (err) {
-        res.status(500).json({ message: "Failed to retrieve history" });
+        console.error('Customer order retrieval failed:', err);
+        res.status(500).json({ message: 'Failed to retrieve orders.' });
+    }
+});
+
+router.get('/history', authenticateUser, async (req, res) => {
+    if (!getIsConnected()) {
+        return res.status(503).json({ message: 'Order history is temporarily unavailable.' });
+    }
+    if (req.query.userId && req.query.userId !== req.user.sub) {
+        return res.status(403).json({ message: 'You can only view your own order history.' });
+    }
+
+    try {
+        const closedStatuses = ['Completed', 'Delivered', 'Cancelled', 'Rejected', 'completed', 'delivered', 'cancelled', 'rejected'];
+        const orders = await Order.find({
+            userId: req.user.sub,
+            $or: [
+                { orderStatus: { $in: closedStatuses } },
+                { status: { $in: closedStatuses } }
+            ]
+        }).sort({ createdAt: -1 }).lean();
+        res.status(200).json(orders);
+    } catch (err) {
+        console.error('Order history retrieval failed:', err);
+        res.status(500).json({ message: 'Failed to retrieve order history.' });
     }
 });
 

@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
+import OrderHistory from './OrderHistory';
 
 export default function OrderHistoryView({ onTrackOrder }) {
   const { orders, loadingOrders, loadUserOrders } = useApp();
   const { addToast } = useToast();
   const editableStatuses = ['Pending_Review', 'Approved', 'Processing Order', 'Ready to Dispatch'];
+  const activeOrders = orders.filter(order => !['Delivered', 'Cancelled', 'Rejected', 'Completed', 'delivered', 'cancelled', 'rejected', 'completed'].includes(order.orderStatus || order.status));
 
   const cancelOrder = async (order) => {
     if (!window.confirm('Cancel this order? Reserved stock will be released.')) return;
@@ -37,11 +39,12 @@ export default function OrderHistoryView({ onTrackOrder }) {
   };
 
   return (
+    <div className="space-y-4">
     <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-base font-extrabold text-slate-900">📦 Order History</h3>
-          <p className="text-xs text-slate-500">Track current and past prescription orders.</p>
+          <h3 className="text-base font-extrabold text-slate-900">📦 Active Orders</h3>
+          <p className="text-xs text-slate-500">Track or manage orders currently being processed.</p>
         </div>
         <button
           onClick={loadUserOrders}
@@ -52,11 +55,11 @@ export default function OrderHistoryView({ onTrackOrder }) {
         </button>
       </div>
 
-      {orders.length === 0 ? (
+      {activeOrders.length === 0 ? (
         <div className="py-16 text-center text-slate-400 space-y-2">
           <p className="text-3xl">📋</p>
-          <p className="text-xs font-bold text-slate-700">No orders placed yet</p>
-          <p className="text-[11px] text-slate-400">Your orders and tracking status will appear here once placed.</p>
+          <p className="text-xs font-bold text-slate-700">No active orders</p>
+          <p className="text-[11px] text-slate-400">Orders being processed will appear here.</p>
         </div>
       ) : (
         <>
@@ -74,7 +77,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {orders.map((order) => {
+                {activeOrders.map((order) => {
                   const orderId = (order._id || '').slice(-6).toUpperCase();
                   return (
                     <tr key={order._id} className="hover:bg-slate-50/70 transition">
@@ -120,7 +123,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
 
           {/* Mobile Stacked Cards */}
           <div className="md:hidden space-y-3">
-            {orders.map((order) => {
+            {activeOrders.map((order) => {
               const orderId = (order._id || '').slice(-6).toUpperCase();
               return (
                 <div key={order._id} className="p-4 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-2.5">
@@ -171,6 +174,8 @@ export default function OrderHistoryView({ onTrackOrder }) {
         </>
       )}
 
+    </div>
+    <OrderHistory />
     </div>
   );
 }

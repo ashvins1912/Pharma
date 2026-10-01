@@ -35,6 +35,7 @@ export function AppProvider({ children }) {
   const [addresses, setAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [loadingAddresses, setLoadingAddresses] = useState(false);
+  const addressLoadSequence = useRef(0);
 
   // Orders & Tracking State
   const [orders, setOrders] = useState([]);
@@ -47,7 +48,10 @@ export function AppProvider({ children }) {
   const [loadingMedicineRequests, setLoadingMedicineRequests] = useState(false);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [requestPrefillData, setRequestPrefillData] = useState(null);
+  const [requestAuthPending, setRequestAuthPending] = useState(false);
   const [activeProposalRequest, setActiveProposalRequest] = useState(null);
+  const previousUserId = useRef(null);
+  const medicineRequestLoadSequence = useRef(0);
 
   // Customer Notifications State
   const [notifications, setNotifications] = useState([
@@ -190,10 +194,11 @@ export function AppProvider({ children }) {
 
   // Fetch User Addresses
   const loadAddresses = useCallback(async () => {
+    const requestSequence = ++addressLoadSequence.current;
     try {
       setLoadingAddresses(true);
       const res = await apiClient.get('/api/user/addresses');
-      if (Array.isArray(res.data)) {
+      if (requestSequence === addressLoadSequence.current && Array.isArray(res.data)) {
         const addrs = res.data;
         setAddresses(addrs);
         if (addrs.length > 0 && !addrs.some(address => address._id === selectedAddressId)) {
@@ -202,6 +207,7 @@ export function AppProvider({ children }) {
         }
       }
     } catch (err) {
+      if (requestSequence !== addressLoadSequence.current) return;
       console.warn("Address directory notice:", err?.message || err);
       // Graceful fallback to initial address so addresses and checkout are immediately usable
       setAddresses((prev) => {
@@ -223,9 +229,40 @@ export function AppProvider({ children }) {
         return [initial];
       });
     } finally {
-      setLoadingAddresses(false);
+      if (requestSequence === addressLoadSequence.current) setLoadingAddresses(false);
     }
   }, [user, selectedAddressId]);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    const currentUserId = user?.id || null;
+    if (previousUserId.current !== currentUserId) {
+      if (previousUserId.current) {
+        addressLoadSequence.current += 1;
+        orderLoadSequence.current += 1;
+        medicineRequestLoadSequence.current += 1;
+        setAddresses([]);
+        setSelectedAddressId('');
+        setLoadingAddresses(false);
+        setOrders([]);
+        setLoadingOrders(false);
+        setMedicineRequests([]);
+        setLoadingMedicineRequests(false);
+        setCart([]);
+        setAppliedCoupon(null);
+        setCouponCode('');
+        setCouponError('');
+        setActiveTrackingOrder(null);
+        setActiveProposalRequest(null);
+        setRequestModalOpen(false);
+        setRequestPrefillData(null);
+        setRequestAuthPending(false);
+        setNotifications(previous => previous.filter(notification => !notification.id.startsWith('notif-prop-')));
+      }
+      previousUserId.current = currentUserId;
+    }
+  }, [authLoading, user?.id]);
 
   useEffect(() => {
     if (user) {
@@ -243,7 +280,7 @@ export function AppProvider({ children }) {
     }
     try {
       if (!silent) setLoadingOrders(true);
-      const res = await apiClient.get('/api/orders/history');
+      const res = await apiClient.get('/api/orders/mine');
       if (requestSequence === orderLoadSequence.current) {
         setOrders(res.data || []);
       }
@@ -264,6 +301,7 @@ export function AppProvider({ children }) {
 
   // Load User Medicine Requests
   const loadUserMedicineRequests = useCallback(async ({ silent = false } = {}) => {
+    const requestSequence = ++medicineRequestLoadSequence.current;
     if (!user) {
       setMedicineRequests([]);
       setLoadingMedicineRequests(false);
@@ -272,6 +310,7 @@ export function AppProvider({ children }) {
     try {
       if (!silent) setLoadingMedicineRequests(true);
       const list = await getCustomerMedicineRequests();
+      if (requestSequence !== medicineRequestLoadSequence.current) return;
       setMedicineRequests(list || []);
 
       // Check if any proposals are ready to notify customer in notification bell
@@ -300,7 +339,7 @@ export function AppProvider({ children }) {
     } catch {
       // ignore
     } finally {
-      if (!silent) setLoadingMedicineRequests(false);
+      if (!silent && requestSequence === medicineRequestLoadSequence.current) setLoadingMedicineRequests(false);
     }
   }, [user]);
 
@@ -312,7 +351,24 @@ export function AppProvider({ children }) {
 
   const openRequestModal = (prefill = null) => {
     setRequestPrefillData(prefill);
-    setRequestModalOpen(true);
+    if (user) {
+      setRequestAuthPending(false);
+      setRequestModalOpen(true);
+    } else {
+      setRequestModalOpen(false);
+      setRequestAuthPending(true);
+    }
+  };
+
+  const closeRequestModal = () => {
+    setRequestModalOpen(false);
+    setRequestPrefillData(null);
+    setRequestAuthPending(false);
+  };
+
+  const cancelRequestAuthentication = () => {
+    setRequestPrefillData(null);
+    setRequestAuthPending(false);
   };
 
   const openProposalModal = (request) => {
@@ -539,8 +595,11 @@ export function AppProvider({ children }) {
         loadingMedicineRequests,
         loadUserMedicineRequests,
         requestModalOpen,
-        setRequestModalOpen,
+        closeRequestModal,
         requestPrefillData,
+        requestAuthPending,
+        setRequestAuthPending,
+        cancelRequestAuthentication,
         openRequestModal,
         activeProposalRequest,
         setActiveProposalRequest,

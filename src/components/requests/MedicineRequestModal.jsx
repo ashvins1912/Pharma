@@ -34,37 +34,61 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
 
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => () => {
+    if (prescriptionPreview) URL.revokeObjectURL(prescriptionPreview);
+  }, [prescriptionPreview]);
+
+  useEffect(() => () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+  }, [imagePreview]);
+
   useEffect(() => {
-    if (isOpen) {
-      if (requestPrefillData) {
-        setMedicineName(requestPrefillData.name || requestPrefillData.requestedName || '');
-        setStrength(requestPrefillData.strength || '');
-        setDosageForm(requestPrefillData.dosageForm || 'Tablet');
-        setManufacturer(requestPrefillData.brand || requestPrefillData.manufacturer || '');
-        setQuantity(requestPrefillData.quantity || 1);
-      } else {
-        setMedicineName('');
-        setStrength('');
-        setDosageForm('Tablet');
-        setManufacturer('');
-        setQuantity(1);
-      }
+    if (!isOpen) {
+      setMedicineName('');
+      setStrength('');
+      setDosageForm('Tablet');
+      setManufacturer('');
+      setQuantity(1);
       setDeliveryPreference('Flexible');
       setCustomerNote('');
+      setChosenAddressId('');
+      setCustomAddress('');
       setPrescriptionFile(null);
       setProductImageFile(null);
       setPrescriptionPreview(null);
       setImagePreview(null);
-
-      if (addresses && addresses.length > 0) {
-        const defaultAddr = addresses.find(a => a.isDefault) || addresses[0];
-        setChosenAddressId(defaultAddr._id);
-        setCustomAddress('');
-      } else {
-        setChosenAddressId('');
-      }
+      setSubmitting(false);
+      return;
     }
-  }, [isOpen, requestPrefillData, addresses]);
+
+    if (requestPrefillData) {
+      setMedicineName(requestPrefillData.name || requestPrefillData.requestedName || '');
+      setStrength(requestPrefillData.strength || '');
+      setDosageForm(requestPrefillData.dosageForm || 'Tablet');
+      setManufacturer(requestPrefillData.brand || requestPrefillData.manufacturer || '');
+      setQuantity(requestPrefillData.quantity || 1);
+    } else {
+      setMedicineName('');
+      setStrength('');
+      setDosageForm('Tablet');
+      setManufacturer('');
+      setQuantity(1);
+    }
+    setDeliveryPreference('Flexible');
+    setCustomerNote('');
+    setPrescriptionFile(null);
+    setProductImageFile(null);
+    setPrescriptionPreview(null);
+    setImagePreview(null);
+    setChosenAddressId('');
+    setCustomAddress('');
+  }, [isOpen, requestPrefillData]);
+
+  useEffect(() => {
+    if (!isOpen || chosenAddressId || !addresses?.length) return;
+    const defaultAddr = addresses.find(a => a.isDefault) || addresses[0];
+    setChosenAddressId(defaultAddr._id);
+  }, [isOpen, addresses, chosenAddressId]);
 
   if (!isOpen) return null;
 
