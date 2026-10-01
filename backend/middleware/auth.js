@@ -181,4 +181,14 @@ export const isAdmin = (req, res, next) => {
     return next();
 };
 
-export default { authenticateUser, isAdmin };
+export const isPharmacyOrAdmin = (req, res, next) => {
+    const role = req.user?.app_metadata?.role || req.user?.role;
+    if (role === 'admin' || role === 'pharmacy') {
+        return next();
+    }
+    return res.status(403).json({
+        message: 'Access denied. Pharmacist or Administrator privileges required.'
+    });
+};
+
+export default { authenticateUser, isAdmin, isPharmacyOrAdmin };

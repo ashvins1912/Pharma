@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const medicineItemSchema = new mongoose.Schema({
-    medicineId: { type: mongoose.Schema.Types.ObjectId, ref: 'Medicine', required: true },
+    medicineId: { type: mongoose.Schema.Types.Mixed, required: false },
     quantity: { type: Number, required: true, min: 1 },
     price: { type: Number, required: true, min: 0 },
     baseCostPrice: { type: Number, min: 0, default: 0 },
@@ -104,6 +104,9 @@ const orderSchema = new mongoose.Schema({
         assignedAt: { type: Date, default: null },
         distanceInKm: { type: Number, default: null }
     },
+    source: { type: String, default: 'DIRECT' },
+    medicineRequestId: { type: String, default: null, index: true },
+    deliverySlot: { type: Object, default: null },
     rider: {
         riderId: String,
         riderName: String,

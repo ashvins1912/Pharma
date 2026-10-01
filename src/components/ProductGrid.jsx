@@ -15,7 +15,8 @@ export default function ProductGrid() {
     totalPages,
     totalMedicines,
     limit,
-    isSearching
+    isSearching,
+    openRequestModal
   } = useApp();
 
   const gridTopRef = useRef(null);
@@ -72,28 +73,53 @@ export default function ProductGrid() {
 
   if (medicines.length === 0) {
     return (
-      <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-8 sm:p-12 text-center space-y-3 my-4 shadow-xs">
+      <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-6 sm:p-10 text-center space-y-4 my-4 shadow-xs">
         <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto bg-slate-100 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">
           🔍
         </div>
-        <div className="max-w-sm mx-auto space-y-1">
-          <h3 className="font-extrabold text-slate-800 text-sm sm:text-base">No medicines found</h3>
+        <div className="max-w-md mx-auto space-y-1.5">
+          <h3 className="font-extrabold text-slate-800 text-sm sm:text-base">No medicines found in catalog</h3>
           <p className="text-xs text-slate-500">
             {searchQuery
               ? `No catalog matches for "${searchQuery}". Out-of-stock items also checked.`
               : 'No items match your active filters.'}
           </p>
         </div>
-        <button
-          onClick={() => {
-            setSearchQuery('');
-            setSelectedCategory('All');
-            setHideRx(false);
-          }}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer transition shadow-sm"
-        >
-          Reset All Filters
-        </button>
+
+        {/* Case 1: Can't find medicine -> Request Medicine */}
+        <div className="max-w-md mx-auto bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-4 sm:p-5 text-left space-y-2.5 shadow-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">📋</span>
+            <h4 className="font-black text-xs sm:text-sm text-blue-950">
+              Can't find your medicine? Request it from Ashvin Pharmacy.
+            </h4>
+          </div>
+          <p className="text-[11px] text-blue-800 leading-relaxed">
+            Our dispensing pharmacists will check licensed supplier availability, source the medication, and formulate a proposal with pricing and delivery slot for your approval.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+            <button
+              onClick={() => openRequestModal({
+                name: searchQuery || '',
+                originalAvailabilityStatus: 'NOT_IN_CATALOG'
+              })}
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl shadow-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <span>+</span>
+              <span>Request Medicine</span>
+            </button>
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedCategory('All');
+                setHideRx(false);
+              }}
+              className="w-full sm:w-auto bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-xs px-3.5 py-2 rounded-xl cursor-pointer transition text-center"
+            >
+              Reset Filters
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -194,6 +220,33 @@ export default function ProductGrid() {
           </div>
         </div>
       )}
+
+      {/* Can't find medicine inquiry banner */}
+      <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-xl flex-shrink-0">
+            📋
+          </div>
+          <div>
+            <h4 className="font-black text-slate-900 text-xs sm:text-sm">
+              Looking for a specific prescription or brand not listed above?
+            </h4>
+            <p className="text-[11px] text-slate-600 mt-0.5">
+              Submit a medicine request with optional prescription upload. Our pharmacists will source it and send a custom price and delivery slot proposal.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => openRequestModal({
+            name: searchQuery || '',
+            originalAvailabilityStatus: 'NOT_IN_CATALOG'
+          })}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer flex-shrink-0 shadow-xs flex items-center gap-1.5"
+        >
+          <span>+</span>
+          <span>Request Any Medicine</span>
+        </button>
+      </div>
     </div>
   );
 }

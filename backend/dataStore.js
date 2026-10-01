@@ -8,6 +8,8 @@ import UserProfile from './models/UserProfile.js';
 import UserAddress from './models/UserAddress.js';
 import CustomerPointsLedger from './models/CustomerPointsLedger.js';
 import Rider from './models/Rider.js';
+import MedicineRequest from './models/MedicineRequest.js';
+import { sendWhatsAppMedicineRequestAlert } from './config/whatsapp.js';
 import ProfitMarginRewardEngine from './strategies/ProfitMarginRewardEngine.js';
 import DefaultProfitRewardStrategy from './strategies/ProfitRewardStrategy.js';
 import FixedDeliveryRewardStrategy from './strategies/DeliveryRewardStrategy.js';
@@ -297,6 +299,103 @@ let inMemoryCoupons = [
     { _id: "c-3", code: "HEALTH50", discountPercentage: 50, isActive: true, minOrderValue: 200 }
 ];
 
+let inMemoryMedicineRequests = [
+    {
+        _id: "req-10024",
+        requestNumber: "MR-10024",
+        customerId: "demo-customer-id",
+        customerName: "Ashvin Singh",
+        customerPhone: "+91 95899 16475",
+        customerEmail: "customer@ashvinpharma.com",
+        requestedItems: [
+            {
+                requestedName: "Rifaximin 550mg",
+                medicineId: null,
+                strength: "550mg",
+                dosageForm: "Tablet",
+                manufacturer: "Sun Pharma",
+                quantity: 2,
+                originalAvailabilityStatus: "NOT_IN_CATALOG"
+            }
+        ],
+        prescriptionUrl: null,
+        productImageUrl: null,
+        customerNote: "Need urgently for post-operative regimen. Please verify if distributor can arrange.",
+        deliveryAddress: "Flat 402, Greenfield Heights, Richmond Road, Bengaluru - 560025",
+        addressDetails: {
+            fullName: "Ashvin Singh",
+            mobile: "+91 95899 16475",
+            addressLine1: "Flat 402, Greenfield Heights, Richmond Road",
+            city: "Bengaluru",
+            state: "Karnataka",
+            pincode: "560025"
+        },
+        coordinates: { lat: 12.9667, lng: 77.6000 },
+        preferredDeliveryPreference: "Evening",
+        status: "PROPOSAL_SENT",
+        pharmacyProposal: {
+            productId: null,
+            medicineName: "Rifaximin 550mg (Strip of 10 Tablets)",
+            manufacturer: "Sun Pharma (Rifagut)",
+            strength: "550mg",
+            dosageForm: "Tablet",
+            quantity: 2,
+            unitPrice: 380,
+            approximatePrice: 760,
+            finalPrice: 760,
+            totalPrice: 760,
+            priceType: "FINAL",
+            pharmacyNote: "Arranged from verified distributor depot. Batch verified and ready for courier packaging.",
+            deliverySlot: {
+                date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+                slotType: "EVENING",
+                startTime: "18:00",
+                endTime: "21:00",
+                label: "Tomorrow Evening, 6 PM - 9 PM"
+            },
+            prescriptionStatus: "Verified",
+            alternativeProduct: ""
+        },
+        customerResponse: {
+            respondedAt: null,
+            responseNote: ""
+        },
+        reviewedBy: "Chief Pharmacist",
+        reviewedAt: new Date(Date.now() - 3600000),
+        proposalSentAt: new Date(Date.now() - 3600000),
+        approvedAt: null,
+        rejectedAt: null,
+        convertedOrderId: null,
+        expiresAt: new Date(Date.now() + 48 * 3600000),
+        createdAt: new Date(Date.now() - 7200000),
+        updatedAt: new Date(Date.now() - 3600000),
+        auditTrail: [
+            {
+                action: "REQUEST_CREATED",
+                actorId: "demo-customer-id",
+                role: "Customer",
+                timestamp: new Date(Date.now() - 7200000),
+                notes: "Initial customer request submitted for Rifaximin 550mg"
+            },
+            {
+                action: "REQUEST_REVIEWED",
+                actorId: "Chief Pharmacist",
+                role: "Pharmacist",
+                timestamp: new Date(Date.now() - 4000000),
+                notes: "Under pharmacist review; stock confirmed with supplier"
+            },
+            {
+                action: "PROPOSAL_SENT",
+                actorId: "Chief Pharmacist",
+                role: "Pharmacist",
+                timestamp: new Date(Date.now() - 3600000),
+                notes: "Final price ₹760 and Evening delivery slot proposed"
+            }
+        ]
+    }
+];
+let requestSequenceCounter = 10025;
+
 let inMemoryOrders = [
     {
         _id: "ord-1021",
@@ -484,12 +583,25 @@ const orderInventoryWasDeducted = (order) => Boolean(
 const deductMongoOrderInventory = async (order, session) => {
     if (orderInventoryWasDeducted(order)) return;
     const items = getOrderInventoryItems(order);
-    if (!items.length) throw inventoryError('Order has no inventory records to deduct.', 409);
+    if (!items.length) {
+        if (order.source === 'MEDICINE_REQUEST') {
+            order.inventoryDeductedAt = new Date();
+            return;
+        }
+        throw inventoryError('Order has no inventory records to deduct.', 409);
+    }
     for (const item of items) {
         const medicineId = item.medicineId;
         const quantity = Number(item.quantity);
         if (!mongoose.isValidObjectId(medicineId) || !Number.isInteger(quantity) || quantity < 1) {
+            if (order.source === 'MEDICINE_REQUEST') {
+                continue; // Procured externally, no catalog deduction needed
+            }
             throw inventoryError('Could not safely deduct stock for this order.', 409);
+        }
+        const medExists = await Medicine.findById(medicineId).session(session);
+        if (!medExists && order.source === 'MEDICINE_REQUEST') {
+            continue;
         }
         const result = await Medicine.collection.updateOne({
             _id: new mongoose.Types.ObjectId(medicineId),
@@ -516,6 +628,7 @@ const deductMongoOrderInventory = async (order, session) => {
             }
         }], { session });
         if (result.modifiedCount !== 1) {
+            if (order.source === 'MEDICINE_REQUEST') continue;
             throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
         }
     }
@@ -525,17 +638,29 @@ const deductMongoOrderInventory = async (order, session) => {
 const deductInMemoryOrderInventory = (order) => {
     if (orderInventoryWasDeducted(order)) return;
     const items = getOrderInventoryItems(order);
-    if (!items.length) throw inventoryError('Order has no inventory records to deduct.', 409);
-    const medicineItems = items.map(item => {
+    if (!items.length) {
+        if (order.source === 'MEDICINE_REQUEST') {
+            order.inventoryDeductedAt = new Date();
+            return;
+        }
+        throw inventoryError('Order has no inventory records to deduct.', 409);
+    }
+    const medicineItems = [];
+    for (const item of items) {
         const medicineId = item.medicineId;
         const quantity = Number(item.quantity);
         const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(medicineId));
-        if (!medicine || !Number.isInteger(quantity) || quantity < 1
-            || getReservedStock(medicine) < quantity || getPhysicalStock(medicine) < quantity) {
+        if (!medicine) {
+            if (order.source === 'MEDICINE_REQUEST') continue;
             throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
         }
-        return { medicine, quantity };
-    });
+        if (!Number.isInteger(quantity) || quantity < 1
+            || getReservedStock(medicine) < quantity || getPhysicalStock(medicine) < quantity) {
+            if (order.source === 'MEDICINE_REQUEST') continue;
+            throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
+        }
+        medicineItems.push({ medicine, quantity });
+    }
     for (const { medicine, quantity } of medicineItems) {
         const remainingStock = getPhysicalStock(medicine) - quantity;
         medicine.stockQuantity = remainingStock;
@@ -2260,6 +2385,753 @@ export const dataStore = {
         if (existing.isDefault && remaining.length) remaining[0].isDefault = true;
         inMemoryAddresses.set(userId, remaining);
         return true;
+    },
+
+    // Medicine Request & Proposal Lifecycle
+    async createMedicineRequest(payload, user) {
+        const customerId = user.sub || user.id;
+        const customerName = user.user_metadata?.name || user.email?.split('@')[0] || 'Valued Customer';
+        const customerPhone = user.user_metadata?.mobile || payload.customerPhone || '';
+        const customerEmail = user.email || '';
+
+        const requestedItems = (payload.requestedItems || []).map(item => ({
+            requestedName: String(item.requestedName || item.name || '').trim(),
+            medicineId: item.medicineId || null,
+            productId: item.productId || null,
+            strength: String(item.strength || '').trim(),
+            dosageForm: String(item.dosageForm || '').trim(),
+            manufacturer: String(item.manufacturer || '').trim(),
+            quantity: Math.max(1, Number(item.quantity) || 1),
+            originalAvailabilityStatus: item.originalAvailabilityStatus === 'OUT_OF_STOCK'
+                ? 'OUT_OF_STOCK'
+                : 'NOT_IN_CATALOG'
+        }));
+
+        if (!requestedItems.length || !requestedItems[0].requestedName) {
+            throw inventoryError('Please provide the medicine name you want to request.');
+        }
+
+        if (!payload.deliveryAddress?.trim()) {
+            throw inventoryError('A delivery address is required for your medicine request.');
+        }
+
+        const validDeliveryPreferences = ['Morning', 'Evening', 'Next Day', 'Flexible'];
+        const preferredDeliveryPreference = validDeliveryPreferences.includes(payload.preferredDeliveryPreference)
+            ? payload.preferredDeliveryPreference
+            : 'Flexible';
+
+        const reqNum = `MR-${requestSequenceCounter++}`;
+        const initialAudit = {
+            action: 'REQUEST_CREATED',
+            actorId: customerId,
+            role: 'Customer',
+            timestamp: new Date(),
+            notes: `Requested ${requestedItems[0].requestedName} (x${requestedItems[0].quantity})`
+        };
+
+        const requestDoc = {
+            requestNumber: reqNum,
+            customerId,
+            customerName,
+            customerPhone,
+            customerEmail,
+            requestedItems,
+            prescriptionUrl: payload.prescriptionUrl || null,
+            productImageUrl: payload.productImageUrl || null,
+            customerNote: String(payload.customerNote || '').trim(),
+            deliveryAddress: payload.deliveryAddress.trim(),
+            addressDetails: payload.addressDetails || {},
+            coordinates: payload.coordinates || null,
+            preferredDeliveryPreference,
+            status: 'REQUESTED',
+            pharmacyProposal: null,
+            customerResponse: null,
+            reviewedBy: null,
+            reviewedAt: null,
+            proposalSentAt: null,
+            approvedAt: null,
+            rejectedAt: null,
+            convertedOrderId: null,
+            expiresAt: null,
+            auditTrail: [initialAudit]
+        };
+
+        if (getIsConnected()) {
+            const created = await MedicineRequest.create(requestDoc);
+            const plain = created.toObject();
+            try {
+                await sendWhatsAppMedicineRequestAlert(plain, 'MedicineRequestCreated');
+            } catch (err) {
+                console.warn('[WhatsApp] Alert failed for request creation:', err.message);
+            }
+            return plain;
+        }
+
+        const created = {
+            ...requestDoc,
+            _id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+        inMemoryMedicineRequests.unshift(created);
+        try {
+            await sendWhatsAppMedicineRequestAlert(created, 'MedicineRequestCreated');
+        } catch (err) {
+            console.warn('[WhatsApp] Alert failed for request creation:', err.message);
+        }
+        return created;
+    },
+
+    async getMedicineRequests(filter = {}, user = null) {
+        const isStaff = user && (
+            user.app_metadata?.role === 'admin'
+            || user.app_metadata?.role === 'pharmacy'
+            || user.role === 'admin'
+            || user.role === 'pharmacy'
+        );
+
+        if (getIsConnected()) {
+            const now = new Date();
+            // Auto expire past proposals
+            await MedicineRequest.updateMany(
+                { status: 'PROPOSAL_SENT', expiresAt: { $lt: now } },
+                {
+                    $set: { status: 'EXPIRED' },
+                    $push: {
+                        auditTrail: {
+                            action: 'REQUEST_EXPIRED',
+                            actorId: 'System',
+                            role: 'System',
+                            timestamp: now,
+                            notes: 'Proposal expired past configured validity period'
+                        }
+                    }
+                }
+            );
+
+            const query = {};
+            if (!isStaff) {
+                query.customerId = user ? user.sub : 'unauthenticated';
+            } else if (filter.customerId) {
+                query.customerId = filter.customerId;
+            }
+
+            if (filter.status && filter.status !== 'ALL') {
+                query.status = filter.status;
+            }
+
+            if (filter.search?.trim()) {
+                const s = filter.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                query.$or = [
+                    { requestNumber: { $regex: s, $options: 'i' } },
+                    { customerName: { $regex: s, $options: 'i' } },
+                    { 'requestedItems.requestedName': { $regex: s, $options: 'i' } }
+                ];
+            }
+
+            return MedicineRequest.find(query).sort({ createdAt: -1 }).lean();
+        }
+
+        const now = new Date();
+        // Auto expire in-memory proposals
+        for (const req of inMemoryMedicineRequests) {
+            if (req.status === 'PROPOSAL_SENT' && req.expiresAt && now > new Date(req.expiresAt)) {
+                req.status = 'EXPIRED';
+                req.auditTrail.push({
+                    action: 'REQUEST_EXPIRED',
+                    actorId: 'System',
+                    role: 'System',
+                    timestamp: now,
+                    notes: 'Proposal expired past configured validity period'
+                });
+            }
+        }
+
+        let list = [...inMemoryMedicineRequests];
+        if (!isStaff) {
+            const customerId = user ? user.sub : 'unauthenticated';
+            list = list.filter(r => r.customerId === customerId);
+        } else if (filter.customerId) {
+            list = list.filter(r => r.customerId === filter.customerId);
+        }
+
+        if (filter.status && filter.status !== 'ALL') {
+            list = list.filter(r => r.status === filter.status);
+        }
+
+        if (filter.search?.trim()) {
+            const s = filter.search.trim().toLowerCase();
+            list = list.filter(r =>
+                r.requestNumber?.toLowerCase().includes(s)
+                || r.customerName?.toLowerCase().includes(s)
+                || (r.requestedItems || []).some(item => item.requestedName?.toLowerCase().includes(s))
+            );
+        }
+
+        return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    },
+
+    async getMedicineRequestById(id, user = null) {
+        let request = null;
+        if (getIsConnected()) {
+            request = mongoose.isValidObjectId(id)
+                ? await MedicineRequest.findById(id).lean()
+                : await MedicineRequest.findOne({ $or: [{ _id: id }, { requestNumber: id }] }).lean();
+        } else {
+            request = inMemoryMedicineRequests.find(r =>
+                String(r._id) === String(id) || r.requestNumber === id
+            ) || null;
+        }
+
+        if (!request) return null;
+
+        const isStaff = user && (
+            user.app_metadata?.role === 'admin'
+            || user.app_metadata?.role === 'pharmacy'
+            || user.role === 'admin'
+            || user.role === 'pharmacy'
+        );
+
+        if (user && !isStaff && request.customerId !== user.sub) {
+            throw inventoryError('You are not authorized to view this medicine request.', 403);
+        }
+
+        // Auto expire check
+        if (request.status === 'PROPOSAL_SENT' && request.expiresAt && new Date() > new Date(request.expiresAt)) {
+            request.status = 'EXPIRED';
+            const expireAudit = {
+                action: 'REQUEST_EXPIRED',
+                actorId: 'System',
+                role: 'System',
+                timestamp: new Date(),
+                notes: 'Proposal expired'
+            };
+            if (getIsConnected()) {
+                await MedicineRequest.updateOne(
+                    { _id: request._id },
+                    { $set: { status: 'EXPIRED' }, $push: { auditTrail: expireAudit } }
+                );
+            } else {
+                request.auditTrail.push(expireAudit);
+            }
+        }
+
+        return request;
+    },
+
+    async reviewMedicineRequest(id, actor = 'Pharmacist', actorRole = 'Pharmacist') {
+        const actorName = typeof actor === 'object'
+            ? (actor?.user_metadata?.name || actor?.email?.split('@')[0] || 'Pharmacist')
+            : (actor || 'Pharmacist');
+        const role = typeof actor === 'object'
+            ? (actor?.app_metadata?.role || actor?.role || 'Pharmacist')
+            : actorRole;
+
+        const request = await this.getMedicineRequestById(id);
+        if (!request) throw inventoryError('Medicine request not found.', 404);
+
+        if (request.status === 'REQUESTED') {
+            const now = new Date();
+            const audit = {
+                action: 'REQUEST_REVIEWED',
+                actorId: actorName,
+                role: role,
+                timestamp: now,
+                notes: 'Pharmacist commenced review and supplier availability assessment'
+            };
+
+            if (getIsConnected()) {
+                const updated = await MedicineRequest.findByIdAndUpdate(
+                    request._id,
+                    {
+                        $set: {
+                            status: 'UNDER_REVIEW',
+                            reviewedBy: actorName,
+                            reviewedAt: now
+                        },
+                        $push: { auditTrail: audit }
+                    },
+                    { new: true }
+                ).lean();
+                return updated;
+            }
+
+            request.status = 'UNDER_REVIEW';
+            request.reviewedBy = actorName;
+            request.reviewedAt = now;
+            request.auditTrail.push(audit);
+        }
+        return request;
+    },
+
+    async createOrUpdateProposal(id, proposalData, actorName = 'Pharmacist', actorRole = 'Pharmacist') {
+        const request = await this.getMedicineRequestById(id);
+        if (!request) throw inventoryError('Medicine request not found.', 404);
+
+        if (['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(request.status)) {
+            throw inventoryError('Cannot alter proposal after customer approval or order conversion.', 400);
+        }
+
+        const medicineName = String(proposalData.medicineName || request.requestedItems?.[0]?.requestedName || '').trim();
+        if (!medicineName) throw inventoryError('Medicine name is required in proposal.');
+
+        const quantity = Math.max(1, Number(proposalData.quantity) || 1);
+        const unitPrice = Math.max(0, Number(proposalData.unitPrice) || 0);
+        const priceType = proposalData.priceType === 'FINAL' ? 'FINAL' : 'APPROXIMATE';
+
+        let approximatePrice = Number(proposalData.approximatePrice);
+        if (!Number.isFinite(approximatePrice) || approximatePrice <= 0) {
+            approximatePrice = unitPrice * quantity;
+        }
+
+        let finalPrice = null;
+        if (priceType === 'FINAL') {
+            finalPrice = Number(proposalData.finalPrice ?? approximatePrice);
+            if (!Number.isFinite(finalPrice) || finalPrice <= 0) {
+                throw inventoryError('A valid final price must be specified when priceType is FINAL.');
+            }
+        }
+
+        const totalPrice = finalPrice != null ? finalPrice : approximatePrice;
+
+        const slot = proposalData.deliverySlot || {};
+        const validSlotTypes = ['MORNING', 'EVENING', 'NEXT_DAY', 'FLEXIBLE', 'CUSTOM'];
+        const slotType = validSlotTypes.includes(slot.slotType) ? slot.slotType : 'FLEXIBLE';
+
+        const deliverySlot = {
+            date: slot.date || new Date(Date.now() + 86400000).toISOString().split('T')[0],
+            slotType,
+            startTime: slot.startTime || (slotType === 'MORNING' ? '09:00' : slotType === 'EVENING' ? '18:00' : '10:00'),
+            endTime: slot.endTime || (slotType === 'MORNING' ? '13:00' : slotType === 'EVENING' ? '21:00' : '18:00'),
+            label: slot.label || `${slotType.replace('_', ' ')} Delivery (${slot.date || 'Available slot'})`
+        };
+
+        const validPrescriptionStatuses = ['Pending Verification', 'Verified', 'Rejected', 'Not Required'];
+        const prescriptionStatus = validPrescriptionStatuses.includes(proposalData.prescriptionStatus)
+            ? proposalData.prescriptionStatus
+            : (request.prescriptionUrl ? 'Verified' : 'Not Required');
+
+        // Expiration: custom date or 48 hours default
+        let expiresAt = proposalData.expiresAt ? new Date(proposalData.expiresAt) : new Date(Date.now() + 48 * 3600000);
+        if (isNaN(expiresAt.getTime()) || expiresAt <= new Date()) {
+            expiresAt = new Date(Date.now() + 48 * 3600000);
+        }
+
+        const proposal = {
+            productId: proposalData.productId || null,
+            medicineName,
+            manufacturer: String(proposalData.manufacturer || request.requestedItems?.[0]?.manufacturer || '').trim(),
+            strength: String(proposalData.strength || request.requestedItems?.[0]?.strength || '').trim(),
+            dosageForm: String(proposalData.dosageForm || request.requestedItems?.[0]?.dosageForm || '').trim(),
+            quantity,
+            unitPrice,
+            approximatePrice,
+            finalPrice,
+            totalPrice,
+            priceType,
+            pharmacyNote: String(proposalData.pharmacyNote || '').trim(),
+            deliverySlot,
+            prescriptionStatus,
+            alternativeProduct: String(proposalData.alternativeProduct || '').trim()
+        };
+
+        const now = new Date();
+        const isUpdate = request.status === 'PROPOSAL_SENT';
+        const audit = {
+            action: isUpdate ? 'PROPOSAL_UPDATED' : 'PROPOSAL_SENT',
+            actorId: actorName,
+            role: actorRole,
+            timestamp: now,
+            notes: `${isUpdate ? 'Updated' : 'Formulated'} proposal: ${medicineName} (${priceType} ₹${totalPrice})`
+        };
+
+        if (getIsConnected()) {
+            const updated = await MedicineRequest.findByIdAndUpdate(
+                request._id,
+                {
+                    $set: {
+                        status: 'PROPOSAL_SENT',
+                        pharmacyProposal: proposal,
+                        proposalSentAt: now,
+                        expiresAt,
+                        reviewedBy: actorName,
+                        reviewedAt: now
+                    },
+                    $push: { auditTrail: audit }
+                },
+                { new: true }
+            ).lean();
+
+            try {
+                await sendWhatsAppMedicineRequestAlert(updated, 'MedicineProposalReady');
+            } catch (err) {
+                console.warn('[WhatsApp] Alert failed for proposal ready:', err.message);
+            }
+            return updated;
+        }
+
+        request.status = 'PROPOSAL_SENT';
+        request.pharmacyProposal = proposal;
+        request.proposalSentAt = now;
+        request.expiresAt = expiresAt;
+        request.reviewedBy = actorName;
+        request.reviewedAt = now;
+        request.auditTrail.push(audit);
+
+        try {
+            await sendWhatsAppMedicineRequestAlert(request, 'MedicineProposalReady');
+        } catch (err) {
+            console.warn('[WhatsApp] Alert failed for proposal ready:', err.message);
+        }
+        return request;
+    },
+
+    async rejectMedicineRequestByPharmacy(id, reason = '', actorName = 'Pharmacist', actorRole = 'Pharmacist') {
+        const request = await this.getMedicineRequestById(id);
+        if (!request) throw inventoryError('Medicine request not found.', 404);
+
+        if (['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(request.status)) {
+            throw inventoryError('Cannot reject request after customer approval or order conversion.', 400);
+        }
+
+        const now = new Date();
+        const audit = {
+            action: 'PHARMACY_REJECTED',
+            actorId: actorName,
+            role: actorRole,
+            timestamp: now,
+            notes: reason || 'Pharmacy unable to procure requested medicine from supplier network.'
+        };
+
+        if (getIsConnected()) {
+            const updated = await MedicineRequest.findByIdAndUpdate(
+                request._id,
+                {
+                    $set: {
+                        status: 'PHARMACY_REJECTED',
+                        rejectedAt: now
+                    },
+                    $push: { auditTrail: audit }
+                },
+                { new: true }
+            ).lean();
+
+            try {
+                await sendWhatsAppMedicineRequestAlert(updated, 'MedicineRequestRejected');
+            } catch (err) {
+                console.warn('[WhatsApp] Alert failed for pharmacy reject:', err.message);
+            }
+            return updated;
+        }
+
+        request.status = 'PHARMACY_REJECTED';
+        request.rejectedAt = now;
+        request.auditTrail.push(audit);
+
+        try {
+            await sendWhatsAppMedicineRequestAlert(request, 'MedicineRequestRejected');
+        } catch (err) {
+            console.warn('[WhatsApp] Alert failed for pharmacy reject:', err.message);
+        }
+        return request;
+    },
+
+    async rejectMedicineProposalByCustomer(id, reason = '', user) {
+        const customerId = user.sub || user.id;
+        const request = await this.getMedicineRequestById(id, user);
+        if (!request) throw inventoryError('Medicine request not found.', 404);
+
+        if (request.customerId !== customerId) {
+            throw inventoryError('Unauthorized access to this medicine request.', 403);
+        }
+
+        if (request.status !== 'PROPOSAL_SENT') {
+            throw inventoryError(`Cannot reject proposal in '${request.status}' status.`, 400);
+        }
+
+        const now = new Date();
+        const audit = {
+            action: 'CUSTOMER_REJECTED',
+            actorId: customerId,
+            role: 'Customer',
+            timestamp: now,
+            notes: reason || 'Customer declined the proposed pricing or delivery schedule.'
+        };
+
+        if (getIsConnected()) {
+            const updated = await MedicineRequest.findByIdAndUpdate(
+                request._id,
+                {
+                    $set: {
+                        status: 'CUSTOMER_REJECTED',
+                        rejectedAt: now,
+                        customerResponse: {
+                            respondedAt: now,
+                            responseNote: reason || 'Declined proposal'
+                        }
+                    },
+                    $push: { auditTrail: audit }
+                },
+                { new: true }
+            ).lean();
+
+            try {
+                await sendWhatsAppMedicineRequestAlert(updated, 'MedicineRequestRejected');
+            } catch (err) {
+                console.warn('[WhatsApp] Alert failed for customer reject:', err.message);
+            }
+            return updated;
+        }
+
+        request.status = 'CUSTOMER_REJECTED';
+        request.rejectedAt = now;
+        request.customerResponse = {
+            respondedAt: now,
+            responseNote: reason || 'Declined proposal'
+        };
+        request.auditTrail.push(audit);
+
+        try {
+            await sendWhatsAppMedicineRequestAlert(request, 'MedicineRequestRejected');
+        } catch (err) {
+            console.warn('[WhatsApp] Alert failed for customer reject:', err.message);
+        }
+        return request;
+    },
+
+    // CRITICAL IDEMPOTENT ORDER CONVERSION
+    async approveMedicineProposalAndConvertToOrder(id, approvalNote = '', user) {
+        const customerId = user.sub || user.id;
+        const request = await this.getMedicineRequestById(id, user);
+        if (!request) throw inventoryError('Medicine request not found.', 404);
+
+        if (request.customerId !== customerId) {
+            throw inventoryError('Unauthorized access to this proposal.', 403);
+        }
+
+        // 1. Idempotency Check: if already converted, return existing order
+        if (request.convertedOrderId || request.status === 'CONVERTED_TO_ORDER') {
+            const existingOrder = await this.getOrder(request.convertedOrderId);
+            return {
+                order: existingOrder,
+                request,
+                alreadyConverted: true,
+                message: 'Proposal was already approved and converted into an order.'
+            };
+        }
+
+        // 2. Check expiration
+        if (request.expiresAt && new Date() > new Date(request.expiresAt)) {
+            if (getIsConnected()) {
+                await MedicineRequest.updateOne({ _id: request._id }, { $set: { status: 'EXPIRED' } });
+            } else {
+                request.status = 'EXPIRED';
+            }
+            throw inventoryError('This proposal has expired and can no longer be approved.', 400);
+        }
+
+        // 3. Status Check: must be PROPOSAL_SENT
+        if (request.status !== 'PROPOSAL_SENT') {
+            throw inventoryError(`Cannot approve proposal in '${request.status}' status.`, 400);
+        }
+
+        const proposal = request.pharmacyProposal;
+        if (!proposal || !proposal.totalPrice || proposal.totalPrice <= 0) {
+            throw inventoryError('The pharmacy proposal is missing valid pricing.', 400);
+        }
+
+        const orderId = getIsConnected()
+            ? new mongoose.Types.ObjectId()
+            : `ord-mr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+        const orderTotal = Math.max(0, Math.round(Number(proposal.totalPrice) * 100) / 100);
+
+        const orderItems = [
+            {
+                name: `${proposal.medicineName}${proposal.strength ? ' ' + proposal.strength : ''}`,
+                productName: proposal.medicineName,
+                sku: 'MR-ARRANGED',
+                quantity: proposal.quantity,
+                unitPrice: proposal.unitPrice || Math.round((orderTotal / proposal.quantity) * 100) / 100,
+                price: orderTotal,
+                totalPrice: orderTotal
+            }
+        ];
+
+        const now = new Date();
+        const orderData = {
+            _id: orderId,
+            userId: customerId,
+            customerId,
+            customerName: request.customerName,
+            customerMobile: request.customerPhone || '',
+            items: orderItems,
+            medicineItems: [],
+            prescriptionUrl: request.prescriptionUrl || null,
+            prescriptionRequired: Boolean(request.prescriptionUrl),
+            subtotal: orderTotal,
+            totalAmount: orderTotal,
+            finalTotal: orderTotal,
+            deliveryAddress: request.deliveryAddress,
+            addressDetails: request.addressDetails || {},
+            coordinates: request.coordinates || null,
+            paymentMethod: 'Cash on Delivery (COD)',
+            orderStatus: 'Processing Order',
+            status: 'accepted',
+            source: 'MEDICINE_REQUEST',
+            medicineRequestId: String(request._id),
+            deliverySlot: proposal.deliverySlot || null,
+            statusHistory: [
+                {
+                    previousStatus: null,
+                    newStatus: 'Processing Order',
+                    changedBy: 'Pharmacist Proposal Approval',
+                    timestamp: now,
+                    notes: `Created from approved medicine request #${request.requestNumber}. Proposed slot: ${proposal.deliverySlot?.label || 'Standard'}`
+                }
+            ]
+        };
+
+        let createdOrder = null;
+
+        if (getIsConnected()) {
+            const [created] = await Order.create([orderData]);
+            createdOrder = created.toObject();
+
+            const updatedRequest = await MedicineRequest.findOneAndUpdate(
+                { _id: request._id, status: 'PROPOSAL_SENT' },
+                {
+                    $set: {
+                        status: 'CONVERTED_TO_ORDER',
+                        approvedAt: now,
+                        convertedOrderId: createdOrder._id.toString(),
+                        customerResponse: {
+                            respondedAt: now,
+                            responseNote: approvalNote || 'Customer approved pharmacy proposal'
+                        }
+                    },
+                    $push: {
+                        auditTrail: [
+                            {
+                                action: 'CUSTOMER_APPROVED',
+                                actorId: customerId,
+                                role: 'Customer',
+                                timestamp: now,
+                                notes: 'Customer approved proposal'
+                            },
+                            {
+                                action: 'REQUEST_CONVERTED_TO_ORDER',
+                                actorId: customerId,
+                                role: 'Customer',
+                                timestamp: now,
+                                notes: `Converted to active Order #${createdOrder._id.toString()}`
+                            }
+                        ]
+                    }
+                },
+                { new: true }
+            ).lean();
+
+            this.logAudit(customerId, 'CONVERT_REQUEST_TO_ORDER', 'ORDER', createdOrder._id.toString(), {
+                requestNumber: request.requestNumber,
+                finalTotal: orderTotal
+            });
+
+            // Trigger Notifications
+            try {
+                await sendWhatsAppMedicineRequestAlert(updatedRequest, 'MedicineRequestApproved');
+                await sendCustomWhatsAppAlert(createdOrder, 'Placed');
+            } catch (err) {
+                console.warn('[WhatsApp] Alerts failed during order conversion:', err.message);
+            }
+
+            return {
+                order: createdOrder,
+                request: updatedRequest,
+                alreadyConverted: false,
+                message: `🎉 Proposal approved! Order #${String(createdOrder._id).slice(-6).toUpperCase()} registered for fulfillment.`
+            };
+        }
+
+        // In-memory branch
+        createdOrder = {
+            ...orderData,
+            createdAt: now,
+            updatedAt: now
+        };
+        inMemoryOrders.unshift(createdOrder);
+
+        request.status = 'CONVERTED_TO_ORDER';
+        request.approvedAt = now;
+        request.convertedOrderId = String(createdOrder._id);
+        request.customerResponse = {
+            respondedAt: now,
+            responseNote: approvalNote || 'Customer approved pharmacy proposal'
+        };
+        request.auditTrail.push(
+            {
+                action: 'CUSTOMER_APPROVED',
+                actorId: customerId,
+                role: 'Customer',
+                timestamp: now,
+                notes: 'Customer approved proposal'
+            },
+            {
+                action: 'REQUEST_CONVERTED_TO_ORDER',
+                actorId: customerId,
+                role: 'Customer',
+                timestamp: now,
+                notes: `Converted to active Order #${String(createdOrder._id)}`
+            }
+        );
+
+        this.logAudit(customerId, 'CONVERT_REQUEST_TO_ORDER', 'ORDER', String(createdOrder._id), {
+            requestNumber: request.requestNumber,
+            finalTotal: orderTotal
+        });
+
+        // Trigger Notifications
+        try {
+            await sendWhatsAppMedicineRequestAlert(request, 'MedicineRequestApproved');
+            await sendCustomWhatsAppAlert(createdOrder, 'Placed');
+        } catch (err) {
+            console.warn('[WhatsApp] Alerts failed during order conversion:', err.message);
+        }
+
+        return {
+            order: createdOrder,
+            request,
+            alreadyConverted: false,
+            message: `🎉 Proposal approved! Order #${String(createdOrder._id).slice(-6).toUpperCase()} registered for fulfillment.`
+        };
+    },
+
+    async getMedicineRequestMetrics() {
+        const requests = await this.getMedicineRequests({}, { app_metadata: { role: 'admin' } });
+
+        const total = requests.length;
+        const requested = requests.filter(r => r.status === 'REQUESTED').length;
+        const underReview = requests.filter(r => r.status === 'UNDER_REVIEW').length;
+        const proposalSent = requests.filter(r => r.status === 'PROPOSAL_SENT').length;
+        const converted = requests.filter(r => ['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(r.status)).length;
+        const customerRejected = requests.filter(r => r.status === 'CUSTOMER_REJECTED').length;
+        const pharmacyRejected = requests.filter(r => r.status === 'PHARMACY_REJECTED').length;
+        const expired = requests.filter(r => r.status === 'EXPIRED').length;
+
+        const resolved = converted + customerRejected;
+        const acceptanceRate = resolved > 0 ? Math.round((converted / resolved) * 100) : 0;
+
+        return {
+            totalRequests: total,
+            pendingReviewCount: requested,
+            underReviewCount: underReview,
+            proposalsSentCount: proposalSent,
+            convertedCount: converted,
+            customerRejectedCount: customerRejected,
+            pharmacyRejectedCount: pharmacyRejected,
+            expiredCount: expired,
+            proposalAcceptanceRate: acceptanceRate
+        };
     }
 };
 

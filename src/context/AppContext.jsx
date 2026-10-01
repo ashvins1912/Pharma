@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../api/apiClient';
 import { applyCouponCode } from '../api/couponService';
+import { getCustomerMedicineRequests } from '../api/medicineRequestService';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
 
@@ -40,6 +41,13 @@ export function AppProvider({ children }) {
   const [activeTrackingOrder, setActiveTrackingOrder] = useState(null);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const orderLoadSequence = useRef(0);
+
+  // Medicine Requests & Proposals State
+  const [medicineRequests, setMedicineRequests] = useState([]);
+  const [loadingMedicineRequests, setLoadingMedicineRequests] = useState(false);
+  const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [requestPrefillData, setRequestPrefillData] = useState(null);
+  const [activeProposalRequest, setActiveProposalRequest] = useState(null);
 
   // Customer Notifications State
   const [notifications, setNotifications] = useState([
@@ -253,6 +261,63 @@ export function AppProvider({ children }) {
     const refreshTimer = window.setInterval(() => loadUserOrders({ silent: true }), 15000);
     return () => window.clearInterval(refreshTimer);
   }, [loadUserOrders]);
+
+  // Load User Medicine Requests
+  const loadUserMedicineRequests = useCallback(async ({ silent = false } = {}) => {
+    if (!user) {
+      setMedicineRequests([]);
+      setLoadingMedicineRequests(false);
+      return;
+    }
+    try {
+      if (!silent) setLoadingMedicineRequests(true);
+      const list = await getCustomerMedicineRequests();
+      setMedicineRequests(list || []);
+
+      // Check if any proposals are ready to notify customer in notification bell
+      const proposalsWaiting = (list || []).filter(r => r.status === 'PROPOSAL_SENT');
+      if (proposalsWaiting.length > 0) {
+        proposalsWaiting.forEach(p => {
+          const notifId = `notif-prop-${p._id}`;
+          setNotifications(prev => {
+            if (prev.some(n => n.id === notifId)) return prev;
+            return [
+              {
+                id: notifId,
+                title: `💊 Proposal Ready for #${p.requestNumber}`,
+                message: `Price: ₹${p.pharmacyProposal?.totalPrice || p.pharmacyProposal?.approximatePrice}. Tap to review and confirm.`,
+                time: 'Just now',
+                read: false,
+                type: 'info',
+                requestId: p._id,
+                actionType: 'VIEW_PROPOSAL'
+              },
+              ...prev
+            ];
+          });
+        });
+      }
+    } catch {
+      // ignore
+    } finally {
+      if (!silent) setLoadingMedicineRequests(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    loadUserMedicineRequests();
+    const timer = window.setInterval(() => loadUserMedicineRequests({ silent: true }), 15000);
+    return () => window.clearInterval(timer);
+  }, [loadUserMedicineRequests]);
+
+  const openRequestModal = (prefill = null) => {
+    setRequestPrefillData(prefill);
+    setRequestModalOpen(true);
+  };
+
+  const openProposalModal = (request) => {
+    setActiveProposalRequest(request);
+  };
 
   // Fetch Admin Inventory Alerts
   const loadInventoryAlerts = useCallback(async () => {
@@ -468,6 +533,18 @@ export function AppProvider({ children }) {
         loadingOrders,
         activeTrackingOrder,
         setActiveTrackingOrder,
+
+        // Medicine Requests & Proposals
+        medicineRequests,
+        loadingMedicineRequests,
+        loadUserMedicineRequests,
+        requestModalOpen,
+        setRequestModalOpen,
+        requestPrefillData,
+        openRequestModal,
+        activeProposalRequest,
+        setActiveProposalRequest,
+        openProposalModal,
 
         // Notifications
         notifications,

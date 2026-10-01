@@ -13,23 +13,24 @@ export default function Header({
   onOpenAdminAlerts
 }) {
   const { user, isAdmin, logout } = useAuth();
-  const { cart, searchQuery, setSearchQuery, whatsappStatus, setWhatsappModalOpen } = useApp();
+  const { cart, searchQuery, setSearchQuery, whatsappStatus, setWhatsappModalOpen, medicineRequests, openRequestModal } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   const cartItemCount = cart.reduce((total, item) => total + item.quantity, 0);
+  const proposalsWaitingCount = (medicineRequests || []).filter(r => r.status === 'PROPOSAL_SENT').length;
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 transition">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 sm:h-20 gap-1.5 sm:gap-4">
+      <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 sm:h-20 gap-1 sm:gap-4">
           
           {/* Left: Logo & Pharmacy Brand */}
           <div
             onClick={() => setActiveTab('store')}
-            className="flex items-center gap-2 sm:gap-3 cursor-pointer select-none flex-shrink min-w-0 mr-1"
+            className="flex items-center gap-1.5 sm:gap-3 cursor-pointer select-none shrink min-w-0"
           >
-            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-lg sm:text-xl shadow-md shadow-blue-500/20 flex-shrink-0">
+            <div className="w-8 h-8 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-base sm:text-xl shadow-md shadow-blue-500/20 shrink-0">
               ⚕️
             </div>
             <div className="min-w-0">
@@ -38,14 +39,14 @@ export default function Header({
                   Ashvin Pharmacy
                 </span>
                 {isAdmin && (
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <span className="bg-purple-100 text-purple-700 text-[9px] sm:text-[10px] font-black px-1.5 py-0.2 rounded-full uppercase tracking-wider">
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="bg-purple-100 text-purple-700 text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider">
                       Admin
                     </span>
                     {whatsappStatus.isConnected ? (
                       <button
                         onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
-                        className="hidden sm:inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase transition cursor-pointer"
+                        className="hidden sm:inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer"
                         title="WhatsApp Dispatch Connected - Click to view"
                       >
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -54,7 +55,7 @@ export default function Header({
                     ) : (
                       <button
                         onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
-                        className="hidden sm:inline-flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase transition cursor-pointer animate-pulse"
+                        className="hidden sm:inline-flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer animate-pulse"
                         title="WhatsApp Offline - Click to scan QR code"
                       >
                         <span>⚠️</span>
@@ -96,6 +97,21 @@ export default function Header({
                   📦 Orders
                 </button>
                 <button
+                  onClick={() => setActiveTab('requests')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer relative ${
+                    activeTab === 'requests'
+                      ? 'bg-blue-50 text-blue-700 font-extrabold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  📋 Requests
+                  {proposalsWaitingCount > 0 && (
+                    <span className="ml-1.5 bg-purple-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
+                      {proposalsWaitingCount}
+                    </span>
+                  )}
+                </button>
+                <button
                   onClick={() => setActiveTab('addresses')}
                   className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                     activeTab === 'addresses'
@@ -123,7 +139,7 @@ export default function Header({
           </nav>
 
           {/* Right: Actions Bar (Search, Notifications, Cart, User Profile, Mobile Menu) */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5 flex-shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             
             {/* Desktop Search Input */}
             {activeTab === 'store' && (
@@ -278,6 +294,23 @@ export default function Header({
               }`}
             >
               <span>📦 Order History & Tracking</span>
+              <span className="text-slate-400">→</span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
+              className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
+                activeTab === 'requests' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span>📋 My Medicine Requests</span>
+                {proposalsWaitingCount > 0 && (
+                  <span className="bg-purple-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full">
+                    {proposalsWaitingCount} new
+                  </span>
+                )}
+              </div>
               <span className="text-slate-400">→</span>
             </button>
 
