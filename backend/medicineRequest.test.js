@@ -45,6 +45,11 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
         email: 'patient101@example.com',
         user_metadata: { name: 'Patient Test User', mobile: '+919988776655' }
     };
+    const otherCustomer = {
+        sub: 'user-test-procurement-102',
+        email: 'patient102@example.com',
+        user_metadata: { name: 'Other Patient' }
+    };
 
     // 1. Customer creates a special medicine request
     const createPayload = {
@@ -60,6 +65,7 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
         ],
         customerNote: 'Please confirm earliest delivery slot.',
         deliveryPreference: 'Urgent',
+        addressId: 'saved-address-101',
         deliveryAddress: '123 Health Ave, Koramangala, Bengaluru - 560034',
         addressDetails: {
             fullName: 'Patient Test User',
@@ -75,11 +81,42 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
     assert.equal(createdReq.status, 'REQUESTED');
     assert.equal(createdReq.requestedItems[0].requestedName, 'Ursocol 300mg Tablet');
     assert.equal(createdReq.customerId, testUser.sub);
+    assert.equal(createdReq.addressId, createPayload.addressId);
+    assert.equal(
+        (await dataStore.getMedicineRequestById(createdReq._id, otherCustomer)),
+        null,
+        'Another customer must not retrieve this request by its ID'
+    );
+    assert.equal(
+        (await dataStore.getMedicineRequests({}, testUser)).some(request => request._id === createdReq._id),
+        true,
+        'The owner must see their own request'
+    );
+    assert.equal(
+        (await dataStore.getMedicineRequests({}, otherCustomer)).some(request => request._id === createdReq._id),
+        false,
+        'Another customer must not see this request in their list'
+    );
+    assert.equal(
+        (await dataStore.getMedicineRequests({}, {
+            sub: 'admin-1',
+            app_metadata: { role: 'admin' }
+        })).some(request => request._id === createdReq._id),
+        true,
+        'Authorized administrators must see customer requests'
+    );
+    await assert.rejects(
+        dataStore.createMedicineRequest({
+            requestedItems: [{ requestedName: 'No address medicine' }]
+        }, otherCustomer),
+        error => error.statusCode === 400
+    );
 
     // 2. Pharmacy/Admin reviews the request
     const adminUser = {
         sub: 'admin-1',
         email: 'pharmacist@ashvinpharmacy.com',
+        app_metadata: { role: 'admin' },
         user_metadata: { name: 'Lead Pharmacist' }
     };
 
@@ -115,6 +152,30 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
     assert.equal(proposedReq.pharmacyProposal.deliverySlot.label, 'Tomorrow Evening (5:00 PM - 8:00 PM)');
 
     // 4. Customer approves the proposal -> Automatically converted to order
+    await assert.rejects(
+        dataStore.approveProposalAndConvertToOrder(createdReq._id, adminUser),
+        error => error.statusCode === 403,
+        'Administrators cannot approve proposals on behalf of a customer'
+    );
+    await assert.rejects(
+        dataStore.approveProposalAndConvertToOrder(createdReq._id, otherCustomer),
+        error => error.statusCode === 404,
+        'Another customer cannot approve this proposal'
+    );
+    await assert.rejects(
+        dataStore.rejectProposalByCustomer(createdReq._id, otherCustomer, 'Not mine'),
+        error => error.statusCode === 404,
+        'Another customer cannot reject this proposal'
+    );
+    await assert.rejects(
+        dataStore.rejectProposalByCustomer(createdReq._id, adminUser, 'Admin rejection'),
+        error => error.statusCode === 403,
+        'Administrators cannot reject proposals on behalf of a customer'
+    );
+    await assert.rejects(
+        dataStore.approveProposalAndConvertToOrder(createdReq._id, otherCustomer),
+        error => error.statusCode === 404
+    );
     const approvalResult = await dataStore.approveProposalAndConvertToOrder(
         createdReq._id,
         testUser,
@@ -131,6 +192,11 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
     assert.equal(approvalResult.order.items[0].name, 'Ursocol 300mg (Strip of 10 Tablets)');
     assert.equal(approvalResult.order.items[0].quantity, 3);
     assert.equal(approvalResult.order.items[0].price, 420);
+    const duplicateApproval = await dataStore.approveProposalAndConvertToOrder(createdReq._id, testUser);
+    assert.equal(duplicateApproval.alreadyConverted, true);
+    assert.equal((await dataStore.getUserOrders(testUser.sub)).filter(order =>
+        String(order.medicineRequestId) === String(createdReq._id)
+    ).length, 1, 'Repeated approval must not create a second order');
 
     // Verify order is retrievable by customer
     const userOrders = await dataStore.getOrders(testUser.sub);
@@ -140,9 +206,11 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
     // 5. Customer declining proposal scenario
     const secondReqPayload = {
         requestedItems: [{ requestedName: 'Rare Tablet XYZ 100mg', quantity: 1 }],
+        addressId: 'saved-address-101',
         deliveryAddress: 'Somewhere 123'
     };
     const secondReq = await dataStore.createMedicineRequest(secondReqPayload, testUser);
+    await dataStore.reviewMedicineRequest(secondReq._id, adminUser);
     await dataStore.createOrUpdateProposal(secondReq._id, {
         proposedMedicineName: 'Alternative ABC',
         finalPrice: 900
@@ -151,11 +219,18 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
     const rejectRes = await dataStore.rejectProposalByCustomer(secondReq._id, testUser, 'Price is too high for alternative');
     assert.equal(rejectRes.status, 'CUSTOMER_REJECTED');
     assert.equal(rejectRes.customerRejectionReason, 'Price is too high for alternative');
+    await assert.rejects(
+        dataStore.approveProposalAndConvertToOrder(secondReq._id, testUser),
+        error => error.statusCode === 400,
+        'A rejected proposal cannot later be approved'
+    );
 
     // 6. Pharmacy rejecting unavailable request
     const thirdReq = await dataStore.createMedicineRequest({
-        requestedItems: [{ requestedName: 'Discontinued Salt Med', quantity: 1 }]
+        requestedItems: [{ requestedName: 'Discontinued Salt Med', quantity: 1 }],
+        addressId: 'saved-address-101'
     }, testUser);
+    await dataStore.reviewMedicineRequest(thirdReq._id, adminUser);
     const pharmacyReject = await dataStore.rejectMedicineRequestByPharmacy(thirdReq._id, adminUser, 'Salt discontinued by FDA');
     assert.equal(pharmacyReject.status, 'PHARMACY_REJECTED');
     assert.equal(pharmacyReject.pharmacyRejectionReason, 'Salt discontinued by FDA');

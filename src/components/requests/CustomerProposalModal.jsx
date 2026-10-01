@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { approveProposal, rejectProposal } from '../../api/medicineRequestService';
 
 export default function CustomerProposalModal({ request, isOpen, onClose, onOrderCreated }) {
   const { loadUserMedicineRequests, loadUserOrders } = useApp();
+  const { user, role } = useAuth();
   const { addToast } = useToast();
 
   const [approving, setApproving] = useState(false);
@@ -12,6 +14,14 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [approvalNote, setApprovalNote] = useState('');
+  const [showApprovalConfirm, setShowApprovalConfirm] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setShowApprovalConfirm(false);
+    setShowRejectInput(false);
+    setRejectReason('');
+  }, [isOpen, request?._id]);
 
   if (!isOpen || !request) return null;
 
@@ -19,6 +29,11 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
   const isExpired = request.status === 'EXPIRED' || (request.expiresAt && new Date() > new Date(request.expiresAt));
   const isApproved = request.status === 'CUSTOMER_APPROVED' || request.status === 'CONVERTED_TO_ORDER';
   const isRejected = request.status === 'CUSTOMER_REJECTED' || request.status === 'PHARMACY_REJECTED';
+  const isOwner = String(request.customerId) === String(user?.id || user?.sub);
+  const canDecide = role === 'customer'
+    && isOwner
+    && request.status === 'PROPOSAL_SENT'
+    && !isExpired;
 
   const priceType = proposal?.priceType || 'APPROXIMATE';
   const priceValue = proposal?.finalPrice ?? proposal?.totalPrice ?? proposal?.approximatePrice ?? 0;
@@ -236,10 +251,39 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
         )}
 
         {/* Action Controls */}
-        {!isExpired && !isApproved && !isRejected && (
+        {canDecide && (
           <div className="space-y-3 pt-2 border-t border-slate-100">
-            
-            {showRejectInput ? (
+            {showApprovalConfirm ? (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 space-y-3" role="group" aria-label="Confirm proposal approval">
+                <div>
+                  <p className="text-sm font-extrabold text-emerald-950">Please confirm this pharmacy proposal.</p>
+                  <p className="mt-1 text-xs text-emerald-800">
+                    {proposal?.medicineName || request.requestedItems?.[0]?.requestedName}
+                    {' · Qty '}{proposal?.quantity || 1}
+                    {' · '}{priceType} ₹{priceValue}
+                    {' · '}{proposal?.deliverySlot?.label || 'Flexible delivery'}
+                  </p>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowApprovalConfirm(false)}
+                    disabled={approving}
+                    className="rounded-xl px-4 py-2 text-xs font-bold text-slate-700 hover:bg-white disabled:opacity-50"
+                  >
+                    Go Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApprove}
+                    disabled={approving}
+                    className="rounded-xl bg-emerald-700 px-4 py-2 text-xs font-black text-white disabled:opacity-50"
+                  >
+                    {approving ? 'Creating Order...' : 'Confirm & Create Order'}
+                  </button>
+                </div>
+              </div>
+            ) : showRejectInput ? (
               <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3.5 space-y-2.5 animate-fade-in">
                 <label className="block text-xs font-bold text-rose-900">
                   Reason for declining proposal (Optional)
@@ -281,21 +325,11 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
 
                 <button
                   type="button"
-                  onClick={handleApprove}
-                  disabled={approving}
+                  onClick={() => setShowApprovalConfirm(true)}
                   className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {approving ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                      <span>Creating Order...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>✓</span>
-                      <span>Approve & Confirm Order</span>
-                    </>
-                  )}
+                  <span>✓</span>
+                  <span>Approve & Confirm Order</span>
                 </button>
               </div>
             )}

@@ -8,7 +8,7 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
-  const [role, setRole] = useState('customer'); // 'customer' | 'admin'
+  const [role, setRole] = useState('customer');
   const [loading, setLoading] = useState(true);
   const [passwordRecoveryRequired, setPasswordRecoveryRequired] = useState(false);
 
@@ -28,7 +28,7 @@ export function AuthProvider({ children }) {
         resolvedUser.app_metadata?.role ||
         resolvedUser.role ||
         'customer';
-      setRole(userRole === 'admin' ? 'admin' : 'customer');
+      setRole(userRole === 'admin' || userRole === 'pharmacy' ? userRole : 'customer');
     } else {
       setUser(null);
       setRole('customer');
@@ -247,6 +247,7 @@ export function AuthProvider({ children }) {
         session,
         role,
         isAdmin: role === 'admin',
+        isPharmacyOrAdmin: role === 'admin' || role === 'pharmacy',
         loading,
         mfaRequired,
         mfaChallenge,

@@ -40,12 +40,23 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
   const [rejectReason, setRejectReason] = useState('');
 
   const [saving, setSaving] = useState(false);
+  const [reviewReady, setReviewReady] = useState(false);
 
   useEffect(() => {
+    let active = true;
     if (isOpen && request) {
-      // Transition from REQUESTED to UNDER_REVIEW automatically
+      setReviewReady(request.status !== 'REQUESTED');
       if (request.status === 'REQUESTED') {
-        reviewMedicineRequest(request._id).catch(() => {});
+        reviewMedicineRequest(request._id)
+          .then(() => {
+            if (active) setReviewReady(true);
+          })
+          .catch((error) => {
+            if (active) {
+              setReviewReady(false);
+              addToast(error.message || 'Could not start request review.', 'error');
+            }
+          });
       }
 
       const firstItem = request.requestedItems?.[0] || {};
@@ -96,12 +107,16 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
       setShowRejectBox(false);
       setRejectReason('');
     }
-  }, [isOpen, request]);
+    return () => { active = false; };
+  }, [isOpen, request, addToast]);
 
   if (!isOpen || !request) return null;
 
   const firstItem = request.requestedItems?.[0] || {};
   const isApproved = request.status === 'CUSTOMER_APPROVED' || request.status === 'CONVERTED_TO_ORDER';
+  const canEditProposal = ['UNDER_REVIEW', 'PROPOSAL_SENT'].includes(request.status)
+    || (request.status === 'REQUESTED' && reviewReady);
+  const canRejectRequest = request.status === 'UNDER_REVIEW';
 
   const handleSlotTypeChange = (type) => {
     setSlotType(type);
@@ -246,6 +261,12 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
                 Status: {request.status}
               </span>
             </div>
+
+            {request.status === 'PROPOSAL_SENT' && (
+              <div className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-bold text-purple-900">
+                Proposal sent — waiting for customer approval. Pharmacy cannot approve or reject on the customer’s behalf.
+              </div>
+            )}
             <h3 className="text-base sm:text-lg font-black text-slate-900">
               Formulate Pharmacy Proposal
             </h3>
@@ -327,7 +348,7 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
           <select
             value={prescriptionStatus}
             onChange={(e) => setPrescriptionStatus(e.target.value)}
-            disabled={isApproved}
+            disabled={!canEditProposal || !reviewReady}
             className="px-3 py-1.5 text-xs font-bold bg-white border border-amber-300 rounded-xl text-amber-950 outline-none"
           >
             <option value="Verified">✓ Verified by Pharmacist</option>
@@ -582,9 +603,9 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
           </div>
 
           {/* Actions Bar */}
-          {!isApproved && (
+          {canEditProposal && (
             <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-              {showRejectBox ? (
+              {showRejectBox && canRejectRequest ? (
                 <div className="w-full bg-rose-50 border border-rose-200 rounded-xl p-3 space-y-2">
                   <label className="block text-xs font-bold text-rose-900">
                     Reason for pharmacy declining this request
@@ -616,13 +637,15 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
                 </div>
               ) : (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => setShowRejectBox(true)}
-                    className="w-full sm:w-auto px-4 py-2 border border-rose-200 text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-bold transition cursor-pointer"
-                  >
-                    Reject Request
-                  </button>
+                  {canRejectRequest && (
+                    <button
+                      type="button"
+                      onClick={() => setShowRejectBox(true)}
+                      className="w-full sm:w-auto px-4 py-2 border border-rose-200 text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-bold transition cursor-pointer"
+                    >
+                      Reject Request
+                    </button>
+                  )}
 
                   <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                     <button
@@ -634,7 +657,7 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
                     </button>
                     <button
                       type="submit"
-                      disabled={saving}
+                      disabled={saving || !reviewReady}
                       className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                     >
                       {saving ? (

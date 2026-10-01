@@ -179,8 +179,11 @@ export default function AdminMedicineRequestsTab() {
             { id: 'REQUESTED', label: 'Pending Review' },
             { id: 'UNDER_REVIEW', label: 'Under Review' },
             { id: 'PROPOSAL_SENT', label: 'Proposal Sent' },
+            { id: 'CUSTOMER_APPROVED', label: 'Customer Approved' },
+            { id: 'CUSTOMER_REJECTED', label: 'Customer Rejected' },
+            { id: 'PHARMACY_REJECTED', label: 'Pharmacy Rejected' },
+            { id: 'EXPIRED', label: 'Expired' },
             { id: 'CONVERTED_TO_ORDER', label: 'Converted to Orders' },
-            { id: 'EXPIRED', label: 'Expired' }
           ].map(tab => (
             <button
               key={tab.id}
@@ -363,6 +366,11 @@ export default function AdminMedicineRequestsTab() {
 
                       <td className="py-3.5 px-3">
                         {getStatusBadge(req.status)}
+                        {req.status === 'PROPOSAL_SENT' && (
+                          <span className="mt-1 block text-[10px] font-bold text-purple-700">
+                            Waiting for Customer Approval
+                          </span>
+                        )}
                       </td>
 
                       <td className="py-3.5 px-3 text-right">
@@ -380,8 +388,10 @@ export default function AdminMedicineRequestsTab() {
                           }`}
                         >
                           {req.status === 'PROPOSAL_SENT'
-                            ? 'Edit Proposal'
+                            ? 'View / Edit Proposal'
                             : ['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(req.status)
+                            ? 'View Details'
+                            : ['CUSTOMER_REJECTED', 'PHARMACY_REJECTED', 'EXPIRED'].includes(req.status)
                             ? 'View Details'
                             : 'Review & Propose'}
                         </button>

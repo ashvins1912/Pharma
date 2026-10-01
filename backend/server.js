@@ -15,6 +15,7 @@ import profileRoutes from './routes/profileRoutes.js';
 import assignmentRoutes from './modules/delivery/routes/assignmentRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import medicineRequestRoutes from './routes/medicineRequestRoutes.js';
+import proposalRoutes from './routes/proposalRoutes.js';
 import { csrfProtection } from './security/sessionCookie.js';
 import { sanitizeBodyMiddleware, validateLogin } from './security/validator.js';
 import dataStore from './dataStore.js';
@@ -85,6 +86,7 @@ app.use('/api/admin/riders', riderRoutes);
 app.use('/api/admin/assignment', assignmentRoutes);
 app.use('/api/medicine-requests', medicineRequestRoutes);
 app.use('/api/admin/medicine-requests', medicineRequestRoutes);
+app.use('/api/proposals', proposalRoutes);
 
 app.post('/api/auth/demo-admin', sanitizeBodyMiddleware, validateLogin, async (req, res) => {
     if (!isDemoAdminEnabled()) {

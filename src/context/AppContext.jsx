@@ -1,14 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../api/apiClient';
 import { applyCouponCode } from '../api/couponService';
-import { getCustomerMedicineRequests } from '../api/medicineRequestService';
+import { getCustomerMedicineRequestsPage } from '../api/medicineRequestService';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
 
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
-  const { user, isAdmin, loading: authLoading } = useAuth();
+  const { user, isAdmin, isPharmacyOrAdmin, loading: authLoading } = useAuth();
   const { addToast } = useToast();
 
   // Catalog State
@@ -46,12 +46,16 @@ export function AppProvider({ children }) {
   // Medicine Requests & Proposals State
   const [medicineRequests, setMedicineRequests] = useState([]);
   const [loadingMedicineRequests, setLoadingMedicineRequests] = useState(false);
+  const [medicineRequestsPagination, setMedicineRequestsPagination] = useState({
+    page: 1, limit: 5, total: 0, totalPages: 0
+  });
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [requestPrefillData, setRequestPrefillData] = useState(null);
   const [requestAuthPending, setRequestAuthPending] = useState(false);
   const [activeProposalRequest, setActiveProposalRequest] = useState(null);
   const previousUserId = useRef(null);
   const medicineRequestLoadSequence = useRef(0);
+  const medicineRequestPage = useRef({ page: 1, statusGroup: 'ALL' });
 
   // Customer Notifications State
   const [notifications, setNotifications] = useState([
@@ -217,34 +221,21 @@ export function AppProvider({ children }) {
             const defaultAddr = addrs.find(a => a.isDefault) || addrs[0];
             return defaultAddr?._id || '';
           });
+        } else {
+          setSelectedAddressId('');
         }
+        return addrs;
       }
     } catch (err) {
       if (requestSequence !== addressLoadSequence.current) return;
       console.warn("Address directory notice:", err?.message || err);
-      // Graceful fallback to initial address so addresses and checkout are immediately usable
-      setAddresses((prev) => {
-        if (prev.length > 0) return prev;
-        const initial = {
-          _id: "addr-1",
-          label: "Home",
-          fullName: user?.user_metadata?.name || "Ashvin Singh",
-          mobile: user?.user_metadata?.mobile || "+91 95899 16475",
-          addressLine1: "Flat 402, Greenfield Heights, Richmond Road",
-          city: "Bengaluru",
-          state: "Karnataka",
-          pincode: "560025",
-          addressLine: "Flat 402, Greenfield Heights, Richmond Road, Bengaluru - 560025",
-          coordinates: { lat: 12.9667, lng: 77.6000 },
-          isDefault: true
-        };
-        setSelectedAddressId(cur => cur || initial._id);
-        return [initial];
-      });
+      setAddresses([]);
+      setSelectedAddressId('');
+      return [];
     } finally {
       if (requestSequence === addressLoadSequence.current) setLoadingAddresses(false);
     }
-  }, [user, selectedAddressId]);
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -321,18 +312,30 @@ export function AppProvider({ children }) {
   }, [loadUserOrders]);
 
   // Load User Medicine Requests
-  const loadUserMedicineRequests = useCallback(async ({ silent = false } = {}) => {
+  const loadUserMedicineRequests = useCallback(async ({ silent = false, page, statusGroup } = {}) => {
     const requestSequence = ++medicineRequestLoadSequence.current;
-    if (!user) {
+    if (!user || isPharmacyOrAdmin) {
       setMedicineRequests([]);
       setLoadingMedicineRequests(false);
       return;
     }
+    if (page != null) medicineRequestPage.current.page = page;
+    if (statusGroup != null) {
+      medicineRequestPage.current.statusGroup = statusGroup;
+      medicineRequestPage.current.page = page ?? 1;
+    }
     try {
       if (!silent) setLoadingMedicineRequests(true);
-      const list = await getCustomerMedicineRequests();
+      const result = await getCustomerMedicineRequestsPage({
+        page: medicineRequestPage.current.page,
+        statusGroup: medicineRequestPage.current.statusGroup
+      });
       if (requestSequence !== medicineRequestLoadSequence.current) return;
-      setMedicineRequests(list || []);
+      const list = result?.requests || [];
+      setMedicineRequests(list);
+      setMedicineRequestsPagination(result?.pagination || {
+        page: medicineRequestPage.current.page, limit: 5, total: list.length, totalPages: list.length ? 1 : 0
+      });
 
       // Check if any proposals are ready to notify customer in notification bell
       const proposalsWaiting = (list || []).filter(r => r.status === 'PROPOSAL_SENT');
@@ -362,7 +365,7 @@ export function AppProvider({ children }) {
     } finally {
       if (!silent && requestSequence === medicineRequestLoadSequence.current) setLoadingMedicineRequests(false);
     }
-  }, [user?.id]);
+  }, [user?.id, isPharmacyOrAdmin]);
 
   useEffect(() => {
     loadUserMedicineRequests();
@@ -371,6 +374,10 @@ export function AppProvider({ children }) {
   }, [loadUserMedicineRequests]);
 
   const openRequestModal = (prefill = null) => {
+    if (isPharmacyOrAdmin) {
+      addToast('Medicine requests can only be submitted by customer accounts.', 'warning');
+      return;
+    }
     setRequestPrefillData(prefill);
     if (user) {
       setRequestAuthPending(false);
@@ -522,7 +529,7 @@ export function AppProvider({ children }) {
       ]);
       setSelectedAddressId(savedAddress._id);
       addToast('Delivery address saved to directory!', 'success');
-      return true;
+      return savedAddress;
     } catch (err) {
       addToast('Failed to save address: ' + err.message, 'error');
       return false;
@@ -622,6 +629,7 @@ export function AppProvider({ children }) {
 
         // Medicine Requests & Proposals
         medicineRequests,
+        medicineRequestsPagination,
         loadingMedicineRequests,
         loadUserMedicineRequests,
         requestModalOpen,
@@ -662,4 +670,10 @@ export function AppProvider({ children }) {
   );
 }
 
-export const useApp = () => useContext(AppContext);
+export const useApp = () => {
+  const context = useContext(AppContext);
+  if (context === null) {
+    throw new Error('useApp must be used within an AppProvider.');
+  }
+  return context;
+};

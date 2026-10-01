@@ -12,7 +12,7 @@ export default function Header({
   onOpenProfile,
   onOpenAdminAlerts
 }) {
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, isPharmacyOrAdmin, role, logout } = useAuth();
   const { cart, searchQuery, setSearchQuery, whatsappStatus, setWhatsappModalOpen, medicineRequests, openRequestModal } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -38,29 +38,31 @@ export default function Header({
                 <span className="text-sm sm:text-lg font-black text-slate-900 tracking-tight leading-none truncate block">
                   Ashvin Pharmacy
                 </span>
-                {isAdmin && (
+                {isPharmacyOrAdmin && (
                   <div className="flex items-center gap-1 shrink-0">
                     <span className="bg-purple-100 text-purple-700 text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                      Admin
+                      {role === 'admin' ? 'Admin' : 'Pharmacy'}
                     </span>
-                    {whatsappStatus.isConnected ? (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
-                        className="hidden sm:inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer"
-                        title="WhatsApp Dispatch Connected - Click to view"
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        <span>WA Live</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
-                        className="hidden sm:inline-flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer animate-pulse"
-                        title="WhatsApp Offline - Click to scan QR code"
-                      >
-                        <span>⚠️</span>
-                        <span>WA Offline</span>
-                      </button>
+                    {isAdmin && (
+                      whatsappStatus.isConnected ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
+                          className="hidden sm:inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer"
+                          title="WhatsApp Dispatch Connected - Click to view"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          <span>WA Live</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
+                          className="hidden sm:inline-flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer animate-pulse"
+                          title="WhatsApp Offline - Click to scan QR code"
+                        >
+                          <span>⚠️</span>
+                          <span>WA Offline</span>
+                        </button>
+                      )
                     )}
                   </div>
                 )}
@@ -96,21 +98,23 @@ export default function Header({
                 >
                   📦 Orders
                 </button>
-                <button
-                  onClick={() => setActiveTab('requests')}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer relative ${
-                    activeTab === 'requests'
-                      ? 'bg-blue-50 text-blue-700 font-extrabold'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  📋 Requests
-                  {proposalsWaitingCount > 0 && (
-                    <span className="ml-1.5 bg-purple-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
-                      {proposalsWaitingCount}
-                    </span>
-                  )}
-                </button>
+                {!isPharmacyOrAdmin && (
+                  <button
+                    onClick={() => setActiveTab('requests')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer relative ${
+                      activeTab === 'requests'
+                        ? 'bg-blue-50 text-blue-700 font-extrabold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    📋 Requests
+                    {proposalsWaitingCount > 0 && (
+                      <span className="ml-1.5 bg-purple-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
+                        {proposalsWaitingCount}
+                      </span>
+                    )}
+                  </button>
+                )}
                 <button
                   onClick={() => setActiveTab('addresses')}
                   className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
@@ -124,7 +128,7 @@ export default function Header({
               </>
             )}
 
-            {isAdmin && (
+            {isPharmacyOrAdmin && (
               <button
                 onClick={() => setActiveTab('admin')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
@@ -297,22 +301,24 @@ export default function Header({
               <span className="text-slate-400">→</span>
             </button>
 
-            <button
-              onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
-              className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
-                activeTab === 'requests' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span>📋 My Medicine Requests</span>
-                {proposalsWaitingCount > 0 && (
-                  <span className="bg-purple-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full">
-                    {proposalsWaitingCount} new
-                  </span>
-                )}
-              </div>
-              <span className="text-slate-400">→</span>
-            </button>
+            {!isPharmacyOrAdmin && (
+              <button
+                onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
+                className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
+                  activeTab === 'requests' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span>📋 My Medicine Requests</span>
+                  {proposalsWaitingCount > 0 && (
+                    <span className="bg-purple-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full">
+                      {proposalsWaitingCount} new
+                    </span>
+                  )}
+                </div>
+                <span className="text-slate-400">→</span>
+              </button>
+            )}
 
             <button
               onClick={() => { setActiveTab('addresses'); setMobileMenuOpen(false); }}
@@ -324,14 +330,14 @@ export default function Header({
               <span className="text-slate-400">→</span>
             </button>
 
-            {isAdmin && (
+            {isPharmacyOrAdmin && (
               <button
                 onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
                 className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
                   activeTab === 'admin' ? 'bg-purple-600 text-white font-extrabold' : 'text-purple-700 bg-purple-50 hover:bg-purple-100'
                 }`}
               >
-                <span>⚙️ Admin Operations Dashboard</span>
+                <span>⚙️ {isAdmin ? 'Admin' : 'Pharmacy'} Operations Dashboard</span>
                 <span>→</span>
               </button>
             )}

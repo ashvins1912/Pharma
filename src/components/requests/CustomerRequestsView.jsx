@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 
 export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
+  const { user } = useAuth();
   const {
     medicineRequests,
     loadingMedicineRequests,
     loadUserMedicineRequests,
+    medicineRequestsPagination,
     openRequestModal,
     orders
   } = useApp();
@@ -121,13 +124,16 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
       {/* Filter Tabs */}
       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 text-xs">
         {[
-          { id: 'ALL', label: `All (${medicineRequests.length})` },
+          { id: 'ALL', label: 'All' },
           { id: 'ACTIVE', label: 'In Progress / Proposals' },
           { id: 'COMPLETED', label: 'Converted to Orders' }
         ].map(tab => (
           <button
             key={tab.id}
-            onClick={() => setStatusFilter(tab.id)}
+            onClick={() => {
+              setStatusFilter(tab.id);
+              void loadUserMedicineRequests({ page: 1, statusGroup: tab.id });
+            }}
             className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer whitespace-nowrap ${
               statusFilter === tab.id
                 ? 'bg-slate-900 text-white'
@@ -164,6 +170,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
             const firstItem = req.requestedItems?.[0] || {};
             const proposal = req.pharmacyProposal;
             const convertedOrder = findConvertedOrder(req.convertedOrderId);
+            const isOwner = String(req.customerId) === String(user?.id || user?.sub);
 
             return (
               <div
@@ -250,7 +257,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                 </div>
 
                 {/* Proposal Callout Card / Action Bar */}
-                {req.status === 'PROPOSAL_SENT' && (
+                {isOwner && req.status === 'PROPOSAL_SENT' && (
                   <div className="bg-purple-50/80 border border-purple-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
                     <div className="space-y-0.5">
                       <p className="font-extrabold text-purple-950">
@@ -293,6 +300,33 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {medicineRequestsPagination.totalPages > 1 && (
+        <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-slate-500" aria-live="polite">
+            Page {medicineRequestsPagination.page} of {medicineRequestsPagination.totalPages}
+            {' · '}{medicineRequestsPagination.total} requests
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => loadUserMedicineRequests({ page: medicineRequestsPagination.page - 1 })}
+              disabled={loadingMedicineRequests || medicineRequestsPagination.page <= 1}
+              className="min-h-9 rounded-lg bg-slate-100 px-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              onClick={() => loadUserMedicineRequests({ page: medicineRequestsPagination.page + 1 })}
+              disabled={loadingMedicineRequests || medicineRequestsPagination.page >= medicineRequestsPagination.totalPages}
+              className="min-h-9 rounded-lg bg-slate-100 px-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
 

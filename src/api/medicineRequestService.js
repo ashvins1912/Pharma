@@ -14,6 +14,16 @@ export const getCustomerMedicineRequests = async (params = {}) => {
   return response.data?.requests || [];
 };
 
+export const getCustomerMedicineRequestsPage = async (params = {}) => {
+  const response = await apiClient.get('/api/medicine-requests', { params });
+  return response.data;
+};
+
+export const getMyProposals = async () => {
+  const response = await apiClient.get('/api/proposals/my-proposals');
+  return response.data?.proposals || [];
+};
+
 export const getMedicineRequestById = async (id) => {
   const response = await apiClient.get(`/api/medicine-requests/${id}`);
   return response.data?.request || null;

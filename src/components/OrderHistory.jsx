@@ -10,34 +10,87 @@ const formatDate = (date) => {
 };
 
 const getItemName = (item) => item.name || item.productName || 'Order item';
+const PAGE_SIZE = 5;
+
+const normalizeHistoryResponse = (data, requestedPage) => {
+  if (Array.isArray(data)) {
+    const total = data.length;
+    const totalPages = Math.ceil(total / PAGE_SIZE);
+    const page = Math.min(requestedPage, Math.max(totalPages, 1));
+    return {
+      orders: data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+      pagination: { page, limit: PAGE_SIZE, total, totalPages }
+    };
+  }
+
+  if (!Array.isArray(data?.orders)) {
+    throw new Error('The order history response was invalid.');
+  }
+
+  const total = Number.isFinite(Number(data.pagination?.total))
+    ? Number(data.pagination.total)
+    : data.orders.length;
+  const totalPages = Number.isFinite(Number(data.pagination?.totalPages))
+    ? Number(data.pagination.totalPages)
+    : Math.ceil(total / PAGE_SIZE);
+  const page = Number.isFinite(Number(data.pagination?.page))
+    ? Number(data.pagination.page)
+    : requestedPage;
+  return {
+    orders: data.orders,
+    pagination: {
+      page,
+      limit: PAGE_SIZE,
+      total,
+      totalPages
+    }
+  };
+};
 
 export default function OrderHistory() {
   const { user } = useAuth();
-  const [result, setResult] = useState({ userId: null, orders: [], error: '' });
+  const [result, setResult] = useState({
+    userId: null,
+    orders: [],
+    pagination: { page: 1, limit: 5, total: 0, totalPages: 0 },
+    error: ''
+  });
   const [loading, setLoading] = useState(true);
+  const pageRef = useRef(1);
   const requestSequence = useRef(0);
   const userId = user?.id;
 
-  const loadOrderHistory = useCallback(async () => {
+  const loadOrderHistory = useCallback(async (requestedPage) => {
+    const currentPage = requestedPage ?? pageRef.current;
     const currentSequence = ++requestSequence.current;
     if (!userId) {
-      setResult({ userId: null, orders: [], error: '' });
+      setResult({
+        userId: null,
+        orders: [],
+        pagination: { page: 1, limit: 5, total: 0, totalPages: 0 },
+        error: ''
+      });
       setLoading(false);
       return;
     }
 
+    pageRef.current = currentPage;
     setLoading(true);
     try {
-      const { data } = await apiClient.get('/api/orders/history', { params: { userId } });
-      if (!Array.isArray(data)) throw new Error('The order history response was invalid.');
+      const { data } = await apiClient.get('/api/orders/history', {
+        params: { userId, page: currentPage }
+      });
+      const history = normalizeHistoryResponse(data, currentPage);
       if (currentSequence === requestSequence.current) {
-        setResult({ userId, orders: data, error: '' });
+        pageRef.current = history.pagination.page;
+        setResult({ userId, ...history, error: '' });
       }
     } catch (requestError) {
       if (currentSequence === requestSequence.current) {
         setResult({
           userId,
           orders: [],
+          pagination: { page: currentPage, limit: PAGE_SIZE, total: 0, totalPages: 0 },
           error: requestError.message || 'Could not load your order history.'
         });
       }
@@ -47,7 +100,8 @@ export default function OrderHistory() {
   }, [userId]);
 
   useEffect(() => {
-    void loadOrderHistory();
+    pageRef.current = 1;
+    void loadOrderHistory(1);
     return () => {
       requestSequence.current += 1;
     };
@@ -56,6 +110,7 @@ export default function OrderHistory() {
   const userResult = result.userId === userId ? result : null;
   const isLoading = loading || Boolean(userId && !userResult);
   const orders = userResult?.orders || [];
+  const pagination = userResult?.pagination || { page: 1, limit: 5, total: 0, totalPages: 0 };
   const error = userResult?.error || '';
 
   return (
@@ -67,7 +122,7 @@ export default function OrderHistory() {
         </div>
         <button
           type="button"
-          onClick={loadOrderHistory}
+          onClick={() => loadOrderHistory()}
           disabled={isLoading}
           className="min-h-10 shrink-0 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -83,7 +138,7 @@ export default function OrderHistory() {
       ) : error ? (
         <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
           <p>{error}</p>
-          <button type="button" onClick={loadOrderHistory} className="mt-2 font-bold underline underline-offset-2">
+          <button type="button" onClick={() => loadOrderHistory()} className="mt-2 font-bold underline underline-offset-2">
             Try again
           </button>
         </div>
@@ -145,6 +200,31 @@ export default function OrderHistory() {
             );
           })}
         </ul>
+      )}
+      {!isLoading && !error && pagination.totalPages > 1 && (
+        <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-slate-500" aria-live="polite">
+            Page {pagination.page} of {pagination.totalPages} · {pagination.total} past orders
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => loadOrderHistory(pagination.page - 1)}
+              disabled={isLoading || pagination.page <= 1}
+              className="min-h-9 rounded-lg bg-slate-100 px-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              onClick={() => loadOrderHistory(pagination.page + 1)}
+              disabled={isLoading || pagination.page >= pagination.totalPages}
+              className="min-h-9 rounded-lg bg-slate-100 px-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       )}
     </section>
   );

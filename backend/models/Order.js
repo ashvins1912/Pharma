@@ -105,7 +105,8 @@ const orderSchema = new mongoose.Schema({
         distanceInKm: { type: Number, default: null }
     },
     source: { type: String, default: 'DIRECT' },
-    medicineRequestId: { type: String, default: null, index: true },
+    medicineRequestId: { type: String, default: null },
+    addressId: { type: mongoose.Schema.Types.ObjectId, ref: 'UserAddress', default: null },
     deliverySlot: { type: Object, default: null },
     rider: {
         riderId: String,
@@ -163,6 +164,10 @@ orderSchema.pre('findOneAndUpdate', function syncUpdatedOrderStatus() {
 });
 
 orderSchema.index({ orderStatus: 1, createdAt: -1 });
+orderSchema.index(
+    { medicineRequestId: 1 },
+    { unique: true, partialFilterExpression: { medicineRequestId: { $type: 'string' } } }
+);
 
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 export default Order;

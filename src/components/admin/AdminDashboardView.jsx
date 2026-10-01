@@ -11,7 +11,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 
 export default function AdminDashboardView() {
-  const { isAdmin, loading: authLoading } = useAuth();
+  const { isAdmin, role, loading: authLoading } = useAuth();
   const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen } = useApp();
   const [adminTab, setAdminTab] = useState('fulfillment'); // 'fulfillment' | 'inventory' | 'routes' | 'audits'
   const [orders, setOrders] = useState([]);
@@ -60,6 +60,25 @@ export default function AdminDashboardView() {
   const deliveredCount = orders.filter(o => o.orderStatus === 'Delivered').length;
   const activeCount = processingCount + pendingReviewCount + approvedCount + readyCount + dispatchedCount;
   const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.finalTotal) || 0), 0);
+
+  if (role === 'pharmacy') {
+    return (
+      <div className="min-w-0 space-y-6 animate-fade-in">
+        <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-3xl p-6 shadow-md">
+          <span className="text-[11px] font-black uppercase tracking-wider text-indigo-400">
+            Pharmacy Review
+          </span>
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight">
+            Medicine Requests
+          </h2>
+          <p className="mt-2 text-sm text-slate-300">
+            Review requests, prepare proposals, and wait for the customer to decide.
+          </p>
+        </div>
+        <AdminMedicineRequestsTab />
+      </div>
+    );
+  }
 
   return (
     <div className="min-w-0 space-y-6 animate-fade-in">

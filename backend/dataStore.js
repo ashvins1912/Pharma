@@ -6,6 +6,7 @@ import Order from './models/Order.js';
 import Coupon from './models/Coupon.js';
 import UserProfile from './models/UserProfile.js';
 import UserAddress from './models/UserAddress.js';
+import Proposal from './models/Proposal.js';
 import CustomerPointsLedger from './models/CustomerPointsLedger.js';
 import Rider from './models/Rider.js';
 import MedicineRequest from './models/MedicineRequest.js';
@@ -2406,6 +2407,9 @@ export const dataStore = {
     // Medicine Request & Proposal Lifecycle
     async createMedicineRequest(payload, user) {
         const customerId = user.sub || user.id;
+        if (!payload.addressId) {
+            throw inventoryError('A saved delivery address is required to create a medicine request.', 400);
+        }
         const customerName = user.user_metadata?.name || user.email?.split('@')[0] || 'Valued Customer';
         const customerPhone = user.user_metadata?.mobile || payload.customerPhone || '';
         const customerEmail = user.email || '';
@@ -2446,6 +2450,7 @@ export const dataStore = {
         const requestDoc = {
             requestNumber: reqNum,
             customerId,
+            addressId: payload.addressId || null,
             customerName,
             customerPhone,
             customerEmail,
@@ -2506,6 +2511,10 @@ export const dataStore = {
 
         if (getIsConnected()) {
             const now = new Date();
+            await MedicineRequest.updateMany(
+                { status: 'converted', pharmacyProposal: { $ne: null } },
+                { $set: { status: 'PROPOSAL_SENT' } }
+            );
             // Auto expire past proposals
             await MedicineRequest.updateMany(
                 { status: 'PROPOSAL_SENT', expiresAt: { $lt: now } },
@@ -2521,6 +2530,10 @@ export const dataStore = {
                         }
                     }
                 }
+            );
+            await Proposal.updateMany(
+                { status: 'reviewed', expiresAt: { $lt: now } },
+                { $set: { status: 'expired' } }
             );
 
             const query = {};
@@ -2587,31 +2600,33 @@ export const dataStore = {
 
     async getMedicineRequestById(id, user = null) {
         let request = null;
-        if (getIsConnected()) {
-            request = mongoose.isValidObjectId(id)
-                ? await MedicineRequest.findById(id).lean()
-                : await MedicineRequest.findOne({ $or: [{ _id: id }, { requestNumber: id }] }).lean();
-        } else {
-            request = inMemoryMedicineRequests.find(r =>
-                String(r._id) === String(id) || r.requestNumber === id
-            ) || null;
-        }
-
-        if (!request) return null;
-
         const isStaff = user && (
             user.app_metadata?.role === 'admin'
             || user.app_metadata?.role === 'pharmacy'
             || user.role === 'admin'
             || user.role === 'pharmacy'
         );
-
-        if (user && !isStaff && request.customerId !== user.sub) {
-            throw inventoryError('You are not authorized to view this medicine request.', 403);
+        const customerId = user?.sub || user?.id;
+        const identifierQuery = mongoose.isValidObjectId(id)
+            ? { _id: id }
+            : { requestNumber: id };
+        const scopedQuery = user && !isStaff
+            ? { $and: [identifierQuery, { customerId }] }
+            : identifierQuery;
+        if (getIsConnected()) {
+            request = await MedicineRequest.findOne(scopedQuery).lean();
+        } else {
+            request = inMemoryMedicineRequests.find(r =>
+                (String(r._id) === String(id) || r.requestNumber === id)
+                && (!user || isStaff || r.customerId === customerId)
+            ) || null;
         }
 
+        if (!request) return null;
+
         // Auto expire check
-        if (request.status === 'PROPOSAL_SENT' && request.expiresAt && new Date() > new Date(request.expiresAt)) {
+        if (request.status === 'PROPOSAL_SENT'
+            && request.expiresAt && new Date() > new Date(request.expiresAt)) {
             request.status = 'EXPIRED';
             const expireAudit = {
                 action: 'REQUEST_EXPIRED',
@@ -2624,6 +2639,10 @@ export const dataStore = {
                 await MedicineRequest.updateOne(
                     { _id: request._id },
                     { $set: { status: 'EXPIRED' }, $push: { auditTrail: expireAudit } }
+                );
+                await Proposal.updateOne(
+                    { requestId: request._id, status: 'reviewed' },
+                    { $set: { status: 'expired' } }
                 );
             } else {
                 request.auditTrail.push(expireAudit);
@@ -2644,8 +2663,11 @@ export const dataStore = {
         const request = await this.getMedicineRequestById(id);
         if (!request) throw inventoryError('Medicine request not found.', 404);
 
-        if (request.status === 'REQUESTED') {
-            const now = new Date();
+        if (request.status !== 'REQUESTED') {
+            throw inventoryError(`Cannot review request in '${request.status}' status.`, 409);
+        }
+
+        const now = new Date();
             const audit = {
                 action: 'REQUEST_REVIEWED',
                 actorId: actorName,
@@ -2655,8 +2677,8 @@ export const dataStore = {
             };
 
             if (getIsConnected()) {
-                const updated = await MedicineRequest.findByIdAndUpdate(
-                    request._id,
+                const updated = await MedicineRequest.findOneAndUpdate(
+                    { _id: request._id, status: 'REQUESTED' },
                     {
                         $set: {
                             status: 'UNDER_REVIEW',
@@ -2667,6 +2689,7 @@ export const dataStore = {
                     },
                     { new: true }
                 ).lean();
+                if (!updated) throw inventoryError('Request status changed before review could begin.', 409);
                 return updated;
             }
 
@@ -2674,7 +2697,6 @@ export const dataStore = {
             request.reviewedBy = actorName;
             request.reviewedAt = now;
             request.auditTrail.push(audit);
-        }
         return request;
     },
 
@@ -2682,8 +2704,11 @@ export const dataStore = {
         const request = await this.getMedicineRequestById(id);
         if (!request) throw inventoryError('Medicine request not found.', 404);
 
-        if (['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(request.status)) {
-            throw inventoryError('Cannot alter proposal after customer approval or order conversion.', 400);
+        if (!['UNDER_REVIEW', 'PROPOSAL_SENT'].includes(request.status)) {
+            throw inventoryError(`Cannot create or edit a proposal in '${request.status}' status.`, 409);
+        }
+        if (request.status === 'PROPOSAL_SENT' && request.expiresAt && request.expiresAt <= new Date()) {
+            throw inventoryError('Cannot update an expired proposal.', 409);
         }
 
         const actor = typeof actorName === 'object' && actorName !== null
@@ -2784,8 +2809,8 @@ export const dataStore = {
         };
 
         if (getIsConnected()) {
-            const updated = await MedicineRequest.findByIdAndUpdate(
-                request._id,
+            const updated = await MedicineRequest.findOneAndUpdate(
+                { _id: request._id, status: request.status },
                 {
                     $set: {
                         status: 'PROPOSAL_SENT',
@@ -2799,6 +2824,22 @@ export const dataStore = {
                 },
                 { new: true }
             ).lean();
+            if (!updated) throw inventoryError('Request status changed before the proposal could be saved.', 409);
+
+            await Proposal.findOneAndUpdate(
+                { requestId: request._id },
+                {
+                    $set: {
+                        customerId: request.customerId,
+                        requestNumber: request.requestNumber,
+                        proposalDetails: proposal,
+                        status: 'reviewed',
+                        reviewedAt: now,
+                        expiresAt
+                    }
+                },
+                { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+            );
 
             try {
                 await sendWhatsAppMedicineRequestAlert(updated, 'MedicineProposalReady');
@@ -2828,8 +2869,8 @@ export const dataStore = {
         const request = await this.getMedicineRequestById(id);
         if (!request) throw inventoryError('Medicine request not found.', 404);
 
-        if (['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(request.status)) {
-            throw inventoryError('Cannot reject request after customer approval or order conversion.', 400);
+        if (request.status !== 'UNDER_REVIEW') {
+            throw inventoryError(`Cannot reject request in '${request.status}' status.`, 409);
         }
 
         let reason = '';
@@ -2860,18 +2901,20 @@ export const dataStore = {
         };
 
         if (getIsConnected()) {
-            const updated = await MedicineRequest.findByIdAndUpdate(
-                request._id,
+            const updated = await MedicineRequest.findOneAndUpdate(
+                { _id: request._id, status: 'UNDER_REVIEW' },
                 {
                     $set: {
                         status: 'PHARMACY_REJECTED',
                         rejectedAt: now,
+                        rejectedBy: actorName,
                         pharmacyRejectionReason: reason
                     },
                     $push: { auditTrail: audit }
                 },
                 { new: true }
             ).lean();
+            if (!updated) throw inventoryError('Request status changed before it could be rejected.', 409);
 
             try {
                 await sendWhatsAppMedicineRequestAlert(updated, 'MedicineRequestRejected');
@@ -2883,6 +2926,7 @@ export const dataStore = {
 
         request.status = 'PHARMACY_REJECTED';
         request.rejectedAt = now;
+        request.rejectedBy = actorName;
         request.pharmacyRejectionReason = reason;
         request.auditTrail.push(audit);
 
@@ -2907,15 +2951,21 @@ export const dataStore = {
         }
 
         const customerId = user?.sub || user?.id;
+        const role = user?.app_metadata?.role || user?.role || 'customer';
+        if (!customerId) throw inventoryError('Customer authentication is required.', 401);
+        if (role !== 'customer') throw inventoryError('Only the request owner can reject this proposal.', 403);
         const request = await this.getMedicineRequestById(id, user);
         if (!request) throw inventoryError('Medicine request not found.', 404);
 
-        if (customerId && request.customerId !== customerId) {
-            throw inventoryError('Unauthorized access to this medicine request.', 403);
+        if (request.customerId !== customerId) {
+            throw inventoryError('Medicine request not found.', 404);
         }
 
         if (request.status !== 'PROPOSAL_SENT') {
             throw inventoryError(`Cannot reject proposal in '${request.status}' status.`, 400);
+        }
+        if (request.expiresAt && new Date(request.expiresAt) <= new Date()) {
+            throw inventoryError('This proposal has expired and can no longer be rejected.', 400);
         }
 
         const now = new Date();
@@ -2928,12 +2978,18 @@ export const dataStore = {
         };
 
         if (getIsConnected()) {
-            const updated = await MedicineRequest.findByIdAndUpdate(
-                request._id,
+            const updated = await MedicineRequest.findOneAndUpdate(
+                {
+                    _id: request._id,
+                    customerId,
+                    status: 'PROPOSAL_SENT',
+                    $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }]
+                },
                 {
                     $set: {
                         status: 'CUSTOMER_REJECTED',
                         rejectedAt: now,
+                        rejectedBy: customerId,
                         customerRejectionReason: reason,
                         customerResponse: {
                             respondedAt: now,
@@ -2944,6 +3000,11 @@ export const dataStore = {
                 },
                 { new: true }
             ).lean();
+            if (!updated) throw inventoryError('Proposal status changed before it could be rejected.', 409);
+            await Proposal.updateOne(
+                { requestId: request._id, customerId },
+                { $set: { status: 'rejected' } }
+            );
 
             try {
                 await sendWhatsAppMedicineRequestAlert(updated, 'MedicineRequestRejected');
@@ -2955,6 +3016,7 @@ export const dataStore = {
 
         request.status = 'CUSTOMER_REJECTED';
         request.rejectedAt = now;
+        request.rejectedBy = customerId;
         request.customerRejectionReason = reason;
         request.customerResponse = {
             respondedAt: now,
@@ -2992,15 +3054,17 @@ export const dataStore = {
         }
 
         const customerId = user?.sub || user?.id;
+        const role = user?.app_metadata?.role || user?.role || 'customer';
+        if (!customerId) throw inventoryError('Customer authentication is required.', 401);
+        if (role !== 'customer') throw inventoryError('Only the request owner can approve this proposal.', 403);
         const request = await this.getMedicineRequestById(id, user);
         if (!request) throw inventoryError('Medicine request not found.', 404);
 
-        if (customerId && request.customerId !== customerId) {
-            throw inventoryError('Unauthorized access to this proposal.', 403);
+        if (request.customerId !== customerId) {
+            throw inventoryError('Medicine request not found.', 404);
         }
 
-        // 1. Idempotency Check: if already converted, return existing order
-        if (request.convertedOrderId || request.status === 'CONVERTED_TO_ORDER') {
+        if (request.status === 'CONVERTED_TO_ORDER' && request.convertedOrderId) {
             const existingOrder = await this.getOrder(request.convertedOrderId);
             return {
                 success: true,
@@ -3011,19 +3075,57 @@ export const dataStore = {
             };
         }
 
-        // 2. Check expiration
-        if (request.expiresAt && new Date() > new Date(request.expiresAt)) {
+        if (request.status === 'CUSTOMER_APPROVED') {
+            const existingOrder = getIsConnected()
+                ? await Order.findOne({ medicineRequestId: String(request._id), customerId }).lean()
+                : inMemoryOrders.find(order => order.medicineRequestId === String(request._id)) || null;
+            if (!existingOrder) {
+                throw inventoryError('Customer approval is being processed. Please refresh before retrying.', 409);
+            }
             if (getIsConnected()) {
-                await MedicineRequest.updateOne({ _id: request._id }, { $set: { status: 'EXPIRED' } });
+                const converted = await MedicineRequest.findOneAndUpdate(
+                    { _id: request._id, customerId, status: 'CUSTOMER_APPROVED', approvedBy: customerId },
+                    { $set: { status: 'CONVERTED_TO_ORDER', convertedOrderId: String(existingOrder._id) } },
+                    { new: true }
+                ).lean();
+                request.status = converted?.status || 'CONVERTED_TO_ORDER';
+                request.convertedOrderId = String(existingOrder._id);
+                await Proposal.updateOne(
+                    { requestId: request._id, customerId },
+                    { $set: { status: 'accepted' } }
+                );
+            } else {
+                request.status = 'CONVERTED_TO_ORDER';
+                request.convertedOrderId = String(existingOrder._id);
+            }
+            return {
+                success: true,
+                order: existingOrder,
+                request,
+                alreadyConverted: true,
+                message: 'Proposal was already approved and converted into an order.'
+            };
+        }
+
+        if (request.status !== 'PROPOSAL_SENT') {
+            throw inventoryError(`Cannot approve proposal in '${request.status}' status.`, 400);
+        }
+
+        const now = new Date();
+        if (request.expiresAt && now >= new Date(request.expiresAt)) {
+            if (getIsConnected()) {
+                await MedicineRequest.updateOne(
+                    { _id: request._id, customerId, status: 'PROPOSAL_SENT' },
+                    { $set: { status: 'EXPIRED' } }
+                );
+                await Proposal.updateOne(
+                    { requestId: request._id, customerId, status: 'reviewed' },
+                    { $set: { status: 'expired' } }
+                );
             } else {
                 request.status = 'EXPIRED';
             }
             throw inventoryError('This proposal has expired and can no longer be approved.', 400);
-        }
-
-        // 3. Status Check: must be PROPOSAL_SENT
-        if (request.status !== 'PROPOSAL_SENT') {
-            throw inventoryError(`Cannot approve proposal in '${request.status}' status.`, 400);
         }
 
         const proposal = request.pharmacyProposal;
@@ -3031,10 +3133,53 @@ export const dataStore = {
             throw inventoryError('The pharmacy proposal is missing valid pricing.', 400);
         }
 
+        const approvalNoteText = String(approvalNote || '').trim().slice(0, 1000);
+        const approvedAudit = {
+            action: 'CUSTOMER_APPROVED',
+            actorId: customerId,
+            role: 'Customer',
+            timestamp: now,
+            notes: approvalNoteText || 'Customer approved proposal'
+        };
+        if (getIsConnected()) {
+            const approved = await MedicineRequest.findOneAndUpdate(
+                {
+                    _id: request._id,
+                    customerId,
+                    status: 'PROPOSAL_SENT',
+                    $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }]
+                },
+                {
+                    $set: {
+                        status: 'CUSTOMER_APPROVED',
+                        approvedAt: now,
+                        approvedBy: customerId,
+                        customerResponse: {
+                            respondedAt: now,
+                            responseNote: approvalNoteText || 'Customer approved pharmacy proposal'
+                        }
+                    },
+                    $push: { auditTrail: approvedAudit }
+                },
+                { new: true }
+            ).lean();
+            if (!approved) {
+                throw inventoryError('Proposal status changed before approval could be recorded.', 409);
+            }
+        } else {
+            request.status = 'CUSTOMER_APPROVED';
+            request.approvedAt = now;
+            request.approvedBy = customerId;
+            request.customerResponse = {
+                respondedAt: now,
+                responseNote: approvalNoteText || 'Customer approved pharmacy proposal'
+            };
+            request.auditTrail.push(approvedAudit);
+        }
+
         const orderId = getIsConnected()
             ? new mongoose.Types.ObjectId()
             : `ord-mr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-
         const orderTotal = Math.max(0, Math.round(Number(proposal.totalPrice) * 100) / 100);
         const itemQuantity = Math.max(1, Number(proposal.quantity) || 1);
         const itemUnitPrice = Number(proposal.unitPrice || Math.round((orderTotal / itemQuantity) * 100) / 100);
@@ -3051,7 +3196,6 @@ export const dataStore = {
             }
         ];
 
-        const now = new Date();
         const orderData = {
             _id: orderId,
             userId: customerId,
@@ -3066,6 +3210,7 @@ export const dataStore = {
             totalAmount: orderTotal,
             finalTotal: orderTotal,
             deliveryAddress: request.deliveryAddress,
+            addressId: request.addressId || null,
             addressDetails: request.addressDetails || {},
             coordinates: request.coordinates || null,
             paymentMethod: 'Cash on Delivery (COD)',
@@ -3078,7 +3223,7 @@ export const dataStore = {
                 {
                     previousStatus: null,
                     newStatus: 'Processing Order',
-                    changedBy: 'Pharmacist Proposal Approval',
+                    changedBy: 'Customer Proposal Approval',
                     timestamp: now,
                     notes: `Created from approved medicine request #${request.requestNumber}. Proposed slot: ${proposal.deliverySlot?.label || 'Standard'}`
                 }
@@ -3088,42 +3233,78 @@ export const dataStore = {
         let createdOrder = null;
 
         if (getIsConnected()) {
-            const [created] = await Order.create([orderData]);
-            createdOrder = created.toObject();
+            try {
+                const [created] = await Order.create([orderData]);
+                createdOrder = created.toObject();
+            } catch (error) {
+                const existingOrder = await Order.findOne({
+                    medicineRequestId: String(request._id),
+                    customerId
+                }).lean();
+                if (existingOrder) {
+                    createdOrder = existingOrder;
+                } else {
+                    await MedicineRequest.updateOne(
+                        {
+                            _id: request._id,
+                            customerId,
+                            status: 'CUSTOMER_APPROVED',
+                            approvedBy: customerId,
+                            convertedOrderId: null
+                        },
+                        {
+                            $set: { status: 'PROPOSAL_SENT' },
+                            $unset: { approvedAt: 1, approvedBy: 1, customerResponse: 1 },
+                            $pull: { auditTrail: { action: 'CUSTOMER_APPROVED', timestamp: now } }
+                        }
+                    );
+                    throw error;
+                }
+            }
 
             const updatedRequest = await MedicineRequest.findOneAndUpdate(
-                { _id: request._id, status: 'PROPOSAL_SENT' },
+                {
+                    _id: request._id,
+                    customerId,
+                    status: 'CUSTOMER_APPROVED',
+                    approvedBy: customerId,
+                    convertedOrderId: null
+                },
                 {
                     $set: {
                         status: 'CONVERTED_TO_ORDER',
-                        approvedAt: now,
                         convertedOrderId: createdOrder._id.toString(),
-                        customerResponse: {
-                            respondedAt: now,
-                            responseNote: approvalNote || 'Customer approved pharmacy proposal'
-                        }
                     },
                     $push: {
-                        auditTrail: [
-                            {
-                                action: 'CUSTOMER_APPROVED',
-                                actorId: customerId,
-                                role: 'Customer',
-                                timestamp: now,
-                                notes: 'Customer approved proposal'
-                            },
-                            {
-                                action: 'REQUEST_CONVERTED_TO_ORDER',
-                                actorId: customerId,
-                                role: 'Customer',
-                                timestamp: now,
-                                notes: `Converted to active Order #${createdOrder._id.toString()}`
-                            }
-                        ]
+                        auditTrail: {
+                            action: 'REQUEST_CONVERTED_TO_ORDER',
+                            actorId: customerId,
+                            role: 'Customer',
+                            timestamp: now,
+                            notes: `Converted to active Order #${createdOrder._id.toString()}`
+                        }
                     }
                 },
                 { new: true }
             ).lean();
+            let finalRequest = updatedRequest;
+            if (!finalRequest) {
+                finalRequest = await MedicineRequest.findOne({
+                    _id: request._id,
+                    customerId,
+                    status: 'CONVERTED_TO_ORDER',
+                    convertedOrderId: String(createdOrder._id)
+                }).lean();
+                if (!finalRequest) {
+                    throw inventoryError('The order was created but the request conversion could not be confirmed.', 500);
+                }
+            }
+            request.status = 'CONVERTED_TO_ORDER';
+            request.convertedOrderId = String(createdOrder._id);
+            await Proposal.updateOne(
+                { requestId: request._id, customerId },
+                { $set: { status: 'accepted' } }
+            );
 
             this.logAudit(customerId, 'CONVERT_REQUEST_TO_ORDER', 'ORDER', createdOrder._id.toString(), {
                 requestNumber: request.requestNumber,
@@ -3132,7 +3313,7 @@ export const dataStore = {
 
             // Trigger Notifications
             try {
-                await sendWhatsAppMedicineRequestAlert(updatedRequest, 'MedicineRequestApproved');
+                await sendWhatsAppMedicineRequestAlert(finalRequest, 'MedicineRequestApproved');
                 await sendCustomWhatsAppAlert(createdOrder, 'Placed');
             } catch (err) {
                 console.warn('[WhatsApp] Alerts failed during order conversion:', err.message);
@@ -3141,7 +3322,7 @@ export const dataStore = {
             return {
                 success: true,
                 order: createdOrder,
-                request: updatedRequest,
+                request: finalRequest,
                 alreadyConverted: false,
                 message: `🎉 Proposal approved! Order #${String(createdOrder._id).slice(-6).toUpperCase()} registered for fulfillment.`
             };
@@ -3156,28 +3337,14 @@ export const dataStore = {
         inMemoryOrders.unshift(createdOrder);
 
         request.status = 'CONVERTED_TO_ORDER';
-        request.approvedAt = now;
         request.convertedOrderId = String(createdOrder._id);
-        request.customerResponse = {
-            respondedAt: now,
-            responseNote: approvalNote || 'Customer approved pharmacy proposal'
-        };
-        request.auditTrail.push(
-            {
-                action: 'CUSTOMER_APPROVED',
-                actorId: customerId,
-                role: 'Customer',
-                timestamp: now,
-                notes: 'Customer approved proposal'
-            },
-            {
-                action: 'REQUEST_CONVERTED_TO_ORDER',
-                actorId: customerId,
-                role: 'Customer',
-                timestamp: now,
-                notes: `Converted to active Order #${String(createdOrder._id)}`
-            }
-        );
+        request.auditTrail.push({
+            action: 'REQUEST_CONVERTED_TO_ORDER',
+            actorId: customerId,
+            role: 'Customer',
+            timestamp: now,
+            notes: `Converted to active Order #${String(createdOrder._id)}`
+        });
 
         this.logAudit(customerId, 'CONVERT_REQUEST_TO_ORDER', 'ORDER', String(createdOrder._id), {
             requestNumber: request.requestNumber,

@@ -1,10 +1,53 @@
 import express from 'express';
 import multer from 'multer';
+import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
 import { authenticateUser, isPharmacyOrAdmin } from '../middleware/auth.js';
 import { getPrescription, savePrescription } from '../config/prescriptionStorage.js';
+import { getIsConnected } from '../config/db.js';
+import MedicineRequest from '../models/MedicineRequest.js';
+import UserAddress from '../models/UserAddress.js';
 
 const router = express.Router();
+
+const requireDatabase = (res) => {
+    if (getIsConnected()) return true;
+    res.status(503).json({ message: 'Medicine requests require an active database connection.' });
+    return false;
+};
+
+const isStaff = (user) => ['admin', 'pharmacy'].includes(
+    user?.app_metadata?.role || user?.role
+);
+
+const requireCustomer = (req, res, next) => {
+    const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
+    if (role !== 'customer') {
+        return res.status(403).json({ message: 'This action is available to customers only.' });
+    }
+    return next();
+};
+
+const authorizeCustomerAction = (req, res, next) => {
+    if (req.baseUrl.startsWith('/api/admin/')) {
+        return res.status(403).json({ message: 'Customer decisions must use the customer medicine request API.' });
+    }
+    return requireCustomer(req, res, next);
+};
+
+const authorizeRequestList = (req, res, next) => {
+    if (req.baseUrl.startsWith('/api/admin/')) {
+        return isPharmacyOrAdmin(req, res, next);
+    }
+    return requireCustomer(req, res, next);
+};
+
+const authorizeRequestDetails = (req, res, next) => {
+    if (req.baseUrl.startsWith('/api/admin/')) {
+        return isPharmacyOrAdmin(req, res, next);
+    }
+    return next();
+};
 
 const allowedMimeTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 
@@ -61,8 +104,26 @@ const handleAttachments = (req, res, next) => {
 // -------------------------------------------------------------
 
 // Create a new medicine request
-router.post('/', authenticateUser, handleAttachments, async (req, res) => {
+router.post('/', authenticateUser, authorizeCustomerAction, handleAttachments, async (req, res) => {
     try {
+        if (!requireDatabase(res)) return;
+
+        const customerId = req.user.sub;
+        const addressId = String(req.body.addressId || '').trim();
+        if (!mongoose.isValidObjectId(addressId)) {
+            return res.status(400).json({
+                code: 'ADDRESS_REQUIRED',
+                message: 'Select a saved delivery address before submitting this medicine request.'
+            });
+        }
+        const selectedAddress = await UserAddress.findOne({
+            _id: addressId,
+            userId: customerId
+        }).lean();
+        if (!selectedAddress) {
+            return res.status(404).json({ message: 'The selected saved address was not found.' });
+        }
+
         let requestedItems = req.body.requestedItems;
         if (typeof requestedItems === 'string') {
             try {
@@ -98,24 +159,34 @@ router.post('/', authenticateUser, handleAttachments, async (req, res) => {
             productImageUrl = await savePrescription(imgFile, req.user.sub);
         }
 
-        let addressDetails = req.body.addressDetails;
-        if (typeof addressDetails === 'string') {
-            try { addressDetails = JSON.parse(addressDetails); } catch { addressDetails = {}; }
-        }
-
-        let coordinates = req.body.coordinates;
-        if (typeof coordinates === 'string') {
-            try { coordinates = JSON.parse(coordinates); } catch { coordinates = null; }
-        }
+        const addressDetails = {
+            addressId: String(selectedAddress._id),
+            label: selectedAddress.label,
+            fullName: selectedAddress.fullName,
+            mobile: selectedAddress.mobile,
+            addressLine1: selectedAddress.addressLine1,
+            addressLine2: selectedAddress.addressLine2,
+            city: selectedAddress.city,
+            state: selectedAddress.state,
+            pincode: selectedAddress.pincode,
+            landmark: selectedAddress.landmark,
+            country: selectedAddress.country,
+            coordinates: selectedAddress.coordinates
+        };
+        const deliveryAddress = selectedAddress.addressLine
+            || [selectedAddress.addressLine1, selectedAddress.addressLine2, selectedAddress.city, selectedAddress.state, selectedAddress.pincode]
+                .filter(Boolean)
+                .join(', ');
 
         const requestDoc = await dataStore.createMedicineRequest({
             requestedItems,
             prescriptionUrl,
             productImageUrl,
             customerNote: req.body.customerNote || '',
-            deliveryAddress: req.body.deliveryAddress || '',
+            addressId: String(selectedAddress._id),
+            deliveryAddress,
             addressDetails,
-            coordinates,
+            coordinates: selectedAddress.coordinates,
             preferredDeliveryPreference: req.body.preferredDeliveryPreference || 'Flexible',
             customerPhone: req.body.customerPhone || ''
         }, req.user);
@@ -130,11 +201,75 @@ router.post('/', authenticateUser, handleAttachments, async (req, res) => {
     }
 });
 
-// Get customer's medicine requests
-router.get('/', authenticateUser, async (req, res) => {
+// Active pipeline excludes requests that have already produced a proposal.
+router.get('/active', authenticateUser, authorizeRequestList, async (req, res) => {
+    if (!getIsConnected()) {
+        return res.status(503).json({ message: 'Medicine requests are temporarily unavailable.' });
+    }
+
+    const staff = isStaff(req.user);
+
     try {
-        const requests = await dataStore.getMedicineRequests(req.query, req.user);
+        const query = { status: { $nin: ['converted', 'CONVERTED_TO_ORDER'] } };
+        if (!staff) query.customerId = req.user.sub;
+        else if (req.query.customerId) query.customerId = String(req.query.customerId);
+        const requests = await MedicineRequest.find(query).sort({ createdAt: -1 }).lean();
         res.json({ requests });
+    } catch (error) {
+        console.error('Active medicine request retrieval failed:', error);
+        res.status(500).json({ message: 'Failed to fetch active medicine requests.' });
+    }
+});
+
+// Get customer's medicine requests
+router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+        const limit = 5;
+        await MedicineRequest.updateMany(
+            { status: 'converted', pharmacyProposal: { $ne: null } },
+            { $set: { status: 'PROPOSAL_SENT' } }
+        );
+        await MedicineRequest.updateMany(
+            { status: 'PROPOSAL_SENT', expiresAt: { $lt: new Date() } },
+            { $set: { status: 'EXPIRED' } }
+        );
+        if (req.baseUrl.startsWith('/api/admin/')) {
+            const requests = await dataStore.getMedicineRequests(req.query, req.user);
+            return res.json({ requests });
+        }
+        const query = { customerId: req.user.sub };
+
+        const statusGroup = String(req.query.statusGroup || '').toUpperCase();
+        if (statusGroup === 'ACTIVE') {
+            query.status = { $in: ['REQUESTED', 'UNDER_REVIEW', 'PROPOSAL_SENT'] };
+        } else if (statusGroup === 'COMPLETED') {
+            query.status = { $in: ['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'] };
+        } else if (req.query.status && req.query.status !== 'ALL') {
+            query.status = String(req.query.status);
+        }
+        if (req.query.search && String(req.query.search).trim()) {
+            const search = String(req.query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            query.$or = [
+                { requestNumber: { $regex: search, $options: 'i' } },
+                { customerName: { $regex: search, $options: 'i' } },
+                { 'requestedItems.requestedName': { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        const total = await MedicineRequest.countDocuments(query);
+        const totalPages = Math.ceil(total / limit);
+        const currentPage = Math.min(page, Math.max(totalPages, 1));
+        const requests = await MedicineRequest.find(query)
+            .sort({ createdAt: -1 })
+            .skip((currentPage - 1) * limit)
+            .limit(limit)
+            .lean();
+        res.json({
+            requests,
+            pagination: { page: currentPage, limit, total, totalPages }
+        });
     } catch (err) {
         console.error('Failed to fetch medicine requests:', err);
         res.status(500).json({ message: 'Failed to fetch your medicine requests.' });
@@ -142,7 +277,7 @@ router.get('/', authenticateUser, async (req, res) => {
 });
 
 // View attachment securely
-router.get('/attachments/:fileId', authenticateUser, async (req, res) => {
+router.get('/attachments/:fileId', authenticateUser, authorizeRequestDetails, async (req, res) => {
     try {
         const file = await getPrescription(req.params.fileId);
         if (!file) return res.status(404).json({ message: 'Attachment file not found.' });
@@ -173,7 +308,8 @@ router.get('/attachments/:fileId', authenticateUser, async (req, res) => {
 });
 
 // Get specific request details
-router.get('/:id', authenticateUser, async (req, res) => {
+router.get('/:id', authenticateUser, authorizeRequestDetails, async (req, res) => {
+    if (!requireDatabase(res)) return;
     try {
         const request = await dataStore.getMedicineRequestById(req.params.id, req.user);
         if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
@@ -184,7 +320,8 @@ router.get('/:id', authenticateUser, async (req, res) => {
 });
 
 // Customer approves proposal -> triggers idempotent order conversion
-router.post('/:id/approve', authenticateUser, async (req, res) => {
+router.post('/:id/approve', authenticateUser, authorizeCustomerAction, async (req, res) => {
+    if (!requireDatabase(res)) return;
     try {
         const result = await dataStore.approveMedicineProposalAndConvertToOrder(
             req.params.id,
@@ -199,7 +336,8 @@ router.post('/:id/approve', authenticateUser, async (req, res) => {
 });
 
 // Customer rejects proposal
-router.post('/:id/reject', authenticateUser, async (req, res) => {
+router.post('/:id/reject', authenticateUser, authorizeCustomerAction, async (req, res) => {
+    if (!requireDatabase(res)) return;
     try {
         const request = await dataStore.rejectMedicineProposalByCustomer(
             req.params.id,
@@ -219,6 +357,7 @@ router.post('/:id/reject', authenticateUser, async (req, res) => {
 
 // Metrics
 router.get('/metrics/overview', authenticateUser, isPharmacyOrAdmin, async (req, res) => {
+    if (!requireDatabase(res)) return;
     try {
         const metrics = await dataStore.getMedicineRequestMetrics();
         res.json(metrics);
@@ -230,6 +369,7 @@ router.get('/metrics/overview', authenticateUser, isPharmacyOrAdmin, async (req,
 
 // Review request
 router.put('/:id/review', authenticateUser, isPharmacyOrAdmin, async (req, res) => {
+    if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
         const actorRole = req.user.app_metadata?.role || req.user.role || 'Pharmacist';
@@ -242,6 +382,7 @@ router.put('/:id/review', authenticateUser, isPharmacyOrAdmin, async (req, res) 
 
 // Create/Send proposal
 router.post('/:id/proposal', authenticateUser, isPharmacyOrAdmin, async (req, res) => {
+    if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
         const actorRole = req.user.app_metadata?.role || req.user.role || 'Pharmacist';
@@ -255,6 +396,7 @@ router.post('/:id/proposal', authenticateUser, isPharmacyOrAdmin, async (req, re
 
 // Update proposal
 router.put('/:id/proposal', authenticateUser, isPharmacyOrAdmin, async (req, res) => {
+    if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
         const actorRole = req.user.app_metadata?.role || req.user.role || 'Pharmacist';
@@ -268,6 +410,7 @@ router.put('/:id/proposal', authenticateUser, isPharmacyOrAdmin, async (req, res
 
 // Pharmacy rejects request
 router.post('/:id/reject-request', authenticateUser, isPharmacyOrAdmin, async (req, res) => {
+    if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
         const actorRole = req.user.app_metadata?.role || req.user.role || 'Pharmacist';

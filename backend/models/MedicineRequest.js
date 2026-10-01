@@ -65,6 +65,7 @@ const auditTrailSchema = new mongoose.Schema({
 const medicineRequestSchema = new mongoose.Schema({
     requestNumber: { type: String, required: true, unique: true, index: true },
     customerId: { type: String, required: true, index: true },
+    addressId: { type: mongoose.Schema.Types.ObjectId, ref: 'UserAddress', required: true, index: true },
     customerName: { type: String, default: 'Valued Customer' },
     customerPhone: { type: String, default: '' },
     customerEmail: { type: String, default: '' },
@@ -116,6 +117,8 @@ const medicineRequestSchema = new mongoose.Schema({
 
     proposalSentAt: { type: Date, default: null },
     approvedAt: { type: Date, default: null },
+    approvedBy: { type: String, default: null },
+    rejectedBy: { type: String, default: null },
     rejectedAt: { type: Date, default: null },
 
     convertedOrderId: { type: mongoose.Schema.Types.Mixed, default: null, index: true },

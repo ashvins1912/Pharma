@@ -44,7 +44,12 @@ function loadGooglePlaces() {
   return googlePlacesScriptPromise;
 }
 
-export default function AddressManager({ isSelectOnly = false, onAddressSelected }) {
+export default function AddressManager({
+  isSelectOnly = false,
+  autoAddIfEmpty = false,
+  onAddressSelected,
+  onAddressSaved
+}) {
   const {
     addresses,
     selectedAddressId,
@@ -82,6 +87,13 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
   const [landmark, setLandmark] = useState('');
   const [coords, setCoords] = useState(null);
   const [isDefault, setIsDefault] = useState(false);
+
+  useEffect(() => {
+    if (autoAddIfEmpty && addresses.length === 0 && !showAddForm) {
+      resetAddressForm();
+      setShowAddForm(true);
+    }
+  }, [autoAddIfEmpty, addresses.length, showAddForm]);
 
   useEffect(() => {
     if (!showAddForm) return undefined;
@@ -389,8 +401,12 @@ export default function AddressManager({ isSelectOnly = false, onAddressSelected
       ? await updateAddress(editingAddress._id, newAddress)
       : await saveAddress(newAddress);
     if (success) {
+      const savedAddress = editingAddress
+        ? addresses.find(address => String(address._id) === String(editingAddress._id))
+        : success;
       setShowAddForm(false);
       resetAddressForm();
+      if (savedAddress && onAddressSaved) onAddressSaved(savedAddress);
     }
   };
 

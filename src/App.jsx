@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import { ToastProvider, useToast } from './context/ToastContext';
-import { AppProvider, useApp } from './context/AppContext';
+import { useAuth } from './context/AuthContext';
+import { useToast } from './context/ToastContext';
+import { useApp } from './context/AppContext';
 
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -23,7 +23,7 @@ import MedicineRequestModal from './components/requests/MedicineRequestModal';
 import CustomerProposalModal from './components/requests/CustomerProposalModal';
 
 function MainApp() {
-  const { user, isAdmin, role, passwordRecoveryRequired } = useAuth();
+  const { user, isAdmin, isPharmacyOrAdmin, passwordRecoveryRequired } = useAuth();
   const {
     cart,
     orders,
@@ -64,8 +64,12 @@ function MainApp() {
       setAuthOpen(true);
       return;
     }
-    if (tab === 'admin' && !isAdmin) {
-      addToast("Admin authorization required to access operations dashboard.", "warning");
+    if (tab === 'requests' && isPharmacyOrAdmin) {
+      addToast('Medicine requests are available in the pharmacy operations dashboard.', 'info');
+      return;
+    }
+    if (tab === 'admin' && !isPharmacyOrAdmin) {
+      addToast("Pharmacy or administrator authorization is required to access operations.", "warning");
       setAuthOpen(true);
       return;
     }
@@ -85,11 +89,11 @@ function MainApp() {
       setRatingPromptOrder(null);
       setDismissedRatingOrderIds([]);
     }
-    if (!isAdmin && activeTab === 'admin') setActiveTab('store');
+    if (!isPharmacyOrAdmin && activeTab === 'admin') setActiveTab('store');
     if (!user && activeTrackingOrder) {
       setActiveTrackingOrder(null);
     }
-  }, [user, isAdmin, activeTab, activeTrackingOrder, setActiveTrackingOrder]);
+  }, [user, isAdmin, isPharmacyOrAdmin, activeTab, activeTrackingOrder, setActiveTrackingOrder]);
 
   useEffect(() => {
     if (!user) {
@@ -181,7 +185,7 @@ function MainApp() {
         onOpenAuth={() => setAuthOpen(true)}
         onOpenProfile={() => setProfileOpen(true)}
         onOpenAdminAlerts={() => {
-          if (isAdmin) setActiveTab('admin');
+          if (isPharmacyOrAdmin) setActiveTab('admin');
         }}
       />
 
@@ -305,7 +309,7 @@ function MainApp() {
 
         {/* TAB 4: ADMIN OPERATIONS DASHBOARD (Guarded) */}
         {activeTab === 'admin' && (
-          isAdmin && <AdminDashboardView />
+          isPharmacyOrAdmin && <AdminDashboardView />
         )}
 
         {/* POST-ORDER SUCCESS CONFIRMATION VIEW */}
@@ -398,14 +402,4 @@ function MainApp() {
   );
 }
 
-export default function App() {
-  return (
-    <AuthProvider>
-      <ToastProvider>
-        <AppProvider>
-          <MainApp />
-        </AppProvider>
-      </ToastProvider>
-    </AuthProvider>
-  );
-}
+export default MainApp;

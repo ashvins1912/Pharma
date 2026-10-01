@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { createMedicineRequest } from '../../api/medicineRequestService';
+import AddressManager from '../AddressManager';
 
 const createRequestedItem = (values = {}) => ({
   requestedName: values.name || values.requestedName || '',
@@ -20,6 +21,9 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
     requestPrefillData,
     addresses,
     selectedAddressId,
+    setSelectedAddressId,
+    loadAddresses,
+    loadingAddresses,
     loadUserMedicineRequests
   } = useApp();
   const { addToast } = useToast();
@@ -27,10 +31,6 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
   const [requestedItems, setRequestedItems] = useState([createRequestedItem()]);
   const [deliveryPreference, setDeliveryPreference] = useState('Flexible');
   const [customerNote, setCustomerNote] = useState('');
-
-  // Address
-  const [chosenAddressId, setChosenAddressId] = useState('');
-  const [customAddress, setCustomAddress] = useState('');
 
   // File attachments
   const [prescriptionFile, setPrescriptionFile] = useState(null);
@@ -53,8 +53,6 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       setRequestedItems([createRequestedItem()]);
       setDeliveryPreference('Flexible');
       setCustomerNote('');
-      setChosenAddressId('');
-      setCustomAddress('');
       setPrescriptionFile(null);
       setProductImageFile(null);
       setPrescriptionPreview(null);
@@ -70,15 +68,8 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
     setProductImageFile(null);
     setPrescriptionPreview(null);
     setImagePreview(null);
-    setChosenAddressId('');
-    setCustomAddress('');
-  }, [isOpen, requestPrefillData]);
-
-  useEffect(() => {
-    if (!isOpen || chosenAddressId || !addresses?.length) return;
-    const defaultAddr = addresses.find(a => a.isDefault) || addresses[0];
-    setChosenAddressId(defaultAddr._id);
-  }, [isOpen, addresses, chosenAddressId]);
+    void loadAddresses();
+  }, [isOpen, requestPrefillData, loadAddresses]);
 
   if (!isOpen) return null;
 
@@ -135,30 +126,11 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       return;
     }
 
-    let deliveryAddress = '';
-    let addressDetails = {};
-    let coordinates = null;
-
-    if (chosenAddressId && chosenAddressId !== 'custom') {
-      const selected = addresses.find(a => String(a._id) === String(chosenAddressId));
-      if (selected) {
-        deliveryAddress = selected.addressLine || `${selected.addressLine1}, ${selected.city} - ${selected.pincode}`;
-        addressDetails = {
-          fullName: selected.fullName,
-          mobile: selected.mobile,
-          addressLine1: selected.addressLine1,
-          city: selected.city,
-          state: selected.state,
-          pincode: selected.pincode
-        };
-        coordinates = selected.coordinates;
-      }
-    } else {
-      deliveryAddress = customAddress.trim();
-    }
-
-    if (!deliveryAddress) {
-      addToast('Please specify a delivery address for this request.', 'warning');
+    const selectedAddress = addresses.find(address =>
+      String(address._id) === String(selectedAddressId)
+    );
+    if (!selectedAddress) {
+      addToast('Please save and select a delivery address before submitting.', 'warning');
       return;
     }
 
@@ -176,17 +148,10 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       }));
 
       formData.append('requestedItems', JSON.stringify(requestItems));
-      formData.append('deliveryAddress', deliveryAddress);
+      formData.append('addressId', String(selectedAddress._id));
       formData.append('preferredDeliveryPreference', deliveryPreference);
       formData.append('customerNote', customerNote.trim());
       formData.append('customerPhone', user?.user_metadata?.mobile || '');
-
-      if (Object.keys(addressDetails).length > 0) {
-        formData.append('addressDetails', JSON.stringify(addressDetails));
-      }
-      if (coordinates) {
-        formData.append('coordinates', JSON.stringify(coordinates));
-      }
 
       if (prescriptionFile) {
         formData.append('prescription', prescriptionFile);
@@ -197,7 +162,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
 
       const res = await createMedicineRequest(formData);
       addToast(res.message || 'Medicine request submitted to Ashvin Pharmacy!', 'success');
-      await loadUserMedicineRequests();
+      await loadUserMedicineRequests({ page: 1, statusGroup: 'ALL' });
       onClose();
     } catch (err) {
       addToast(err.response?.data?.message || err.message || 'Failed to submit request.', 'error');
@@ -238,6 +203,12 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
             <strong>No immediate charge or normal order is created.</strong> Our pharmacy team checks stock and creates a personalized <strong>Proposal</strong> with approximate/final pricing and delivery timing for your review and approval.
           </div>
         </div>
+
+        <AddressManager
+          autoAddIfEmpty={!loadingAddresses && addresses.length === 0}
+          onAddressSelected={(address) => setSelectedAddressId(String(address._id || address.id))}
+          onAddressSaved={(address) => setSelectedAddressId(String(address._id || address.id))}
+        />
 
         {/* Request Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -360,48 +331,6 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
             </div>
           </div>
 
-          {/* Delivery Address Selector */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Delivery Address <span className="text-rose-500">*</span>
-            </label>
-            {addresses && addresses.length > 0 ? (
-              <div className="space-y-2">
-                <select
-                  value={chosenAddressId}
-                  onChange={(e) => setChosenAddressId(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 outline-none font-medium"
-                >
-                  {addresses.map(a => (
-                    <option key={a._id} value={a._id}>
-                      {a.label ? `[${a.label}] ` : ''}{a.addressLine || a.addressLine1}, {a.city} - {a.pincode}
-                    </option>
-                  ))}
-                  <option value="custom">Enter a different address manually</option>
-                </select>
-
-                {chosenAddressId === 'custom' && (
-                  <textarea
-                    rows={2}
-                    placeholder="Enter complete street address, apartment, pincode..."
-                    value={customAddress}
-                    onChange={(e) => setCustomAddress(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 outline-none"
-                  />
-                )}
-              </div>
-            ) : (
-              <textarea
-                required
-                rows={2}
-                placeholder="Enter complete street address, house/flat no., city, pincode..."
-                value={customAddress}
-                onChange={(e) => setCustomAddress(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 outline-none"
-              />
-            )}
-          </div>
-
           {/* Customer Note */}
           <div>
             <label className="block text-[11px] font-bold text-slate-600 mb-1">
@@ -485,7 +414,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || loadingAddresses || !selectedAddressId || !addresses.some(address => String(address._id) === String(selectedAddressId))}
               className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (
