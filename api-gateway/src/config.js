@@ -34,7 +34,7 @@ function isExactBrowserOrigin(origin, production) {
 export function loadConfig(environment = process.env) {
   const production = environment.NODE_ENV === 'production';
   const originsValue = environment.CORS_ALLOWED_ORIGINS
-    || (production ? '' : 'http://localhost:3000,http://localhost:5173');
+    || (production ? '' : 'http://localhost:3000,http://localhost:5173,http://0.0.0.0:3000');
   const allowedOrigins = originsValue.split(',').map(origin => origin.trim()).filter(Boolean);
   const backendApiUrl = parseOrigin(environment.BACKEND_API_URL || (production ? '' : 'http://localhost:8090'));
   const inventoryServiceUrl = parseOrigin(environment.INVENTORY_SERVICE_URL || '');

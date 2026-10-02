@@ -1,5 +1,5 @@
 import deliveryContainer from '../container.js';
-import { publishOrderEvent } from '../../../services/OrderEventService.js';
+import { sendCustomWhatsAppAlert } from '../../../config/whatsapp.js';
 
 /**
  * Controller: Order Automated Assignment & Engine Monitoring
@@ -11,12 +11,17 @@ export const autoAssignOrder = async (req, res) => {
 
         const result = await deliveryContainer.assignmentEngine.assignOrder(orderId, req.body || {});
 
-        if (result.success && result.order?.rider && result.strategyUsed !== 'AlreadyAssigned') {
-            await publishOrderEvent(
-                result.order.toJSON ? result.order.toJSON() : result.order,
-                'OrderAssigned',
-                { payload: { riderMobile: result.rider?.mobile || result.order.rider.riderMobile } }
-            );
+        // If assigned, trigger WhatsApp alert if rider info is available
+        if (result.success && result.order?.rider) {
+            try {
+                await sendCustomWhatsAppAlert(
+                    result.order.toJSON ? result.order.toJSON() : result.order,
+                    'Assigned',
+                    result.rider?.mobile || result.order.rider.riderMobile
+                );
+            } catch (waErr) {
+                console.warn('[AutoAssign] WhatsApp notification non-blocking warning:', waErr.message);
+            }
         }
 
         res.json({
@@ -43,16 +48,18 @@ export const manualAssignOrder = async (req, res) => {
             return res.status(400).json({ message: 'riderId is required for manual assignment.' });
         }
 
-        const previousOrder = await deliveryContainer.orderRepository.findById(orderId);
-        const wasAssigned = Boolean(previousOrder?.rider?.riderId);
         const result = await deliveryContainer.manualAssignOrderUseCase.execute(orderId, riderId, notes);
 
         if (result.order?.rider) {
-            await publishOrderEvent(
-                result.order.toJSON ? result.order.toJSON() : result.order,
-                wasAssigned ? 'OrderReassigned' : 'OrderAssigned',
-                { payload: { riderMobile: result.rider?.mobile || result.order.rider.riderMobile } }
-            );
+            try {
+                await sendCustomWhatsAppAlert(
+                    result.order.toJSON ? result.order.toJSON() : result.order,
+                    'Assigned',
+                    result.rider?.mobile || result.order.rider.riderMobile
+                );
+            } catch (waErr) {
+                console.warn('[ManualAssign] WhatsApp notification warning:', waErr.message);
+            }
         }
 
         res.json({

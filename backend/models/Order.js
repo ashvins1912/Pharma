@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import { randomUUID } from 'node:crypto';
 
 const medicineItemSchema = new mongoose.Schema({
     medicineId: { type: mongoose.Schema.Types.Mixed, required: false },
@@ -14,26 +13,17 @@ const medicineItemSchema = new mongoose.Schema({
 
 const orderItemSchema = new mongoose.Schema({
     productId: { type: String, trim: true },
-    productVersion: { type: Number, min: 1 },
     medicineId: { type: mongoose.Schema.Types.Mixed },
     name: { type: String, trim: true },
     productName: { type: String, trim: true },
     sku: { type: String, trim: true },
-    genericName: { type: String, trim: true },
-    strength: { type: String, trim: true },
-    form: { type: String, trim: true },
-    manufacturer: { type: String, trim: true },
     quantity: { type: Number, required: true, min: 1 },
     price: { type: Number, min: 0 },
     unitPrice: { type: Number, min: 0 },
-    tax: { type: Number, min: 0, default: 0 },
-    discount: { type: Number, min: 0, default: 0 },
-    totalPrice: { type: Number, min: 0 },
-    snapshotAt: { type: Date, default: Date.now }
+    totalPrice: { type: Number, min: 0 }
 }, { _id: false, strict: false });
 
 const orderSchema = new mongoose.Schema({
-    orderNumber: { type: String, required: true, default: () => `ORD-${randomUUID()}` },
     customerId: { type: String, index: true },
     riderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Rider', default: null, index: true },
     userId: { type: String, required: true, index: true },
@@ -114,14 +104,7 @@ const orderSchema = new mongoose.Schema({
         assignedAt: { type: Date, default: null },
         distanceInKm: { type: Number, default: null }
     },
-    source: {
-        type: String,
-        enum: ['WEB', 'MOBILE', 'ADMIN', 'POS', 'ERP', 'PARTNER', 'API', 'MEDICINE_REQUEST', 'DIRECT'],
-        default: 'DIRECT',
-        index: true
-    },
-    externalReference: { type: String, trim: true, default: null },
-    idempotencyKey: { type: String, trim: true, default: null },
+    source: { type: String, default: 'DIRECT' },
     medicineRequestId: { type: String, default: null },
     addressId: { type: mongoose.Schema.Types.ObjectId, ref: 'UserAddress', default: null },
     deliverySlot: { type: Object, default: null },
@@ -181,18 +164,9 @@ orderSchema.pre('findOneAndUpdate', function syncUpdatedOrderStatus() {
 });
 
 orderSchema.index({ orderStatus: 1, createdAt: -1 });
-orderSchema.index({ orderNumber: 1 }, { unique: true, partialFilterExpression: { orderNumber: { $type: 'string' } } });
 orderSchema.index(
     { medicineRequestId: 1 },
     { unique: true, partialFilterExpression: { medicineRequestId: { $type: 'string' } } }
-);
-orderSchema.index(
-    { source: 1, externalReference: 1 },
-    { unique: true, partialFilterExpression: { externalReference: { $type: 'string' } } }
-);
-orderSchema.index(
-    { source: 1, idempotencyKey: 1 },
-    { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } }
 );
 
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);

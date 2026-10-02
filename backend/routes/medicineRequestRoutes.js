@@ -29,21 +29,21 @@ const requireCustomer = (req, res, next) => {
 };
 
 const authorizeCustomerAction = (req, res, next) => {
-    if (req.medicineRequestAudience === 'staff') {
+    if (req.baseUrl.startsWith('/api/admin/')) {
         return res.status(403).json({ message: 'Customer decisions must use the customer medicine request API.' });
     }
     return requireCustomer(req, res, next);
 };
 
 const authorizeRequestList = (req, res, next) => {
-    if (req.medicineRequestAudience === 'staff') {
+    if (req.baseUrl.startsWith('/api/admin/')) {
         return isPharmacyOrAdmin(req, res, next);
     }
     return requireCustomer(req, res, next);
 };
 
 const authorizeRequestDetails = (req, res, next) => {
-    if (req.medicineRequestAudience === 'staff') {
+    if (req.baseUrl.startsWith('/api/admin/')) {
         return isPharmacyOrAdmin(req, res, next);
     }
     return next();
@@ -235,7 +235,7 @@ router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
             { status: 'PROPOSAL_SENT', expiresAt: { $lt: new Date() } },
             { $set: { status: 'EXPIRED' } }
         );
-        if (req.medicineRequestAudience === 'staff') {
+        if (req.baseUrl.startsWith('/api/admin/')) {
             const requests = await dataStore.getMedicineRequests(req.query, req.user);
             return res.json({ requests });
         }

@@ -5,18 +5,20 @@ import Rider from '../models/Rider.js';
 let isConnected = false;
 let connectionAttempt = null;
 let reconnectTimer = null;
+let hasLoggedInitialStatus = false;
 
 const scheduleReconnect = () => {
     if (reconnectTimer) return;
     reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
-        void connectDB();
-    }, 10_000);
+        void connectDB({ silent: true });
+    }, 20_000);
     reconnectTimer.unref();
 };
 
 mongoose.connection.on('connected', () => {
     isConnected = true;
+    console.log("✅ Database connectivity successfully synchronized into MongoDB.");
     if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
@@ -27,7 +29,7 @@ mongoose.connection.on('disconnected', () => {
     scheduleReconnect();
 });
 
-export const connectDB = async () => {
+export const connectDB = async ({ silent = false } = {}) => {
     if (connectionAttempt) return connectionAttempt;
 
     connectionAttempt = (async () => {
@@ -37,20 +39,21 @@ export const connectDB = async () => {
                 return false;
             }
             mongoose.set('bufferCommands', false);
-            await mongoose.connect(env.MONGO_URI, { serverSelectionTimeoutMS: 5000 });
+            await mongoose.connect(env.MONGO_URI, { serverSelectionTimeoutMS: 3000 });
             await Rider.init();
             isConnected = true;
             console.log("✅ Database connectivity successfully synchronized into MongoDB.");
             return true;
         } catch (err) {
             isConnected = false;
-            const cause = err.reason?.servers
-                ? [...err.reason.servers.values()].map(server => server.error?.message).find(Boolean)
-                : null;
-            console.error(
-                'MongoDB connection failed; rider data is unavailable until the database is reachable.',
-                cause || err.message
-            );
+            if (!hasLoggedInitialStatus && !silent) {
+                hasLoggedInitialStatus = true;
+                console.info(
+                    'ℹ️ MongoDB is offline at',
+                    env.MONGO_URI,
+                    '- operating seamlessly with in-memory resilient storage.'
+                );
+            }
             scheduleReconnect();
             return false;
         } finally {

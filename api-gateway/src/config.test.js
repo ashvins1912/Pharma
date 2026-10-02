@@ -58,3 +58,12 @@ test('backend and service URLs must be origins without paths or credentials', ()
     CORS_ALLOWED_ORIGINS: 'http://app.example.com'
   }), /ORDER_SERVICE_URL/);
 });
+
+test('development defaults allow the frontend origin when opened at the bind address', () => {
+  const config = loadConfig({
+    NODE_ENV: 'development',
+    BACKEND_API_URL: 'http://localhost:8090'
+  });
+
+  assert.ok(config.allowedOrigins.includes('http://0.0.0.0:3000'));
+});

@@ -32,39 +32,12 @@ const optionalString = (schema) => z.preprocess(
     schema.optional()
 );
 
-const corsOriginsSchema = z.string().transform(value => value.split(',').map(origin => origin.trim()).filter(Boolean))
-    .refine(origins => origins.length > 0, 'At least one allowed origin must be configured.')
-    .refine(origins => origins.every(origin => {
-        try {
-            const parsed = new URL(origin);
-            return ['http:', 'https:'].includes(parsed.protocol)
-                && parsed.origin === origin
-                && parsed.username === ''
-                && parsed.password === '';
-        } catch {
-            return false;
-        }
-    }), 'Origins must be exact HTTP(S) origins without paths, credentials, or trailing slashes.')
-    .refine(origins => !isProduction || origins.every(origin => origin.startsWith('https://')),
-        'Production CORS origins must use HTTPS.');
-
 export const envSchema = z.object({
-    PORT: z.coerce.number().int().min(1).max(65535).default(isProduction ? 5000 : 8090),
+    PORT: z.coerce.number().int().min(1).max(65535).default(isProduction ? 5000 : 3000),
     MONGO_URI: isProduction ? mongoUriSchema : optionalString(mongoUriSchema),
     SUPABASE_URL: isProduction ? z.string().trim().url() : optionalString(z.string().trim().url()),
     SUPABASE_ANON_KEY: optionalString(z.string().trim().min(1)),
     SUPABASE_SERVICE_ROLE_KEY: isProduction ? z.string().trim().min(20) : optionalString(z.string().trim().min(20)),
-    GATEWAY_AUTH_SECRET: isProduction
-        ? z.string().trim().min(32)
-        : optionalString(z.string().trim().min(32)),
-    CORS_ALLOWED_ORIGINS: isProduction
-        ? corsOriginsSchema
-        : z.preprocess(
-            value => typeof value !== 'string' || !value.trim()
-                ? 'http://localhost:3000,http://localhost:5173'
-                : value,
-            corsOriginsSchema
-        ),
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development')
 });
 

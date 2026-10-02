@@ -2,14 +2,12 @@ services:
   - type: web
     name: ashvin-pharmacy
     runtime: node
-    buildCommand: npm install && npm --prefix frontend install && npm run build
-    startCommand: npm run start:legacy
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: VITE_FRONTEND_URL
-        sync: false
-      - key: CORS_ALLOWED_ORIGINS
         sync: false
       - key: MONGO_URI
         sync: false
@@ -59,7 +57,3 @@ services:
         sync: false
       - key: INVENTORY_IMPORT_MAX_FILE_BYTES
         sync: false
-      - key: GATEWAY_AUTH_SECRET
-        sync: false
-      - key: SERVICE_JWT_ISSUER
-        value: ashvin-pharmacy

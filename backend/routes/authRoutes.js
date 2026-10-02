@@ -33,11 +33,6 @@ import {
     issueDemoAdminToken,
     verifyDemoAdminPassword
 } from '../config/demoAdmin.js';
-import {
-    getDemoCustomerIdentity,
-    isDemoCustomerEnabled,
-    issueDemoCustomerToken
-} from '../config/demoCustomer.js';
 
 const router = express.Router();
 router.use(sanitizeBodyMiddleware);
@@ -188,63 +183,6 @@ router.get('/csrf', (req, res) => {
     const token = generateCsrfToken();
     setSessionCookies(res, { csrfToken: token });
     res.json({ csrfToken: token });
-});
-
-router.post('/demo-admin', validateLogin, async (req, res) => {
-    if (!isDemoAdminEnabled()) {
-        return res.status(404).json({ message: 'Demo admin sign-in is disabled.' });
-    }
-    if (!verifyDemoAdminPassword(req.body?.email, req.body?.password)) {
-        return res.status(401).json({ message: 'Invalid demo admin email or password.' });
-    }
-    try {
-        const access_token = await issueDemoAdminToken();
-        return res.json({
-            access_token,
-            token_type: 'Bearer',
-            expires_in: 3600,
-            user: getDemoAdminIdentity()
-        });
-    } catch (error) {
-        console.error('Demo admin token creation failed:', error);
-        return res.status(503).json({ message: 'Demo admin sign-in is not configured correctly.' });
-    }
-});
-
-router.post('/demo-admin/instant', async (_req, res) => {
-    if (!isDemoAdminEnabled() || !isInstantDemoAdminEnabled()) {
-        return res.status(404).json({ message: 'Instant demo admin access is disabled.' });
-    }
-    try {
-        const access_token = await issueDemoAdminToken(true);
-        return res.json({
-            access_token,
-            token_type: 'Bearer',
-            expires_in: 3600,
-            user: getDemoAdminIdentity()
-        });
-    } catch (error) {
-        console.error('Instant demo admin sign-in failed:', error);
-        return res.status(503).json({ message: 'Instant demo admin access is not configured correctly.' });
-    }
-});
-
-router.post('/demo-customer', async (_req, res) => {
-    if (!isDemoCustomerEnabled()) {
-        return res.status(404).json({ message: 'Demo customer access is disabled.' });
-    }
-    try {
-        const access_token = await issueDemoCustomerToken();
-        return res.json({
-            access_token,
-            token_type: 'Bearer',
-            expires_in: 3600,
-            user: getDemoCustomerIdentity()
-        });
-    } catch (error) {
-        console.error('Demo customer token creation failed:', error);
-        return res.status(503).json({ message: 'Demo customer access is not configured correctly.' });
-    }
 });
 
 /**

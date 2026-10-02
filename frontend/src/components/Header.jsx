@@ -16,9 +16,16 @@ export default function Header({
   const { cart, searchQuery, setSearchQuery, whatsappStatus, setWhatsappModalOpen, medicineRequests, openRequestModal } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const cartItemCount = cart.reduce((total, item) => total + item.quantity, 0);
   const proposalsWaitingCount = (medicineRequests || []).filter(r => r.status === 'PROPOSAL_SENT').length;
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    await logout();
+    setMobileMenuOpen(false);
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 transition">
@@ -349,10 +356,17 @@ export default function Header({
                     👤 {user.email}
                   </span>
                   <button
-                    onClick={() => { logout(); setMobileMenuOpen(false); }}
-                    className="text-rose-600 font-bold hover:underline"
+                    onClick={handleSignOut}
+                    disabled={signingOut}
+                    aria-busy={signingOut}
+                    className="text-rose-600 font-bold hover:underline disabled:opacity-60 inline-flex items-center gap-2"
                   >
-                    Log Out
+                    {signingOut ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" aria-hidden="true"></span>
+                        <span>Signing out...</span>
+                      </>
+                    ) : 'Log Out'}
                   </button>
                 </>
               ) : (

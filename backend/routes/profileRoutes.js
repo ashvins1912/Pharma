@@ -2,21 +2,10 @@ import express from 'express';
 import mongoose from 'mongoose';
 import UserProfile from '../models/UserProfile.js';
 import UserAddress from '../models/UserAddress.js';
-import dataStore from '../dataStore.js';
-import { authenticateSupabaseUser, authenticateUser } from '../middleware/auth.js';
+import { authenticateSupabaseUser } from '../middleware/auth.js';
 import { getIsConnected } from '../config/db.js';
 
 const router = express.Router();
-const legacyRouter = express.Router();
-
-const hasValidCoordinates = coordinates => {
-    if (coordinates?.lat == null || coordinates?.lng == null
-        || String(coordinates.lat).trim() === '' || String(coordinates.lng).trim() === '') return false;
-    const lat = Number(coordinates.lat);
-    const lng = Number(coordinates.lng);
-    return Number.isFinite(lat) && lat >= -90 && lat <= 90
-        && Number.isFinite(lng) && lng >= -180 && lng <= 180;
-};
 
 const requireDatabase = (res) => {
     if (getIsConnected() && mongoose.connection.readyState === 1) return true;
@@ -207,85 +196,4 @@ router.delete('/addresses/:addressId', async (req, res) => {
     }
 });
 
-legacyRouter.use(authenticateUser);
-
-legacyRouter.post('/profile', async (req, res) => {
-    try {
-        const profile = await dataStore.saveUserProfile(req.user.sub, {
-            name: req.body.name,
-            email: req.user.email,
-            mobile: req.body.mobile
-        });
-        return res.json(profile);
-    } catch (error) {
-        console.error('Profile save error:', error);
-        return res.status(500).json({ message: 'Failed to update profile' });
-    }
-});
-
-legacyRouter.get('/profile', async (req, res) => {
-    try {
-        const profile = await dataStore.getUserProfile(req.user.sub);
-        return res.json(profile);
-    } catch (error) {
-        console.error('Profile get error:', error);
-        return res.status(500).json({ message: 'Failed to fetch profile' });
-    }
-});
-
-legacyRouter.get('/addresses', async (req, res) => {
-    try {
-        return res.json(await dataStore.getUserAddresses(req.user.sub));
-    } catch (error) {
-        console.error('Address list error:', error);
-        return res.status(500).json({ message: 'Failed to fetch addresses' });
-    }
-});
-
-legacyRouter.post('/addresses', async (req, res) => {
-    try {
-        const address = req.body;
-        if (!address?.addressLine1?.trim()) {
-            return res.status(400).json({ message: 'Street address is required.' });
-        }
-        if (!hasValidCoordinates(address.coordinates)) {
-            return res.status(400).json({ message: 'Select a valid delivery pin on the map before saving this address.' });
-        }
-        return res.status(201).json(await dataStore.createUserAddress(req.user.sub, address));
-    } catch (error) {
-        console.error('Address create error:', error);
-        return res.status(500).json({ message: 'Failed to save address' });
-    }
-});
-
-legacyRouter.patch('/addresses/:addressId', async (req, res) => {
-    try {
-        const address = req.body;
-        if (!address?.addressLine1?.trim()) {
-            return res.status(400).json({ message: 'Street address is required.' });
-        }
-        if (!hasValidCoordinates(address.coordinates)) {
-            return res.status(400).json({ message: 'Select a valid delivery pin on the map before saving this address.' });
-        }
-        const updated = await dataStore.updateUserAddress(req.user.sub, req.params.addressId, address);
-        if (!updated) return res.status(404).json({ message: 'Address not found.' });
-        return res.json(updated);
-    } catch (error) {
-        console.error('Address update error:', error);
-        return res.status(500).json({ message: 'Failed to update address' });
-    }
-});
-
-legacyRouter.delete('/addresses/:addressId', async (req, res) => {
-    try {
-        const deleted = await dataStore.deleteUserAddress(req.user.sub, req.params.addressId);
-        if (!deleted) return res.status(404).json({ message: 'Address not found.' });
-        return res.json({ message: 'Address deleted.' });
-    } catch (error) {
-        console.error('Address delete error:', error);
-        return res.status(500).json({ message: 'Failed to delete address' });
-    }
-});
-
-export { legacyRouter as legacyProfileRoutes };
 export default router;

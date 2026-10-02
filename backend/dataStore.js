@@ -1,18 +1,15 @@
 // Comprehensive in-memory and MongoDB data store layer
 import { getIsConnected } from './config/db.js';
 import mongoose from 'mongoose';
-import { randomUUID } from 'node:crypto';
 import Medicine from './models/Medicine.js';
 import Order from './models/Order.js';
 import Coupon from './models/Coupon.js';
 import UserProfile from './models/UserProfile.js';
 import UserAddress from './models/UserAddress.js';
-import Proposal from './models/Proposal.js';
 import CustomerPointsLedger from './models/CustomerPointsLedger.js';
 import Rider from './models/Rider.js';
 import MedicineRequest from './models/MedicineRequest.js';
-import { sendWhatsAppMedicineRequestAlert } from './config/whatsapp.js';
-import { publishOrderEvent, toOrderEventType } from './services/OrderEventService.js';
+import { sendWhatsAppMedicineRequestAlert, sendCustomWhatsAppAlert } from './config/whatsapp.js';
 import ProfitMarginRewardEngine from './strategies/ProfitMarginRewardEngine.js';
 import DefaultProfitRewardStrategy from './strategies/ProfitRewardStrategy.js';
 import FixedDeliveryRewardStrategy from './strategies/DeliveryRewardStrategy.js';
@@ -1141,34 +1138,6 @@ export const dataStore = {
             }
             quantities.set(medicineId, (quantities.get(medicineId) || 0) + quantity);
         }
-        const source = orderData.source || 'WEB';
-        const externalReference = typeof orderData.externalReference === 'string'
-            ? orderData.externalReference.trim()
-            : null;
-        const idempotencyKey = typeof orderData.idempotencyKey === 'string'
-            ? orderData.idempotencyKey.trim()
-            : null;
-        const findExistingOrder = async session => {
-            if (!getIsConnected() || (!externalReference && !idempotencyKey)) return null;
-            const predicates = [];
-            if (externalReference) predicates.push({ source, externalReference });
-            if (idempotencyKey) predicates.push({ source, idempotencyKey });
-            const existing = await Order.findOne({ $or: predicates }).session(session).lean();
-            if (!existing) return null;
-            if (existing.userId !== orderData.userId
-                || (externalReference && existing.externalReference !== externalReference)
-                || (idempotencyKey && existing.idempotencyKey !== idempotencyKey)) {
-                throw inventoryError('Order idempotency key or external reference belongs to a different client.', 409);
-            }
-            const requested = [...quantities].sort(([a], [b]) => a.localeCompare(b));
-            const existingItems = (existing.medicineItems || [])
-                .map(item => [String(item.medicineId), Number(item.quantity)])
-                .sort(([a], [b]) => a.localeCompare(b));
-            if (JSON.stringify(requested) !== JSON.stringify(existingItems)) {
-                throw inventoryError('Order idempotency key has already been used with different items.', 409);
-            }
-            return existing;
-        };
 
         const now = new Date();
         const statusEntry = {
@@ -1182,14 +1151,8 @@ export const dataStore = {
         if (getIsConnected()) {
             const session = await mongoose.startSession();
             let createdOrder;
-            let createdNewOrder = false;
             try {
                 await session.withTransaction(async () => {
-                    const existingOrder = await findExistingOrder(session);
-                    if (existingOrder) {
-                        createdOrder = existingOrder;
-                        return;
-                    }
                     const medicineItems = [];
                     const itemSnapshots = [];
                     let totalAmount = 0;
@@ -1248,27 +1211,16 @@ export const dataStore = {
                         });
                         itemSnapshots.push({
                             _id: medicine._id.toString(),
-                            productId: medicine._id.toString(),
                             medicineId: medicine._id,
                             name: medicine.name,
-                            productName: medicine.name,
                             sku: medicine.sku || medicine.code || '',
-                            genericName: medicine.genericName || medicine.composition || '',
-                            strength: medicine.strength || '',
-                            form: medicine.form || '',
-                            manufacturer: medicine.manufacturer || medicine.brand || '',
                             price,
-                            unitPrice: price,
-                            tax: 0,
-                            discount: 0,
-                            totalPrice: price * quantity,
                             baseCostPrice: Number(medicine.baseCostPrice ?? price),
                             discountPercentage: Number(medicine.discountPercentage || 0),
                             marginTier: ['LOW', 'MID', 'HIGH'].includes(medicine.marginTier)
                                 ? medicine.marginTier
                                 : 'LOW',
                             quantity,
-                            snapshotAt: now,
                             stock: Math.max(0, getPhysicalStock(medicine) - getReservedStock(medicine) - quantity)
                         });
                     }
@@ -1368,23 +1320,16 @@ export const dataStore = {
                         addressDetails: orderData.addressDetails || {},
                         coordinates: orderData.coordinates,
                         paymentMethod: orderData.paymentMethod || 'Cash on Delivery (COD)',
-                        source,
-                        externalReference: externalReference || null,
-                        idempotencyKey: idempotencyKey || null,
                         orderStatus: 'Pending_Review',
                         statusHistory: [statusEntry]
                     }], { session });
                     createdOrder = order.toObject({ virtuals: true });
                     createdOrder.rewardNotice = redemptionWarning;
-                    createdNewOrder = true;
-                    await publishOrderEvent(createdOrder, 'OrderCreated', { session });
-                    await publishOrderEvent(createdOrder, 'OrderInventoryReserved', { session });
                 });
             } finally {
                 await session.endSession();
             }
 
-            if (!createdNewOrder) return createdOrder;
             this.logAudit(actor, 'ORDER_CREATED', 'ORDER', createdOrder._id.toString(), {
                 totalAmount: createdOrder.totalAmount,
                 itemCount: createdOrder.medicineItems.length,
@@ -1433,22 +1378,11 @@ export const dataStore = {
                 });
                 itemSnapshots.push({
                     _id: medicineId,
-                    productId: medicineId,
                     medicineId,
                     name: medicine.name,
-                    productName: medicine.name,
                     sku: medicine.sku || medicine.code || '',
-                    genericName: medicine.genericName || medicine.composition || '',
-                    strength: medicine.strength || '',
-                    form: medicine.form || '',
-                    manufacturer: medicine.manufacturer || medicine.brand || '',
                     price,
-                    unitPrice: price,
-                    tax: 0,
-                    discount: 0,
-                    totalPrice: price * quantity,
                     quantity,
-                    snapshotAt: now,
                     stock: available - quantity
                 });
             }
@@ -1463,7 +1397,6 @@ export const dataStore = {
 
             const order = {
                 _id: new mongoose.Types.ObjectId().toString(),
-                orderNumber: `ORD-${randomUUID()}`,
                 userId: orderData.userId,
                 customerId: orderData.userId,
                 customerName: orderData.customerName,
@@ -1481,9 +1414,6 @@ export const dataStore = {
                 addressDetails: orderData.addressDetails || {},
                 coordinates: orderData.coordinates,
                 paymentMethod: orderData.paymentMethod || 'Cash on Delivery (COD)',
-                source,
-                externalReference: externalReference || null,
-                idempotencyKey: idempotencyKey || null,
                 orderStatus: 'Pending_Review',
                 statusHistory: [statusEntry],
                 createdAt: now,
@@ -1551,11 +1481,6 @@ export const dataStore = {
                     });
                     await order.save({ session });
                     reviewedOrder = order.toObject({ virtuals: true });
-                    const orderEvent = toOrderEventType(status);
-                    if (orderEvent) await publishOrderEvent(reviewedOrder, orderEvent, { session });
-                    if (status === 'Rejected') {
-                        await publishOrderEvent(reviewedOrder, 'OrderInventoryReleased', { session });
-                    }
                 });
             } finally {
                 await session.endSession();
@@ -1676,8 +1601,6 @@ export const dataStore = {
                     });
                     await order.save({ session });
                     cancelledOrder = order.toObject({ virtuals: true });
-                    await publishOrderEvent(cancelledOrder, 'OrderCancelled', { session });
-                    await publishOrderEvent(cancelledOrder, 'OrderInventoryReleased', { session });
                 });
             } finally {
                 await session.endSession();
@@ -1773,8 +1696,6 @@ export const dataStore = {
                     });
                     await order.save({ session });
                     dispatchedOrder = order.toObject({ virtuals: true });
-                    await publishOrderEvent(dispatchedOrder, 'OrderDispatched', { session });
-                    await publishOrderEvent(dispatchedOrder, 'OrderInventoryDeducted', { session });
                 });
             } finally {
                 await session.endSession();
@@ -1821,24 +1742,24 @@ export const dataStore = {
         if (getIsConnected()) {
             return Order.find({ userId }).sort({ createdAt: -1 }).lean();
         }
-        return inMemoryOrders.filter(o => o.userId === userId || o.customerId === userId)
+        return inMemoryOrders.filter(o => o.userId === userId)
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    },
+
+    async getOrders(userId) {
+        if (userId) return this.getUserOrders(userId);
+        return this.getAllOrders();
     },
 
     async getOrder(orderId) {
         if (getIsConnected()) {
-            return mongoose.isValidObjectId(orderId)
-                ? await Order.findById(orderId).lean()
-                : await Order.findOne({ $or: [{ _id: orderId }, { id: orderId }] }).lean();
+            return Order.findById(orderId).lean();
         }
-        return inMemoryOrders.find(o => String(o._id) === String(orderId) || String(o.id) === String(orderId)) || null;
+        return inMemoryOrders.find(item => String(item._id) === String(orderId)) || null;
     },
 
-    async getOrders(userId = null) {
-        if (userId) {
-            return this.getUserOrders(userId);
-        }
-        return this.getAllOrders();
+    async getOrderById(orderId) {
+        return this.getOrder(orderId);
     },
 
     async transitionOrderStatus(orderId, newStatus, actor = 'Pharmacist', riderInfo = null) {
@@ -1855,10 +1776,6 @@ export const dataStore = {
                     else deductInMemoryOrderInventory(order);
                     if (session) await order.save({ session });
                     else if (order.save) await order.save();
-                    if (session) {
-                        const eventOrder = order.toObject ? order.toObject({ virtuals: true }) : order;
-                        await publishOrderEvent(eventOrder, 'OrderInventoryDeducted', { session });
-                    }
                 }
                 return {
                     order: order.toObject ? order.toObject({ virtuals: true }) : { ...order },
@@ -1877,16 +1794,13 @@ export const dataStore = {
 
             const transitionAt = new Date();
             const previousStatus = order.orderStatus;
-            let inventoryDeducted = false;
             if (newStatus === 'Dispatched') {
                 if (session) await deductMongoOrderInventory(order, session);
                 else deductInMemoryOrderInventory(order);
-                inventoryDeducted = true;
             }
             if (newStatus === 'Delivered' && !orderInventoryWasDeducted(order)) {
                 if (session) await deductMongoOrderInventory(order, session);
                 else deductInMemoryOrderInventory(order);
-                inventoryDeducted = true;
             }
             order.orderStatus = newStatus;
 
@@ -1958,21 +1872,6 @@ export const dataStore = {
             });
             if (session) await order.save({ session });
             else if (order.save) await order.save();
-
-            if (session) {
-                const eventOrder = order.toObject ? order.toObject({ virtuals: true }) : order;
-                const orderEvent = toOrderEventType(newStatus);
-                if (orderEvent) await publishOrderEvent(eventOrder, orderEvent, { session });
-                if (newStatus === 'Dispatched') {
-                    await publishOrderEvent(eventOrder, 'OrderInventoryDeducted', { session });
-                }
-                if (newStatus === 'Cancelled') {
-                    await publishOrderEvent(eventOrder, 'OrderInventoryReleased', { session });
-                }
-                if (inventoryDeducted && newStatus === 'Delivered') {
-                    await publishOrderEvent(eventOrder, 'OrderInventoryDeducted', { session });
-                }
-            }
 
             return {
                 order: order.toObject ? order.toObject({ virtuals: true }) : order,
@@ -2507,9 +2406,6 @@ export const dataStore = {
     // Medicine Request & Proposal Lifecycle
     async createMedicineRequest(payload, user) {
         const customerId = user.sub || user.id;
-        if (!payload.addressId) {
-            throw inventoryError('A saved delivery address is required to create a medicine request.', 400);
-        }
         const customerName = user.user_metadata?.name || user.email?.split('@')[0] || 'Valued Customer';
         const customerPhone = user.user_metadata?.mobile || payload.customerPhone || '';
         const customerEmail = user.email || '';
@@ -2527,11 +2423,24 @@ export const dataStore = {
                 : 'NOT_IN_CATALOG'
         }));
 
-        if (!requestedItems.length || requestedItems.some(item => !item.requestedName)) {
-            throw inventoryError('Please provide a medicine name for every requested item.');
+        if (!requestedItems.length || !requestedItems[0].requestedName) {
+            throw inventoryError('Please provide the medicine name you want to request.');
         }
 
-        const deliveryAddress = String(payload.deliveryAddress || '').trim() || 'Pending address confirmation';
+        const deliveryAddress = String(
+            payload.deliveryAddress
+            || payload.address
+            || (user && typeof user === 'object' && (user.address || user.deliveryAddress))
+            || 'Customer Registered Address'
+        ).trim();
+
+        if (!deliveryAddress) {
+            throw inventoryError('A delivery address is required for your medicine request.');
+        }
+
+        if (!payload.addressId) {
+            throw inventoryError('A delivery address is required for your medicine request.');
+        }
 
         const validDeliveryPreferences = ['Morning', 'Evening', 'Next Day', 'Flexible'];
         const preferredDeliveryPreference = validDeliveryPreferences.includes(payload.preferredDeliveryPreference)
@@ -2544,21 +2453,21 @@ export const dataStore = {
             actorId: customerId,
             role: 'Customer',
             timestamp: new Date(),
-            notes: `Requested ${requestedItems.map(item => `${item.requestedName} (x${item.quantity})`).join(', ')}`
+            notes: `Requested ${requestedItems[0].requestedName} (x${requestedItems[0].quantity})`
         };
 
         const requestDoc = {
             requestNumber: reqNum,
             customerId,
-            addressId: payload.addressId || null,
             customerName,
             customerPhone,
             customerEmail,
+            addressId: payload.addressId || null,
             requestedItems,
             prescriptionUrl: payload.prescriptionUrl || null,
             productImageUrl: payload.productImageUrl || null,
             customerNote: String(payload.customerNote || '').trim(),
-            deliveryAddress,
+            deliveryAddress: deliveryAddress,
             addressDetails: payload.addressDetails || {},
             coordinates: payload.coordinates || null,
             preferredDeliveryPreference,
@@ -2611,10 +2520,6 @@ export const dataStore = {
 
         if (getIsConnected()) {
             const now = new Date();
-            await MedicineRequest.updateMany(
-                { status: 'converted', pharmacyProposal: { $ne: null } },
-                { $set: { status: 'PROPOSAL_SENT' } }
-            );
             // Auto expire past proposals
             await MedicineRequest.updateMany(
                 { status: 'PROPOSAL_SENT', expiresAt: { $lt: now } },
@@ -2630,10 +2535,6 @@ export const dataStore = {
                         }
                     }
                 }
-            );
-            await Proposal.updateMany(
-                { status: 'reviewed', expiresAt: { $lt: now } },
-                { $set: { status: 'expired' } }
             );
 
             const query = {};
@@ -2700,33 +2601,31 @@ export const dataStore = {
 
     async getMedicineRequestById(id, user = null) {
         let request = null;
+        if (getIsConnected()) {
+            request = mongoose.isValidObjectId(id)
+                ? await MedicineRequest.findById(id).lean()
+                : await MedicineRequest.findOne({ $or: [{ _id: id }, { requestNumber: id }] }).lean();
+        } else {
+            request = inMemoryMedicineRequests.find(r =>
+                String(r._id) === String(id) || r.requestNumber === id
+            ) || null;
+        }
+
+        if (!request) return null;
+
         const isStaff = user && (
             user.app_metadata?.role === 'admin'
             || user.app_metadata?.role === 'pharmacy'
             || user.role === 'admin'
             || user.role === 'pharmacy'
         );
-        const customerId = user?.sub || user?.id;
-        const identifierQuery = mongoose.isValidObjectId(id)
-            ? { _id: id }
-            : { requestNumber: id };
-        const scopedQuery = user && !isStaff
-            ? { $and: [identifierQuery, { customerId }] }
-            : identifierQuery;
-        if (getIsConnected()) {
-            request = await MedicineRequest.findOne(scopedQuery).lean();
-        } else {
-            request = inMemoryMedicineRequests.find(r =>
-                (String(r._id) === String(id) || r.requestNumber === id)
-                && (!user || isStaff || r.customerId === customerId)
-            ) || null;
+
+        if (user && !isStaff && request.customerId !== (user.sub || user.id)) {
+            return null;
         }
 
-        if (!request) return null;
-
         // Auto expire check
-        if (request.status === 'PROPOSAL_SENT'
-            && request.expiresAt && new Date() > new Date(request.expiresAt)) {
+        if (request.status === 'PROPOSAL_SENT' && request.expiresAt && new Date() > new Date(request.expiresAt)) {
             request.status = 'EXPIRED';
             const expireAudit = {
                 action: 'REQUEST_EXPIRED',
@@ -2740,16 +2639,19 @@ export const dataStore = {
                     { _id: request._id },
                     { $set: { status: 'EXPIRED' }, $push: { auditTrail: expireAudit } }
                 );
-                await Proposal.updateOne(
-                    { requestId: request._id, status: 'reviewed' },
-                    { $set: { status: 'expired' } }
-                );
             } else {
                 request.auditTrail.push(expireAudit);
             }
         }
 
         return request;
+    },
+
+    async getPendingMedicineRequestCount() {
+        if (getIsConnected()) {
+            return MedicineRequest.countDocuments({ status: { $in: ['REQUESTED', 'UNDER_REVIEW'] } });
+        }
+        return inMemoryMedicineRequests.filter(r => ['REQUESTED', 'UNDER_REVIEW'].includes(r.status)).length;
     },
 
     async reviewMedicineRequest(id, actor = 'Pharmacist', actorRole = 'Pharmacist') {
@@ -2763,11 +2665,8 @@ export const dataStore = {
         const request = await this.getMedicineRequestById(id);
         if (!request) throw inventoryError('Medicine request not found.', 404);
 
-        if (request.status !== 'REQUESTED') {
-            throw inventoryError(`Cannot review request in '${request.status}' status.`, 409);
-        }
-
-        const now = new Date();
+        if (request.status === 'REQUESTED') {
+            const now = new Date();
             const audit = {
                 action: 'REQUEST_REVIEWED',
                 actorId: actorName,
@@ -2777,8 +2676,8 @@ export const dataStore = {
             };
 
             if (getIsConnected()) {
-                const updated = await MedicineRequest.findOneAndUpdate(
-                    { _id: request._id, status: 'REQUESTED' },
+                const updated = await MedicineRequest.findByIdAndUpdate(
+                    request._id,
                     {
                         $set: {
                             status: 'UNDER_REVIEW',
@@ -2789,7 +2688,6 @@ export const dataStore = {
                     },
                     { new: true }
                 ).lean();
-                if (!updated) throw inventoryError('Request status changed before review could begin.', 409);
                 return updated;
             }
 
@@ -2797,6 +2695,7 @@ export const dataStore = {
             request.reviewedBy = actorName;
             request.reviewedAt = now;
             request.auditTrail.push(audit);
+        }
         return request;
     },
 
@@ -2804,35 +2703,14 @@ export const dataStore = {
         const request = await this.getMedicineRequestById(id);
         if (!request) throw inventoryError('Medicine request not found.', 404);
 
-        if (!['UNDER_REVIEW', 'PROPOSAL_SENT'].includes(request.status)) {
-            throw inventoryError(`Cannot create or edit a proposal in '${request.status}' status.`, 409);
-        }
-        if (request.status === 'PROPOSAL_SENT' && request.expiresAt && request.expiresAt <= new Date()) {
-            throw inventoryError('Cannot update an expired proposal.', 409);
+        if (['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(request.status)) {
+            throw inventoryError('Cannot alter proposal after customer approval or order conversion.', 400);
         }
 
-        const actor = typeof actorName === 'object' && actorName !== null
-            ? (actorName.user_metadata?.name || actorName.email?.split('@')[0] || 'Pharmacist')
-            : (actorName || 'Pharmacist');
-        const role = typeof actorName === 'object' && actorName !== null
-            ? (actorName.app_metadata?.role || actorName.role || 'Pharmacist')
-            : actorRole;
-
-        const medicineName = String(
-            proposalData.medicineName
-            || proposalData.proposedMedicineName
-            || request.requestedItems?.[0]?.requestedName
-            || ''
-        ).trim();
+        const medicineName = String(proposalData.medicineName || proposalData.proposedMedicineName || request.requestedItems?.[0]?.requestedName || '').trim();
         if (!medicineName) throw inventoryError('Medicine name is required in proposal.');
 
-        const manufacturer = String(
-            proposalData.manufacturer
-            || proposalData.proposedManufacturer
-            || request.requestedItems?.[0]?.manufacturer
-            || ''
-        ).trim();
-        const quantity = Math.max(1, Number(proposalData.quantity || proposalData.proposedQuantity) || 1);
+        const quantity = Math.max(1, Number(proposalData.quantity ?? proposalData.proposedQuantity) || 1);
         const unitPrice = Math.max(0, Number(proposalData.unitPrice) || 0);
         const priceType = proposalData.priceType === 'FINAL' ? 'FINAL' : 'APPROXIMATE';
 
@@ -2874,25 +2752,19 @@ export const dataStore = {
             expiresAt = new Date(Date.now() + 48 * 3600000);
         }
 
-        const pharmacyNote = String(proposalData.pharmacyNote || proposalData.pharmacyNotes || '').trim();
-
         const proposal = {
             productId: proposalData.productId || null,
             medicineName,
-            proposedMedicineName: medicineName,
-            manufacturer,
-            proposedManufacturer: manufacturer,
+            manufacturer: String(proposalData.manufacturer || proposalData.proposedManufacturer || request.requestedItems?.[0]?.manufacturer || '').trim(),
             strength: String(proposalData.strength || request.requestedItems?.[0]?.strength || '').trim(),
             dosageForm: String(proposalData.dosageForm || request.requestedItems?.[0]?.dosageForm || '').trim(),
             quantity,
-            proposedQuantity: quantity,
             unitPrice,
             approximatePrice,
             finalPrice,
             totalPrice,
             priceType,
-            pharmacyNote,
-            pharmacyNotes: pharmacyNote,
+            pharmacyNote: String(proposalData.pharmacyNote || proposalData.pharmacyNotes || '').trim(),
             deliverySlot,
             prescriptionStatus,
             alternativeProduct: String(proposalData.alternativeProduct || '').trim()
@@ -2902,44 +2774,28 @@ export const dataStore = {
         const isUpdate = request.status === 'PROPOSAL_SENT';
         const audit = {
             action: isUpdate ? 'PROPOSAL_UPDATED' : 'PROPOSAL_SENT',
-            actorId: actor,
-            role,
+            actorId: actorName,
+            role: actorRole,
             timestamp: now,
             notes: `${isUpdate ? 'Updated' : 'Formulated'} proposal: ${medicineName} (${priceType} ₹${totalPrice})`
         };
 
         if (getIsConnected()) {
-            const updated = await MedicineRequest.findOneAndUpdate(
-                { _id: request._id, status: request.status },
+            const updated = await MedicineRequest.findByIdAndUpdate(
+                request._id,
                 {
                     $set: {
                         status: 'PROPOSAL_SENT',
                         pharmacyProposal: proposal,
                         proposalSentAt: now,
                         expiresAt,
-                        reviewedBy: actor,
+                        reviewedBy: actorName,
                         reviewedAt: now
                     },
                     $push: { auditTrail: audit }
                 },
                 { new: true }
             ).lean();
-            if (!updated) throw inventoryError('Request status changed before the proposal could be saved.', 409);
-
-            await Proposal.findOneAndUpdate(
-                { requestId: request._id },
-                {
-                    $set: {
-                        customerId: request.customerId,
-                        requestNumber: request.requestNumber,
-                        proposalDetails: proposal,
-                        status: 'reviewed',
-                        reviewedAt: now,
-                        expiresAt
-                    }
-                },
-                { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
-            );
 
             try {
                 await sendWhatsAppMedicineRequestAlert(updated, 'MedicineProposalReady');
@@ -2953,7 +2809,7 @@ export const dataStore = {
         request.pharmacyProposal = proposal;
         request.proposalSentAt = now;
         request.expiresAt = expiresAt;
-        request.reviewedBy = actor;
+        request.reviewedBy = actorName;
         request.reviewedAt = now;
         request.auditTrail.push(audit);
 
@@ -2965,68 +2821,69 @@ export const dataStore = {
         return request;
     },
 
-    async rejectMedicineRequestByPharmacy(id, reasonOrActor = '', actorOrReason = 'Pharmacist', actorRole = 'Pharmacist') {
+    async rejectMedicineRequestByPharmacy(id, arg2 = '', arg3 = 'Pharmacist', arg4 = 'Pharmacist') {
+        let reason = '';
+        let actorName = 'Pharmacist';
+        let actorRole = 'Pharmacist';
+
+        if (arg2 && typeof arg2 === 'object') {
+            actorName = arg2.user_metadata?.name || arg2.email?.split('@')[0] || arg2.sub || 'Pharmacist';
+            actorRole = arg2.app_metadata?.role || 'Pharmacist';
+            reason = typeof arg3 === 'string' ? arg3 : (arg3?.reason || '');
+        } else {
+            reason = typeof arg2 === 'string' ? arg2 : (arg2?.reason || '');
+            if (arg3 && typeof arg3 === 'object') {
+                actorName = arg3.user_metadata?.name || arg3.email?.split('@')[0] || arg3.sub || 'Pharmacist';
+                actorRole = arg3.app_metadata?.role || 'Pharmacist';
+            } else if (typeof arg3 === 'string') {
+                actorName = arg3;
+                actorRole = arg4 || 'Pharmacist';
+            }
+        }
+
         const request = await this.getMedicineRequestById(id);
         if (!request) throw inventoryError('Medicine request not found.', 404);
 
-        if (request.status !== 'UNDER_REVIEW') {
-            throw inventoryError(`Cannot reject request in '${request.status}' status.`, 409);
-        }
-
-        let reason = '';
-        let actorName = 'Pharmacist';
-        let role = actorRole;
-
-        if (typeof reasonOrActor === 'object' && reasonOrActor !== null) {
-            actorName = reasonOrActor.user_metadata?.name || reasonOrActor.email?.split('@')[0] || 'Pharmacist';
-            role = reasonOrActor.app_metadata?.role || reasonOrActor.role || 'Pharmacist';
-            reason = typeof actorOrReason === 'string' ? actorOrReason : '';
-        } else {
-            reason = typeof reasonOrActor === 'string' ? reasonOrActor : '';
-            if (typeof actorOrReason === 'object' && actorOrReason !== null) {
-                actorName = actorOrReason.user_metadata?.name || actorOrReason.email?.split('@')[0] || 'Pharmacist';
-                role = actorOrReason.app_metadata?.role || actorOrReason.role || 'Pharmacist';
-            } else {
-                actorName = actorOrReason || 'Pharmacist';
-            }
+        if (['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(request.status)) {
+            throw inventoryError('Cannot reject request after customer approval or order conversion.', 400);
         }
 
         const now = new Date();
         const audit = {
             action: 'PHARMACY_REJECTED',
             actorId: actorName,
-            role,
+            role: actorRole,
             timestamp: now,
             notes: reason || 'Pharmacy unable to procure requested medicine from supplier network.'
         };
 
         if (getIsConnected()) {
-            const updated = await MedicineRequest.findOneAndUpdate(
-                { _id: request._id, status: 'UNDER_REVIEW' },
+            const updated = await MedicineRequest.findByIdAndUpdate(
+                request._id,
                 {
                     $set: {
                         status: 'PHARMACY_REJECTED',
                         rejectedAt: now,
-                        rejectedBy: actorName,
-                        pharmacyRejectionReason: reason
+                        pharmacyRejectionReason: reason || 'Pharmacy unable to procure requested medicine'
                     },
                     $push: { auditTrail: audit }
                 },
                 { new: true }
             ).lean();
-            if (!updated) throw inventoryError('Request status changed before it could be rejected.', 409);
 
             try {
                 await sendWhatsAppMedicineRequestAlert(updated, 'MedicineRequestRejected');
             } catch (err) {
                 console.warn('[WhatsApp] Alert failed for pharmacy reject:', err.message);
             }
+            if (updated) {
+                updated.pharmacyRejectionReason = reason;
+            }
             return updated;
         }
 
         request.status = 'PHARMACY_REJECTED';
         request.rejectedAt = now;
-        request.rejectedBy = actorName;
         request.pharmacyRejectionReason = reason;
         request.auditTrail.push(audit);
 
@@ -3038,59 +2895,53 @@ export const dataStore = {
         return request;
     },
 
-    async rejectMedicineProposalByCustomer(id, reasonOrUser = '', userOrReason = null) {
-        let user = null;
+    async rejectMedicineProposalByCustomer(id, arg2 = '', arg3) {
         let reason = '';
-
-        if (typeof reasonOrUser === 'object' && reasonOrUser !== null) {
-            user = reasonOrUser;
-            reason = typeof userOrReason === 'string' ? userOrReason : (userOrReason?.reason || '');
+        let user = null;
+        if (arg2 && typeof arg2 === 'object' && (arg2.sub || arg2.id || arg2.email)) {
+            user = arg2;
+            reason = typeof arg3 === 'string' ? arg3 : (arg3?.reason || '');
         } else {
-            reason = typeof reasonOrUser === 'string' ? reasonOrUser : '';
-            user = userOrReason;
+            reason = typeof arg2 === 'string' ? arg2 : (arg2?.reason || '');
+            user = arg3;
         }
 
-        const customerId = user?.sub || user?.id;
-        const role = user?.app_metadata?.role || user?.role || 'customer';
-        if (!customerId) throw inventoryError('Customer authentication is required.', 401);
-        if (role !== 'customer') throw inventoryError('Only the request owner can reject this proposal.', 403);
-        const request = await this.getMedicineRequestById(id, user);
-        if (!request) throw inventoryError('Medicine request not found.', 404);
+        if (!user) {
+            throw inventoryError('User context required for proposal rejection.', 401);
+        }
 
-        if (request.customerId !== customerId) {
+        const role = user.app_metadata?.role || user.role || 'customer';
+        if (role === 'admin' || role === 'pharmacy') {
+            throw inventoryError('Administrators cannot reject proposals on behalf of a customer.', 403);
+        }
+
+        const customerId = user.sub || user.id;
+        const request = await this.getMedicineRequestById(id, user);
+        if (!request || request.customerId !== customerId) {
             throw inventoryError('Medicine request not found.', 404);
         }
 
         if (request.status !== 'PROPOSAL_SENT') {
             throw inventoryError(`Cannot reject proposal in '${request.status}' status.`, 400);
         }
-        if (request.expiresAt && new Date(request.expiresAt) <= new Date()) {
-            throw inventoryError('This proposal has expired and can no longer be rejected.', 400);
-        }
 
         const now = new Date();
         const audit = {
             action: 'CUSTOMER_REJECTED',
-            actorId: customerId || 'Customer',
+            actorId: customerId,
             role: 'Customer',
             timestamp: now,
             notes: reason || 'Customer declined the proposed pricing or delivery schedule.'
         };
 
         if (getIsConnected()) {
-            const updated = await MedicineRequest.findOneAndUpdate(
-                {
-                    _id: request._id,
-                    customerId,
-                    status: 'PROPOSAL_SENT',
-                    $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }]
-                },
+            const updated = await MedicineRequest.findByIdAndUpdate(
+                request._id,
                 {
                     $set: {
                         status: 'CUSTOMER_REJECTED',
                         rejectedAt: now,
-                        rejectedBy: customerId,
-                        customerRejectionReason: reason,
+                        customerRejectionReason: reason || 'Declined proposal',
                         customerResponse: {
                             respondedAt: now,
                             responseNote: reason || 'Declined proposal'
@@ -3100,23 +2951,20 @@ export const dataStore = {
                 },
                 { new: true }
             ).lean();
-            if (!updated) throw inventoryError('Proposal status changed before it could be rejected.', 409);
-            await Proposal.updateOne(
-                { requestId: request._id, customerId },
-                { $set: { status: 'rejected' } }
-            );
 
             try {
                 await sendWhatsAppMedicineRequestAlert(updated, 'MedicineRequestRejected');
             } catch (err) {
                 console.warn('[WhatsApp] Alert failed for customer reject:', err.message);
             }
+            if (updated) {
+                updated.customerRejectionReason = reason;
+            }
             return updated;
         }
 
         request.status = 'CUSTOMER_REJECTED';
         request.rejectedAt = now;
-        request.rejectedBy = customerId;
         request.customerRejectionReason = reason;
         request.customerResponse = {
             respondedAt: now,
@@ -3132,39 +2980,36 @@ export const dataStore = {
         return request;
     },
 
-    rejectProposalByCustomer(id, ...args) {
-        return this.rejectMedicineProposalByCustomer(id, ...args);
+    async rejectProposalByCustomer(id, arg2, arg3) {
+        return this.rejectMedicineProposalByCustomer(id, arg2, arg3);
     },
 
     // CRITICAL IDEMPOTENT ORDER CONVERSION
-    async approveMedicineProposalAndConvertToOrder(id, noteOrUser = '', userOrOptions = null) {
-        let user = null;
+    async approveMedicineProposalAndConvertToOrder(id, arg2 = '', arg3) {
         let approvalNote = '';
-
-        if (typeof noteOrUser === 'object' && noteOrUser !== null) {
-            user = noteOrUser;
-            if (typeof userOrOptions === 'string') {
-                approvalNote = userOrOptions;
-            } else if (typeof userOrOptions === 'object' && userOrOptions !== null) {
-                approvalNote = userOrOptions.customerResponseNote || userOrOptions.approvalNote || '';
-            }
+        let user = null;
+        if (arg2 && typeof arg2 === 'object' && (arg2.sub || arg2.id || arg2.email)) {
+            user = arg2;
+            approvalNote = typeof arg3 === 'string' ? arg3 : (arg3?.customerResponseNote || arg3?.note || '');
         } else {
-            approvalNote = typeof noteOrUser === 'string' ? noteOrUser : '';
-            user = userOrOptions;
+            approvalNote = typeof arg2 === 'string' ? arg2 : (arg2?.customerResponseNote || arg2?.note || '');
+            user = arg3;
         }
-
-        const customerId = user?.sub || user?.id;
-        const role = user?.app_metadata?.role || user?.role || 'customer';
-        if (!customerId) throw inventoryError('Customer authentication is required.', 401);
-        if (role !== 'customer') throw inventoryError('Only the request owner can approve this proposal.', 403);
+        if (!user) {
+            throw inventoryError('User context is required for proposal approval.', 401);
+        }
+        const role = user.app_metadata?.role || user.role || 'customer';
+        if (role === 'admin' || role === 'pharmacy') {
+            throw inventoryError('Administrators cannot approve proposals on behalf of a customer.', 403);
+        }
+        const customerId = user.sub || user.id;
         const request = await this.getMedicineRequestById(id, user);
-        if (!request) throw inventoryError('Medicine request not found.', 404);
-
-        if (request.customerId !== customerId) {
+        if (!request || request.customerId !== customerId) {
             throw inventoryError('Medicine request not found.', 404);
         }
 
-        if (request.status === 'CONVERTED_TO_ORDER' && request.convertedOrderId) {
+        // 1. Idempotency Check: if already converted, return existing order
+        if (request.convertedOrderId || request.status === 'CONVERTED_TO_ORDER') {
             const existingOrder = await this.getOrder(request.convertedOrderId);
             return {
                 success: true,
@@ -3175,57 +3020,23 @@ export const dataStore = {
             };
         }
 
-        if (request.status === 'CUSTOMER_APPROVED') {
-            const existingOrder = getIsConnected()
-                ? await Order.findOne({ medicineRequestId: String(request._id), customerId }).lean()
-                : inMemoryOrders.find(order => order.medicineRequestId === String(request._id)) || null;
-            if (!existingOrder) {
-                throw inventoryError('Customer approval is being processed. Please refresh before retrying.', 409);
-            }
-            if (getIsConnected()) {
-                const converted = await MedicineRequest.findOneAndUpdate(
-                    { _id: request._id, customerId, status: 'CUSTOMER_APPROVED', approvedBy: customerId },
-                    { $set: { status: 'CONVERTED_TO_ORDER', convertedOrderId: String(existingOrder._id) } },
-                    { new: true }
-                ).lean();
-                request.status = converted?.status || 'CONVERTED_TO_ORDER';
-                request.convertedOrderId = String(existingOrder._id);
-                await Proposal.updateOne(
-                    { requestId: request._id, customerId },
-                    { $set: { status: 'accepted' } }
-                );
-            } else {
-                request.status = 'CONVERTED_TO_ORDER';
-                request.convertedOrderId = String(existingOrder._id);
-            }
-            return {
-                success: true,
-                order: existingOrder,
-                request,
-                alreadyConverted: true,
-                message: 'Proposal was already approved and converted into an order.'
-            };
+        if (request.status === 'CUSTOMER_REJECTED' || request.status === 'PHARMACY_REJECTED') {
+            throw inventoryError('A rejected proposal cannot later be approved.', 400);
         }
 
-        if (request.status !== 'PROPOSAL_SENT') {
-            throw inventoryError(`Cannot approve proposal in '${request.status}' status.`, 400);
-        }
-
-        const now = new Date();
-        if (request.expiresAt && now >= new Date(request.expiresAt)) {
+        // 2. Check expiration
+        if (request.expiresAt && new Date() > new Date(request.expiresAt)) {
             if (getIsConnected()) {
-                await MedicineRequest.updateOne(
-                    { _id: request._id, customerId, status: 'PROPOSAL_SENT' },
-                    { $set: { status: 'EXPIRED' } }
-                );
-                await Proposal.updateOne(
-                    { requestId: request._id, customerId, status: 'reviewed' },
-                    { $set: { status: 'expired' } }
-                );
+                await MedicineRequest.updateOne({ _id: request._id }, { $set: { status: 'EXPIRED' } });
             } else {
                 request.status = 'EXPIRED';
             }
             throw inventoryError('This proposal has expired and can no longer be approved.', 400);
+        }
+
+        // 3. Status Check: must be PROPOSAL_SENT
+        if (request.status !== 'PROPOSAL_SENT') {
+            throw inventoryError(`Cannot approve proposal in '${request.status}' status.`, 400);
         }
 
         const proposal = request.pharmacyProposal;
@@ -3233,80 +3044,32 @@ export const dataStore = {
             throw inventoryError('The pharmacy proposal is missing valid pricing.', 400);
         }
 
-        const approvalNoteText = String(approvalNote || '').trim().slice(0, 1000);
-        const approvedAudit = {
-            action: 'CUSTOMER_APPROVED',
-            actorId: customerId,
-            role: 'Customer',
-            timestamp: now,
-            notes: approvalNoteText || 'Customer approved proposal'
-        };
-        if (getIsConnected()) {
-            const approved = await MedicineRequest.findOneAndUpdate(
-                {
-                    _id: request._id,
-                    customerId,
-                    status: 'PROPOSAL_SENT',
-                    $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }]
-                },
-                {
-                    $set: {
-                        status: 'CUSTOMER_APPROVED',
-                        approvedAt: now,
-                        approvedBy: customerId,
-                        customerResponse: {
-                            respondedAt: now,
-                            responseNote: approvalNoteText || 'Customer approved pharmacy proposal'
-                        }
-                    },
-                    $push: { auditTrail: approvedAudit }
-                },
-                { new: true }
-            ).lean();
-            if (!approved) {
-                throw inventoryError('Proposal status changed before approval could be recorded.', 409);
-            }
-        } else {
-            request.status = 'CUSTOMER_APPROVED';
-            request.approvedAt = now;
-            request.approvedBy = customerId;
-            request.customerResponse = {
-                respondedAt: now,
-                responseNote: approvalNoteText || 'Customer approved pharmacy proposal'
-            };
-            request.auditTrail.push(approvedAudit);
-        }
-
         const orderId = getIsConnected()
             ? new mongoose.Types.ObjectId()
             : `ord-mr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
         const orderTotal = Math.max(0, Math.round(Number(proposal.totalPrice) * 100) / 100);
-        const itemQuantity = Math.max(1, Number(proposal.quantity) || 1);
-        const itemUnitPrice = Number(proposal.unitPrice || Math.round((orderTotal / itemQuantity) * 100) / 100);
+
+        const unitPrice = proposal.unitPrice || Math.round((orderTotal / proposal.quantity) * 100) / 100;
+        const itemName = proposal.medicineName && proposal.strength && !proposal.medicineName.toLowerCase().includes(proposal.strength.toLowerCase())
+            ? `${proposal.medicineName} ${proposal.strength}`
+            : proposal.medicineName;
 
         const orderItems = [
             {
-                name: proposal.medicineName || `${proposal.proposedMedicineName || 'Medicine'}${proposal.strength ? ' ' + proposal.strength : ''}`,
-                productName: proposal.medicineName || proposal.proposedMedicineName || 'Medicine',
-                productId: proposal.productId ? String(proposal.productId) : undefined,
-                sku: '',
-                genericName: '',
-                strength: proposal.strength || '',
-                form: proposal.dosageForm || '',
-                manufacturer: proposal.manufacturer || '',
-                quantity: itemQuantity,
-                unitPrice: itemUnitPrice,
-                price: itemUnitPrice,
-                tax: 0,
-                discount: 0,
-                totalPrice: orderTotal,
-                snapshotAt: now
+                name: itemName,
+                productName: proposal.medicineName,
+                sku: 'MR-ARRANGED',
+                quantity: proposal.quantity,
+                unitPrice: unitPrice,
+                price: unitPrice,
+                totalPrice: orderTotal
             }
         ];
 
+        const now = new Date();
         const orderData = {
             _id: orderId,
-            orderNumber: `ORD-${randomUUID()}`,
             userId: customerId,
             customerId,
             customerName: request.customerName,
@@ -3319,7 +3082,6 @@ export const dataStore = {
             totalAmount: orderTotal,
             finalTotal: orderTotal,
             deliveryAddress: request.deliveryAddress,
-            addressId: request.addressId || null,
             addressDetails: request.addressDetails || {},
             coordinates: request.coordinates || null,
             paymentMethod: 'Cash on Delivery (COD)',
@@ -3332,7 +3094,7 @@ export const dataStore = {
                 {
                     previousStatus: null,
                     newStatus: 'Processing Order',
-                    changedBy: 'Customer Proposal Approval',
+                    changedBy: 'Pharmacist Proposal Approval',
                     timestamp: now,
                     notes: `Created from approved medicine request #${request.requestNumber}. Proposed slot: ${proposal.deliverySlot?.label || 'Standard'}`
                 }
@@ -3342,78 +3104,42 @@ export const dataStore = {
         let createdOrder = null;
 
         if (getIsConnected()) {
-            try {
-                const [created] = await Order.create([orderData]);
-                createdOrder = created.toObject();
-            } catch (error) {
-                const existingOrder = await Order.findOne({
-                    medicineRequestId: String(request._id),
-                    customerId
-                }).lean();
-                if (existingOrder) {
-                    createdOrder = existingOrder;
-                } else {
-                    await MedicineRequest.updateOne(
-                        {
-                            _id: request._id,
-                            customerId,
-                            status: 'CUSTOMER_APPROVED',
-                            approvedBy: customerId,
-                            convertedOrderId: null
-                        },
-                        {
-                            $set: { status: 'PROPOSAL_SENT' },
-                            $unset: { approvedAt: 1, approvedBy: 1, customerResponse: 1 },
-                            $pull: { auditTrail: { action: 'CUSTOMER_APPROVED', timestamp: now } }
-                        }
-                    );
-                    throw error;
-                }
-            }
+            const [created] = await Order.create([orderData]);
+            createdOrder = created.toObject();
 
             const updatedRequest = await MedicineRequest.findOneAndUpdate(
-                {
-                    _id: request._id,
-                    customerId,
-                    status: 'CUSTOMER_APPROVED',
-                    approvedBy: customerId,
-                    convertedOrderId: null
-                },
+                { _id: request._id, status: 'PROPOSAL_SENT' },
                 {
                     $set: {
                         status: 'CONVERTED_TO_ORDER',
+                        approvedAt: now,
                         convertedOrderId: createdOrder._id.toString(),
+                        customerResponse: {
+                            respondedAt: now,
+                            responseNote: approvalNote || 'Customer approved pharmacy proposal'
+                        }
                     },
                     $push: {
-                        auditTrail: {
-                            action: 'REQUEST_CONVERTED_TO_ORDER',
-                            actorId: customerId,
-                            role: 'Customer',
-                            timestamp: now,
-                            notes: `Converted to active Order #${createdOrder._id.toString()}`
-                        }
+                        auditTrail: [
+                            {
+                                action: 'CUSTOMER_APPROVED',
+                                actorId: customerId,
+                                role: 'Customer',
+                                timestamp: now,
+                                notes: 'Customer approved proposal'
+                            },
+                            {
+                                action: 'REQUEST_CONVERTED_TO_ORDER',
+                                actorId: customerId,
+                                role: 'Customer',
+                                timestamp: now,
+                                notes: `Converted to active Order #${createdOrder._id.toString()}`
+                            }
+                        ]
                     }
                 },
                 { new: true }
             ).lean();
-            let finalRequest = updatedRequest;
-            if (!finalRequest) {
-                finalRequest = await MedicineRequest.findOne({
-                    _id: request._id,
-                    customerId,
-                    status: 'CONVERTED_TO_ORDER',
-                    convertedOrderId: String(createdOrder._id)
-                }).lean();
-                if (!finalRequest) {
-                    throw inventoryError('The order was created but the request conversion could not be confirmed.', 500);
-                }
-            }
-            request.status = 'CONVERTED_TO_ORDER';
-            request.convertedOrderId = String(createdOrder._id);
-            await Proposal.updateOne(
-                { requestId: request._id, customerId },
-                { $set: { status: 'accepted' } }
-            );
 
             this.logAudit(customerId, 'CONVERT_REQUEST_TO_ORDER', 'ORDER', createdOrder._id.toString(), {
                 requestNumber: request.requestNumber,
@@ -3422,16 +3148,15 @@ export const dataStore = {
 
             // Trigger Notifications
             try {
-                await sendWhatsAppMedicineRequestAlert(finalRequest, 'MedicineRequestApproved');
-                await publishOrderEvent(createdOrder, 'OrderCreated');
+                await sendWhatsAppMedicineRequestAlert(updatedRequest, 'MedicineRequestApproved');
+                await sendCustomWhatsAppAlert(createdOrder, 'Placed');
             } catch (err) {
                 console.warn('[WhatsApp] Alerts failed during order conversion:', err.message);
             }
 
             return {
-                success: true,
                 order: createdOrder,
-                request: finalRequest,
+                request: updatedRequest,
                 alreadyConverted: false,
                 message: `🎉 Proposal approved! Order #${String(createdOrder._id).slice(-6).toUpperCase()} registered for fulfillment.`
             };
@@ -3446,14 +3171,28 @@ export const dataStore = {
         inMemoryOrders.unshift(createdOrder);
 
         request.status = 'CONVERTED_TO_ORDER';
+        request.approvedAt = now;
         request.convertedOrderId = String(createdOrder._id);
-        request.auditTrail.push({
-            action: 'REQUEST_CONVERTED_TO_ORDER',
-            actorId: customerId,
-            role: 'Customer',
-            timestamp: now,
-            notes: `Converted to active Order #${String(createdOrder._id)}`
-        });
+        request.customerResponse = {
+            respondedAt: now,
+            responseNote: approvalNote || 'Customer approved pharmacy proposal'
+        };
+        request.auditTrail.push(
+            {
+                action: 'CUSTOMER_APPROVED',
+                actorId: customerId,
+                role: 'Customer',
+                timestamp: now,
+                notes: 'Customer approved proposal'
+            },
+            {
+                action: 'REQUEST_CONVERTED_TO_ORDER',
+                actorId: customerId,
+                role: 'Customer',
+                timestamp: now,
+                notes: `Converted to active Order #${String(createdOrder._id)}`
+            }
+        );
 
         this.logAudit(customerId, 'CONVERT_REQUEST_TO_ORDER', 'ORDER', String(createdOrder._id), {
             requestNumber: request.requestNumber,
@@ -3463,7 +3202,7 @@ export const dataStore = {
         // Trigger Notifications
         try {
             await sendWhatsAppMedicineRequestAlert(request, 'MedicineRequestApproved');
-            await publishOrderEvent(createdOrder, 'OrderCreated');
+            await sendCustomWhatsAppAlert(createdOrder, 'Placed');
         } catch (err) {
             console.warn('[WhatsApp] Alerts failed during order conversion:', err.message);
         }
@@ -3477,8 +3216,8 @@ export const dataStore = {
         };
     },
 
-    approveProposalAndConvertToOrder(id, ...args) {
-        return this.approveMedicineProposalAndConvertToOrder(id, ...args);
+    async approveProposalAndConvertToOrder(id, param2, param3) {
+        return this.approveMedicineProposalAndConvertToOrder(id, param2, param3);
     },
 
     async getMedicineRequestMetrics() {
@@ -3507,17 +3246,6 @@ export const dataStore = {
             expiredCount: expired,
             proposalAcceptanceRate: acceptanceRate
         };
-    },
-
-    async getPendingMedicineRequestCount() {
-        if (getIsConnected()) {
-            return MedicineRequest.countDocuments({
-                status: { $in: ['REQUESTED', 'UNDER_REVIEW'] }
-            });
-        }
-        return inMemoryMedicineRequests.filter(request =>
-            request.status === 'REQUESTED' || request.status === 'UNDER_REVIEW'
-        ).length;
     }
 };
 

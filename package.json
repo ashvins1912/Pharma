@@ -4,14 +4,13 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/dev.js",
-    "dev:legacy": "tsx server.ts",
-    "build": "npm --prefix frontend run build",
-    "lint": "npm --prefix frontend run lint",
-    "admin:promote": "npm --prefix backend run admin:promote",
-    "start": "npm --prefix api-gateway start",
-    "start:backend": "npm --prefix backend start",
-    "start:legacy": "tsx server.ts"
+    "dev": "tsx server.ts",
+    "build": "vite build",
+    "lint": "tsc --noEmit",
+    "test": "node --test backend/*.test.js backend/security/validator.test.js backend/modules/delivery/use-cases/RiderLifecycle.test.js tests/**/*.test.js",
+    "admin:promote": "node scripts/promote-admin.mjs",
+    "prestart": "npm run build",
+    "start": "tsx server.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

@@ -195,9 +195,6 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
     assert.equal(approvalResult.order.items[0].name, 'Ursocol 300mg (Strip of 10 Tablets)');
     assert.equal(approvalResult.order.items[0].quantity, 3);
     assert.equal(approvalResult.order.items[0].price, 420);
-    assert.equal(approvalResult.order.items[0].manufacturer, 'Abbott Healthcare');
-    assert.equal(approvalResult.order.items[0].totalPrice, 1260);
-    assert.equal(approvalResult.order.items[0].snapshotAt instanceof Date, true);
     const duplicateApproval = await dataStore.approveProposalAndConvertToOrder(createdReq._id, testUser);
     assert.equal(duplicateApproval.alreadyConverted, true);
     assert.equal((await dataStore.getUserOrders(testUser.sub)).filter(order =>

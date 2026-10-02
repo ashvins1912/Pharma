@@ -8,6 +8,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
   const { addToast } = useToast();
   const [enrollModalOpen, setEnrollModalOpen] = useState(false);
   const [disablingMfa, setDisablingMfa] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   if (!isOpen || !user) return null;
 
@@ -24,6 +25,13 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
     } finally {
       setDisablingMfa(false);
     }
+  };
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    await logout();
+    addToast('Signed out successfully', 'info');
+    onClose();
   };
 
   return (
@@ -140,14 +148,17 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
           {/* Logout */}
           <div className="pt-3 border-t border-slate-100">
             <button
-              onClick={() => {
-                logout();
-                addToast('Signed out successfully', 'info');
-                onClose();
-              }}
-              className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold py-2.5 rounded-xl text-xs transition cursor-pointer"
+              onClick={handleSignOut}
+              disabled={signingOut}
+              aria-busy={signingOut}
+              className="w-full bg-rose-50 hover:bg-rose-100 disabled:opacity-60 text-rose-700 font-extrabold py-2.5 rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-2"
             >
-              🚪 Sign Out of Account
+              {signingOut ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" aria-hidden="true"></span>
+                  <span>Signing out...</span>
+                </>
+              ) : '🚪 Sign Out of Account'}
             </button>
           </div>
 
