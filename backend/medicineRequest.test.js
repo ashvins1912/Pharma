@@ -242,3 +242,23 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
     assert.equal(pharmacyReject.pharmacyRejectionReason, 'Salt discontinued by FDA');
     assert.equal(await dataStore.getPendingMedicineRequestCount(), 0);
 });
+
+test('Concurrent medicine requests receive distinct request numbers', async () => {
+    const testUser = {
+        sub: 'user-test-request-number-sequence',
+        email: 'sequence@example.com',
+        user_metadata: { name: 'Sequence Test User' }
+    };
+
+    const requests = await Promise.all(
+        Array.from({ length: 10 }, (_, index) => dataStore.createMedicineRequest({
+            requestedItems: [{ requestedName: `Sequence Test Medicine ${index + 1}` }],
+            addressId: 'saved-address-sequence-test',
+            deliveryAddress: 'Sequence Test Address'
+        }, testUser))
+    );
+    const requestNumbers = requests.map(request => request.requestNumber);
+
+    assert.equal(new Set(requestNumbers).size, requestNumbers.length);
+    assert.ok(requestNumbers.every(requestNumber => /^MR-\d+$/.test(requestNumber)));
+});

@@ -22,7 +22,7 @@ const isStaff = (user) => ['admin', 'pharmacy'].includes(
 
 const requireCustomer = (req, res, next) => {
     const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
-    if (role !== 'customer') {
+    if (!['customer', 'authenticated'].includes(role)) {
         return res.status(403).json({ message: 'This action is available to customers only.' });
     }
     return next();
@@ -197,7 +197,12 @@ router.post('/', authenticateUser, authorizeCustomerAction, handleAttachments, a
         });
     } catch (err) {
         console.error('Failed to create medicine request:', err);
-        res.status(err.statusCode || 400).json({ message: err.message || 'Failed to submit medicine request.' });
+        const isDuplicate = err.code === 11000;
+        res.status(err.statusCode || (isDuplicate ? 409 : 400)).json({
+            message: isDuplicate
+                ? 'A duplicate request number was detected. Please retry your request.'
+                : err.message || 'Failed to submit medicine request.'
+        });
     }
 });
 

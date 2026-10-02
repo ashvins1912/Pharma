@@ -2,16 +2,20 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 
+const DEFAULT_PAGINATION = { page: 1, limit: 5, total: 0, totalPages: 0 };
+
 export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
   const { user } = useAuth();
   const {
     medicineRequests,
+    medicineRequestsError,
     loadingMedicineRequests,
     loadUserMedicineRequests,
     medicineRequestsPagination,
     openRequestModal,
     orders
   } = useApp();
+  const pagination = medicineRequestsPagination || DEFAULT_PAGINATION;
 
   const [statusFilter, setStatusFilter] = useState('ALL');
 
@@ -146,7 +150,19 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
       </div>
 
       {/* Requests List */}
-      {filteredRequests.length === 0 ? (
+      {medicineRequestsError ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
+          <p>{medicineRequestsError}</p>
+          <button
+            type="button"
+            onClick={() => loadUserMedicineRequests()}
+            disabled={loadingMedicineRequests}
+            className="mt-2 font-bold underline underline-offset-2 disabled:opacity-50"
+          >
+            Try again
+          </button>
+        </div>
+      ) : filteredRequests.length === 0 ? (
         <div className="py-16 text-center text-slate-400 space-y-3">
           <p className="text-4xl">💊</p>
           <div className="max-w-sm mx-auto space-y-1">
@@ -303,25 +319,25 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
         </div>
       )}
 
-      {medicineRequestsPagination.totalPages > 1 && (
+      {pagination.totalPages > 1 && (
         <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-slate-500" aria-live="polite">
-            Page {medicineRequestsPagination.page} of {medicineRequestsPagination.totalPages}
-            {' · '}{medicineRequestsPagination.total} requests
+            Page {pagination.page} of {pagination.totalPages}
+            {' · '}{pagination.total} requests
           </p>
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => loadUserMedicineRequests({ page: medicineRequestsPagination.page - 1 })}
-              disabled={loadingMedicineRequests || medicineRequestsPagination.page <= 1}
+              onClick={() => loadUserMedicineRequests({ page: pagination.page - 1 })}
+              disabled={loadingMedicineRequests || pagination.page <= 1}
               className="min-h-9 rounded-lg bg-slate-100 px-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Previous
             </button>
             <button
               type="button"
-              onClick={() => loadUserMedicineRequests({ page: medicineRequestsPagination.page + 1 })}
-              disabled={loadingMedicineRequests || medicineRequestsPagination.page >= medicineRequestsPagination.totalPages}
+              onClick={() => loadUserMedicineRequests({ page: pagination.page + 1 })}
+              disabled={loadingMedicineRequests || pagination.page >= pagination.totalPages}
               className="min-h-9 rounded-lg bg-slate-100 px-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Next

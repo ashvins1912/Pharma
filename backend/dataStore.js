@@ -396,6 +396,54 @@ let inMemoryMedicineRequests = [
 ];
 let requestSequenceCounter = 10025;
 
+const nextMedicineRequestNumber = async () => {
+    if (!getIsConnected()) return `MR-${requestSequenceCounter++}`;
+
+    const counters = mongoose.connection.db.collection('applicationCounters');
+    const counterId = 'medicineRequest';
+    let counter = await counters.findOne({ _id: counterId });
+    if (!counter) {
+        const [latest] = await MedicineRequest.aggregate([
+            { $match: { requestNumber: /^MR-\d+$/ } },
+            {
+                $project: {
+                    sequence: {
+                        $convert: {
+                            input: { $arrayElemAt: [{ $split: ['$requestNumber', '-'] }, 1] },
+                            to: 'long',
+                            onError: 0,
+                            onNull: 0
+                        }
+                    }
+                }
+            },
+            { $group: { _id: null, sequence: { $max: '$sequence' } } }
+        ]).exec();
+        const initialSequence = Math.max(10024, Number(latest?.sequence) || 0);
+        try {
+            await counters.updateOne(
+                { _id: counterId },
+                { $max: { sequence: initialSequence } },
+                { upsert: true }
+            );
+        } catch (error) {
+            if (error.code !== 11000) throw error;
+            await counters.updateOne(
+                { _id: counterId },
+                { $max: { sequence: initialSequence } }
+            );
+        }
+    }
+
+    const result = await counters.findOneAndUpdate(
+        { _id: counterId },
+        { $inc: { sequence: 1 } },
+        { returnDocument: 'after' }
+    );
+    counter = result?.value || result;
+    return `MR-${counter.sequence}`;
+};
+
 let inMemoryOrders = [
     {
         _id: "ord-1021",
@@ -2447,7 +2495,7 @@ export const dataStore = {
             ? payload.preferredDeliveryPreference
             : 'Flexible';
 
-        const reqNum = `MR-${requestSequenceCounter++}`;
+        const reqNum = await nextMedicineRequestNumber();
         const initialAudit = {
             action: 'REQUEST_CREATED',
             actorId: customerId,

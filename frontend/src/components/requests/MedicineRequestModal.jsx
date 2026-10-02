@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -39,6 +39,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
   const [imagePreview, setImagePreview] = useState(null);
 
   const [submitting, setSubmitting] = useState(false);
+  const submitInProgressRef = useRef(false);
 
   useEffect(() => () => {
     if (prescriptionPreview) URL.revokeObjectURL(prescriptionPreview);
@@ -121,6 +122,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitInProgressRef.current) return;
     if (requestedItems.some(item => !item.requestedName.trim())) {
       addToast('Please enter a name for each requested medicine or remove the empty item.', 'warning');
       return;
@@ -135,6 +137,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
     }
 
     try {
+      submitInProgressRef.current = true;
       setSubmitting(true);
       const formData = new FormData();
 
@@ -167,6 +170,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
     } catch (err) {
       addToast(err.response?.data?.message || err.message || 'Failed to submit request.', 'error');
     } finally {
+      submitInProgressRef.current = false;
       setSubmitting(false);
     }
   };

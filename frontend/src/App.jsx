@@ -102,7 +102,7 @@ function MainApp() {
       return;
     }
     if (ratingPromptOrder) return;
-    const pendingOrder = orders.find((order) =>
+    const pendingOrder = Array.isArray(orders) && orders.find((order) =>
       order.ratingPromptPending
       && !order.customerRating
       && !dismissedRatingOrderIds.includes(String(order._id))

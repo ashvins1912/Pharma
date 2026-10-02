@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../api/apiClient';
+import { normalizeOrdersResponse } from '../api/orderService';
 import { applyCouponCode } from '../api/couponService';
 import { getCustomerMedicineRequestsPage } from '../api/medicineRequestService';
 import { useAuth } from './AuthContext';
@@ -45,6 +46,7 @@ export function AppProvider({ children }) {
 
   // Medicine Requests & Proposals State
   const [medicineRequests, setMedicineRequests] = useState([]);
+  const [medicineRequestsError, setMedicineRequestsError] = useState('');
   const [loadingMedicineRequests, setLoadingMedicineRequests] = useState(false);
   const [medicineRequestsPagination, setMedicineRequestsPagination] = useState({
     page: 1, limit: 5, total: 0, totalPages: 0
@@ -294,10 +296,10 @@ export function AppProvider({ children }) {
       if (!silent) setLoadingOrders(true);
       const res = await apiClient.get('/api/orders/mine');
       if (requestSequence === orderLoadSequence.current) {
-        setOrders(res.data || []);
+        setOrders(normalizeOrdersResponse(res.data));
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      console.error('Failed to load customer orders:', error);
     } finally {
       if (requestSequence === orderLoadSequence.current) {
         setLoadingOrders(false);
@@ -316,6 +318,7 @@ export function AppProvider({ children }) {
     const requestSequence = ++medicineRequestLoadSequence.current;
     if (!user || isPharmacyOrAdmin) {
       setMedicineRequests([]);
+      setMedicineRequestsError('');
       setLoadingMedicineRequests(false);
       return;
     }
@@ -326,6 +329,7 @@ export function AppProvider({ children }) {
     }
     try {
       if (!silent) setLoadingMedicineRequests(true);
+      setMedicineRequestsError('');
       const result = await getCustomerMedicineRequestsPage({
         page: medicineRequestPage.current.page,
         statusGroup: medicineRequestPage.current.statusGroup
@@ -360,8 +364,9 @@ export function AppProvider({ children }) {
           });
         });
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      console.error('Failed to load customer medicine requests:', error);
+      setMedicineRequestsError(error.message || 'Could not load your medicine requests.');
     } finally {
       if (!silent && requestSequence === medicineRequestLoadSequence.current) setLoadingMedicineRequests(false);
     }
@@ -545,7 +550,7 @@ export function AppProvider({ children }) {
         return updatedAddress.isDefault ? { ...address, isDefault: false } : address;
       }));
       addToast('Saved address updated. Existing orders keep their original delivery address.', 'success');
-      return true;
+      return updatedAddress;
     } catch (err) {
       addToast('Failed to update address: ' + err.message, 'error');
       return false;
@@ -629,6 +634,7 @@ export function AppProvider({ children }) {
 
         // Medicine Requests & Proposals
         medicineRequests,
+        medicineRequestsError,
         medicineRequestsPagination,
         loadingMedicineRequests,
         loadUserMedicineRequests,

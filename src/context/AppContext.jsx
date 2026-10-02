@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../api/apiClient';
+import { normalizeOrdersResponse } from '../api/orderService';
 import { applyCouponCode } from '../api/couponService';
 import { getCustomerMedicineRequests } from '../api/medicineRequestService';
 import { useAuth } from './AuthContext';
@@ -44,6 +45,10 @@ export function AppProvider({ children }) {
 
   // Medicine Requests & Proposals State
   const [medicineRequests, setMedicineRequests] = useState([]);
+  const [medicineRequestsError, setMedicineRequestsError] = useState('');
+  const [medicineRequestsPagination, setMedicineRequestsPagination] = useState({
+    page: 1, limit: 5, total: 0, totalPages: 0
+  });
   const [loadingMedicineRequests, setLoadingMedicineRequests] = useState(false);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [requestPrefillData, setRequestPrefillData] = useState(null);
@@ -378,12 +383,12 @@ export function AppProvider({ children }) {
     }
     try {
       if (!silent) setLoadingOrders(true);
-      const res = await apiClient.get('/api/orders/history');
+      const res = await apiClient.get('/api/orders/mine');
       if (requestSequence === orderLoadSequence.current) {
-        setOrders(res.data || []);
+        setOrders(normalizeOrdersResponse(res.data));
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      console.error('Failed to load customer orders:', error);
     } finally {
       if (requestSequence === orderLoadSequence.current) {
         setLoadingOrders(false);
@@ -401,11 +406,14 @@ export function AppProvider({ children }) {
   const loadUserMedicineRequests = useCallback(async ({ silent = false } = {}) => {
     if (!user) {
       setMedicineRequests([]);
+      setMedicineRequestsError('');
+      setMedicineRequestsPagination({ page: 1, limit: 5, total: 0, totalPages: 0 });
       setLoadingMedicineRequests(false);
       return;
     }
     try {
       if (!silent) setLoadingMedicineRequests(true);
+      setMedicineRequestsError('');
       const list = await getCustomerMedicineRequests();
       setMedicineRequests(list || []);
 
@@ -432,8 +440,9 @@ export function AppProvider({ children }) {
           });
         });
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      console.error('Failed to load customer medicine requests:', error);
+      setMedicineRequestsError(error.message || 'Could not load your medicine requests.');
     } finally {
       if (!silent) setLoadingMedicineRequests(false);
     }
@@ -448,6 +457,11 @@ export function AppProvider({ children }) {
   const openRequestModal = (prefill = null) => {
     setRequestPrefillData(prefill);
     setRequestModalOpen(true);
+  };
+
+  const closeRequestModal = () => {
+    setRequestModalOpen(false);
+    setRequestPrefillData(null);
   };
 
   const openProposalModal = (request) => {
@@ -479,38 +493,39 @@ export function AppProvider({ children }) {
       return;
     }
 
-    setCart((prev) => {
-      const existing = prev.find(item => item._id === med._id);
-      if (existing) {
-        if (existing.quantity >= stock) {
-          addToast(`Maximum available stock reached for ${med.name} (${stock} units).`, 'warning');
-          return prev;
-        }
-        addToast(`Increased ${med.name} quantity to ${existing.quantity + 1}`, 'success');
-        return prev.map(item =>
-          item._id === med._id ? { ...item, quantity: item.quantity + 1 } : item
-        );
+    const existing = cart.find(item => item._id === med._id);
+    if (existing) {
+      if (existing.quantity >= stock) {
+        addToast(`Maximum available stock reached for ${med.name} (${stock} units).`, 'warning');
+        return;
       }
-      addToast(`Added ${med.name} to cart`, 'success');
-      return [...prev, { ...med, quantity: 1, stock }];
-    });
+      const quantity = existing.quantity + 1;
+      setCart(cart.map(item =>
+        item._id === med._id ? { ...item, quantity } : item
+      ));
+      addToast(`Increased ${med.name} quantity to ${quantity}`, 'success');
+      return;
+    }
+    setCart([...cart, { ...med, quantity: 1, stock }]);
+    addToast(`Added ${med.name} to cart`, 'success');
   };
 
   const updateQuantity = (id, delta) => {
-    setCart((prev) => {
-      const item = prev.find(i => i._id === id);
-      if (!item) return prev;
-      const nextQty = item.quantity + delta;
-      if (nextQty <= 0) {
-        addToast(`Removed ${item.name} from cart`, 'info');
-        return prev.filter(i => i._id !== id);
-      }
-      if (nextQty > item.stock) {
-        addToast(`Only ${item.stock} units available in pharmacy stock.`, 'warning');
-        return prev;
-      }
-      return prev.map(i => i._id === id ? { ...i, quantity: nextQty } : i);
-    });
+    const item = cart.find(cartItem => cartItem._id === id);
+    if (!item) return;
+    const nextQty = item.quantity + delta;
+    if (nextQty <= 0) {
+      setCart(cart.filter(cartItem => cartItem._id !== id));
+      addToast(`Removed ${item.name} from cart`, 'info');
+      return;
+    }
+    if (nextQty > item.stock) {
+      addToast(`Only ${item.stock} units available in pharmacy stock.`, 'warning');
+      return;
+    }
+    setCart(cart.map(cartItem =>
+      cartItem._id === id ? { ...cartItem, quantity: nextQty } : cartItem
+    ));
   };
 
   const removeFromCart = (id) => {
@@ -571,7 +586,7 @@ export function AppProvider({ children }) {
       ]);
       setSelectedAddressId(savedAddress._id);
       addToast('Delivery address saved to directory!', 'success');
-      return true;
+      return savedAddress;
     } catch (err) {
       addToast('Failed to save address: ' + err.message, 'error');
       return false;
@@ -587,7 +602,7 @@ export function AppProvider({ children }) {
         return updatedAddress.isDefault ? { ...address, isDefault: false } : address;
       }));
       addToast('Saved address updated. Existing orders keep their original delivery address.', 'success');
-      return true;
+      return updatedAddress;
     } catch (err) {
       addToast('Failed to update address: ' + err.message, 'error');
       return false;
@@ -671,6 +686,8 @@ export function AppProvider({ children }) {
 
         // Medicine Requests & Proposals
         medicineRequests,
+        medicineRequestsError,
+        medicineRequestsPagination,
         loadingMedicineRequests,
         loadUserMedicineRequests,
         requestModalOpen,
@@ -679,6 +696,7 @@ export function AppProvider({ children }) {
         openRequestModal,
         activeProposalRequest,
         setActiveProposalRequest,
+        closeRequestModal,
         openProposalModal,
 
         // Multi-Tenant & Branch Context

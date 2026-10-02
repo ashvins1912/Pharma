@@ -13,9 +13,8 @@ export default function Header({
   onOpenAdminAlerts
 }) {
   const { user, isAdmin, isPharmacyOrAdmin, role, logout } = useAuth();
-  const { cart, searchQuery, setSearchQuery, whatsappStatus, setWhatsappModalOpen, medicineRequests, openRequestModal } = useApp();
+  const { cart, whatsappStatus, setWhatsappModalOpen, medicineRequests, openRequestModal } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   const cartItemCount = cart.reduce((total, item) => total + item.quantity, 0);
@@ -149,39 +148,9 @@ export default function Header({
             )}
           </nav>
 
-          {/* Right: Actions Bar (Search, Notifications, Cart, User Profile, Mobile Menu) */}
+          {/* Right: Actions Bar (Notifications, Cart, User Profile, Mobile Menu) */}
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             
-            {/* Desktop Search Input */}
-            {activeTab === 'store' && (
-              <div className="hidden lg:flex items-center relative w-48 xl:w-60">
-                <span className="absolute left-3 text-slate-400 text-xs">🔍</span>
-                <input
-                  type="text"
-                  placeholder="Search medicines..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-100 border border-transparent focus:border-blue-500 focus:bg-white rounded-xl outline-none transition"
-                />
-              </div>
-            )}
-
-            {/* Mobile Search Toggle Icon */}
-            <button
-              onClick={() => {
-                setMobileSearchOpen(!mobileSearchOpen);
-                if (activeTab !== 'store') setActiveTab('store');
-              }}
-              className={`lg:hidden w-9 h-9 rounded-xl flex items-center justify-center transition cursor-pointer flex-shrink-0 ${
-                mobileSearchOpen || searchQuery
-                  ? 'bg-blue-100 text-blue-800 font-bold'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-              }`}
-              aria-label="Search medicines"
-            >
-              <span className="text-sm">🔍</span>
-            </button>
-
             {/* Notification Bell (Only shown when user is signed in) */}
             {user && (
               isAdmin ? (
@@ -253,37 +222,6 @@ export default function Header({
 
           </div>
         </div>
-
-        {/* Mobile Search Input Bar (Dropdown on toggle) */}
-        {mobileSearchOpen && (
-          <div className="lg:hidden pb-3 pt-1 border-t border-slate-100 flex items-center gap-2 animate-fade-in">
-            <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
-              <input
-                type="text"
-                autoFocus
-                placeholder="Search medicines, brands, active salts..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-8 py-2 text-xs bg-slate-100 border border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl outline-none"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-            <button
-              onClick={() => setMobileSearchOpen(false)}
-              className="text-xs text-slate-500 hover:text-slate-800 font-bold px-2 py-1"
-            >
-              Done
-            </button>
-          </div>
-        )}
 
         {/* Mobile Navigation Dropdown Menu */}
         {mobileMenuOpen && (

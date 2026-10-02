@@ -72,8 +72,10 @@ export default function AddressManager({
   const mapInstanceRef = useRef(null);
   const mapMarkerRef = useRef(null);
   const locationRequestedForFormRef = useRef(false);
+  const addressSubmitInProgressRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [pinConfirmed, setPinConfirmed] = useState(false);
+  const [savingAddress, setSavingAddress] = useState(false);
 
   // Form Fields
   const [label, setLabel] = useState('Home');
@@ -372,6 +374,7 @@ export default function AddressManager({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (addressSubmitInProgressRef.current) return;
     if (!addressLine1.trim()) {
       setPlacesStatus('Choose a suggested location or enter your street address before saving.');
       return;
@@ -397,16 +400,20 @@ export default function AddressManager({
       isDefault
     };
 
-    const success = editingAddress
-      ? await updateAddress(editingAddress._id, newAddress)
-      : await saveAddress(newAddress);
-    if (success) {
+    addressSubmitInProgressRef.current = true;
+    setSavingAddress(true);
+    try {
       const savedAddress = editingAddress
-        ? addresses.find(address => String(address._id) === String(editingAddress._id))
-        : success;
-      setShowAddForm(false);
-      resetAddressForm();
-      if (savedAddress && onAddressSaved) onAddressSaved(savedAddress);
+        ? await updateAddress(editingAddress._id, newAddress)
+        : await saveAddress(newAddress);
+      if (savedAddress && typeof savedAddress === 'object') {
+        setShowAddForm(false);
+        resetAddressForm();
+        if (onAddressSaved) onAddressSaved(savedAddress);
+      }
+    } finally {
+      addressSubmitInProgressRef.current = false;
+      setSavingAddress(false);
     }
   };
 
@@ -720,9 +727,10 @@ export default function AddressManager({
 
           <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2.5 rounded-xl text-xs shadow-md transition cursor-pointer"
+            disabled={savingAddress}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2.5 rounded-xl text-xs shadow-md transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {editingAddress ? 'Update Saved Address' : 'Save Address'}
+            {savingAddress ? 'Saving Address...' : editingAddress ? 'Update Saved Address' : 'Save Address'}
           </button>
         </form>
       )}
