@@ -2,15 +2,8 @@
 // Provides idempotent messaging tracking, device pairing QR generation, and delivery status updates
 import path from 'node:path';
 import { rm } from 'node:fs/promises';
-import QRCode from 'qrcode';
 import { getIsConnected } from './db.js';
 import WhatsAppMessage from '../models/WhatsAppMessage.js';
-import {
-    DisconnectReason,
-    fetchLatestBaileysVersion,
-    makeWASocket,
-    useMultiFileAuthState
-} from '@whiskeysockets/baileys';
 
 const sentNotifications = new Map();
 const authDirectory = process.env.WHATSAPP_AUTH_DIR || path.resolve('data/whatsapp-auth');
@@ -62,6 +55,11 @@ const startWhatsAppSession = async (forceRefresh = false) => {
     };
 
     const pendingSession = (async () => {
+        const [{ DisconnectReason, fetchLatestBaileysVersion, makeWASocket, useMultiFileAuthState }, QRCode] =
+            await Promise.all([
+                import('@whiskeysockets/baileys'),
+                import('qrcode').then(module => module.default)
+            ]);
         const { state, saveCreds } = await useMultiFileAuthState(authDirectory);
         if (generation !== sessionGeneration) return getWhatsAppStatus();
 
