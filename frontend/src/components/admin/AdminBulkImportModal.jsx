@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import * as xlsx from 'xlsx';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useApp } from '../../context/AppContext';
@@ -125,7 +124,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     }
   };
 
-  const downloadSampleTemplate = () => {
+  const downloadSampleTemplate = async () => {
     const sampleRows = [
       {
         SKU: "MED-DLO-650",
@@ -155,11 +154,17 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       }
     ];
 
-    const ws = xlsx.utils.json_to_sheet(sampleRows);
-    const wb = xlsx.utils.book_new();
-    xlsx.utils.book_append_sheet(wb, ws, "Inventory");
-    xlsx.writeFile(wb, "Ashvin_Pharmacy_Inventory_Template.xlsx");
-    addToast("Sample Excel template downloaded!", "success");
+    try {
+      const xlsx = await import('xlsx');
+      const ws = xlsx.utils.json_to_sheet(sampleRows);
+      const wb = xlsx.utils.book_new();
+      xlsx.utils.book_append_sheet(wb, ws, "Inventory");
+      xlsx.writeFile(wb, "Ashvin_Pharmacy_Inventory_Template.xlsx");
+      addToast("Sample Excel template downloaded!", "success");
+    } catch (error) {
+      console.error('Sample inventory workbook generation failed:', error);
+      addToast('Could not generate the sample Excel template.', 'error');
+    }
   };
 
   return (

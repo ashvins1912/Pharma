@@ -16,7 +16,7 @@ import OrderHistoryView from './components/OrderHistoryView';
 import AddressManager from './components/AddressManager';
 import AuthModal from './components/AuthModal';
 import UserProfileModal from './components/UserProfileModal';
-import AdminDashboardView from './components/admin/AdminDashboardView';
+const AdminDashboardView = React.lazy(() => import('./components/admin/AdminDashboardView'));
 import WhatsAppConnectModal from './components/admin/WhatsAppConnectModal';
 import CustomerRequestsView from './components/requests/CustomerRequestsView';
 import MedicineRequestModal from './components/requests/MedicineRequestModal';
@@ -314,7 +314,11 @@ function MainApp() {
 
         {/* TAB 4: ADMIN OPERATIONS DASHBOARD (Guarded) */}
         {activeTab === 'admin' && (
-          isPharmacyOrAdmin && <AdminDashboardView />
+          isPharmacyOrAdmin && (
+            <React.Suspense fallback={<div className="py-12 text-center text-sm text-slate-500">Loading operations dashboard...</div>}>
+              <AdminDashboardView />
+            </React.Suspense>
+          )
         )}
 
         {/* POST-ORDER SUCCESS CONFIRMATION VIEW */}
