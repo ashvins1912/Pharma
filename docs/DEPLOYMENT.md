@@ -38,16 +38,31 @@ SUPABASE_URL=https://...
 SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
 
-# Demo Credentials (Staging / Development only)
-DEMO_ADMIN_ENABLED=true
-DEMO_ADMIN_EMAIL=admin@ashvinpharma.com
-DEMO_ADMIN_PASSWORD=...
-DEMO_CUSTOMER_ENABLED=true
+# PII encryption key (generate a private random value; see below)
+ENCRYPTION_SECRET_KEY=<private 32-byte random secret, hex encoded>
 
-# Security Keys
-ENCRYPTION_SECRET_KEY=ashvin-platform-symmetric-32b-key!
-JWT_SECRET=...
+# Optional local/demo authentication only; leave demo access disabled in production
+DEMO_ADMIN_ENABLED=false
+DEMO_CUSTOMER_ENABLED=false
 ```
+
+Generate a strong encryption secret locally with:
+
+```bash
+openssl rand -hex 32
+```
+
+Put the resulting 64-character hex string in Render as `ENCRYPTION_SECRET_KEY`.
+Do not use the example text above or commit the generated secret. This key
+derives the AES-256-GCM key used to encrypt stored PII. Keep it backed up in a
+password manager and stable: changing it later prevents the app from decrypting
+PII encrypted with the previous value.
+
+The application does not read an environment variable named `JWT_SECRET`.
+Supabase handles normal production login. If demo authentication is explicitly
+enabled, set the corresponding `DEMO_ADMIN_JWT_SECRET` and/or
+`DEMO_CUSTOMER_JWT_SECRET` to separate private random secrets of at least 32
+characters. Do not reuse the PII encryption key for demo token signing.
 
 ---
 
