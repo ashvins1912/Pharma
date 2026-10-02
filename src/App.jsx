@@ -115,17 +115,22 @@ function MainApp() {
   const adminCheckedRef = useRef(false);
 
   useEffect(() => {
-    if (isAdmin) {
+    let cancelled = false;
+    if (user && isAdmin) {
       loadWhatsAppStatus().then((status) => {
-        if (status && !status.isConnected && !adminCheckedRef.current) {
+        if (!cancelled && status && !status.isConnected && !adminCheckedRef.current) {
           adminCheckedRef.current = true;
           setWhatsappModalOpen(true);
         }
       });
     } else {
       adminCheckedRef.current = false;
+      setWhatsappModalOpen(false);
     }
-  }, [isAdmin, loadWhatsAppStatus, setWhatsappModalOpen]);
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, isAdmin, loadWhatsAppStatus, setWhatsappModalOpen]);
 
   useEffect(() => {
     if (passwordRecoveryRequired) setAuthOpen(true);
@@ -372,10 +377,12 @@ function MainApp() {
       />
 
       {/* WhatsApp Delivery Dispatch Gateway Modal */}
-      <WhatsAppConnectModal
-        isOpen={whatsappModalOpen}
-        onClose={() => setWhatsappModalOpen(false)}
-      />
+      {user && isAdmin && (
+        <WhatsAppConnectModal
+          isOpen={whatsappModalOpen}
+          onClose={() => setWhatsappModalOpen(false)}
+        />
+      )}
 
       {/* Medicine Procurement Request Modal */}
       <MedicineRequestModal

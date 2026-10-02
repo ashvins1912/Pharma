@@ -93,6 +93,20 @@ export function AppProvider({ children }) {
   const [whatsappModalOpen, setWhatsappModalOpen] = useState(false);
   const [whatsappWarningActive, setWhatsappWarningActive] = useState(false);
 
+  useEffect(() => {
+    if (user && isAdmin) return;
+    setWhatsappModalOpen(false);
+    setWhatsappWarningActive(false);
+    setNotifications(prev => prev.filter(notification => !notification.id.startsWith('notif-wa')));
+    setWhatsappStatus({
+      isConnected: false,
+      phone: null,
+      deviceName: null,
+      qrCode: null,
+      expiresAt: null
+    });
+  }, [user?.id, isAdmin]);
+
   // Load WhatsApp status
   const loadWhatsAppStatus = useCallback(async () => {
     try {
@@ -138,21 +152,7 @@ export function AppProvider({ children }) {
   };
 
   const triggerWhatsAppWarningNotification = () => {
-    const notifId = `notif-wa-${Date.now()}`;
-    const warningNotif = {
-      id: notifId,
-      title: '⚠️ You may miss delivery updates on mobile',
-      message: 'WhatsApp dispatch service is disconnected. Order status tracking, rider dispatch alerts, and delivery OTPs are paused.',
-      time: 'Just now',
-      read: false,
-      type: 'warning',
-      actionType: 'CONNECT_WHATSAPP'
-    };
-
-    setNotifications(prev => [
-      warningNotif,
-      ...prev.filter(n => !n.id.startsWith('notif-wa'))
-    ]);
+    if (!user || !isAdmin) return;
     setWhatsappWarningActive(true);
     addToast('⚠️ You may miss delivery updates on mobile! WhatsApp is not connected.', 'warning');
   };

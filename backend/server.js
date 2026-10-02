@@ -1,10 +1,11 @@
 import express from 'express';
-import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 dotenv.config();
 
 import connectDB from './config/db.js';
+import { corsErrorHandler, createCorsMiddleware } from './security/corsPolicy.js';
+import { requestContext } from './security/requestContext.js';
 import medicineRoutes from './routes/medicineRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
 import couponRoutes from './routes/couponRoutes.js';
@@ -35,7 +36,12 @@ import {
 } from './config/demoCustomer.js';
 
 const app = express();
-app.use(cors({ origin: true, credentials: true }));
+const corsAllowedOrigins = env.CORS_ALLOWED_ORIGINS
+    ? env.CORS_ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
+    : ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173'];
+app.use(requestContext);
+app.use(createCorsMiddleware(corsAllowedOrigins));
+app.use(corsErrorHandler);
 app.use(express.json());
 app.use(cookieParser());
 app.use(csrfProtection);

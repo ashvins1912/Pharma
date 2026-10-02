@@ -2,7 +2,21 @@
 
 **Target Runtime:** Node.js (v20+) with Vite Full-Stack integration  
 **Dev Entry Point:** `server.ts` (executes via `tsx server.ts` on port 3000)  
-**Prod Entry Point:** `npm run build && node server.ts`  
+**Prod Entry Point:** `npm run build`, then `tsx server.ts`
+
+## Render: combined application
+
+The root `render.yaml` deploys the compatibility app as one Render web service.
+Create a Blueprint from the repository root and choose the branch to deploy.
+Set `CORS_ALLOWED_ORIGINS` to the exact HTTPS Render/custom frontend origin,
+for example `https://your-service.onrender.com`; do not include paths or use
+`*`. Supply the required MongoDB and Supabase values in the Render dashboard.
+Keep demo access disabled in production unless it is intentionally configured.
+
+The Blueprint mounts a persistent disk at `/var/data` for WhatsApp's linked
+device credentials. Keep one service instance for this disk-backed process.
+After deployment, check `/api/v1/health`, complete the WhatsApp QR pairing in
+the admin UI, and send a controlled test message before relying on notifications.
 
 ---
 
