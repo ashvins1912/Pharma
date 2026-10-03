@@ -48,7 +48,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
       setUrgency('Normal');
       setCustomerNote('');
     } catch (err) {
-      addToast(err.message || 'Could not submit medicine request.', 'error');
+      addToast(err.message || 'Unable to submit your medicine request right now. Please try again.', 'error');
     } finally {
       setSubmitting(false);
     }

@@ -3,7 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { env } from './backend/config/env.js';
 import backendApp from './backend/server.js';
-import { createServer as createViteServer } from 'vite';
 import express from 'express';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -15,6 +14,7 @@ async function startServer() {
   const isProduction = NODE_ENV === 'production';
 
   if (!isProduction) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       root: __dirname,
       server: { middlewareMode: true },

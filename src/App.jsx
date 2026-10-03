@@ -16,7 +16,7 @@ import OrderHistoryView from './components/OrderHistoryView';
 import AddressManager from './components/AddressManager';
 import AuthModal from './components/AuthModal';
 import UserProfileModal from './components/UserProfileModal';
-import AdminDashboardView from './components/admin/AdminDashboardView';
+const AdminDashboardView = React.lazy(() => import('./components/admin/AdminDashboardView'));
 import WhatsAppConnectModal from './components/admin/WhatsAppConnectModal';
 import CustomerRequestsView from './components/requests/CustomerRequestsView';
 import MedicineRequestModal from './components/requests/MedicineRequestModal';
@@ -96,13 +96,23 @@ function MainApp() {
   }, [user, isAdmin, isPharmacyOrAdmin, activeTab, activeTrackingOrder, setActiveTrackingOrder]);
 
   useEffect(() => {
+    const requireLogin = () => setAuthOpen(true);
+    window.addEventListener('ashvin:authentication-required', requireLogin);
+    window.addEventListener('ashvin:logout-complete', requireLogin);
+    return () => {
+      window.removeEventListener('ashvin:authentication-required', requireLogin);
+      window.removeEventListener('ashvin:logout-complete', requireLogin);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!user) {
-      setRatingPromptOrder(null);
-      setDismissedRatingOrderIds([]);
+      if (ratingPromptOrder) setRatingPromptOrder(null);
+      setDismissedRatingOrderIds((prev) => (prev.length === 0 ? prev : []));
       return;
     }
     if (ratingPromptOrder) return;
-    const pendingOrder = orders.find((order) =>
+    const pendingOrder = Array.isArray(orders) && orders.find((order) =>
       order.ratingPromptPending
       && !order.customerRating
       && !dismissedRatingOrderIds.includes(String(order._id))
@@ -115,17 +125,22 @@ function MainApp() {
   const adminCheckedRef = useRef(false);
 
   useEffect(() => {
-    if (isAdmin) {
+    let cancelled = false;
+    if (user && isAdmin) {
       loadWhatsAppStatus().then((status) => {
-        if (status && !status.isConnected && !adminCheckedRef.current) {
+        if (!cancelled && status && !status.isConnected && !adminCheckedRef.current) {
           adminCheckedRef.current = true;
           setWhatsappModalOpen(true);
         }
       });
     } else {
       adminCheckedRef.current = false;
+      setWhatsappModalOpen(false);
     }
-  }, [isAdmin, loadWhatsAppStatus, setWhatsappModalOpen]);
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, isAdmin, loadWhatsAppStatus, setWhatsappModalOpen]);
 
   useEffect(() => {
     if (passwordRecoveryRequired) setAuthOpen(true);
@@ -309,7 +324,11 @@ function MainApp() {
 
         {/* TAB 4: ADMIN OPERATIONS DASHBOARD (Guarded) */}
         {activeTab === 'admin' && (
-          isPharmacyOrAdmin && <AdminDashboardView />
+          isPharmacyOrAdmin && (
+            <React.Suspense fallback={<div className="py-12 text-center text-sm text-slate-500">Loading operations dashboard...</div>}>
+              <AdminDashboardView />
+            </React.Suspense>
+          )
         )}
 
         {/* POST-ORDER SUCCESS CONFIRMATION VIEW */}
@@ -372,10 +391,12 @@ function MainApp() {
       />
 
       {/* WhatsApp Delivery Dispatch Gateway Modal */}
-      <WhatsAppConnectModal
-        isOpen={whatsappModalOpen}
-        onClose={() => setWhatsappModalOpen(false)}
-      />
+      {user && isAdmin && (
+        <WhatsAppConnectModal
+          isOpen={whatsappModalOpen}
+          onClose={() => setWhatsappModalOpen(false)}
+        />
+      )}
 
       {/* Medicine Procurement Request Modal */}
       <MedicineRequestModal

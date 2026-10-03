@@ -2,7 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import UserProfile from '../models/UserProfile.js';
 import UserAddress from '../models/UserAddress.js';
-import { authenticateSupabaseUser } from '../middleware/auth.js';
+import { authenticateSupabaseUser, authenticateUser } from '../middleware/auth.js';
 import { getIsConnected } from '../config/db.js';
 
 const router = express.Router();
@@ -197,3 +197,7 @@ router.delete('/addresses/:addressId', async (req, res) => {
 });
 
 export default router;
+// The central API router preserves the historical /user/profile mount while
+// reusing this route implementation and the application's established auth.
+export const legacyProfileRoutes = express.Router();
+legacyProfileRoutes.use('/profile', authenticateUser, router);

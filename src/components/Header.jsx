@@ -12,10 +12,19 @@ export default function Header({
   onOpenProfile,
   onOpenAdminAlerts
 }) {
-  const { user, isAdmin, isPharmacyOrAdmin, role, logout } = useAuth();
-  const { cart, searchQuery, setSearchQuery, whatsappStatus, setWhatsappModalOpen, medicineRequests, openRequestModal } = useApp();
+  const { user, isAdmin, logout } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+  const {
+    cart,
+    whatsappStatus,
+    setWhatsappModalOpen,
+    medicineRequests,
+    openRequestModal,
+    branches,
+    activeBranchId,
+    switchBranch
+  } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   const cartItemCount = cart.reduce((total, item) => total + item.quantity, 0);
   const proposalsWaitingCount = (medicineRequests || []).filter(r => r.status === 'PROPOSAL_SENT').length;
@@ -38,31 +47,29 @@ export default function Header({
                 <span className="text-sm sm:text-lg font-black text-slate-900 tracking-tight leading-none truncate block">
                   Ashvin Pharmacy
                 </span>
-                {isPharmacyOrAdmin && (
+                {isAdmin && (
                   <div className="flex items-center gap-1 shrink-0">
                     <span className="bg-purple-100 text-purple-700 text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                      {role === 'admin' ? 'Admin' : 'Pharmacy'}
+                      Admin
                     </span>
-                    {isAdmin && (
-                      whatsappStatus.isConnected ? (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
-                          className="hidden sm:inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer"
-                          title="WhatsApp Dispatch Connected - Click to view"
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                          <span>WA Live</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
-                          className="hidden sm:inline-flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer animate-pulse"
-                          title="WhatsApp Offline - Click to scan QR code"
-                        >
-                          <span>⚠️</span>
-                          <span>WA Offline</span>
-                        </button>
-                      )
+                    {whatsappStatus.isConnected ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
+                        className="hidden sm:inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer"
+                        title="WhatsApp Dispatch Connected - Click to view"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        <span>WA Live</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
+                        className="hidden sm:inline-flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer animate-pulse"
+                        title="WhatsApp Offline - Click to scan QR code"
+                      >
+                        <span>⚠️</span>
+                        <span>WA Offline</span>
+                      </button>
                     )}
                   </div>
                 )}
@@ -98,23 +105,21 @@ export default function Header({
                 >
                   📦 Orders
                 </button>
-                {!isPharmacyOrAdmin && (
-                  <button
-                    onClick={() => setActiveTab('requests')}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer relative ${
-                      activeTab === 'requests'
-                        ? 'bg-blue-50 text-blue-700 font-extrabold'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                    }`}
-                  >
-                    📋 Requests
-                    {proposalsWaitingCount > 0 && (
-                      <span className="ml-1.5 bg-purple-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
-                        {proposalsWaitingCount}
-                      </span>
-                    )}
-                  </button>
-                )}
+                <button
+                  onClick={() => setActiveTab('requests')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer relative ${
+                    activeTab === 'requests'
+                      ? 'bg-blue-50 text-blue-700 font-extrabold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  📋 Requests
+                  {proposalsWaitingCount > 0 && (
+                    <span className="ml-1.5 bg-purple-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
+                      {proposalsWaitingCount}
+                    </span>
+                  )}
+                </button>
                 <button
                   onClick={() => setActiveTab('addresses')}
                   className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
@@ -128,7 +133,7 @@ export default function Header({
               </>
             )}
 
-            {isPharmacyOrAdmin && (
+            {isAdmin && (
               <button
                 onClick={() => setActiveTab('admin')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
@@ -142,38 +147,25 @@ export default function Header({
             )}
           </nav>
 
-          {/* Right: Actions Bar (Search, Notifications, Cart, User Profile, Mobile Menu) */}
+          {/* Right: Actions Bar (Branch, Notifications, Cart, User Profile, Mobile Menu) */}
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             
-            {/* Desktop Search Input */}
-            {activeTab === 'store' && (
-              <div className="hidden lg:flex items-center relative w-48 xl:w-60">
-                <span className="absolute left-3 text-slate-400 text-xs">🔍</span>
-                <input
-                  type="text"
-                  placeholder="Search medicines..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-100 border border-transparent focus:border-blue-500 focus:bg-white rounded-xl outline-none transition"
-                />
-              </div>
-            )}
-
-            {/* Mobile Search Toggle Icon */}
-            <button
-              onClick={() => {
-                setMobileSearchOpen(!mobileSearchOpen);
-                if (activeTab !== 'store') setActiveTab('store');
-              }}
-              className={`lg:hidden w-9 h-9 rounded-xl flex items-center justify-center transition cursor-pointer flex-shrink-0 ${
-                mobileSearchOpen || searchQuery
-                  ? 'bg-blue-100 text-blue-800 font-bold'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-              }`}
-              aria-label="Search medicines"
-            >
-              <span className="text-sm">🔍</span>
-            </button>
+            {/* Pharmacy Branch Selector */}
+            <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-700 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 rounded-xl px-2.5 py-1.5 transition">
+              <span className="text-slate-500">📍</span>
+              <select
+                value={activeBranchId}
+                onChange={(e) => switchBranch(e.target.value)}
+                className="bg-transparent text-slate-800 font-bold focus:outline-none cursor-pointer pr-1 text-xs"
+                title="Select fulfilling pharmacy branch"
+              >
+                {(branches || []).map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.serviceRadiusKm}km)
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* Notification Bell (Only shown when user is signed in) */}
             {user && (
@@ -247,37 +239,6 @@ export default function Header({
           </div>
         </div>
 
-        {/* Mobile Search Input Bar (Dropdown on toggle) */}
-        {mobileSearchOpen && (
-          <div className="lg:hidden pb-3 pt-1 border-t border-slate-100 flex items-center gap-2 animate-fade-in">
-            <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
-              <input
-                type="text"
-                autoFocus
-                placeholder="Search medicines, brands, active salts..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-8 py-2 text-xs bg-slate-100 border border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl outline-none"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-            <button
-              onClick={() => setMobileSearchOpen(false)}
-              className="text-xs text-slate-500 hover:text-slate-800 font-bold px-2 py-1"
-            >
-              Done
-            </button>
-          </div>
-        )}
-
         {/* Mobile Navigation Dropdown Menu */}
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-slate-100 py-3 space-y-1 animate-fade-in">
@@ -301,24 +262,22 @@ export default function Header({
               <span className="text-slate-400">→</span>
             </button>
 
-            {!isPharmacyOrAdmin && (
-              <button
-                onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
-                className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
-                  activeTab === 'requests' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span>📋 My Medicine Requests</span>
-                  {proposalsWaitingCount > 0 && (
-                    <span className="bg-purple-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full">
-                      {proposalsWaitingCount} new
-                    </span>
-                  )}
-                </div>
-                <span className="text-slate-400">→</span>
-              </button>
-            )}
+            <button
+              onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
+              className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
+                activeTab === 'requests' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span>📋 My Medicine Requests</span>
+                {proposalsWaitingCount > 0 && (
+                  <span className="bg-purple-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full">
+                    {proposalsWaitingCount} new
+                  </span>
+                )}
+              </div>
+              <span className="text-slate-400">→</span>
+            </button>
 
             <button
               onClick={() => { setActiveTab('addresses'); setMobileMenuOpen(false); }}
@@ -330,14 +289,14 @@ export default function Header({
               <span className="text-slate-400">→</span>
             </button>
 
-            {isPharmacyOrAdmin && (
+            {isAdmin && (
               <button
                 onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
                 className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
                   activeTab === 'admin' ? 'bg-purple-600 text-white font-extrabold' : 'text-purple-700 bg-purple-50 hover:bg-purple-100'
                 }`}
               >
-                <span>⚙️ {isAdmin ? 'Admin' : 'Pharmacy'} Operations Dashboard</span>
+                <span>⚙️ Admin Operations Dashboard</span>
                 <span>→</span>
               </button>
             )}
@@ -349,10 +308,12 @@ export default function Header({
                     👤 {user.email}
                   </span>
                   <button
-                    onClick={() => { logout(); setMobileMenuOpen(false); }}
-                    className="text-rose-600 font-bold hover:underline"
+                    onClick={async () => { setSigningOut(true); await logout(); setMobileMenuOpen(false); setSigningOut(false); }}
+                    disabled={signingOut}
+                    aria-busy={signingOut}
+                    className="text-rose-600 font-bold hover:underline disabled:opacity-60"
                   >
-                    Log Out
+                    {signingOut ? 'Signing out…' : 'Log Out'}
                   </button>
                 </>
               ) : (

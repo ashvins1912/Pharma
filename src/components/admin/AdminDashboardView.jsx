@@ -7,63 +7,42 @@ import AdminBulkImportModal from './AdminBulkImportModal';
 import RiderFleetView from './riders/RiderFleetView';
 import AdminOrderFinancials from './AdminOrderFinancials';
 import AdminMedicineRequestsTab from './requests/AdminMedicineRequestsTab';
-import { getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
+import AdminIntegrationsView from './AdminIntegrationsView';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 
-function PendingMedicineRequestsNotice({ count, onOpen }) {
-  if (count < 1) return null;
-  const plural = count !== 1;
-
-  return (
-    <aside className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-950 shadow-sm" aria-live="polite">
-      <h3 className="text-sm font-black">
-        {count} Medicine Request{plural ? 's' : ''} Pending
-      </h3>
-      <p className="mt-1 text-xs text-rose-800">
-        {plural
-          ? `You have ${count} medicine requests waiting for review.`
-          : 'A medicine request is waiting for review.'}
-      </p>
-      <button
-        type="button"
-        onClick={onOpen}
-        className="mt-3 text-xs font-extrabold text-rose-800 underline underline-offset-2 hover:text-rose-950"
-      >
-        Open Medicine Requests &amp; Proposals →
-      </button>
-    </aside>
-  );
-}
-
 export default function AdminDashboardView() {
-  const { isAdmin, isPharmacyOrAdmin, role, loading: authLoading } = useAuth();
-  const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen } = useApp();
-  const [adminTab, setAdminTab] = useState('fulfillment'); // 'fulfillment' | 'inventory' | 'routes' | 'audits'
+  const { isAdmin, loading: authLoading } = useAuth();
+  const {
+    inventoryAlerts,
+    loadInventoryAlerts,
+    whatsappStatus,
+    setWhatsappModalOpen,
+    branches,
+    activeBranchId,
+    switchBranch
+  } = useApp();
+  const [adminTab, setAdminTab] = useState('fulfillment'); // 'fulfillment' | 'requests' | 'riders' | 'inventory' | 'routes' | 'integrations' | 'audits'
   const [orders, setOrders] = useState([]);
-  const [pendingMedicineRequestCount, setPendingMedicineRequestCount] = useState(0);
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [deliveredCount, setDeliveredCount] = useState(0);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [ordersError, setOrdersError] = useState('');
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState([]);
-
-  const loadPendingMedicineRequestCount = async () => {
-    if (authLoading || !isPharmacyOrAdmin) return;
-    try {
-      const count = await getAdminPendingMedicineRequestCount();
-      setPendingMedicineRequestCount(Number.isInteger(count) && count > 0 ? count : 0);
-    } catch (error) {
-      console.error('Failed to load pending medicine request count:', error);
-    }
-  };
 
   const loadAllOrders = async () => {
     if (authLoading || !isAdmin) return;
     try {
       setLoadingOrders(true);
       setOrdersError('');
-      const res = await apiClient.get('/api/orders/admin/all');
-      setOrders(res.data || []);
+      const res = await apiClient.get('/api/orders/admin/all?fulfillmentSnapshot=true');
+      const snapshot = res.data || {};
+      setOrders(Array.isArray(snapshot.items) ? snapshot.items : []);
+      setRecentOrders(Array.isArray(snapshot.recentOrders) ? snapshot.recentOrders : []);
+      setTotalOrders(Number(snapshot.total) || 0);
+      setDeliveredCount(Number(snapshot.deliveredCount) || 0);
     } catch (err) {
       setOrdersError(err.message || 'Could not load the order queue.');
     } finally {
@@ -82,13 +61,6 @@ export default function AdminDashboardView() {
   };
 
   useEffect(() => {
-    if (authLoading || !isPharmacyOrAdmin) return;
-    loadPendingMedicineRequestCount();
-    const timer = window.setInterval(loadPendingMedicineRequestCount, 15000);
-    return () => window.clearInterval(timer);
-  }, [authLoading, isPharmacyOrAdmin]);
-
-  useEffect(() => {
     if (authLoading || !isAdmin) return;
     loadAllOrders();
     loadInventoryAlerts();
@@ -101,37 +73,11 @@ export default function AdminDashboardView() {
   const approvedCount = orders.filter(o => o.orderStatus === 'Approved').length;
   const readyCount = orders.filter(o => o.orderStatus === 'Ready to Dispatch').length;
   const dispatchedCount = orders.filter(o => o.orderStatus === 'Dispatched').length;
-  const deliveredCount = orders.filter(o => o.orderStatus === 'Delivered').length;
   const activeCount = processingCount + pendingReviewCount + approvedCount + readyCount + dispatchedCount;
   const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.finalTotal) || 0), 0);
 
-  if (role === 'pharmacy') {
-    return (
-      <div className="min-w-0 space-y-6 animate-fade-in">
-        <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-3xl p-6 shadow-md">
-          <span className="text-[11px] font-black uppercase tracking-wider text-indigo-400">
-            Pharmacy Review
-          </span>
-          <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-            Medicine Requests
-          </h2>
-          <p className="mt-2 text-sm text-slate-300">
-            Review requests, prepare proposals, and wait for the customer to decide.
-          </p>
-        </div>
-        <PendingMedicineRequestsNotice
-          count={pendingMedicineRequestCount}
-          onOpen={() => document.getElementById('admin-medicine-requests')?.scrollIntoView({ behavior: 'smooth' })}
-        />
-        <div id="admin-medicine-requests">
-          <AdminMedicineRequestsTab onPendingCountRefresh={loadPendingMedicineRequestCount} />
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-w-0 space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       
       {/* Top Banner & Metric Cards */}
       <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-3xl p-6 shadow-md space-y-5">
@@ -145,7 +91,24 @@ export default function AdminDashboardView() {
             </h2>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+            {/* Pharmacy Branch Context Switcher */}
+            <div className="flex items-center gap-1.5 bg-purple-700 text-white rounded-xl px-2.5 py-1.5 text-xs font-bold shadow-sm">
+              <span>📍 Branch:</span>
+              <select
+                value={activeBranchId}
+                onChange={(e) => switchBranch(e.target.value)}
+                className="bg-purple-800 text-white font-bold rounded-lg px-2 py-1 text-xs focus:outline-none cursor-pointer"
+                title="Active Branch Operations Context"
+              >
+                {(branches || []).map(b => (
+                  <option key={b.id} value={b.id} className="bg-slate-800 text-white">
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* WhatsApp Gateway Status & Quick Action */}
             <button
               onClick={() => setWhatsappModalOpen(true)}
@@ -177,7 +140,7 @@ export default function AdminDashboardView() {
               All Orders
             </span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-black text-slate-900">{orders.length}</span>
+              <span className="text-2xl font-black text-slate-900">{totalOrders}</span>
               <span className="text-[11px] font-bold text-amber-600">({activeCount} ongoing)</span>
             </div>
           </div>
@@ -263,11 +226,6 @@ export default function AdminDashboardView() {
         >
           <span>📋</span>
           <span>Medicine Requests & Proposals</span>
-          {pendingMedicineRequestCount > 0 && (
-            <span className="inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[10px] font-black leading-none text-white">
-              {pendingMedicineRequestCount}
-            </span>
-          )}
         </button>
 
         <button
@@ -314,6 +272,18 @@ export default function AdminDashboardView() {
         >
           📜 Inventory Merge Audits
         </button>
+
+        <button
+          onClick={() => setAdminTab('integrations')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+            adminTab === 'integrations'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <span>🏢</span>
+          <span>Branch POS & C-Square</span>
+        </button>
       </div>
 
       {/* Tab Content Display */}
@@ -339,7 +309,7 @@ export default function AdminDashboardView() {
           ) : (
             <AdminFulfillmentKanban orders={orders} onRefresh={loadAllOrders} />
           )}
-          {!loadingOrders && orders.length > 0 && (
+          {!loadingOrders && recentOrders.length > 0 && (
             <section aria-labelledby="admin-financial-insights" className="space-y-3 pt-3">
               <div>
                 <h3 id="admin-financial-insights" className="text-base font-black text-slate-900">
@@ -350,7 +320,7 @@ export default function AdminDashboardView() {
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {orders.slice(0, 6).map(order => (
+                {recentOrders.map(order => (
                   <AdminOrderFinancials key={order._id} order={order} />
                 ))}
               </div>
@@ -454,6 +424,11 @@ export default function AdminDashboardView() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Tab: Branch POS & C-Square Integration */}
+      {adminTab === 'integrations' && (
+        <AdminIntegrationsView />
       )}
 
       {/* Bulk Excel Ingestion Modal */}

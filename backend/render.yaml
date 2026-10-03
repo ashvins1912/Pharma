@@ -1,0 +1,42 @@
+services:
+  - type: pserv
+    name: ashvin-pharmacy-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGO_URI
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: GATEWAY_AUTH_SECRET
+        sync: false
+      - key: SERVICE_JWT_ISSUER
+        value: ashvin-pharmacy
+      # Keep disabled until MongoDB transaction support and business attempt policy are verified.
+      - key: WHATSAPP_DELIVERY_TRACKING_ENABLED
+        value: "false"
+      - key: MONGO_TRANSACTIONS_CONFIRMED
+        value: "false"
+      - key: DELIVERY_ACTION_BASE_URL
+        sync: false
+      - key: DELIVERY_MAX_ATTEMPTS
+        sync: false
+      - key: SYSTEM_SECRET_KEY
+        sync: false
+      - key: DELIVERY_EVENT_SECRET
+        sync: false

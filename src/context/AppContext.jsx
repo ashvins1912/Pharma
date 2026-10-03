@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../api/apiClient';
+import { normalizeOrdersResponse } from '../api/orderService';
 import { applyCouponCode } from '../api/couponService';
 import { getCustomerMedicineRequestsPage } from '../api/medicineRequestService';
 import { useAuth } from './AuthContext';
@@ -8,11 +9,12 @@ import { useToast } from './ToastContext';
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
-  const { user, isAdmin, isPharmacyOrAdmin, loading: authLoading } = useAuth();
+  const { user, isAdmin, loading: authLoading } = useAuth();
   const { addToast } = useToast();
 
   // Catalog State
   const [medicines, setMedicines] = useState([]);
+  const [medicinesError, setMedicinesError] = useState('');
   const [loadingMedicines, setLoadingMedicines] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -33,29 +35,105 @@ export function AppProvider({ children }) {
 
   // Address Directory State
   const [addresses, setAddresses] = useState([]);
+  const [addressesError, setAddressesError] = useState('');
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [loadingAddresses, setLoadingAddresses] = useState(false);
-  const addressLoadSequence = useRef(0);
 
   // Orders & Tracking State
   const [orders, setOrders] = useState([]);
+  const [ordersError, setOrdersError] = useState('');
   const [activeTrackingOrder, setActiveTrackingOrder] = useState(null);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const orderLoadSequence = useRef(0);
+  const previousCustomerId = useRef(null);
 
   // Medicine Requests & Proposals State
   const [medicineRequests, setMedicineRequests] = useState([]);
-  const [loadingMedicineRequests, setLoadingMedicineRequests] = useState(false);
+  const [medicineRequestsError, setMedicineRequestsError] = useState('');
   const [medicineRequestsPagination, setMedicineRequestsPagination] = useState({
-    page: 1, limit: 5, total: 0, totalPages: 0
+    page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false
   });
+  const [loadingMedicineRequests, setLoadingMedicineRequests] = useState(false);
+  const medicineRequestQuery = useRef({ statusGroup: 'ALL' });
+  const medicineRequestSequence = useRef(0);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [requestPrefillData, setRequestPrefillData] = useState(null);
-  const [requestAuthPending, setRequestAuthPending] = useState(false);
   const [activeProposalRequest, setActiveProposalRequest] = useState(null);
-  const previousUserId = useRef(null);
-  const medicineRequestLoadSequence = useRef(0);
-  const medicineRequestPage = useRef({ page: 1, statusGroup: 'ALL' });
+
+  // Multi-Tenant & Branch Context State
+  const [tenants, setTenants] = useState([
+    { id: 'tenant-ashvin-main', name: 'Ashvin Central Pharmacy', code: 'ASHVIN-HQ' },
+    { id: 'tenant-medplus-partner', name: 'MedPlus Express Partner', code: 'MEDPLUS-MP' }
+  ]);
+  const [branches, setBranches] = useState([
+    {
+      id: 'branch-indore-central',
+      tenantId: 'tenant-ashvin-main',
+      name: 'Indore Central (Old Palasia)',
+      code: 'IND-01',
+      serviceRadiusKm: 12.0,
+      deliveryFee: 30,
+      freeDeliveryAbove: 499
+    },
+    {
+      id: 'branch-indore-vijaynagar',
+      tenantId: 'tenant-ashvin-main',
+      name: 'Vijay Nagar Express Dispensary',
+      code: 'IND-02',
+      serviceRadiusKm: 8.0,
+      deliveryFee: 35,
+      freeDeliveryAbove: 599
+    },
+    {
+      id: 'branch-bhopal-mpnagar',
+      tenantId: 'tenant-medplus-partner',
+      name: 'Bhopal MP Nagar Branch',
+      code: 'BPL-01',
+      serviceRadiusKm: 10.0,
+      deliveryFee: 40,
+      freeDeliveryAbove: 499
+    }
+  ]);
+  const [activeTenantId, setActiveTenantIdState] = useState(() => localStorage.getItem('selected_tenant_id') || 'tenant-ashvin-main');
+  const [activeBranchId, setActiveBranchIdState] = useState(() => localStorage.getItem('selected_branch_id') || 'branch-indore-central');
+
+  const switchBranch = useCallback((branchId, tenantId = null) => {
+    if (branchId) {
+      setActiveBranchIdState(branchId);
+      localStorage.setItem('selected_branch_id', branchId);
+    }
+    if (tenantId) {
+      setActiveTenantIdState(tenantId);
+      localStorage.setItem('selected_tenant_id', tenantId);
+    } else {
+      // Find branch's tenant
+      const found = branches.find(b => b.id === branchId);
+      if (found?.tenantId) {
+        setActiveTenantIdState(found.tenantId);
+        localStorage.setItem('selected_tenant_id', found.tenantId);
+      }
+    }
+  }, [branches]);
+
+  useEffect(() => {
+    async function loadTenantHierarchy() {
+      try {
+        const [tRes, bRes] = await Promise.allSettled([
+          apiClient.get('/api/v1/tenants'),
+          apiClient.get('/api/v1/branches/all')
+        ]);
+        if (tRes.status === 'fulfilled' && tRes.value.data?.data) {
+          setTenants(tRes.value.data.data);
+        }
+        if (bRes.status === 'fulfilled' && bRes.value.data?.data) {
+          setBranches(bRes.value.data.data);
+        }
+      } catch (err) {
+        console.warn('Tenant hierarchy load fallback:', err.message);
+      }
+    }
+    loadTenantHierarchy();
+  }, []);
 
   // Customer Notifications State
   const [notifications, setNotifications] = useState([
@@ -90,6 +168,20 @@ export function AppProvider({ children }) {
   });
   const [whatsappModalOpen, setWhatsappModalOpen] = useState(false);
   const [whatsappWarningActive, setWhatsappWarningActive] = useState(false);
+
+  useEffect(() => {
+    if (user && isAdmin) return;
+    setWhatsappModalOpen(false);
+    setWhatsappWarningActive(false);
+    setNotifications(prev => prev.filter(notification => !notification.id.startsWith('notif-wa')));
+    setWhatsappStatus({
+      isConnected: false,
+      phone: null,
+      deviceName: null,
+      qrCode: null,
+      expiresAt: null
+    });
+  }, [user?.id, isAdmin]);
 
   // Load WhatsApp status
   const loadWhatsAppStatus = useCallback(async () => {
@@ -136,21 +228,7 @@ export function AppProvider({ children }) {
   };
 
   const triggerWhatsAppWarningNotification = () => {
-    const notifId = `notif-wa-${Date.now()}`;
-    const warningNotif = {
-      id: notifId,
-      title: '⚠️ You may miss delivery updates on mobile',
-      message: 'WhatsApp dispatch service is disconnected. Order status tracking, rider dispatch alerts, and delivery OTPs are paused.',
-      time: 'Just now',
-      read: false,
-      type: 'warning',
-      actionType: 'CONNECT_WHATSAPP'
-    };
-
-    setNotifications(prev => [
-      warningNotif,
-      ...prev.filter(n => !n.id.startsWith('notif-wa'))
-    ]);
+    if (!user || !isAdmin) return;
     setWhatsappWarningActive(true);
     addToast('⚠️ You may miss delivery updates on mobile! WhatsApp is not connected.', 'warning');
   };
@@ -173,28 +251,26 @@ export function AppProvider({ children }) {
       if (selectedCategory && selectedCategory !== 'All') params.category = selectedCategory;
       if (sortOption !== 'default') params.sort = sortOption;
 
-      let res;
-      try {
-        res = await apiClient.get('/api/medicines', { params });
-      } catch (firstErr) {
-        // If initial attempt fails due to temporary connection or startup hiccup, retry once after 800ms
-        await new Promise(resolve => setTimeout(resolve, 800));
-        res = await apiClient.get('/api/medicines', { params });
-      }
-
+      const res = await apiClient.get('/api/medicines', { params });
       if (res.data && res.data.medicines) {
         setMedicines(res.data.medicines || []);
+        setMedicinesError('');
         setTotalMedicines(res.data.total || 0);
         setTotalPages(res.data.totalPages || 1);
         setIsSearching(Boolean(res.data.isSearching));
       } else if (Array.isArray(res.data)) {
         setMedicines(res.data);
+        setMedicinesError('');
         setTotalMedicines(res.data.length);
         setTotalPages(1);
         setIsSearching(Boolean(searchQuery));
       }
     } catch (err) {
-      console.error("Failed to load catalog:", err);
+      console.warn('Catalog fetch notice:', err?.message || err);
+      setMedicines([]);
+      setTotalMedicines(0);
+      setTotalPages(1);
+      setMedicinesError(err.message || 'The medicine catalog is temporarily unavailable. Please try again.');
     } finally {
       setLoadingMedicines(false);
     }
@@ -206,87 +282,74 @@ export function AppProvider({ children }) {
 
   // Fetch User Addresses
   const loadAddresses = useCallback(async () => {
-    const requestSequence = ++addressLoadSequence.current;
     try {
       setLoadingAddresses(true);
+      setAddressesError('');
       const res = await apiClient.get('/api/user/addresses');
-      if (requestSequence === addressLoadSequence.current && Array.isArray(res.data)) {
+      if (Array.isArray(res.data)) {
         const addrs = res.data;
         setAddresses(addrs);
+        if (addrs.length === 0) setSelectedAddressId('');
         if (addrs.length > 0) {
-          setSelectedAddressId(currentId => {
-            if (currentId && addrs.some(address => address._id === currentId)) {
-              return currentId;
+          setSelectedAddressId((currentSelected) => {
+            if (currentSelected && addrs.some(address => address._id === currentSelected)) {
+              return currentSelected;
             }
             const defaultAddr = addrs.find(a => a.isDefault) || addrs[0];
             return defaultAddr?._id || '';
           });
-        } else {
-          setSelectedAddressId('');
         }
         return addrs;
       }
+      throw new Error('Address response was invalid.');
     } catch (err) {
-      if (requestSequence !== addressLoadSequence.current) return;
       console.warn("Address directory notice:", err?.message || err);
-      setAddresses([]);
-      setSelectedAddressId('');
-      return [];
+      setAddressesError('Unable to load your saved addresses right now. Please try again.');
+      return null;
     } finally {
-      if (requestSequence === addressLoadSequence.current) setLoadingAddresses(false);
+      setLoadingAddresses(false);
     }
-  }, []);
+  }, [user, addToast]);
 
   useEffect(() => {
-    if (authLoading) return;
-
-    const currentUserId = user?.id || null;
-    if (previousUserId.current !== currentUserId) {
-      if (previousUserId.current) {
-        addressLoadSequence.current += 1;
-        orderLoadSequence.current += 1;
-        medicineRequestLoadSequence.current += 1;
-        setAddresses([]);
-        setSelectedAddressId('');
-        setLoadingAddresses(false);
-        setOrders([]);
-        setLoadingOrders(false);
-        setMedicineRequests([]);
-        setLoadingMedicineRequests(false);
-        setCart([]);
-        setAppliedCoupon(null);
-        setCouponCode('');
-        setCouponError('');
-        setSearchQuery('');
-        setSelectedCategory('All');
-        setHideRx(false);
-        setSortOption('default');
-        setPage(1);
-        setActiveTrackingOrder(null);
-        setActiveProposalRequest(null);
-        setRequestModalOpen(false);
-        setRequestPrefillData(null);
-        setRequestAuthPending(false);
-        setNotifications(previous => previous.filter(notification => !notification.id.startsWith('notif-prop-')));
-      }
-      previousUserId.current = currentUserId;
+    const currentCustomerId = user?.id || null;
+    if (previousCustomerId.current !== currentCustomerId) {
+      previousCustomerId.current = currentCustomerId;
+      setAddresses([]);
+      setAddressesError('');
+      setSelectedAddressId('');
+      setCart([]);
+      setOrders([]);
+      setOrdersError('');
+      setMedicineRequests([]);
+      setMedicineRequestsError('');
+      setMedicineRequestsPagination({ page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false });
+      setNotifications([]);
+      setActiveProposalRequest(null);
+      setRequestModalOpen(false);
+      setRequestPrefillData(null);
     }
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (user?.id) {
+    if (user) {
       loadAddresses();
     } else {
       setAddresses([]);
+      setAddressesError('');
       setSelectedAddressId('');
+      setCart([]);
+      setOrders([]);
+      setOrdersError('');
+      setMedicineRequests([]);
+      setMedicineRequestsError('');
+      setMedicineRequestsPagination({ page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false });
     }
-  }, [user?.id, loadAddresses]);
+  }, [user, loadAddresses]);
 
   // Fetch Orders
   const loadUserOrders = useCallback(async ({ silent = false } = {}) => {
     const requestSequence = ++orderLoadSequence.current;
     if (!user?.id) {
       setOrders([]);
+      setOrdersError('');
       setLoadingOrders(false);
       return;
     }
@@ -294,10 +357,12 @@ export function AppProvider({ children }) {
       if (!silent) setLoadingOrders(true);
       const res = await apiClient.get('/api/orders/mine');
       if (requestSequence === orderLoadSequence.current) {
-        setOrders(res.data || []);
+        setOrders(normalizeOrdersResponse(res.data));
+        setOrdersError('');
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      console.error('Failed to load customer orders:', error);
+      if (requestSequence === orderLoadSequence.current) setOrdersError('Unable to load your orders right now. Please try again in a moment.');
     } finally {
       if (requestSequence === orderLoadSequence.current) {
         setLoadingOrders(false);
@@ -312,29 +377,41 @@ export function AppProvider({ children }) {
   }, [loadUserOrders]);
 
   // Load User Medicine Requests
-  const loadUserMedicineRequests = useCallback(async ({ silent = false, page, statusGroup } = {}) => {
-    const requestSequence = ++medicineRequestLoadSequence.current;
-    if (!user || isPharmacyOrAdmin) {
+  const loadUserMedicineRequests = useCallback(async ({ silent = false, page = 1, statusGroup, append = false } = {}) => {
+    const sequence = ++medicineRequestSequence.current;
+    if (statusGroup) medicineRequestQuery.current = { statusGroup };
+    const query = medicineRequestQuery.current;
+    if (!user) {
       setMedicineRequests([]);
+      setMedicineRequestsError('');
+      setMedicineRequestsPagination({ page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false });
       setLoadingMedicineRequests(false);
       return;
     }
-    if (page != null) medicineRequestPage.current.page = page;
-    if (statusGroup != null) {
-      medicineRequestPage.current.statusGroup = statusGroup;
-      medicineRequestPage.current.page = page ?? 1;
-    }
     try {
       if (!silent) setLoadingMedicineRequests(true);
-      const result = await getCustomerMedicineRequestsPage({
-        page: medicineRequestPage.current.page,
-        statusGroup: medicineRequestPage.current.statusGroup
+      if (!append) setMedicineRequestsError('');
+      const data = await getCustomerMedicineRequestsPage({ page, pageSize: 3, ...query });
+      if (sequence !== medicineRequestSequence.current) return;
+      const list = data.requests || data.items;
+      if (!Array.isArray(list)) throw new Error('Medicine requests response was invalid.');
+      setMedicineRequests(previous => {
+        if (!append && silent) {
+          const byId = new Map([...list, ...previous].map(item => [String(item._id), item]));
+          return [...byId.values()];
+        }
+        if (!append) return list;
+        const byId = new Map(previous.map(item => [String(item._id), item]));
+        list.forEach(item => byId.set(String(item._id), item));
+        return [...byId.values()];
       });
-      if (requestSequence !== medicineRequestLoadSequence.current) return;
-      const list = result?.requests || [];
-      setMedicineRequests(list);
-      setMedicineRequestsPagination(result?.pagination || {
-        page: medicineRequestPage.current.page, limit: 5, total: list.length, totalPages: list.length ? 1 : 0
+      setMedicineRequestsPagination({
+        page: Number(data.pagination?.page) || page,
+        pageSize: Number(data.pagination?.pageSize || data.pagination?.limit) || 3,
+        limit: Number(data.pagination?.pageSize || data.pagination?.limit) || 3,
+        total: Number(data.pagination?.total) || 0,
+        totalPages: Number(data.pagination?.totalPages) || 0,
+        hasNextPage: Boolean(data.pagination?.hasNextPage ?? ((Number(data.pagination?.page) || page) < Number(data.pagination?.totalPages || 0)))
       });
 
       // Check if any proposals are ready to notify customer in notification bell
@@ -360,49 +437,29 @@ export function AppProvider({ children }) {
           });
         });
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      if (sequence !== medicineRequestSequence.current) return;
+      console.error('Failed to load customer medicine requests:', error);
+      setMedicineRequestsError(error.message || 'Medicine requests are temporarily unavailable. Please try again in a moment.');
     } finally {
-      if (!silent && requestSequence === medicineRequestLoadSequence.current) setLoadingMedicineRequests(false);
+      if (sequence === medicineRequestSequence.current && !silent) setLoadingMedicineRequests(false);
     }
-  }, [user?.id, isPharmacyOrAdmin]);
+  }, [user]);
 
   useEffect(() => {
     loadUserMedicineRequests();
-    const timer = window.setInterval(() => loadUserMedicineRequests({ silent: true }), 15000);
+    const timer = window.setInterval(() => loadUserMedicineRequests({ silent: true, page: 1 }), 15000);
     return () => window.clearInterval(timer);
   }, [loadUserMedicineRequests]);
 
   const openRequestModal = (prefill = null) => {
-    if (isPharmacyOrAdmin) {
-      addToast('Medicine requests can only be submitted by customer accounts.', 'warning');
-      return;
-    }
     setRequestPrefillData(prefill);
-    if (user) {
-      setRequestAuthPending(false);
-      setRequestModalOpen(true);
-    } else {
-      setRequestModalOpen(false);
-      setRequestAuthPending(true);
-    }
+    setRequestModalOpen(true);
   };
 
   const closeRequestModal = () => {
     setRequestModalOpen(false);
     setRequestPrefillData(null);
-    setRequestAuthPending(false);
-  };
-
-  const cancelRequestAuthentication = () => {
-    setRequestPrefillData(null);
-    setRequestAuthPending(false);
-  };
-
-  const resumeRequestAfterAuthentication = () => {
-    if (!user) return;
-    setRequestAuthPending(false);
-    setRequestModalOpen(true);
   };
 
   const openProposalModal = (request) => {
@@ -447,7 +504,6 @@ export function AppProvider({ children }) {
       addToast(`Increased ${med.name} quantity to ${quantity}`, 'success');
       return;
     }
-
     setCart([...cart, { ...med, quantity: 1, stock }]);
     addToast(`Added ${med.name} to cart`, 'success');
   };
@@ -455,7 +511,6 @@ export function AppProvider({ children }) {
   const updateQuantity = (id, delta) => {
     const item = cart.find(cartItem => cartItem._id === id);
     if (!item) return;
-
     const nextQty = item.quantity + delta;
     if (nextQty <= 0) {
       setCart(cart.filter(cartItem => cartItem._id !== id));
@@ -466,13 +521,13 @@ export function AppProvider({ children }) {
       addToast(`Only ${item.stock} units available in pharmacy stock.`, 'warning');
       return;
     }
-    setCart(cart.map(cartItem => cartItem._id === id ? { ...cartItem, quantity: nextQty } : cartItem));
+    setCart(cart.map(cartItem =>
+      cartItem._id === id ? { ...cartItem, quantity: nextQty } : cartItem
+    ));
   };
 
   const removeFromCart = (id) => {
-    const item = cart.find(cartItem => cartItem._id === id);
-    if (!item) return;
-    setCart(cart.filter(cartItem => cartItem._id !== id));
+    setCart(prev => prev.filter(i => i._id !== id));
     addToast('Item removed from cart', 'info');
   };
 
@@ -545,7 +600,7 @@ export function AppProvider({ children }) {
         return updatedAddress.isDefault ? { ...address, isDefault: false } : address;
       }));
       addToast('Saved address updated. Existing orders keep their original delivery address.', 'success');
-      return true;
+      return updatedAddress;
     } catch (err) {
       addToast('Failed to update address: ' + err.message, 'error');
       return false;
@@ -566,7 +621,14 @@ export function AppProvider({ children }) {
       addToast('Saved address deleted. Existing orders keep their original delivery address.', 'success');
       return true;
     } catch (err) {
-      addToast('Failed to delete address: ' + err.message, 'error');
+      if (err.status === 404) {
+        const refreshedAddresses = await loadAddresses();
+        if (Array.isArray(refreshedAddresses) && !refreshedAddresses.some(address => String(address._id) === String(addressId))) {
+          addToast('This address was already removed. Your address list has been refreshed.', 'info');
+          return true;
+        }
+      }
+      addToast(err.message || 'Unable to delete this address right now. Please try again.', 'error');
       return false;
     }
   };
@@ -576,6 +638,7 @@ export function AppProvider({ children }) {
       value={{
         // Catalog
         medicines,
+        medicinesError,
         loadingMedicines,
         searchQuery,
         setSearchQuery,
@@ -612,6 +675,7 @@ export function AppProvider({ children }) {
 
         // Addresses
         addresses,
+        addressesError,
         selectedAddressId,
         setSelectedAddressId,
         loadingAddresses,
@@ -622,6 +686,7 @@ export function AppProvider({ children }) {
 
         // Orders
         orders,
+        ordersError,
         loadUserOrders,
         loadingOrders,
         activeTrackingOrder,
@@ -629,20 +694,27 @@ export function AppProvider({ children }) {
 
         // Medicine Requests & Proposals
         medicineRequests,
+        medicineRequestsError,
         medicineRequestsPagination,
         loadingMedicineRequests,
         loadUserMedicineRequests,
         requestModalOpen,
-        closeRequestModal,
+        setRequestModalOpen,
         requestPrefillData,
-        requestAuthPending,
-        setRequestAuthPending,
-        cancelRequestAuthentication,
-        resumeRequestAfterAuthentication,
         openRequestModal,
         activeProposalRequest,
         setActiveProposalRequest,
+        closeRequestModal,
         openProposalModal,
+
+        // Multi-Tenant & Branch Context
+        tenants,
+        branches,
+        activeTenantId,
+        activeBranchId,
+        activeBranch: branches.find(b => b.id === activeBranchId) || branches[0],
+        activeTenant: tenants.find(t => t.id === activeTenantId) || tenants[0],
+        switchBranch,
 
         // Notifications
         notifications,
@@ -670,10 +742,4 @@ export function AppProvider({ children }) {
   );
 }
 
-export const useApp = () => {
-  const context = useContext(AppContext);
-  if (context === null) {
-    throw new Error('useApp must be used within an AppProvider.');
-  }
-  return context;
-};
+export const useApp = () => useContext(AppContext);

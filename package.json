@@ -7,6 +7,7 @@
     "dev": "tsx server.ts",
     "build": "vite build",
     "lint": "tsc --noEmit",
+    "test": "node --test backend/*.test.js backend/security/validator.test.js backend/modules/delivery/use-cases/RiderLifecycle.test.js backend/modules/delivery/controllers/*.test.js backend/services/delivery/*.test.js backend/services/payment/*.test.js backend/services/orderSearch.test.js src/api/*.test.js frontend/src/api/*.test.js",
     "admin:promote": "node scripts/promote-admin.mjs",
     "prestart": "npm run build",
     "start": "tsx server.ts"

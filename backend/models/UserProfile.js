@@ -63,6 +63,7 @@ const userProfileSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 userProfileSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });
+userProfileSchema.index({ email: 1 });
 
 const UserProfile = mongoose.models.UserProfile || mongoose.model('UserProfile', userProfileSchema);
 export default UserProfile;

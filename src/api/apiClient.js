@@ -1,9 +1,28 @@
 import axios from 'axios';
 import { supabase } from '../supabaseClient';
+import { normalizeApiError } from './apiErrors';
+
+const resolveBaseUrl = () => {
+    const rawUrl = import.meta.env.VITE_API_URL || '';
+    if (typeof window !== 'undefined') {
+        // In browser, if VITE_API_URL points to localhost/127.0.0.1 while the page
+        // is hosted on a remote domain (e.g. Cloud Run preview), use relative URL.
+        // The Express backend and Vite frontend are hosted together on the same origin.
+        if (!rawUrl || rawUrl.includes('localhost') || rawUrl.includes('127.0.0.1')) {
+            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                return '';
+            }
+        }
+        if (window.location.protocol === 'https:' && rawUrl.startsWith('http://')) {
+            return '';
+        }
+    }
+    return rawUrl;
+};
 
 const apiClient = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || '',
-    timeout: 10000,
+    baseURL: resolveBaseUrl(),
+    timeout: 15000,
     withCredentials: true
 });
 
@@ -15,6 +34,10 @@ function getCsrfCookie() {
 
 // Resilient request interceptor that ensures tokens and anti-CSRF headers are sent
 apiClient.interceptors.request.use(async (config) => {
+    if (!config.headers['X-Request-ID']) {
+        config.headers['X-Request-ID'] = globalThis.crypto?.randomUUID?.()
+            || `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    }
     // 1. Auto-attach Anti-CSRF Token header for Double Submit Cookie pattern
     const csrfToken = getCsrfCookie();
     if (csrfToken) {
@@ -67,6 +90,12 @@ apiClient.interceptors.request.use(async (config) => {
     } else {
         delete config.headers.Authorization;
     }
+
+    const tenantId = localStorage.getItem('selected_tenant_id') || 'tenant-ashvin-main';
+    const branchId = localStorage.getItem('selected_branch_id') || 'branch-indore-central';
+    if (!config.headers['x-tenant-id']) config.headers['x-tenant-id'] = tenantId;
+    if (!config.headers['x-branch-id']) config.headers['x-branch-id'] = branchId;
+
     return config;
 }, (error) => Promise.reject(error));
 
@@ -74,18 +103,24 @@ apiClient.interceptors.request.use(async (config) => {
 apiClient.interceptors.response.use(
     (response) => response,
     (error) => {
-        let handledError = { message: "Network communication error." };
-        if (error.response) {
-            if (error.response.status === 401) {
-                // Only clear if explicitly an expired custom token
-                handledError.message = error.response.data?.message || "Session authentication required.";
-            } else {
-                handledError.message = error.response.data?.message || "Internal server error.";
-            }
-        } else if (error.request) {
-            handledError.message = "Pharmacy core API endpoint server offline or unreachable.";
+        const normalized = normalizeApiError(error);
+        const url = String(error.config?.url || '');
+        const isCredentialSubmission = /\/api\/auth\/(login|signup|demo-admin|demo-customer)(\/|$)/.test(url);
+        const isSessionProbe = /\/api\/auth\/(session|logout)(\/|$)/.test(url);
+        if (normalized.status === 401 && !isCredentialSubmission && !isSessionProbe && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('ashvin:authentication-required', {
+                detail: { requestId: normalized.requestId }
+            }));
         }
-        return Promise.reject(handledError);
+        console.warn('API request failed', {
+            requestId: normalized.requestId,
+            endpoint: url,
+            status: normalized.status || null,
+            code: normalized.code
+        });
+        normalized.response = error.response;
+        normalized.config = error.config;
+        return Promise.reject(normalized);
     }
 );
 

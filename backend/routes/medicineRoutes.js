@@ -6,16 +6,6 @@ import { getIsConnected } from '../config/db.js';
 import { authenticateUser, isAdmin } from '../middleware/auth.js';
 import ProductDiscoveryService from '../services/ProductDiscoveryService.js';
 import SearchMetricIngestionService from '../services/SearchMetricIngestionService.js';
-import {
-    buildFailedInventoryWorkbook,
-    createInventoryImport,
-    enqueueInventoryImport,
-    getInventoryImportFailedRows,
-    getInventoryImportStatus,
-    previewInventoryWorkbook,
-    retryInventoryImport,
-    createInventoryImportFromRows
-} from '../services/InventoryImportService.js';
 
 const router = express.Router();
 const importFileLimit = Number.parseInt(process.env.INVENTORY_IMPORT_MAX_FILE_BYTES || '', 10);
@@ -201,6 +191,8 @@ router.post('/imports', authenticateUser, isAdmin, uploadMemory.single('excelFil
         if (!/\.(xlsx|xls)$/i.test(req.file.originalname)) {
             return res.status(400).json({ message: 'Upload an .xlsx or .xls workbook.' });
         }
+        const { createInventoryImport, enqueueInventoryImport } =
+            await import('../services/InventoryImportService.js');
         const job = await createInventoryImport({
             fileName: req.file.originalname,
             buffer: req.file.buffer,
@@ -234,6 +226,7 @@ router.get('/imports/:importId/status', authenticateUser, isAdmin, async (req, r
         return res.status(404).json({ message: 'Inventory import was not found.' });
     }
     try {
+        const { getInventoryImportStatus } = await import('../services/InventoryImportService.js');
         const job = await getInventoryImportStatus(req.params.importId, req.user.sub);
         if (!job) return res.status(404).json({ message: 'Inventory import was not found.' });
         return res.json({
@@ -261,6 +254,8 @@ router.get('/imports/:importId/failed-records', authenticateUser, isAdmin, async
         return res.status(404).json({ message: 'Inventory import was not found.' });
     }
     try {
+        const { buildFailedInventoryWorkbook, getInventoryImportFailedRows } =
+            await import('../services/InventoryImportService.js');
         const result = await getInventoryImportFailedRows(req.params.importId, req.user.sub);
         if (!result) return res.status(404).json({ message: 'Inventory import was not found.' });
         if (!result.rows.length) return res.status(404).json({ message: 'This import has no failed records.' });
@@ -290,6 +285,7 @@ router.post('/imports/:importId/retry', authenticateUser, isAdmin, async (req, r
         return res.status(404).json({ message: 'Inventory import was not found.' });
     }
     try {
+        const { retryInventoryImport } = await import('../services/InventoryImportService.js');
         const job = await retryInventoryImport(req.params.importId, req.user.sub);
         if (!job) return res.status(404).json({ message: 'A retryable import was not found.' });
         return res.status(202).json({ importId: String(job._id), status: 'QUEUED' });
@@ -305,6 +301,7 @@ router.post('/validate-import', authenticateUser, isAdmin, uploadMemory.single('
         if (!req.file || !req.file.buffer) {
             return res.status(400).json({ message: "No Excel file provided." });
         }
+        const { previewInventoryWorkbook } = await import('../services/InventoryImportService.js');
         return res.json(previewInventoryWorkbook(req.file.buffer));
     } catch (err) {
         console.error("Workbook validation error:", err);
@@ -319,6 +316,7 @@ router.post('/confirm-import', authenticateUser, isAdmin, async (req, res) => {
         if (!Array.isArray(rows) || rows.length === 0) {
             return res.status(400).json({ message: "No valid rows provided for import." });
         }
+        const { createInventoryImportFromRows } = await import('../services/InventoryImportService.js');
         const job = await createInventoryImportFromRows({
             rows,
             fileName: 'Confirmed_inventory_rows.xlsx',
@@ -337,6 +335,8 @@ router.post('/upload-excel', authenticateUser, isAdmin, uploadMemory.single('exc
         if (!req.file || !req.file.buffer) {
             return res.status(400).json({ message: "No Excel file provided." });
         }
+        const { createInventoryImport, enqueueInventoryImport } =
+            await import('../services/InventoryImportService.js');
         const job = await createInventoryImport({
             fileName: req.file.originalname,
             buffer: req.file.buffer,

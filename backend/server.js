@@ -1,10 +1,12 @@
 import express from 'express';
-import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 dotenv.config();
 
+import { env } from './config/env.js';
 import connectDB from './config/db.js';
+import { corsErrorHandler, createCorsMiddleware } from './security/corsPolicy.js';
+import { requestContext } from './security/requestContext.js';
 import medicineRoutes from './routes/medicineRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
 import couponRoutes from './routes/couponRoutes.js';
@@ -13,14 +15,15 @@ import riderRoutes from './modules/delivery/routes/riderRoutes.js';
 import riderProfileRoutes from './routes/riderProfileRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
 import assignmentRoutes from './modules/delivery/routes/assignmentRoutes.js';
+import paymentActionRoutes from './routes/paymentActionRoutes.js';
+import adminPaymentReminderRoutes from './routes/adminPaymentReminderRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import medicineRequestRoutes from './routes/medicineRequestRoutes.js';
-import proposalRoutes from './routes/proposalRoutes.js';
+import gatewayRouter from './gateway/gatewayRouter.js';
 import { csrfProtection } from './security/sessionCookie.js';
 import { sanitizeBodyMiddleware, validateLogin } from './security/validator.js';
 import dataStore from './dataStore.js';
 import DataMartRefreshService from './services/DataMartRefreshService.js';
-import { recoverInventoryImports } from './services/InventoryImportService.js';
 import { authenticateUser, isAdmin } from './middleware/auth.js';
 import {
     getDemoAdminIdentity,
@@ -36,8 +39,13 @@ import {
 } from './config/demoCustomer.js';
 
 const app = express();
-app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+const corsAllowedOrigins = env.CORS_ALLOWED_ORIGINS
+    ? env.CORS_ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
+    : ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173'];
+app.use(requestContext);
+app.use(createCorsMiddleware(corsAllowedOrigins));
+app.use(corsErrorHandler);
+app.use(express.json({ verify: (req, _res, buffer) => { req.rawBody = Buffer.from(buffer); } }));
 app.use(cookieParser());
 app.use(csrfProtection);
 
@@ -70,19 +78,11 @@ connectDB()
     .then(async connected => {
         if (!connected) return;
         await dataStore.ensureCatalogSeeded();
-        await recoverInventoryImports();
         await refreshDataMart();
         const refreshTimer = setInterval(() => void refreshDataMart(), 15 * 60 * 1000);
         refreshTimer.unref();
     })
     .catch(error => console.error('MongoDB catalog initialization failed:', error));
-
-const inventoryImportRecoveryTimer = setInterval(() => {
-    void recoverInventoryImports().catch(error => {
-        console.error('Inventory import recovery check failed:', error.message);
-    });
-}, 30_000);
-inventoryImportRecoveryTimer.unref();
 
 app.use('/api/auth', authRoutes);
 app.use('/api/medicines', medicineRoutes);
@@ -93,9 +93,13 @@ app.use('/api/coupons', couponRoutes);
 app.use('/api/admin/whatsapp', whatsappRoutes);
 app.use('/api/admin/riders', riderRoutes);
 app.use('/api/admin/assignment', assignmentRoutes);
+app.use('/api/admin/payments', adminPaymentReminderRoutes);
+app.use('/api/public/payments', paymentActionRoutes);
 app.use('/api/medicine-requests', medicineRequestRoutes);
 app.use('/api/admin/medicine-requests', medicineRequestRoutes);
-app.use('/api/proposals', proposalRoutes);
+
+// Ashvin Platform API Gateway (v1 Multi-Tenant Engine)
+app.use('/api/v1', gatewayRouter);
 
 app.post('/api/auth/demo-admin', sanitizeBodyMiddleware, validateLogin, async (req, res) => {
     if (!isDemoAdminEnabled()) {
