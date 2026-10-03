@@ -232,7 +232,11 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
       return;
     }
 
-    const calculatedApprox = Math.max(0, Number(approximatePrice) || Number(unitPrice * quantity) || 0);
+    const calculatedApprox = Number(approximatePrice);
+    if (priceType === 'APPROXIMATE' && (!Number.isFinite(calculatedApprox) || calculatedApprox <= 0)) {
+      addToast('Please enter an Approximate Total greater than ₹0.', 'warning');
+      return;
+    }
     let calculatedFinal = null;
 
     if (priceType === 'FINAL') {
@@ -551,8 +555,9 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
                 {priceType === 'APPROXIMATE' ? (
                   <input
                     type="number"
-                    step="any"
-                    min="0"
+                    step="0.01"
+                    min="0.01"
+                    required
                     disabled={isApproved}
                     value={approximatePrice}
                     onChange={(e) => setApproximatePrice(Math.max(0, parseFloat(e.target.value) || 0))}

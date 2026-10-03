@@ -1,16 +1,19 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import apiClient from '../api/apiClient';
 
-export default function OrderRatingPrompt({ order, onClose, onSubmitted }) {
+export default function OrderRatingPrompt({ order, onClose, onSubmitted, onAlreadySubmitted }) {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const submissionInProgress = useRef(false);
 
   if (!order) return null;
 
   const submitRating = async (event) => {
     event.preventDefault();
+    if (submissionInProgress.current) return;
+    submissionInProgress.current = true;
     setSubmitting(true);
     setError('');
     try {
@@ -18,10 +21,18 @@ export default function OrderRatingPrompt({ order, onClose, onSubmitted }) {
         rating,
         comment
       });
-      onSubmitted();
+      await onSubmitted?.(String(order._id));
     } catch (requestError) {
-      setError(requestError.message || 'Unable to submit your feedback right now. Please try again.');
+      const serverMessage = String(requestError.response?.data?.message || '');
+      if (requestError.status === 409 && /already (been )?submitted|already rated/i.test(serverMessage)) {
+        await onAlreadySubmitted?.(String(order._id));
+        return;
+      }
+      setError(requestError.status === 409
+        ? 'This delivery is not available for rating right now.'
+        : 'Unable to submit your feedback right now. Please try again.');
     } finally {
+      submissionInProgress.current = false;
       setSubmitting(false);
     }
   };

@@ -53,6 +53,8 @@ export default function AddressManager({
   const {
     addresses,
     addressesError,
+    loadingAddresses,
+    loadAddresses,
     selectedAddressId,
     setSelectedAddressId,
     saveAddress,
@@ -540,15 +542,22 @@ export default function AddressManager({
       </div>
 
       {addressesError && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800" role="alert">
-          <p>{addressesError}</p>
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
+          <p className="font-bold">Address directory is temporarily unavailable.</p>
+          <p className="mt-1">Please try again later. Your saved addresses have not been changed.</p>
           <button type="button" onClick={loadAddresses} disabled={loadingAddresses} className="mt-2 font-bold underline disabled:opacity-50">
-            {loadingAddresses ? 'Retrying...' : 'Try again'}
+            {loadingAddresses ? 'Retrying…' : 'Try again'}
           </button>
         </div>
       )}
 
       {addresses.length === 0 && !showAddForm && !addressesError && (
+        loadingAddresses ? (
+          <div className="flex min-h-28 items-center justify-center gap-2 text-sm font-semibold text-slate-500" role="status">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-blue-600" aria-hidden="true" />
+            Loading your saved addresses…
+          </div>
+        ) : (
         <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-2">
           <p className="text-2xl">🏠</p>
           <p className="text-xs font-bold text-slate-600">No saved addresses yet</p>
@@ -560,6 +569,7 @@ export default function AddressManager({
             + Add First Address
           </button>
         </div>
+        )
       )}
 
       {/* Add New Address Form */}

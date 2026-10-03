@@ -350,6 +350,7 @@ function MainApp() {
         isOpen={cartOpen}
         onClose={() => setCartOpen(false)}
         onProceedToCheckout={handleProceedToCheckout}
+        onBrowseMedicines={() => setActiveTab('store')}
       />
 
       {/* Checkout Modal */}
@@ -368,12 +369,21 @@ function MainApp() {
       <OrderRatingPrompt
         order={ratingPromptOrder}
         onClose={() => {
-          setDismissedRatingOrderIds((previous) => [...previous, String(ratingPromptOrder?._id)]);
+          const orderId = String(ratingPromptOrder?._id || '');
+          if (orderId) setDismissedRatingOrderIds((previous) => previous.includes(orderId) ? previous : [...previous, orderId]);
           setRatingPromptOrder(null);
         }}
-        onSubmitted={async () => {
+        onSubmitted={(orderId) => {
+          const resolvedOrderId = String(orderId || ratingPromptOrder?._id || '');
+          if (resolvedOrderId) setDismissedRatingOrderIds((previous) => previous.includes(resolvedOrderId) ? previous : [...previous, resolvedOrderId]);
           setRatingPromptOrder(null);
-          await loadUserOrders();
+          void loadUserOrders();
+        }}
+        onAlreadySubmitted={(orderId) => {
+          const resolvedOrderId = String(orderId || ratingPromptOrder?._id || '');
+          if (resolvedOrderId) setDismissedRatingOrderIds((previous) => previous.includes(resolvedOrderId) ? previous : [...previous, resolvedOrderId]);
+          setRatingPromptOrder(null);
+          void loadUserOrders();
         }}
       />
 

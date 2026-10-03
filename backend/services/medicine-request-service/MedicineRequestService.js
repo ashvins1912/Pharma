@@ -153,8 +153,23 @@ export class MedicineRequestService {
         }
 
         const quantity = Number(proposalData.quantity || proposalData.proposedQuantity || request.requestedQuantity) || 1;
-        const unitPrice = Number(proposalData.unitPrice || 0);
-        const totalPrice = Number(proposalData.totalPrice || proposalData.finalPrice || (unitPrice * quantity));
+        const unitPrice = Number(proposalData.unitPrice ?? 0);
+        const priceType = proposalData.priceType === 'APPROXIMATE' ? 'APPROXIMATE' : 'FINAL';
+        const totalPrice = Number(
+            (priceType === 'APPROXIMATE'
+                ? proposalData.approximatePrice
+                : proposalData.finalPrice)
+            ?? proposalData.totalPrice
+            ?? (unitPrice * quantity)
+        );
+        if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+            throw new Error('Unit price must be a valid non-negative amount.');
+        }
+        if (!Number.isFinite(totalPrice) || totalPrice <= 0) {
+            throw new Error(priceType === 'APPROXIMATE'
+                ? 'Approximate total must be greater than zero.'
+                : 'A valid final price must be specified.');
+        }
 
         const proposal = {
             productId: proposalData.productId || null,
@@ -165,7 +180,7 @@ export class MedicineRequestService {
             quantity,
             unitPrice,
             totalPrice,
-            priceType: proposalData.priceType === 'APPROXIMATE' ? 'APPROXIMATE' : 'FINAL',
+            priceType,
             pharmacyNote: String(proposalData.pharmacyNote || proposalData.pharmacyNotes || '').trim(),
             deliverySlot: proposalData.deliverySlot || {
                 date: 'Tomorrow',

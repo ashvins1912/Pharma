@@ -183,19 +183,20 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-      <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-2xl w-full p-6 sm:p-8 my-8 relative">
+      <div role="dialog" aria-modal="true" aria-labelledby="checkout-modal-title" className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-2xl w-full p-6 sm:p-8 my-8 relative">
         
         {/* Header */}
         <div className="flex justify-between items-center pb-4 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
             <span className="text-2xl">📋</span>
             <div>
-              <h2 className="text-lg font-black text-slate-900">Checkout & Order Confirmation</h2>
+              <h2 id="checkout-modal-title" className="text-lg font-black text-slate-900">Checkout & Order Confirmation</h2>
               <p className="text-[11px] text-slate-400">Step 3 of 3: Confirm address & place Cash on Delivery order</p>
             </div>
           </div>
           <button
             onClick={onClose}
+            aria-label="Close checkout"
             className="text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition cursor-pointer"
           >
             ✕

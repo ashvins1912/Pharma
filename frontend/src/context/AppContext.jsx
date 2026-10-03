@@ -397,7 +397,6 @@ export function AppProvider({ children }) {
       console.error('Failed to load customer medicine requests:', error);
       setMedicineRequestsError(error.message || 'Medicine requests are temporarily unavailable. Please try again in a moment.');
     } finally {
-      if (requestSequence === medicineRequestLoadSequence.current) setMedicineRequestAppending(false);
       if (!silent && requestSequence === medicineRequestLoadSequence.current) setLoadingMedicineRequests(false);
     }
   }, [user?.id, isPharmacyOrAdmin]);
@@ -566,7 +565,7 @@ export function AppProvider({ children }) {
       addToast('Delivery address saved to directory!', 'success');
       return savedAddress;
     } catch (err) {
-      addToast('Failed to save address: ' + err.message, 'error');
+      addToast('Unable to save this address right now. Please try again later.', 'error');
       return false;
     }
   };
@@ -582,7 +581,7 @@ export function AppProvider({ children }) {
       addToast('Saved address updated. Existing orders keep their original delivery address.', 'success');
       return updatedAddress;
     } catch (err) {
-      addToast('Failed to update address: ' + err.message, 'error');
+      addToast('Unable to update this address right now. Please try again later.', 'error');
       return false;
     }
   };
@@ -608,7 +607,7 @@ export function AppProvider({ children }) {
           return true;
         }
       }
-      addToast(err.message || 'Unable to delete this address right now. Please try again.', 'error');
+      addToast('Unable to delete this address right now. Please try again later.', 'error');
       return false;
     }
   };

@@ -44,7 +44,7 @@ const COLUMNS = [
   { id: 'Rejected', title: 'Rejected', color: 'border-rose-500 text-rose-800 bg-rose-50' },
   { id: 'Processing Order', title: 'Processing Order', color: 'border-amber-500 text-amber-800 bg-amber-50' },
   { id: 'Ready to Dispatch', title: 'Ready to Dispatch', color: 'border-indigo-500 text-indigo-800 bg-indigo-50' },
-  { id: 'Dispatched', title: 'Dispatched', color: 'border-blue-500 text-blue-800 bg-blue-50' },
+  { id: 'Dispatched', title: 'Out for Delivery', color: 'border-blue-500 text-blue-800 bg-blue-50' },
   { id: 'Delivered', title: 'Delivered', color: 'border-emerald-500 text-emerald-800 bg-emerald-50' }
 ];
 
@@ -59,12 +59,14 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const [riderSearch, setRiderSearch] = useState('');
   const [verifiedOrderIds, setVerifiedOrderIds] = useState([]);
   const [prescriptionPreview, setPrescriptionPreview] = useState(null);
+  const [viewingPrescriptionOrderId, setViewingPrescriptionOrderId] = useState(null);
   const [deliveredPage, setDeliveredPage] = useState(1);
   const [deliveredOrders, setDeliveredOrders] = useState([]);
   const [deliveredPagination, setDeliveredPagination] = useState({ page: 1, limit: 5, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
   const [deliveredLoading, setDeliveredLoading] = useState(true);
   const [deliveredError, setDeliveredError] = useState('');
   const [deliveredRetryKey, setDeliveredRetryKey] = useState(0);
+  const [expandedDeliveredOrderId, setExpandedDeliveredOrderId] = useState(null);
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [searchOrders, setSearchOrders] = useState([]);
@@ -219,8 +221,13 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   };
 
   const reviewOrder = async (order, status) => {
-    if (status === 'Approved' && order.prescriptionRequired && !verifiedOrderIds.includes(order._id)) {
-      addToast('View and verify the uploaded prescription before approving.', 'warning');
+    const orderId = String(order._id);
+    if (status === 'Approved' && order.prescriptionRequired && !order.prescriptionUrl) {
+      addToast('This order requires a prescription, but no prescription file is attached.', 'warning');
+      return;
+    }
+    if (status === 'Approved' && order.prescriptionUrl && !verifiedOrderIds.includes(orderId)) {
+      addToast('Open the attached prescription before approving this order.', 'warning');
       return;
     }
     try {
@@ -230,7 +237,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         prescriptionVerified: status === 'Approved'
       });
       addToast(res.data.message || `Order ${status.toLowerCase()}.`, 'success');
-      setVerifiedOrderIds(prev => prev.filter(id => id !== order._id));
+      setVerifiedOrderIds(prev => prev.filter(id => id !== orderId));
       refreshBoard();
     } catch (err) {
       addToast(err.message || 'Order review failed.', 'error');
@@ -254,12 +261,23 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   };
 
   const viewPrescription = async (order) => {
+    if (!order?.prescriptionUrl || viewingPrescriptionOrderId) return;
     try {
+      setViewingPrescriptionOrderId(String(order._id));
       const res = await apiClient.get(order.prescriptionUrl, { responseType: 'blob' });
+      const contentType = String(res.headers?.['content-type'] || res.data?.type || '').toLowerCase();
+      if (!res.data?.size || !/(application\/pdf|image\/)/.test(contentType)) {
+        throw new Error('Prescription file could not be previewed.');
+      }
       const url = URL.createObjectURL(res.data);
+      if (prescriptionPreview) URL.revokeObjectURL(prescriptionPreview);
       setPrescriptionPreview(url);
-    } catch (err) {
-      addToast(err.message || 'Could not open prescription file.', 'error');
+      const orderId = String(order._id);
+      setVerifiedOrderIds(prev => prev.includes(orderId) ? prev : [...prev, orderId]);
+    } catch {
+      addToast('Could not open the prescription file. Please try again.', 'error');
+    } finally {
+      setViewingPrescriptionOrderId(null);
     }
   };
 
@@ -362,6 +380,49 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                     const orderId = (order._id || '').slice(-6).toUpperCase();
                     const isProcessing = updatingId === order._id;
 
+                    if (col.id === 'Delivered') {
+                      const isExpanded = String(expandedDeliveredOrderId) === String(order._id);
+                      const customerName = order.customerName || order.addressDetails?.fullName || 'Customer';
+                      return (
+                        <section key={order._id} className="min-w-0 overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
+                          <button
+                            type="button"
+                            aria-expanded={isExpanded}
+                            aria-controls={`delivered-order-${order._id}`}
+                            onClick={() => setExpandedDeliveredOrderId(current => current === String(order._id) ? null : String(order._id))}
+                            className="flex min-h-14 w-full min-w-0 items-center justify-between gap-2 p-3 text-left hover:bg-emerald-50/60"
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="flex flex-wrap items-center gap-2">
+                                <span className="font-black text-xs text-slate-900">#{orderId}</span>
+                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-800">Delivered</span>
+                              </span>
+                              <span className="mt-1 block truncate text-xs font-semibold text-slate-600">{customerName}</span>
+                            </span>
+                            <span aria-hidden="true" className="shrink-0 text-slate-500">{isExpanded ? '−' : '+'}</span>
+                          </button>
+                          {isExpanded && (
+                            <div id={`delivered-order-${order._id}`} className="space-y-2 border-t border-slate-100 p-3 text-xs text-slate-600">
+                              <p><span className="font-bold">Order ID:</span> {order._id}</p>
+                              <p><span className="font-bold">Customer:</span> {customerName}</p>
+                              <p><span className="font-bold">Mobile:</span> {order.customerMobile || 'No phone'}</p>
+                              {order.deliveryAddress && <p><span className="font-bold">Address:</span> {order.deliveryAddress}</p>}
+                              <p><span className="font-bold">Total:</span> ₹{order.finalTotal} COD</p>
+                              {order.outForDeliveryAt && <p><span className="font-bold">Out for delivery:</span> {new Date(order.outForDeliveryAt).toLocaleString()}</p>}
+                              {order.deliveredAt && <p><span className="font-bold">Delivered:</span> {new Date(order.deliveredAt).toLocaleString()}</p>}
+                              {order.rider && <p><span className="font-bold">Rider:</span> {order.rider.riderName || 'Assigned rider'}{order.rider.riderMobile ? ` · ${order.rider.riderMobile}` : ''}</p>}
+                              <div className="border-t border-slate-100 pt-2">
+                                <p className="mb-1 font-bold">Items</p>
+                                {(order.items || []).map((item, index) => (
+                                  <p key={`${item.name || 'item'}-${index}`}>{item.name || 'Item'} × {item.quantity || 1}</p>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </section>
+                      );
+                    }
+
                     return (
                       <div
                         key={order._id}
@@ -406,40 +467,35 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
 
                         {col.id === 'Pending_Review' && (
                           <div className="space-y-2 border-t border-slate-100 pt-2">
-                            {order.prescriptionRequired && (
+                            {(order.prescriptionRequired || order.prescriptionUrl) && (
                               <div className="rounded-xl bg-rose-50 p-2 text-xs text-rose-800">
-                                <p className="font-bold">Prescription required</p>
+                                <p className="font-bold">{order.prescriptionRequired ? 'Prescription required' : 'Prescription attached'}</p>
                                 {order.prescriptionUrl ? (
                                   <button
                                     type="button"
                                     onClick={() => viewPrescription(order)}
-                                    className="mt-1 min-h-11 font-bold underline"
+                                    disabled={viewingPrescriptionOrderId === String(order._id)}
+                                    className="mt-1 min-h-11 font-bold underline disabled:cursor-wait disabled:opacity-60"
                                   >
-                                    View uploaded prescription
+                                    {viewingPrescriptionOrderId === String(order._id) ? 'Opening prescription…' : 'View uploaded prescription'}
                                   </button>
                                 ) : (
                                   <p>Prescription file is missing.</p>
                                 )}
-                                <label className="mt-2 flex min-h-11 items-center gap-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={verifiedOrderIds.includes(order._id)}
-                                    disabled={!order.prescriptionUrl}
-                                    onChange={event => setVerifiedOrderIds(prev =>
-                                      event.target.checked
-                                        ? [...prev, order._id]
-                                        : prev.filter(id => id !== order._id)
-                                    )}
-                                  />
-                                  I verified the prescription
-                                </label>
+                                {order.prescriptionUrl && (
+                                  <p className="mt-1 text-[11px] font-semibold text-rose-800">
+                                    {verifiedOrderIds.includes(String(order._id))
+                                      ? 'Prescription opened. Approval is enabled.'
+                                      : 'Open the prescription to enable approval.'}
+                                  </p>
+                                )}
                               </div>
                             )}
                             <div className="flex gap-2">
                               <button
                                 type="button"
                                 onClick={() => reviewOrder(order, 'Approved')}
-                                disabled={isProcessing || (order.prescriptionRequired && !order.prescriptionUrl)}
+                                disabled={isProcessing || (order.prescriptionRequired && !order.prescriptionUrl) || (Boolean(order.prescriptionUrl) && !verifiedOrderIds.includes(String(order._id)))}
                                 className="min-h-11 flex-1 rounded-xl bg-emerald-600 px-2 py-2 text-xs font-extrabold text-white disabled:opacity-50"
                               >
                                 Approve

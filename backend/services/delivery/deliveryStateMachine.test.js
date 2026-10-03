@@ -30,3 +30,9 @@ test('not reachable preserves the existing Dispatched order status', () => {
     assert.equal(transition.allowed, true);
     assert.equal(transition.nextOrderStatus, 'Dispatched');
 });
+
+test('delivery accepts persisted legacy and uppercase out-for-delivery status values', () => {
+    assert.equal(evaluateDeliveryAction({ ...dispatchedOrder, orderStatus: 'DISPATCHED' }, 'payment_pending', 'rider-1').allowed, true);
+    assert.equal(evaluateDeliveryAction({ ...dispatchedOrder, orderStatus: 'out_for_delivery' }, 'payment_pending', 'rider-1').allowed, true);
+    assert.equal(evaluateDeliveryAction({ ...dispatchedOrder, orderStatus: undefined, status: 'out_for_delivery' }, 'cash_received', 'rider-1').allowed, true);
+});
