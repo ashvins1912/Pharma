@@ -292,3 +292,134 @@ test('7. Idempotent Order Creation & Medicine Proposal Conversion', async () => 
     assert.equal(repeatApproval.alreadyConverted, true);
     assert.equal(repeatApproval.order.id, approval.order.id);
 });
+
+test('8. Multi-Tenant Cross-Tenant Denial, Role Escalation & State Machine Guards', async () => {
+    // 1. Order Status Transition Tenant Isolation
+    // Create an order in Tenant 1 (Ashvin Main)
+    const { order } = await orderService.createOrder({
+        tenantId: 'tenant-ashvin-main',
+        branchId: 'branch-indore-central',
+        customerId: 'cust-demo-ashvin',
+        customerName: 'Ashvin Singh',
+        items: [{ productId: 'prod-pcm-650', quantity: 1 }],
+        idempotencyKey: `idemp-iso-${Date.now()}`
+    });
+
+    // Staff from Tenant 2 (MedPlus) attempts to transition Tenant 1's order -> DENIED
+    const medplusStaffActor = {
+        userId: 'user-medplus-staff-1',
+        tenantId: 'tenant-medplus-partner',
+        tenantMembership: { tenantId: 'tenant-medplus-partner', role: 'PHARMACIST' },
+        role: 'PHARMACIST',
+        isPlatformUser: false
+    };
+
+    await assert.rejects(
+        async () => {
+            await orderService.transitionOrderStatus(order.id, 'ACCEPTED', medplusStaffActor);
+        },
+        (err) => err instanceof TenantAccessDeniedError && err.code === 'TENANT_ACCESS_DENIED'
+    );
+
+    // 2. Customer Role Escalation: Customer cannot advance order to ACCEPTED or PROCESSING
+    const customerActor = {
+        userId: 'user-customer-99',
+        customerId: 'cust-demo-ashvin',
+        role: 'CUSTOMER',
+        isPlatformUser: false
+    };
+
+    await assert.rejects(
+        async () => {
+            await orderService.transitionOrderStatus(order.id, 'ACCEPTED', customerActor);
+        },
+        /Customers can only request order cancellation/
+    );
+
+    // 3. State Machine Validation: Cannot transition backward or from terminal state
+    const ashvinStaffActor = {
+        userId: 'user-ashvin-staff-1',
+        tenantId: 'tenant-ashvin-main',
+        tenantMembership: { tenantId: 'tenant-ashvin-main', role: 'PHARMACIST' },
+        role: 'PHARMACIST',
+        isPlatformUser: false
+    };
+
+    // Transition pipeline: SUBMITTED -> ACCEPTED -> PROCESSING -> READY_FOR_DISPATCH -> OUT_FOR_DELIVERY -> DELIVERED
+    await orderService.transitionOrderStatus(order.id, 'ACCEPTED', ashvinStaffActor);
+    await orderService.transitionOrderStatus(order.id, 'PROCESSING', ashvinStaffActor);
+    await orderService.transitionOrderStatus(order.id, 'READY_FOR_DISPATCH', ashvinStaffActor);
+    await orderService.transitionOrderStatus(order.id, 'OUT_FOR_DELIVERY', ashvinStaffActor);
+    await orderService.transitionOrderStatus(order.id, 'DELIVERED', ashvinStaffActor);
+
+    // Terminal state: Cannot transition DELIVERED -> ACCEPTED
+    await assert.rejects(
+        async () => {
+            await orderService.transitionOrderStatus(order.id, 'ACCEPTED', ashvinStaffActor);
+        },
+        /Invalid order status transition/
+    );
+
+    // 4. Medicine Request: Staff from Tenant 2 cannot formulate proposal for Tenant 1's request
+    const medReq = await medicineRequestService.createRequest({
+        tenantId: 'tenant-ashvin-main',
+        branchId: 'branch-indore-central',
+        customerId: 'cust-demo-ashvin',
+        customerName: 'Ashvin Singh',
+        medicineName: 'Special Liver Compound',
+        requestedQuantity: 1
+    });
+
+    await assert.rejects(
+        async () => {
+            await medicineRequestService.createOrUpdateProposal(
+                medReq.id,
+                { proposedMedicineName: 'Special Liver Compound', unitPrice: 300 },
+                medplusStaffActor
+            );
+        },
+        (err) => err instanceof TenantAccessDeniedError && err.code === 'TENANT_ACCESS_DENIED'
+    );
+
+    // 5. Customer IDOR: Customer B cannot approve Customer A's proposal
+    await medicineRequestService.createOrUpdateProposal(
+        medReq.id,
+        { proposedMedicineName: 'Special Liver Compound', unitPrice: 300, quantity: 1 },
+        ashvinStaffActor
+    );
+
+    await assert.rejects(
+        async () => {
+            await medicineRequestService.approveProposalAndConvertToOrder(
+                medReq.id,
+                'different-customer-id',
+                'Hacked approval attempt'
+            );
+        },
+        /You do not have access to approve this medicine request/
+    );
+
+    // 6. Bulk Import Job Isolation: Tenant 2 cannot view Tenant 1's import job
+    const importJob = await catalogService.startBulkImport(
+        'tenant-ashvin-main',
+        'branch-indore-central',
+        [{ name: 'Test Med Alpha', quantity: 50, price: 100 }],
+        ashvinStaffActor
+    );
+
+    const jobViewedByTenant1 = await catalogService.getBulkImportJob(importJob.jobId, 'tenant-ashvin-main');
+    assert.ok(jobViewedByTenant1, 'Tenant 1 must be able to view their own import job');
+
+    const jobViewedByTenant2 = await catalogService.getBulkImportJob(importJob.jobId, 'tenant-medplus-partner');
+    assert.equal(jobViewedByTenant2, null, 'Tenant 2 must be denied viewing Tenant 1 import job');
+
+    // 7. Delivery Job Isolation: Tenant 2 staff cannot update Tenant 1 delivery job
+    await deliveryService.assignRiderToOrder('tenant-ashvin-main', 'branch-indore-central', order.id, 'rider-ind-01', ashvinStaffActor);
+
+    await assert.rejects(
+        async () => {
+            await deliveryService.updateJobStatus(order.id, 'DELIVERED', medplusStaffActor);
+        },
+        (err) => err instanceof TenantAccessDeniedError && err.code === 'TENANT_ACCESS_DENIED'
+    );
+});

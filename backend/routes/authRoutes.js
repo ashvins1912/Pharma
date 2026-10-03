@@ -33,9 +33,56 @@ import {
     issueDemoAdminToken,
     verifyDemoAdminPassword
 } from '../config/demoAdmin.js';
+import {
+    getDemoCustomerIdentity,
+    isDemoCustomerEnabled,
+    issueDemoCustomerToken
+} from '../config/demoCustomer.js';
 
 const router = express.Router();
 router.use(sanitizeBodyMiddleware);
+
+router.post('/demo-admin', validateLogin, async (req, res) => {
+    if (!isDemoAdminEnabled()) {
+        return res.status(404).json({ message: 'Demo admin sign-in is disabled.' });
+    }
+    if (!verifyDemoAdminPassword(req.body?.email, req.body?.password)) {
+        return res.status(401).json({ message: 'Invalid demo admin email or password.' });
+    }
+    try {
+        const access_token = await issueDemoAdminToken();
+        res.json({ access_token, token_type: 'Bearer', expires_in: 3600, user: getDemoAdminIdentity() });
+    } catch (error) {
+        console.error('Demo admin token creation failed:', error);
+        res.status(503).json({ message: 'Demo admin sign-in is not configured correctly.' });
+    }
+});
+
+router.post('/demo-admin/instant', async (req, res) => {
+    if (!isDemoAdminEnabled() || !isInstantDemoAdminEnabled()) {
+        return res.status(404).json({ message: 'Instant demo admin access is disabled.' });
+    }
+    try {
+        const access_token = await issueDemoAdminToken(true);
+        res.json({ access_token, token_type: 'Bearer', expires_in: 3600, user: getDemoAdminIdentity() });
+    } catch (error) {
+        console.error('Instant demo admin sign-in failed:', error);
+        res.status(503).json({ message: 'Instant demo admin access is not configured correctly.' });
+    }
+});
+
+router.post('/demo-customer', async (req, res) => {
+    if (!isDemoCustomerEnabled()) {
+        return res.status(404).json({ message: 'Demo customer access is disabled.' });
+    }
+    try {
+        const access_token = await issueDemoCustomerToken();
+        res.json({ access_token, token_type: 'Bearer', expires_in: 3600, user: getDemoCustomerIdentity() });
+    } catch (error) {
+        console.error('Demo customer token creation failed:', error);
+        res.status(503).json({ message: 'Demo customer access is not configured correctly.' });
+    }
+});
 
 // In-memory shadow profiles store when MongoDB is offline
 const inMemoryShadowProfiles = new Map();

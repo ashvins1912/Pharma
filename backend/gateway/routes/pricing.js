@@ -16,7 +16,7 @@ router.post('/calculate', async (req, res, next) => {
         const calculation = await pricingEngine.calculateOrderPricing({
             tenantId: targetTenantId,
             branchId: targetBranchId,
-            customerId: customerId || req.context?.customerId,
+            customerId: req.context?.customerId || customerId || null,
             items: items || [],
             couponCode,
             redeemPoints

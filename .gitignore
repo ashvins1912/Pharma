@@ -68,3 +68,6 @@ Thumbs.db
 /services/order-service/.env
 /backend/data/whatsapp-auth/
 /data/whatsapp-auth/
+.local-logs/
+bun.lock
+*.lockb

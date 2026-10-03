@@ -60,7 +60,8 @@ router.post('/bulk-import', authenticateUser, requireTenantScope, requireTenantS
 
 router.get('/bulk-import/:jobId', authenticateUser, requireTenantScope, async (req, res, next) => {
     try {
-        const job = await catalogService.getBulkImportJob(req.params.jobId);
+        const tenantId = req.context.isPlatformUser ? null : req.context.tenantId;
+        const job = await catalogService.getBulkImportJob(req.params.jobId, tenantId);
         if (!job) return res.status(404).json({ success: false, message: 'Import job not found' });
         res.json({ success: true, data: job });
     } catch (err) {

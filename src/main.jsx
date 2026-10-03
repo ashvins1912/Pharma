@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { SpeedInsights } from '@vercel/speed-insights/react';
+// SpeedInsights stripped for AI Studio environment
+const SpeedInsights = () => null;
 import './config/env.ts';
 import App from './App.jsx';
 import './index.css';
