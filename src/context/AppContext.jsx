@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import apiClient from '../api/apiClient';
 import { normalizeOrdersResponse } from '../api/orderService';
 import { applyCouponCode } from '../api/couponService';
-import { getCustomerMedicineRequests } from '../api/medicineRequestService';
+import { getCustomerMedicineRequestsPage } from '../api/medicineRequestService';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
 
@@ -14,6 +14,7 @@ export function AppProvider({ children }) {
 
   // Catalog State
   const [medicines, setMedicines] = useState([]);
+  const [medicinesError, setMedicinesError] = useState('');
   const [loadingMedicines, setLoadingMedicines] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -34,22 +35,27 @@ export function AppProvider({ children }) {
 
   // Address Directory State
   const [addresses, setAddresses] = useState([]);
+  const [addressesError, setAddressesError] = useState('');
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [loadingAddresses, setLoadingAddresses] = useState(false);
 
   // Orders & Tracking State
   const [orders, setOrders] = useState([]);
+  const [ordersError, setOrdersError] = useState('');
   const [activeTrackingOrder, setActiveTrackingOrder] = useState(null);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const orderLoadSequence = useRef(0);
+  const previousCustomerId = useRef(null);
 
   // Medicine Requests & Proposals State
   const [medicineRequests, setMedicineRequests] = useState([]);
   const [medicineRequestsError, setMedicineRequestsError] = useState('');
   const [medicineRequestsPagination, setMedicineRequestsPagination] = useState({
-    page: 1, limit: 5, total: 0, totalPages: 0
+    page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false
   });
   const [loadingMedicineRequests, setLoadingMedicineRequests] = useState(false);
+  const medicineRequestQuery = useRef({ statusGroup: 'ALL' });
+  const medicineRequestSequence = useRef(0);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [requestPrefillData, setRequestPrefillData] = useState(null);
   const [activeProposalRequest, setActiveProposalRequest] = useState(null);
@@ -248,72 +254,23 @@ export function AppProvider({ children }) {
       const res = await apiClient.get('/api/medicines', { params });
       if (res.data && res.data.medicines) {
         setMedicines(res.data.medicines || []);
+        setMedicinesError('');
         setTotalMedicines(res.data.total || 0);
         setTotalPages(res.data.totalPages || 1);
         setIsSearching(Boolean(res.data.isSearching));
       } else if (Array.isArray(res.data)) {
         setMedicines(res.data);
+        setMedicinesError('');
         setTotalMedicines(res.data.length);
         setTotalPages(1);
         setIsSearching(Boolean(searchQuery));
       }
     } catch (err) {
-      console.warn("Catalog fetch notice:", err?.message || err);
-      setMedicines(prev => {
-        if (prev.length > 0) return prev;
-        return [
-          {
-            _id: "med-fallback-1",
-            sku: "MED-PNF-PARA-0001",
-            name: "Paracetamol 650mg (Strip of 15 Tablets)",
-            brand: "Calpol / Dolo",
-            category: "Pain & Fever",
-            description: "Fast-acting relief for headache, body aches, and fever.",
-            composition: "Paracetamol IP 650mg",
-            price: 32,
-            stock: 48,
-            requiresPrescription: false,
-            imageUrl: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80",
-            manufacturer: "Micro Labs",
-            availableQuantity: 48,
-            isPrescriptionRequired: false
-          },
-          {
-            _id: "med-fallback-2",
-            sku: "MED-ANT-AZI-0002",
-            name: "Azithromycin 500mg (Strip of 5 Tablets)",
-            brand: "Azee 500",
-            category: "Antibiotics",
-            description: "Broad-spectrum macrolide antibiotic for respiratory and throat infections.",
-            composition: "Azithromycin 500mg",
-            price: 119,
-            stock: 35,
-            requiresPrescription: true,
-            imageUrl: "https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=500&q=80",
-            manufacturer: "Cipla",
-            availableQuantity: 35,
-            isPrescriptionRequired: true
-          },
-          {
-            _id: "med-fallback-3",
-            sku: "MED-VIT-VITC-0003",
-            name: "Vitamin C + Zinc Chewable Tablets (Strip of 15)",
-            brand: "Limcee",
-            category: "Vitamins & Supplements",
-            description: "Daily immunity enhancer with citrus bioflavonoids and essential Zinc.",
-            composition: "Ascorbic Acid 500mg + Zinc 5mg",
-            price: 45,
-            stock: 60,
-            requiresPrescription: false,
-            imageUrl: "https://images.unsplash.com/photo-1576075796033-848c2a5f3696?w=500&q=80",
-            manufacturer: "Abbott",
-            availableQuantity: 60,
-            isPrescriptionRequired: false
-          }
-        ];
-      });
-      setTotalMedicines(prev => prev || 3);
+      console.warn('Catalog fetch notice:', err?.message || err);
+      setMedicines([]);
+      setTotalMedicines(0);
       setTotalPages(1);
+      setMedicinesError(err.message || 'The medicine catalog is temporarily unavailable. Please try again.');
     } finally {
       setLoadingMedicines(false);
     }
@@ -327,10 +284,12 @@ export function AppProvider({ children }) {
   const loadAddresses = useCallback(async () => {
     try {
       setLoadingAddresses(true);
+      setAddressesError('');
       const res = await apiClient.get('/api/user/addresses');
       if (Array.isArray(res.data)) {
         const addrs = res.data;
         setAddresses(addrs);
+        if (addrs.length === 0) setSelectedAddressId('');
         if (addrs.length > 0) {
           setSelectedAddressId((currentSelected) => {
             if (currentSelected && addrs.some(address => address._id === currentSelected)) {
@@ -340,36 +299,48 @@ export function AppProvider({ children }) {
             return defaultAddr?._id || '';
           });
         }
+        return addrs;
       }
+      throw new Error('Address response was invalid.');
     } catch (err) {
       console.warn("Address directory notice:", err?.message || err);
-      // Graceful fallback to initial address so addresses and checkout are immediately usable
-      setAddresses((prev) => {
-        if (prev.length > 0) return prev;
-        const initial = {
-          _id: "addr-1",
-          label: "Home",
-          fullName: user?.user_metadata?.name || "Ashvin Singh",
-          mobile: user?.user_metadata?.mobile || "+91 95899 16475",
-          addressLine1: "Flat 402, Greenfield Heights, Richmond Road",
-          city: "Bengaluru",
-          state: "Karnataka",
-          pincode: "560025",
-          addressLine: "Flat 402, Greenfield Heights, Richmond Road, Bengaluru - 560025",
-          coordinates: { lat: 12.9667, lng: 77.6000 },
-          isDefault: true
-        };
-        setSelectedAddressId((prevId) => prevId || initial._id);
-        return [initial];
-      });
+      setAddressesError('Unable to load your saved addresses right now. Please try again.');
+      return null;
     } finally {
       setLoadingAddresses(false);
     }
-  }, [user]);
+  }, [user, addToast]);
 
   useEffect(() => {
+    const currentCustomerId = user?.id || null;
+    if (previousCustomerId.current !== currentCustomerId) {
+      previousCustomerId.current = currentCustomerId;
+      setAddresses([]);
+      setAddressesError('');
+      setSelectedAddressId('');
+      setCart([]);
+      setOrders([]);
+      setOrdersError('');
+      setMedicineRequests([]);
+      setMedicineRequestsError('');
+      setMedicineRequestsPagination({ page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false });
+      setNotifications([]);
+      setActiveProposalRequest(null);
+      setRequestModalOpen(false);
+      setRequestPrefillData(null);
+    }
     if (user) {
       loadAddresses();
+    } else {
+      setAddresses([]);
+      setAddressesError('');
+      setSelectedAddressId('');
+      setCart([]);
+      setOrders([]);
+      setOrdersError('');
+      setMedicineRequests([]);
+      setMedicineRequestsError('');
+      setMedicineRequestsPagination({ page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false });
     }
   }, [user, loadAddresses]);
 
@@ -378,6 +349,7 @@ export function AppProvider({ children }) {
     const requestSequence = ++orderLoadSequence.current;
     if (!user?.id) {
       setOrders([]);
+      setOrdersError('');
       setLoadingOrders(false);
       return;
     }
@@ -386,9 +358,11 @@ export function AppProvider({ children }) {
       const res = await apiClient.get('/api/orders/mine');
       if (requestSequence === orderLoadSequence.current) {
         setOrders(normalizeOrdersResponse(res.data));
+        setOrdersError('');
       }
     } catch (error) {
       console.error('Failed to load customer orders:', error);
+      if (requestSequence === orderLoadSequence.current) setOrdersError('Unable to load your orders right now. Please try again in a moment.');
     } finally {
       if (requestSequence === orderLoadSequence.current) {
         setLoadingOrders(false);
@@ -403,19 +377,42 @@ export function AppProvider({ children }) {
   }, [loadUserOrders]);
 
   // Load User Medicine Requests
-  const loadUserMedicineRequests = useCallback(async ({ silent = false } = {}) => {
+  const loadUserMedicineRequests = useCallback(async ({ silent = false, page = 1, statusGroup, append = false } = {}) => {
+    const sequence = ++medicineRequestSequence.current;
+    if (statusGroup) medicineRequestQuery.current = { statusGroup };
+    const query = medicineRequestQuery.current;
     if (!user) {
       setMedicineRequests([]);
       setMedicineRequestsError('');
-      setMedicineRequestsPagination({ page: 1, limit: 5, total: 0, totalPages: 0 });
+      setMedicineRequestsPagination({ page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false });
       setLoadingMedicineRequests(false);
       return;
     }
     try {
       if (!silent) setLoadingMedicineRequests(true);
-      setMedicineRequestsError('');
-      const list = await getCustomerMedicineRequests();
-      setMedicineRequests(list || []);
+      if (!append) setMedicineRequestsError('');
+      const data = await getCustomerMedicineRequestsPage({ page, pageSize: 3, ...query });
+      if (sequence !== medicineRequestSequence.current) return;
+      const list = data.requests || data.items;
+      if (!Array.isArray(list)) throw new Error('Medicine requests response was invalid.');
+      setMedicineRequests(previous => {
+        if (!append && silent) {
+          const byId = new Map([...list, ...previous].map(item => [String(item._id), item]));
+          return [...byId.values()];
+        }
+        if (!append) return list;
+        const byId = new Map(previous.map(item => [String(item._id), item]));
+        list.forEach(item => byId.set(String(item._id), item));
+        return [...byId.values()];
+      });
+      setMedicineRequestsPagination({
+        page: Number(data.pagination?.page) || page,
+        pageSize: Number(data.pagination?.pageSize || data.pagination?.limit) || 3,
+        limit: Number(data.pagination?.pageSize || data.pagination?.limit) || 3,
+        total: Number(data.pagination?.total) || 0,
+        totalPages: Number(data.pagination?.totalPages) || 0,
+        hasNextPage: Boolean(data.pagination?.hasNextPage ?? ((Number(data.pagination?.page) || page) < Number(data.pagination?.totalPages || 0)))
+      });
 
       // Check if any proposals are ready to notify customer in notification bell
       const proposalsWaiting = (list || []).filter(r => r.status === 'PROPOSAL_SENT');
@@ -441,16 +438,17 @@ export function AppProvider({ children }) {
         });
       }
     } catch (error) {
+      if (sequence !== medicineRequestSequence.current) return;
       console.error('Failed to load customer medicine requests:', error);
-      setMedicineRequestsError(error.message || 'Could not load your medicine requests.');
+      setMedicineRequestsError(error.message || 'Medicine requests are temporarily unavailable. Please try again in a moment.');
     } finally {
-      if (!silent) setLoadingMedicineRequests(false);
+      if (sequence === medicineRequestSequence.current && !silent) setLoadingMedicineRequests(false);
     }
   }, [user]);
 
   useEffect(() => {
     loadUserMedicineRequests();
-    const timer = window.setInterval(() => loadUserMedicineRequests({ silent: true }), 15000);
+    const timer = window.setInterval(() => loadUserMedicineRequests({ silent: true, page: 1 }), 15000);
     return () => window.clearInterval(timer);
   }, [loadUserMedicineRequests]);
 
@@ -623,7 +621,14 @@ export function AppProvider({ children }) {
       addToast('Saved address deleted. Existing orders keep their original delivery address.', 'success');
       return true;
     } catch (err) {
-      addToast('Failed to delete address: ' + err.message, 'error');
+      if (err.status === 404) {
+        const refreshedAddresses = await loadAddresses();
+        if (Array.isArray(refreshedAddresses) && !refreshedAddresses.some(address => String(address._id) === String(addressId))) {
+          addToast('This address was already removed. Your address list has been refreshed.', 'info');
+          return true;
+        }
+      }
+      addToast(err.message || 'Unable to delete this address right now. Please try again.', 'error');
       return false;
     }
   };
@@ -633,6 +638,7 @@ export function AppProvider({ children }) {
       value={{
         // Catalog
         medicines,
+        medicinesError,
         loadingMedicines,
         searchQuery,
         setSearchQuery,
@@ -669,6 +675,7 @@ export function AppProvider({ children }) {
 
         // Addresses
         addresses,
+        addressesError,
         selectedAddressId,
         setSelectedAddressId,
         loadingAddresses,
@@ -679,6 +686,7 @@ export function AppProvider({ children }) {
 
         // Orders
         orders,
+        ordersError,
         loadUserOrders,
         loadingOrders,
         activeTrackingOrder,

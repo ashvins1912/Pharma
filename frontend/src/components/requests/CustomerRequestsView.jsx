@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 
-const DEFAULT_PAGINATION = { page: 1, limit: 5, total: 0, totalPages: 0 };
+const DEFAULT_PAGINATION = { page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false };
 
 export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
   const { user } = useAuth();
@@ -162,6 +162,8 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
             Try again
           </button>
         </div>
+      ) : loadingMedicineRequests && medicineRequests.length === 0 ? (
+        <div className="py-12 text-center text-sm font-semibold text-slate-500" role="status">Loading medicine requests...</div>
       ) : filteredRequests.length === 0 ? (
         <div className="py-16 text-center text-slate-400 space-y-3">
           <p className="text-4xl">💊</p>
@@ -319,30 +321,19 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
         </div>
       )}
 
-      {pagination.totalPages > 1 && (
+      {pagination.total > 0 && (
         <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-slate-500" aria-live="polite">
-            Page {pagination.page} of {pagination.totalPages}
-            {' · '}{pagination.total} requests
+            Showing {medicineRequests.length} of {pagination.total} requests
           </p>
-          <div className="flex items-center gap-2">
-            <button
+          {pagination.hasNextPage && <button
               type="button"
-              onClick={() => loadUserMedicineRequests({ page: pagination.page - 1 })}
-              disabled={loadingMedicineRequests || pagination.page <= 1}
-              className="min-h-9 rounded-lg bg-slate-100 px-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => loadUserMedicineRequests({ page: pagination.page + 1, append: true })}
+              disabled={loadingMedicineRequests}
+              className="min-h-9 rounded-lg bg-slate-100 px-4 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Previous
-            </button>
-            <button
-              type="button"
-              onClick={() => loadUserMedicineRequests({ page: pagination.page + 1 })}
-              disabled={loadingMedicineRequests || pagination.page >= pagination.totalPages}
-              className="min-h-9 rounded-lg bg-slate-100 px-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
+              {loadingMedicineRequests ? 'Loading medicine requests...' : 'Load More'}
+            </button>}
         </div>
       )}
 

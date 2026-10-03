@@ -32,6 +32,12 @@ const formatDistance = (distanceInKm) => {
   return `${distanceInKm.toFixed(1)} km to pickup`;
 };
 
+const getPageWindow = (currentPage, totalPages) => {
+  const visibleCount = Math.min(totalPages, 7);
+  const firstPage = Math.max(1, Math.min(currentPage - 3, totalPages - visibleCount + 1));
+  return Array.from({ length: visibleCount }, (_, index) => firstPage + index);
+};
+
 const COLUMNS = [
   { id: 'Pending_Review', title: 'Pending Review', color: 'border-amber-500 text-amber-800 bg-amber-50' },
   { id: 'Approved', title: 'Approved', color: 'border-teal-500 text-teal-800 bg-teal-50' },
@@ -53,6 +59,109 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const [riderSearch, setRiderSearch] = useState('');
   const [verifiedOrderIds, setVerifiedOrderIds] = useState([]);
   const [prescriptionPreview, setPrescriptionPreview] = useState(null);
+  const [deliveredPage, setDeliveredPage] = useState(1);
+  const [deliveredOrders, setDeliveredOrders] = useState([]);
+  const [deliveredPagination, setDeliveredPagination] = useState({ page: 1, limit: 5, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+  const [deliveredLoading, setDeliveredLoading] = useState(true);
+  const [deliveredError, setDeliveredError] = useState('');
+  const [deliveredRetryKey, setDeliveredRetryKey] = useState(0);
+  const [searchInput, setSearchInput] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
+  const [searchOrders, setSearchOrders] = useState([]);
+  const [searchPagination, setSearchPagination] = useState({ page: 1, limit: 5, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [searchRetryKey, setSearchRetryKey] = useState(0);
+
+  useEffect(() => {
+    let isCurrentRequest = true;
+    setDeliveredLoading(true);
+    setDeliveredError('');
+    apiClient.get('/api/orders/admin/all', {
+      params: { status: 'Delivered', page: deliveredPage, limit: 5 }
+    }).then(response => {
+      if (!isCurrentRequest) return;
+      const data = response.data || {};
+      setDeliveredOrders(Array.isArray(data.items) ? data.items : []);
+      setDeliveredPagination(data.pagination || { page: deliveredPage, limit: 5, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+    }).catch(error => {
+      if (isCurrentRequest) setDeliveredError(error.message || 'Unable to load delivered orders. Please try again.');
+    }).finally(() => {
+      if (isCurrentRequest) setDeliveredLoading(false);
+    });
+    return () => { isCurrentRequest = false; };
+  }, [deliveredPage, deliveredRetryKey]);
+
+  useEffect(() => {
+    if (!appliedSearch) return undefined;
+    let isCurrentRequest = true;
+    setSearchLoading(true);
+    setSearchError('');
+    apiClient.get('/api/orders/admin/all', {
+      params: { search: appliedSearch, page: searchPagination.page, limit: 5 }
+    }).then(response => {
+      if (!isCurrentRequest) return;
+      const data = response.data || {};
+      setSearchOrders(Array.isArray(data.items) ? data.items : []);
+      setSearchPagination(data.pagination || { page: 1, limit: 5, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+    }).catch(error => {
+      if (isCurrentRequest) {
+        setSearchOrders([]);
+        setSearchError(error.message || 'Unable to search orders. Please try again.');
+      }
+    }).finally(() => {
+      if (isCurrentRequest) setSearchLoading(false);
+    });
+    return () => { isCurrentRequest = false; };
+  }, [appliedSearch, searchPagination.page, searchRetryKey]);
+
+  const refreshBoard = () => {
+    onRefresh?.();
+    setDeliveredRetryKey(value => value + 1);
+  };
+
+  const changeDeliveredPage = (page) => {
+    if (page < 1 || page > deliveredPagination.totalPages || page === deliveredPage) return;
+    setDeliveredLoading(true);
+    setDeliveredPage(page);
+  };
+
+  const submitSearch = (event) => {
+    event.preventDefault();
+    if (searchLoading) return;
+    const query = searchInput.trim();
+    if (!query) {
+      setSearchError('Please enter an Order ID, mobile number, or email address.');
+      return;
+    }
+    setSearchOrders([]);
+    setSearchPagination({ page: 1, limit: 5, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+    setSearchError('');
+    setSearchLoading(true);
+    setSearchPagination(current => ({ ...current, page: 1 }));
+    setAppliedSearch(query);
+    setSearchRetryKey(value => value + 1);
+  };
+
+  const clearSearch = () => {
+    setSearchInput('');
+    setAppliedSearch('');
+    setSearchOrders([]);
+    setSearchError('');
+    setSearchPagination({ page: 1, limit: 5, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+  };
+
+  const changeSearchPage = (page) => {
+    if (page < 1 || page > searchPagination.totalPages || page === searchPagination.page) return;
+    setSearchOrders([]);
+    setSearchLoading(true);
+    setSearchPagination(current => ({ ...current, page }));
+  };
+
+  const retrySearch = () => {
+    setSearchLoading(true);
+    setSearchRetryKey(value => value + 1);
+  };
 
   useEffect(() => {
     if (!assignRiderModal) return undefined;
@@ -100,7 +209,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         riderInfo
       });
       addToast(res.data.message || `Order shifted to ${newStatus}`, 'success');
-      onRefresh();
+      refreshBoard();
     } catch (err) {
       addToast(err.message || 'State transition failed', 'error');
     } finally {
@@ -122,7 +231,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       });
       addToast(res.data.message || `Order ${status.toLowerCase()}.`, 'success');
       setVerifiedOrderIds(prev => prev.filter(id => id !== order._id));
-      onRefresh();
+      refreshBoard();
     } catch (err) {
       addToast(err.message || 'Order review failed.', 'error');
     } finally {
@@ -135,7 +244,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       setUpdatingId(orderId);
       const res = await apiClient.put(`/api/orders/${encodeURIComponent(orderId)}/dispatch`, { riderInfo });
       addToast(res.data.message || 'Order dispatched.', 'success');
-      onRefresh();
+      refreshBoard();
     } catch (err) {
       addToast(err.message || 'Order dispatch failed.', 'error');
     } finally {
@@ -167,17 +276,52 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
           <p className="text-xs text-slate-500">Live order state machine & dispatch lifecycle</p>
         </div>
         <button
-          onClick={onRefresh}
+          onClick={refreshBoard}
           className="min-h-11 px-3 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer transition"
         >
           🔄 Refresh Board
         </button>
       </div>
 
+      <form onSubmit={submitSearch} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" role="search">
+        <label htmlFor="fulfillment-order-search" className="mb-2 block text-xs font-black text-slate-800">Search orders</label>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            id="fulfillment-order-search"
+            type="search"
+            value={searchInput}
+            onChange={event => setSearchInput(event.target.value)}
+            placeholder="Order ID / customer mobile / email"
+            className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          />
+          <button type="submit" disabled={searchLoading} className="min-h-11 rounded-xl bg-blue-600 px-5 text-xs font-black text-white disabled:opacity-50">{searchLoading ? 'Searching…' : 'Search'}</button>
+          {appliedSearch && <button type="button" onClick={clearSearch} className="min-h-11 rounded-xl border border-slate-300 px-4 text-xs font-bold text-slate-700">Clear Search</button>}
+        </div>
+        <p className="mt-2 text-[11px] text-slate-500">Searches all fulfillment statuses: Order ID, mobile number, or email.</p>
+        {appliedSearch && !searchLoading && !searchError && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
+            <span>{searchPagination.total === 0 ? 'No orders found.' : `${searchPagination.total} orders found for “${appliedSearch}”.`}</span>
+            {searchPagination.totalPages > 1 && <nav aria-label="Order search pages" className="flex items-center gap-2">
+              <button type="button" onClick={() => changeSearchPage(searchPagination.page - 1)} disabled={!searchPagination.hasPreviousPage} className="min-h-9 rounded-lg border px-3 font-bold disabled:opacity-40">Previous</button>
+              <span aria-current="page">Page {searchPagination.page} of {searchPagination.totalPages}</span>
+              <button type="button" onClick={() => changeSearchPage(searchPagination.page + 1)} disabled={!searchPagination.hasNextPage} className="min-h-9 rounded-lg border px-3 font-bold disabled:opacity-40">Next</button>
+            </nav>}
+          </div>
+        )}
+        {searchLoading && <p className="mt-3 text-xs text-slate-500" role="status">Searching orders…</p>}
+        {searchError && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-rose-700" role="alert"><span>{searchError}</span><button type="button" onClick={retrySearch} disabled={searchLoading} className="font-bold underline">Try again</button></div>}
+      </form>
+
       {/* 4-Column Kanban Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {COLUMNS.map((col) => {
-          const colOrders = orders.filter(o => o.orderStatus === col.id);
+          const searchMode = Boolean(appliedSearch);
+          if (searchMode && (searchLoading || searchError || searchPagination.total === 0)) return null;
+          const colOrders = searchMode
+            ? searchOrders.filter(order => order.orderStatus === col.id)
+            : col.id === 'Delivered'
+              ? deliveredOrders
+            : orders.filter(o => o.orderStatus === col.id);
 
           return (
             <div key={col.id} className="min-w-0 bg-slate-100/70 border border-slate-200 rounded-3xl p-3 sm:p-4 flex flex-col min-h-[500px]">
@@ -187,14 +331,29 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                 <span className={`min-w-0 text-xs font-black px-2.5 py-1 rounded-xl uppercase tracking-wider break-words ${col.color}`}>
                   {col.title}
                 </span>
-                <span className="text-xs font-black text-slate-500 bg-white border border-slate-200 w-6 h-6 rounded-full flex items-center justify-center">
-                  {colOrders.length}
+                <span className="text-xs font-black text-slate-500 bg-white border border-slate-200 min-w-6 h-6 px-1 rounded-full flex items-center justify-center">
+                  {col.id === 'Delivered' ? deliveredPagination.total : colOrders.length}
                 </span>
               </div>
 
               {/* Cards Container */}
               <div className="min-w-0 space-y-3 flex-1">
-                {colOrders.length === 0 ? (
+                {searchMode && searchLoading ? (
+                  <div className="h-40 flex items-center justify-center text-slate-500 text-xs" role="status">Searching orders...</div>
+                ) : searchMode && searchError ? (
+                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs">Search results unavailable</div>
+                ) : col.id === 'Delivered' && deliveredLoading && !searchMode ? (
+                  <div className="h-40 flex items-center justify-center text-slate-500 text-xs" role="status">Loading delivered orders...</div>
+                ) : col.id === 'Delivered' && deliveredError && !searchMode ? (
+                  <div className="min-h-40 flex flex-col items-center justify-center gap-2 text-center text-xs text-rose-700" role="alert">
+                    <p>{deliveredError}</p>
+                    <button type="button" onClick={() => setDeliveredRetryKey(value => value + 1)} className="font-bold underline">Try again</button>
+                  </div>
+                ) : searchMode && !searchLoading && !searchError && searchPagination.total === 0 ? (
+                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">No orders found.</div>
+                ) : col.id === 'Delivered' && deliveredPagination.total === 0 && !searchMode ? (
+                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">No delivered orders found.</div>
+                ) : colOrders.length === 0 ? (
                   <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">
                     No orders in this stage
                   </div>
@@ -383,6 +542,16 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                   })
                 )}
               </div>
+
+              {col.id === 'Delivered' && !searchMode && !deliveredLoading && !deliveredError && deliveredPagination.totalPages > 0 && (
+                <nav aria-label="Delivered order pages" className="mt-4 flex flex-wrap items-center justify-center gap-1.5 border-t border-slate-200 pt-3">
+                  <button type="button" onClick={() => changeDeliveredPage(deliveredPage - 1)} disabled={!deliveredPagination.hasPreviousPage} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+                  {getPageWindow(deliveredPage, deliveredPagination.totalPages).map(page => (
+                    <button key={page} type="button" onClick={() => changeDeliveredPage(page)} aria-current={page === deliveredPage ? 'page' : undefined} className={`min-h-9 min-w-9 rounded-lg border px-2 text-xs font-bold ${page === deliveredPage ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}>{page}</button>
+                  ))}
+                  <button type="button" onClick={() => changeDeliveredPage(deliveredPage + 1)} disabled={!deliveredPagination.hasNextPage} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+                </nav>
+              )}
 
             </div>
           );

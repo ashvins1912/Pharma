@@ -34,6 +34,9 @@ export function useOrderDashboard() {
 
     // Feature 2: Trigger automated assignment engine pipeline
     const autoAssignOrder = async (orderId) => {
+        if (typeof orderId !== 'string' || !/^[a-f\d]{24}$/i.test(orderId)) {
+            throw new Error('Unable to assign delivery for this order. Please refresh and try again.');
+        }
         setAssignmentExecuting(true);
         try {
             const res = await apiClient.post(`/api/admin/assignment/orders/${orderId}/auto-assign`);
@@ -41,7 +44,7 @@ export function useOrderDashboard() {
             await loadOrders();
             return res.data;
         } catch (err) {
-            const msg = err.response?.data?.message || err.message || 'Automated assignment failed.';
+            const msg = err.code === 'NOT_FOUND' ? 'Order not found.' : err.message || 'Unable to assign delivery for this order. Please try again.';
             throw new Error(msg);
         } finally {
             setAssignmentExecuting(false);
@@ -50,6 +53,9 @@ export function useOrderDashboard() {
 
     // Manual override assignment
     const manualAssignOrder = async (orderId, riderId, notes = 'Manual dispatch override') => {
+        if (typeof orderId !== 'string' || !/^[a-f\d]{24}$/i.test(orderId)) {
+            throw new Error('Unable to assign delivery for this order. Please refresh and try again.');
+        }
         setAssignmentExecuting(true);
         try {
             const res = await apiClient.post(`/api/admin/assignment/orders/${orderId}/manual-assign`, {
@@ -60,7 +66,7 @@ export function useOrderDashboard() {
             await loadOrders();
             return res.data;
         } catch (err) {
-            const msg = err.response?.data?.message || err.message || 'Manual assignment failed.';
+            const msg = err.code === 'NOT_FOUND' ? 'Order not found.' : err.message || 'Unable to assign delivery for this order. Please try again.';
             throw new Error(msg);
         } finally {
             setAssignmentExecuting(false);

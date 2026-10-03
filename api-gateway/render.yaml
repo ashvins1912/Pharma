@@ -5,6 +5,7 @@ services:
     rootDir: api-gateway
     buildCommand: npm install
     startCommand: npm start
+    numInstances: 1
     healthCheckPath: /ready
     envVars:
       - key: NODE_ENV
@@ -31,3 +32,11 @@ services:
         value: 120000
       - key: AUTH_TIMEOUT_MS
         value: 15000
+      - key: HEALTH_CHECK_ENABLED
+        value: "true"
+      - key: HEALTH_CHECK_INTERVAL_MINUTES
+        value: 15
+      - key: HEALTH_CHECK_TIMEOUT_MS
+        value: 5000
+      - key: HEALTH_CHECK_RUN_ON_STARTUP
+        value: "false"

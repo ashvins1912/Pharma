@@ -5,7 +5,7 @@ import { useToast } from '../context/ToastContext';
 import OrderHistory from './OrderHistory';
 
 export default function OrderHistoryView({ onTrackOrder }) {
-  const { orders, loadingOrders, loadUserOrders } = useApp();
+  const { orders, ordersError, loadingOrders, loadUserOrders } = useApp();
   const { addToast } = useToast();
   const editableStatuses = ['Pending_Review', 'Approved', 'Processing Order', 'Ready to Dispatch'];
   const activeOrders = orders.filter(order => !['Delivered', 'Cancelled', 'Rejected', 'Completed', 'delivered', 'cancelled', 'rejected', 'completed'].includes(order.orderStatus || order.status));
@@ -55,7 +55,12 @@ export default function OrderHistoryView({ onTrackOrder }) {
         </button>
       </div>
 
-      {activeOrders.length === 0 ? (
+      {ordersError ? (
+        <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
+          <p>{ordersError}</p>
+          <button type="button" onClick={() => loadUserOrders()} disabled={loadingOrders} className="mt-2 font-bold underline disabled:opacity-50">Try again</button>
+        </div>
+      ) : activeOrders.length === 0 ? (
         <div className="py-16 text-center text-slate-400 space-y-2">
           <p className="text-3xl">📋</p>
           <p className="text-xs font-bold text-slate-700">No active orders</p>

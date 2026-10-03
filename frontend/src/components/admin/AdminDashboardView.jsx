@@ -42,6 +42,9 @@ export default function AdminDashboardView() {
   const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen } = useApp();
   const [adminTab, setAdminTab] = useState('fulfillment'); // 'fulfillment' | 'inventory' | 'routes' | 'audits'
   const [orders, setOrders] = useState([]);
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [deliveredCount, setDeliveredCount] = useState(0);
   const [pendingMedicineRequestCount, setPendingMedicineRequestCount] = useState(0);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [ordersError, setOrdersError] = useState('');
@@ -63,8 +66,12 @@ export default function AdminDashboardView() {
     try {
       setLoadingOrders(true);
       setOrdersError('');
-      const res = await apiClient.get('/api/orders/admin/all');
-      setOrders(res.data || []);
+      const res = await apiClient.get('/api/orders/admin/all?fulfillmentSnapshot=true');
+      const snapshot = res.data || {};
+      setOrders(Array.isArray(snapshot.items) ? snapshot.items : []);
+      setRecentOrders(Array.isArray(snapshot.recentOrders) ? snapshot.recentOrders : []);
+      setTotalOrders(Number(snapshot.total) || 0);
+      setDeliveredCount(Number(snapshot.deliveredCount) || 0);
     } catch (err) {
       setOrdersError(err.message || 'Could not load the order queue.');
     } finally {
@@ -102,7 +109,6 @@ export default function AdminDashboardView() {
   const approvedCount = orders.filter(o => o.orderStatus === 'Approved').length;
   const readyCount = orders.filter(o => o.orderStatus === 'Ready to Dispatch').length;
   const dispatchedCount = orders.filter(o => o.orderStatus === 'Dispatched').length;
-  const deliveredCount = orders.filter(o => o.orderStatus === 'Delivered').length;
   const activeCount = processingCount + pendingReviewCount + approvedCount + readyCount + dispatchedCount;
   const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.finalTotal) || 0), 0);
 
@@ -178,7 +184,7 @@ export default function AdminDashboardView() {
               All Orders
             </span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-black text-slate-900">{orders.length}</span>
+              <span className="text-2xl font-black text-slate-900">{totalOrders}</span>
               <span className="text-[11px] font-bold text-amber-600">({activeCount} ongoing)</span>
             </div>
           </div>
@@ -351,7 +357,7 @@ export default function AdminDashboardView() {
           ) : (
             <AdminFulfillmentKanban orders={orders} onRefresh={loadAllOrders} />
           )}
-          {!loadingOrders && orders.length > 0 && (
+          {!loadingOrders && recentOrders.length > 0 && (
             <section aria-labelledby="admin-financial-insights" className="space-y-3 pt-3">
               <div>
                 <h3 id="admin-financial-insights" className="text-base font-black text-slate-900">
@@ -362,7 +368,7 @@ export default function AdminDashboardView() {
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {orders.slice(0, 6).map(order => (
+                {recentOrders.map(order => (
                   <AdminOrderFinancials key={order._id} order={order} />
                 ))}
               </div>

@@ -30,7 +30,8 @@ const orderSchema = new mongoose.Schema({
     riderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Rider', default: null, index: true },
     userId: { type: String, required: true, index: true },
     customerName: { type: String, default: "Valued Customer" },
-    customerMobile: { type: String, default: "" },
+    customerMobile: { type: String, default: "", index: true },
+    customerMobileNormalized: { type: String, default: '', index: true },
     medicineItems: { type: [medicineItemSchema], default: [] },
     items: { type: [orderItemSchema], default: [] },
     prescriptionUrl: { type: String, default: null },
@@ -153,6 +154,7 @@ const normalizedOrderStatus = {
     Cancelled: 'cancelled'
 };
 orderSchema.pre('validate', function syncOrderStatuses() {
+    this.customerMobileNormalized = String(this.customerMobile || '').replace(/\D/g, '');
     if (!this.riderId && mongoose.isValidObjectId(this.rider?.riderId)) {
         this.riderId = this.rider.riderId;
     }
@@ -174,10 +176,15 @@ orderSchema.pre('findOneAndUpdate', function syncUpdatedOrderStatus() {
     if (normalizedOrderStatus[fields.orderStatus]) {
         fields.status = normalizedOrderStatus[fields.orderStatus];
     }
+    if (fields.customerMobile !== undefined) {
+        fields.customerMobileNormalized = String(fields.customerMobile || '').replace(/\D/g, '');
+    }
     if (mongoose.isValidObjectId(fields.rider?.riderId)) {
         fields.riderId = fields.rider.riderId;
     }
 });
+
+orderSchema.index({ orderStatus: 1, createdAt: -1, _id: -1 });
 
 orderSchema.index({ orderStatus: 1, createdAt: -1 });
 orderSchema.index(

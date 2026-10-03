@@ -78,231 +78,232 @@ test('gateway handles preflight before proxying to the backend', async () => {
       }
     });
 
-    test('gateway returns a controlled error for a rejected origin', async () => {
-      const app = createGatewayApp(loadConfig({
-        NODE_ENV: 'test',
-        BACKEND_API_URL: 'http://127.0.0.1:8090',
-        CORS_ALLOWED_ORIGINS: 'http://localhost:3000'
-      }));
-      const server = await start(app);
-      try {
-        const response = await fetch(`${server.url}/api/v1/orders`, {
-          headers: { Origin: 'https://untrusted.example' }
-        });
-        assert.equal(response.status, 403);
-        assert.equal((await response.json()).error.code, 'CORS_ORIGIN_NOT_ALLOWED');
-      } finally {
-        await server.close();
-      }
-    });
-
-    test('gateway authenticates the user and issues a scoped Order Service token', async () => {
-      let serviceAuthorization = '';
-      let forwardedUserAuthorization = '';
-      const backend = await startMockServer((req, res) => {
-        if (req.url !== '/internal/gateway/authenticate') {
-          res.writeHead(404).end();
-          return;
-        }
-        const assertion = (req.headers['x-gateway-authorization'] || '').slice(7);
-        assert.doesNotThrow(() => jwt.verify(assertion, testSecrets.gateway, {
-          algorithms: ['HS256'],
-          issuer: 'ashvin-pharmacy',
-          audience: 'pharma-backend-auth',
-          subject: 'api-gateway'
-        }));
-        forwardedUserAuthorization = req.headers.authorization;
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          user: {
-            sub: 'customer-42',
-            email: 'customer@example.com',
-            app_metadata: { role: 'customer' },
-            user_metadata: { name: 'Test Customer', mobile: '+10000000000' }
-          }
-        }));
-      });
-      const service = await startMockServer((req, res) => {
-        serviceAuthorization = req.headers.authorization;
-        let body = '';
-        req.setEncoding('utf8');
-        req.on('data', chunk => { body += chunk; });
-        req.on('end', () => {
-          res.writeHead(201, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ path: req.url, body }));
-        });
-      });
-      const app = createGatewayApp(authorizedConfig(backend.url, service.url));
-      const gateway = await start(app);
-
-      try {
-        const response = await fetch(`${gateway.url}/api/v1/orders/`, {
-          method: 'POST',
-          headers: {
-            Authorization: 'Bearer valid-user-token',
-            'Content-Type': 'application/json',
-            'Idempotency-Key': 'checkout-42'
-          },
-          body: JSON.stringify({ items: [{ productId: 'MED-42', quantity: 1 }] })
-        });
-        assert.equal(response.status, 201);
-        assert.equal(forwardedUserAuthorization, 'Bearer valid-user-token');
-        const claims = jwt.verify(serviceAuthorization.slice(7), testSecrets.service, {
-          algorithms: ['HS256'],
-          issuer: 'ashvin-pharmacy',
-          audience: 'order-service',
-          subject: 'api-gateway'
-        });
-        assert.equal(claims.scope, 'orders.create');
-        assert.equal(claims.userId, 'customer-42');
-        assert.equal(claims.userRole, 'customer');
-        assert.equal(claims.email, 'customer@example.com');
-        const forwarded = await response.json();
-        assert.equal(forwarded.path, '/api/v1/orders/');
-        assert.equal(JSON.parse(forwarded.body).items[0].productId, 'MED-42');
-      } finally {
-        await Promise.all([gateway.close(), backend.close(), service.close()]);
-      }
-    });
-
-    test('gateway rejects invalid user credentials before contacting a service', async () => {
-      let serviceCalled = false;
-      const backend = await startMockServer((_req, res) => {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ message: 'Invalid or expired authentication token.' }));
-      });
-      const service = await startMockServer((_req, res) => {
-        serviceCalled = true;
-        res.writeHead(200).end();
-      });
-      const app = createGatewayApp(authorizedConfig(backend.url, service.url));
-      const gateway = await start(app);
-
-      try {
-        const response = await fetch(`${gateway.url}/api/v1/orders`, {
-          headers: { Authorization: 'Bearer invalid-user-token' }
-        });
-        assert.equal(response.status, 401);
-        assert.equal((await response.json()).error.code, 'INVALID_AUTHENTICATION');
-        assert.equal(serviceCalled, false);
-      } finally {
-        await Promise.all([gateway.close(), backend.close(), service.close()]);
-      }
-    });
-
-    test('gateway returns unavailable for unconfigured Inventory and preserves Order backend fallback', async () => {
-      let orderFallbackPath = '';
-      const backend = await startMockServer((req, res) => {
-        orderFallbackPath = req.url;
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ implementation: 'backend' }));
-      });
-      const gatewayConfig = loadConfig({
-        NODE_ENV: 'test',
-        BACKEND_API_URL: backend.url,
-        CORS_ALLOWED_ORIGINS: 'http://localhost:3000'
-      });
-      const gateway = await start(createGatewayApp(gatewayConfig));
-
-      try {
-        const inventoryResponse = await fetch(`${gateway.url}/api/v1/inventory/med-1`);
-        assert.equal(inventoryResponse.status, 503);
-        assert.equal((await inventoryResponse.json()).error.code, 'SERVICE_UNAVAILABLE');
-
-        const orderResponse = await fetch(`${gateway.url}/api/v1/orders?limit=1`);
-        assert.equal(orderResponse.status, 200);
-        assert.equal((await orderResponse.json()).implementation, 'backend');
-        assert.equal(orderFallbackPath, '/api/v1/orders?limit=1');
-      } finally {
-        await Promise.all([gateway.close(), backend.close()]);
-      }
-    });
-
-    test('gateway requires admin role for Inventory adjustment and signs import scopes', async () => {
-      let serviceClaims;
-      let serviceRequestCount = 0;
-      let serviceCookie;
-      let serviceIdempotencyKey;
-      let serviceOrigin;
-      let forwardedGatewayAssertion;
-      const backend = await startMockServer((req, res) => {
-        const token = req.headers.authorization;
-        const admin = token === 'Bearer admin-user-token';
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          user: {
-            sub: admin ? 'admin-1' : 'customer-1',
-            app_metadata: { role: admin ? 'admin' : 'customer' },
-            user_metadata: {}
-          }
-        }));
-      });
-      const service = await startMockServer((req, res) => {
-        serviceRequestCount += 1;
-        serviceCookie = req.headers.cookie;
-        serviceIdempotencyKey = req.headers['idempotency-key'];
-        serviceOrigin = req.headers.origin;
-        forwardedGatewayAssertion = req.headers['x-gateway-authorization'];
-        const serviceToken = req.headers.authorization.slice(7);
-        serviceClaims = jwt.verify(serviceToken, testSecrets.service, {
-          algorithms: ['HS256'],
-          issuer: 'ashvin-pharmacy',
-          audience: 'inventory-service',
-          subject: 'api-gateway'
-        });
-        req.resume();
-        req.on('end', () => {
-          res.writeHead(202, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ accepted: true }));
-        });
-      });
-      const app = createGatewayApp(authorizedConfig(backend.url, service.url));
-      const gateway = await start(app);
-
-      try {
-        const denied = await fetch(`${gateway.url}/api/v1/inventory/adjust`, {
-          method: 'POST',
-          headers: {
-            Authorization: 'Bearer customer-user-token',
-            Cookie: 'access_token=customer-user-token',
-            'Content-Type': 'application/json'
-          },
-          body: '{}'
-        });
-        assert.equal(denied.status, 403);
-
-        const uploaded = await fetch(`${gateway.url}/api/v1/inventory/imports`, {
-          method: 'POST',
-          headers: {
-            Authorization: 'Bearer admin-user-token',
-            Cookie: 'access_token=admin-user-token',
-            Origin: 'http://localhost:3000',
-            'X-Gateway-Authorization': 'Bearer untrusted-client-value',
-            'Content-Type': 'multipart/form-data; boundary=upload-boundary',
-            'Idempotency-Key': 'inventory-import-1'
-          },
-          body: '--upload-boundary--\r\n'
-        });
-        assert.equal(uploaded.status, 202);
-        assert.equal(serviceClaims.scope, 'inventory.import');
-        assert.equal(serviceClaims.userId, 'admin-1');
-        assert.equal(serviceClaims.userRole, 'admin');
-        assert.equal(serviceClaims.email, undefined);
-        assert.equal(serviceClaims.customerName, undefined);
-        assert.equal(serviceClaims.customerMobile, undefined);
-        assert.equal(serviceRequestCount, 1);
-        assert.equal(serviceCookie, undefined);
-        assert.equal(serviceIdempotencyKey, 'inventory-import-1');
-        assert.equal(serviceOrigin, undefined);
-        assert.equal(forwardedGatewayAssertion, undefined);
-      } finally {
-        await Promise.all([gateway.close(), backend.close(), service.close()]);
-      }
-    });
     assert.equal(response.status, 204);
     assert.equal(response.headers.get('access-control-allow-credentials'), 'true');
     assert.equal(response.headers.get('access-control-allow-origin'), 'http://localhost:3000');
   } finally {
     await server.close();
+  }
+});
+
+test('gateway returns a controlled error for a rejected origin', async () => {
+  const app = createGatewayApp(loadConfig({
+    NODE_ENV: 'test',
+    BACKEND_API_URL: 'http://127.0.0.1:8090',
+    CORS_ALLOWED_ORIGINS: 'http://localhost:3000'
+  }));
+  const server = await start(app);
+  try {
+    const response = await fetch(`${server.url}/api/v1/orders`, {
+      headers: { Origin: 'https://untrusted.example' }
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, 'CORS_ORIGIN_NOT_ALLOWED');
+  } finally {
+    await server.close();
+  }
+});
+
+test('gateway authenticates the user and issues a scoped Order Service token', async () => {
+  let serviceAuthorization = '';
+  let forwardedUserAuthorization = '';
+  const backend = await startMockServer((req, res) => {
+    if (req.url !== '/internal/gateway/authenticate') {
+      res.writeHead(404).end();
+      return;
+    }
+    const assertion = (req.headers['x-gateway-authorization'] || '').slice(7);
+    assert.doesNotThrow(() => jwt.verify(assertion, testSecrets.gateway, {
+      algorithms: ['HS256'],
+      issuer: 'ashvin-pharmacy',
+      audience: 'pharma-backend-auth',
+      subject: 'api-gateway'
+    }));
+    forwardedUserAuthorization = req.headers.authorization;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      user: {
+        sub: 'customer-42',
+        email: 'customer@example.com',
+        app_metadata: { role: 'customer' },
+        user_metadata: { name: 'Test Customer', mobile: '+10000000000' }
+      }
+    }));
+  });
+  const service = await startMockServer((req, res) => {
+    serviceAuthorization = req.headers.authorization;
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      res.writeHead(201, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ path: req.url, body }));
+    });
+  });
+  const app = createGatewayApp(authorizedConfig(backend.url, service.url));
+  const gateway = await start(app);
+
+  try {
+    const response = await fetch(`${gateway.url}/api/v1/orders/`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer valid-user-token',
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'checkout-42'
+      },
+      body: JSON.stringify({ items: [{ productId: 'MED-42', quantity: 1 }] })
+    });
+    assert.equal(response.status, 201);
+    assert.equal(forwardedUserAuthorization, 'Bearer valid-user-token');
+    const claims = jwt.verify(serviceAuthorization.slice(7), testSecrets.service, {
+      algorithms: ['HS256'],
+      issuer: 'ashvin-pharmacy',
+      audience: 'order-service',
+      subject: 'api-gateway'
+    });
+    assert.equal(claims.scope, 'orders.create');
+    assert.equal(claims.userId, 'customer-42');
+    assert.equal(claims.userRole, 'customer');
+    assert.equal(claims.email, 'customer@example.com');
+    const forwarded = await response.json();
+    assert.equal(forwarded.path, '/api/v1/orders/');
+    assert.equal(JSON.parse(forwarded.body).items[0].productId, 'MED-42');
+  } finally {
+    await Promise.all([gateway.close(), backend.close(), service.close()]);
+  }
+});
+
+test('gateway rejects invalid user credentials before contacting a service', async () => {
+  let serviceCalled = false;
+  const backend = await startMockServer((_req, res) => {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ message: 'Invalid or expired authentication token.' }));
+  });
+  const service = await startMockServer((_req, res) => {
+    serviceCalled = true;
+    res.writeHead(200).end();
+  });
+  const app = createGatewayApp(authorizedConfig(backend.url, service.url));
+  const gateway = await start(app);
+
+  try {
+    const response = await fetch(`${gateway.url}/api/v1/orders`, {
+      headers: { Authorization: 'Bearer invalid-user-token' }
+    });
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error.code, 'INVALID_AUTHENTICATION');
+    assert.equal(serviceCalled, false);
+  } finally {
+    await Promise.all([gateway.close(), backend.close(), service.close()]);
+  }
+});
+
+test('gateway returns unavailable for unconfigured Inventory and preserves Order backend fallback', async () => {
+  let orderFallbackPath = '';
+  const backend = await startMockServer((req, res) => {
+    orderFallbackPath = req.url;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ implementation: 'backend' }));
+  });
+  const gatewayConfig = loadConfig({
+    NODE_ENV: 'test',
+    BACKEND_API_URL: backend.url,
+    CORS_ALLOWED_ORIGINS: 'http://localhost:3000'
+  });
+  const gateway = await start(createGatewayApp(gatewayConfig));
+
+  try {
+    const inventoryResponse = await fetch(`${gateway.url}/api/v1/inventory/med-1`);
+    assert.equal(inventoryResponse.status, 503);
+    assert.equal((await inventoryResponse.json()).error.code, 'SERVICE_UNAVAILABLE');
+
+    const orderResponse = await fetch(`${gateway.url}/api/v1/orders?limit=1`);
+    assert.equal(orderResponse.status, 200);
+    assert.equal((await orderResponse.json()).implementation, 'backend');
+    assert.equal(orderFallbackPath, '/api/v1/orders?limit=1');
+  } finally {
+    await Promise.all([gateway.close(), backend.close()]);
+  }
+});
+
+test('gateway requires admin role for Inventory adjustment and signs import scopes', async () => {
+  let serviceClaims;
+  let serviceRequestCount = 0;
+  let serviceCookie;
+  let serviceIdempotencyKey;
+  let serviceOrigin;
+  let forwardedGatewayAssertion;
+  const backend = await startMockServer((req, res) => {
+    const token = req.headers.authorization;
+    const admin = token === 'Bearer admin-user-token';
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      user: {
+        sub: admin ? 'admin-1' : 'customer-1',
+        app_metadata: { role: admin ? 'admin' : 'customer' },
+        user_metadata: {}
+      }
+    }));
+  });
+  const service = await startMockServer((req, res) => {
+    serviceRequestCount += 1;
+    serviceCookie = req.headers.cookie;
+    serviceIdempotencyKey = req.headers['idempotency-key'];
+    serviceOrigin = req.headers.origin;
+    forwardedGatewayAssertion = req.headers['x-gateway-authorization'];
+    const serviceToken = req.headers.authorization.slice(7);
+    serviceClaims = jwt.verify(serviceToken, testSecrets.service, {
+      algorithms: ['HS256'],
+      issuer: 'ashvin-pharmacy',
+      audience: 'inventory-service',
+      subject: 'api-gateway'
+    });
+    req.resume();
+    req.on('end', () => {
+      res.writeHead(202, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ accepted: true }));
+    });
+  });
+  const app = createGatewayApp(authorizedConfig(backend.url, service.url));
+  const gateway = await start(app);
+
+  try {
+    const denied = await fetch(`${gateway.url}/api/v1/inventory/adjust`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer customer-user-token',
+        Cookie: 'access_token=customer-user-token',
+        'Content-Type': 'application/json'
+      },
+      body: '{}'
+    });
+    assert.equal(denied.status, 403);
+
+    const uploaded = await fetch(`${gateway.url}/api/v1/inventory/imports`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer admin-user-token',
+        Cookie: 'access_token=admin-user-token',
+        Origin: 'http://localhost:3000',
+        'X-Gateway-Authorization': 'Bearer untrusted-client-value',
+        'Content-Type': 'multipart/form-data; boundary=upload-boundary',
+        'Idempotency-Key': 'inventory-import-1'
+      },
+      body: '--upload-boundary--\r\n'
+    });
+    assert.equal(uploaded.status, 202);
+    assert.equal(serviceClaims.scope, 'inventory.import');
+    assert.equal(serviceClaims.userId, 'admin-1');
+    assert.equal(serviceClaims.userRole, 'admin');
+    assert.equal(serviceClaims.email, undefined);
+    assert.equal(serviceClaims.customerName, undefined);
+    assert.equal(serviceClaims.customerMobile, undefined);
+    assert.equal(serviceRequestCount, 1);
+    assert.equal(serviceCookie, undefined);
+    assert.equal(serviceIdempotencyKey, 'inventory-import-1');
+    assert.equal(serviceOrigin, undefined);
+    assert.equal(forwardedGatewayAssertion, undefined);
+  } finally {
+    await Promise.all([gateway.close(), backend.close(), service.close()]);
   }
 });

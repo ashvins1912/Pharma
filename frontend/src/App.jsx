@@ -96,6 +96,16 @@ function MainApp() {
   }, [user, isAdmin, isPharmacyOrAdmin, activeTab, activeTrackingOrder, setActiveTrackingOrder]);
 
   useEffect(() => {
+    const requireLogin = () => setAuthOpen(true);
+    window.addEventListener('ashvin:authentication-required', requireLogin);
+    window.addEventListener('ashvin:logout-complete', requireLogin);
+    return () => {
+      window.removeEventListener('ashvin:authentication-required', requireLogin);
+      window.removeEventListener('ashvin:logout-complete', requireLogin);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!user) {
       setRatingPromptOrder(null);
       setDismissedRatingOrderIds([]);

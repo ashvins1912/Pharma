@@ -168,7 +168,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       await loadUserMedicineRequests({ page: 1, statusGroup: 'ALL' });
       onClose();
     } catch (err) {
-      addToast(err.response?.data?.message || err.message || 'Failed to submit request.', 'error');
+      addToast(err.message || 'Unable to submit your medicine request right now. Please try again.', 'error');
     } finally {
       submitInProgressRef.current = false;
       setSubmitting(false);

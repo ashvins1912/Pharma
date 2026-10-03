@@ -7,13 +7,16 @@ import './index.css';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { AppProvider } from './context/AppContext';
+import CustomerErrorBoundary from './components/CustomerErrorBoundary';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AuthProvider>
       <ToastProvider>
         <AppProvider>
-          <App />
+          <CustomerErrorBoundary>
+            <App />
+          </CustomerErrorBoundary>
           <SpeedInsights />
         </AppProvider>
       </ToastProvider>

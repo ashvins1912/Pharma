@@ -187,7 +187,7 @@ export const disconnectWhatsApp = async () => {
     return getWhatsAppStatus();
 };
 
-const normalizeWhatsAppNumber = (phone) => {
+export const normalizeWhatsAppNumber = (phone) => {
     let digits = String(phone || '').replace(/\D/g, '');
     if (digits.startsWith('00')) digits = digits.slice(2);
     if (digits.startsWith('0')) digits = digits.slice(1);

@@ -13,6 +13,7 @@ export default function Header({
   onOpenAdminAlerts
 }) {
   const { user, isAdmin, logout } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
   const {
     cart,
     whatsappStatus,
@@ -307,10 +308,12 @@ export default function Header({
                     👤 {user.email}
                   </span>
                   <button
-                    onClick={() => { logout(); setMobileMenuOpen(false); }}
-                    className="text-rose-600 font-bold hover:underline"
+                    onClick={async () => { setSigningOut(true); await logout(); setMobileMenuOpen(false); setSigningOut(false); }}
+                    disabled={signingOut}
+                    aria-busy={signingOut}
+                    className="text-rose-600 font-bold hover:underline disabled:opacity-60"
                   >
-                    Log Out
+                    {signingOut ? 'Signing out…' : 'Log Out'}
                   </button>
                 </>
               ) : (

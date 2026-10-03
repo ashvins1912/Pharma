@@ -9,11 +9,16 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const { user } = useAuth();
   const { cart, subtotal, discountAmount, deliveryFee, finalTotal, appliedCoupon, selectedAddressId, addresses, clearCart, addToCart } = useApp();
   const { addToast } = useToast();
+  const prescriptionRequired = cart.some(item => item.isPrescriptionRequired || item.requiresPrescription);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [prescriptionFile, setPrescriptionFile] = useState(null);
+  const [prescriptionError, setPrescriptionError] = useState('');
+  const [prescriptionChoice, setPrescriptionChoice] = useState('no');
+  const [prescriptionPreview, setPrescriptionPreview] = useState(null);
   const [restockItems, setRestockItems] = useState([]);
+  const [restockError, setRestockError] = useState('');
   const [restockLoading, setRestockLoading] = useState(false);
   const [usePoints, setUsePoints] = useState(false);
   const [pointsRequested, setPointsRequested] = useState(0);
@@ -64,8 +69,8 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       .then(response => {
         if (active) setRestockItems(response.data.items || []);
       })
-      .catch(() => {
-        if (active) setRestockItems([]);
+      .catch((error) => {
+        if (active) setRestockError(error.message || 'Your regular restock list is temporarily unavailable.');
       })
       .finally(() => {
         if (active) setRestockLoading(false);
@@ -73,10 +78,19 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     return () => { active = false; };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!prescriptionFile || !prescriptionFile.type.startsWith('image/')) {
+      setPrescriptionPreview(null);
+      return undefined;
+    }
+    const previewUrl = URL.createObjectURL(prescriptionFile);
+    setPrescriptionPreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [prescriptionFile]);
+
   if (!isOpen) return null;
 
   const selectedAddress = addresses.find(a => a._id === selectedAddressId) || addresses[0];
-  const prescriptionRequired = cart.some(item => item.isPrescriptionRequired || item.requiresPrescription);
 
   const handlePlaceOrder = async () => {
     if (!selectedAddress) {
@@ -87,6 +101,10 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
     if (cart.length === 0) {
       setErrorMsg("Your cart is empty.");
+      return;
+    }
+    if (prescriptionRequired && prescriptionChoice !== 'yes') {
+      setErrorMsg('Please confirm that you have a prescription for this order.');
       return;
     }
     if (prescriptionRequired && !prescriptionFile) {
@@ -115,6 +133,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       if (prescriptionFile) formData.append('prescription', prescriptionFile);
 
       const res = await apiClient.post('/api/orders/checkout', formData);
+      setRestockError('');
 
       addToast(
         res.data.rewardNotice
@@ -147,6 +166,19 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       brand: item.manufacturer || 'Pharmacy',
       quantity: 1
     });
+  };
+
+  const retryRestockItems = async () => {
+    setRestockLoading(true);
+    setRestockError('');
+    try {
+      const response = await apiClient.get('/api/orders/dynamic-restock');
+      setRestockItems(response.data.items || []);
+    } catch (error) {
+      setRestockError(error.message || 'Your regular restock list is temporarily unavailable.');
+    } finally {
+      setRestockLoading(false);
+    }
   };
 
   return (
@@ -192,24 +224,53 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2.5">
               2. Prescription & Medicine Items ({cart.length})
             </h3>
-            {prescriptionRequired && (
-              <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3">
-                <label htmlFor="prescription-upload" className="block text-xs font-bold text-rose-800">
-                  Prescription required. Please upload a clear image/PDF to proceed.
+            <div className={`mb-3 rounded-xl border p-3 ${prescriptionRequired ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50'}`}>
+              <fieldset>
+                <legend className="text-xs font-bold text-slate-800">Do you have a prescription for this order?</legend>
+                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-700">
+                  <label className="inline-flex items-center gap-2"><input type="radio" name="prescription-choice" checked={prescriptionChoice === 'yes'} onChange={() => setPrescriptionChoice('yes')} />Yes, I have a prescription</label>
+                  <label className="inline-flex items-center gap-2"><input type="radio" name="prescription-choice" checked={prescriptionChoice === 'no'} onChange={() => { setPrescriptionChoice('no'); setPrescriptionFile(null); setPrescriptionError(''); }} />No prescription</label>
+                </div>
+              </fieldset>
+              {prescriptionRequired && prescriptionChoice !== 'yes' && <p className="mt-2 text-xs font-bold text-rose-800">A prescription is required for one or more items in this cart. Choose Yes and upload it to continue.</p>}
+              {(prescriptionRequired || prescriptionChoice === 'yes') && <>
+                <label htmlFor="prescription-upload" className="mt-2 block text-xs font-bold text-slate-800">
+                  Upload Prescription (PDF, JPEG, PNG, or WebP; maximum 5 MB)
                 </label>
                 <input
                   id="prescription-upload"
                   type="file"
                   accept="image/jpeg,image/png,image/webp,application/pdf"
-                  onChange={event => setPrescriptionFile(event.target.files?.[0] || null)}
+                  onChange={event => {
+                    const file = event.target.files?.[0] || null;
+                    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+                    if (file && !allowedTypes.includes(file.type)) {
+                      setPrescriptionFile(null);
+                      setPrescriptionError('Choose a PDF, JPEG, PNG, or WebP file.');
+                      event.target.value = '';
+                      return;
+                    }
+                    if (file && file.size > 5 * 1024 * 1024) {
+                      setPrescriptionFile(null);
+                      setPrescriptionError('The prescription file must be 5 MB or smaller.');
+                      event.target.value = '';
+                      return;
+                    }
+                    setPrescriptionError('');
+                    setPrescriptionFile(file);
+                  }}
                   className="mt-2 block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:font-bold file:text-rose-700"
-                  required
+                  required={prescriptionRequired}
                 />
                 {prescriptionFile && (
-                  <p className="mt-1 text-[10px] text-rose-700">{prescriptionFile.name}</p>
+                  <div className="mt-2 flex items-center gap-3 text-[10px] text-emerald-800" role="status">
+                    {prescriptionPreview && <img src={prescriptionPreview} alt="Prescription preview" className="h-12 w-12 rounded-lg object-cover" />}
+                    <span>Ready to attach: {prescriptionFile.name}</span>
+                  </div>
                 )}
-              </div>
-            )}
+                {prescriptionError && <p className="mt-1 text-xs text-rose-700" role="alert">{prescriptionError}</p>}
+              </>}
+            </div>
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 max-h-48 overflow-y-auto space-y-2">
               {cart.map((item) => (
                 <div key={item._id} className="flex justify-between items-center text-xs">
@@ -222,6 +283,13 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
               ))}
             </div>
           </div>
+
+          {restockError && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900" role="alert">
+              <p>Your regular restock list is temporarily unavailable.</p>
+              <button type="button" onClick={retryRestockItems} disabled={restockLoading} className="mt-2 font-bold underline disabled:opacity-50">{restockLoading ? 'Retrying...' : 'Try again'}</button>
+            </div>
+          )}
 
           {restockItems.length > 0 && (
             <section className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">

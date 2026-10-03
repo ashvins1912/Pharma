@@ -10,6 +10,7 @@ import { getPrescription, removePrescription, savePrescription } from '../config
 import { getIsConnected } from '../config/db.js';
 import DynamicOrderService from '../services/DynamicOrderService.js';
 import deliveryContainer from '../modules/delivery/container.js';
+import { classifyOrderSearch, paginationResult } from '../services/orderSearch.js';
 
 const router = express.Router();
 const dynamicOrderService = new DynamicOrderService({
@@ -676,9 +677,36 @@ router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res
 // Admin All Orders
 router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
     try {
+        if (req.query.search !== undefined) {
+            const { type, value } = classifyOrderSearch(req.query.search);
+            const parsedPage = Number.parseInt(req.query.page, 10);
+            const parsedLimit = Number.parseInt(req.query.limit, 10);
+            const requestedPage = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+            const limit = Number.isSafeInteger(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 50) : 5;
+            const result = await dataStore.searchOrders({ type, value, page: requestedPage, limit });
+            const page = result.page || 1;
+            return res.json({ ...paginationResult(result.items, result.total, page, limit), searchType: type });
+        }
+        if (req.query.status !== undefined) {
+            if (req.query.status !== 'Delivered') {
+                return res.status(400).json({ message: 'Only Delivered orders support pagination on this endpoint.' });
+            }
+            const parsedPage = Number.parseInt(req.query.page, 10);
+            const parsedLimit = Number.parseInt(req.query.limit, 10);
+            const requestedPage = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+            const limit = Number.isSafeInteger(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 50) : 5;
+            const result = await dataStore.getDeliveredOrdersPage(requestedPage, limit);
+            const page = result.page || 1;
+            return res.json(paginationResult(result.items, result.total, page, limit));
+        }
+        if (req.query.fulfillmentSnapshot === 'true') {
+            return res.json(await dataStore.getFulfillmentSnapshot());
+        }
         const orders = await dataStore.getAllOrders();
         res.json(orders);
     } catch (err) {
+        if (err.statusCode === 422) return res.status(422).json({ message: err.message });
+        if (err.statusCode === 503) return res.status(503).json({ message: 'Order search is temporarily unavailable. Please try again.' });
         res.status(500).json({ message: "Failed to retrieve orders" });
     }
 });
@@ -720,13 +748,9 @@ router.get('/history', authenticateUser, async (req, res) => {
     if (!getIsConnected()) {
         return res.status(503).json({ message: 'Order history is temporarily unavailable.' });
     }
-    if (req.query.userId && req.query.userId !== req.user.sub) {
-        return res.status(403).json({ message: 'You can only view your own order history.' });
-    }
-
     try {
         const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
-        const limit = 5;
+        const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 3));
         const closedStatuses = new Set(['completed', 'delivered', 'cancelled', 'rejected']);
         const statusFilter = {
             $or: [
@@ -740,13 +764,22 @@ router.get('/history', authenticateUser, async (req, res) => {
         const totalPages = Math.ceil(total / limit);
         const currentPage = Math.min(page, Math.max(totalPages, 1));
         const orders = await Order.find(filter)
-            .sort({ createdAt: -1 })
+            .sort({ createdAt: -1, _id: -1 })
             .skip((currentPage - 1) * limit)
             .limit(limit)
             .lean();
         res.status(200).json({
             orders,
-            pagination: { page: currentPage, limit, total, totalPages }
+            items: orders,
+            pagination: {
+                page: currentPage,
+                pageSize: limit,
+                limit,
+                total,
+                totalPages,
+                hasNextPage: currentPage < totalPages,
+                hasPreviousPage: currentPage > 1
+            }
         });
     } catch (err) {
         console.error('Order history retrieval failed:', err);

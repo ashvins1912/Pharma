@@ -51,7 +51,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
       }
       onClose();
     } catch (err) {
-      addToast(err.response?.data?.message || err.message || 'Failed to approve proposal.', 'error');
+      addToast(err.message || 'Unable to approve this proposal right now. Please try again.', 'error');
     } finally {
       setApproving(false);
     }
@@ -66,7 +66,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
       await loadUserMedicineRequests();
       onClose();
     } catch (err) {
-      addToast(err.response?.data?.message || err.message || 'Failed to reject proposal.', 'error');
+      addToast(err.message || 'Unable to update this proposal right now. Please try again.', 'error');
     } finally {
       setRejecting(false);
     }

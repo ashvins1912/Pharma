@@ -1,0 +1,6 @@
+/Users/priyankatripathi/WebstormProjects/Pharma/.env.example
+/Users/priyankatripathi/WebstormProjects/Pharma/api-gateway/.env.example
+/Users/priyankatripathi/WebstormProjects/Pharma/backend/.env.example
+/Users/priyankatripathi/WebstormProjects/Pharma/frontend/.env.example
+/Users/priyankatripathi/WebstormProjects/Pharma/services/inventory-service/.env.example
+/Users/priyankatripathi/WebstormProjects/Pharma/services/order-service/.env.example

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { friendlyAuthError } from '../api/apiErrors';
 import { isSupabaseConfigured } from '../supabaseClient';
 
 const signupFields = ['name', 'mobile', 'email', 'password', 'confirmPassword'];
@@ -160,7 +161,7 @@ export default function AuthModal({ isOpen, onClose }) {
         }
       }
     } catch (err) {
-      setErrorMsg(err.message || 'Authentication failed. Please verify credentials.');
+      setErrorMsg(isSignUp ? friendlyAuthError(err, 'signup') : friendlyAuthError(err, 'login'));
     } finally {
       setLoading(false);
     }
@@ -181,7 +182,7 @@ export default function AuthModal({ isOpen, onClose }) {
       addToast('🛡️ Two-Factor Authentication verified. Signed in!', 'success');
       handleClose(true);
     } catch (err) {
-      setErrorMsg(err.message || 'Invalid 6-digit code. Please verify in your authenticator app.');
+      setErrorMsg('That verification code could not be confirmed. Check the code and try again.');
     } finally {
       setLoading(false);
     }
@@ -195,7 +196,7 @@ export default function AuthModal({ isOpen, onClose }) {
       await sendPasswordResetEmail(email);
       setResetEmailSent(true);
     } catch (err) {
-      setErrorMsg(err.message || 'Could not send the password reset email.');
+      setErrorMsg(friendlyAuthError(err, 'password reset'));
     } finally {
       setLoading(false);
     }
@@ -209,7 +210,7 @@ export default function AuthModal({ isOpen, onClose }) {
       await loginWithGoogle();
       handleClose(true);
     } catch (err) {
-      setErrorMsg(err.message || 'Google OAuth failed.');
+      setErrorMsg(friendlyAuthError(err, 'Google sign-in'));
       setLoading(false);
       setGoogleLoading(false);
     }
@@ -223,7 +224,7 @@ export default function AuthModal({ isOpen, onClose }) {
       addToast('Logged in as Demo Customer!', 'success');
       handleClose(true);
     } catch (err) {
-      setErrorMsg(err.message || 'Demo customer sign-in failed.');
+      setErrorMsg(friendlyAuthError(err, 'login'));
     } finally {
       setLoading(false);
     }
@@ -237,7 +238,7 @@ export default function AuthModal({ isOpen, onClose }) {
       addToast('Logged in as Demo Admin!', 'success');
       handleClose(true);
     } catch (err) {
-      setErrorMsg(err.message || 'Demo admin sign-in failed.');
+      setErrorMsg(friendlyAuthError(err, 'login'));
     } finally {
       setLoading(false);
     }

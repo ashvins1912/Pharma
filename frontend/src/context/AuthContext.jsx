@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { isSupabaseConfigured, supabase } from '../supabaseClient';
 import apiClient from '../api/apiClient';
 import { env } from '../config/env';
@@ -17,6 +17,7 @@ export function AuthProvider({ children }) {
   const [mfaChallenge, setMfaChallenge] = useState(null); // { challengeToken, factorId, email }
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [aal, setAal] = useState('aal1'); // 'aal1' (Single Factor) | 'aal2' (MFA Verified)
+  const logoutInProgress = useRef(false);
 
   // Synchronize user and role
   const syncSession = (currSession, userData = null) => {
@@ -54,16 +55,17 @@ export function AuthProvider({ children }) {
           setMfaEnabled(Boolean(data.mfaEnabled));
           setAal(data.aal || 'aal1');
         }
-      } catch {
-        // Fallback to local demo session if available
-        const savedDemo = localStorage.getItem('demo_session');
-        if (savedDemo && mounted) {
-          try {
-            const parsed = JSON.parse(savedDemo);
-            if (parsed?.access_token === 'demo-customer-token') {
-              syncSession(parsed, parsed.user);
-            }
-          } catch {}
+      } catch (error) {
+        // Do not treat cached identity data as a valid authenticated session.
+        if (mounted) {
+          syncSession(null);
+          if (error.status === 401) {
+            localStorage.removeItem('demo_session');
+            localStorage.removeItem('demo_auth_token');
+            if (supabase) void supabase.auth.signOut({ scope: 'local' }).catch(signOutError => {
+              console.warn('Could not clear expired local Supabase session.', { name: signOutError.name, status: signOutError.status });
+            });
+          }
         }
       } finally {
         if (mounted) setLoading(false);
@@ -78,9 +80,9 @@ export function AuthProvider({ children }) {
         if (event === 'PASSWORD_RECOVERY') {
           setPasswordRecoveryRequired(true);
         }
-        if (supaSession && mounted) {
-          syncSession(supaSession);
-        }
+        if (!mounted) return;
+        if (supaSession) syncSession(supaSession);
+        else if (event === 'SIGNED_OUT') syncSession(null);
       });
       return () => {
         mounted = false;
@@ -91,6 +93,19 @@ export function AuthProvider({ children }) {
     return () => {
       mounted = false;
     };
+  }, []);
+
+  useEffect(() => {
+    const handleAuthenticationRequired = () => {
+      localStorage.removeItem('demo_session');
+      localStorage.removeItem('demo_auth_token');
+      syncSession(null);
+      if (supabase) void supabase.auth.signOut({ scope: 'local' }).then(({ error }) => {
+        if (error) console.warn('Could not clear expired local Supabase session.', { name: error.name, status: error.status });
+      });
+    };
+    window.addEventListener('ashvin:authentication-required', handleAuthenticationRequired);
+    return () => window.removeEventListener('ashvin:authentication-required', handleAuthenticationRequired);
   }, []);
 
   /**
@@ -210,15 +225,35 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
+    if (logoutInProgress.current) return;
+    logoutInProgress.current = true;
     try {
-      await apiClient.post('/api/auth/logout');
-      if (isSupabaseConfigured) {
-        await supabase.auth.signOut().catch(() => {});
-      }
-    } catch {}
     localStorage.removeItem('demo_session');
     localStorage.removeItem('demo_auth_token');
     syncSession(null);
+    setMfaRequired(false);
+    setMfaChallenge(null);
+    window.dispatchEvent(new CustomEvent('ashvin:logout-complete'));
+    try {
+      await apiClient.post('/api/auth/logout');
+    } catch (error) {
+      console.warn('Server logout request failed; local logout was completed.', { code: error.code, status: error.status, requestId: error.requestId });
+    }
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) console.warn('Could not inspect Supabase session during logout.', { name: sessionError.name, status: sessionError.status });
+        if (data?.session) {
+          const { error } = await supabase.auth.signOut({ scope: 'local' });
+          if (error) console.warn('Supabase local logout returned an error.', { name: error.name, status: error.status });
+        }
+      } catch (error) {
+        console.warn('Supabase local logout failed.', { name: error.name, status: error.status });
+      }
+    }
+    } finally {
+      logoutInProgress.current = false;
+    }
   };
 
   const sendPasswordResetEmail = async (email) => {

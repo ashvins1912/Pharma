@@ -14,6 +14,7 @@ export function AppProvider({ children }) {
 
   // Catalog State
   const [medicines, setMedicines] = useState([]);
+  const [medicinesError, setMedicinesError] = useState('');
   const [loadingMedicines, setLoadingMedicines] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -34,12 +35,14 @@ export function AppProvider({ children }) {
 
   // Address Directory State
   const [addresses, setAddresses] = useState([]);
+  const [addressesError, setAddressesError] = useState('');
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [loadingAddresses, setLoadingAddresses] = useState(false);
   const addressLoadSequence = useRef(0);
 
   // Orders & Tracking State
   const [orders, setOrders] = useState([]);
+  const [ordersError, setOrdersError] = useState('');
   const [activeTrackingOrder, setActiveTrackingOrder] = useState(null);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const orderLoadSequence = useRef(0);
@@ -49,7 +52,7 @@ export function AppProvider({ children }) {
   const [medicineRequestsError, setMedicineRequestsError] = useState('');
   const [loadingMedicineRequests, setLoadingMedicineRequests] = useState(false);
   const [medicineRequestsPagination, setMedicineRequestsPagination] = useState({
-    page: 1, limit: 5, total: 0, totalPages: 0
+    page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false
   });
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [requestPrefillData, setRequestPrefillData] = useState(null);
@@ -186,17 +189,23 @@ export function AppProvider({ children }) {
 
       if (res.data && res.data.medicines) {
         setMedicines(res.data.medicines || []);
+        setMedicinesError('');
         setTotalMedicines(res.data.total || 0);
         setTotalPages(res.data.totalPages || 1);
         setIsSearching(Boolean(res.data.isSearching));
       } else if (Array.isArray(res.data)) {
         setMedicines(res.data);
+        setMedicinesError('');
         setTotalMedicines(res.data.length);
         setTotalPages(1);
         setIsSearching(Boolean(searchQuery));
       }
     } catch (err) {
       console.error("Failed to load catalog:", err);
+      setMedicines([]);
+      setTotalMedicines(0);
+      setTotalPages(1);
+      setMedicinesError(err.message || 'The medicine catalog is temporarily unavailable. Please try again.');
     } finally {
       setLoadingMedicines(false);
     }
@@ -211,6 +220,7 @@ export function AppProvider({ children }) {
     const requestSequence = ++addressLoadSequence.current;
     try {
       setLoadingAddresses(true);
+      setAddressesError('');
       const res = await apiClient.get('/api/user/addresses');
       if (requestSequence === addressLoadSequence.current && Array.isArray(res.data)) {
         const addrs = res.data;
@@ -228,12 +238,12 @@ export function AppProvider({ children }) {
         }
         return addrs;
       }
+      throw new Error('Address response was invalid.');
     } catch (err) {
       if (requestSequence !== addressLoadSequence.current) return;
       console.warn("Address directory notice:", err?.message || err);
-      setAddresses([]);
-      setSelectedAddressId('');
-      return [];
+      setAddressesError('Unable to load your saved addresses right now. Please try again.');
+      return null;
     } finally {
       if (requestSequence === addressLoadSequence.current) setLoadingAddresses(false);
     }
@@ -249,11 +259,15 @@ export function AppProvider({ children }) {
         orderLoadSequence.current += 1;
         medicineRequestLoadSequence.current += 1;
         setAddresses([]);
+        setAddressesError('');
         setSelectedAddressId('');
         setLoadingAddresses(false);
         setOrders([]);
+        setOrdersError('');
         setLoadingOrders(false);
         setMedicineRequests([]);
+        setMedicineRequestsError('');
+        setMedicineRequestsPagination({ page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false });
         setLoadingMedicineRequests(false);
         setCart([]);
         setAppliedCoupon(null);
@@ -280,6 +294,7 @@ export function AppProvider({ children }) {
       loadAddresses();
     } else {
       setAddresses([]);
+      setAddressesError('');
       setSelectedAddressId('');
     }
   }, [user?.id, loadAddresses]);
@@ -297,9 +312,11 @@ export function AppProvider({ children }) {
       const res = await apiClient.get('/api/orders/mine');
       if (requestSequence === orderLoadSequence.current) {
         setOrders(normalizeOrdersResponse(res.data));
+        setOrdersError('');
       }
     } catch (error) {
       console.error('Failed to load customer orders:', error);
+      if (requestSequence === orderLoadSequence.current) setOrdersError('Unable to load your orders right now. Please try again in a moment.');
     } finally {
       if (requestSequence === orderLoadSequence.current) {
         setLoadingOrders(false);
@@ -314,11 +331,12 @@ export function AppProvider({ children }) {
   }, [loadUserOrders]);
 
   // Load User Medicine Requests
-  const loadUserMedicineRequests = useCallback(async ({ silent = false, page, statusGroup } = {}) => {
+  const loadUserMedicineRequests = useCallback(async ({ silent = false, page, statusGroup, append = false } = {}) => {
     const requestSequence = ++medicineRequestLoadSequence.current;
     if (!user || isPharmacyOrAdmin) {
       setMedicineRequests([]);
       setMedicineRequestsError('');
+      setMedicineRequestsPagination({ page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false });
       setLoadingMedicineRequests(false);
       return;
     }
@@ -329,16 +347,27 @@ export function AppProvider({ children }) {
     }
     try {
       if (!silent) setLoadingMedicineRequests(true);
-      setMedicineRequestsError('');
+      if (!append) setMedicineRequestsError('');
       const result = await getCustomerMedicineRequestsPage({
         page: medicineRequestPage.current.page,
+        pageSize: 3,
         statusGroup: medicineRequestPage.current.statusGroup
       });
       if (requestSequence !== medicineRequestLoadSequence.current) return;
-      const list = result?.requests || [];
-      setMedicineRequests(list);
-      setMedicineRequestsPagination(result?.pagination || {
-        page: medicineRequestPage.current.page, limit: 5, total: list.length, totalPages: list.length ? 1 : 0
+      const list = result?.requests || result?.items;
+      if (!Array.isArray(list)) throw new Error('Medicine requests response was invalid.');
+      setMedicineRequests(previous => {
+        if (!append && silent) {
+          const byId = new Map([...list, ...previous].map(item => [String(item._id), item]));
+          return [...byId.values()];
+        }
+        if (!append) return list;
+        const byId = new Map(previous.map(item => [String(item._id), item]));
+        list.forEach(item => byId.set(String(item._id), item));
+        return [...byId.values()];
+      });
+      setMedicineRequestsPagination(result.pagination || {
+        page: medicineRequestPage.current.page, pageSize: 3, limit: 3, total: list.length, totalPages: list.length ? 1 : 0, hasNextPage: false
       });
 
       // Check if any proposals are ready to notify customer in notification bell
@@ -366,8 +395,9 @@ export function AppProvider({ children }) {
       }
     } catch (error) {
       console.error('Failed to load customer medicine requests:', error);
-      setMedicineRequestsError(error.message || 'Could not load your medicine requests.');
+      setMedicineRequestsError(error.message || 'Medicine requests are temporarily unavailable. Please try again in a moment.');
     } finally {
+      if (requestSequence === medicineRequestLoadSequence.current) setMedicineRequestAppending(false);
       if (!silent && requestSequence === medicineRequestLoadSequence.current) setLoadingMedicineRequests(false);
     }
   }, [user?.id, isPharmacyOrAdmin]);
@@ -571,7 +601,14 @@ export function AppProvider({ children }) {
       addToast('Saved address deleted. Existing orders keep their original delivery address.', 'success');
       return true;
     } catch (err) {
-      addToast('Failed to delete address: ' + err.message, 'error');
+      if (err.status === 404) {
+        const refreshedAddresses = await loadAddresses();
+        if (Array.isArray(refreshedAddresses) && !refreshedAddresses.some(address => String(address._id) === String(addressId))) {
+          addToast('This address was already removed. Your address list has been refreshed.', 'info');
+          return true;
+        }
+      }
+      addToast(err.message || 'Unable to delete this address right now. Please try again.', 'error');
       return false;
     }
   };
@@ -581,6 +618,7 @@ export function AppProvider({ children }) {
       value={{
         // Catalog
         medicines,
+        medicinesError,
         loadingMedicines,
         searchQuery,
         setSearchQuery,
@@ -617,6 +655,7 @@ export function AppProvider({ children }) {
 
         // Addresses
         addresses,
+        addressesError,
         selectedAddressId,
         setSelectedAddressId,
         loadingAddresses,
@@ -627,6 +666,7 @@ export function AppProvider({ children }) {
 
         // Orders
         orders,
+        ordersError,
         loadUserOrders,
         loadingOrders,
         activeTrackingOrder,

@@ -11,11 +11,13 @@ export const createMedicineRequest = async (formData) => {
 
 export const getCustomerMedicineRequests = async (params = {}) => {
   const response = await apiClient.get('/api/medicine-requests', { params });
-  return response.data?.requests || [];
+  if (!Array.isArray(response.data?.requests)) throw new Error('Medicine requests response was invalid.');
+  return response.data.requests;
 };
 
 export const getCustomerMedicineRequestsPage = async (params = {}) => {
-  const response = await apiClient.get('/api/medicine-requests', { params });
+  const response = await apiClient.get('/api/medicine-requests', { params: { page: 1, pageSize: 3, statusGroup: 'ALL', ...params } });
+  if (!Array.isArray(response.data?.requests || response.data?.items)) throw new Error('Medicine requests response was invalid.');
   return response.data;
 };
 

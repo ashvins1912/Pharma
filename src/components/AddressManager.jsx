@@ -52,6 +52,7 @@ export default function AddressManager({
 }) {
   const {
     addresses,
+    addressesError,
     selectedAddressId,
     setSelectedAddressId,
     saveAddress,
@@ -73,9 +74,21 @@ export default function AddressManager({
   const mapMarkerRef = useRef(null);
   const locationRequestedForFormRef = useRef(false);
   const addressSubmitInProgressRef = useRef(false);
+  const deleteInProgressRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [pinConfirmed, setPinConfirmed] = useState(false);
   const [savingAddress, setSavingAddress] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletingAddressId, setDeletingAddressId] = useState(null);
+
+  useEffect(() => {
+    if (!deleteTarget) return undefined;
+    const onKeyDown = event => {
+      if (event.key === 'Escape' && !deletingAddressId) setDeleteTarget(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [deleteTarget, deletingAddressId]);
 
   // Form Fields
   const [label, setLabel] = useState('Home');
@@ -91,11 +104,11 @@ export default function AddressManager({
   const [isDefault, setIsDefault] = useState(false);
 
   useEffect(() => {
-    if (autoAddIfEmpty && addresses.length === 0 && !showAddForm) {
+    if (autoAddIfEmpty && addresses.length === 0 && !showAddForm && !addressesError) {
       resetAddressForm();
       setShowAddForm(true);
     }
-  }, [autoAddIfEmpty, addresses.length, showAddForm]);
+  }, [autoAddIfEmpty, addresses.length, showAddForm, addressesError]);
 
   useEffect(() => {
     if (!showAddForm) return undefined;
@@ -313,11 +326,24 @@ export default function AddressManager({
 
   const handleDeleteAddress = async (event, address) => {
     event.stopPropagation();
-    if (!window.confirm(`Delete this ${address.label || ''} address? Existing orders will keep their original delivery address.`)) return;
-    const success = await deleteAddress(address._id);
-    if (success && editingAddress?._id === address._id) {
-      setShowAddForm(false);
-      resetAddressForm();
+    setDeleteTarget(address);
+  };
+
+  const confirmDeleteAddress = async () => {
+    if (!deleteTarget?._id || deleteInProgressRef.current) return;
+    const address = deleteTarget;
+    deleteInProgressRef.current = true;
+    setDeletingAddressId(address._id);
+    try {
+      const success = await deleteAddress(address._id);
+      if (success) setDeleteTarget(null);
+      if (success && editingAddress?._id === address._id) {
+        setShowAddForm(false);
+        resetAddressForm();
+      }
+    } finally {
+      deleteInProgressRef.current = false;
+      setDeletingAddressId(null);
     }
   };
 
@@ -513,7 +539,16 @@ export default function AddressManager({
         })}
       </div>
 
-      {addresses.length === 0 && !showAddForm && (
+      {addressesError && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800" role="alert">
+          <p>{addressesError}</p>
+          <button type="button" onClick={loadAddresses} disabled={loadingAddresses} className="mt-2 font-bold underline disabled:opacity-50">
+            {loadingAddresses ? 'Retrying...' : 'Try again'}
+          </button>
+        </div>
+      )}
+
+      {addresses.length === 0 && !showAddForm && !addressesError && (
         <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-2">
           <p className="text-2xl">🏠</p>
           <p className="text-xs font-bold text-slate-600">No saved addresses yet</p>
@@ -733,6 +768,25 @@ export default function AddressManager({
             {savingAddress ? 'Saving Address...' : editingAddress ? 'Update Saved Address' : 'Save Address'}
           </button>
         </form>
+      )}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/50 p-4" onMouseDown={event => { if (event.target === event.currentTarget && !deletingAddressId) setDeleteTarget(null); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="delete-address-title" aria-describedby="delete-address-description" className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 id="delete-address-title" className="text-base font-extrabold text-slate-900">Delete address?</h3>
+                <p id="delete-address-description" className="mt-2 text-sm text-slate-600">Are you sure you want to delete this address? Existing orders will keep their original delivery address.</p>
+              </div>
+              <button type="button" aria-label="Close confirmation" disabled={Boolean(deletingAddressId)} onClick={() => setDeleteTarget(null)} className="rounded-lg px-2 py-1 text-slate-500 hover:bg-slate-100 disabled:opacity-50">✕</button>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" disabled={Boolean(deletingAddressId)} onClick={() => setDeleteTarget(null)} className="min-h-10 rounded-xl bg-slate-100 px-4 text-sm font-bold text-slate-700 disabled:opacity-50">Cancel</button>
+              <button type="button" disabled={Boolean(deletingAddressId)} onClick={confirmDeleteAddress} className="min-h-10 rounded-xl bg-rose-600 px-4 text-sm font-bold text-white disabled:opacity-50">
+                {deletingAddressId ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </section>
+        </div>
       )}
     </div>
   );

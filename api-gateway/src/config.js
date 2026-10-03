@@ -39,6 +39,10 @@ export function loadConfig(environment = process.env) {
   const backendApiUrl = parseOrigin(environment.BACKEND_API_URL || (production ? '' : 'http://localhost:8090'));
   const inventoryServiceUrl = parseOrigin(environment.INVENTORY_SERVICE_URL || '');
   const orderServiceUrl = parseOrigin(environment.ORDER_SERVICE_URL || '');
+  const healthCheckEnabled = environment.HEALTH_CHECK_ENABLED !== 'false';
+  const healthCheckIntervalMinutes = Number(environment.HEALTH_CHECK_INTERVAL_MINUTES || 15);
+  const healthCheckTimeoutMs = Number(environment.HEALTH_CHECK_TIMEOUT_MS || 5000);
+  const healthCheckRunOnStartup = environment.HEALTH_CHECK_RUN_ON_STARTUP === 'true';
   const serviceAuthSecret = environment.SERVICE_AUTH_SECRET || '';
   const gatewayAuthSecret = environment.GATEWAY_AUTH_SECRET || '';
   const errors = [];
@@ -78,6 +82,12 @@ export function loadConfig(environment = process.env) {
   if (!Number.isInteger(authTimeoutMs) || authTimeoutMs < 1) {
     errors.push('AUTH_TIMEOUT_MS must be a positive integer.');
   }
+  if (!Number.isInteger(healthCheckIntervalMinutes) || healthCheckIntervalMinutes < 1 || healthCheckIntervalMinutes > 1440) {
+    errors.push('HEALTH_CHECK_INTERVAL_MINUTES must be an integer from 1 to 1440.');
+  }
+  if (!Number.isInteger(healthCheckTimeoutMs) || healthCheckTimeoutMs < 100 || healthCheckTimeoutMs > 60_000) {
+    errors.push('HEALTH_CHECK_TIMEOUT_MS must be an integer from 100 to 60000.');
+  }
   if (errors.length) throw new Error(`Invalid API Gateway configuration: ${errors.join(' ')}`);
 
   return {
@@ -85,6 +95,15 @@ export function loadConfig(environment = process.env) {
     backendApiUrl,
     inventoryServiceUrl,
     orderServiceUrl,
+    healthCheckEnabled,
+    healthCheckIntervalMs: healthCheckIntervalMinutes * 60 * 1000,
+    healthCheckTimeoutMs,
+    healthCheckRunOnStartup,
+    healthServices: [
+      { name: 'backend-api', baseUrl: backendApiUrl, healthPath: '/api/v1/health', critical: true },
+      ...(inventoryServiceUrl ? [{ name: 'inventory-service', baseUrl: inventoryServiceUrl, healthPath: '/ready', critical: false }] : []),
+      ...(orderServiceUrl ? [{ name: 'order-service', baseUrl: orderServiceUrl, healthPath: '/ready', critical: false }] : [])
+    ],
     serviceAuthSecret,
     gatewayAuthSecret,
     serviceJwtIssuer: environment.SERVICE_JWT_ISSUER || 'ashvin-pharmacy',

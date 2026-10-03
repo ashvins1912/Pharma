@@ -22,6 +22,15 @@ values, requires HTTPS CORS origins, and never uses a wildcard. Production
 also requires `GATEWAY_AUTH_SECRET`. Requests without an Origin header are
 allowed. Health and readiness endpoints are `/health` and `/ready`.
 
+The Gateway checks its configured legacy backend, Inventory Service, and Order
+Service readiness endpoints every 15 minutes (5 second timeout, one bounded
+retry). Latest results are held in Gateway memory and are available to an
+authenticated administrator at `/health/services`. The public `/health` and
+Render `/ready` endpoints remain separate. The Render Blueprint pins the
+Gateway to one instance because this repository has no shared distributed-lock
+or health-state store. If Gateway scaling is enabled, add a shared lease and
+state store before running multiple instances.
+
 For Render, use `api-gateway/render.yaml` as a blueprint. Set
 `BACKEND_API_URL` to the backend's private-network URL; do not point it at a
 publicly exposed service when the platform supports private services. Configure

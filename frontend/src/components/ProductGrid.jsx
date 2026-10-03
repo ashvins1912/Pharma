@@ -5,7 +5,9 @@ import { useApp } from '../context/AppContext';
 export default function ProductGrid() {
   const {
     medicines,
+    medicinesError,
     loadingMedicines,
+    fetchMedicines,
     searchQuery,
     setSelectedCategory,
     setSearchQuery,
@@ -67,6 +69,16 @@ export default function ProductGrid() {
             </div>
           ))}
         </div>
+      </div>
+    );
+  }
+
+  if (medicinesError) {
+    return (
+      <div className="my-4 rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center" role="alert">
+        <h3 className="font-bold text-slate-900">The medicine catalog is temporarily unavailable.</h3>
+        <p className="mt-1 text-sm text-slate-600">Please try again in a moment.</p>
+        <button type="button" onClick={fetchMedicines} className="mt-3 rounded-xl bg-white px-4 py-2 text-sm font-bold text-blue-700 shadow-sm">Try Again</button>
       </div>
     );
   }

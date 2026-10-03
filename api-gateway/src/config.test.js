@@ -67,3 +67,34 @@ test('development defaults allow the frontend origin when opened at the bind add
 
   assert.ok(config.allowedOrigins.includes('http://0.0.0.0:3000'));
 });
+
+test('health monitoring uses the configured internal service registry and safe defaults', () => {
+  const config = loadConfig({
+    NODE_ENV: 'test',
+    BACKEND_API_URL: 'http://backend.example.com',
+    INVENTORY_SERVICE_URL: 'http://inventory.example.com',
+    ORDER_SERVICE_URL: 'http://order.example.com',
+    SERVICE_AUTH_SECRET: secrets.service,
+    GATEWAY_AUTH_SECRET: secrets.gateway,
+    CORS_ALLOWED_ORIGINS: 'http://app.example.com'
+  });
+  assert.equal(config.healthCheckIntervalMs, 15 * 60 * 1000);
+  assert.deepEqual(config.healthServices.map(service => [service.name, service.healthPath]), [
+    ['backend-api', '/api/v1/health'],
+    ['inventory-service', '/ready'],
+    ['order-service', '/ready']
+  ]);
+  assert.equal(config.healthCheckTimeoutMs, 5000);
+  assert.equal(config.healthCheckRunOnStartup, false);
+});
+
+test('health monitor configuration validates interval and timeout bounds', () => {
+  assert.throws(() => loadConfig({
+    NODE_ENV: 'test', BACKEND_API_URL: 'http://backend.example.com',
+    CORS_ALLOWED_ORIGINS: 'http://app.example.com', HEALTH_CHECK_INTERVAL_MINUTES: '0'
+  }), /HEALTH_CHECK_INTERVAL_MINUTES/);
+  assert.throws(() => loadConfig({
+    NODE_ENV: 'test', BACKEND_API_URL: 'http://backend.example.com',
+    CORS_ALLOWED_ORIGINS: 'http://app.example.com', HEALTH_CHECK_TIMEOUT_MS: '50'
+  }), /HEALTH_CHECK_TIMEOUT_MS/);
+});

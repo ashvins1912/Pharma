@@ -231,7 +231,7 @@ router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
-        const limit = 5;
+        const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 3));
         await MedicineRequest.updateMany(
             { status: 'converted', pharmacyProposal: { $ne: null } },
             { $set: { status: 'PROPOSAL_SENT' } }
@@ -267,13 +267,22 @@ router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
         const totalPages = Math.ceil(total / limit);
         const currentPage = Math.min(page, Math.max(totalPages, 1));
         const requests = await MedicineRequest.find(query)
-            .sort({ createdAt: -1 })
+            .sort({ createdAt: -1, _id: -1 })
             .skip((currentPage - 1) * limit)
             .limit(limit)
             .lean();
         res.json({
             requests,
-            pagination: { page: currentPage, limit, total, totalPages }
+            items: requests,
+            pagination: {
+                page: currentPage,
+                pageSize: limit,
+                limit,
+                total,
+                totalPages,
+                hasNextPage: currentPage < totalPages,
+                hasPreviousPage: currentPage > 1
+            }
         });
     } catch (err) {
         console.error('Failed to fetch medicine requests:', err);

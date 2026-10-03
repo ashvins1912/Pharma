@@ -6,12 +6,21 @@ import express from 'express';
 import { config } from './config.js';
 import { proxyRequest } from './proxy.js';
 import { createServiceRouters } from './serviceRoutes.js';
+import { authenticateUser, requireAdmin } from './authenticateUser.js';
+import { createHealthMonitor } from './healthMonitor.js';
 
-export function createGatewayApp(gatewayConfig = config) {
+export function createGatewayApp(gatewayConfig = config, healthMonitor = createHealthMonitor({
+  services: gatewayConfig.healthServices || [],
+  intervalMs: gatewayConfig.healthCheckIntervalMs,
+  timeoutMs: gatewayConfig.healthCheckTimeoutMs,
+  enabled: gatewayConfig.healthCheckEnabled,
+  runOnStartup: gatewayConfig.healthCheckRunOnStartup
+})) {
   const target = new URL(`${gatewayConfig.backendApiUrl}/ready`);
   const transport = target.protocol === 'https:' ? https : http;
   const { inventoryRouter, orderRouter } = createServiceRouters(gatewayConfig);
   const app = express();
+  app.locals.healthMonitor = healthMonitor;
   app.disable('x-powered-by');
   app.use((req, res, next) => {
     const suppliedRequestId = req.get('x-request-id') || '';
@@ -51,6 +60,11 @@ export function createGatewayApp(gatewayConfig = config) {
   }));
 
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'api-gateway' }));
+  app.get('/health/services',
+    (req, res, next) => authenticateUser(req, res, next, gatewayConfig),
+    requireAdmin,
+    (req, res) => res.json({ ...healthMonitor.snapshot(), requestId: req.requestId })
+  );
   app.get('/ready', (_req, res) => {
     const probe = transport.get(target, { timeout: 3000 }, response => {
       response.resume();

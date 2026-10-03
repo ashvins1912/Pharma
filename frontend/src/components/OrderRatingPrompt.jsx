@@ -20,7 +20,7 @@ export default function OrderRatingPrompt({ order, onClose, onSubmitted }) {
       });
       onSubmitted();
     } catch (requestError) {
-      setError(requestError.response?.data?.message || requestError.message || 'Could not submit feedback.');
+      setError(requestError.message || 'Unable to submit your feedback right now. Please try again.');
     } finally {
       setSubmitting(false);
     }

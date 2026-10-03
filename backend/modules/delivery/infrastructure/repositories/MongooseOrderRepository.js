@@ -1,6 +1,7 @@
 import { IOrderRepository } from '../../ports/IOrderRepository.js';
 import { Order } from '../../domain/entities/Order.js';
 import OrderModel from '../../../../models/Order.js';
+import mongoose from 'mongoose';
 
 export class MongooseOrderRepository extends IOrderRepository {
     _toDomain(doc) {
@@ -39,7 +40,8 @@ export class MongooseOrderRepository extends IOrderRepository {
     }
 
     async findById(id) {
-        const doc = await OrderModel.findById(id);
+        if (id == null || String(id) === 'undefined' || String(id) === 'null' || !mongoose.isValidObjectId(id)) return null;
+        const doc = await OrderModel.findById(String(id));
         return this._toDomain(doc);
     }
 

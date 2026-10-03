@@ -9,7 +9,7 @@ import UserAddress from './models/UserAddress.js';
 import CustomerPointsLedger from './models/CustomerPointsLedger.js';
 import Rider from './models/Rider.js';
 import MedicineRequest from './models/MedicineRequest.js';
-import { sendWhatsAppMedicineRequestAlert, sendCustomWhatsAppAlert } from './config/whatsapp.js';
+import { normalizeWhatsAppNumber, sendWhatsAppMedicineRequestAlert, sendCustomWhatsAppAlert } from './config/whatsapp.js';
 import ProfitMarginRewardEngine from './strategies/ProfitMarginRewardEngine.js';
 import DefaultProfitRewardStrategy from './strategies/ProfitRewardStrategy.js';
 import FixedDeliveryRewardStrategy from './strategies/DeliveryRewardStrategy.js';
@@ -1784,6 +1784,100 @@ export const dataStore = {
             return Order.find().sort({ createdAt: -1 }).lean();
         }
         return [...inMemoryOrders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    },
+
+    async getDeliveredOrdersPage(page = 1, limit = 5) {
+        const filter = { orderStatus: 'Delivered' };
+        if (getIsConnected()) {
+            const total = await Order.countDocuments(filter);
+            const safePage = Math.min(page, Math.max(Math.ceil(total / limit), 1));
+            const items = await Order.find(filter)
+                .sort({ createdAt: -1, _id: -1 })
+                .skip((safePage - 1) * limit)
+                .limit(limit)
+                .lean();
+            return { items, total, page: safePage };
+        }
+        const delivered = inMemoryOrders
+            .filter(order => order.orderStatus === 'Delivered')
+            .sort((a, b) => {
+                const createdAtDelta = new Date(b.createdAt) - new Date(a.createdAt);
+                return createdAtDelta || String(b._id || '').localeCompare(String(a._id || ''));
+            });
+        return {
+            items: delivered.slice((Math.min(page, Math.max(Math.ceil(delivered.length / limit), 1)) - 1) * limit, Math.min(page, Math.max(Math.ceil(delivered.length / limit), 1)) * limit),
+            total: delivered.length,
+            page: Math.min(page, Math.max(Math.ceil(delivered.length / limit), 1))
+        };
+    },
+
+    async getFulfillmentSnapshot() {
+        const activeFilter = { orderStatus: { $nin: ['Delivered', 'delivered'] } };
+        if (getIsConnected()) {
+            const [items, total, deliveredCount, recentOrders] = await Promise.all([
+                Order.find(activeFilter).sort({ createdAt: -1 }).lean(),
+                Order.countDocuments({}),
+                Order.countDocuments({ orderStatus: 'Delivered' }),
+                Order.find().sort({ createdAt: -1, _id: -1 }).limit(6).lean()
+            ]);
+            return { items, total, deliveredCount, recentOrders };
+        }
+        const allOrders = [...inMemoryOrders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        return {
+            items: allOrders.filter(order => !['Delivered', 'delivered'].includes(order.orderStatus)),
+            total: allOrders.length,
+            deliveredCount: allOrders.filter(order => order.orderStatus === 'Delivered').length,
+            recentOrders: allOrders.slice(0, 6)
+        };
+    },
+
+    async searchOrders({ type, value, page = 1, limit = 5 }) {
+        let filter;
+        if (type === 'orderId') {
+            filter = value.orderNumber
+                ? { orderNumber: value.orderNumber }
+                : { _id: value.objectId };
+        } else if (type === 'mobile') {
+            const normalized = normalizeWhatsAppNumber(value.digits);
+            const candidates = [...new Set([value.digits, normalized, normalized.startsWith('91') ? normalized.slice(2) : normalized])];
+            filter = {
+                $or: [
+                    { customerMobileNormalized: { $in: candidates } },
+                    { customerMobile: value.raw }
+                ]
+            };
+        } else if (type === 'email') {
+            if (!getIsConnected()) throw Object.assign(new Error('Email search requires the customer profile database.'), { statusCode: 503 });
+            const profiles = await UserProfile.find({ email: value }).select('supabase_user_id supabaseId userId').lean();
+            const userIds = [...new Set(profiles.flatMap(profile => [profile.supabase_user_id, profile.supabaseId, profile.userId]).filter(Boolean))];
+            if (userIds.length === 0) return { items: [], total: 0 };
+            filter = { $or: [{ customerId: { $in: userIds } }, { userId: { $in: userIds } }] };
+        } else {
+            return { items: [], total: 0 };
+        }
+
+        if (getIsConnected()) {
+            const total = await Order.countDocuments(filter);
+            const safePage = Math.min(page, Math.max(Math.ceil(total / limit), 1));
+            const items = await Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip((safePage - 1) * limit).limit(limit).lean();
+            return { items, total, page: safePage };
+        }
+
+        const matches = inMemoryOrders.filter(order => {
+            if (type === 'orderId') return value.orderNumber
+                ? String(order.orderNumber || '').toUpperCase() === value.orderNumber
+                : String(order._id) === value.objectId;
+            if (type === 'mobile') {
+                return [...new Set([value.digits, normalizeWhatsAppNumber(value.digits), normalizeWhatsAppNumber(value.digits).replace(/^91(?=\d{10}$)/, '')])].includes(String(order.customerMobile || '').replace(/\D/g, ''))
+                    || String(order.customerMobile || '') === value.raw;
+            }
+            return false;
+        }).sort((a, b) => {
+            const createdAtDelta = new Date(b.createdAt) - new Date(a.createdAt);
+            return createdAtDelta || String(b._id || '').localeCompare(String(a._id || ''));
+        });
+        const safePage = Math.min(page, Math.max(Math.ceil(matches.length / limit), 1));
+        return { items: matches.slice((safePage - 1) * limit, safePage * limit), total: matches.length, page: safePage };
     },
 
     async getUserOrders(userId) {
