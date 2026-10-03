@@ -3,7 +3,7 @@
  */
 import { domainEvents } from '../../shared/events/DomainEvents.js';
 import { logger } from '../../shared/observability/logger.js';
-import { OutOfServiceRadiusError } from '../../shared/errors/DomainErrors.js';
+import { OutOfServiceRadiusError, TenantAccessDeniedError } from '../../shared/errors/DomainErrors.js';
 import { tenantService } from '../tenant-service/TenantService.js';
 import { RiderStatus } from '../../shared/contracts/index.js';
 
@@ -161,6 +161,11 @@ export class DeliveryService {
     async updateJobStatus(orderId, status, actor = null) {
         const job = this.deliveryJobs.get(orderId);
         if (!job) throw new Error('Delivery job not found for order');
+
+        // Isolation guard: non-platform staff cannot update jobs for other tenants
+        if (actor?.tenantId && job.tenantId !== actor.tenantId && !actor.isPlatformUser) {
+            throw new TenantAccessDeniedError('Cannot update delivery job belonging to another pharmacy tenant.');
+        }
 
         job.status = status;
         if (status === 'DELIVERED') {

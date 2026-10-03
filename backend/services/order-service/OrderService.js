@@ -9,8 +9,41 @@ import { identityService } from '../identity-service/IdentityService.js';
 import { tenantService } from '../tenant-service/TenantService.js';
 import { domainEvents } from '../../shared/events/DomainEvents.js';
 import { logger } from '../../shared/observability/logger.js';
-import { IdempotencyConflictError } from '../../shared/errors/DomainErrors.js';
-import { MultiTenantOrderStatus, FulfillmentMode } from '../../shared/contracts/index.js';
+import { IdempotencyConflictError, TenantAccessDeniedError } from '../../shared/errors/DomainErrors.js';
+import { MultiTenantOrderStatus, FulfillmentMode, CustomerRole } from '../../shared/contracts/index.js';
+
+const ALLOWED_ORDER_TRANSITIONS = {
+    [MultiTenantOrderStatus.SUBMITTED]: [
+        MultiTenantOrderStatus.PHARMACY_REVIEW,
+        MultiTenantOrderStatus.ACCEPTED,
+        MultiTenantOrderStatus.CANCELLED,
+        MultiTenantOrderStatus.REJECTED
+    ],
+    [MultiTenantOrderStatus.PHARMACY_REVIEW]: [
+        MultiTenantOrderStatus.ACCEPTED,
+        MultiTenantOrderStatus.CANCELLED,
+        MultiTenantOrderStatus.REJECTED
+    ],
+    [MultiTenantOrderStatus.ACCEPTED]: [
+        MultiTenantOrderStatus.PROCESSING,
+        MultiTenantOrderStatus.CANCELLED
+    ],
+    [MultiTenantOrderStatus.PROCESSING]: [
+        MultiTenantOrderStatus.READY_FOR_DISPATCH,
+        MultiTenantOrderStatus.CANCELLED
+    ],
+    [MultiTenantOrderStatus.READY_FOR_DISPATCH]: [
+        MultiTenantOrderStatus.OUT_FOR_DELIVERY,
+        MultiTenantOrderStatus.CANCELLED
+    ],
+    [MultiTenantOrderStatus.OUT_FOR_DELIVERY]: [
+        MultiTenantOrderStatus.DELIVERED,
+        MultiTenantOrderStatus.CANCELLED
+    ],
+    [MultiTenantOrderStatus.DELIVERED]: [],
+    [MultiTenantOrderStatus.CANCELLED]: [],
+    [MultiTenantOrderStatus.REJECTED]: []
+};
 
 export class OrderService {
     constructor() {
@@ -249,8 +282,36 @@ export class OrderService {
     }
 
     async transitionOrderStatus(orderId, newStatus, actor = null) {
-        const order = this.orders.get(orderId);
+        const order = this.orders.get(String(orderId));
         if (!order) throw new Error('Order not found');
+
+        // 1. Tenant Isolation Guard: non-platform staff cannot mutate orders of other tenants
+        if (actor?.tenantId && order.tenantId !== actor.tenantId && !actor.isPlatformUser) {
+            throw new TenantAccessDeniedError('You do not have access to manage orders for this pharmacy tenant.');
+        }
+
+        // 2. Customer Role Check: Customers cannot unilaterally advance order status
+        if (actor && (actor.role === CustomerRole || (!actor.isPlatformUser && !actor.tenantMembership))) {
+            if (newStatus !== MultiTenantOrderStatus.CANCELLED) {
+                throw new Error('Customers can only request order cancellation and cannot advance fulfillment status.');
+            }
+            if (order.customerId && actor.customerId && order.customerId !== actor.customerId) {
+                throw new Error('You do not have permission to cancel another customer order.');
+            }
+            if (order.orderStatus !== MultiTenantOrderStatus.SUBMITTED && order.orderStatus !== MultiTenantOrderStatus.PHARMACY_REVIEW) {
+                throw new Error('Order can only be cancelled before it enters processing.');
+            }
+        }
+
+        // 3. State Machine Validation
+        if (order.orderStatus === newStatus) {
+            return order; // Idempotent no-op
+        }
+
+        const allowedNext = ALLOWED_ORDER_TRANSITIONS[order.orderStatus];
+        if (allowedNext && !allowedNext.includes(newStatus)) {
+            throw new Error(`Invalid order status transition from '${order.orderStatus}' to '${newStatus}'.`);
+        }
 
         const prevStatus = order.orderStatus;
         order.orderStatus = newStatus;

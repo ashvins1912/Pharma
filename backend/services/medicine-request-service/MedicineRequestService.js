@@ -7,7 +7,8 @@ import crypto from 'node:crypto';
 import { orderService } from '../order-service/OrderService.js';
 import { domainEvents } from '../../shared/events/DomainEvents.js';
 import { logger } from '../../shared/observability/logger.js';
-import { MedicineRequestStatus } from '../../shared/contracts/index.js';
+import { MedicineRequestStatus, CustomerRole } from '../../shared/contracts/index.js';
+import { TenantAccessDeniedError, CustomerAccessDeniedError } from '../../shared/errors/DomainErrors.js';
 
 export class MedicineRequestService {
     constructor() {
@@ -148,6 +149,16 @@ export class MedicineRequestService {
         const request = this.requests.get(String(id));
         if (!request) throw new Error('Medicine request not found');
 
+        // 1. Tenant Isolation Guard: pharmacy staff can only formulate proposals for their own tenant
+        if (actor?.tenantId && request.tenantId !== actor.tenantId && !actor.isPlatformUser) {
+            throw new TenantAccessDeniedError('Cannot formulate proposal for a medicine request from another pharmacy tenant.');
+        }
+
+        // 2. Role Restriction: Customers cannot formulate pharmacy proposals
+        if (actor && (actor.role === CustomerRole || (!actor.isPlatformUser && !actor.tenantMembership))) {
+            throw new Error('Customers cannot formulate pharmacy proposals.');
+        }
+
         if (request.status === MedicineRequestStatus.CONVERTED_TO_ORDER) {
             throw new Error('Cannot modify proposal for a request that has already been converted to an order.');
         }
@@ -197,7 +208,7 @@ export class MedicineRequestService {
 
         // Customer isolation guard
         if (request.customerId !== customerId) {
-            throw new Error('Unauthorized access to this medicine request');
+            throw new CustomerAccessDeniedError('You do not have access to approve this medicine request.');
         }
 
         // Idempotency: If already converted, return existing order
@@ -272,7 +283,7 @@ export class MedicineRequestService {
         if (!request) throw new Error('Medicine request not found');
 
         if (request.customerId !== customerId) {
-            throw new Error('Unauthorized access to this medicine request');
+            throw new CustomerAccessDeniedError('You do not have access to reject this medicine request.');
         }
 
         request.status = MedicineRequestStatus.CUSTOMER_REJECTED;

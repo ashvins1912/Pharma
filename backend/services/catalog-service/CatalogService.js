@@ -446,8 +446,11 @@ export class CatalogService {
         return job;
     }
 
-    async getBulkImportJob(jobId) {
-        return this.bulkImportJobs.get(jobId) || null;
+    async getBulkImportJob(jobId, tenantId = null) {
+        const job = this.bulkImportJobs.get(jobId);
+        if (!job) return null;
+        if (tenantId && job.tenantId !== tenantId) return null;
+        return job;
     }
 }
 

@@ -18,7 +18,7 @@ async function startServer() {
     const vite = await createViteServer({
       root: __dirname,
       server: { middlewareMode: true },
-      appType: 'spa'
+      appType: 'custom'
     });
     app.use(vite.middlewares);
 
@@ -26,7 +26,7 @@ async function startServer() {
     app.use('*', async (req, res, next) => {
       const url = req.originalUrl;
       if (url.startsWith('/api')) {
-        return next();
+        return res.status(404).json({ message: 'API route not found' });
       }
       try {
         const indexPath = path.resolve(__dirname, 'index.html');
@@ -43,7 +43,7 @@ async function startServer() {
     app.use(express.static(distPath));
     app.get('*', (req: express.Request, res: express.Response, next: express.NextFunction) => {
       if (req.originalUrl.startsWith('/api')) {
-        return next();
+        return res.status(404).json({ message: 'API route not found' });
       }
       res.sendFile(path.resolve(distPath, 'index.html'));
     });
