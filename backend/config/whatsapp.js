@@ -2,8 +2,10 @@
 // Provides idempotent messaging tracking, device pairing QR generation, and delivery status updates
 import path from 'node:path';
 import { rm } from 'node:fs/promises';
-import { getIsConnected } from './db.js';
+import { getIsConnected, getTransactionsSupported } from './db.js';
 import WhatsAppMessage from '../models/WhatsAppMessage.js';
+import PaymentReminder from '../models/PaymentReminder.js';
+import { createRiderDeliveryActionToken } from '../services/payment/SignedPaymentActionService.js';
 
 const sentNotifications = new Map();
 const authDirectory = process.env.WHATSAPP_AUTH_DIR || path.resolve('data/whatsapp-auth');
@@ -213,7 +215,7 @@ const getOrderItems = (order) => (order.items || [])
     .map(item => `• ${item.name || 'Item'} x${item.quantity || 1}`)
     .join('\n');
 
-export const buildWhatsAppMessageBody = (order, status, audience) => {
+export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActionLinks = [] } = {}) => {
     const orderId = order?._id?.toString() || order?.id?.toString() || 'UNKNOWN';
     const shortId = orderId.slice(-6).toUpperCase();
     const items = getOrderItems(order);
@@ -237,6 +239,7 @@ export const buildWhatsAppMessageBody = (order, status, audience) => {
                 ? `Assigned at: ${order.assignmentDetails?.assignedAt ? new Date(order.assignmentDetails.assignedAt).toLocaleString() : new Date().toLocaleString()}`
                 : `Out for delivery at: ${order.outForDeliveryAt ? new Date(order.outForDeliveryAt).toLocaleString() : new Date().toLocaleString()}`,
             `COD amount: ₹${order.finalTotal}`,
+            deliveryActionLinks.length ? `Delivery actions (confirm each action):\n${deliveryActionLinks.join('\n')}` : '',
             items && `Order items:\n${items}`
         ].filter(Boolean).join('\n');
     }
@@ -376,13 +379,29 @@ const updateNotification = async (record, mongoRecord, updates) => {
 };
 
 const transmitWhatsAppMessage = async (record, mongoRecord) => {
+    const updateReminder = async () => {
+        if (record.eventType !== 'PaymentReminder' || !String(record.orderId).startsWith('PAYMENT:') || !getIsConnected()) return;
+        const reminderId = String(record.orderId).slice('PAYMENT:'.length);
+        if (!/^[a-f\d]{24}$/i.test(reminderId)) return;
+        const status = record.status === 'SENT' ? 'SENT'
+            : record.status === 'QUEUED_OFFLINE' ? 'QUEUED_OFFLINE'
+                : record.status === 'FAILED' || record.status === 'MISSING_RECIPIENT' ? 'FAILED' : 'SENDING';
+        await PaymentReminder.updateOne({ _id: reminderId }, { $set: {
+            status,
+            providerMessageId: record.messageId || null,
+            sentAt: status === 'SENT' ? record.sentAt || new Date() : null,
+            failureReason: record.error || (status === 'FAILED' ? 'WhatsApp recipient is unavailable.' : null)
+        } });
+    };
     const number = normalizeWhatsAppNumber(record.recipient);
     if (number.length < 8) {
         await updateNotification(record, mongoRecord, { status: 'MISSING_RECIPIENT' });
+        await updateReminder();
         return record;
     }
     if (!whatsappState.isConnected || !socket) {
         await updateNotification(record, mongoRecord, { status: 'QUEUED_OFFLINE' });
+        await updateReminder();
         return record;
     }
 
@@ -400,6 +419,7 @@ const transmitWhatsAppMessage = async (record, mongoRecord) => {
             error: error.message || 'WhatsApp send failed'
         });
     }
+    await updateReminder();
     return record;
 };
 
@@ -429,6 +449,35 @@ const flushQueuedNotifications = async () => {
                 await clearOrderNotifications(record.orderId);
             }
         }
+    }
+};
+
+const createDeliveryActionLinks = (order) => {
+    if (process.env.WHATSAPP_DELIVERY_TRACKING_ENABLED !== 'true'
+        || process.env.MONGO_TRANSACTIONS_CONFIRMED !== 'true'
+        || !getTransactionsSupported()) return [];
+    const baseUrl = process.env.DELIVERY_ACTION_BASE_URL;
+    const orderId = order?._id?.toString() || order?.id?.toString();
+    const riderId = order?.rider?.riderId;
+    if (!baseUrl || !orderId || !riderId) return [];
+    const actions = [
+        ['cash_received', 'Cash received'],
+        ['payment_pending', 'Payment pending'],
+        ['not_reachable', 'Customer not reachable']
+    ];
+    try {
+        return actions.map(([action, label]) => {
+            const token = createRiderDeliveryActionToken({ orderId, riderId: String(riderId), action });
+            const url = new URL(baseUrl);
+            if (url.protocol !== 'https:' && process.env.NODE_ENV === 'production') {
+                throw new Error('Delivery action links must use HTTPS in production.');
+            }
+            url.searchParams.set('token', token);
+            return `${label}: ${url.toString()}`;
+        });
+    } catch (error) {
+        console.error('Rider action links are not configured:', { code: error.code || 'INVALID_ACTION_LINK_CONFIG' });
+        return [];
     }
 };
 
@@ -486,7 +535,11 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
             eventType: statusUpdateText,
             recipient: recipient || 'Not provided',
             dedupeKey,
-            messageBody: buildWhatsAppMessageBody(order, statusUpdateText, audience),
+            messageBody: buildWhatsAppMessageBody(order, statusUpdateText, audience, {
+                deliveryActionLinks: audience === 'rider' && statusUpdateText === 'Dispatched'
+                    ? createDeliveryActionLinks(order)
+                    : []
+            }),
             status: 'PENDING',
             channel: 'WHATSAPP',
             sentAt: null,
@@ -517,6 +570,55 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
     }
 
     return records;
+};
+
+// Stateless direct-message entry point for domain notifications such as payment reminders.
+// Provider/session state remains owned by this existing WhatsApp adapter.
+export const sendWhatsAppDirectMessage = async ({ recipient, message, dedupeKey, referenceId }) => {
+    const normalizedRecipient = normalizeWhatsAppNumber(recipient);
+    if (normalizedRecipient.length < 8) {
+        return { status: 'FAILED', error: 'Recipient phone number is invalid.' };
+    }
+    if (typeof message !== 'string' || !message.trim() || typeof dedupeKey !== 'string' || !dedupeKey) {
+        return { status: 'FAILED', error: 'Message and idempotency key are required.' };
+    }
+    if (getIsConnected()) {
+        const existing = await WhatsAppMessage.findOne({ dedupeKey, expiresAt: { $gt: new Date() } });
+        if (existing) return {
+            status: existing.status,
+            providerMessageId: existing.messageId,
+            error: existing.error || null
+        };
+    }
+    const createdAt = new Date();
+    const record = {
+        orderId: String(referenceId || 'PAYMENT_REMINDER'),
+        eventType: 'PaymentReminder',
+        recipient: normalizedRecipient,
+        dedupeKey,
+        messageBody: message,
+        status: 'PENDING',
+        channel: 'WHATSAPP',
+        sentAt: null,
+        attempts: 1,
+        messageId: `msg-${createdAt.getTime()}-${Math.random().toString(36).slice(2, 7)}`,
+        createdAt,
+        expiresAt: new Date(createdAt.getTime() + messageRetentionMs)
+    };
+    let mongoRecord = null;
+    if (getIsConnected()) {
+        try {
+            mongoRecord = await WhatsAppMessage.create(record);
+        } catch (error) {
+            if (error.code === 11000) {
+                const existing = await WhatsAppMessage.findOne({ dedupeKey }).lean();
+                if (existing) return { status: existing.status, providerMessageId: existing.messageId, error: existing.error || null };
+            }
+            throw error;
+        }
+    }
+    await transmitWhatsAppMessage(record, mongoRecord);
+    return { status: record.status, providerMessageId: record.messageId, error: record.error || null };
 };
 
 export const sendWhatsAppMedicineRequestAlert = async (request, eventType) => {

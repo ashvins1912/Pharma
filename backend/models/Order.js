@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { randomUUID } from 'node:crypto';
 
 const medicineItemSchema = new mongoose.Schema({
     medicineId: { type: mongoose.Schema.Types.Mixed, required: false },
@@ -24,6 +25,7 @@ const orderItemSchema = new mongoose.Schema({
 }, { _id: false, strict: false });
 
 const orderSchema = new mongoose.Schema({
+    orderNumber: { type: String, unique: true, sparse: true, default: () => `ORD-${randomUUID()}` },
     customerId: { type: String, index: true },
     riderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Rider', default: null, index: true },
     userId: { type: String, required: true, index: true },
@@ -80,6 +82,16 @@ const orderSchema = new mongoose.Schema({
     customerRating: { type: Number, min: 1, max: 5 },
     customerComment: { type: String, maxlength: 1000, default: '' },
     paymentMethod: { type: String, default: "Cash on Delivery (COD)" },
+    // Only explicit PENDING_DIGITAL records are eligible for customer payment reminders.
+    // No default is applied so existing payment behavior and historic orders remain unchanged.
+    paymentStatus: {
+        type: String,
+        enum: ['PENDING', 'PENDING_DIGITAL', 'PAID', 'PARTIALLY_PAID', 'REFUNDED', 'DISPUTED'],
+        default: undefined,
+        index: true
+    },
+    amountPaid: { type: Number, min: 0, default: 0 },
+    deliveryAttempts: { type: Number, min: 0, default: 0 },
     orderStatus: {
         type: String,
         enum: ['Pending_Review', 'Approved', 'Rejected', 'Processing Order', 'Ready to Dispatch', 'Dispatched', 'Delivered', 'Cancelled', 'pending', 'accepted', 'out_for_delivery', 'delivered', 'cancelled'],
@@ -104,7 +116,11 @@ const orderSchema = new mongoose.Schema({
         assignedAt: { type: Date, default: null },
         distanceInKm: { type: Number, default: null }
     },
-    source: { type: String, default: 'DIRECT' },
+    source: {
+        type: String,
+        enum: ['WEB', 'MOBILE', 'ADMIN', 'POS', 'ERP', 'PARTNER', 'API', 'MEDICINE_REQUEST', 'DIRECT'],
+        default: 'DIRECT'
+    },
     medicineRequestId: { type: String, default: null },
     addressId: { type: mongoose.Schema.Types.ObjectId, ref: 'UserAddress', default: null },
     deliverySlot: { type: Object, default: null },

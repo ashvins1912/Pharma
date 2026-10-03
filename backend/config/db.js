@@ -1,8 +1,14 @@
 import mongoose from 'mongoose';
 import { env } from './env.js';
 import Rider from '../models/Rider.js';
+import DeliveryAction from '../models/DeliveryAction.js';
+import RiderLedger from '../models/RiderLedger.js';
+import PaymentSnooze from '../models/PaymentSnooze.js';
+import PaymentReminder from '../models/PaymentReminder.js';
+import PaymentActionNonce from '../models/PaymentActionNonce.js';
 
 let isConnected = false;
+let supportsTransactions = false;
 let connectionAttempt = null;
 let reconnectTimer = null;
 let hasLoggedInitialStatus = false;
@@ -40,7 +46,16 @@ export const connectDB = async ({ silent = false } = {}) => {
             }
             mongoose.set('bufferCommands', false);
             await mongoose.connect(env.MONGO_URI, { serverSelectionTimeoutMS: 3000 });
-            await Rider.init();
+            const hello = await mongoose.connection.db.admin().command({ hello: 1 });
+            supportsTransactions = Boolean(hello.setName || hello.msg === 'isdbgrid');
+            await Promise.all([
+                Rider.init(),
+                DeliveryAction.init(),
+                RiderLedger.init(),
+                PaymentSnooze.init(),
+                PaymentReminder.init(),
+                PaymentActionNonce.init()
+            ]);
             isConnected = true;
             console.log("✅ Database connectivity successfully synchronized into MongoDB.");
             return true;
@@ -65,5 +80,6 @@ export const connectDB = async ({ silent = false } = {}) => {
 };
 
 export const getIsConnected = () => isConnected;
+export const getTransactionsSupported = () => supportsTransactions;
 
 export default connectDB;

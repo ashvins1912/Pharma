@@ -55,8 +55,37 @@ export const envSchema = z.object({
     SUPABASE_URL: isProduction ? z.string().trim().url() : optionalString(z.string().trim().url()),
     SUPABASE_ANON_KEY: optionalString(z.string().trim().min(1)),
     SUPABASE_SERVICE_ROLE_KEY: isProduction ? z.string().trim().min(20) : optionalString(z.string().trim().min(20)),
+    GATEWAY_AUTH_SECRET: isProduction ? z.string().trim().min(32) : optionalString(z.string().trim().min(32)),
     CORS_ALLOWED_ORIGINS: isProduction ? corsOriginsSchema : optionalString(corsOriginsSchema),
-    NODE_ENV: z.enum(['development', 'production', 'test']).default('development')
+    NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+    PAYMENT_REMINDER_ENABLED: z.enum(['true', 'false']).default('false'),
+    PAYMENT_REMINDER_ENGINE_ENABLED: z.enum(['true', 'false']).default('false'),
+    PAYMENT_REMINDER_THROTTLE_HOURS: optionalString(z.coerce.number().int().positive()),
+    PAYMENT_REMINDER_SNOOZE_HOURS: optionalString(z.coerce.number().positive()),
+    PAYMENT_ACTION_BASE_URL: optionalString(z.string().url().refine(value => !isProduction || value.startsWith('https://'), {
+        message: 'Payment action URLs must use HTTPS in production.'
+    })),
+    SYSTEM_SECRET_KEY: optionalString(z.string().min(32)),
+    WHATSAPP_DELIVERY_TRACKING_ENABLED: z.enum(['true', 'false']).default('false'),
+    MONGO_TRANSACTIONS_CONFIRMED: z.enum(['true', 'false']).default('false'),
+    DELIVERY_MAX_ATTEMPTS: optionalString(z.coerce.number().int().positive()),
+    DELIVERY_ACTION_BASE_URL: optionalString(z.string().url().refine(value => !isProduction || value.startsWith('https://'), {
+        message: 'Delivery action URLs must use HTTPS in production.'
+    })),
+    DELIVERY_EVENT_SECRET: optionalString(z.string().min(32))
+}).superRefine((value, context) => {
+    if (value.PAYMENT_REMINDER_ENABLED === 'true' || value.PAYMENT_REMINDER_ENGINE_ENABLED === 'true') {
+        if (!value.SYSTEM_SECRET_KEY) context.addIssue({ code: 'custom', path: ['SYSTEM_SECRET_KEY'], message: 'Required when payment reminders are enabled.' });
+        if (!value.PAYMENT_ACTION_BASE_URL) context.addIssue({ code: 'custom', path: ['PAYMENT_ACTION_BASE_URL'], message: 'Required when payment reminders are enabled.' });
+    }
+    if (value.WHATSAPP_DELIVERY_TRACKING_ENABLED === 'true') {
+        for (const key of ['SYSTEM_SECRET_KEY', 'DELIVERY_EVENT_SECRET', 'DELIVERY_ACTION_BASE_URL', 'DELIVERY_MAX_ATTEMPTS']) {
+            if (!value[key]) context.addIssue({ code: 'custom', path: [key], message: 'Required when delivery event tracking is enabled.' });
+        }
+        if (value.MONGO_TRANSACTIONS_CONFIRMED !== 'true') {
+            context.addIssue({ code: 'custom', path: ['MONGO_TRANSACTIONS_CONFIRMED'], message: 'Confirm transaction support before enabling delivery tracking.' });
+        }
+    }
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

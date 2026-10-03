@@ -7,6 +7,7 @@ import AdminBulkImportModal from './AdminBulkImportModal';
 import RiderFleetView from './riders/RiderFleetView';
 import AdminOrderFinancials from './AdminOrderFinancials';
 import AdminMedicineRequestsTab from './requests/AdminMedicineRequestsTab';
+import AdminPaymentReminders from './AdminPaymentReminders';
 import { getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -283,6 +284,17 @@ export default function AdminDashboardView() {
         </button>
 
         <button
+          onClick={() => setAdminTab('payments')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
+            adminTab === 'payments'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          💳 Payment reminders
+        </button>
+
+        <button
           onClick={() => setAdminTab('inventory')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
             adminTab === 'inventory'
@@ -370,6 +382,10 @@ export default function AdminDashboardView() {
 
       {adminTab === 'riders' && (
         <RiderFleetView />
+      )}
+
+      {adminTab === 'payments' && (
+        <AdminPaymentReminders />
       )}
 
       {adminTab === 'inventory' && (
