@@ -3,7 +3,10 @@ services:
     name: ashvin-pharmacy-inventory
     runtime: node
     rootDir: services/inventory-service
-    buildCommand: npm install
+    # rootDir ensures npm installs the dependencies declared by this service,
+    # including mongoose; npm ci fails the deploy instead of deferring a missing
+    # runtime dependency to application startup.
+    buildCommand: npm ci --omit=dev && node --input-type=module -e "await import('mongoose')"
     startCommand: npm start
     healthCheckPath: /ready
     envVars:

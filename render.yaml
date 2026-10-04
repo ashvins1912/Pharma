@@ -3,7 +3,7 @@ services:
     name: ashvin-pharmacy
     runtime: node
     plan: starter
-    buildCommand: npm install --include=dev && npm run build
+    buildCommand: npm install --include=dev && node --input-type=module -e "await import('mongoose')" && npm run build
     startCommand: ./node_modules/.bin/tsx server.ts
     healthCheckPath: /api/v1/health
     envVars:
