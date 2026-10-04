@@ -6,6 +6,9 @@ const whatsappMessageSchema = new mongoose.Schema({
     recipient: { type: String, required: true },
     dedupeKey: { type: String, required: true, unique: true },
     messageBody: { type: String, required: true },
+    // Persist the interactive payload so an offline queued rider notification
+    // can still be delivered as a WhatsApp list after the session reconnects.
+    deliveryMenu: { type: mongoose.Schema.Types.Mixed, default: null },
     status: { type: String, required: true },
     error: { type: String, default: null },
     channel: { type: String, default: 'WHATSAPP' },
