@@ -12,7 +12,8 @@
     "admin:bootstrap": "node scripts/bootstrap-super-admin.mjs",
     "tenant:create": "node scripts/create-tenant.mjs",
     "prestart": "npm run build",
-    "start": "tsx server.ts"
+    "start": "tsx server.ts",
+    "postinstall": "npm --prefix services/inventory-service install"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
