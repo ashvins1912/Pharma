@@ -1,5 +1,5 @@
 try {
-  import 'dotenv/config'
+  require('dotenv').config();
 } catch {
   if (typeof process.loadEnvFile === 'function') {
     try {

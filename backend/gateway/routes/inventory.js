@@ -19,7 +19,7 @@ import {
     findImportJob,
     getImportFailures,
     retryImportJob
-} from '../../inventory-service/src/imports.js';
+} from '../../services/inventory-service/src/imports.js';
 
 const router = express.Router();
 
