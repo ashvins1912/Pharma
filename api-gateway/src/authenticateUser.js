@@ -91,9 +91,22 @@ export async function authenticateUser(req, res, next, gatewayConfig = config) {
   }
 }
 
+export function requireSuperAdmin(req, res, next) {
+  const role = req.user?.app_metadata?.role || req.user?.role;
+  if (role !== 'SUPER_ADMIN' && role !== 'PLATFORM_SUPER_ADMIN' && role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'Platform Super Administrator access is required.' },
+      requestId: req.requestId
+    });
+  }
+  return next();
+}
+
 export function requireAdmin(req, res, next) {
   const role = req.user?.app_metadata?.role || req.user?.role;
-  if (role !== 'admin') {
+  const allowed = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_OWNER'];
+  if (!allowed.includes(role)) {
     return res.status(403).json({
       success: false,
       error: { code: 'ADMIN_REQUIRED', message: 'Administrator access is required.' },
@@ -101,4 +114,18 @@ export function requireAdmin(req, res, next) {
     });
   }
   return next();
+}
+
+export function requireInventoryImportPermission(req, res, next) {
+  const role = req.user?.app_metadata?.role || req.user?.role;
+  const permissions = req.user?.app_metadata?.permissions || req.user?.permissions || [];
+  const allowedRoles = ['admin', 'PLATFORM_SUPER_ADMIN', 'TENANT_OWNER', 'TENANT_ADMIN', 'INVENTORY_MANAGER', 'PHARMACIST', 'PHARMACY_STAFF'];
+  if (allowedRoles.includes(role) || permissions.includes('inventory.import')) {
+    return next();
+  }
+  return res.status(403).json({
+    success: false,
+    error: { code: 'FORBIDDEN', message: 'Inventory import permission required.' },
+    requestId: req.requestId
+  });
 }

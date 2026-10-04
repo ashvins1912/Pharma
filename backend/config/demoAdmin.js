@@ -16,10 +16,11 @@ const configuredPassword = process.env.DEMO_ADMIN_PASSWORD || '';
 const configuredSecret = process.env.DEMO_ADMIN_JWT_SECRET || '';
 
 const getSigningKey = () => {
-    if (configuredSecret.length < 32) {
+    const secret = process.env.DEMO_ADMIN_JWT_SECRET || configuredSecret || (env.NODE_ENV !== 'production' ? 'development-demo-admin-secret-key-32-chars-long' : '');
+    if (secret.length < 32) {
         throw new Error('DEMO_ADMIN_JWT_SECRET must contain at least 32 characters.');
     }
-    return new TextEncoder().encode(configuredSecret);
+    return new TextEncoder().encode(secret);
 };
 
 export const isDemoAdminEnabled = () => demoAdminEnabled;

@@ -1,7 +1,9 @@
 import mongoose from 'mongoose';
 
 const medicineSchema = new mongoose.Schema({
-    sku: { type: String, unique: true, sparse: true, trim: true, uppercase: true },
+    tenantId: { type: String, default: "tenant-ashvin-main", index: true },
+    branchId: { type: String, default: "branch-indore-central", index: true },
+    sku: { type: String, trim: true, uppercase: true },
     code: { type: String, trim: true, uppercase: true },
     name: { type: String, required: true, trim: true, index: true },
     brand: { type: String, required: true },
@@ -45,6 +47,9 @@ medicineSchema.pre('validate', function () {
         this.isPrescriptionRequired = Boolean(this.requiresPrescription);
     }
 });
+
+medicineSchema.index({ tenantId: 1, sku: 1 }, { unique: true, sparse: true });
+medicineSchema.index({ tenantId: 1, branchId: 1, sku: 1 });
 
 const Medicine = mongoose.models.Medicine || mongoose.model('Medicine', medicineSchema);
 export default Medicine;

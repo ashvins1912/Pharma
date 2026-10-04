@@ -172,8 +172,25 @@ export const authenticateSupabaseUser = async (req, res, next) => {
     }
 };
 
+export const requireSuperAdmin = (req, res, next) => {
+    const role = req.user?.app_metadata?.role || req.user?.role || req.context?.role;
+    if (role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN' || role === 'admin') {
+        return next();
+    }
+    return res.status(403).json({
+        success: false,
+        error: {
+            code: 'FORBIDDEN',
+            message: 'Access denied. Platform Super Administrator privileges required.',
+            requestId: req.context?.requestId
+        }
+    });
+};
+
 export const isAdmin = (req, res, next) => {
-    if (req.user?.app_metadata?.role !== 'admin' && req.user?.role !== 'admin') {
+    const role = req.user?.app_metadata?.role || req.user?.role || req.context?.role;
+    const allowed = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_OWNER'];
+    if (!allowed.includes(role)) {
         return res.status(403).json({
             message: 'Access denied. Administrator privileges required.'
         });
@@ -182,8 +199,9 @@ export const isAdmin = (req, res, next) => {
 };
 
 export const isPharmacyOrAdmin = (req, res, next) => {
-    const role = req.user?.app_metadata?.role || req.user?.role;
-    if (role === 'admin' || role === 'pharmacy') {
+    const role = req.user?.app_metadata?.role || req.user?.role || req.context?.role;
+    const allowed = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_OWNER', 'pharmacy', 'PHARMACIST', 'PHARMACY_STAFF'];
+    if (allowed.includes(role)) {
         return next();
     }
     return res.status(403).json({
@@ -191,4 +209,4 @@ export const isPharmacyOrAdmin = (req, res, next) => {
     });
 };
 
-export default { authenticateUser, isAdmin, isPharmacyOrAdmin };
+export default { authenticateUser, requireSuperAdmin, isAdmin, isPharmacyOrAdmin };

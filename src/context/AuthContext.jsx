@@ -29,7 +29,17 @@ export function AuthProvider({ children }) {
         resolvedUser.app_metadata?.role ||
         resolvedUser.role ||
         'customer';
-      setRole(userRole === 'admin' || userRole === 'pharmacy' ? userRole : 'customer');
+      setRole(userRole);
+      // Hydrate authoritative profile from /api/v1/auth/me
+      apiClient.get('/api/v1/auth/me')
+        .then(res => {
+          if (res.data?.data?.user) {
+            const authoritative = res.data.data.user;
+            setUser(prev => prev ? { ...prev, ...authoritative } : prev);
+            if (authoritative.role) setRole(authoritative.role);
+          }
+        })
+        .catch(() => {});
     } else {
       setUser(null);
       setRole('customer');
@@ -288,8 +298,12 @@ export function AuthProvider({ children }) {
         user,
         session,
         role,
-        isAdmin: role === 'admin',
-        isPharmacyOrAdmin: role === 'admin' || role === 'pharmacy',
+        isAdmin: role === 'SUPER_ADMIN' || role === 'admin' || role === 'PLATFORM_SUPER_ADMIN' || role === 'TENANT_ADMIN' || role === 'TENANT_OWNER',
+        isSuperAdmin: role === 'SUPER_ADMIN' || role === 'admin' || role === 'PLATFORM_SUPER_ADMIN',
+        isTenantAdmin: role === 'TENANT_ADMIN' || role === 'TENANT_OWNER',
+        isPharmacyOrAdmin: role === 'SUPER_ADMIN' || role === 'admin' || role === 'PLATFORM_SUPER_ADMIN' || role === 'TENANT_ADMIN' || role === 'TENANT_OWNER' || role === 'pharmacy' || role === 'PHARMACY_STAFF',
+        tenantId: user?.tenantId || user?.app_metadata?.tenantId || null,
+        scope: (role === 'SUPER_ADMIN' || role === 'admin' || role === 'PLATFORM_SUPER_ADMIN') ? 'PLATFORM' : ((user?.tenantId || user?.app_metadata?.tenantId) ? 'TENANT' : 'CUSTOMER'),
         loading,
         mfaRequired,
         mfaChallenge,

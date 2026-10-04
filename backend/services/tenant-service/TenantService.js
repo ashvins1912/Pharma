@@ -1,10 +1,14 @@
 /**
  * Tenant & Branch Management Domain Service
  */
+import crypto from 'node:crypto';
 import { domainEvents } from '../../shared/events/DomainEvents.js';
 import { logger } from '../../shared/observability/logger.js';
 import { registerMembership } from '../../middleware/context.js';
 import { TenantRoles, PlatformRoles } from '../../shared/contracts/index.js';
+import Tenant from '../../models/Tenant.js';
+import TenantMembership from '../../models/TenantMembership.js';
+import { getIsConnected } from '../../config/db.js';
 
 export class TenantService {
     constructor() {
@@ -19,10 +23,13 @@ export class TenantService {
         const tenant1 = {
             id: 'tenant-ashvin-main',
             name: 'Ashvin Central Pharmacy',
+            slug: 'ashvin-central',
             legalName: 'Ashvin Healthcare Private Limited',
             code: 'ASHVIN-HQ',
             phone: '+91 95899 16475',
             email: 'care@ashvinpharmacy.com',
+            contactEmail: 'care@ashvinpharmacy.com',
+            contactPhone: '+91 95899 16475',
             status: 'ACTIVE',
             timezone: 'Asia/Kolkata',
             currency: 'INR',
@@ -31,7 +38,8 @@ export class TenantService {
                 allowCouponWithRewards: true,
                 allowOfferWithRewards: false
             },
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         };
         this.tenants.set(tenant1.id, tenant1);
 
@@ -91,10 +99,13 @@ export class TenantService {
         const tenant2 = {
             id: 'tenant-medplus-partner',
             name: 'MedPlus Express Pharmacy',
+            slug: 'medplus-express',
             legalName: 'MedPlus Healthcare MP LLP',
             code: 'MEDPLUS-MP',
             phone: '+91 75524 56789',
             email: 'support@medplus-partner.in',
+            contactEmail: 'support@medplus-partner.in',
+            contactPhone: '+91 75524 56789',
             status: 'ACTIVE',
             timezone: 'Asia/Kolkata',
             currency: 'INR',
@@ -103,7 +114,8 @@ export class TenantService {
                 allowCouponWithRewards: false,
                 allowOfferWithRewards: false
             },
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         };
         this.tenants.set(tenant2.id, tenant2);
 
@@ -162,25 +174,83 @@ export class TenantService {
     }
 
     async getTenants(filter = {}) {
+        if (getIsConnected()) {
+            try {
+                const query = {};
+                if (filter.status) query.status = filter.status;
+                const dbTenants = await Tenant.find(query).lean();
+                if (dbTenants.length > 0) {
+                    return dbTenants.map(t => ({ id: t._id, ...t }));
+                }
+            } catch (err) {
+                logger.warn('Failed to query Tenants from MongoDB, falling back to memory', { error: err.message });
+            }
+        }
         let list = Array.from(this.tenants.values());
         if (filter.status) list = list.filter(t => t.status === filter.status);
         return list;
     }
 
     async getTenantById(tenantId) {
+        if (!tenantId) return null;
+        if (getIsConnected()) {
+            try {
+                const dbTenant = await Tenant.findById(String(tenantId)).lean();
+                if (dbTenant) return { id: dbTenant._id, ...dbTenant };
+            } catch (err) {
+                logger.warn('Failed to fetch Tenant by ID from MongoDB, falling back to memory', { error: err.message });
+            }
+        }
         return this.tenants.get(String(tenantId)) || null;
     }
 
+    async getTenantBySlug(slug) {
+        if (!slug) return null;
+        const normalizedSlug = String(slug).trim().toLowerCase();
+        if (getIsConnected()) {
+            try {
+                const dbTenant = await Tenant.findOne({ slug: normalizedSlug }).lean();
+                if (dbTenant) return { id: dbTenant._id, ...dbTenant };
+            } catch (err) {
+                logger.warn('Failed to fetch Tenant by slug from MongoDB', { error: err.message });
+            }
+        }
+        return Array.from(this.tenants.values()).find(t => t.slug === normalizedSlug) || null;
+    }
+
     async createTenant(data, actor = null) {
+        if (!data?.name) {
+            throw new Error('Tenant name is required.');
+        }
+
         const id = data.id || `tenant-${Date.now()}`;
+        const slug = (data.slug || data.name)
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+
+        if (!slug) {
+            throw new Error('A valid alphanumeric slug is required.');
+        }
+
+        // Verify slug uniqueness
+        const existing = await this.getTenantBySlug(slug);
+        if (existing && existing.id !== id) {
+            throw new Error(`Tenant slug "${slug}" is already in use.`);
+        }
+
         const newTenant = {
             id,
-            name: data.name,
+            name: data.name.trim(),
+            slug,
             legalName: data.legalName || data.name,
             code: (data.code || data.name.toUpperCase().replace(/[^A-Z0-9]/g, '')).slice(0, 12),
-            phone: data.phone || '',
-            email: data.email || '',
-            status: 'ACTIVE',
+            phone: data.contactPhone || data.phone || '',
+            email: data.contactEmail || data.email || '',
+            contactEmail: data.contactEmail || data.email || '',
+            contactPhone: data.contactPhone || data.phone || '',
+            status: data.status || 'ACTIVE',
             timezone: data.timezone || 'Asia/Kolkata',
             currency: data.currency || 'INR',
             settings: {
@@ -191,10 +261,87 @@ export class TenantService {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
+
+        if (getIsConnected()) {
+            try {
+                await Tenant.create({
+                    _id: id,
+                    name: newTenant.name,
+                    slug: newTenant.slug,
+                    legalName: newTenant.legalName,
+                    code: newTenant.code,
+                    contactEmail: newTenant.contactEmail,
+                    contactPhone: newTenant.contactPhone,
+                    status: newTenant.status,
+                    timezone: newTenant.timezone,
+                    currency: newTenant.currency,
+                    settings: newTenant.settings
+                });
+            } catch (err) {
+                logger.warn('Could not persist Tenant to MongoDB, retained in memory', { error: err.message });
+            }
+        }
+
         this.tenants.set(id, newTenant);
         domainEvents.emitDomainEvent('TENANT_CREATED', id, newTenant, actor, id);
-        logger.info(`New tenant onboarded: ${newTenant.name}`, { tenantId: id });
+        logger.info(`New tenant onboarded: ${newTenant.name}`, { tenantId: id, slug });
         return newTenant;
+    }
+
+    async updateTenant(tenantId, updates, actor = null) {
+        const tenant = await this.getTenantById(tenantId);
+        if (!tenant) throw new Error('Tenant not found');
+
+        let newSlug = tenant.slug;
+        if (updates.slug && updates.slug !== tenant.slug) {
+            newSlug = updates.slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+            const existingSlug = await this.getTenantBySlug(newSlug);
+            if (existingSlug && existingSlug.id !== tenantId) {
+                throw new Error(`Tenant slug "${newSlug}" is already in use.`);
+            }
+        }
+
+        const updated = {
+            ...tenant,
+            ...updates,
+            slug: newSlug,
+            name: updates.name ? updates.name.trim() : tenant.name,
+            contactEmail: updates.contactEmail !== undefined ? updates.contactEmail : tenant.contactEmail,
+            contactPhone: updates.contactPhone !== undefined ? updates.contactPhone : tenant.contactPhone,
+            settings: { ...tenant.settings, ...(updates.settings || {}) },
+            updatedAt: new Date().toISOString()
+        };
+
+        if (getIsConnected()) {
+            try {
+                await Tenant.findByIdAndUpdate(tenantId, {
+                    name: updated.name,
+                    slug: updated.slug,
+                    legalName: updated.legalName,
+                    code: updated.code,
+                    status: updated.status,
+                    contactEmail: updated.contactEmail,
+                    contactPhone: updated.contactPhone,
+                    timezone: updated.timezone,
+                    currency: updated.currency,
+                    settings: updated.settings
+                });
+            } catch (err) {
+                logger.warn('Could not update Tenant in MongoDB', { error: err.message });
+            }
+        }
+
+        this.tenants.set(tenantId, updated);
+        domainEvents.emitDomainEvent('TENANT_UPDATED', tenantId, updated, actor, tenantId);
+        return updated;
+    }
+
+    async suspendTenant(tenantId, actor = null) {
+        return this.updateTenant(tenantId, { status: 'SUSPENDED' }, actor);
+    }
+
+    async activateTenant(tenantId, actor = null) {
+        return this.updateTenant(tenantId, { status: 'ACTIVE' }, actor);
     }
 
     async getBranches(tenantId, filter = {}) {
@@ -263,7 +410,31 @@ export class TenantService {
     }
 
     async getMembershipsForUser(userId) {
+        if (getIsConnected()) {
+            try {
+                const dbMemberships = await TenantMembership.find({ userId, status: 'ACTIVE' }).lean();
+                if (dbMemberships.length > 0) {
+                    return dbMemberships.map(m => ({ id: m._id, ...m }));
+                }
+            } catch (err) {
+                logger.warn('Failed to query TenantMembership from MongoDB', { error: err.message });
+            }
+        }
         return Array.from(this.memberships.values()).filter(m => m.userId === userId && m.status === 'ACTIVE');
+    }
+
+    async getMembershipsForTenant(tenantId) {
+        if (getIsConnected()) {
+            try {
+                const dbMemberships = await TenantMembership.find({ tenantId }).lean();
+                if (dbMemberships.length > 0) {
+                    return dbMemberships.map(m => ({ id: m._id, ...m }));
+                }
+            } catch (err) {
+                logger.warn('Failed to query TenantMembership for tenant from MongoDB', { error: err.message });
+            }
+        }
+        return Array.from(this.memberships.values()).filter(m => m.tenantId === String(tenantId));
     }
 
     async assignMembership(userId, tenantId, branchId, role, permissions = [], actor = null) {
@@ -273,14 +444,84 @@ export class TenantService {
             userId,
             tenantId,
             branchId: branchId || null,
-            role,
+            role: role || TenantRoles.TENANT_ADMIN,
             permissions: permissions.length ? permissions : ['READ_WRITE'],
             status: 'ACTIVE',
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         };
+
+        if (getIsConnected()) {
+            try {
+                await TenantMembership.findOneAndUpdate(
+                    { userId, tenantId },
+                    {
+                        branchId: membership.branchId,
+                        role: membership.role,
+                        permissions: membership.permissions,
+                        status: 'ACTIVE'
+                    },
+                    { upsert: true, new: true }
+                );
+            } catch (err) {
+                logger.warn('Failed to persist TenantMembership to MongoDB', { error: err.message });
+            }
+        }
+
         this.memberships.set(key, membership);
         registerMembership(membership);
         return membership;
+    }
+
+    async inviteTenantAdmin(tenantId, inviteData, actor = null) {
+        const tenant = await this.getTenantById(tenantId);
+        if (!tenant) throw new Error('Tenant not found');
+
+        const email = inviteData.email?.trim().toLowerCase();
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            throw new Error('Valid invitation email address is required.');
+        }
+
+        const invitationToken = `inv_${crypto.randomUUID()}`;
+        const inviteRecord = {
+            id: `invite-${Date.now()}`,
+            userId: inviteData.userId || `pending-${crypto.randomUUID().slice(0, 8)}`,
+            email,
+            name: inviteData.name || '',
+            tenantId,
+            branchId: inviteData.branchId || null,
+            role: TenantRoles.TENANT_ADMIN,
+            permissions: inviteData.permissions?.length ? inviteData.permissions : ['*'],
+            status: 'INVITED',
+            invitationToken,
+            invitedBy: actor?.userId || 'platform-super-admin',
+            createdAt: new Date().toISOString()
+        };
+
+        const key = `${inviteRecord.userId}:${tenantId}`;
+        this.memberships.set(key, inviteRecord);
+        registerMembership(inviteRecord);
+
+        if (getIsConnected()) {
+            try {
+                await TenantMembership.create({
+                    userId: inviteRecord.userId,
+                    tenantId,
+                    branchId: inviteRecord.branchId,
+                    role: inviteRecord.role,
+                    permissions: inviteRecord.permissions,
+                    status: 'INVITED',
+                    invitedBy: inviteRecord.invitedBy,
+                    invitationToken
+                });
+            } catch (err) {
+                logger.warn('Failed to save invitation to MongoDB', { error: err.message });
+            }
+        }
+
+        domainEvents.emitDomainEvent('TENANT_ADMIN_INVITED', tenantId, inviteRecord, actor, tenantId);
+        logger.info(`Tenant admin invited: ${email} for tenant ${tenant.name}`, { tenantId, email });
+        return inviteRecord;
     }
 }
 

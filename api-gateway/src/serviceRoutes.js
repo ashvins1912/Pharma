@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticateUser, requireAdmin } from './authenticateUser.js';
+import { authenticateUser, requireAdmin, requireInventoryImportPermission } from './authenticateUser.js';
 import { config } from './config.js';
 import { proxyRequest } from './proxy.js';
 import { createServiceToken } from './serviceAuth.js';
@@ -57,12 +57,15 @@ export function createServiceRouters(gatewayConfig = config) {
   const inventoryAdmin = (req, res, next) => req.inventoryServiceUnavailable
     ? next()
     : requireAdmin(req, res, next);
+  const inventoryImportAuth = (req, res, next) => req.inventoryServiceUnavailable
+    ? next()
+    : requireInventoryImportPermission(req, res, next);
   inventoryRouter.post('/adjust', inventoryAdmin, inventory('inventory.adjust'));
-  inventoryRouter.post('/imports', inventoryAdmin, inventory('inventory.import'));
-  inventoryRouter.get('/imports/:jobId/failures/download', inventoryAdmin, inventory('inventory.import'));
-  inventoryRouter.get('/imports/:jobId/failures', inventoryAdmin, inventory('inventory.import'));
-  inventoryRouter.post('/imports/:jobId/retry', inventoryAdmin, inventory('inventory.import'));
-  inventoryRouter.get('/imports/:jobId', inventoryAdmin, inventory('inventory.import'));
+  inventoryRouter.post('/imports', inventoryImportAuth, inventory('inventory.import'));
+  inventoryRouter.get('/imports/:jobId/failures/download', inventoryImportAuth, inventory('inventory.import'));
+  inventoryRouter.get('/imports/:jobId/failures', inventoryImportAuth, inventory('inventory.import'));
+  inventoryRouter.post('/imports/:jobId/retry', inventoryImportAuth, inventory('inventory.import'));
+  inventoryRouter.get('/imports/:jobId', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.get('/:productId', inventory('inventory.read'));
   inventoryRouter.all('*', (req, res) => res.status(404).json({
     success: false,

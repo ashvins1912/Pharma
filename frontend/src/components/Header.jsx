@@ -12,7 +12,7 @@ export default function Header({
   onOpenProfile,
   onOpenAdminAlerts
 }) {
-  const { user, isAdmin, isPharmacyOrAdmin, role, logout } = useAuth();
+  const { user, isAdmin, isSuperAdmin, isTenantAdmin, isPharmacyOrAdmin, role, logout } = useAuth();
   const { cart, whatsappStatus, setWhatsappModalOpen, medicineRequests, openRequestModal } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -47,7 +47,7 @@ export default function Header({
                 {isPharmacyOrAdmin && (
                   <div className="flex items-center gap-1 shrink-0">
                     <span className="bg-purple-100 text-purple-700 text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                      {role === 'admin' ? 'Admin' : 'Pharmacy'}
+                      {isSuperAdmin ? 'Super Admin' : (isTenantAdmin ? 'Tenant Admin' : (role === 'admin' ? 'Admin' : 'Pharmacy'))}
                     </span>
                     {isAdmin && (
                       whatsappStatus.isConnected ? (
