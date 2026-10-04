@@ -1,4 +1,14 @@
-import 'dotenv/config';
+try {
+  await import('dotenv/config');
+} catch {
+  if (typeof process.loadEnvFile === 'function') {
+    try {
+      process.loadEnvFile();
+    } catch {
+      // In production (Render/Cloud), environment variables are already set in process.env
+    }
+  }
+}
 
 const positiveInteger = (value, fallback, max) => {
   const parsed = Number.parseInt(value || '', 10);
