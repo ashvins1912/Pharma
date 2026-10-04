@@ -3,7 +3,10 @@ services:
     name: ashvin-pharmacy-api
     runtime: node
     rootDir: backend
-    buildCommand: npm install
+    # Inventory models are imported from the repository-level services/ tree.
+    # Install the repository dependencies there so ESM package resolution from
+    # services/inventory-service can find mongoose, then install backend deps.
+    buildCommand: npm ci --prefix .. --omit=dev && npm ci --omit=dev && node --input-type=module -e "await import('../services/inventory-service/src/models.js')"
     startCommand: npm start
     healthCheckPath: /ready
     envVars:
