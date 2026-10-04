@@ -445,20 +445,20 @@ export function AppProvider({ children }) {
 
   // Fetch Admin Inventory Alerts
   const loadInventoryAlerts = useCallback(async () => {
-    if (authLoading || !isAdmin) return;
+    if (authLoading || !user?.id || !isAdmin) return;
     try {
       const res = await apiClient.get('/api/medicines/alerts');
       setInventoryAlerts(res.data || {});
     } catch {
       // ignore
     }
-  }, [authLoading, isAdmin]);
+  }, [authLoading, user?.id, isAdmin]);
 
   useEffect(() => {
-    if (!authLoading && isAdmin) {
+    if (!authLoading && user?.id && isAdmin) {
       loadInventoryAlerts();
     }
-  }, [authLoading, isAdmin, loadInventoryAlerts]);
+  }, [authLoading, user?.id, isAdmin, loadInventoryAlerts]);
 
   // Cart operations
   const addToCart = (med) => {
