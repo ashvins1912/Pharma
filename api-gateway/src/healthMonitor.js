@@ -146,5 +146,11 @@ export function createHealthMonitor({
     if (activeCycle) await activeCycle;
   };
 
-  return { start, stop, runCycle, snapshot, isRunning: () => Boolean(activeCycle), isScheduled: () => Boolean(timer) };
+  const checkNow = async () => {
+    if (stopping) return snapshot();
+    if (activeCycle) return (await activeCycle).results;
+    return (await runCycle()).results;
+  };
+
+  return { start, stop, runCycle, checkNow, snapshot, isRunning: () => Boolean(activeCycle), isScheduled: () => Boolean(timer) };
 }

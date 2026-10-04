@@ -59,7 +59,29 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
     optionsSuccessStatus: 204
   }));
 
-  app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'api-gateway' }));
+  const respondWithHealth = async (req, res) => {
+    const snapshot = healthMonitor.checkNow
+      ? await healthMonitor.checkNow()
+      : healthMonitor.snapshot();
+    const isHealthy = snapshot.overallStatus === 'HEALTHY';
+    res.status(isHealthy ? 200 : 503).json({
+      status: snapshot.overallStatus,
+      gatewayStatus: 'UP',
+      service: 'api-gateway',
+      overallStatus: snapshot.overallStatus,
+      checkedAt: snapshot.checkedAt,
+      serviceCount: snapshot.services?.length || 0,
+      services: (snapshot.services || []).map(service => ({
+        name: service.serviceName,
+        status: service.status,
+        checkedAt: service.checkedAt,
+        responseTimeMs: service.responseTimeMs
+      })),
+      requestId: req.requestId
+    });
+  };
+  app.get('/health', respondWithHealth);
+  app.get('/api/v1/health', respondWithHealth);
   app.get('/health/services',
     (req, res, next) => authenticateUser(req, res, next, gatewayConfig),
     requireAdmin,

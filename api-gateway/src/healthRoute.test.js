@@ -35,16 +35,54 @@ test('service health summary requires authenticated administrator authorization'
     SERVICE_AUTH_SECRET: 'test-service-secret-that-is-longer-than-thirty-two-characters',
     CORS_ALLOWED_ORIGINS: 'http://localhost:3000'
   });
-  const monitor = { snapshot: () => ({ overallStatus: 'HEALTHY', checkedAt: '2026-10-03T00:00:00Z', services: [{ serviceName: 'backend-api', status: 'HEALTHY' }] }) };
+  const degradedSnapshot = {
+    overallStatus: 'DEGRADED',
+    checkedAt: '2026-10-03T00:00:00Z',
+    services: [
+      { serviceName: 'backend-api', status: 'HEALTHY', checkedAt: '2026-10-03T00:00:00Z', responseTimeMs: 12 },
+      { serviceName: 'inventory-service', status: 'UNHEALTHY', checkedAt: '2026-10-03T00:00:00Z', responseTimeMs: 40, errorMessage: 'private endpoint detail' },
+      { serviceName: 'order-service', status: 'HEALTHY', checkedAt: '2026-10-03T00:00:00Z', responseTimeMs: 18 }
+    ]
+  };
+  let healthCheckCalls = 0;
+  const monitor = {
+    snapshot: () => degradedSnapshot,
+    checkNow: async () => {
+      healthCheckCalls += 1;
+      return healthCheckCalls === 1
+        ? degradedSnapshot
+        : { ...degradedSnapshot, overallStatus: 'HEALTHY' };
+    }
+  };
   const gateway = await start(createGatewayApp(config, monitor));
   try {
+    const publicHealthResponse = await fetch(`${gateway.url}/health`);
+    assert.equal(publicHealthResponse.status, 503);
+    const publicHealth = await publicHealthResponse.json();
+    assert.equal(publicHealth.overallStatus, 'DEGRADED');
+    assert.equal(publicHealth.serviceCount, 3);
+    assert.deepEqual(publicHealth.services.map(service => service.name), ['backend-api', 'inventory-service', 'order-service']);
+    assert.equal(publicHealth.services[1].status, 'UNHEALTHY');
+    assert.equal(JSON.stringify(publicHealth).includes('private endpoint detail'), false);
+    assert.equal(healthCheckCalls, 1);
+
+    const secondPublicHealthResponse = await fetch(`${gateway.url}/health`);
+    assert.equal(secondPublicHealthResponse.status, 200);
+    assert.equal((await secondPublicHealthResponse.json()).overallStatus, 'HEALTHY');
+    assert.equal(healthCheckCalls, 2);
+
+    const versionedHealthResponse = await fetch(`${gateway.url}/api/v1/health`);
+    assert.equal(versionedHealthResponse.status, 200);
+    assert.equal((await versionedHealthResponse.json()).overallStatus, 'HEALTHY');
+    assert.equal(healthCheckCalls, 3);
+
     const unauthenticated = await fetch(`${gateway.url}/health/services`);
     assert.equal(unauthenticated.status, 401);
     const customer = await fetch(`${gateway.url}/health/services`, { headers: { Authorization: 'Bearer customer-token' } });
     assert.equal(customer.status, 403);
     const admin = await fetch(`${gateway.url}/health/services`, { headers: { Authorization: 'Bearer admin-token' } });
     assert.equal(admin.status, 200);
-    assert.equal((await admin.json()).overallStatus, 'HEALTHY');
+    assert.equal((await admin.json()).overallStatus, 'DEGRADED');
   } finally {
     await gateway.close();
     await new Promise(resolve => backend.close(resolve));
