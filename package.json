@@ -3,6 +3,10 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "workspaces": [
+    "services/inventory-service",
+    "services/order-service"
+  ],
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
