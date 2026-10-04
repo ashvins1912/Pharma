@@ -99,19 +99,6 @@ function verifyPassword(password, salt, storedHash) {
     return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(storedHash));
 }
 
-// Pre-seed default test accounts in memory for instant out-of-the-box verification
-const defaultAdminSeed = hashPassword('Admin@123');
-inMemoryShadowProfiles.set('ashvinsingh25@gmail.com', {
-    supabase_user_id: 'admin',
-    userId: 'admin',
-    name: 'Ashvin Singh (Admin)',
-    email: 'ashvinsingh25@gmail.com',
-    role: 'admin',
-    salt: defaultAdminSeed.salt,
-    passwordHash: defaultAdminSeed.hash,
-    mfaEnabled: false
-});
-
 const defaultCustomerSeed = hashPassword('Customer@123');
 inMemoryShadowProfiles.set('customer@ashvinpharma.com', {
     supabase_user_id: 'demo-customer-id',
@@ -241,17 +228,22 @@ router.post('/login', validateLogin, async (req, res) => {
     const normalizedEmail = email.trim().toLowerCase();
 
     try {
-        // 1. Direct Demo Admin Match
-        if (normalizedEmail === 'ashvinsingh25@gmail.com' && password === 'Admin@123') {
+        // 1. Configured demo admin account. Password and identity are supplied
+        // through environment configuration; never bake credentials into source.
+        if (verifyDemoAdminPassword(normalizedEmail, password)) {
+            if (!process.env.DEMO_ADMIN_JWT_SECRET && process.env.NODE_ENV === 'production') {
+                return res.status(503).json({ message: 'Admin sign-in is not configured correctly.' });
+            }
+            const configuredAdmin = getDemoAdminIdentity();
             const demoAdmin = {
-                id: 'admin',
-                sub: 'admin',
-                email: 'ashvinsingh25@gmail.com',
+                id: configuredAdmin.id,
+                sub: configuredAdmin.id,
+                email: configuredAdmin.email,
                 role: 'admin',
                 app_metadata: { role: 'admin' },
-                user_metadata: { name: 'Ashvin Singh (Admin)' }
+                user_metadata: configuredAdmin.user_metadata
             };
-            const shadow = await getShadowProfile('admin');
+            const shadow = await getShadowProfile(configuredAdmin.id);
 
             if (shadow?.mfaEnabled) {
                 const challengeToken = await issueMfaChallengeToken(demoAdmin, 'demo-totp-factor');
@@ -265,14 +257,14 @@ router.post('/login', validateLogin, async (req, res) => {
             }
 
             const adminToken = await new SignJWT({
-                sub: 'admin',
-                email: 'ashvinsingh25@gmail.com',
+                sub: configuredAdmin.id,
+                email: configuredAdmin.email,
                 app_metadata: { role: 'admin' },
-                user_metadata: { name: 'Ashvin Singh (Admin)' },
+                user_metadata: configuredAdmin.user_metadata,
                 aal: 'aal1'
             })
                 .setProtectedHeader({ alg: 'HS256' })
-                .setSubject('admin')
+                .setSubject(configuredAdmin.id)
                 .setIssuedAt()
                 .setExpirationTime('2h')
                 .sign(SIGNING_KEY);

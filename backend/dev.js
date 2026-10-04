@@ -1,2 +1,2 @@
-process.env.PORT ||= '8090';
+process.env.PORT ||= '3001';
 await import('./server-entry.js');
