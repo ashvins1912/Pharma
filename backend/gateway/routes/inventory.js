@@ -11,8 +11,8 @@ import mongoose from 'mongoose';
 import { catalogService } from '../../services/catalog-service/CatalogService.js';
 import { authenticateUser } from '../../middleware/auth.js';
 import { requireBranchScope, requireTenantScope, requireTenantStaff } from '../../middleware/context.js';
-import { config as inventoryConfig } from '../../inventory-service/src/config.js';
-import { ImportJob } from '../../inventory-service/src/models.js';
+import { config as inventoryConfig } from '../../services/inventory-service/src/config.js';
+
 import {
     buildFailureWorkbook,
     createImportJob,
