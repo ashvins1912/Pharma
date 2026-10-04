@@ -31,7 +31,14 @@ export default function PlatformTenantsView() {
     contactPhone: '',
     timezone: 'Asia/Kolkata',
     currency: 'INR',
-    initialAdminEmail: ''
+    initialAdminEmail: '',
+    customSmtpEnabled: false,
+    smtpHost: 'smtp.gmail.com',
+    smtpPort: '587',
+    smtpSecure: false,
+    smtpUser: '',
+    smtpPass: '',
+    smtpFrom: ''
   });
   const [submittingOnboard, setSubmittingOnboard] = useState(false);
   const [onboardError, setOnboardError] = useState('');
@@ -45,6 +52,30 @@ export default function PlatformTenantsView() {
   const [submittingInvite, setSubmittingInvite] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [issuedInvitation, setIssuedInvitation] = useState(null);
+
+  // SMTP Settings Modal states
+  const [smtpModalOpen, setSmtpModalOpen] = useState(false);
+  const [smtpActiveTab, setSmtpActiveTab] = useState('config'); // 'config' | 'test' | 'history'
+  const [smtpConfig, setSmtpConfig] = useState({
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    encryption: 'STARTTLS',
+    user: '',
+    pass: '',
+    hasPassword: false,
+    from: '',
+    enabled: true
+  });
+  const [loadingSmtp, setLoadingSmtp] = useState(false);
+  const [savingSmtp, setSavingSmtp] = useState(false);
+  const [smtpSuccess, setSmtpSuccess] = useState('');
+  const [smtpModalError, setSmtpModalError] = useState('');
+  const [testEmailInput, setTestEmailInput] = useState('');
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState(null);
+  const [smtpHistory, setSmtpHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   // Status toggle confirmation
   const [statusActionPending, setStatusActionPending] = useState(null); // { tenantId, action: 'suspend' | 'activate' }
@@ -60,6 +91,88 @@ export default function PlatformTenantsView() {
       setError(err.message || 'Could not load platform tenants.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSmtpConfig = async () => {
+    try {
+      setLoadingSmtp(true);
+      setSmtpModalError('');
+      const res = await apiClient.get('/api/v1/admin/tenants/smtp/config');
+      if (res.data?.data) {
+        setSmtpConfig(res.data.data);
+      }
+    } catch (err) {
+      setSmtpModalError(err.message || 'Could not load SMTP configuration.');
+    } finally {
+      setLoadingSmtp(false);
+    }
+  };
+
+  const loadSmtpHistory = async () => {
+    try {
+      setLoadingHistory(true);
+      const res = await apiClient.get('/api/v1/admin/tenants/smtp/history');
+      setSmtpHistory(Array.isArray(res.data?.data) ? res.data.data : []);
+    } catch (err) {
+      console.warn('Could not load email dispatch history:', err.message);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleSaveSmtp = async (e) => {
+    e.preventDefault();
+    try {
+      setSavingSmtp(true);
+      setSmtpSuccess('');
+      setSmtpModalError('');
+      const res = await apiClient.put('/api/v1/admin/tenants/smtp/config', {
+        host: smtpConfig.host,
+        port: Number(smtpConfig.port) || 587,
+        secure: smtpConfig.secure,
+        user: smtpConfig.user,
+        pass: smtpConfig.pass,
+        from: smtpConfig.from,
+        enabled: smtpConfig.enabled
+      });
+      setSmtpSuccess('Global SMTP configuration saved successfully.');
+      if (res.data?.data) {
+        setSmtpConfig(res.data.data);
+      }
+    } catch (err) {
+      setSmtpModalError(err.message || 'Failed to update SMTP settings.');
+    } finally {
+      setSavingSmtp(false);
+    }
+  };
+
+  const handleTestSmtp = async (e) => {
+    e.preventDefault();
+    if (!testEmailInput.trim()) {
+      setSmtpModalError('Please enter a target recipient email address.');
+      return;
+    }
+    try {
+      setTestingEmail(true);
+      setTestEmailResult(null);
+      setSmtpModalError('');
+      const res = await apiClient.post('/api/v1/admin/tenants/smtp/test', {
+        targetEmail: testEmailInput.trim(),
+        host: smtpConfig.host,
+        port: Number(smtpConfig.port) || 587,
+        secure: smtpConfig.secure,
+        user: smtpConfig.user,
+        pass: smtpConfig.pass,
+        from: smtpConfig.from
+      });
+      setTestEmailResult(res.data?.data);
+      setSmtpSuccess(res.data?.message || 'Test email dispatched.');
+      loadSmtpHistory();
+    } catch (err) {
+      setSmtpModalError(err.message || 'SMTP diagnostic test failed.');
+    } finally {
+      setTestingEmail(false);
     }
   };
 

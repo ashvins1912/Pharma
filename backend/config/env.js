@@ -72,7 +72,14 @@ export const envSchema = z.object({
     DELIVERY_ACTION_BASE_URL: optionalString(z.string().url().refine(value => !isProduction || value.startsWith('https://'), {
         message: 'Delivery action URLs must use HTTPS in production.'
     })),
-    DELIVERY_EVENT_SECRET: optionalString(z.string().min(32))
+    DELIVERY_EVENT_SECRET: optionalString(z.string().min(32)),
+    SMTP_HOST: optionalString(z.string().trim()),
+    SMTP_PORT: optionalString(z.coerce.number().int().min(1).max(65535)),
+    SMTP_SECURE: optionalString(z.enum(['true', 'false'])),
+    SMTP_USER: optionalString(z.string().trim()),
+    SMTP_PASS: optionalString(z.string().trim()),
+    SMTP_FROM: optionalString(z.string().trim()),
+    SMTP_SERVICE: optionalString(z.string().trim())
 }).superRefine((value, context) => {
     if (value.PAYMENT_REMINDER_ENABLED === 'true' || value.PAYMENT_REMINDER_ENGINE_ENABLED === 'true') {
         if (!value.SYSTEM_SECRET_KEY) context.addIssue({ code: 'custom', path: ['SYSTEM_SECRET_KEY'], message: 'Required when payment reminders are enabled.' });

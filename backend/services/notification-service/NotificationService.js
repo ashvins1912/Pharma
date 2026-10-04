@@ -4,14 +4,25 @@
  */
 import { domainEvents } from '../../shared/events/DomainEvents.js';
 import { logger } from '../../shared/observability/logger.js';
+import { emailService } from './EmailService.js';
 
 export class NotificationService {
     constructor() {
         this.notifications = []; // in-app notifications
+        this.emailService = emailService;
         this._bindDomainEvents();
     }
 
     _bindDomainEvents() {
+        domainEvents.on('TENANT_CREATED', async (evt) => {
+            const tenant = evt.payload;
+            this.send({
+                tenantId: evt.tenantId,
+                title: `Pharmacy Tenant Onboarded: ${tenant?.name || evt.tenantId}`,
+                body: `Tenant ${tenant?.name || evt.tenantId} has been successfully registered on the platform.`,
+                channels: ['IN_APP', 'EMAIL']
+            });
+        });
         domainEvents.on('ORDER_CREATED', (evt) => {
             this.send({
                 tenantId: evt.tenantId,

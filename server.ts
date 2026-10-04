@@ -10,7 +10,8 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = backendApp;
-  const { PORT, NODE_ENV } = env;
+  const { NODE_ENV } = env;
+  const port = 3000;
   const isProduction = NODE_ENV === 'production';
 
   if (!isProduction) {
@@ -56,8 +57,8 @@ async function startServer() {
     res.status(500).json({ message: err?.message || 'Internal server error' });
   });
 
-  const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Pharmacy App server running at http://0.0.0.0:${PORT}`);
+  const server = app.listen(port, '0.0.0.0', () => {
+    console.log(`🚀 Pharmacy App server running at http://0.0.0.0:${port}`);
   });
 
   const shutdown = () => {
