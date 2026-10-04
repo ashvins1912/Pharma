@@ -19,7 +19,16 @@ const tenantSchema = new mongoose.Schema({
     settings: {
         allowOfferWithCoupon: { type: Boolean, default: false },
         allowCouponWithRewards: { type: Boolean, default: true },
-        allowOfferWithRewards: { type: Boolean, default: false }
+        allowOfferWithRewards: { type: Boolean, default: false },
+        smtp: {
+            host: { type: String, trim: true },
+            port: { type: Number },
+            secure: { type: Boolean },
+            user: { type: String, trim: true },
+            pass: { type: String, trim: true },
+            from: { type: String, trim: true },
+            enabled: { type: Boolean }
+        }
     }
 }, {
     timestamps: true,

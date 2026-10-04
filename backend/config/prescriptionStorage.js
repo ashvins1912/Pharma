@@ -1,12 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import mongoose from 'mongoose';
-import { GridFSBucket } from 'mongodb';
 import { getIsConnected } from './db.js';
 
 const bucketName = 'prescriptions';
 const memoryFiles = new Map();
 
-const getBucket = () => new GridFSBucket(mongoose.connection.db, { bucketName });
+const getBucket = () => {
+    const GridFSBucket = mongoose.mongo?.GridFSBucket;
+    if (!GridFSBucket) {
+        throw new Error('GridFSBucket is not available from mongoose.mongo');
+    }
+    return new GridFSBucket(mongoose.connection.db, { bucketName });
+};
 
 export const savePrescription = async (file, ownerId) => {
     if (!file) return null;

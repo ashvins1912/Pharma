@@ -256,7 +256,8 @@ export class TenantService {
             settings: {
                 allowOfferWithCoupon: Boolean(data.settings?.allowOfferWithCoupon),
                 allowCouponWithRewards: data.settings?.allowCouponWithRewards !== false,
-                allowOfferWithRewards: Boolean(data.settings?.allowOfferWithRewards)
+                allowOfferWithRewards: Boolean(data.settings?.allowOfferWithRewards),
+                ...(data.settings || {})
             },
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()

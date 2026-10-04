@@ -7,6 +7,25 @@ export function createCorsMiddleware(allowedOrigins) {
     return cors({
         origin(origin, callback) {
             if (!origin || allowed.has(origin)) return callback(null, true);
+
+            // In development/test preview environments, support AI Studio / Cloud Run preview domains and localhost
+            if (process.env.NODE_ENV !== 'production') {
+                try {
+                    const { hostname } = new URL(origin);
+                    if (
+                        hostname === 'localhost' ||
+                        hostname === '127.0.0.1' ||
+                        hostname.endsWith('.run.app') ||
+                        hostname.endsWith('.aistudio.google.com') ||
+                        hostname.endsWith('.googleusercontent.com')
+                    ) {
+                        return callback(null, true);
+                    }
+                } catch {
+                    // Ignore URL parsing errors
+                }
+            }
+
             return callback(Object.assign(new Error('Request origin is not allowed.'), {
                 code: corsOriginErrorCode
             }));
