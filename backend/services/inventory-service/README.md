@@ -33,7 +33,7 @@ Run `npm start` to start the service. `GET /health` is a liveness check;
 replica set or sharded cluster because reservation state transitions and import
 batches use MongoDB transactions.
 
-`render.yaml` can deploy the service independently and mounts persistent import
+`../../render.yaml` can deploy the service independently and mounts persistent import
 storage. The Inventory MongoDB cluster is still provisioned and backed up
 separately; provide a dedicated replica-set URI when configuring
 `INVENTORY_MONGO_URI`.

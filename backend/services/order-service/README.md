@@ -58,7 +58,7 @@ independent services; those existing behaviors remain on the main application.
 
 ## Deployment
 
-`render.yaml` deploys this service independently. Configure `ORDER_MONGO_URI`,
+`../../render.yaml` deploys this service independently. Configure `ORDER_MONGO_URI`,
 the shared `SERVICE_AUTH_SECRET`, and a private `INVENTORY_SERVICE_URL`.
 Configure `ORDER_SERVICE_URL` and the same service secret on the API Gateway
 to route `/api/v1/orders` here. The Gateway validates users through the private

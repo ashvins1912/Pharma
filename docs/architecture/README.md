@@ -36,9 +36,9 @@ writes, or legacy synchronization is required.
   database access, and legacy business modules.
 - `api-gateway/`: public CORS boundary, service authentication/authorization,
   request IDs, and HTTP routing.
-- `services/inventory-service/`: extracted inventory API and dedicated
+- `../../backend/inventory-service`: extracted inventory API and dedicated
   Inventory database.
-- `services/order-service/`: extracted versioned Order API and dedicated Order
+- `../../backend/order-service`: extracted versioned Order API and dedicated Order
   database; Inventory accessed only over the Inventory API.
 - `api/`: Vercel adapter for the Express backend.
 

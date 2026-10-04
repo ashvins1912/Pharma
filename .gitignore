@@ -63,9 +63,9 @@ Thumbs.db
 /frontend/node_modules/
 /frontend/dist/
 /backend/.env
-/services/inventory-service/data/
-/services/inventory-service/.env
-/services/order-service/.env
+/backend/inventory-service/data/
+/backend/inventory-service/.env
+/backend/order-service/.env
 /backend/data/whatsapp-auth/
 /data/whatsapp-auth/
 .local-logs/

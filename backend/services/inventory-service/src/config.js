@@ -1,5 +1,5 @@
 try {
-  await import('dotenv/config');
+  import 'dotenv/config'
 } catch {
   if (typeof process.loadEnvFile === 'function') {
     try {
