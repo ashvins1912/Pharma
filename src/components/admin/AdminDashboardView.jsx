@@ -8,11 +8,12 @@ import RiderFleetView from './riders/RiderFleetView';
 import AdminOrderFinancials from './AdminOrderFinancials';
 import AdminMedicineRequestsTab from './requests/AdminMedicineRequestsTab';
 import AdminIntegrationsView from './AdminIntegrationsView';
+import PlatformTenantsView from './PlatformTenantsView';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 
 export default function AdminDashboardView() {
-  const { isAdmin, loading: authLoading } = useAuth();
+  const { isAdmin, isSuperAdmin, loading: authLoading } = useAuth();
   const {
     inventoryAlerts,
     loadInventoryAlerts,
@@ -284,9 +285,26 @@ export default function AdminDashboardView() {
           <span>🏢</span>
           <span>Branch POS & C-Square</span>
         </button>
+
+        {isSuperAdmin && (
+          <button
+            onClick={() => setAdminTab('tenants')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              adminTab === 'tenants'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-200'
+            }`}
+          >
+            <span>🌐</span>
+            <span>Platform Tenants & Access</span>
+          </button>
+        )}
       </div>
 
       {/* Tab Content Display */}
+      {adminTab === 'tenants' && isSuperAdmin && (
+        <PlatformTenantsView />
+      )}
       {adminTab === 'fulfillment' && (
         <div className="space-y-3">
           {ordersError && (

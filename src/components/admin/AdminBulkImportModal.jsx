@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import * as xlsx from 'xlsx';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useApp } from '../../context/AppContext';
@@ -15,33 +16,42 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   const [importJob, setImportJob] = useState(null);
   const [pollError, setPollError] = useState('');
 
+  // Status Polling for active import jobs
   useEffect(() => {
-    if (pollError || !importJob?.importId || !['QUEUED', 'PROCESSING'].includes(importJob.status)) return undefined;
+    if (pollError || !importJob?.jobId || !['QUEUED', 'PROCESSING'].includes(importJob.status)) return undefined;
     let cancelled = false;
+
     const pollStatus = async () => {
       try {
-        const response = await apiClient.get(`/api/medicines/imports/${importJob.importId}/status`);
+        const response = await apiClient.get(`/api/v1/inventory/imports/${importJob.jobId}`);
         if (cancelled) return;
         setPollError('');
         setImportJob(response.data);
         if (['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(response.data.status)) {
           fetchMedicines();
-          addToast('Inventory import completed.', 'success');
+          addToast(
+            response.data.status === 'COMPLETED'
+              ? 'Bulk inventory import completed successfully!'
+              : 'Inventory import completed with some failed records.',
+            response.data.status === 'COMPLETED' ? 'success' : 'warning'
+          );
         }
       } catch (error) {
         if (!cancelled) setPollError(error.response?.data?.message || 'Could not refresh import progress.');
       }
     };
+
     void pollStatus();
     const timer = window.setInterval(pollStatus, 1500);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [importJob?.importId, importJob?.status, fetchMedicines, addToast, pollError]);
+  }, [importJob?.jobId, importJob?.status, fetchMedicines, addToast, pollError]);
 
   if (!isOpen) return null;
 
+  // Single-Upload Architecture: Read workbook locally in browser for instant preview
   const handleFileChange = async (selectedFile) => {
     if (!selectedFile) return;
     setFile(selectedFile);
@@ -50,15 +60,62 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     setImportJob(null);
     setPollError('');
 
-    const formData = new FormData();
-    formData.append('excelFile', selectedFile);
-
     try {
-      const res = await apiClient.post('/api/medicines/validate-import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const buffer = await selectedFile.arrayBuffer();
+      const workbook = xlsx.read(buffer, { type: 'array', cellDates: true });
+      const firstSheetName = workbook.SheetNames[0];
+      if (!firstSheetName) {
+        throw new Error('Workbook contains no sheets.');
+      }
+      const sheet = workbook.Sheets[firstSheetName];
+      const rows = xlsx.utils.sheet_to_json(sheet, { defval: '', raw: false });
+
+      if (!rows.length) {
+        throw new Error('Workbook contains no data rows.');
+      }
+
+      const sampleRows = rows.slice(0, 10);
+      let validCount = 0;
+      let errorsCount = 0;
+      const errors = [];
+
+      rows.forEach((row, idx) => {
+        const sku = row.SKU || row.sku || row['Product SKU'] || row.Barcode;
+        const name = row['Medicine Name'] || row.medicineName || row.name || row.Name;
+        const price = Number(row.Price || row.price || row.MRP || row.mrp);
+        const stock = Number(row.Stock || row.stock || row.Quantity || row.quantity);
+
+        const rowErrors = [];
+        if (!sku || String(sku).trim() === '') rowErrors.push('Missing SKU');
+        if (!name || String(name).trim() === '') rowErrors.push('Missing Medicine Name');
+        if (isNaN(price) || price < 0) rowErrors.push('Invalid Price');
+        if (isNaN(stock) || stock < 0 || !Number.isInteger(stock)) rowErrors.push('Invalid Stock');
+
+        if (rowErrors.length > 0) {
+          errorsCount++;
+          if (errors.length < 50) {
+            errors.push({
+              rowNumber: idx + 2,
+              sku: String(sku || 'N/A'),
+              name: String(name || 'N/A'),
+              errors: rowErrors
+            });
+          }
+        } else {
+          validCount++;
+        }
       });
-      setPreviewData(res.data);
-      addToast(`Analyzed ${res.data.rowsDetected} rows (${res.data.validCount} valid)`, 'info');
+
+      setPreviewData({
+        rowsDetected: rows.length,
+        validCount,
+        warningsCount: 0,
+        errorsCount,
+        errors,
+        previewRows: sampleRows
+      });
+
+      addToast(`Analyzed ${rows.length} rows (${validCount} valid)`, 'info');
     } catch (err) {
       addToast(err.message || 'Validation failed', 'error');
     } finally {
@@ -73,6 +130,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     }
   };
 
+  // Authoritative Single Upload to /api/v1/inventory/imports with unique Idempotency-Key
   const handleConfirmImport = async () => {
     if (!previewData || previewData.rowsDetected === 0 || !file) {
       addToast('No records available to import', 'warning');
@@ -81,13 +139,21 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
     setCommitting(true);
     try {
+      const idempotencyKey = globalThis.crypto?.randomUUID?.()
+        || `import-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+
       const formData = new FormData();
       formData.append('excelFile', file);
-      const res = await apiClient.post('/api/medicines/imports', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+
+      const res = await apiClient.post('/api/v1/inventory/imports', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Idempotency-Key': idempotencyKey
+        }
       });
+
       setImportJob(res.data);
-      addToast('Inventory import queued. You can continue while it processes.', 'info');
+      addToast('Inventory import queued. Processing asynchronously in background.', 'info');
     } catch (err) {
       addToast(err.response?.data?.message || err.message || 'Import could not be started.', 'error');
     } finally {
@@ -95,17 +161,18 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     }
   };
 
+  // Download Row-Level Failure Excel Workbook from Inventory Service
   const downloadFailedRows = async () => {
-    if (!importJob?.importId) return;
+    if (!importJob?.jobId) return;
     try {
       const response = await apiClient.get(
-        `/api/medicines/imports/${importJob.importId}/failed-records`,
+        `/api/v1/inventory/imports/${importJob.jobId}/failures/download`,
         { responseType: 'blob' }
       );
       const url = URL.createObjectURL(response.data);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Failed_Inventory_Import_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      link.download = `Failed_Inventory_Import_${importJob.jobId}.xlsx`;
       link.click();
       URL.revokeObjectURL(url);
     } catch (error) {
@@ -113,11 +180,23 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     }
   };
 
+  // Retry Transient Failures via Inventory Service with a new Idempotency-Key
   const retryImport = async () => {
-    if (!importJob?.importId) return;
+    if (!importJob?.jobId) return;
     try {
-      const response = await apiClient.post(`/api/medicines/imports/${importJob.importId}/retry`);
-      setImportJob(previous => ({ ...previous, ...response.data }));
+      const retryKey = globalThis.crypto?.randomUUID?.()
+        || `retry-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+
+      const response = await apiClient.post(
+        `/api/v1/inventory/imports/${importJob.jobId}/retry`,
+        {},
+        {
+          headers: {
+            'Idempotency-Key': retryKey
+          }
+        }
+      );
+      setImportJob(previous => ({ ...previous, ...response.data, status: 'QUEUED' }));
       addToast('Import retry queued.', 'info');
     } catch (error) {
       addToast(error.response?.data?.message || 'Could not retry import.', 'error');
@@ -133,6 +212,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
         Description: "Anti-pyretic formulation for severe fever and headache.",
         Price: 32,
         Stock: 150,
+        "Base Cost Price": 22,
+        "Margin Tier": "MID",
         "Expiry Date": "2027-12-31",
         "Batch Number": "BTH-DLO-2401",
         "Requires Prescription": "false",
@@ -146,6 +227,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
         Description: "Amoxicillin and Potassium Clavulanate Tablets IP.",
         Price: 205,
         Stock: 50,
+        "Base Cost Price": 150,
+        "Margin Tier": "HIGH",
         "Expiry Date": "2027-09-15",
         "Batch Number": "BTH-AUG-2390",
         "Requires Prescription": "true",
@@ -155,7 +238,6 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     ];
 
     try {
-      const xlsx = await import('xlsx');
       const ws = xlsx.utils.json_to_sheet(sampleRows);
       const wb = xlsx.utils.book_new();
       xlsx.utils.book_append_sheet(wb, ws, "Inventory");
@@ -173,7 +255,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
         
         {/* Header */}
         <div className="flex flex-wrap justify-between items-start gap-3 pb-4 border-b border-slate-100">
-        <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-2xl">📥</span>
               <h2 className="min-w-0 break-words text-base sm:text-lg font-black text-slate-900">
@@ -181,7 +263,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
               </h2>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Large workbooks are validated and processed in safe background batches.
+              Multi-tenant isolated background processing with row-level error reporting.
             </p>
           </div>
           <button
@@ -209,7 +291,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   Drag & Drop your .xlsx spreadsheet here
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Supports large workbooks with background progress and row-level failure reports
+                  Instant local preview + resilient single-pass server ingestion
                 </p>
               </div>
 
@@ -225,12 +307,12 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                 type="button"
                 className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md shadow-blue-600/20 cursor-pointer"
               >
-                {analyzing ? 'Validating Workbook...' : 'Choose Excel File (.xlsx)'}
+                {analyzing ? 'Analyzing Spreadsheet...' : 'Choose Excel File (.xlsx)'}
               </button>
             </div>
 
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs text-slate-500 pt-2">
-              <span className="break-words">Required: SKU, Medicine Name, Price, Stock, Expiry Date</span>
+              <span className="break-words">Required: SKU, Medicine Name, Price, Stock</span>
               <button
                 type="button"
                 onClick={downloadSampleTemplate}
@@ -265,6 +347,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
               </div>
             </div>
 
+            {/* Active Import Job Progress Banner */}
             {importJob && (
               <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 space-y-3" aria-live="polite">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -272,11 +355,11 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                     {['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(importJob.status)
                       ? '✓ Import Completed'
                       : importJob.status === 'FAILED'
-                        ? 'Import Paused'
-                        : 'Inventory Import Processing'}
+                        ? 'Import Paused / Failed'
+                        : 'Inventory Import Processing...'}
                   </h3>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-blue-800">
-                    {importJob.status.replaceAll('_', ' ')}
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-blue-800 uppercase">
+                    {(importJob.status || 'QUEUED').replaceAll('_', ' ')}
                   </span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-blue-100">
@@ -286,12 +369,17 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   />
                 </div>
                 <p className="text-xs text-slate-700">
-                  {importJob.processedRecords || 0} / {importJob.totalRecords || 0} records
+                  {importJob.processedRecords || 0} / {importJob.totalRecords || previewData.rowsDetected || 0} records processed
                   {' '}({Math.round(importJob.progress || 0)}%)
                 </p>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <p className="rounded-xl bg-white p-2.5 text-emerald-800">
                     Successful: <strong>{importJob.successfulRecords || 0}</strong>
+                    {importJob.insertedRecords !== undefined && (
+                      <span className="text-[10px] text-slate-500 block">
+                        ({importJob.insertedRecords || 0} new, {importJob.updatedRecords || 0} updated)
+                      </span>
+                    )}
                   </p>
                   <p className="rounded-xl bg-white p-2.5 text-rose-800">
                     Failed: <strong>{importJob.failedRecords || 0}</strong>
@@ -312,28 +400,28 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   <button
                     type="button"
                     onClick={downloadFailedRows}
-                    className="w-full rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-rose-700 sm:w-auto"
+                    className="w-full rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-rose-700 sm:w-auto cursor-pointer"
                   >
-                    Download Failed Records
+                    📥 Download Failed Records (.xlsx)
                   </button>
                 )}
                 {importJob.status === 'FAILED' && (
                   <button
                     type="button"
                     onClick={retryImport}
-                    className="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700"
+                    className="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 cursor-pointer"
                   >
-                    Retry Unprocessed Records
+                    🔄 Retry Transient Failures
                   </button>
                 )}
               </section>
             )}
 
-            {/* Error Review Banner if any */}
+            {/* Error Review Banner if any detected client-side */}
             {previewData.errorsCount > 0 && (
               <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs space-y-2">
                 <div className="flex flex-col sm:flex-row justify-between items-start gap-2 text-rose-800 font-bold">
-                  <span>⚠️ {previewData.errorsCount} rows failed schema validation (excluded from import)</span>
+                  <span>⚠️ {previewData.errorsCount} rows failed schema checks (will be logged to failure report)</span>
                   <button
                     onClick={() => setShowErrorsOnly(!showErrorsOnly)}
                     className="underline text-[11px] font-extrabold cursor-pointer"
@@ -391,23 +479,23 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
             {/* Actions */}
             {!importJob && (
-            <div className="pt-3 border-t border-slate-100 flex flex-col-reverse sm:flex-row justify-between gap-3">
-              <button
-                onClick={() => { setPreviewData(null); setFile(null); }}
-                className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer"
-              >
-                Upload Different File
-              </button>
+              <div className="pt-3 border-t border-slate-100 flex flex-col-reverse sm:flex-row justify-between gap-3">
+                <button
+                  onClick={() => { setPreviewData(null); setFile(null); }}
+                  className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer"
+                >
+                  Upload Different File
+                </button>
 
-              <button
-                onClick={handleConfirmImport}
-                disabled={committing || previewData.rowsDetected === 0}
-                className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md shadow-emerald-600/25 cursor-pointer transition flex items-center gap-1.5"
-              >
-                <span>{committing ? 'Starting Import...' : `Import ${previewData.rowsDetected} Records`}</span>
-                <span>✓</span>
-              </button>
-            </div>
+                <button
+                  onClick={handleConfirmImport}
+                  disabled={committing || previewData.rowsDetected === 0}
+                  className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md shadow-emerald-600/25 cursor-pointer transition flex items-center gap-1.5"
+                >
+                  <span>{committing ? 'Starting Ingestion...' : `Import ${previewData.rowsDetected} Records`}</span>
+                  <span>✓</span>
+                </button>
+              </div>
             )}
           </div>
         )}

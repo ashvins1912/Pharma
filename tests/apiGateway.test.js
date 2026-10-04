@@ -2,6 +2,7 @@
  * Automated Test Suite for Ashvin API Gateway (/api/v1/*)
  */
 process.env.NODE_ENV = 'test';
+process.env.DEMO_ADMIN_JWT_SECRET = 'test-demo-admin-secret-key-32-chars-long';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import app from '../backend/server.js';
@@ -104,3 +105,52 @@ test('Gateway: Standard Error Envelope on invalid coupon code', async () => {
     assert.equal(body.error.code, 'INVALID_COUPON');
     assert.ok(body.error.requestId);
 });
+
+test('Gateway: Bulk Import: POST /api/v1/inventory/imports enforces authentication', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/inventory/imports`, {
+        method: 'POST'
+    });
+    assert.equal(res.status, 401);
+});
+
+test('Gateway: Bulk Import: POST /api/v1/inventory/imports enforces tenant scope', async () => {
+    const { issueDemoAdminToken } = await import('../backend/config/demoAdmin.js');
+    const adminToken = await issueDemoAdminToken(true);
+
+    const res = await fetch(`${baseUrl}/api/v1/inventory/imports`, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${adminToken}`
+        }
+    });
+    // Missing x-tenant-id should return 400
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.error?.code, 'TENANT_REQUIRED');
+});
+
+test('Gateway: Bulk Import: GET /api/v1/inventory/imports/:jobId validates objectId and tenant isolation', async () => {
+    const { issueDemoAdminToken } = await import('../backend/config/demoAdmin.js');
+    const adminToken = await issueDemoAdminToken(true);
+
+    // Invalid ObjectId returns 404
+    const invalidIdRes = await fetch(`${baseUrl}/api/v1/inventory/imports/not-a-valid-id`, {
+        headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'x-tenant-id': 'tenant-ashvin-main',
+            'x-branch-id': 'branch-indore-central'
+        }
+    });
+    assert.equal(invalidIdRes.status, 404);
+
+    // Nonexistent valid ObjectId returns 404
+    const nonExistentRes = await fetch(`${baseUrl}/api/v1/inventory/imports/507f1f77bcf86cd799439011`, {
+        headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'x-tenant-id': 'tenant-ashvin-main',
+            'x-branch-id': 'branch-indore-central'
+        }
+    });
+    assert.equal(nonExistentRes.status, 404);
+});
+

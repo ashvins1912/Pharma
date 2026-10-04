@@ -12,7 +12,7 @@ export default function Header({
   onOpenProfile,
   onOpenAdminAlerts
 }) {
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, isSuperAdmin, isTenantAdmin, logout } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
   const {
     cart,
@@ -50,7 +50,7 @@ export default function Header({
                 {isAdmin && (
                   <div className="flex items-center gap-1 shrink-0">
                     <span className="bg-purple-100 text-purple-700 text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                      Admin
+                      {isSuperAdmin ? 'Super Admin' : (isTenantAdmin ? 'Tenant Admin' : 'Admin')}
                     </span>
                     {whatsappStatus.isConnected ? (
                       <button

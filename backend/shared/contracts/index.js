@@ -3,7 +3,8 @@
  */
 
 export const PlatformRoles = {
-    PLATFORM_SUPER_ADMIN: 'PLATFORM_SUPER_ADMIN',
+    SUPER_ADMIN: 'SUPER_ADMIN',
+    PLATFORM_SUPER_ADMIN: 'SUPER_ADMIN',
     PLATFORM_OPERATIONS: 'PLATFORM_OPERATIONS',
     PLATFORM_SUPPORT: 'PLATFORM_SUPPORT',
     PLATFORM_FINANCE: 'PLATFORM_FINANCE',
@@ -11,17 +12,23 @@ export const PlatformRoles = {
 };
 
 export const TenantRoles = {
-    TENANT_OWNER: 'TENANT_OWNER',
     TENANT_ADMIN: 'TENANT_ADMIN',
-    PHARMACIST: 'PHARMACIST',
+    TENANT_OWNER: 'TENANT_OWNER',
     PHARMACY_STAFF: 'PHARMACY_STAFF',
+    PHARMACIST: 'PHARMACIST',
     ORDER_MANAGER: 'ORDER_MANAGER',
     INVENTORY_MANAGER: 'INVENTORY_MANAGER',
     DISPATCHER: 'DISPATCHER',
+    RIDER: 'RIDER',
     TENANT_RIDER: 'TENANT_RIDER'
 };
 
 export const CustomerRole = 'CUSTOMER';
+export const RiderRole = 'RIDER';
+
+export const isPlatformSuperAdmin = (role) => {
+    return role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN' || role === 'admin';
+};
 
 export const TenantStatus = {
     PENDING: 'PENDING',

@@ -122,26 +122,35 @@ router.post('/adjust', requireServiceScope('inventory.adjust'), asyncHandler(asy
 router.post('/imports', requireServiceScope('inventory.import'), upload.single('excelFile'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'An Excel workbook is required.' });
   if (!/\.(xlsx|xls)$/i.test(req.file.originalname)) {
-    await fs.rm(req.file.path, { force: true });
+    await fs.rm(req.file.path, { force: true }).catch(() => {});
     return res.status(400).json({ message: 'Upload an .xlsx or .xls workbook.' });
   }
   const idempotencyKey = req.get('idempotency-key');
   if (!idempotencyKey?.trim() || idempotencyKey.length > 128) {
-    await fs.rm(req.file.path, { force: true });
+    await fs.rm(req.file.path, { force: true }).catch(() => {});
     return res.status(400).json({ message: 'A valid Idempotency-Key header is required.' });
   }
+
+  const tenantId = String(req.get('x-tenant-id') || req.service?.tenantId || 'tenant-ashvin-main').trim();
+  const branchId = String(req.get('x-branch-id') || req.service?.branchId || 'branch-indore-central').trim();
+
   try {
     const job = await createImportJob({
       file: req.file,
       fileName: req.file.originalname,
       uploadedBy: req.service.userId || req.service.name,
-      idempotencyKey: idempotencyKey.trim()
+      idempotencyKey: idempotencyKey.trim(),
+      tenantId,
+      branchId
     });
     return res.status(202).json({
       jobId: String(job._id),
-      idempotencyKey,
+      idempotencyKey: job.idempotencyKey,
       status: job.status,
-      totalRecords: job.totalRecords
+      totalRecords: job.totalRecords || 0,
+      processedRecords: job.processedRecords || 0,
+      successfulRecords: job.successfulRecords || 0,
+      failedRecords: job.failedRecords || 0
     });
   } catch (error) {
     await fs.rm(req.file.path, { force: true }).catch(() => {});
@@ -151,7 +160,14 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
 
 router.get('/imports/:jobId', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
-  const job = await ImportJob.findById(req.params.jobId).lean();
+  const tenantId = req.get('x-tenant-id') || req.service?.tenantId;
+  const isPlatformUser = req.service?.isPlatformUser || req.service?.userRole === 'admin';
+
+  const filter = { _id: req.params.jobId };
+  if (!isPlatformUser && tenantId) {
+    filter.tenantId = tenantId;
+  }
+  const job = await ImportJob.findOne(filter).lean();
   if (!job) return res.status(404).json({ message: 'Import job was not found.' });
   return res.json({
     jobId: String(job._id),
@@ -165,6 +181,7 @@ router.get('/imports/:jobId', requireServiceScope('inventory.import'), asyncHand
     failedRecords: job.failedRecords,
     retryCount: job.retryCount,
     progress: job.totalRecords ? Math.round(job.processedRecords / job.totalRecords * 1000) / 10 : 0,
+    failedFileAvailable: ['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(job.status) && job.failedRecords > 0,
     createdAt: job.createdAt,
     startedAt: job.startedAt,
     completedAt: job.completedAt,
@@ -174,15 +191,29 @@ router.get('/imports/:jobId', requireServiceScope('inventory.import'), asyncHand
 
 router.get('/imports/:jobId/failures', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
-  const failures = await getImportFailures(req.params.jobId);
+  const tenantId = req.get('x-tenant-id') || req.service?.tenantId;
+  const isPlatformUser = req.service?.isPlatformUser || req.service?.userRole === 'admin';
+
+  const filter = { _id: req.params.jobId };
+  if (!isPlatformUser && tenantId) filter.tenantId = tenantId;
+  const job = await ImportJob.findOne(filter).lean();
+  if (!job) return res.status(404).json({ message: 'Import job was not found.' });
+
+  const failures = await getImportFailures(req.params.jobId, !isPlatformUser ? tenantId : null);
   return res.json({ failures });
 }));
 
 router.get('/imports/:jobId/failures/download', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
-  const jobExists = await ImportJob.exists({ _id: req.params.jobId });
-  if (!jobExists) return res.status(404).json({ message: 'Import job was not found.' });
-  const failures = await getImportFailures(req.params.jobId);
+  const tenantId = req.get('x-tenant-id') || req.service?.tenantId;
+  const isPlatformUser = req.service?.isPlatformUser || req.service?.userRole === 'admin';
+
+  const filter = { _id: req.params.jobId };
+  if (!isPlatformUser && tenantId) filter.tenantId = tenantId;
+  const job = await ImportJob.findOne(filter).lean();
+  if (!job) return res.status(404).json({ message: 'Import job was not found.' });
+
+  const failures = await getImportFailures(req.params.jobId, !isPlatformUser ? tenantId : null);
   if (!failures.length) return res.status(404).json({ message: 'This import has no failed records.' });
   res.set({
     'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -194,10 +225,14 @@ router.get('/imports/:jobId/failures/download', requireServiceScope('inventory.i
 
 router.post('/imports/:jobId/retry', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
+  const tenantId = req.get('x-tenant-id') || req.service?.tenantId;
+  const isPlatformUser = req.service?.isPlatformUser || req.service?.userRole === 'admin';
+
   const job = await retryImportJob(
     req.params.jobId,
     req.service.userId || req.service.name,
-    req.get('idempotency-key')
+    req.get('idempotency-key'),
+    !isPlatformUser ? tenantId : null
   );
   if (!job) return res.status(404).json({ message: 'Import job was not found.' });
   return res.status(202).json({ jobId: String(job._id), status: job.status });

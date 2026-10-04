@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 
 const productSchema = new mongoose.Schema({
-  sku: { type: String, required: true, unique: true, trim: true, uppercase: true },
+  tenantId: { type: String, required: true, default: 'tenant-ashvin-main', index: true },
+  sku: { type: String, required: true, trim: true, uppercase: true },
   name: { type: String, required: true, trim: true },
   genericName: { type: String, default: '' },
   strength: { type: String, default: '' },
@@ -15,9 +16,13 @@ const productSchema = new mongoose.Schema({
   active: { type: Boolean, default: true }
 }, { timestamps: true });
 
+productSchema.index({ tenantId: 1, sku: 1 }, { unique: true });
+
 const inventorySchema = new mongoose.Schema({
-  productId: { type: mongoose.Schema.Types.ObjectId, ref: 'InventoryProduct', required: true, unique: true },
-  sku: { type: String, required: true, unique: true, trim: true, uppercase: true },
+  tenantId: { type: String, required: true, default: 'tenant-ashvin-main', index: true },
+  branchId: { type: String, required: true, default: 'branch-indore-central', index: true },
+  productId: { type: mongoose.Schema.Types.ObjectId, ref: 'InventoryProduct', required: true },
+  sku: { type: String, required: true, trim: true, uppercase: true },
   stockQuantity: { type: Number, required: true, min: 0, default: 0 },
   reservedQuantity: { type: Number, required: true, min: 0, default: 0 },
   price: { type: Number, required: true, min: 0 },
@@ -26,11 +31,16 @@ const inventorySchema = new mongoose.Schema({
   warehouse: { type: String, default: 'default' }
 }, { timestamps: true });
 
+inventorySchema.index({ tenantId: 1, branchId: 1, productId: 1, batchNumber: 1 }, { unique: true });
+inventorySchema.index({ tenantId: 1, branchId: 1, sku: 1 });
+
 inventorySchema.virtual('availableQuantity').get(function () {
   return Math.max(0, this.stockQuantity - this.reservedQuantity);
 });
 
 const reservationSchema = new mongoose.Schema({
+  tenantId: { type: String, required: true, default: 'tenant-ashvin-main', index: true },
+  branchId: { type: String, required: true, default: 'branch-indore-central', index: true },
   reservationId: { type: String, required: true, unique: true },
   idempotencyKey: { type: String, required: true, unique: true },
   parentJobId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
@@ -44,10 +54,13 @@ const reservationSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const importJobSchema = new mongoose.Schema({
+  tenantId: { type: String, required: true, default: 'tenant-ashvin-main', index: true },
+  branchId: { type: String, required: true, default: 'branch-indore-central', index: true },
   fileName: { type: String, required: true },
   filePath: { type: String, required: true },
   uploadedBy: { type: String, required: true },
-  idempotencyKey: { type: String, required: true, unique: true },
+  idempotencyKey: { type: String, required: true },
+  parentJobId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
   status: {
     type: String,
     enum: ['QUEUED', 'PROCESSING', 'COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'],
@@ -67,7 +80,12 @@ const importJobSchema = new mongoose.Schema({
   errorMessage: String
 }, { timestamps: true });
 
+importJobSchema.index({ tenantId: 1, idempotencyKey: 1 }, { unique: true });
+importJobSchema.index({ tenantId: 1, branchId: 1, createdAt: -1 });
+
 const importFailureSchema = new mongoose.Schema({
+  tenantId: { type: String, required: true, default: 'tenant-ashvin-main', index: true },
+  branchId: { type: String, required: true, default: 'branch-indore-central', index: true },
   jobId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
   batchId: { type: String, required: true },
   rowNumber: { type: Number, required: true },
@@ -80,11 +98,16 @@ const importFailureSchema = new mongoose.Schema({
     enum: ['VALIDATION_ERROR', 'DUPLICATE_ERROR', 'DATABASE_ERROR', 'NETWORK_ERROR', 'TIMEOUT', 'BUSINESS_RULE_ERROR', 'UNKNOWN_ERROR'],
     required: true
   },
+  technicalCode: { type: String, default: '' },
   retryable: { type: Boolean, default: false },
   timestamp: { type: Date, default: Date.now }
 }, { timestamps: true });
 
+importFailureSchema.index({ tenantId: 1, branchId: 1, jobId: 1, rowNumber: 1 });
+
 const auditSchema = new mongoose.Schema({
+  tenantId: { type: String, required: true, default: 'tenant-ashvin-main', index: true },
+  branchId: { type: String, required: true, default: 'branch-indore-central', index: true },
   actor: { type: String, required: true },
   operation: { type: String, required: true },
   operationKey: { type: String, unique: true, sparse: true },

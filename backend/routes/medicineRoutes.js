@@ -184,8 +184,16 @@ router.get('/audits', authenticateUser, isAdmin, async (req, res) => {
     }
 });
 
-// Start a durable background import job. Source workbook is stored in private GridFS.
+// DEPRECATED: Legacy medicine import endpoints. Target architecture uses /api/v1/inventory/imports
+const setLegacyImportDeprecation = res => {
+    res.set('Deprecation', 'true');
+    res.set('Sunset', '2027-01-01');
+    res.set('Link', '</api/v1/inventory/imports>; rel="successor-version"');
+};
+
+// Start a durable background import job (Legacy).
 router.post('/imports', authenticateUser, isAdmin, uploadMemory.single('excelFile'), async (req, res) => {
+    setLegacyImportDeprecation(res);
     try {
         if (!req.file?.buffer) return res.status(400).json({ message: 'No Excel file provided.' });
         if (!/\.(xlsx|xls)$/i.test(req.file.originalname)) {
@@ -222,6 +230,7 @@ router.post('/imports', authenticateUser, isAdmin, uploadMemory.single('excelFil
 });
 
 router.get('/imports/:importId/status', authenticateUser, isAdmin, async (req, res) => {
+    setLegacyImportDeprecation(res);
     if (!mongoose.isValidObjectId(req.params.importId)) {
         return res.status(404).json({ message: 'Inventory import was not found.' });
     }
@@ -250,6 +259,7 @@ router.get('/imports/:importId/status', authenticateUser, isAdmin, async (req, r
 });
 
 router.get('/imports/:importId/failed-records', authenticateUser, isAdmin, async (req, res) => {
+    setLegacyImportDeprecation(res);
     if (!mongoose.isValidObjectId(req.params.importId)) {
         return res.status(404).json({ message: 'Inventory import was not found.' });
     }
@@ -281,6 +291,7 @@ router.get('/imports/:importId/failed-records', authenticateUser, isAdmin, async
 });
 
 router.post('/imports/:importId/retry', authenticateUser, isAdmin, async (req, res) => {
+    setLegacyImportDeprecation(res);
     if (!mongoose.isValidObjectId(req.params.importId)) {
         return res.status(404).json({ message: 'Inventory import was not found.' });
     }
@@ -297,6 +308,7 @@ router.post('/imports/:importId/retry', authenticateUser, isAdmin, async (req, r
 
 // Workbook preview is chunked and returns only a small preview/error sample.
 router.post('/validate-import', authenticateUser, isAdmin, uploadMemory.single('excelFile'), async (req, res) => {
+    setLegacyImportDeprecation(res);
     try {
         if (!req.file || !req.file.buffer) {
             return res.status(400).json({ message: "No Excel file provided." });
@@ -311,6 +323,7 @@ router.post('/validate-import', authenticateUser, isAdmin, uploadMemory.single('
 
 // Confirm and commit validated Excel rows (Requirement 6)
 router.post('/confirm-import', authenticateUser, isAdmin, async (req, res) => {
+    setLegacyImportDeprecation(res);
     try {
         const { rows } = req.body;
         if (!Array.isArray(rows) || rows.length === 0) {
@@ -331,6 +344,7 @@ router.post('/confirm-import', authenticateUser, isAdmin, async (req, res) => {
 
 // Direct single-step Excel upload
 router.post('/upload-excel', authenticateUser, isAdmin, uploadMemory.single('excelFile'), async (req, res) => {
+    setLegacyImportDeprecation(res);
     try {
         if (!req.file || !req.file.buffer) {
             return res.status(400).json({ message: "No Excel file provided." });
