@@ -50,7 +50,10 @@ test('gateway responds to health without an Origin header', async () => {
     NODE_ENV: 'test',
     BACKEND_API_URL: 'http://127.0.0.1:8090',
     CORS_ALLOWED_ORIGINS: 'http://localhost:3000'
-  }));
+  }), {
+    snapshot: () => ({ overallStatus: 'HEALTHY', checkedAt: '2026-10-03T00:00:00Z', services: [] }),
+    checkNow: async () => ({ overallStatus: 'HEALTHY', checkedAt: '2026-10-03T00:00:00Z', services: [] })
+  });
   const server = await start(app);
   try {
     const response = await fetch(`${server.url}/health`);

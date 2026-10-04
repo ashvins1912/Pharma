@@ -3,7 +3,10 @@ services:
     name: ashvin-pharmacy-api
     runtime: node
     rootDir: backend
-    buildCommand: npm install
+    # The backend imports source files from services/inventory-service. ESM
+    # resolves their packages from that service directory, so install there.
+    # Use npm install because this deployment must not depend on an untracked lockfile.
+    buildCommand: npm install --prefix ../services/inventory-service --omit=dev && npm install --omit=dev && node --input-type=module -e "await import('../services/inventory-service/src/models.js')"
     startCommand: npm start
     healthCheckPath: /ready
     envVars:
@@ -27,6 +30,22 @@ services:
         sync: false
       - key: SERVICE_JWT_ISSUER
         value: ashvin-pharmacy
+      # Admin password login is enabled, while anonymous instant access stays off.
+      # Set DEMO_ADMIN_PASSWORD and DEMO_ADMIN_JWT_SECRET in Render's Environment UI.
+      - key: DEMO_ADMIN_ENABLED
+        value: "true"
+      - key: DEMO_ADMIN_INSTANT_ACCESS_ENABLED
+        value: "false"
+      - key: DEMO_ADMIN_EMAIL
+        value: ashvinsingh25@gmail.com
+      - key: DEMO_ADMIN_USER_ID
+        value: admin
+      - key: DEMO_ADMIN_PASSWORD
+        sync: false
+      - key: DEMO_ADMIN_JWT_SECRET
+        sync: false
+      - key: DEMO_CUSTOMER_ENABLED
+        value: "false"
       # Keep disabled until MongoDB transaction support and business attempt policy are verified.
       - key: WHATSAPP_DELIVERY_TRACKING_ENABLED
         value: "false"

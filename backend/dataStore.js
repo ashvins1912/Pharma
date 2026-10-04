@@ -1505,6 +1505,9 @@ export const dataStore = {
                     if (order.orderStatus !== 'Pending_Review') {
                         throw inventoryError(`Only Pending_Review orders can be reviewed. Current status: ${order.orderStatus}`, 409);
                     }
+                    if (status === 'Approved' && order.prescriptionRequired && !order.prescriptionUrl) {
+                        throw inventoryError('This order requires an attached prescription before approval.', 409);
+                    }
 
                     if (status === 'Rejected') {
                         for (const item of order.medicineItems) {
@@ -1540,6 +1543,9 @@ export const dataStore = {
         if (!order) throw inventoryError('Order not found.', 404);
         if (order.orderStatus !== 'Pending_Review') {
             throw inventoryError(`Only Pending_Review orders can be reviewed. Current status: ${order.orderStatus}`, 409);
+        }
+        if (status === 'Approved' && order.prescriptionRequired && !order.prescriptionUrl) {
+            throw inventoryError('This order requires an attached prescription before approval.', 409);
         }
         if (status === 'Rejected') {
             for (const item of order.medicineItems || []) {
@@ -2853,17 +2859,27 @@ export const dataStore = {
         if (!medicineName) throw inventoryError('Medicine name is required in proposal.');
 
         const quantity = Math.max(1, Number(proposalData.quantity ?? proposalData.proposedQuantity) || 1);
-        const unitPrice = Math.max(0, Number(proposalData.unitPrice) || 0);
-        const priceType = proposalData.priceType === 'FINAL' ? 'FINAL' : 'APPROXIMATE';
+        const unitPrice = Number(proposalData.unitPrice ?? 0);
+        if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+            throw inventoryError('Unit price must be a valid non-negative amount.');
+        }
+        const priceType = proposalData.priceType === 'FINAL'
+            || (!proposalData.priceType && proposalData.finalPrice != null)
+            ? 'FINAL'
+            : 'APPROXIMATE';
 
-        let approximatePrice = Number(proposalData.approximatePrice);
-        if (!Number.isFinite(approximatePrice) || approximatePrice <= 0) {
-            approximatePrice = unitPrice * quantity;
+        const approximatePrice = Number(
+            proposalData.approximatePrice
+            ?? proposalData.totalPrice
+            ?? (unitPrice * quantity)
+        );
+        if (priceType === 'APPROXIMATE' && (!Number.isFinite(approximatePrice) || approximatePrice <= 0)) {
+            throw inventoryError('Approximate total must be greater than zero.');
         }
 
         let finalPrice = null;
         if (priceType === 'FINAL') {
-            finalPrice = Number(proposalData.finalPrice ?? approximatePrice);
+            finalPrice = Number(proposalData.finalPrice ?? proposalData.totalPrice ?? approximatePrice);
             if (!Number.isFinite(finalPrice) || finalPrice <= 0) {
                 throw inventoryError('A valid final price must be specified when priceType is FINAL.');
             }

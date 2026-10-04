@@ -30,16 +30,6 @@ export function AuthProvider({ children }) {
         resolvedUser.role ||
         'customer';
       setRole(userRole);
-      // Hydrate authoritative profile from /api/v1/auth/me
-      apiClient.get('/api/v1/auth/me')
-        .then(res => {
-          if (res.data?.data?.user) {
-            const authoritative = res.data.data.user;
-            setUser(prev => prev ? { ...prev, ...authoritative } : prev);
-            if (authoritative.role) setRole(authoritative.role);
-          }
-        })
-        .catch(() => {});
     } else {
       setUser(null);
       setRole('customer');

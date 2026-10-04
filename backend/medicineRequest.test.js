@@ -125,6 +125,17 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
     assert.equal(reviewRes.status, 'UNDER_REVIEW');
     assert.equal(await dataStore.getPendingMedicineRequestCount(), 1, 'Requests under review remain pending');
 
+    await assert.rejects(
+        dataStore.createOrUpdateProposal(createdReq._id, {
+            medicineName: 'Ursocol 300mg',
+            priceType: 'APPROXIMATE',
+            unitPrice: 0,
+            approximatePrice: 0
+        }, adminUser),
+        error => error.statusCode === 400 && /Approximate total/i.test(error.message),
+        'A zero approximate total must not be sent to the customer'
+    );
+
     // 3. Pharmacist creates a proposal with pricing and delivery slot
     const proposalPayload = {
         proposedMedicineName: 'Ursocol 300mg (Strip of 10 Tablets)',

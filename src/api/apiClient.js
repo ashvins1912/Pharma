@@ -3,7 +3,12 @@ import { supabase } from '../supabaseClient';
 import { normalizeApiError } from './apiErrors';
 
 const resolveBaseUrl = () => {
-    const rawUrl = import.meta.env.VITE_API_URL || '';
+    const configuredUrl = String(import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
+    const rawUrl = configuredUrl === '/api'
+        ? ''
+        : configuredUrl.endsWith('/api')
+            ? configuredUrl.slice(0, -4)
+            : configuredUrl;
     if (typeof window !== 'undefined') {
         // In browser, if VITE_API_URL points to localhost/127.0.0.1 while the page
         // is hosted on a remote domain (e.g. Cloud Run preview), use relative URL.

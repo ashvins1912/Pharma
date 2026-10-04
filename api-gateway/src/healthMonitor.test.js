@@ -25,6 +25,29 @@ test('checks configured services independently and normalizes healthy and HTTP f
   assert.equal(cycle.results.services[1].errorType, 'HTTP_ERROR');
 });
 
+test('on-demand checks refresh every service and coalesce concurrent callers', async () => {
+  let fetchCalls = 0;
+  const releaseFetches = [];
+  const monitor = createHealthMonitor({
+    services: [service('one'), service('two')],
+    maxConcurrency: 2,
+    fetchImpl: () => {
+      fetchCalls += 1;
+      return new Promise(resolve => { releaseFetches.push(() => resolve({ ok: true, status: 200, body: null })); });
+    },
+    logger: {}
+  });
+
+  const firstRequest = monitor.checkNow();
+  const secondRequest = monitor.checkNow();
+  assert.equal(fetchCalls, 2, 'each configured service is checked once for the shared cycle');
+  releaseFetches.forEach(release => release());
+  const [firstResult, secondResult] = await Promise.all([firstRequest, secondRequest]);
+  assert.equal(firstResult.overallStatus, 'HEALTHY');
+  assert.equal(secondResult.overallStatus, 'HEALTHY');
+  assert.equal(fetchCalls, 2, 'concurrent public health requests share one in-progress cycle');
+});
+
 test('classifies request timeouts and unreachable endpoints without leaking exception text', async () => {
   const timeoutMonitor = createHealthMonitor({
     services: [service('slow')],

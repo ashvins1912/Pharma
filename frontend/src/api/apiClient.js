@@ -2,8 +2,16 @@ import axios from 'axios';
 import { supabase } from '../supabaseClient';
 import { normalizeApiError } from './apiErrors';
 
+const rawApiBaseUrl = String(import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
+const apiBaseUrl = rawApiBaseUrl === '/api'
+    ? ''
+    : rawApiBaseUrl.endsWith('/api')
+        ? rawApiBaseUrl.slice(0, -4)
+        : rawApiBaseUrl;
+
 const apiClient = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || '',
+    // Call sites already include /api; keep VITE_API_URL as an origin or /api base.
+    baseURL: apiBaseUrl,
     timeout: 10000,
     withCredentials: true
 });

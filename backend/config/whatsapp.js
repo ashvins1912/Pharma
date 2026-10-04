@@ -6,6 +6,7 @@ import { getIsConnected, getTransactionsSupported } from './db.js';
 import WhatsAppMessage from '../models/WhatsAppMessage.js';
 import PaymentReminder from '../models/PaymentReminder.js';
 import { createRiderDeliveryActionToken } from '../services/payment/SignedPaymentActionService.js';
+import { buildDeliveryActionMenu, getDeliveryActionFromListReply } from '../services/delivery/DeliveryWhatsAppMenu.js';
 
 const sentNotifications = new Map();
 const authDirectory = process.env.WHATSAPP_AUTH_DIR || path.resolve('data/whatsapp-auth');
@@ -75,6 +76,40 @@ const startWhatsAppSession = async (forceRefresh = false) => {
         });
         socket = client;
         client.ev.on('creds.update', saveCreds);
+        client.ev.on('messages.upsert', ({ messages = [] }) => {
+            for (const incoming of messages) {
+                if (incoming?.key?.fromMe) continue;
+                const senderJid = String(incoming?.key?.remoteJid || '');
+                // Delivery choices are private one-to-one rider actions only.
+                if (!senderJid.endsWith('@s.whatsapp.net')) continue;
+                const response = getDeliveryActionFromListReply(incoming);
+                const action = response?.singleSelectReply?.selectedRowId;
+                const messageId = response?.contextInfo?.stanzaId;
+                if (!action || !messageId) continue;
+                void import('../services/delivery/WhatsAppDeliverySelectionService.js')
+                    .then(({ processWhatsAppDeliverySelection }) => processWhatsAppDeliverySelection({
+                        messageId,
+                        action,
+                        senderPhone: senderJid.slice(0, -'@s.whatsapp.net'.length),
+                        normalizePhone: normalizeWhatsAppNumber
+                    })).then(outcome => {
+                    if (outcome.processed) {
+                        console.info('WhatsApp delivery action accepted', JSON.stringify({
+                            messageId,
+                            action,
+                            orderId: outcome.result?.result?.orderId || null,
+                            duplicate: outcome.result?.duplicate === true
+                        }));
+                    }
+                }).catch(error => {
+                    console.warn('WhatsApp delivery action rejected', JSON.stringify({
+                        messageId,
+                        action,
+                        code: error.code || 'DELIVERY_ACTION_FAILED'
+                    }));
+                });
+            }
+        });
 
         return new Promise((resolve, reject) => {
             let settled = false;
@@ -406,7 +441,30 @@ const transmitWhatsAppMessage = async (record, mongoRecord) => {
     }
 
     try {
-        const result = await socket.sendMessage(`${number}@s.whatsapp.net`, { text: record.messageBody });
+        let result;
+        if (record.deliveryMenu) {
+            try {
+                const { generateWAMessageFromContent, proto } = await import('@whiskeysockets/baileys');
+                const jid = `${number}@s.whatsapp.net`;
+                const message = generateWAMessageFromContent(
+                    jid,
+                    proto.Message.fromObject({ listMessage: record.deliveryMenu }),
+                    { userJid: socket.user?.id }
+                );
+                const providerMessageId = await socket.relayMessage(jid, message.message, { messageId: message.key.id });
+                result = { key: { id: providerMessageId || message.key.id } };
+            } catch (menuError) {
+                // Preserve the established signed-link delivery path if this
+                // WhatsApp client/provider rejects an interactive list.
+                console.warn('Interactive WhatsApp delivery menu unavailable; sending signed action links.', {
+                    orderId: record.orderId,
+                    errorName: menuError?.name || 'Error'
+                });
+                result = await socket.sendMessage(`${number}@s.whatsapp.net`, { text: record.messageBody });
+            }
+        } else {
+            result = await socket.sendMessage(`${number}@s.whatsapp.net`, { text: record.messageBody });
+        }
         await updateNotification(record, mongoRecord, {
             status: 'SENT',
             sentAt: new Date(),
@@ -481,6 +539,16 @@ const createDeliveryActionLinks = (order) => {
     }
 };
 
+const createDeliveryActionMenu = order => {
+    if (process.env.WHATSAPP_DELIVERY_TRACKING_ENABLED !== 'true'
+        || process.env.MONGO_TRANSACTIONS_CONFIRMED !== 'true'
+        || !getTransactionsSupported()) return null;
+    const orderId = order?._id?.toString() || order?.id?.toString();
+    const riderId = order?.rider?.riderId;
+    if (!orderId || !riderId || !order?.rider?.riderMobile) return null;
+    return buildDeliveryActionMenu(order);
+};
+
 const clearOrderNotifications = async (orderId) => {
     if (getIsConnected()) await WhatsAppMessage.deleteMany({ orderId: String(orderId) });
     for (const [key, notification] of sentNotifications.entries()) {
@@ -540,6 +608,9 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
                     ? createDeliveryActionLinks(order)
                     : []
             }),
+            deliveryMenu: audience === 'rider' && statusUpdateText === 'Dispatched'
+                ? createDeliveryActionMenu(order)
+                : null,
             status: 'PENDING',
             channel: 'WHATSAPP',
             sentAt: null,

@@ -359,7 +359,7 @@ export default function AuthModal({ isOpen, onClose }) {
               <form onSubmit={isForgotPassword ? handleSendPasswordReset : handleSubmit} className="space-y-3.5">
                 {(import.meta.env.DEV || import.meta.env.VITE_DEMO_ADMIN_ENABLED === 'true') && import.meta.env.VITE_DEMO_ADMIN_ENABLED !== 'false' && !isSignUp && !isForgotPassword && !passwordRecoveryRequired && (
                   <div className="rounded-xl border border-purple-200 bg-purple-50 p-3 text-[11px] text-purple-800">
-                    Local demo admin: sign in with email <span className="font-bold">ashvinsingh25@gmail.com</span> and password <span className="font-bold">Admin@123</span>, or click <span className="font-bold">🛡️ Demo Admin</span> below.
+                    Local demo admin credentials are configured in the backend environment, or click <span className="font-bold">🛡️ Demo Admin</span> below.
                   </div>
                 )}
 

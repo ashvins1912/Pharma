@@ -3,15 +3,18 @@ import React from 'react';
 const STAGES = [
   { key: 'Processing Order', label: 'Processing Order', desc: 'Pharmacist validating Rx formulation & packaging' },
   { key: 'Ready to Dispatch', label: 'Ready to Dispatch', desc: 'Securely packaged in pharmacy dispatch hub' },
-  { key: 'Dispatched', label: 'Dispatched', desc: 'Assigned to delivery courier with cold-chain lock' },
+  { key: 'Dispatched', label: 'Out for Delivery', desc: 'Assigned to delivery courier with cold-chain lock' },
   { key: 'Delivered', label: 'Delivered', desc: 'Safely delivered to patient & COD collected' }
 ];
 
 export default function OrderTrackingModal({ order, onClose }) {
-  if (!order || order.orderStatus === 'Delivered') return null;
+  const rawStatus = String(order?.orderStatus || order?.status || '').trim().toLowerCase();
+  if (!order || rawStatus === 'delivered') return null;
 
   const orderId = (order._id || '').slice(-6).toUpperCase();
-  const currentStatus = order.orderStatus || 'Processing Order';
+  const currentStatus = ['dispatched', 'out_for_delivery'].includes(rawStatus)
+    ? 'Dispatched'
+    : order.orderStatus || 'Processing Order';
 
   const getStageIndex = (status) => {
     switch (status) {

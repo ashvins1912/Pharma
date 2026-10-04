@@ -14,21 +14,23 @@ export const COOKIE_CONFIG = {
     ACCESS_TOKEN: {
         httpOnly: true,
         secure: isProduction,
-        sameSite: 'lax', // 'lax' permits top-level navigation while blocking cross-site POSTs
+        // The browser app and API gateway may be on different sites in production.
+        // Cross-site fetches with credentials require SameSite=None and Secure.
+        sameSite: isProduction ? 'none' : 'lax',
         path: '/',
         maxAge: 60 * 60 * 1000 // 1 hour
     },
     REFRESH_TOKEN: {
         httpOnly: true,
         secure: isProduction,
-        sameSite: 'lax',
+        sameSite: isProduction ? 'none' : 'lax',
         path: '/api/auth',
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     },
     CSRF_TOKEN: {
         httpOnly: false, // Client JavaScript reads this cookie and sends it back in X-XSRF-TOKEN header
         secure: isProduction,
-        sameSite: 'lax',
+        sameSite: isProduction ? 'none' : 'lax',
         path: '/',
         maxAge: 7 * 24 * 60 * 60 * 1000
     }
