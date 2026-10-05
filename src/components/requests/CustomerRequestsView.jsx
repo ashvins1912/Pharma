@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { cancelMedicineRequest, approveProposal } from '../../api/medicineRequestService';
 
 const DEFAULT_PAGINATION = { page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false };
 
@@ -15,9 +17,14 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
     openRequestModal,
     orders
   } = useApp();
+  const { addToast } = useToast();
   const pagination = medicineRequestsPagination || DEFAULT_PAGINATION;
 
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [cancellingRequest, setCancellingRequest] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+  const [approvingId, setApprovingId] = useState(null);
 
   const filteredRequests = medicineRequests.filter(r => {
     if (statusFilter === 'ALL') return true;
@@ -27,8 +34,27 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
     if (statusFilter === 'COMPLETED') {
       return ['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(r.status);
     }
+    if (statusFilter === 'CANCELLED') {
+      return ['CANCELLED', 'CUSTOMER_REJECTED', 'PHARMACY_REJECTED'].includes(r.status);
+    }
     return r.status === statusFilter;
   });
+
+  const handleCancelRequest = async () => {
+    if (!cancellingRequest || cancelling) return;
+    try {
+      setCancelling(true);
+      const res = await cancelMedicineRequest(cancellingRequest._id, cancelReason);
+      addToast(res.message || `Request #${cancellingRequest.requestNumber} was cancelled.`, 'info');
+      setCancellingRequest(null);
+      setCancelReason('');
+      await loadUserMedicineRequests();
+    } catch (err) {
+      addToast(err.message || 'Failed to cancel medicine request.', 'error');
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -67,6 +93,12 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
         return (
           <span className="bg-rose-100 text-rose-800 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">
             <span>✕</span> Unavailable from Supplier
+          </span>
+        );
+      case 'CANCELLED':
+        return (
+          <span className="bg-slate-100 text-slate-600 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+            <span>🚫</span> Cancelled
           </span>
         );
       case 'EXPIRED':
@@ -130,7 +162,8 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
         {[
           { id: 'ALL', label: 'All' },
           { id: 'ACTIVE', label: 'In Progress / Proposals' },
-          { id: 'COMPLETED', label: 'Converted to Orders' }
+          { id: 'COMPLETED', label: 'Converted to Orders' },
+          { id: 'CANCELLED', label: 'Cancelled' }
         ].map(tab => (
           <button
             key={tab.id}
@@ -186,9 +219,15 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
         <div className="space-y-3">
           {filteredRequests.map((req) => {
             const firstItem = req.requestedItems?.[0] || {};
-            const proposal = req.pharmacyProposal;
+            const proposal = req.pharmacyProposal || req.proposal;
             const convertedOrder = findConvertedOrder(req.convertedOrderId);
-            const isOwner = String(req.customerId) === String(user?.id || user?.sub);
+            const currentUserId = user?._id || user?.id || user?.sub || user?.userId || user?.supabase_user_id;
+            const isOwner = !req.customerId || !currentUserId || String(req.customerId) === String(currentUserId);
+            const hasProposal = Boolean(proposal);
+            const isProposalActionable = req.status === 'PROPOSAL_SENT'
+              || (hasProposal && !['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER', 'CUSTOMER_REJECTED', 'PHARMACY_REJECTED', 'CANCELLED', 'EXPIRED'].includes(req.status));
+            const isPendingWithoutProposal = ['REQUESTED', 'UNDER_REVIEW'].includes(req.status) && !isProposalActionable;
+            const isCancelled = req.status === 'CANCELLED';
 
             return (
               <div
@@ -275,22 +314,87 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                 </div>
 
                 {/* Proposal Callout Card / Action Bar */}
-                {isOwner && req.status === 'PROPOSAL_SENT' && (
-                  <div className="bg-purple-50/80 border border-purple-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-                    <div className="space-y-0.5">
-                      <p className="font-extrabold text-purple-950">
-                        🎉 Ashvin Pharmacy sent a proposal for #{req.requestNumber}!
-                      </p>
-                      <p className="text-[11px] text-purple-800">
-                        {proposal?.deliverySlot?.label || 'Scheduled delivery slot available'}. Review pricing and medicine formulation.
-                      </p>
+                {isProposalActionable && (
+                  <div className="bg-purple-50/90 border border-purple-200 rounded-2xl p-3.5 space-y-3 text-xs animate-fade-in">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <p className="font-black text-purple-950 text-sm">
+                          🎉 Proposal Ready from Ashvin Pharmacy!
+                        </p>
+                        <p className="text-[11px] text-purple-800 mt-0.5">
+                          {proposal?.medicineName || firstItem.requestedName} · ₹{proposal?.finalPrice ?? proposal?.totalPrice ?? proposal?.approximatePrice} · {proposal?.deliverySlot?.label || 'Available delivery slot'}
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide bg-purple-200 text-purple-900 px-2 py-0.5 rounded-full shrink-0 self-start sm:self-center">
+                        Action Required
+                      </span>
                     </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-purple-200/60">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCancellingRequest(req);
+                          setCancelReason('');
+                        }}
+                        className="px-3.5 py-2 border border-rose-200 hover:bg-rose-100/70 text-rose-700 font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <span>✕</span>
+                        <span>Cancel / Decline</span>
+                      </button>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onOpenProposal && onOpenProposal(req)}
+                          className="px-3.5 py-2 bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-xs rounded-xl transition cursor-pointer"
+                        >
+                          Review Details
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onOpenProposal && onOpenProposal(req)}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                        >
+                          <span>✓</span>
+                          <span>Approve Proposal</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Pending Request Action Bar (Cancel Option) */}
+                {isPendingWithoutProposal && (
+                  <div className="flex items-center justify-between pt-2.5 border-t border-slate-200/60 text-xs">
+                    <span className="text-slate-500 font-medium">
+                      {req.status === 'UNDER_REVIEW'
+                        ? '🔬 Pharmacist is actively reviewing stock and procuring quotes.'
+                        : '⏳ Request submitted and queued for pharmacist review.'}
+                    </span>
                     <button
-                      onClick={() => onOpenProposal(req)}
-                      className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl shadow-xs transition cursor-pointer flex-shrink-0"
+                      type="button"
+                      onClick={() => {
+                        setCancellingRequest(req);
+                        setCancelReason('');
+                      }}
+                      className="px-3 py-1.5 border border-slate-200 hover:border-rose-300 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1"
                     >
-                      View & Confirm Proposal →
+                      <span>✕</span>
+                      <span>Cancel Request</span>
                     </button>
+                  </div>
+                )}
+
+                {/* Cancelled Notice */}
+                {isCancelled && (
+                  <div className="pt-2 border-t border-slate-200/60 text-xs text-slate-500 flex items-center justify-between">
+                    <span>
+                      🚫 Cancelled by customer {req.customerResponse?.responseNote ? `(${req.customerResponse.responseNote})` : ''}
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      {req.customerResponse?.respondedAt ? new Date(req.customerResponse.respondedAt).toLocaleDateString() : ''}
+                    </span>
                   </div>
                 )}
 
@@ -334,6 +438,69 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
             >
               {loadingMedicineRequests ? 'Loading medicine requests...' : 'Load More'}
             </button>}
+        </div>
+      )}
+
+      {/* Cancel Confirmation Dialog */}
+      {cancellingRequest && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex min-h-full items-center justify-center p-3 animate-fade-in">
+          <div role="dialog" aria-modal="true" className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">⚠️</span>
+                <h4 className="font-black text-slate-900 text-base">
+                  Cancel Medicine Request
+                </h4>
+              </div>
+              <button
+                onClick={() => setCancellingRequest(null)}
+                className="text-slate-400 hover:text-slate-700 font-bold text-lg w-8 h-8 rounded-full flex items-center justify-center hover:bg-slate-100 transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <p className="text-slate-700 font-medium">
+                Are you sure you want to cancel request <strong className="font-bold text-slate-900 font-mono">#{cancellingRequest.requestNumber}</strong>?
+              </p>
+              <p className="text-slate-500">
+                Medicine: <strong className="text-slate-800">{cancellingRequest.requestedItems?.[0]?.requestedName || 'Requested Medicine'}</strong>
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700">
+                Reason for cancellation (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Purchased elsewhere, doctor changed medication..."
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-slate-400 transition"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setCancellingRequest(null)}
+                disabled={cancelling}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer disabled:opacity-50"
+              >
+                Keep Request
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelRequest}
+                disabled={cancelling}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer disabled:opacity-50"
+              >
+                {cancelling ? 'Cancelling...' : 'Yes, Cancel Request'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

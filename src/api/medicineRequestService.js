@@ -45,6 +45,11 @@ export const rejectProposal = async (id, reason = '') => {
   return response.data;
 };
 
+export const cancelMedicineRequest = async (id, reason = '') => {
+  const response = await apiClient.post(`/api/medicine-requests/${id}/cancel`, { reason });
+  return response.data;
+};
+
 // Admin & Pharmacy APIs
 export const getAdminMedicineRequests = async (params = {}) => {
   const response = await apiClient.get('/api/admin/medicine-requests', { params });

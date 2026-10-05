@@ -377,6 +377,37 @@ router.post('/:id/reject', authenticateUser, authorizeCustomerAction, async (req
     }
 });
 
+// Customer cancels medicine request
+router.post('/:id/cancel', authenticateUser, authorizeCustomerAction, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const request = await dataStore.cancelMedicineRequestByCustomer(
+            req.params.id,
+            req.body.reason || '',
+            req.user
+        );
+        res.json({ message: 'Medicine request cancelled successfully.', request });
+    } catch (err) {
+        console.error('Medicine request cancellation failed:', err);
+        res.status(err.statusCode || 400).json({ message: err.message || 'Failed to cancel medicine request.' });
+    }
+});
+
+router.delete('/:id', authenticateUser, authorizeCustomerAction, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const request = await dataStore.cancelMedicineRequestByCustomer(
+            req.params.id,
+            req.body.reason || req.query.reason || '',
+            req.user
+        );
+        res.json({ message: 'Medicine request cancelled successfully.', request });
+    } catch (err) {
+        console.error('Medicine request cancellation failed:', err);
+        res.status(err.statusCode || 400).json({ message: err.message || 'Failed to cancel medicine request.' });
+    }
+});
+
 // -------------------------------------------------------------
 // PHARMACY / ADMIN APIS
 // -------------------------------------------------------------

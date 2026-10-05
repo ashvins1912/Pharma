@@ -2725,8 +2725,12 @@ export const dataStore = {
 
         let list = [...inMemoryMedicineRequests];
         if (!isStaff) {
-            const customerId = user ? user.sub : 'unauthenticated';
-            list = list.filter(r => r.customerId === customerId);
+            const customerId = user ? (user.sub || user.id) : 'unauthenticated';
+            list = list.filter(r =>
+                r.customerId === customerId
+                || (customerId?.startsWith('demo-customer') && String(r.customerId)?.startsWith('demo-customer'))
+                || (user?.email && r.customerEmail === user.email)
+            );
         } else if (filter.customerId) {
             list = list.filter(r => r.customerId === filter.customerId);
         }
@@ -3140,6 +3144,70 @@ export const dataStore = {
 
     async rejectProposalByCustomer(id, arg2, arg3) {
         return this.rejectMedicineProposalByCustomer(id, arg2, arg3);
+    },
+
+    async cancelMedicineRequestByCustomer(id, arg2 = '', arg3) {
+        let reason = '';
+        let user = null;
+        if (arg2 && typeof arg2 === 'object' && (arg2.sub || arg2.id || arg2.email)) {
+            user = arg2;
+            reason = typeof arg3 === 'string' ? arg3 : (arg3?.reason || '');
+        } else {
+            reason = typeof arg2 === 'string' ? arg2 : (arg2?.reason || '');
+            user = arg3;
+        }
+
+        if (!user) {
+            throw inventoryError('User context required for request cancellation.', 401);
+        }
+
+        const customerId = user.sub || user.id || user._id || user.userId;
+        const request = await this.getMedicineRequestById(id, user);
+        if (!request || (request.customerId && customerId && String(request.customerId) !== String(customerId))) {
+            throw inventoryError('Medicine request not found.', 404);
+        }
+
+        if (['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(request.status)) {
+            throw inventoryError('Cannot cancel a request that has already been converted to an order.', 400);
+        }
+
+        if (request.status === 'CANCELLED') {
+            return request;
+        }
+
+        const now = new Date();
+        const audit = {
+            action: 'CUSTOMER_CANCELLED',
+            actorId: customerId || 'Customer',
+            role: 'Customer',
+            timestamp: now,
+            notes: reason || 'Customer cancelled the medicine request.'
+        };
+
+        if (getIsConnected()) {
+            return MedicineRequest.findByIdAndUpdate(
+                request._id,
+                {
+                    $set: {
+                        status: 'CANCELLED',
+                        customerResponse: {
+                            respondedAt: now,
+                            responseNote: reason || 'Cancelled by customer'
+                        }
+                    },
+                    $push: { auditTrail: audit }
+                },
+                { new: true }
+            ).lean();
+        }
+
+        request.status = 'CANCELLED';
+        request.customerResponse = {
+            respondedAt: now,
+            responseNote: reason || 'Cancelled by customer'
+        };
+        request.auditTrail.push(audit);
+        return request;
     },
 
     // CRITICAL IDEMPOTENT ORDER CONVERSION

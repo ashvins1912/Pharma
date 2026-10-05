@@ -674,6 +674,82 @@ router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res
     }
 });
 
+// Manual / Server WhatsApp Notification Trigger (GET and POST supported)
+const handleNotifyWhatsApp = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const target = req.query.target || req.body?.target || 'all';
+        const customType = req.query.type || req.body?.type || null;
+
+        const order = await dataStore.getOrderById(id);
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+
+        let eventType = customType;
+        if (!eventType) {
+            if (order.orderStatus === 'Dispatched') {
+                eventType = 'Dispatched';
+            } else if (order.orderStatus === 'Delivered') {
+                eventType = 'Delivered';
+            } else if (order.rider?.riderId || order.orderStatus === 'Ready to Dispatch') {
+                eventType = 'Assigned';
+            } else {
+                eventType = order.orderStatus || 'Placed';
+            }
+        }
+
+        const riderMobile = order.rider?.riderMobile || null;
+        const customerMobile = order.customerMobile || order.addressDetails?.mobile || null;
+        let sentCount = 0;
+        const dispatchedTo = [];
+
+        if ((target === 'all' || target === 'rider') && riderMobile) {
+            try {
+                await sendCustomWhatsAppAlert(order, eventType, riderMobile);
+                sentCount++;
+                dispatchedTo.push({ recipient: 'rider', mobile: riderMobile });
+            } catch (err) {
+                console.warn(`[WhatsApp Notify] Failed to notify rider for order ${id}:`, err.message);
+            }
+        }
+
+        if ((target === 'all' || target === 'customer') && customerMobile) {
+            try {
+                await sendCustomWhatsAppAlert(order, eventType, customerMobile);
+                sentCount++;
+                dispatchedTo.push({ recipient: 'customer', mobile: customerMobile });
+            } catch (err) {
+                console.warn(`[WhatsApp Notify] Failed to notify customer for order ${id}:`, err.message);
+            }
+        }
+
+        dataStore.logAudit(
+            req.user?.sub || 'Admin',
+            'WHATSAPP_NOTIFICATION_TRIGGERED',
+            'ORDER',
+            id,
+            { target, eventType, dispatchedTo }
+        );
+
+        return res.json({
+            success: true,
+            message: sentCount > 0
+                ? `WhatsApp notification dispatched for Order #${(order._id || id).toString().slice(-6).toUpperCase()} to ${dispatchedTo.map(d => d.recipient).join(' and ')}.`
+                : `WhatsApp alert queued/recorded for Order #${(order._id || id).toString().slice(-6).toUpperCase()}.`,
+            orderId: id,
+            eventType,
+            dispatchedTo
+        });
+    } catch (err) {
+        console.error('WhatsApp notify error:', err);
+        return res.status(500).json({ success: false, message: err.message || 'Failed to dispatch WhatsApp notification' });
+    }
+};
+
+router.get('/:id/notify-whatsapp', authenticateUser, isAdmin, handleNotifyWhatsApp);
+router.post('/:id/notify-whatsapp', authenticateUser, isAdmin, handleNotifyWhatsApp);
+
 // Admin All Orders
 router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
     try {

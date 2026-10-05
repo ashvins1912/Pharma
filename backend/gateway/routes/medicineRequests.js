@@ -132,4 +132,20 @@ router.post('/:id/reject', authenticateUser, async (req, res, next) => {
     }
 });
 
+// Customer cancels request
+router.post('/:id/cancel', authenticateUser, async (req, res, next) => {
+    try {
+        const customer = await identityService.getOrCreateCustomer(req.context.userId);
+        const request = await medicineRequestService.cancelRequest(
+            req.params.id,
+            customer.id,
+            req.body.reason || '',
+            req.context
+        );
+        res.json({ success: true, data: request });
+    } catch (err) {
+        next(err);
+    }
+});
+
 export default router;

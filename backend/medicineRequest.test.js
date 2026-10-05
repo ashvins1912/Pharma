@@ -252,6 +252,15 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
     assert.equal(pharmacyReject.status, 'PHARMACY_REJECTED');
     assert.equal(pharmacyReject.pharmacyRejectionReason, 'Salt discontinued by FDA');
     assert.equal(await dataStore.getPendingMedicineRequestCount(), 0);
+
+    // 7. Customer cancelling their pending request
+    const fourthReq = await dataStore.createMedicineRequest({
+        requestedItems: [{ requestedName: 'Alternative Needed Med', quantity: 2 }],
+        addressId: 'saved-address-101'
+    }, testUser);
+    const cancelledReq = await dataStore.cancelMedicineRequestByCustomer(fourthReq._id, 'Found at local clinic', testUser);
+    assert.equal(cancelledReq.status, 'CANCELLED');
+    assert.equal(cancelledReq.customerResponse?.responseNote, 'Found at local clinic');
 });
 
 test('Concurrent medicine requests receive distinct request numbers', async () => {

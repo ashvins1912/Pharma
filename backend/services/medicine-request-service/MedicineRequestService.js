@@ -317,6 +317,35 @@ export class MedicineRequestService {
         domainEvents.emitDomainEvent('PROPOSAL_REJECTED', id, { reason }, actor, request.tenantId, request.branchId);
         return request;
     }
+
+    async cancelRequest(id, customerId, reason = '', actor = null) {
+        const request = this.requests.get(String(id));
+        if (!request) throw new Error('Medicine request not found');
+
+        if (request.customerId && customerId && String(request.customerId) !== String(customerId)) {
+            throw new CustomerAccessDeniedError('You do not have access to cancel this medicine request.');
+        }
+
+        if (['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(request.status)) {
+            throw new Error('Cannot cancel a request that has already been converted to an order.');
+        }
+
+        request.status = MedicineRequestStatus.CANCELLED;
+        request.customerResponse = {
+            approved: false,
+            respondedAt: new Date().toISOString(),
+            reason: reason || 'Cancelled by customer'
+        };
+        request.auditTrail.push({
+            action: 'CUSTOMER_CANCELLED',
+            timestamp: new Date().toISOString(),
+            actor: 'Customer',
+            notes: reason || 'Customer cancelled the medicine request'
+        });
+
+        domainEvents.emitDomainEvent('REQUEST_CANCELLED', id, { reason }, actor, request.tenantId, request.branchId);
+        return request;
+    }
 }
 
 export const medicineRequestService = new MedicineRequestService();

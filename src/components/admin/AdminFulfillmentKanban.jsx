@@ -32,10 +32,56 @@ const formatDistance = (distanceInKm) => {
   return `${distanceInKm.toFixed(1)} km to pickup`;
 };
 
-const getPageWindow = (currentPage, totalPages) => {
-  const visibleCount = Math.min(totalPages, 7);
-  const firstPage = Math.max(1, Math.min(currentPage - 3, totalPages - visibleCount + 1));
-  return Array.from({ length: visibleCount }, (_, index) => firstPage + index);
+const getCompactPageWindow = (currentPage, totalPages) => {
+  if (totalPages <= 4) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+  if (currentPage <= 2) {
+    return [1, 2, 3, '...', totalPages];
+  }
+  if (currentPage >= totalPages - 1) {
+    return [1, '...', totalPages - 2, totalPages - 1, totalPages];
+  }
+  return [1, '...', currentPage, '...', totalPages];
+};
+
+const cleanPhoneForWhatsApp = (phone) => {
+  if (!phone) return '';
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.length === 10) return `91${digits}`;
+  return digits;
+};
+
+const buildOrderWhatsAppText = (order, targetRole = 'rider') => {
+  const shortId = (order._id || '').slice(-6).toUpperCase();
+  const customerName = order.customerName || order.addressDetails?.fullName || 'Customer';
+  const customerMobile = order.customerMobile || order.addressDetails?.mobile || 'Not provided';
+  const address = order.deliveryAddress || 'Address on file';
+  const total = order.finalTotal || 0;
+  const items = (order.items || []).map(i => `• ${i.name || 'Medicine'} (x${i.quantity || 1})`).join('\n');
+  const riderName = order.rider?.riderName || 'Assigned Rider';
+  const riderMobile = order.rider?.riderMobile || '';
+
+  if (targetRole === 'rider') {
+    return [
+      `🛵 ASHVIN PHARMACY DISPATCH — Order #${shortId}`,
+      `Status: Assigned for Delivery`,
+      `Customer: ${customerName}`,
+      `Phone: ${customerMobile}`,
+      `Delivery Address: ${address}`,
+      `COD Amount to Collect: ₹${total}`,
+      items ? `Order Items:\n${items}` : ''
+    ].filter(Boolean).join('\n\n');
+  }
+
+  return [
+    `🚚 ASHVIN PHARMACY — Order #${shortId} Ready for Delivery`,
+    `Hello ${customerName}, your medicines are packed and ready for delivery!`,
+    riderName ? `Assigned Rider: ${riderName} (${riderMobile})` : '',
+    `Delivery Destination: ${address}`,
+    `Payable Total (COD): ₹${total}`,
+    'Thank you for trusting Ashvin Pharmacy for your healthcare needs.'
+  ].filter(Boolean).join('\n\n');
 };
 
 const COLUMNS = [
@@ -74,6 +120,34 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [searchRetryKey, setSearchRetryKey] = useState(0);
+
+  // WhatsApp Menu Dropdown and Server Notify States
+  const [openWhatsAppMenuOrderId, setOpenWhatsAppMenuOrderId] = useState(null);
+  const [notifyingOrderId, setNotifyingOrderId] = useState(null);
+
+  const handleNotifyServer = async (orderId, target = 'all') => {
+    try {
+      setNotifyingOrderId(String(orderId));
+      const res = await apiClient.get(`/api/orders/${orderId}/notify-whatsapp?target=${target}`);
+      addToast(res.data?.message || 'Server WhatsApp notification triggered successfully!', 'success');
+      setOpenWhatsAppMenuOrderId(null);
+    } catch (err) {
+      addToast(err.response?.data?.message || err.message || 'Failed to trigger server notification.', 'error');
+    } finally {
+      setNotifyingOrderId(null);
+    }
+  };
+
+  const handleCopyWhatsAppText = async (order, targetRole) => {
+    try {
+      const text = buildOrderWhatsAppText(order, targetRole);
+      await navigator.clipboard.writeText(text);
+      addToast(`WhatsApp message for ${targetRole} copied to clipboard!`, 'success');
+      setOpenWhatsAppMenuOrderId(null);
+    } catch {
+      addToast('Could not copy to clipboard', 'info');
+    }
+  };
 
   useEffect(() => {
     let isCurrentRequest = true;
@@ -465,6 +539,134 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                           </div>
                         )}
 
+                        {/* WhatsApp Menu List with options: Notify Server (GET API) / Open in Chrome */}
+                        {(order.rider || col.id === 'Ready to Dispatch' || col.id === 'Dispatched' || col.id === 'Approved') && (() => {
+                          const cleanRiderPhone = cleanPhoneForWhatsApp(order.rider?.riderMobile);
+                          const cleanCustomerPhone = cleanPhoneForWhatsApp(order.customerMobile || order.addressDetails?.mobile);
+                          const isMenuOpen = openWhatsAppMenuOrderId === String(order._id);
+                          const isNotifying = notifyingOrderId === String(order._id);
+
+                          return (
+                            <div className="relative pt-1 border-t border-slate-100">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenWhatsAppMenuOrderId(prev => prev === String(order._id) ? null : String(order._id))}
+                                  className="flex-1 flex items-center justify-between gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                                >
+                                  <span className="flex items-center gap-1">
+                                    <span>💬</span>
+                                    <span>WhatsApp Menu</span>
+                                  </span>
+                                  <span className="text-[10px] text-emerald-600">
+                                    {isMenuOpen ? '▲' : '▼'}
+                                  </span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  title="Quick Notify Server (GET API)"
+                                  disabled={isNotifying}
+                                  onClick={() => handleNotifyServer(order._id, 'all')}
+                                  className="px-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-black shadow-xs transition cursor-pointer shrink-0"
+                                >
+                                  {isNotifying ? '⏳' : '⚡ Notify'}
+                                </button>
+                              </div>
+
+                              {/* WhatsApp Actions Dropdown Menu List */}
+                              {isMenuOpen && (
+                                <div className="mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl p-2.5 space-y-2 z-30 animate-fade-in text-xs">
+                                  <div className="flex items-center justify-between pb-1 border-b border-slate-100 text-[11px] font-bold text-slate-500">
+                                    <span>WhatsApp Notification Options</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setOpenWhatsAppMenuOrderId(null)}
+                                      className="text-slate-400 hover:text-slate-600 font-bold px-1 rounded cursor-pointer"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+
+                                  {/* Option 1: Notify Server via GET API */}
+                                  <button
+                                    type="button"
+                                    disabled={isNotifying}
+                                    onClick={() => handleNotifyServer(order._id, 'all')}
+                                    className="w-full text-left p-2 rounded-xl bg-slate-50 hover:bg-emerald-50 text-slate-800 hover:text-emerald-900 border border-slate-200 hover:border-emerald-200 font-bold transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                                  >
+                                    <span className="text-base shrink-0">⚡</span>
+                                    <div className="min-w-0 flex-1">
+                                      <span className="block font-black text-xs text-slate-900">Notify Server (GET API)</span>
+                                      <span className="block text-[10px] text-slate-500 font-normal">Triggers backend WhatsApp dispatch</span>
+                                    </div>
+                                  </button>
+
+                                  {/* Option 2: Open in Chrome (WhatsApp Web - Rider) */}
+                                  {cleanRiderPhone ? (
+                                    <a
+                                      href={`https://web.whatsapp.com/send?phone=${cleanRiderPhone}&text=${encodeURIComponent(buildOrderWhatsAppText(order, 'rider'))}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={() => setOpenWhatsAppMenuOrderId(null)}
+                                      className="w-full text-left p-2 rounded-xl bg-slate-50 hover:bg-blue-50 text-slate-800 hover:text-blue-900 border border-slate-200 hover:border-blue-200 font-bold transition flex items-center gap-2 cursor-pointer no-underline block"
+                                    >
+                                      <span className="text-base shrink-0">🛵</span>
+                                      <div className="min-w-0 flex-1">
+                                        <span className="block font-black text-xs text-blue-900">Open in Chrome (Notify Rider)</span>
+                                        <span className="block text-[10px] text-blue-600 font-normal truncate">WhatsApp Web: +{cleanRiderPhone}</span>
+                                      </div>
+                                      <span className="text-[11px] text-blue-400 shrink-0">↗</span>
+                                    </a>
+                                  ) : (
+                                    <div className="p-2 rounded-xl bg-slate-50 text-slate-400 text-[11px] italic">
+                                      Assign a delivery rider to notify via WhatsApp Web
+                                    </div>
+                                  )}
+
+                                  {/* Option 3: Open in Chrome (WhatsApp Web - Customer) */}
+                                  {cleanCustomerPhone ? (
+                                    <a
+                                      href={`https://web.whatsapp.com/send?phone=${cleanCustomerPhone}&text=${encodeURIComponent(buildOrderWhatsAppText(order, 'customer'))}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={() => setOpenWhatsAppMenuOrderId(null)}
+                                      className="w-full text-left p-2 rounded-xl bg-slate-50 hover:bg-emerald-50 text-slate-800 hover:text-emerald-900 border border-slate-200 hover:border-emerald-200 font-bold transition flex items-center gap-2 cursor-pointer no-underline block"
+                                    >
+                                      <span className="text-base shrink-0">👤</span>
+                                      <div className="min-w-0 flex-1">
+                                        <span className="block font-black text-xs text-emerald-900">Open in Chrome (Notify Customer)</span>
+                                        <span className="block text-[10px] text-emerald-600 font-normal truncate">WhatsApp Web: +{cleanCustomerPhone}</span>
+                                      </div>
+                                      <span className="text-[11px] text-emerald-400 shrink-0">↗</span>
+                                    </a>
+                                  ) : null}
+
+                                  {/* Option 4: Quick Copy text */}
+                                  <div className="flex gap-1.5 pt-1 border-t border-slate-100">
+                                    {cleanRiderPhone && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCopyWhatsAppText(order, 'rider')}
+                                        className="flex-1 py-1 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded-lg transition cursor-pointer"
+                                      >
+                                        📋 Copy Rider Text
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyWhatsAppText(order, 'customer')}
+                                      className="flex-1 py-1 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded-lg transition cursor-pointer"
+                                    >
+                                      📋 Copy Customer Text
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+
                         {col.id === 'Pending_Review' && (
                           <div className="space-y-2 border-t border-slate-100 pt-2">
                             {(order.prescriptionRequired || order.prescriptionUrl) && (
@@ -600,12 +802,80 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
               </div>
 
               {col.id === 'Delivered' && !searchMode && !deliveredLoading && !deliveredError && deliveredPagination.totalPages > 0 && (
-                <nav aria-label="Delivered order pages" className="mt-4 flex flex-wrap items-center justify-center gap-1.5 border-t border-slate-200 pt-3">
-                  <button type="button" onClick={() => changeDeliveredPage(deliveredPage - 1)} disabled={!deliveredPagination.hasPreviousPage} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
-                  {getPageWindow(deliveredPage, deliveredPagination.totalPages).map(page => (
-                    <button key={page} type="button" onClick={() => changeDeliveredPage(page)} aria-current={page === deliveredPage ? 'page' : undefined} className={`min-h-9 min-w-9 rounded-lg border px-2 text-xs font-bold ${page === deliveredPage ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}>{page}</button>
-                  ))}
-                  <button type="button" onClick={() => changeDeliveredPage(deliveredPage + 1)} disabled={!deliveredPagination.hasNextPage} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+                <nav aria-label="Delivered order pages" className="mt-3 flex items-center justify-between gap-1 border-t border-slate-200 pt-2.5 overflow-x-auto no-scrollbar whitespace-nowrap text-xs">
+                  <div className="flex items-center gap-0.5 shrink min-w-0">
+                    {/* << First Page */}
+                    <button
+                      type="button"
+                      title="First Page"
+                      onClick={() => changeDeliveredPage(1)}
+                      disabled={deliveredPage <= 1}
+                      className="h-7 w-7 flex items-center justify-center rounded-lg border border-slate-300 bg-white text-[10px] font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 shrink-0 cursor-pointer"
+                    >
+                      &lt;&lt;
+                    </button>
+
+                    {/* < Previous Page */}
+                    <button
+                      type="button"
+                      title="Previous Page"
+                      onClick={() => changeDeliveredPage(deliveredPage - 1)}
+                      disabled={!deliveredPagination.hasPreviousPage}
+                      className="h-7 w-7 flex items-center justify-center rounded-lg border border-slate-300 bg-white text-[11px] font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 shrink-0 cursor-pointer"
+                    >
+                      &lt;
+                    </button>
+
+                    {/* Numbered Pages & Ellipsis */}
+                    {getCompactPageWindow(deliveredPage, deliveredPagination.totalPages).map((page, idx) => (
+                      page === '...' ? (
+                        <span key={`ellipsis-${idx}`} className="px-0.5 text-slate-400 font-bold text-[10px] select-none">
+                          …
+                        </span>
+                      ) : (
+                        <button
+                          key={page}
+                          type="button"
+                          onClick={() => changeDeliveredPage(page)}
+                          aria-current={page === deliveredPage ? 'page' : undefined}
+                          className={`h-7 min-w-7 px-1.5 flex items-center justify-center rounded-lg border text-xs font-bold shrink-0 cursor-pointer ${
+                            page === deliveredPage
+                              ? 'border-emerald-600 bg-emerald-600 text-white font-black'
+                              : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      )
+                    ))}
+
+                    {/* > Next Page */}
+                    <button
+                      type="button"
+                      title="Next Page"
+                      onClick={() => changeDeliveredPage(deliveredPage + 1)}
+                      disabled={!deliveredPagination.hasNextPage}
+                      className="h-7 w-7 flex items-center justify-center rounded-lg border border-slate-300 bg-white text-[11px] font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 shrink-0 cursor-pointer"
+                    >
+                      &gt;
+                    </button>
+
+                    {/* >> Last Page */}
+                    <button
+                      type="button"
+                      title="Last Page"
+                      onClick={() => changeDeliveredPage(deliveredPagination.totalPages)}
+                      disabled={deliveredPage >= deliveredPagination.totalPages}
+                      className="h-7 w-7 flex items-center justify-center rounded-lg border border-slate-300 bg-white text-[10px] font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 shrink-0 cursor-pointer"
+                    >
+                      &gt;&gt;
+                    </button>
+                  </div>
+
+                  {/* Page Indicator: page1 */}
+                  <span className="text-[11px] font-extrabold text-slate-600 whitespace-nowrap pl-1 shrink-0">
+                    page{deliveredPage}
+                  </span>
                 </nav>
               )}
 

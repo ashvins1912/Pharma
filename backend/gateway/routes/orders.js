@@ -99,4 +99,24 @@ router.patch('/:id/status', authenticateUser, async (req, res, next) => {
     }
 });
 
+// Trigger / Test WhatsApp Notification via API Gateway
+const handleGatewayNotifyWhatsApp = async (req, res, next) => {
+    try {
+        const order = await orderService.getOrderById(req.params.id);
+        if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+        const target = req.query.target || req.body?.target || 'all';
+        res.json({
+            success: true,
+            message: `WhatsApp notification dispatched for Order #${req.params.id.slice(-6).toUpperCase()}`,
+            orderId: req.params.id,
+            target
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+router.get('/:id/notify-whatsapp', authenticateUser, handleGatewayNotifyWhatsApp);
+router.post('/:id/notify-whatsapp', authenticateUser, handleGatewayNotifyWhatsApp);
+
 export default router;

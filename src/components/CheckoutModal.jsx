@@ -88,6 +88,15 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     return () => URL.revokeObjectURL(previewUrl);
   }, [prescriptionFile]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const selectedAddress = addresses.find(a => a._id === selectedAddressId) || addresses[0];
@@ -182,11 +191,11 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
-      <div role="dialog" aria-modal="true" aria-labelledby="checkout-modal-title" className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col relative overflow-hidden">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex min-h-full items-start sm:items-center justify-center p-2.5 sm:p-4 animate-fade-in overscroll-contain">
+      <div role="dialog" aria-modal="true" aria-labelledby="checkout-modal-title" className="my-auto bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[92vh] sm:max-h-[88vh] flex flex-col relative overflow-hidden">
         
-        {/* Sticky Header */}
-        <div className="shrink-0 p-4 sm:p-6 pb-3.5 border-b border-slate-100 bg-white flex justify-between items-center">
+        {/* Sticky Header - Stays visible when scrolling down or moving up */}
+        <div className="sticky top-0 z-20 shrink-0 p-4 sm:p-6 pb-3.5 border-b border-slate-100 bg-white flex justify-between items-center shadow-xs">
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="text-2xl shrink-0">📋</span>
             <div className="min-w-0">
@@ -206,7 +215,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         </div>
 
         {/* Scrollable Form Content */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 overscroll-contain">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-6 overscroll-contain">
           {errorMsg && (
             <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2">
               <span>⚠️</span>
@@ -417,8 +426,8 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
         </div>
 
-        {/* Footer Actions */}
-        <div className="shrink-0 p-4 sm:p-6 pt-3.5 border-t border-slate-100 bg-white flex flex-col sm:flex-row gap-3">
+        {/* Footer Actions - Sticky at bottom */}
+        <div className="sticky bottom-0 z-20 shrink-0 p-4 sm:p-6 pt-3.5 border-t border-slate-100 bg-white flex flex-col sm:flex-row gap-3 shadow-xs">
           <button
             onClick={onClose}
             className="w-full sm:w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-2xl text-xs cursor-pointer transition"
