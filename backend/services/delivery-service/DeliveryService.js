@@ -168,14 +168,28 @@ export class DeliveryService {
         }
 
         job.status = status;
+        const rider = this.riders.get(job.riderId);
+
         if (status === 'DELIVERED') {
             job.deliveredAt = new Date().toISOString();
-            const rider = this.riders.get(job.riderId);
             if (rider) {
                 rider.activeOrdersCount = Math.max(0, rider.activeOrdersCount - 1);
                 rider.status = rider.activeOrdersCount === 0 ? RiderStatus.AVAILABLE : RiderStatus.ASSIGNED;
             }
-            domainEvents.emitDomainEvent('ORDER_DELIVERED', orderId, { jobId: job.id }, actor, job.tenantId, job.branchId);
+            domainEvents.emitDomainEvent('ORDER_DELIVERED', orderId, {
+                jobId: job.id,
+                orderNumber: orderId,
+                riderName: rider?.name || job.riderName || 'Assigned Courier',
+                riderMobile: rider?.mobile || job.riderMobile
+            }, actor, job.tenantId, job.branchId);
+        } else {
+            domainEvents.emitDomainEvent('DELIVERY_STATUS_CHANGED', orderId, {
+                status,
+                jobId: job.id,
+                orderNumber: orderId,
+                riderName: rider?.name || job.riderName || 'Assigned Courier',
+                riderMobile: rider?.mobile || job.riderMobile
+            }, actor, job.tenantId, job.branchId);
         }
         return job;
     }

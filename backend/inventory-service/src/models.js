@@ -1,4 +1,17 @@
-import mongoose from 'mongoose';
+import { createRequire } from 'node:module';
+
+let mongoose;
+try {
+  mongoose = (await import('mongoose')).default;
+} catch {
+  try {
+    const req = createRequire(import.meta.url);
+    mongoose = req('mongoose');
+  } catch {
+    const rootReq = createRequire(new URL('../../../package.json', import.meta.url));
+    mongoose = rootReq('mongoose');
+  }
+}
 
 const productSchema = new mongoose.Schema({
   tenantId: { type: String, required: true, default: 'tenant-ashvin-main', index: true },

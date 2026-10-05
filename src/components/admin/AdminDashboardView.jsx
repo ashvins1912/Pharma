@@ -32,6 +32,10 @@ export default function AdminDashboardView() {
   const [ordersError, setOrdersError] = useState('');
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [deliveryEvents, setDeliveryEvents] = useState([]);
+  const [latestDeliveryPush, setLatestDeliveryPush] = useState(null);
+  const [deliveryStreamConnected, setDeliveryStreamConnected] = useState(false);
+  const [showDeliveryHistory, setShowDeliveryHistory] = useState(false);
 
   const loadAllOrders = async () => {
     if (authLoading || !isAdmin) return;
@@ -67,6 +71,62 @@ export default function AdminDashboardView() {
     loadInventoryAlerts();
     if (adminTab === 'audits') loadAuditLogs();
   }, [adminTab, authLoading, isAdmin, loadInventoryAlerts]);
+
+  // Real-Time Delivery Status Push Stream to Tenant Admin Portal
+  useEffect(() => {
+    if (authLoading || !isAdmin) return;
+
+    // 1. Initial hydration: fetch recent delivery transitions across branches
+    apiClient.get('/api/v1/notifications/delivery-history')
+      .then(res => {
+        if (Array.isArray(res.data?.data || res.data)) {
+          const list = res.data?.data || res.data;
+          setDeliveryEvents(list);
+          if (list[0]) setLatestDeliveryPush(list[0]);
+        }
+      })
+      .catch(() => {});
+
+    // 2. Connect to Server-Sent Events (SSE) push stream
+    let eventSource = null;
+    try {
+      eventSource = new EventSource('/api/v1/notifications/delivery-stream', { withCredentials: true });
+
+      eventSource.onopen = () => {
+        setDeliveryStreamConnected(true);
+      };
+
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'CONNECTED') {
+            setDeliveryStreamConnected(true);
+            return;
+          }
+          // Real-time delivery push event received across branches!
+          setLatestDeliveryPush(payload);
+          setDeliveryEvents(prev => [payload, ...prev.slice(0, 49)]);
+
+          // Automatically reload fulfillment orders queue so live Kanban and table update without page reload
+          loadAllOrders();
+        } catch {
+          // ignore parse issues
+        }
+      };
+
+      eventSource.onerror = () => {
+        setDeliveryStreamConnected(false);
+      };
+    } catch {
+      // ignore connection issues
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [authLoading, isAdmin]);
 
   // Derived Metrics
   const processingCount = orders.filter(o => o.orderStatus === 'Processing Order').length;
@@ -176,6 +236,84 @@ export default function AdminDashboardView() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Real-Time Delivery Status Push Notification Banner (Across Branches) */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm space-y-2">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div className="flex items-center gap-2.5">
+            <span className="relative flex h-3 w-3">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                deliveryStreamConnected ? 'bg-emerald-400' : 'bg-amber-400'
+              }`}></span>
+              <span className={`relative inline-flex rounded-full h-3 w-3 ${
+                deliveryStreamConnected ? 'bg-emerald-500' : 'bg-amber-500'
+              }`}></span>
+            </span>
+            <span className="text-xs font-black text-slate-800">
+              Live Delivery Status Push
+            </span>
+            <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold">
+              {deliveryStreamConnected ? 'Connected (Multi-Branch)' : 'Reconnecting...'}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowDeliveryHistory(!showDeliveryHistory)}
+            className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition cursor-pointer flex items-center gap-1"
+          >
+            <span>{showDeliveryHistory ? 'Hide Branch Log ▲' : `Branch Events (${deliveryEvents.length}) ▼`}</span>
+          </button>
+        </div>
+
+        {/* Latest Push Ticker */}
+        {latestDeliveryPush ? (
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-indigo-50/70 border border-indigo-100 rounded-xl px-3 py-2 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-extrabold text-indigo-900 flex items-center gap-1">
+                <span>🚚</span>
+                <span>Order #{latestDeliveryPush.orderNumber || latestDeliveryPush.orderId || 'NEW'}</span>
+              </span>
+              <span className="bg-purple-100 text-purple-800 text-[10px] font-black px-2 py-0.5 rounded-md">
+                📍 {latestDeliveryPush.branchId || 'Indore Central'}
+              </span>
+              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-md uppercase">
+                {latestDeliveryPush.status || latestDeliveryPush.type || 'UPDATED'}
+              </span>
+              <span className="text-slate-600 text-[11px]">
+                {latestDeliveryPush.message || 'Status transition received across branch.'}
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-400 shrink-0">
+              {new Date(latestDeliveryPush.timestamp || Date.now()).toLocaleTimeString()}
+            </span>
+          </div>
+        ) : (
+          <p className="text-[11px] text-slate-400 italic">
+            Awaiting live branch order and courier dispatch events...
+          </p>
+        )}
+
+        {/* Expandable History Drawer */}
+        {showDeliveryHistory && deliveryEvents.length > 0 && (
+          <div className="border-t border-slate-100 pt-2.5 space-y-1.5 max-h-48 overflow-y-auto no-scrollbar">
+            {deliveryEvents.map((evt, idx) => (
+              <div key={evt.id || idx} className="flex justify-between items-center bg-slate-50 rounded-lg p-2 text-[11px]">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-800">#{evt.orderNumber || evt.orderId || 'Order'}</span>
+                  <span className="text-slate-400">|</span>
+                  <span className="font-bold text-purple-700">{evt.branchId || 'Branch'}</span>
+                  <span className="text-slate-400">|</span>
+                  <span className="text-slate-600">{evt.title || evt.status}: {evt.message}</span>
+                </div>
+                <span className="text-[10px] text-slate-400">
+                  {new Date(evt.timestamp || Date.now()).toLocaleTimeString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* WhatsApp Disconnection Warning Banner */}

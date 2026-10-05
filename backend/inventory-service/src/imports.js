@@ -2,7 +2,20 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import * as xlsx from 'xlsx';
-import mongoose from 'mongoose';
+import { createRequire } from 'node:module';
+
+let mongoose;
+try {
+  mongoose = (await import('mongoose')).default;
+} catch {
+  try {
+    const req = createRequire(import.meta.url);
+    mongoose = req('mongoose');
+  } catch {
+    const rootReq = createRequire(new URL('../../../package.json', import.meta.url));
+    mongoose = rootReq('mongoose');
+  }
+}
 import { config } from './config.js';
 import { Audit, ImportFailure, ImportJob, Inventory, Product } from './models.js';
 

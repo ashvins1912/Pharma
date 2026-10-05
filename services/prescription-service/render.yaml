@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: ashvin-pharmacy-prescription-service
+    runtime: python
+    rootDir: services/prescription-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: MONGO_URI
+        sync: false
+      - key: PRESCRIPTION_DB_NAME
+        value: pharma_prescriptions
+      - key: PRESCRIPTION_ENCRYPTION_KEY
+        sync: false
+      - key: SERVICE_AUTH_SECRET
+        sync: false
+      - key: SERVICE_JWT_ISSUER
+        value: ashvin-pharmacy
+      - key: SERVICE_JWT_AUDIENCE
+        value: prescription-service
+      - key: PRESCRIPTION_MAX_RETRIES
+        value: 3
