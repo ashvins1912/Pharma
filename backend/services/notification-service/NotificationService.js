@@ -9,8 +9,46 @@ import { emailService } from './EmailService.js';
 export class NotificationService {
     constructor() {
         this.notifications = []; // in-app notifications
+        this.deliveryEvents = []; // delivery push events history
+        this.sseClients = new Map(); // clientId -> { res, context }
         this.emailService = emailService;
         this._bindDomainEvents();
+    }
+
+    addSseClient(clientId, res, context = {}) {
+        this.sseClients.set(clientId, { res, context });
+    }
+
+    removeSseClient(clientId) {
+        this.sseClients.delete(clientId);
+    }
+
+    getDeliveryEvents(tenantId = null, branchId = null) {
+        return this.deliveryEvents.filter(e => {
+            if (tenantId && e.tenantId && e.tenantId !== tenantId) return false;
+            if (branchId && e.branchId && e.branchId !== branchId) return false;
+            return true;
+        });
+    }
+
+    _broadcastDeliveryEvent(eventData) {
+        this.deliveryEvents.unshift(eventData);
+        if (this.deliveryEvents.length > 500) this.deliveryEvents.pop();
+
+        for (const [clientId, client] of this.sseClients.entries()) {
+            try {
+                if (!client.context.isSuperAdmin && client.context.tenantId && eventData.tenantId && client.context.tenantId !== eventData.tenantId) {
+                    continue;
+                }
+                if (client.context.branchId && eventData.branchId && client.context.branchId !== eventData.branchId) {
+                    continue;
+                }
+                client.res.write(`data: ${JSON.stringify(eventData)}\n\n`);
+            } catch (err) {
+                logger.warn(`Failed to push SSE event to client ${clientId}:`, err?.message);
+                this.sseClients.delete(clientId);
+            }
+        }
     }
 
     _bindDomainEvents() {
@@ -53,6 +91,40 @@ export class NotificationService {
                 body: `Rider ${evt.payload.riderName} has been assigned to deliver your order.`,
                 channels: ['IN_APP', 'WHATSAPP']
             });
+            this._broadcastDeliveryEvent({
+                type: 'DELIVERY_STATUS_CHANGED',
+                eventType: 'RIDER_ASSIGNED',
+                status: 'ASSIGNED',
+                tenantId: evt.tenantId,
+                branchId: evt.branchId,
+                orderId: evt.aggregateId,
+                riderId: evt.payload.riderId,
+                riderName: evt.payload.riderName,
+                jobId: evt.payload.jobId,
+                timestamp: new Date().toISOString()
+            });
+        });
+
+        domainEvents.on('DELIVERY_STATUS_CHANGED', (evt) => {
+            this.send({
+                tenantId: evt.tenantId,
+                branchId: evt.branchId,
+                title: `Delivery Update: ${evt.payload.status}`,
+                body: `Order #${evt.payload.orderNumber || evt.aggregateId} status changed to ${evt.payload.status}.`,
+                channels: ['IN_APP', 'WHATSAPP']
+            });
+            this._broadcastDeliveryEvent({
+                type: 'DELIVERY_STATUS_CHANGED',
+                eventType: 'DELIVERY_STATUS_CHANGED',
+                status: evt.payload.status,
+                tenantId: evt.tenantId,
+                branchId: evt.branchId,
+                orderId: evt.aggregateId || evt.payload.orderNumber,
+                riderName: evt.payload.riderName,
+                riderMobile: evt.payload.riderMobile,
+                jobId: evt.payload.jobId,
+                timestamp: new Date().toISOString()
+            });
         });
 
         domainEvents.on('ORDER_DELIVERED', (evt) => {
@@ -62,6 +134,18 @@ export class NotificationService {
                 title: 'Order Delivered',
                 body: `Order #${evt.payload.orderNumber} was delivered successfully. Stay healthy!`,
                 channels: ['IN_APP', 'WHATSAPP']
+            });
+            this._broadcastDeliveryEvent({
+                type: 'DELIVERY_STATUS_CHANGED',
+                eventType: 'ORDER_DELIVERED',
+                status: 'DELIVERED',
+                tenantId: evt.tenantId,
+                branchId: evt.branchId,
+                orderId: evt.aggregateId || evt.payload.orderNumber,
+                riderName: evt.payload.riderName,
+                riderMobile: evt.payload.riderMobile,
+                jobId: evt.payload.jobId,
+                timestamp: new Date().toISOString()
             });
         });
 

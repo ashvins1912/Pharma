@@ -46,6 +46,27 @@ export default function PlatformTenantsView() {
   const [inviteError, setInviteError] = useState('');
   const [issuedInvitation, setIssuedInvitation] = useState(null);
 
+  // Vendor Onboarding State
+  const [platformTab, setPlatformTab] = useState('tenants'); // 'tenants' | 'vendors'
+  const [vendors, setVendors] = useState([]);
+  const [loadingVendors, setLoadingVendors] = useState(false);
+  const [vendorModalOpen, setVendorModalOpen] = useState(false);
+  const [vendorForm, setVendorForm] = useState({
+    name: '',
+    companyName: '',
+    email: '',
+    mobile: '',
+    gstNumber: '',
+    street: '',
+    city: '',
+    state: '',
+    pincode: ''
+  });
+  const [submittingVendor, setSubmittingVendor] = useState(false);
+  const [vendorError, setVendorError] = useState('');
+  const [invitedVendorResult, setInvitedVendorResult] = useState(null);
+  const [resendingVendorId, setResendingVendorId] = useState(null);
+
   // Status toggle confirmation
   const [statusActionPending, setStatusActionPending] = useState(null); // { tenantId, action: 'suspend' | 'activate' }
 
@@ -63,8 +84,22 @@ export default function PlatformTenantsView() {
     }
   };
 
+  const loadVendors = async () => {
+    try {
+      setLoadingVendors(true);
+      const res = await apiClient.get('/api/v1/vendors');
+      const items = res.data?.data || [];
+      setVendors(Array.isArray(items) ? items : []);
+    } catch (err) {
+      console.warn('Could not load vendors:', err.message);
+    } finally {
+      setLoadingVendors(false);
+    }
+  };
+
   useEffect(() => {
     loadTenants();
+    loadVendors();
   }, []);
 
   // Filtered tenants calculation
@@ -188,10 +223,72 @@ export default function PlatformTenantsView() {
 
       setIssuedInvitation(res.data?.data);
       setActionSuccess(`Invitation issued to ${inviteForm.email.trim()}.`);
+      // Keep modal open to show token details
     } catch (err) {
       setInviteError(err.message || 'Could not issue administrator invitation.');
     } finally {
       setSubmittingInvite(false);
+    }
+  };
+
+  // Submit Vendor Invitation
+  const handleVendorSubmit = async (e) => {
+    e.preventDefault();
+    if (!vendorForm.name.trim() || !vendorForm.email.trim()) {
+      setVendorError('Vendor name and email address are required.');
+      return;
+    }
+
+    try {
+      setSubmittingVendor(true);
+      setVendorError('');
+      const payload = {
+        name: vendorForm.name.trim(),
+        companyName: vendorForm.companyName.trim() || vendorForm.name.trim(),
+        email: vendorForm.email.trim(),
+        mobile: vendorForm.mobile.trim(),
+        gstNumber: vendorForm.gstNumber.trim(),
+        address: {
+          street: vendorForm.street.trim(),
+          city: vendorForm.city.trim(),
+          state: vendorForm.state.trim(),
+          pincode: vendorForm.pincode.trim()
+        }
+      };
+
+      const res = await apiClient.post('/api/v1/vendors', payload);
+      setInvitedVendorResult(res.data?.data);
+      setActionSuccess(`Vendor invitation dispatched to ${vendorForm.email}.`);
+      await loadVendors();
+      setVendorForm({
+        name: '',
+        companyName: '',
+        email: '',
+        mobile: '',
+        gstNumber: '',
+        street: '',
+        city: '',
+        state: '',
+        pincode: ''
+      });
+    } catch (err) {
+      setVendorError(err.response?.data?.error?.message || err.message || 'Failed to invite vendor.');
+    } finally {
+      setSubmittingVendor(false);
+    }
+  };
+
+  // Resend Vendor Invitation
+  const handleResendVendorInvite = async (vendorId) => {
+    try {
+      setResendingVendorId(vendorId);
+      await apiClient.post(`/api/v1/vendors/${vendorId}/onboarding/resend`);
+      setActionSuccess('Vendor invitation link resent successfully.');
+      await loadVendors();
+    } catch (err) {
+      setError(`Failed to resend invitation: ${err.message}`);
+    } finally {
+      setResendingVendorId(null);
     }
   };
 
@@ -231,17 +328,32 @@ export default function PlatformTenantsView() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setOnboardError('');
-              setOnboardModalOpen(true);
-            }}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-sm shrink-0"
-          >
-            <span>➕</span>
-            <span>Onboard Pharmacy Tenant</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setVendorError('');
+                setInvitedVendorResult(null);
+                setVendorModalOpen(true);
+              }}
+              className="bg-teal-600 hover:bg-teal-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-sm shrink-0"
+            >
+              <span>✉️</span>
+              <span>Invite Vendor Partner</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setOnboardError('');
+                setOnboardModalOpen(true);
+              }}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-sm shrink-0"
+            >
+              <span>➕</span>
+              <span>Onboard Pharmacy Tenant</span>
+            </button>
+          </div>
         </div>
 
         {/* 4 Clean Metric Blocks */}
@@ -321,8 +433,40 @@ export default function PlatformTenantsView() {
         </div>
       )}
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
+      {/* Main Tab Navigation between Tenants Directory & Vendor Onboarding Invitations */}
+      <div className="flex border-b border-slate-200 gap-4">
+        <button
+          type="button"
+          onClick={() => setPlatformTab('tenants')}
+          className={`pb-3 text-xs font-black transition cursor-pointer flex items-center gap-2 border-b-2 ${
+            platformTab === 'tenants'
+              ? 'border-indigo-600 text-indigo-700'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <span>🏢</span>
+          <span>Tenants Directory ({totalCount})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPlatformTab('vendors')}
+          className={`pb-3 text-xs font-black transition cursor-pointer flex items-center gap-2 border-b-2 ${
+            platformTab === 'vendors'
+              ? 'border-teal-600 text-teal-700'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <span>✉️</span>
+          <span>Vendor Onboarding Invitations ({vendors.length})</span>
+        </button>
+      </div>
+
+      {platformTab === 'tenants' ? (
+        <>
+          {/* Filter and Search Bar */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
+        {/* Interactive Segmented Control Buttons (No static pills) */}
         <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-full sm:w-auto overflow-x-auto no-scrollbar">
           <button
             type="button"
@@ -444,20 +588,24 @@ export default function PlatformTenantsView() {
                 {filteredTenants.map((t) => {
                   const isSuspended = t.status === 'SUSPENDED';
                   const isActive = t.status === 'ACTIVE';
+                  const isPending = t.status === 'PENDING';
                   const isMutating = statusActionPending === t.id;
 
                   return (
                     <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
+                      {/* Name & Legal */}
                       <td className="py-3.5 px-4">
                         <div className="font-extrabold text-slate-900 text-sm">{t.name}</div>
                         <div className="text-[11px] text-slate-500">{t.legalName || t.name}</div>
                       </td>
 
+                      {/* Identifiers */}
                       <td className="py-3.5 px-4 font-mono text-[11px]">
                         <div className="text-indigo-600 font-semibold">{t.id}</div>
                         <div className="text-slate-400 text-[10px]">slug: {t.slug || '—'}</div>
                       </td>
 
+                      {/* Status (Unboxed subtle typography with indicator dot, no pill candy) */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-1.5 font-bold">
                           <span
@@ -483,11 +631,13 @@ export default function PlatformTenantsView() {
                         </div>
                       </td>
 
+                      {/* Contact */}
                       <td className="py-3.5 px-4 text-[11px] text-slate-600">
                         <div>{t.contactEmail || t.email || '—'}</div>
                         <div className="text-slate-400">{t.contactPhone || t.phone || '—'}</div>
                       </td>
 
+                      {/* Locale & Currency */}
                       <td className="py-3.5 px-4 text-[11px] text-slate-600">
                         <div className="flex items-center gap-1">
                           <span>{t.currency || 'INR'}</span>
@@ -496,8 +646,10 @@ export default function PlatformTenantsView() {
                         </div>
                       </td>
 
+                      {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* Invite Admin Button */}
                           <button
                             type="button"
                             onClick={() => openInviteModal(t)}
@@ -507,6 +659,7 @@ export default function PlatformTenantsView() {
                             👤 Invite Admin
                           </button>
 
+                          {/* Details / View */}
                           <button
                             type="button"
                             onClick={() => openDetailsModal(t)}
@@ -516,6 +669,7 @@ export default function PlatformTenantsView() {
                             👁️ Details
                           </button>
 
+                          {/* Suspend or Activate Toggle */}
                           {isActive && (
                             <button
                               type="button"
@@ -549,8 +703,118 @@ export default function PlatformTenantsView() {
           </div>
         </div>
       )}
+    </>
+  ) : (
+        /* VENDOR ONBOARDING INVITATIONS VIEW */
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <div>
+              <h3 className="text-sm font-black text-slate-800">Pharmacy Vendor Onboarding Pipeline</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Issue single-use cryptographic invitation links. Vendors complete verification to automatically provision their Tenant workspaces.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setVendorError('');
+                setInvitedVendorResult(null);
+                setVendorModalOpen(true);
+              }}
+              className="bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm shrink-0"
+            >
+              <span>➕</span>
+              <span>Invite New Vendor</span>
+            </button>
+          </div>
 
-      {/* MODAL 1: Onboard New Pharmacy Tenant */}
+          <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    <th className="py-3 px-4">Company & Vendor</th>
+                    <th className="py-3 px-4">Contact</th>
+                    <th className="py-3 px-4">GST / Tax ID</th>
+                    <th className="py-3 px-4 text-center">Onboarding Status</th>
+                    <th className="py-3 px-4">Timeline</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {vendors.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-slate-400">
+                        {loadingVendors ? 'Loading vendor invitations...' : 'No vendor invitations issued yet. Click "Invite New Vendor" to get started.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    vendors.map((v) => {
+                      const vId = v._id || v.id;
+                      const isCompleted = v.onboardingStatus === 'COMPLETED';
+                      const isPending = v.onboardingStatus === 'PENDING' || v.status === 'INVITED';
+                      return (
+                        <tr key={vId} className="hover:bg-slate-50/70 transition">
+                          <td className="py-3 px-4">
+                            <div className="font-extrabold text-slate-900">{v.companyName || v.name}</div>
+                            <div className="text-[11px] text-slate-500">{v.name}</div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="font-medium text-slate-800">{v.email}</div>
+                            {v.mobile && <div className="text-[11px] text-slate-400">{v.mobile}</div>}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-[11px] text-slate-600">
+                            {v.gstNumber || '—'}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                                isCompleted
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : isPending
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                  : 'bg-slate-100 text-slate-600 border-slate-200'
+                              }`}
+                            >
+                              {v.onboardingStatus || v.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-[11px] text-slate-500">
+                            <div>Invited: {v.createdAt ? new Date(v.createdAt).toLocaleDateString() : '—'}</div>
+                            {isCompleted && v.onboardingCompletedAt && (
+                              <div className="text-emerald-600 font-semibold">
+                                Completed: {new Date(v.onboardingCompletedAt).toLocaleDateString()}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            {!isCompleted ? (
+                              <button
+                                type="button"
+                                disabled={resendingVendorId === vId}
+                                onClick={() => handleResendVendorInvite(vId)}
+                                className="px-2.5 py-1 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition cursor-pointer disabled:opacity-50"
+                              >
+                                {resendingVendorId === vId ? 'Resending...' : 'Resend Invite'}
+                              </button>
+                            ) : (
+                              <span className="text-[11px] font-bold text-emerald-600">Active Tenant</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL 1: Onboard New Pharmacy Tenant                          */}
+      {/* ============================================================== */}
       {onboardModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-scale-up border border-slate-100">
@@ -668,6 +932,9 @@ export default function PlatformTenantsView() {
                   onChange={(e) => setOnboardForm(prev => ({ ...prev, initialAdminEmail: e.target.value }))}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
                 />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  If provided, an invitation token and Tenant Admin membership will be provisioned immediately.
+                </span>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
@@ -691,7 +958,9 @@ export default function PlatformTenantsView() {
         </div>
       )}
 
-      {/* MODAL 2: Invite Tenant Administrator */}
+      {/* ============================================================== */}
+      {/* MODAL 2: Invite Tenant Administrator                          */}
+      {/* ============================================================== */}
       {inviteModalOpen && selectedTenant && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-scale-up border border-slate-100">
@@ -771,6 +1040,13 @@ export default function PlatformTenantsView() {
                   />
                 </div>
 
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 space-y-1">
+                  <div className="font-bold text-slate-700">Security Guarantee:</div>
+                  <p>
+                    Invited administrators receive <strong>TENANT_ADMIN</strong> scope bound exclusively to this tenant. Cross-tenant access is strictly denied by the API Gateway.
+                  </p>
+                </div>
+
                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                   <button
                     type="button"
@@ -793,7 +1069,9 @@ export default function PlatformTenantsView() {
         </div>
       )}
 
-      {/* MODAL 3: Detailed Tenant Information */}
+      {/* ============================================================== */}
+      {/* MODAL 3: Detailed Tenant Information & Memberships            */}
+      {/* ============================================================== */}
       {detailsModalOpen && selectedTenant && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 animate-scale-up border border-slate-100 max-h-[90vh] overflow-y-auto">
@@ -824,10 +1102,13 @@ export default function PlatformTenantsView() {
               </div>
             ) : tenantDetails ? (
               <div className="space-y-4 text-xs">
+                {/* Branches Section */}
                 <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50 space-y-2">
-                  <span className="font-extrabold text-slate-800 block">
-                    Dispensary Branches ({tenantDetails.branches?.length || 0})
-                  </span>
+                  <div className="flex justify-between items-center">
+                    <span className="font-extrabold text-slate-800">
+                      Dispensary Branches ({tenantDetails.branches?.length || 0})
+                    </span>
+                  </div>
                   {tenantDetails.branches && tenantDetails.branches.length > 0 ? (
                     <div className="space-y-2">
                       {tenantDetails.branches.map(b => (
@@ -850,6 +1131,7 @@ export default function PlatformTenantsView() {
                   )}
                 </div>
 
+                {/* Memberships Section */}
                 <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50 space-y-2">
                   <span className="font-extrabold text-slate-800 block">
                     Administrative Staff & Delegated Memberships ({tenantDetails.memberships?.length || 0})
@@ -866,6 +1148,9 @@ export default function PlatformTenantsView() {
                             <span className={`font-bold ${m.status === 'ACTIVE' ? 'text-emerald-600' : 'text-amber-600'}`}>
                               {m.status}
                             </span>
+                            {m.invitationToken && (
+                              <div className="text-[10px] text-slate-400 font-mono">Token: {m.invitationToken.slice(0, 12)}...</div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -885,6 +1170,231 @@ export default function PlatformTenantsView() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Invite Vendor Partner Modal */}
+      {vendorModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-xl w-full max-h-[92vh] flex flex-col my-auto overflow-hidden">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-100 shrink-0 bg-white">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl">✉️</span>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900">
+                    Invite Pharmacy Vendor Partner
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Dispatches a cryptographically secure, single-use onboarding token to the vendor.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setVendorModalOpen(false);
+                  setInvitedVendorResult(null);
+                  setVendorError('');
+                }}
+                className="text-slate-400 hover:text-slate-600 w-8 h-8 rounded-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+              {vendorError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2">
+                  <span>⚠️</span>
+                  <span>{vendorError}</span>
+                </div>
+              )}
+
+              {invitedVendorResult ? (
+                <div className="space-y-4 animate-fade-in">
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🎉</span>
+                      <h4 className="font-black text-sm">Vendor Partner Invited Successfully!</h4>
+                    </div>
+                    <p className="text-xs text-emerald-800">
+                      An onboarding link has been generated. The vendor can complete their registration, setup pharmacy branches, and claim their tenant portal.
+                    </p>
+                    <div className="pt-2 text-xs space-y-1 text-slate-700">
+                      <p><span className="font-bold">Vendor Name:</span> {invitedVendorResult.name}</p>
+                      <p><span className="font-bold">Email:</span> {invitedVendorResult.email}</p>
+                      <p><span className="font-bold">Status:</span> <span className="font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full text-[10px]">{invitedVendorResult.status || 'INVITED'}</span></p>
+                      {invitedVendorResult.onboardingUrl && (
+                        <div className="mt-3 p-3 bg-white border border-emerald-300 rounded-xl space-y-2">
+                          <label className="text-[10px] font-black uppercase text-slate-400 block tracking-wider">
+                            Direct Onboarding Link
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              value={invitedVendorResult.onboardingUrl}
+                              className="text-xs font-mono bg-slate-50 border border-slate-200 rounded-lg p-2 w-full select-all"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard?.writeText(invitedVendorResult.onboardingUrl);
+                                setActionSuccess('Onboarding link copied to clipboard!');
+                              }}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-2 rounded-lg shrink-0 cursor-pointer"
+                            >
+                              Copy
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInvitedVendorResult(null);
+                        setVendorModalOpen(false);
+                      }}
+                      className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleVendorSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-500 block tracking-wider mb-1">
+                        Vendor Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Ramesh Patel"
+                        value={vendorForm.name}
+                        onChange={(e) => setVendorForm({ ...vendorForm, name: e.target.value })}
+                        className="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-500 block tracking-wider mb-1">
+                        Company / Pharmacy Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Patel Healthcare LLC"
+                        value={vendorForm.companyName}
+                        onChange={(e) => setVendorForm({ ...vendorForm, companyName: e.target.value })}
+                        className="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-500 block tracking-wider mb-1">
+                        Vendor Email Address *
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="vendor@pharmacy.example.com"
+                        value={vendorForm.email}
+                        onChange={(e) => setVendorForm({ ...vendorForm, email: e.target.value })}
+                        className="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-500 block tracking-wider mb-1">
+                        Mobile Phone Number
+                      </label>
+                      <input
+                        type="tel"
+                        placeholder="+91 98765 43210"
+                        value={vendorForm.mobile}
+                        onChange={(e) => setVendorForm({ ...vendorForm, mobile: e.target.value })}
+                        className="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-500 block tracking-wider mb-1">
+                      GSTIN / Tax Registration Number
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 23AAAAA0000A1Z5"
+                      value={vendorForm.gstNumber}
+                      onChange={(e) => setVendorForm({ ...vendorForm, gstNumber: e.target.value })}
+                      className="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden font-mono uppercase"
+                    />
+                  </div>
+
+                  <div className="space-y-2 border-t border-slate-100 pt-3">
+                    <span className="text-[10px] font-black uppercase text-slate-400 block tracking-wider">
+                      Registered Address (Optional)
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="Street address or landmark"
+                      value={vendorForm.street}
+                      onChange={(e) => setVendorForm({ ...vendorForm, street: e.target.value })}
+                      className="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                    />
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        type="text"
+                        placeholder="City"
+                        value={vendorForm.city}
+                        onChange={(e) => setVendorForm({ ...vendorForm, city: e.target.value })}
+                        className="text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                      />
+                      <input
+                        type="text"
+                        placeholder="State"
+                        value={vendorForm.state}
+                        onChange={(e) => setVendorForm({ ...vendorForm, state: e.target.value })}
+                        className="text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Pincode"
+                        value={vendorForm.pincode}
+                        onChange={(e) => setVendorForm({ ...vendorForm, pincode: e.target.value })}
+                        className="text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setVendorModalOpen(false)}
+                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submittingVendor}
+                      className="px-5 py-2.5 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white font-extrabold rounded-xl text-xs transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                    >
+                      <span>{submittingVendor ? 'Generating Invitation...' : 'Dispatch Invitation'}</span>
+                      <span>✉️</span>
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </div>

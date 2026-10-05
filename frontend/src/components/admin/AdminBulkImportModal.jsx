@@ -250,38 +250,40 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-      <div className="my-auto max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl overflow-y-auto overflow-x-hidden bg-white border border-slate-200 rounded-3xl shadow-2xl p-4 sm:p-8 relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+      <div className="w-full max-w-3xl max-h-[92vh] flex flex-col bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden relative my-auto">
         
-        {/* Header */}
-        <div className="flex flex-wrap justify-between items-start gap-3 pb-4 border-b border-slate-100">
+        {/* Sticky Header */}
+        <div className="shrink-0 p-4 sm:p-6 pb-3.5 border-b border-slate-100 bg-white flex justify-between items-center gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-2xl">📥</span>
-              <h2 className="min-w-0 break-words text-base sm:text-lg font-black text-slate-900">
+              <span className="text-2xl shrink-0">📥</span>
+              <h2 className="min-w-0 break-words text-base sm:text-lg font-black text-slate-900 truncate">
                 Bulk Inventory Excel Ingestion
               </h2>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5 truncate">
               Multi-tenant isolated background processing with row-level error reporting.
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition cursor-pointer"
+            className="text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition cursor-pointer shrink-0"
           >
             ✕
           </button>
         </div>
 
-        {/* Upload Zone */}
-        {!previewData && (
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 overscroll-contain">
+          {/* Upload Zone */}
+          {!previewData && (
           <div className="py-6 space-y-4">
             <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
               className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-3xl p-4 sm:p-12 text-center transition bg-slate-50/50 hover:bg-blue-50/30 flex flex-col items-center justify-center space-y-3 cursor-pointer"
-              onClick={() => document.getElementById('excel-file-input-frontend').click()}
+              onClick={() => document.getElementById('excel-file-input').click()}
             >
               <div className="w-16 h-16 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center text-3xl">
                 📊
@@ -296,7 +298,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
               </div>
 
               <input
-                id="excel-file-input-frontend"
+                id="excel-file-input"
                 type="file"
                 accept=".xlsx, .xls"
                 className="hidden"
@@ -500,6 +502,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
           </div>
         )}
 
+        </div>
       </div>
     </div>
   );
