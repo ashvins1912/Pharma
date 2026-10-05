@@ -1175,6 +1175,231 @@ export default function PlatformTenantsView() {
         </div>
       )}
 
+      {/* 4. Invite Vendor Partner Modal */}
+      {vendorModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-xl w-full max-h-[92vh] flex flex-col my-auto overflow-hidden">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-100 shrink-0 bg-white">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl">✉️</span>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900">
+                    Invite Pharmacy Vendor Partner
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Dispatches a cryptographically secure, single-use onboarding token to the vendor.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setVendorModalOpen(false);
+                  setInvitedVendorResult(null);
+                  setVendorError('');
+                }}
+                className="text-slate-400 hover:text-slate-600 w-8 h-8 rounded-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+              {vendorError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2">
+                  <span>⚠️</span>
+                  <span>{vendorError}</span>
+                </div>
+              )}
+
+              {invitedVendorResult ? (
+                <div className="space-y-4 animate-fade-in">
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🎉</span>
+                      <h4 className="font-black text-sm">Vendor Partner Invited Successfully!</h4>
+                    </div>
+                    <p className="text-xs text-emerald-800">
+                      An onboarding link has been generated. The vendor can complete their registration, setup pharmacy branches, and claim their tenant portal.
+                    </p>
+                    <div className="pt-2 text-xs space-y-1 text-slate-700">
+                      <p><span className="font-bold">Vendor Name:</span> {invitedVendorResult.name}</p>
+                      <p><span className="font-bold">Email:</span> {invitedVendorResult.email}</p>
+                      <p><span className="font-bold">Status:</span> <span className="font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full text-[10px]">{invitedVendorResult.status || 'INVITED'}</span></p>
+                      {invitedVendorResult.onboardingUrl && (
+                        <div className="mt-3 p-3 bg-white border border-emerald-300 rounded-xl space-y-2">
+                          <label className="text-[10px] font-black uppercase text-slate-400 block tracking-wider">
+                            Direct Onboarding Link
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              value={invitedVendorResult.onboardingUrl}
+                              className="text-xs font-mono bg-slate-50 border border-slate-200 rounded-lg p-2 w-full select-all"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard?.writeText(invitedVendorResult.onboardingUrl);
+                                setActionSuccess('Onboarding link copied to clipboard!');
+                              }}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-2 rounded-lg shrink-0 cursor-pointer"
+                            >
+                              Copy
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInvitedVendorResult(null);
+                        setVendorModalOpen(false);
+                      }}
+                      className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleVendorSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-500 block tracking-wider mb-1">
+                        Vendor Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Ramesh Patel"
+                        value={vendorForm.name}
+                        onChange={(e) => setVendorForm({ ...vendorForm, name: e.target.value })}
+                        className="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-500 block tracking-wider mb-1">
+                        Company / Pharmacy Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Patel Healthcare LLC"
+                        value={vendorForm.companyName}
+                        onChange={(e) => setVendorForm({ ...vendorForm, companyName: e.target.value })}
+                        className="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-500 block tracking-wider mb-1">
+                        Vendor Email Address *
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="vendor@pharmacy.example.com"
+                        value={vendorForm.email}
+                        onChange={(e) => setVendorForm({ ...vendorForm, email: e.target.value })}
+                        className="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-500 block tracking-wider mb-1">
+                        Mobile Phone Number
+                      </label>
+                      <input
+                        type="tel"
+                        placeholder="+91 98765 43210"
+                        value={vendorForm.mobile}
+                        onChange={(e) => setVendorForm({ ...vendorForm, mobile: e.target.value })}
+                        className="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-500 block tracking-wider mb-1">
+                      GSTIN / Tax Registration Number
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 23AAAAA0000A1Z5"
+                      value={vendorForm.gstNumber}
+                      onChange={(e) => setVendorForm({ ...vendorForm, gstNumber: e.target.value })}
+                      className="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden font-mono uppercase"
+                    />
+                  </div>
+
+                  <div className="space-y-2 border-t border-slate-100 pt-3">
+                    <span className="text-[10px] font-black uppercase text-slate-400 block tracking-wider">
+                      Registered Address (Optional)
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="Street address or landmark"
+                      value={vendorForm.street}
+                      onChange={(e) => setVendorForm({ ...vendorForm, street: e.target.value })}
+                      className="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                    />
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        type="text"
+                        placeholder="City"
+                        value={vendorForm.city}
+                        onChange={(e) => setVendorForm({ ...vendorForm, city: e.target.value })}
+                        className="text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                      />
+                      <input
+                        type="text"
+                        placeholder="State"
+                        value={vendorForm.state}
+                        onChange={(e) => setVendorForm({ ...vendorForm, state: e.target.value })}
+                        className="text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Pincode"
+                        value={vendorForm.pincode}
+                        onChange={(e) => setVendorForm({ ...vendorForm, pincode: e.target.value })}
+                        className="text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setVendorModalOpen(false)}
+                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submittingVendor}
+                      className="px-5 py-2.5 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white font-extrabold rounded-xl text-xs transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                    >
+                      <span>{submittingVendor ? 'Generating Invitation...' : 'Dispatch Invitation'}</span>
+                      <span>✉️</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

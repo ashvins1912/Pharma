@@ -182,35 +182,37 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-      <div role="dialog" aria-modal="true" aria-labelledby="checkout-modal-title" className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-2xl w-full p-6 sm:p-8 my-8 relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+      <div role="dialog" aria-modal="true" aria-labelledby="checkout-modal-title" className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col relative overflow-hidden">
         
-        {/* Header */}
-        <div className="flex justify-between items-center pb-4 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <span className="text-2xl">📋</span>
-            <div>
-              <h2 id="checkout-modal-title" className="text-lg font-black text-slate-900">Checkout & Order Confirmation</h2>
+        {/* Sticky Header */}
+        <div className="shrink-0 p-4 sm:p-6 pb-3.5 border-b border-slate-100 bg-white flex justify-between items-center">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-2xl shrink-0">📋</span>
+            <div className="min-w-0">
+              <h2 id="checkout-modal-title" className="text-base sm:text-lg font-black text-slate-900 truncate">
+                Checkout & Order Confirmation
+              </h2>
               <p className="text-[11px] text-slate-400">Step 3 of 3: Confirm address & place Cash on Delivery order</p>
             </div>
           </div>
           <button
             onClick={onClose}
             aria-label="Close checkout"
-            className="text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition cursor-pointer"
+            className="text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition cursor-pointer shrink-0 ml-2"
           >
             ✕
           </button>
         </div>
 
-        {errorMsg && (
-          <div className="my-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2">
-            <span>⚠️</span>
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
-        <div className="space-y-6 py-4">
+        {/* Scrollable Form Content */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 overscroll-contain">
+          {errorMsg && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2">
+              <span>⚠️</span>
+              <span>{errorMsg}</span>
+            </div>
+          )}
           
           {/* Section 1: Delivery Address Selection */}
           <div>
@@ -416,7 +418,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         </div>
 
         {/* Footer Actions */}
-        <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
+        <div className="shrink-0 p-4 sm:p-6 pt-3.5 border-t border-slate-100 bg-white flex flex-col sm:flex-row gap-3">
           <button
             onClick={onClose}
             className="w-full sm:w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-2xl text-xs cursor-pointer transition"

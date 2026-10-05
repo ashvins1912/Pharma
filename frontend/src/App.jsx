@@ -21,6 +21,8 @@ import WhatsAppConnectModal from './components/admin/WhatsAppConnectModal';
 import CustomerRequestsView from './components/requests/CustomerRequestsView';
 import MedicineRequestModal from './components/requests/MedicineRequestModal';
 import CustomerProposalModal from './components/requests/CustomerProposalModal';
+import VerifyEmailView from './components/auth/VerifyEmailView';
+import VendorOnboardingView from './components/auth/VendorOnboardingView';
 
 function MainApp() {
   const { user, isAdmin, isPharmacyOrAdmin, passwordRecoveryRequired } = useAuth();
@@ -56,6 +58,27 @@ function MainApp() {
   const [placedOrder, setPlacedOrder] = useState(null);
   const [ratingPromptOrder, setRatingPromptOrder] = useState(null);
   const [dismissedRatingOrderIds, setDismissedRatingOrderIds] = useState([]);
+  const [vendorOnboardingToken, setVendorOnboardingToken] = useState(null);
+  const [verifyEmailToken, setVerifyEmailToken] = useState(null);
+
+  // Check URL query parameters for onboarding or verification tokens
+  useEffect(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token');
+      const path = window.location.pathname;
+
+      if (token) {
+        if (path.includes('vendor') || path.includes('onboarding') || urlParams.get('type') === 'vendor') {
+          setVendorOnboardingToken(token);
+        } else if (path.includes('verify') || path === '/verify-email' || urlParams.get('type') === 'verify') {
+          setVerifyEmailToken(token);
+        }
+      }
+    } catch (e) {
+      console.warn('URL parsing note:', e);
+    }
+  }, []);
 
   // Tab switch guard: Users must be signed in to access orders, tracking, requests, or addresses
   const handleTabSwitch = (tab) => {
@@ -107,8 +130,8 @@ function MainApp() {
 
   useEffect(() => {
     if (!user) {
-      setRatingPromptOrder(null);
-      setDismissedRatingOrderIds([]);
+      if (ratingPromptOrder) setRatingPromptOrder(null);
+      setDismissedRatingOrderIds((prev) => (prev.length === 0 ? prev : []));
       return;
     }
     if (ratingPromptOrder) return;
@@ -181,6 +204,12 @@ function MainApp() {
     setPlacedOrder(null);
     setActiveTab('orders');
   };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  }, [activeTab]);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800 antialiased selection:bg-blue-100 selection:text-blue-900">
@@ -428,6 +457,38 @@ function MainApp() {
           }
         }}
       />
+
+      {/* Vendor Onboarding Flow Dialog */}
+      {vendorOnboardingToken && (
+        <VendorOnboardingView
+          token={vendorOnboardingToken}
+          onClose={() => {
+            setVendorOnboardingToken(null);
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }}
+          onSuccess={() => {
+            setVendorOnboardingToken(null);
+            window.history.replaceState({}, document.title, '/');
+            setActiveTab('admin');
+          }}
+        />
+      )}
+
+      {/* Email Verification Dialog */}
+      {verifyEmailToken && (
+        <VerifyEmailView
+          token={verifyEmailToken}
+          onClose={() => {
+            setVerifyEmailToken(null);
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }}
+          onOpenSignIn={() => {
+            setVerifyEmailToken(null);
+            window.history.replaceState({}, document.title, '/');
+            setAuthOpen(true);
+          }}
+        />
+      )}
 
     </div>
   );
