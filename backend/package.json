@@ -25,6 +25,7 @@
     "qrcode": "^1.5.4",
     "xlsx": "^0.18.5",
     "zod": "^4.6.5",
-    "nodemailer": "^10.0.14"
+    "nodemailer": "^10.0.14",
+    "bcryptjs": "^3.0.3"
   }
 }
