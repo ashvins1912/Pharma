@@ -31,14 +31,7 @@ export default function PlatformTenantsView() {
     contactPhone: '',
     timezone: 'Asia/Kolkata',
     currency: 'INR',
-    initialAdminEmail: '',
-    customSmtpEnabled: false,
-    smtpHost: 'smtp.gmail.com',
-    smtpPort: '587',
-    smtpSecure: false,
-    smtpUser: '',
-    smtpPass: '',
-    smtpFrom: ''
+    initialAdminEmail: ''
   });
   const [submittingOnboard, setSubmittingOnboard] = useState(false);
   const [onboardError, setOnboardError] = useState('');
@@ -53,29 +46,26 @@ export default function PlatformTenantsView() {
   const [inviteError, setInviteError] = useState('');
   const [issuedInvitation, setIssuedInvitation] = useState(null);
 
-  // SMTP Settings Modal states
-  const [smtpModalOpen, setSmtpModalOpen] = useState(false);
-  const [smtpActiveTab, setSmtpActiveTab] = useState('config'); // 'config' | 'test' | 'history'
-  const [smtpConfig, setSmtpConfig] = useState({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
-    encryption: 'STARTTLS',
-    user: '',
-    pass: '',
-    hasPassword: false,
-    from: '',
-    enabled: true
+  // Vendor Onboarding State
+  const [platformTab, setPlatformTab] = useState('tenants'); // 'tenants' | 'vendors'
+  const [vendors, setVendors] = useState([]);
+  const [loadingVendors, setLoadingVendors] = useState(false);
+  const [vendorModalOpen, setVendorModalOpen] = useState(false);
+  const [vendorForm, setVendorForm] = useState({
+    name: '',
+    companyName: '',
+    email: '',
+    mobile: '',
+    gstNumber: '',
+    street: '',
+    city: '',
+    state: '',
+    pincode: ''
   });
-  const [loadingSmtp, setLoadingSmtp] = useState(false);
-  const [savingSmtp, setSavingSmtp] = useState(false);
-  const [smtpSuccess, setSmtpSuccess] = useState('');
-  const [smtpModalError, setSmtpModalError] = useState('');
-  const [testEmailInput, setTestEmailInput] = useState('');
-  const [testingEmail, setTestingEmail] = useState(false);
-  const [testEmailResult, setTestEmailResult] = useState(null);
-  const [smtpHistory, setSmtpHistory] = useState([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [submittingVendor, setSubmittingVendor] = useState(false);
+  const [vendorError, setVendorError] = useState('');
+  const [invitedVendorResult, setInvitedVendorResult] = useState(null);
+  const [resendingVendorId, setResendingVendorId] = useState(null);
 
   // Status toggle confirmation
   const [statusActionPending, setStatusActionPending] = useState(null); // { tenantId, action: 'suspend' | 'activate' }
@@ -94,90 +84,22 @@ export default function PlatformTenantsView() {
     }
   };
 
-  const loadSmtpConfig = async () => {
+  const loadVendors = async () => {
     try {
-      setLoadingSmtp(true);
-      setSmtpModalError('');
-      const res = await apiClient.get('/api/v1/admin/tenants/smtp/config');
-      if (res.data?.data) {
-        setSmtpConfig(res.data.data);
-      }
+      setLoadingVendors(true);
+      const res = await apiClient.get('/api/v1/vendors');
+      const items = res.data?.data || [];
+      setVendors(Array.isArray(items) ? items : []);
     } catch (err) {
-      setSmtpModalError(err.message || 'Could not load SMTP configuration.');
+      console.warn('Could not load vendors:', err.message);
     } finally {
-      setLoadingSmtp(false);
-    }
-  };
-
-  const loadSmtpHistory = async () => {
-    try {
-      setLoadingHistory(true);
-      const res = await apiClient.get('/api/v1/admin/tenants/smtp/history');
-      setSmtpHistory(Array.isArray(res.data?.data) ? res.data.data : []);
-    } catch (err) {
-      console.warn('Could not load email dispatch history:', err.message);
-    } finally {
-      setLoadingHistory(false);
-    }
-  };
-
-  const handleSaveSmtp = async (e) => {
-    e.preventDefault();
-    try {
-      setSavingSmtp(true);
-      setSmtpSuccess('');
-      setSmtpModalError('');
-      const res = await apiClient.put('/api/v1/admin/tenants/smtp/config', {
-        host: smtpConfig.host,
-        port: Number(smtpConfig.port) || 587,
-        secure: smtpConfig.secure,
-        user: smtpConfig.user,
-        pass: smtpConfig.pass,
-        from: smtpConfig.from,
-        enabled: smtpConfig.enabled
-      });
-      setSmtpSuccess('Global SMTP configuration saved successfully.');
-      if (res.data?.data) {
-        setSmtpConfig(res.data.data);
-      }
-    } catch (err) {
-      setSmtpModalError(err.message || 'Failed to update SMTP settings.');
-    } finally {
-      setSavingSmtp(false);
-    }
-  };
-
-  const handleTestSmtp = async (e) => {
-    e.preventDefault();
-    if (!testEmailInput.trim()) {
-      setSmtpModalError('Please enter a target recipient email address.');
-      return;
-    }
-    try {
-      setTestingEmail(true);
-      setTestEmailResult(null);
-      setSmtpModalError('');
-      const res = await apiClient.post('/api/v1/admin/tenants/smtp/test', {
-        targetEmail: testEmailInput.trim(),
-        host: smtpConfig.host,
-        port: Number(smtpConfig.port) || 587,
-        secure: smtpConfig.secure,
-        user: smtpConfig.user,
-        pass: smtpConfig.pass,
-        from: smtpConfig.from
-      });
-      setTestEmailResult(res.data?.data);
-      setSmtpSuccess(res.data?.message || 'Test email dispatched.');
-      loadSmtpHistory();
-    } catch (err) {
-      setSmtpModalError(err.message || 'SMTP diagnostic test failed.');
-    } finally {
-      setTestingEmail(false);
+      setLoadingVendors(false);
     }
   };
 
   useEffect(() => {
     loadTenants();
+    loadVendors();
   }, []);
 
   // Filtered tenants calculation
@@ -309,6 +231,67 @@ export default function PlatformTenantsView() {
     }
   };
 
+  // Submit Vendor Invitation
+  const handleVendorSubmit = async (e) => {
+    e.preventDefault();
+    if (!vendorForm.name.trim() || !vendorForm.email.trim()) {
+      setVendorError('Vendor name and email address are required.');
+      return;
+    }
+
+    try {
+      setSubmittingVendor(true);
+      setVendorError('');
+      const payload = {
+        name: vendorForm.name.trim(),
+        companyName: vendorForm.companyName.trim() || vendorForm.name.trim(),
+        email: vendorForm.email.trim(),
+        mobile: vendorForm.mobile.trim(),
+        gstNumber: vendorForm.gstNumber.trim(),
+        address: {
+          street: vendorForm.street.trim(),
+          city: vendorForm.city.trim(),
+          state: vendorForm.state.trim(),
+          pincode: vendorForm.pincode.trim()
+        }
+      };
+
+      const res = await apiClient.post('/api/v1/vendors', payload);
+      setInvitedVendorResult(res.data?.data);
+      setActionSuccess(`Vendor invitation dispatched to ${vendorForm.email}.`);
+      await loadVendors();
+      setVendorForm({
+        name: '',
+        companyName: '',
+        email: '',
+        mobile: '',
+        gstNumber: '',
+        street: '',
+        city: '',
+        state: '',
+        pincode: ''
+      });
+    } catch (err) {
+      setVendorError(err.response?.data?.error?.message || err.message || 'Failed to invite vendor.');
+    } finally {
+      setSubmittingVendor(false);
+    }
+  };
+
+  // Resend Vendor Invitation
+  const handleResendVendorInvite = async (vendorId) => {
+    try {
+      setResendingVendorId(vendorId);
+      await apiClient.post(`/api/v1/vendors/${vendorId}/onboarding/resend`);
+      setActionSuccess('Vendor invitation link resent successfully.');
+      await loadVendors();
+    } catch (err) {
+      setError(`Failed to resend invitation: ${err.message}`);
+    } finally {
+      setResendingVendorId(null);
+    }
+  };
+
   // Open Details Modal
   const openDetailsModal = async (tenant) => {
     setSelectedTenant(tenant);
@@ -345,17 +328,32 @@ export default function PlatformTenantsView() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setOnboardError('');
-              setOnboardModalOpen(true);
-            }}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-sm shrink-0"
-          >
-            <span>➕</span>
-            <span>Onboard Pharmacy Tenant</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setVendorError('');
+                setInvitedVendorResult(null);
+                setVendorModalOpen(true);
+              }}
+              className="bg-teal-600 hover:bg-teal-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-sm shrink-0"
+            >
+              <span>✉️</span>
+              <span>Invite Vendor Partner</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setOnboardError('');
+                setOnboardModalOpen(true);
+              }}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-sm shrink-0"
+            >
+              <span>➕</span>
+              <span>Onboard Pharmacy Tenant</span>
+            </button>
+          </div>
         </div>
 
         {/* 4 Clean Metric Blocks */}
@@ -435,8 +433,39 @@ export default function PlatformTenantsView() {
         </div>
       )}
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
+      {/* Main Tab Navigation between Tenants Directory & Vendor Onboarding Invitations */}
+      <div className="flex border-b border-slate-200 gap-4">
+        <button
+          type="button"
+          onClick={() => setPlatformTab('tenants')}
+          className={`pb-3 text-xs font-black transition cursor-pointer flex items-center gap-2 border-b-2 ${
+            platformTab === 'tenants'
+              ? 'border-indigo-600 text-indigo-700'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <span>🏢</span>
+          <span>Tenants Directory ({totalCount})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPlatformTab('vendors')}
+          className={`pb-3 text-xs font-black transition cursor-pointer flex items-center gap-2 border-b-2 ${
+            platformTab === 'vendors'
+              ? 'border-teal-600 text-teal-700'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <span>✉️</span>
+          <span>Vendor Onboarding Invitations ({vendors.length})</span>
+        </button>
+      </div>
+
+      {platformTab === 'tenants' ? (
+        <>
+          {/* Filter and Search Bar */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
         {/* Interactive Segmented Control Buttons (No static pills) */}
         <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-full sm:w-auto overflow-x-auto no-scrollbar">
           <button
@@ -671,6 +700,114 @@ export default function PlatformTenantsView() {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+    </>
+  ) : (
+        /* VENDOR ONBOARDING INVITATIONS VIEW */
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <div>
+              <h3 className="text-sm font-black text-slate-800">Pharmacy Vendor Onboarding Pipeline</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Issue single-use cryptographic invitation links. Vendors complete verification to automatically provision their Tenant workspaces.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setVendorError('');
+                setInvitedVendorResult(null);
+                setVendorModalOpen(true);
+              }}
+              className="bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm shrink-0"
+            >
+              <span>➕</span>
+              <span>Invite New Vendor</span>
+            </button>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    <th className="py-3 px-4">Company & Vendor</th>
+                    <th className="py-3 px-4">Contact</th>
+                    <th className="py-3 px-4">GST / Tax ID</th>
+                    <th className="py-3 px-4 text-center">Onboarding Status</th>
+                    <th className="py-3 px-4">Timeline</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {vendors.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-slate-400">
+                        {loadingVendors ? 'Loading vendor invitations...' : 'No vendor invitations issued yet. Click "Invite New Vendor" to get started.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    vendors.map((v) => {
+                      const vId = v._id || v.id;
+                      const isCompleted = v.onboardingStatus === 'COMPLETED';
+                      const isPending = v.onboardingStatus === 'PENDING' || v.status === 'INVITED';
+                      return (
+                        <tr key={vId} className="hover:bg-slate-50/70 transition">
+                          <td className="py-3 px-4">
+                            <div className="font-extrabold text-slate-900">{v.companyName || v.name}</div>
+                            <div className="text-[11px] text-slate-500">{v.name}</div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="font-medium text-slate-800">{v.email}</div>
+                            {v.mobile && <div className="text-[11px] text-slate-400">{v.mobile}</div>}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-[11px] text-slate-600">
+                            {v.gstNumber || '—'}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                                isCompleted
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : isPending
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                  : 'bg-slate-100 text-slate-600 border-slate-200'
+                              }`}
+                            >
+                              {v.onboardingStatus || v.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-[11px] text-slate-500">
+                            <div>Invited: {v.createdAt ? new Date(v.createdAt).toLocaleDateString() : '—'}</div>
+                            {isCompleted && v.onboardingCompletedAt && (
+                              <div className="text-emerald-600 font-semibold">
+                                Completed: {new Date(v.onboardingCompletedAt).toLocaleDateString()}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            {!isCompleted ? (
+                              <button
+                                type="button"
+                                disabled={resendingVendorId === vId}
+                                onClick={() => handleResendVendorInvite(vId)}
+                                className="px-2.5 py-1 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition cursor-pointer disabled:opacity-50"
+                              >
+                                {resendingVendorId === vId ? 'Resending...' : 'Resend Invite'}
+                              </button>
+                            ) : (
+                              <span className="text-[11px] font-bold text-emerald-600">Active Tenant</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

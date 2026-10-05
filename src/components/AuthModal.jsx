@@ -54,13 +54,27 @@ export default function AuthModal({ isOpen, onClose }) {
   const [totpCode, setTotpCode] = useState('');
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [resetEmailSent, setResetEmailSent] = useState(false);
+  const [signupEmailVerificationSent, setSignupEmailVerificationSent] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [signupErrors, setSignupErrors] = useState({});
+
+  // Password strength calculation (0 to 4)
+  const passwordStrength = React.useMemo(() => {
+    if (!password) return 0;
+    let score = 0;
+    if (password.length >= 8) score += 1;
+    if (/[A-Z]/.test(password)) score += 1;
+    if (/[a-z]/.test(password)) score += 1;
+    if (/[0-9]/.test(password)) score += 1;
+    return score;
+  }, [password]);
   const instantDemoEnabled = import.meta.env.VITE_INSTANT_DEMO_ACCESS_ENABLED === 'true'
     || (import.meta.env.DEV && import.meta.env.VITE_INSTANT_DEMO_ACCESS_ENABLED !== 'false');
   const demoCustomerEnabled = instantDemoEnabled
@@ -78,8 +92,11 @@ export default function AuthModal({ isOpen, onClose }) {
     setTotpCode('');
     setIsForgotPassword(false);
     setResetEmailSent(false);
+    setSignupEmailVerificationSent(false);
     setShowPassword(false);
     setShowConfirmPassword(false);
+    setFirstName('');
+    setLastName('');
     setName('');
     setMobile('');
     setLoading(false);
@@ -144,9 +161,14 @@ export default function AuthModal({ isOpen, onClose }) {
           setLoading(false);
           return;
         }
-        await signUpWithEmail(email, password, name, mobile);
-        addToast('Account created successfully!', 'success');
-        handleClose(true);
+        const effectiveName = `${firstName} ${lastName}`.trim() || name;
+        const res = await signUpWithEmail(email, password, effectiveName, mobile, firstName, lastName);
+        if (res?.requiresEmailVerification || res?.data?.verification?.required) {
+          setSignupEmailVerificationSent(true);
+        } else {
+          addToast('Account created successfully!', 'success');
+          handleClose(true);
+        }
       } else {
         // Step 1: Submit primary credentials
         const result = await loginWithEmail(email, password);
@@ -345,11 +367,34 @@ export default function AuthModal({ isOpen, onClose }) {
         ) : (
           /* STEP 1: STANDARD AUTHENTICATION & REGISTRATION SCREEN */
           <>
-            {resetEmailSent && isForgotPassword && (
+            {signupEmailVerificationSent ? (
+              <div className="text-center py-4 space-y-4">
+                <div className="w-16 h-16 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center mx-auto text-2xl font-black">
+                  ✉️
+                </div>
+                <h3 className="text-lg font-black text-slate-800">Check Your Email</h3>
+                <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
+                  We've sent a verification link to <span className="font-bold text-slate-900">{email}</span>. Please click the link in the email to activate your account before signing in.
+                </p>
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSignupEmailVerificationSent(false);
+                      setIsSignUp(false);
+                      setErrorMsg('');
+                    }}
+                    className="w-full py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs shadow-sm transition cursor-pointer"
+                  >
+                    Proceed to Sign In →
+                  </button>
+                </div>
+              </div>
+            ) : resetEmailSent && isForgotPassword ? (
               <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
                 If an account exists for {email}, a password reset link has been sent. Check your inbox and follow the link to choose a new password.
               </div>
-            )}
+            ) : null}
 
             {!resetEmailSent && (
               <form onSubmit={isForgotPassword ? handleSendPasswordReset : handleSubmit} className="space-y-3.5">
@@ -360,21 +405,33 @@ export default function AuthModal({ isOpen, onClose }) {
                 )}
 
                 {isSignUp && !passwordRecoveryRequired && (
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Full Name
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Ashvin Singh"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      onBlur={() => handleSignupBlur('name')}
-                      aria-invalid={Boolean(signupErrors.name)}
-                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
-                      required
-                    />
-                    {signupErrors.name && <p className="mt-1 text-[11px] text-rose-600">{signupErrors.name}</p>}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        First Name *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ashvin"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Last Name *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Singh"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                        required
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -455,6 +512,20 @@ export default function AuthModal({ isOpen, onClose }) {
                         {showPassword ? 'Hide' : 'Show'}
                       </button>
                     </div>
+                    {isSignUp && password && (
+                      <div className="mt-2 space-y-1">
+                        <div className="flex gap-1 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                          <div className={`h-full flex-1 transition-all ${passwordStrength >= 1 ? (passwordStrength === 1 ? 'bg-rose-500' : passwordStrength <= 3 ? 'bg-amber-500' : 'bg-emerald-500') : 'bg-transparent'}`} />
+                          <div className={`h-full flex-1 transition-all ${passwordStrength >= 2 ? (passwordStrength <= 3 ? 'bg-amber-500' : 'bg-emerald-500') : 'bg-transparent'}`} />
+                          <div className={`h-full flex-1 transition-all ${passwordStrength >= 3 ? (passwordStrength <= 3 ? 'bg-amber-500' : 'bg-emerald-500') : 'bg-transparent'}`} />
+                          <div className={`h-full flex-1 transition-all ${passwordStrength >= 4 ? 'bg-emerald-500' : 'bg-transparent'}`} />
+                        </div>
+                        <div className="flex justify-between items-center text-[10px] text-slate-500">
+                          <span>Strength: <strong className={passwordStrength >= 4 ? 'text-emerald-600' : passwordStrength >= 2 ? 'text-amber-600' : 'text-rose-600'}>{passwordStrength === 4 ? 'Strong' : passwordStrength >= 2 ? 'Medium' : 'Weak'}</strong></span>
+                          <span>(Min 8 chars, 1 uppercase, 1 lowercase, 1 number)</span>
+                        </div>
+                      </div>
+                    )}
                     {isSignUp && signupErrors.password && <p className="mt-1 text-[11px] text-rose-600">{signupErrors.password}</p>}
                   </div>
                 )}

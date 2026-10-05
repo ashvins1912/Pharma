@@ -154,3 +154,72 @@ test('Gateway: Bulk Import: GET /api/v1/inventory/imports/:jobId validates objec
     assert.equal(nonExistentRes.status, 404);
 });
 
+test('Gateway: Prescription Service: POST /api/v1/prescriptions/upload enforces authentication', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/prescriptions/upload`, {
+        method: 'POST'
+    });
+    assert.equal(res.status, 401);
+});
+
+test('Gateway: Prescription Service: End-to-end upload, retrieval, removal, and response contracts', async () => {
+    const { issueDemoCustomerToken } = await import('../backend/config/demoCustomer.js');
+    const customerToken = await issueDemoCustomerToken();
+
+    // 1. Upload
+    const uploadRes = await fetch(`${baseUrl}/api/v1/prescriptions/upload`, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${customerToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            notes: 'Need urgent allergy medicine',
+            patientName: 'Rohan Mehra',
+            doctorName: 'Dr. S. K. Gupta'
+        })
+    });
+
+    assert.equal(uploadRes.status, 201);
+    const uploadBody = await uploadRes.json();
+    assert.equal(uploadBody.success, true);
+    assert.ok(uploadBody.data.prescriptionId);
+    assert.equal(uploadBody.data.status, 'COMPLETED');
+    assert.ok(uploadBody.requestId);
+
+    const prescId = uploadBody.data.prescriptionId;
+
+    // 2. Retrieve details
+    const getRes = await fetch(`${baseUrl}/api/v1/prescriptions/${prescId}`, {
+        headers: { Authorization: `Bearer ${customerToken}` }
+    });
+    assert.equal(getRes.status, 200);
+    const getBody = await getRes.json();
+    assert.equal(getBody.success, true);
+    assert.equal(getBody.data.prescriptionId, prescId);
+    assert.ok(getBody.data.patient);
+    assert.ok(Array.isArray(getBody.data.medicines));
+
+    // Security check: No secret leakage
+    const rawResponse = JSON.stringify(getBody);
+    assert.equal(rawResponse.includes('password'), false);
+    assert.equal(rawResponse.includes('passwordHash'), false);
+    assert.equal(rawResponse.includes('rawToken'), false);
+    assert.equal(rawResponse.includes('encryptionKey'), false);
+
+    // 3. Customer Data Removal
+    const removeRes = await fetch(`${baseUrl}/api/v1/prescriptions/${prescId}/remove`, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${customerToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ reason: 'User requested removal' })
+    });
+    assert.equal(removeRes.status, 200);
+    const removeBody = await removeRes.json();
+    assert.equal(removeBody.success, true);
+    assert.equal(removeBody.data.status, 'INACTIVE');
+    assert.ok(removeBody.data.inactiveAt);
+});
+
+

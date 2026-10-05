@@ -1,12 +1,12 @@
 {
   "name": "ashvin-pharmacy",
   "private": true,
+  "workspaces": [
+    "services/*",
+    "api-gateway"
+  ],
   "version": "1.0.0",
   "type": "module",
-  "workspaces": [
-    "services/inventory-service",
-    "services/order-service"
-  ],
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
@@ -16,13 +16,13 @@
     "admin:bootstrap": "node scripts/bootstrap-super-admin.mjs",
     "tenant:create": "node scripts/create-tenant.mjs",
     "prestart": "npm run build",
-    "start": "tsx server.ts",
-    "postinstall": "npm --prefix services/inventory-service install"
+    "start": "tsx server.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
     "@whiskeysockets/baileys": "^6.7.24",
     "axios": "^1.7.9",
+    "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
@@ -32,7 +32,7 @@
     "jwks-rsa": "^3.1.0",
     "mongoose": "^8.10.1",
     "multer": "^1.4.5-lts.1",
-    "nodemailer": "^10.0.14",
+    "nodemailer": "^10.0.15",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -40,6 +40,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.0",

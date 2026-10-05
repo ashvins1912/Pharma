@@ -193,14 +193,18 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const signUpWithEmail = async (email, password, name = '', mobile = '') => {
-    const { data } = await apiClient.post('/api/auth/signup', {
+  const signUpWithEmail = async (email, password, name = '', mobile = '', firstName = '', lastName = '') => {
+    const { data } = await apiClient.post('/api/v1/auth/signup', {
       email,
       password,
       name,
+      firstName,
+      lastName,
       mobile
     });
-    if (data.user) {
+    if (data?.data?.user && data?.data?.user?.status === 'ACTIVE') {
+      syncSession({ user: data.data.user }, data.data.user);
+    } else if (data?.user && data?.user?.status === 'ACTIVE') {
       syncSession({ user: data.user }, data.user);
     }
     return data;

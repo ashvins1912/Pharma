@@ -6,7 +6,7 @@ const userProfileSchema = new mongoose.Schema({
         trim: true,
         default: undefined
     },
-    // Strictly isolate identity reference to Supabase User ID
+    // Isolated identity reference
     supabase_user_id: {
         type: String,
         required: true,
@@ -19,24 +19,94 @@ const userProfileSchema = new mongoose.Schema({
     },
     name: {
         type: String,
+        default: '',
+        trim: true
+    },
+    firstName: {
+        type: String,
+        trim: true,
         default: ''
     },
-    firstName: { type: String, trim: true, default: '' },
-    lastName: { type: String, trim: true, default: '' },
+    lastName: {
+        type: String,
+        trim: true,
+        default: ''
+    },
     email: {
         type: String,
-        default: '',
+        required: true,
         lowercase: true,
         trim: true
     },
-    // Application-level AES-256-GCM encrypted sensitive PII (addresses, phone numbers, notes)
+    normalizedEmail: {
+        type: String,
+        required: true,
+        lowercase: true,
+        trim: true
+    },
+    passwordHash: {
+        type: String,
+        default: null
+    },
+    emailVerified: {
+        type: Boolean,
+        default: false,
+        index: true
+    },
+    verificationTokenHash: {
+        type: String,
+        default: null
+    },
+    verificationTokenExpiresAt: {
+        type: Date,
+        default: null,
+        index: true
+    },
+    resetPasswordTokenHash: {
+        type: String,
+        default: null,
+        index: true
+    },
+    resetPasswordExpiresAt: {
+        type: Date,
+        default: null
+    },
+    status: {
+        type: String,
+        enum: ['PENDING_VERIFICATION', 'ACTIVE', 'SUSPENDED', 'DISABLED'],
+        default: 'ACTIVE',
+        index: true
+    },
+    // Application-level AES-256-GCM encrypted sensitive PII
     encryptedPii: {
         type: String,
         default: null
     },
     mobile: {
         type: String,
-        default: ''
+        default: '',
+        trim: true
+    },
+    roles: [{
+        type: String,
+        default: ['customer']
+    }],
+    permissions: [{
+        type: String,
+        default: []
+    }],
+    role: {
+        type: String,
+        default: 'customer'
+    },
+    tenantId: {
+        type: String,
+        default: null,
+        index: true
+    },
+    branchId: {
+        type: String,
+        default: null
     },
     // Zero-Cost TOTP Multi-Factor Authentication (MFA) metadata
     mfaEnabled: {
@@ -51,19 +121,34 @@ const userProfileSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
-    role: {
-        type: String,
-        enum: ['customer', 'admin', 'rider'],
-        default: 'customer'
-    },
     lastLoginAt: {
         type: Date,
         default: null
     }
-}, { timestamps: true });
+}, {
+    timestamps: true
+});
 
+userProfileSchema.index({ normalizedEmail: 1 }, { unique: true });
 userProfileSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });
-userProfileSchema.index({ email: 1 });
+userProfileSchema.index({ verificationTokenHash: 1 });
+userProfileSchema.index({ tenantId: 1, role: 1 });
+
+/**
+ * Returns a sanitized DTO without sensitive fields (passwordHash, tokens, MFA secrets, etc.)
+ */
+userProfileSchema.methods.toSafeObject = function () {
+    const obj = this.toObject();
+    delete obj.passwordHash;
+    delete obj.verificationTokenHash;
+    delete obj.verificationTokenExpiresAt;
+    delete obj.resetPasswordTokenHash;
+    delete obj.resetPasswordExpiresAt;
+    delete obj.mfaSecretEncrypted;
+    delete obj.salt;
+    delete obj.__v;
+    return obj;
+};
 
 const UserProfile = mongoose.models.UserProfile || mongoose.model('UserProfile', userProfileSchema);
 export default UserProfile;
