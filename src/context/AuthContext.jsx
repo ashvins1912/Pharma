@@ -206,20 +206,62 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const signUpWithEmail = async (email, password, name = '', mobile = '', firstName = '', lastName = '') => {
-    const { data } = await apiClient.post('/api/v1/auth/signup', {
-      email,
-      password,
-      name,
-      firstName,
-      lastName,
-      mobile
-    });
-    if (data?.data?.user && data?.data?.user?.status === 'ACTIVE') {
+  const signUpWithEmail = async (param1, param2, param3 = '', param4 = '', param5 = '', param6 = '', param7 = '') => {
+    let payload = {};
+    if (typeof param1 === 'object' && param1 !== null) {
+      payload = {
+        email: param1.email,
+        password: param1.password,
+        firstName: param1.firstName || '',
+        lastName: param1.lastName || '',
+        name: param1.name || `${param1.firstName || ''} ${param1.lastName || ''}`.trim(),
+        dateOfBirth: param1.dateOfBirth,
+        mobileNumber: param1.mobileNumber || param1.mobile || '',
+        mobile: param1.mobileNumber || param1.mobile || ''
+      };
+    } else {
+      payload = {
+        email: param1,
+        password: param2,
+        name: param3,
+        mobile: param4,
+        mobileNumber: param4,
+        firstName: param5,
+        lastName: param6,
+        dateOfBirth: param7 || null
+      };
+    }
+
+    const { data } = await apiClient.post('/api/v1/auth/signup', payload);
+    if (data?.data?.user && data?.data?.user?.accountStatus === 'ACTIVE') {
       syncSession({ user: data.data.user }, data.data.user);
-    } else if (data?.user && data?.user?.status === 'ACTIVE') {
+    } else if (data?.user && data?.user?.accountStatus === 'ACTIVE') {
       syncSession({ user: data.user }, data.user);
     }
+    return data;
+  };
+
+  const completeProfileOnboarding = async ({ firstName, lastName, dateOfBirth, mobileNumber }) => {
+    const { data } = await apiClient.put('/api/v1/profile/onboarding', {
+      firstName,
+      lastName,
+      dateOfBirth,
+      mobileNumber
+    });
+    const updatedUser = data?.data?.user || data?.user;
+    if (updatedUser) {
+      syncSession({ user: updatedUser }, updatedUser);
+    }
+    return data;
+  };
+
+  const resendVerificationEmail = async (email) => {
+    const { data } = await apiClient.post('/api/v1/auth/resend-verification', { email });
+    return data;
+  };
+
+  const activateAccount = async (token) => {
+    const { data } = await apiClient.post('/api/v1/auth/activate', { token });
     return data;
   };
 
@@ -322,6 +364,9 @@ export function AuthProvider({ children }) {
         confirmMfaEnroll,
         disableMfa,
         signUpWithEmail,
+        completeProfileOnboarding,
+        resendVerificationEmail,
+        activateAccount,
         sendPasswordResetEmail,
         updatePassword,
         loginDemoCustomer,

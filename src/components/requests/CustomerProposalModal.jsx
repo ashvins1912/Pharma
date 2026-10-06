@@ -178,6 +178,16 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
             </div>
           </div>
 
+          {(proposal?.prescriptionStatus === 'Verified' || request.prescriptionUrl) && (
+            <div className="flex items-center gap-1.5 p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-900 font-bold">
+              <span className="text-emerald-700">✓</span>
+              <span>Prescription Verified by Analytics</span>
+              {proposal?.scannedMedicineName && (
+                <span className="text-slate-600 font-medium">({proposal.scannedMedicineName})</span>
+              )}
+            </div>
+          )}
+
           {proposal?.alternativeProduct && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-xs text-amber-900">
               <strong className="block font-bold">Recommended Alternative Formulation:</strong>

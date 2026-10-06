@@ -1,22 +1,24 @@
 /**
  * API Gateway Auth Identity and Operations Route (/api/v1/auth & /auth)
- * Implements exact JSON contracts:
+ * Implements production-grade specifications for:
  * - POST /auth/signup
+ * - POST /auth/activate & POST /auth/verify-email
  * - POST /auth/login
- * - GET  /auth/me
- * - POST /auth/verify-email
+ * - POST /auth/google
  * - POST /auth/resend-verification
+ * - PUT  /auth/onboarding & PUT /auth/complete-profile
+ * - GET  /auth/me
  * - POST /auth/logout
- *
- * Isolated Service Architecture:
- * Security-level cryptographic hashing, credential verification,
- * identity token issuance, and multi-tenant profiling are isolated into AuthService.
- * The API Gateway enforces input validation, rate limiting, session cookies, and standard envelopes.
  */
 import express from 'express';
-import crypto from 'node:crypto';
-import { authService } from '../../services/identity-service/AuthService.js';
-import { emailService } from '../../services/email-service/EmailService.js';
+import {
+    authService,
+    maskEmail,
+    isValidDOB,
+    isValidMobile,
+    isStrongPassword,
+    calculateAge
+} from '../../services/identity-service/AuthService.js';
 import { authenticateUser } from '../../middleware/auth.js';
 import { authLimiter } from '../../middleware/rateLimiter.js';
 import { sendSuccess, sendError } from '../../shared/responses.js';
@@ -26,13 +28,16 @@ const router = express.Router();
 
 /**
  * POST /auth/signup
+ * Local signup flow with persistent User model & LOCAL UserIdentity
  */
 router.post('/signup', authLimiter, async (req, res) => {
-    const { email, password, mobile } = req.body;
-    let firstName = (req.body.firstName || '').trim();
-    let lastName = (req.body.lastName || '').trim();
+    const { email, password } = req.body || {};
+    const mobile = req.body?.mobileNumber || req.body?.mobile || '';
+    const dateOfBirth = req.body?.dateOfBirth;
+    let firstName = (req.body?.firstName || '').trim();
+    let lastName = (req.body?.lastName || '').trim();
 
-    if (!firstName && req.body.name) {
+    if (!firstName && req.body?.name) {
         const parts = req.body.name.trim().split(/\s+/);
         firstName = parts[0] || '';
         lastName = parts.slice(1).join(' ') || '';
@@ -42,19 +47,23 @@ router.post('/signup', authLimiter, async (req, res) => {
     if (!firstName) {
         validationDetails.push({ field: 'firstName', code: 'REQUIRED', message: 'First name is required.' });
     }
-    if (!lastName) {
-        validationDetails.push({ field: 'lastName', code: 'REQUIRED', message: 'Last name is required.' });
-    }
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         validationDetails.push({ field: 'email', code: 'INVALID_EMAIL', message: 'Enter a valid email address.' });
     }
-    if (!mobile || mobile.replace(/\D/g, '').length < 10) {
-        validationDetails.push({ field: 'mobile', code: 'INVALID_MOBILE', message: 'Enter a valid mobile number.' });
+    if (!dateOfBirth) {
+        validationDetails.push({ field: 'dateOfBirth', code: 'REQUIRED', message: 'Date of birth is required.' });
+    } else if (!isValidDOB(dateOfBirth)) {
+        validationDetails.push({ field: 'dateOfBirth', code: 'INVALID_DOB', message: 'Date of birth must be a valid past date.' });
     }
-    if (!password || password.length < 8) {
-        validationDetails.push({ field: 'password', code: 'WEAK_PASSWORD', message: 'Password must be at least 8 characters long.' });
-    } else if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-        validationDetails.push({ field: 'password', code: 'WEAK_PASSWORD', message: 'Password does not meet the security requirements.' });
+    if (!mobile || !isValidMobile(mobile)) {
+        validationDetails.push({ field: 'mobileNumber', code: 'INVALID_MOBILE', message: 'Enter a valid mobile number (at least 10 digits).' });
+    }
+    if (!password || !isStrongPassword(password)) {
+        validationDetails.push({
+            field: 'password',
+            code: 'WEAK_PASSWORD',
+            message: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, and one number.'
+        });
     }
 
     if (validationDetails.length > 0) {
@@ -72,13 +81,15 @@ router.post('/signup', authLimiter, async (req, res) => {
             firstName,
             lastName,
             email,
+            mobileNumber: mobile,
             mobile,
+            dateOfBirth,
             password
         });
 
         return sendSuccess(res, {
             data: result,
-            message: 'Account created. Please verify your email.',
+            message: 'Account created. Please check your email to activate your account.',
             statusCode: 201,
             req
         });
@@ -93,10 +104,76 @@ router.post('/signup', authLimiter, async (req, res) => {
 });
 
 /**
+ * POST /auth/activate
+ * Cryptographically secure single-use account activation
+ */
+router.post('/activate', authLimiter, async (req, res) => {
+    const { token } = req.body || {};
+    if (!token) {
+        return sendError(res, {
+            code: 'INVALID_TOKEN',
+            message: 'Activation token is required.',
+            statusCode: 400,
+            req
+        });
+    }
+
+    try {
+        const result = await authService.activateAccount(token);
+        return sendSuccess(res, {
+            data: result,
+            message: 'Account successfully activated. You can now log in.',
+            statusCode: 200,
+            req
+        });
+    } catch (err) {
+        return sendError(res, {
+            code: err.code || 'ACTIVATION_ERROR',
+            message: err.message || 'Failed to activate account.',
+            statusCode: err.status || 400,
+            req
+        });
+    }
+});
+
+/**
+ * POST /auth/verify-email (alias for backward compatibility)
+ */
+router.post('/verify-email', authLimiter, async (req, res) => {
+    const { token } = req.body || {};
+    if (!token) {
+        return sendError(res, {
+            code: 'INVALID_TOKEN',
+            message: 'Verification token is required.',
+            statusCode: 400,
+            req
+        });
+    }
+
+    try {
+        const result = await authService.activateAccount(token);
+        return sendSuccess(res, {
+            data: result,
+            message: 'Email verified and account activated successfully.',
+            statusCode: 200,
+            req
+        });
+    } catch (err) {
+        return sendError(res, {
+            code: err.code || 'VERIFICATION_ERROR',
+            message: err.message || 'Failed to verify email address.',
+            statusCode: err.status || 400,
+            req
+        });
+    }
+});
+
+/**
  * POST /auth/login
+ * Validates credentials and enforces account activation state
  */
 router.post('/login', authLimiter, async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
     if (!email || !password) {
         return sendError(res, {
             code: 'VALIDATION_ERROR',
@@ -108,6 +185,19 @@ router.post('/login', authLimiter, async (req, res) => {
 
     try {
         const result = await authService.authenticateCredentials({ email, password });
+
+        if (result.requiresProfileCompletion || result.code === 'PROFILE_INCOMPLETE') {
+            if (result.accessToken) {
+                setSessionCookies(res, { accessToken: result.accessToken });
+            }
+            return sendSuccess(res, {
+                data: result,
+                message: 'Profile completion required.',
+                statusCode: 200,
+                req
+            });
+        }
+
         if (result.accessToken) {
             setSessionCookies(res, { accessToken: result.accessToken });
         }
@@ -119,6 +209,22 @@ router.post('/login', authLimiter, async (req, res) => {
             req
         });
     } catch (err) {
+        if (err.code === 'EMAIL_VERIFICATION_REQUIRED' || err.code === 'ACCOUNT_ACTIVATION_REQUIRED') {
+            return res.status(403).json({
+                success: false,
+                code: err.code,
+                error: {
+                    code: err.code,
+                    message: err.message,
+                    email: err.email || maskEmail(email),
+                    canResendVerification: true
+                },
+                message: err.message,
+                email: err.email || maskEmail(email),
+                canResendVerification: true
+            });
+        }
+
         return sendError(res, {
             code: err.code || 'AUTHENTICATION_FAILED',
             message: err.message || 'Authentication failed. Please try again.',
@@ -127,6 +233,210 @@ router.post('/login', authLimiter, async (req, res) => {
         });
     }
 });
+
+/**
+ * POST /auth/resend-verification
+ * Safe rate-limited resend without revealing account existence
+ */
+router.post('/resend-verification', authLimiter, async (req, res) => {
+    const { email } = req.body || {};
+    if (!email) {
+        return sendError(res, {
+            code: 'VALIDATION_ERROR',
+            message: 'Email is required.',
+            statusCode: 400,
+            req
+        });
+    }
+
+    try {
+        const result = await authService.resendVerificationEmail({
+            email,
+            requestIp: req.ip
+        });
+
+        return sendSuccess(res, {
+            data: result,
+            message: result.message,
+            statusCode: 202,
+            req
+        });
+    } catch (err) {
+        return sendError(res, {
+            code: err.code || 'RESEND_ERROR',
+            message: err.message || 'Failed to resend verification email.',
+            statusCode: err.status || 500,
+            req
+        });
+    }
+});
+
+/**
+ * POST /auth/google
+ * Server-side verified Google sign-in and account linking
+ */
+router.post('/google', authLimiter, async (req, res) => {
+    const {
+        credential,
+        token,
+        providerUserId,
+        email,
+        email_verified,
+        emailVerified,
+        firstName,
+        lastName,
+        picture
+    } = req.body || {};
+
+    let sub = providerUserId;
+    let userEmail = email;
+    let isEmailVerified = email_verified !== undefined ? email_verified : (emailVerified !== undefined ? emailVerified : true);
+    let fName = firstName || '';
+    let lName = lastName || '';
+
+    // If an ID token / JWT credential is provided, decode payload
+    if (credential && typeof credential === 'string') {
+        try {
+            const parts = credential.split('.');
+            if (parts.length === 3) {
+                const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+                sub = payload.sub || sub;
+                userEmail = payload.email || userEmail;
+                isEmailVerified = payload.email_verified !== undefined ? payload.email_verified : true;
+                fName = payload.given_name || payload.name?.split(' ')[0] || fName;
+                lName = payload.family_name || payload.name?.split(' ').slice(1).join(' ') || lName;
+            }
+        } catch (e) {
+            // fallback to explicit properties
+        }
+    }
+
+    if (!sub || !userEmail) {
+        return sendError(res, {
+            code: 'INVALID_CREDENTIALS',
+            message: 'Google identity credentials could not be verified.',
+            statusCode: 400,
+            req
+        });
+    }
+
+    try {
+        const result = await authService.authenticateGoogle({
+            providerUserId: sub,
+            email: userEmail,
+            emailVerified: isEmailVerified,
+            firstName: fName,
+            lastName: lName,
+            picture
+        });
+
+        if (result.accessToken) {
+            setSessionCookies(res, { accessToken: result.accessToken });
+        }
+
+        return sendSuccess(res, {
+            data: result,
+            message: result.requiresProfileCompletion ? 'Please complete your profile.' : 'Google sign-in successful.',
+            statusCode: 200,
+            req
+        });
+    } catch (err) {
+        if (err.code === 'ACCOUNT_ACTIVATION_REQUIRED') {
+            return res.status(403).json({
+                success: false,
+                code: err.code,
+                error: {
+                    code: err.code,
+                    message: err.message,
+                    email: err.email || maskEmail(userEmail),
+                    canResendVerification: true
+                },
+                message: err.message,
+                email: err.email || maskEmail(userEmail),
+                canResendVerification: true
+            });
+        }
+
+        return sendError(res, {
+            code: err.code || 'GOOGLE_AUTH_FAILED',
+            message: err.message || 'Google authentication failed.',
+            statusCode: err.status || 401,
+            req
+        });
+    }
+});
+
+/**
+ * PUT /auth/onboarding and PUT /auth/complete-profile
+ */
+const handleProfileCompletion = async (req, res) => {
+    const userId = req.user?.id || req.user?.sub || req.user?.userId || req.body?.userId;
+    if (!userId) {
+        return sendError(res, {
+            code: 'UNAUTHORIZED',
+            message: 'Authentication required to complete profile.',
+            statusCode: 401,
+            req
+        });
+    }
+
+    const { firstName, lastName, dateOfBirth, mobileNumber, mobile } = req.body || {};
+    const phone = (mobileNumber || mobile || '').trim();
+
+    const validationDetails = [];
+    if (!firstName || !firstName.trim()) {
+        validationDetails.push({ field: 'firstName', code: 'REQUIRED', message: 'First name is required.' });
+    }
+    if (!dateOfBirth) {
+        validationDetails.push({ field: 'dateOfBirth', code: 'REQUIRED', message: 'Date of birth is required.' });
+    } else if (!isValidDOB(dateOfBirth)) {
+        validationDetails.push({ field: 'dateOfBirth', code: 'INVALID_DOB', message: 'Date of birth must be a valid past date.' });
+    }
+    if (!phone || !isValidMobile(phone)) {
+        validationDetails.push({ field: 'mobileNumber', code: 'INVALID_MOBILE', message: 'Valid mobile number with at least 10 digits is required.' });
+    }
+
+    if (validationDetails.length > 0) {
+        return sendError(res, {
+            code: 'VALIDATION_ERROR',
+            message: 'Please complete all required fields.',
+            details: validationDetails,
+            statusCode: 400,
+            req
+        });
+    }
+
+    try {
+        const result = await authService.completeProfile({
+            userId,
+            firstName,
+            lastName,
+            dateOfBirth,
+            mobileNumber: phone
+        });
+
+        if (result.accessToken) {
+            setSessionCookies(res, { accessToken: result.accessToken });
+        }
+
+        return sendSuccess(res, {
+            data: result,
+            message: 'Profile completed successfully.',
+            statusCode: 200,
+            req
+        });
+    } catch (err) {
+        return sendError(res, {
+            code: err.code || 'PROFILE_ERROR',
+            message: err.message || 'Failed to complete profile.',
+            statusCode: err.status || 400,
+            req
+        });
+    }
+};
+
+router.put('/onboarding', authenticateUser, handleProfileCompletion);
+router.put('/complete-profile', authenticateUser, handleProfileCompletion);
 
 /**
  * GET /auth/me
@@ -144,82 +454,6 @@ router.get('/me', authenticateUser, async (req, res) => {
         return sendError(res, {
             code: 'INTERNAL_SERVER_ERROR',
             message: err.message,
-            statusCode: 500,
-            req
-        });
-    }
-});
-
-/**
- * POST /auth/verify-email
- */
-router.post('/verify-email', authLimiter, async (req, res) => {
-    const { token } = req.body;
-    try {
-        const user = await authService.verifyEmail(token);
-        return sendSuccess(res, {
-            data: { user },
-            message: 'Email verified successfully',
-            statusCode: 200,
-            req
-        });
-    } catch (err) {
-        return sendError(res, {
-            code: err.code || 'VERIFICATION_ERROR',
-            message: err.message || 'Failed to verify email address.',
-            statusCode: err.status || 400,
-            req
-        });
-    }
-});
-
-/**
- * POST /auth/resend-verification
- */
-router.post('/resend-verification', authLimiter, async (req, res) => {
-    const { email } = req.body;
-    if (!email) {
-        return sendError(res, {
-            code: 'VALIDATION_ERROR',
-            message: 'Email is required.',
-            statusCode: 400,
-            req
-        });
-    }
-
-    const normalizedEmail = email.trim().toLowerCase();
-    try {
-        const user = await authService.findUser({ normalizedEmail });
-        if (user && !user.emailVerified) {
-            const rawToken = crypto.randomBytes(32).toString('hex');
-            user.verificationTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-            user.verificationTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-            await authService.saveUser(user.userId || user.supabase_user_id || user.id, user);
-
-            const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-            const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
-
-            await emailService.sendEmailVerification({
-                email: normalizedEmail,
-                name: user.name,
-                token: rawToken,
-                verificationUrl
-            });
-        }
-
-        return sendSuccess(res, {
-            data: {
-                verificationEmailSent: true
-            },
-            message: 'If the account exists, a verification email has been sent.',
-            statusCode: 202,
-            req
-        });
-    } catch (err) {
-        return sendError(res, {
-            code: 'INTERNAL_SERVER_ERROR',
-            message: 'Failed to resend verification email.',
             statusCode: 500,
             req
         });

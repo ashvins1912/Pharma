@@ -96,6 +96,22 @@ router.get('/analytics/summary', authenticateUser, async (req, res) => {
     }
 });
 
+// 2b. Analytics Scan & Medicine Extraction
+router.all('/analytics/scan', authenticateUser, async (req, res) => {
+    try {
+        const authContext = {
+            isPlatformUser: req.context?.isPlatformUser,
+            tenantId: req.context?.tenantId,
+            userId: req.user?.sub || req.user?.userId
+        };
+        const params = req.method === 'POST' ? req.body : req.query;
+        const result = await prescriptionService.scanPrescription(params, authContext);
+        return sendResponse(res, 200, result, 'Prescription scan and verification completed');
+    } catch (err) {
+        return sendError(res, err.status || 500, err.code || 'SCAN_FAILED', err.message);
+    }
+});
+
 // 3. Hospital Match / Create
 router.post('/hospitals', authenticateUser, async (req, res) => {
     try {

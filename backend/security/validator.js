@@ -54,8 +54,11 @@ export function validateLogin(req, res, next) {
 }
 
 export function validateSignup(req, res, next) {
-    const { email, password, name, mobile } = req.body || {};
+    const { email, password, name, firstName, lastName, mobile, mobileNumber, dateOfBirth } = req.body || {};
     const errors = [];
+
+    const effectiveName = (name || `${firstName || ''} ${lastName || ''}`).trim();
+    const effectiveMobile = mobileNumber || mobile;
 
     if (!email || !EMAIL_REGEX.test(String(email).trim())) {
         errors.push('A valid email address is required.');
@@ -70,13 +73,19 @@ export function validateSignup(req, res, next) {
             errors.push('Password must contain at least one uppercase letter, one lowercase letter, and one number.');
         }
     }
-    if (!name || typeof name !== 'string' || name.trim().length < 2) {
-        errors.push('Full name must be at least 2 characters.');
+    if (!effectiveName || effectiveName.length < 2) {
+        errors.push('First name or full name must be at least 2 characters.');
     }
-    if (mobile) {
-        const digits = String(mobile).replace(/\D/g, '');
+    if (effectiveMobile) {
+        const digits = String(effectiveMobile).replace(/\D/g, '');
         if (digits.length < 10) {
             errors.push('Mobile number must be at least 10 digits.');
+        }
+    }
+    if (dateOfBirth) {
+        const d = new Date(dateOfBirth);
+        if (Number.isNaN(d.getTime()) || d > new Date()) {
+            errors.push('Date of birth must be a valid past date.');
         }
     }
 

@@ -71,7 +71,7 @@ function MainApp() {
       if (token) {
         if (path.includes('vendor') || path.includes('onboarding') || urlParams.get('type') === 'vendor') {
           setVendorOnboardingToken(token);
-        } else if (path.includes('verify') || path === '/verify-email' || urlParams.get('type') === 'verify') {
+        } else if (path.includes('verify') || path.includes('activate') || path === '/verify-email' || path === '/activate-account' || urlParams.get('type') === 'verify' || urlParams.get('type') === 'activate') {
           setVerifyEmailToken(token);
         }
       }
@@ -188,6 +188,16 @@ function MainApp() {
   const handleProceedToCheckout = () => {
     if (!user) {
       addToast("Please sign in or use demo access to proceed with delivery checkout.", "info");
+      setAuthOpen(true);
+      return;
+    }
+    if (user.accountStatus === 'PENDING_EMAIL_VERIFICATION' || user.accountStatus === 'PENDING_ACCOUNT_ACTIVATION') {
+      addToast("Please activate your account before proceeding to checkout.", "warning");
+      setAuthOpen(true);
+      return;
+    }
+    if (user.accountStatus === 'PROFILE_INCOMPLETE' || user.profileCompleted === false) {
+      addToast("Please complete your profile details before proceeding to checkout.", "info");
       setAuthOpen(true);
       return;
     }

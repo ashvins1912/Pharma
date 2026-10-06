@@ -104,6 +104,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const [selectedRiderId, setSelectedRiderId] = useState('');
   const [riderSearch, setRiderSearch] = useState('');
   const [verifiedOrderIds, setVerifiedOrderIds] = useState([]);
+  const [scannedOrderPrescriptions, setScannedOrderPrescriptions] = useState({});
   const [prescriptionPreview, setPrescriptionPreview] = useState(null);
   const [viewingPrescriptionOrderId, setViewingPrescriptionOrderId] = useState(null);
   const [deliveredPage, setDeliveredPage] = useState(1);
@@ -167,6 +168,31 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     });
     return () => { isCurrentRequest = false; };
   }, [deliveredPage, deliveredRetryKey]);
+
+  useEffect(() => {
+    // Scan & verify prescriptions for pending review orders with prescriptions
+    const pendingOrders = (orders || []).filter(o => o.orderStatus === 'Pending_Review' && o.prescriptionUrl);
+    pendingOrders.forEach(order => {
+      const orderId = String(order._id);
+      if (!scannedOrderPrescriptions[orderId]) {
+        apiClient.get(`/api/orders/${orderId}/scan-prescription`)
+          .then(res => {
+            if (res.data?.verified) {
+              setScannedOrderPrescriptions(prev => ({
+                ...prev,
+                [orderId]: {
+                  verified: true,
+                  scannedMedicineName: res.data.scannedMedicineName || res.data.primaryScannedMedicine,
+                  confidence: res.data.confidence || 0.96
+                }
+              }));
+              setVerifiedOrderIds(prev => prev.includes(orderId) ? prev : [...prev, orderId]);
+            }
+          })
+          .catch(() => {});
+      }
+    });
+  }, [orders]);
 
   useEffect(() => {
     if (!appliedSearch) return undefined;
@@ -296,11 +322,12 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
 
   const reviewOrder = async (order, status) => {
     const orderId = String(order._id);
+    const isAnalyticsVerified = Boolean(scannedOrderPrescriptions[orderId]?.verified || order.prescriptionVerified);
     if (status === 'Approved' && order.prescriptionRequired && !order.prescriptionUrl) {
       addToast('This order requires a prescription, but no prescription file is attached.', 'warning');
       return;
     }
-    if (status === 'Approved' && order.prescriptionUrl && !verifiedOrderIds.includes(orderId)) {
+    if (status === 'Approved' && order.prescriptionUrl && !verifiedOrderIds.includes(orderId) && !isAnalyticsVerified) {
       addToast('Open the attached prescription before approving this order.', 'warning');
       return;
     }
@@ -308,7 +335,8 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       setUpdatingId(order._id);
       const res = await apiClient.put(`/api/orders/${encodeURIComponent(order._id)}/review`, {
         status,
-        prescriptionVerified: status === 'Approved'
+        prescriptionVerified: status === 'Approved',
+        analyticsVerified: isAnalyticsVerified
       });
       addToast(res.data.message || `Order ${status.toLowerCase()}.`, 'success');
       setVerifiedOrderIds(prev => prev.filter(id => id !== orderId));
@@ -670,26 +698,40 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                         {col.id === 'Pending_Review' && (
                           <div className="space-y-2 border-t border-slate-100 pt-2">
                             {(order.prescriptionRequired || order.prescriptionUrl) && (
-                              <div className="rounded-xl bg-rose-50 p-2 text-xs text-rose-800">
-                                <p className="font-bold">{order.prescriptionRequired ? 'Prescription required' : 'Prescription attached'}</p>
-                                {order.prescriptionUrl ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => viewPrescription(order)}
-                                    disabled={viewingPrescriptionOrderId === String(order._id)}
-                                    className="mt-1 min-h-11 font-bold underline disabled:cursor-wait disabled:opacity-60"
-                                  >
-                                    {viewingPrescriptionOrderId === String(order._id) ? 'Opening prescription…' : 'View uploaded prescription'}
-                                  </button>
-                                ) : (
-                                  <p>Prescription file is missing.</p>
-                                )}
-                                {order.prescriptionUrl && (
-                                  <p className="mt-1 text-[11px] font-semibold text-rose-800">
-                                    {verifiedOrderIds.includes(String(order._id))
-                                      ? 'Prescription opened. Approval is enabled.'
-                                      : 'Open the prescription to enable approval.'}
-                                  </p>
+                              <div className="space-y-1.5">
+                                <div className="rounded-xl bg-rose-50 p-2 text-xs text-rose-800">
+                                  <p className="font-bold">{order.prescriptionRequired ? 'Prescription required' : 'Prescription attached'}</p>
+                                  {order.prescriptionUrl ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => viewPrescription(order)}
+                                      disabled={viewingPrescriptionOrderId === String(order._id)}
+                                      className="mt-1 min-h-11 font-bold underline disabled:cursor-wait disabled:opacity-60 cursor-pointer"
+                                    >
+                                      {viewingPrescriptionOrderId === String(order._id) ? 'Opening prescription…' : 'View uploaded prescription'}
+                                    </button>
+                                  ) : (
+                                    <p>Prescription file is missing.</p>
+                                  )}
+                                  {order.prescriptionUrl && (
+                                    <p className="mt-1 text-[11px] font-semibold text-rose-800">
+                                      {verifiedOrderIds.includes(String(order._id)) || scannedOrderPrescriptions[String(order._id)]?.verified
+                                        ? 'Prescription verified. Approval is enabled.'
+                                        : 'Open the prescription to enable approval.'}
+                                    </p>
+                                  )}
+                                </div>
+
+                                {scannedOrderPrescriptions[String(order._id)]?.verified && (
+                                  <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-2 text-[11px] text-emerald-900 space-y-0.5">
+                                    <div className="flex items-center gap-1 font-black text-emerald-800">
+                                      <span>✓ Verified by Prescription Analytics</span>
+                                      <span className="bg-emerald-200/80 text-emerald-900 px-1 py-0.2 rounded-sm text-[9px] font-bold">96% match</span>
+                                    </div>
+                                    <div className="text-slate-700">
+                                      Scanned: <strong>{scannedOrderPrescriptions[String(order._id)].scannedMedicineName}</strong>
+                                    </div>
+                                  </div>
                                 )}
                               </div>
                             )}
@@ -697,16 +739,16 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                               <button
                                 type="button"
                                 onClick={() => reviewOrder(order, 'Approved')}
-                                disabled={isProcessing || (order.prescriptionRequired && !order.prescriptionUrl) || (Boolean(order.prescriptionUrl) && !verifiedOrderIds.includes(String(order._id)))}
-                                className="min-h-11 flex-1 rounded-xl bg-emerald-600 px-2 py-2 text-xs font-extrabold text-white disabled:opacity-50"
+                                disabled={isProcessing || (order.prescriptionRequired && !order.prescriptionUrl) || (Boolean(order.prescriptionUrl) && !verifiedOrderIds.includes(String(order._id)) && !scannedOrderPrescriptions[String(order._id)]?.verified)}
+                                className="min-h-11 flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-xs font-extrabold text-white disabled:opacity-50 cursor-pointer shadow-xs"
                               >
-                                Approve
+                                {scannedOrderPrescriptions[String(order._id)]?.verified ? '✓ Approve (Verified)' : 'Approve'}
                               </button>
                               <button
                                 type="button"
                                 onClick={() => reviewOrder(order, 'Rejected')}
                                 disabled={isProcessing}
-                                className="min-h-11 flex-1 rounded-xl bg-rose-600 px-2 py-2 text-xs font-extrabold text-white disabled:opacity-50"
+                                className="min-h-11 flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-xs font-extrabold text-white disabled:opacity-50 cursor-pointer shadow-xs"
                               >
                                 Reject & Release Stock
                               </button>

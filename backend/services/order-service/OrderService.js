@@ -330,8 +330,13 @@ export class OrderService {
             if (newStatus === MultiTenantOrderStatus.DELIVERED) fulfillment.status = 'COMPLETED';
         }
 
-        // If order delivered, deduct stock permanently and reward points
-        if (newStatus === MultiTenantOrderStatus.DELIVERED) {
+        if (newStatus === MultiTenantOrderStatus.ACCEPTED) {
+            domainEvents.emitDomainEvent('ORDER_ACCEPTED', orderId, { orderNumber: order.orderNumber }, actor, order.tenantId, order.branchId);
+        } else if (newStatus === MultiTenantOrderStatus.READY_FOR_DISPATCH) {
+            domainEvents.emitDomainEvent('DELIVERY_STATUS_CHANGED', orderId, { orderNumber: order.orderNumber, status: 'READY_TO_DISPATCH' }, actor, order.tenantId, order.branchId);
+        } else if (newStatus === MultiTenantOrderStatus.OUT_FOR_DELIVERY) {
+            domainEvents.emitDomainEvent('DELIVERY_STATUS_CHANGED', orderId, { orderNumber: order.orderNumber, status: 'OUT_FOR_DELIVERY' }, actor, order.tenantId, order.branchId);
+        } else if (newStatus === MultiTenantOrderStatus.DELIVERED) {
             await catalogService.deductStock(order.tenantId, order.branchId, order.items);
             const pointsEarned = Math.floor(order.finalTotal / 10);
             await identityService.recordOrderCompletion(

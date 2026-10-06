@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": [
     "services/*",
-    "api-gateway"
+    "api-gateway",
+    "backend"
   ],
   "version": "1.0.0",
   "type": "module",

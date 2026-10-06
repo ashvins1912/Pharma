@@ -250,12 +250,24 @@ const getOrderItems = (order) => (order.items || [])
     .map(item => `• ${item.name || 'Item'} x${item.quantity || 1}`)
     .join('\n');
 
+export const normalizeOrderStatus = (rawStatus) => {
+    const s = String(rawStatus || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    if (['PLACED', 'ORDER_CREATED', 'SUBMITTED', 'PENDING_REVIEW', 'ORDERCREATED'].includes(s)) return 'Placed';
+    if (['READY_TO_DISPATCH', 'READY_FOR_DISPATCH', 'PACKED', 'ORDERREADYFORDISPATCH'].includes(s)) return 'Ready to Dispatch';
+    if (['ASSIGNED', 'RIDER_ASSIGNED', 'ORDERASSIGNED', 'ORDERREASSIGNED'].includes(s)) return 'Assigned';
+    if (['DISPATCHED', 'OUT_FOR_DELIVERY', 'ORDERDISPATCHED'].includes(s)) return 'Dispatched';
+    if (['DELIVERED', 'COMPLETED', 'ORDERDELIVERED'].includes(s)) return 'Delivered';
+    if (['CANCELLED', 'CANCELED', 'ORDERCANCELLED'].includes(s)) return 'Cancelled';
+    return rawStatus;
+};
+
 export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActionLinks = [] } = {}) => {
+    const normalizedStatus = normalizeOrderStatus(status);
     const orderId = order?._id?.toString() || order?.id?.toString() || 'UNKNOWN';
     const shortId = orderId.slice(-6).toUpperCase();
     const items = getOrderItems(order);
 
-    if (audience === 'rider' && ['Assigned', 'Dispatched'].includes(status)) {
+    if (audience === 'rider' && ['Assigned', 'Dispatched'].includes(normalizedStatus)) {
         const coordinates = order.coordinates || {};
         const hasCoordinates = Number.isFinite(Number(coordinates.lat))
             && Number.isFinite(Number(coordinates.lng))
@@ -264,13 +276,13 @@ export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActi
             ? `https://www.google.com/maps/search/?api=1&query=${coordinates.lat},${coordinates.lng}`
             : null;
         return [
-            `🚚 ${status === 'Assigned' ? 'NEW DELIVERY ASSIGNED' : 'ORDER OUT FOR DELIVERY'} — Order #${shortId}`,
+            `🚚 ${normalizedStatus === 'Assigned' ? 'NEW DELIVERY ASSIGNED' : 'ORDER OUT FOR DELIVERY'} — Order #${shortId}`,
             `Rider: ${order.rider?.riderName || 'Assigned Rider'}`,
             `Customer: ${order.addressDetails?.fullName || order.customerName || 'Customer'}`,
             `Customer contact: ${order.customerMobile || order.addressDetails?.mobile || 'Not provided'}`,
             `Complete delivery address: ${getCompleteAddress(order)}`,
             mapsLink && `Google Maps: ${mapsLink}`,
-            status === 'Assigned'
+            normalizedStatus === 'Assigned'
                 ? `Assigned at: ${order.assignmentDetails?.assignedAt ? new Date(order.assignmentDetails.assignedAt).toLocaleString() : new Date().toLocaleString()}`
                 : `Out for delivery at: ${order.outForDeliveryAt ? new Date(order.outForDeliveryAt).toLocaleString() : new Date().toLocaleString()}`,
             `COD amount: ₹${order.finalTotal}`,
@@ -279,7 +291,7 @@ export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActi
         ].filter(Boolean).join('\n');
     }
 
-    if (audience === 'admin' && status === 'Placed') {
+    if (audience === 'admin' && normalizedStatus === 'Placed') {
         return [
             `🛎️ NEW ORDER RECEIVED — #${shortId}`,
             `Customer: ${order.addressDetails?.fullName || order.customerName || 'Customer'}`,
@@ -290,7 +302,7 @@ export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActi
         ].filter(Boolean).join('\n');
     }
 
-    if (status === 'Dispatched') {
+    if (normalizedStatus === 'Dispatched') {
         return [
             `🚚 YOUR ORDER IS OUT FOR DELIVERY — #${shortId}`,
             `Status: Out for Delivery`,
@@ -303,7 +315,7 @@ export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActi
         ].filter(Boolean).join('\n');
     }
 
-    if (status === 'Assigned') {
+    if (normalizedStatus === 'Assigned') {
         return [
             `🛵 DELIVERY RIDER ASSIGNED — #${shortId}`,
             `Rider: ${order.rider?.riderName || 'Assigned Rider'}`,
@@ -313,7 +325,7 @@ export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActi
         ].join('\n');
     }
 
-    switch (status) {
+    switch (normalizedStatus) {
         case 'Placed':
             return [
                 `🎉 ORDER PLACED SUCCESSFULLY — #${shortId}`,
@@ -336,7 +348,7 @@ export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActi
                 'Please visit us again for your healthcare needs. 💚'
             ].join('\n');
         default:
-            return `ℹ️ Order #${shortId} status update: ${status}`;
+            return `ℹ️ Order #${shortId} status update: ${normalizedStatus || status}`;
     }
 };
 
@@ -557,20 +569,21 @@ const clearOrderNotifications = async (orderId) => {
 };
 
 export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryMobile = null) => {
+    const normalizedStatus = normalizeOrderStatus(statusUpdateText);
     const orderId = order?._id?.toString() || order?.id?.toString() || 'UNKNOWN';
     const customerPhone = order.customerMobile || order.addressDetails?.mobile || '';
     const riderPhone = deliveryMobile || order.rider?.riderMobile || '';
-    const recipients = statusUpdateText === 'Assigned'
+    const recipients = normalizedStatus === 'Assigned'
         ? [
             { audience: 'customer', phone: customerPhone },
             ...(riderPhone ? [{ audience: 'rider', phone: riderPhone }] : [])
         ]
         : [
             { audience: 'customer', phone: customerPhone },
-            ...(statusUpdateText === 'Dispatched' && riderPhone
+            ...(normalizedStatus === 'Dispatched' && riderPhone
                 ? [{ audience: 'rider', phone: riderPhone }]
                 : []),
-            ...(statusUpdateText === 'Placed' && whatsappState.isConnected && whatsappState.phone
+            ...(normalizedStatus === 'Placed' && whatsappState.isConnected && whatsappState.phone
                 ? [{ audience: 'admin', phone: whatsappState.phone }]
                 : [])
         ];
@@ -578,7 +591,7 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
 
     for (const { audience, phone } of recipients) {
         const recipient = normalizeWhatsAppNumber(phone);
-        const dedupeKey = `${orderId}:${statusUpdateText}:${audience}:${recipient || 'missing'}`;
+        const dedupeKey = `${orderId}:${normalizedStatus}:${audience}:${recipient || 'missing'}`;
         if (sentNotifications.has(dedupeKey)) {
             records.push(sentNotifications.get(dedupeKey));
             continue;
@@ -600,15 +613,15 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
         const createdAt = new Date();
         const record = {
             orderId,
-            eventType: statusUpdateText,
+            eventType: normalizedStatus,
             recipient: recipient || 'Not provided',
             dedupeKey,
-            messageBody: buildWhatsAppMessageBody(order, statusUpdateText, audience, {
-                deliveryActionLinks: audience === 'rider' && statusUpdateText === 'Dispatched'
+            messageBody: buildWhatsAppMessageBody(order, normalizedStatus, audience, {
+                deliveryActionLinks: audience === 'rider' && normalizedStatus === 'Dispatched'
                     ? createDeliveryActionLinks(order)
                     : []
             }),
-            deliveryMenu: audience === 'rider' && statusUpdateText === 'Dispatched'
+            deliveryMenu: audience === 'rider' && normalizedStatus === 'Dispatched'
                 ? createDeliveryActionMenu(order)
                 : null,
             status: 'PENDING',
@@ -625,7 +638,7 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
         records.push(record);
         await transmitWhatsAppMessage(record, mongoRecord);
 
-        if (statusUpdateText === 'Delivered') {
+        if (normalizedStatus === 'Delivered') {
             if (record.status === 'SENT' || record.status === 'MISSING_RECIPIENT') {
                 await clearOrderNotifications(orderId);
             } else if (getIsConnected()) {

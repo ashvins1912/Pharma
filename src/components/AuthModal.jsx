@@ -4,12 +4,21 @@ import { useToast } from '../context/ToastContext';
 import { friendlyAuthError } from '../api/apiErrors';
 import { isSupabaseConfigured } from '../supabaseClient';
 
-const signupFields = ['name', 'mobile', 'email', 'password', 'confirmPassword'];
+const signupFields = ['firstName', 'lastName', 'dateOfBirth', 'mobile', 'email', 'password', 'confirmPassword'];
 
 function validateSignupField(field, values) {
   switch (field) {
-    case 'name':
-      return values.name.trim().length < 2 ? 'Full name must be at least 2 characters.' : '';
+    case 'firstName':
+      return !values.firstName || values.firstName.trim().length < 1 ? 'First name is required.' : '';
+    case 'lastName':
+      return '';
+    case 'dateOfBirth': {
+      if (!values.dateOfBirth) return 'Date of birth is required.';
+      const d = new Date(values.dateOfBirth);
+      if (Number.isNaN(d.getTime())) return 'Enter a valid date.';
+      if (d > new Date()) return 'Date of birth cannot be in the future.';
+      return '';
+    }
     case 'mobile':
       return values.mobile.replace(/\D/g, '').length < 10 ? 'Mobile number must be at least 10 digits.' : '';
     case 'email':
@@ -39,6 +48,8 @@ export default function AuthModal({ isOpen, onClose }) {
     mfaRequired,
     mfaChallenge,
     signUpWithEmail,
+    completeProfileOnboarding,
+    resendVerificationEmail,
     sendPasswordResetEmail,
     updatePassword,
     passwordRecoveryRequired,
@@ -59,11 +70,18 @@ export default function AuthModal({ isOpen, onClose }) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [name, setName] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [mobile, setMobile] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [signupErrors, setSignupErrors] = useState({});
+
+  // Verification required state when login is rejected due to pending email verification
+  const [unverifiedState, setUnverifiedState] = useState(null); // { email: 'masked' }
+  const [resendStatus, setResendStatus] = useState('');
+
+  // Profile completion required state (e.g. after first Google login)
+  const [profileCompletionState, setProfileCompletionState] = useState(null);
 
   // Password strength calculation (0 to 4)
   const passwordStrength = React.useMemo(() => {
@@ -75,6 +93,7 @@ export default function AuthModal({ isOpen, onClose }) {
     if (/[0-9]/.test(password)) score += 1;
     return score;
   }, [password]);
+
   const instantDemoEnabled = import.meta.env.VITE_INSTANT_DEMO_ACCESS_ENABLED === 'true'
     || (import.meta.env.DEV && import.meta.env.VITE_INSTANT_DEMO_ACCESS_ENABLED !== 'false');
   const demoCustomerEnabled = instantDemoEnabled
@@ -97,11 +116,14 @@ export default function AuthModal({ isOpen, onClose }) {
     setShowConfirmPassword(false);
     setFirstName('');
     setLastName('');
-    setName('');
+    setDateOfBirth('');
     setMobile('');
     setLoading(false);
     setErrorMsg('');
     setSignupErrors({});
+    setUnverifiedState(null);
+    setResendStatus('');
+    setProfileCompletionState(null);
   };
 
   useEffect(() => {
@@ -110,7 +132,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  const getSignupValues = () => ({ name, mobile, email, password, confirmPassword });
+  const getSignupValues = () => ({ firstName, lastName, dateOfBirth, mobile, email, password, confirmPassword });
   const validateSignup = () => {
     const values = getSignupValues();
     const errors = Object.fromEntries(
@@ -119,6 +141,7 @@ export default function AuthModal({ isOpen, onClose }) {
     setSignupErrors(errors);
     return Object.values(errors).every((error) => !error);
   };
+
   const handleSignupBlur = (field) => {
     const values = getSignupValues();
     setSignupErrors((current) => {
@@ -161,9 +184,17 @@ export default function AuthModal({ isOpen, onClose }) {
           setLoading(false);
           return;
         }
-        const effectiveName = `${firstName} ${lastName}`.trim() || name;
-        const res = await signUpWithEmail(email, password, effectiveName, mobile, firstName, lastName);
-        if (res?.requiresEmailVerification || res?.data?.verification?.required) {
+
+        const res = await signUpWithEmail({
+          email,
+          password,
+          firstName,
+          lastName,
+          dateOfBirth,
+          mobileNumber: mobile
+        });
+
+        if (res?.requiresEmailVerification || res?.data?.verification?.required || res?.verification?.required) {
           setSignupEmailVerificationSent(true);
         } else {
           addToast('Account created successfully!', 'success');
@@ -174,14 +205,33 @@ export default function AuthModal({ isOpen, onClose }) {
         const result = await loginWithEmail(email, password);
         if (result.mfaRequired) {
           addToast('Two-factor authentication code required.', 'info');
-          // Automatically transitions to Step 2 (TOTP verification UI)
+        } else if (result.requiresProfileCompletion || result.code === 'PROFILE_INCOMPLETE') {
+          setProfileCompletionState({
+            email: result.user?.email || email,
+            firstName: result.user?.firstName || '',
+            lastName: result.user?.lastName || ''
+          });
         } else {
           addToast('Signed in successfully!', 'success');
           handleClose(true);
         }
       }
     } catch (err) {
-      setErrorMsg(isSignUp ? friendlyAuthError(err, 'signup') : friendlyAuthError(err, 'login'));
+      const errData = err.response?.data;
+      if (errData?.code === 'EMAIL_VERIFICATION_REQUIRED' || errData?.error?.code === 'EMAIL_VERIFICATION_REQUIRED' || err.code === 'EMAIL_VERIFICATION_REQUIRED') {
+        setUnverifiedState({
+          email: errData?.email || errData?.error?.email || email,
+          rawEmail: email
+        });
+      } else if (errData?.code === 'ACCOUNT_ACTIVATION_REQUIRED' || errData?.error?.code === 'ACCOUNT_ACTIVATION_REQUIRED') {
+        setUnverifiedState({
+          email: errData?.email || errData?.error?.email || email,
+          rawEmail: email,
+          isActivation: true
+        });
+      } else {
+        setErrorMsg(isSignUp ? friendlyAuthError(err, 'signup') : friendlyAuthError(err, 'login'));
+      }
     } finally {
       setLoading(false);
     }
@@ -234,6 +284,61 @@ export default function AuthModal({ isOpen, onClose }) {
     }
   };
 
+  const handleResendFromUnverified = async () => {
+    const targetEmail = unverifiedState?.rawEmail || email;
+    if (!targetEmail) return;
+    setLoading(true);
+    setResendStatus('');
+    try {
+      await resendVerificationEmail(targetEmail);
+      setResendStatus('A new activation link has been sent to your email.');
+      addToast('Activation email resent!', 'success');
+    } catch (e) {
+      setResendStatus('Failed to send verification email. Please try again shortly.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProfileCompletionSubmit = async (e) => {
+    e.preventDefault();
+    if (!firstName.trim()) {
+      setErrorMsg('First name is required.');
+      return;
+    }
+    if (!dateOfBirth) {
+      setErrorMsg('Date of birth is required.');
+      return;
+    }
+    const d = new Date(dateOfBirth);
+    if (Number.isNaN(d.getTime()) || d > new Date()) {
+      setErrorMsg('Date of birth must be a valid past date.');
+      return;
+    }
+    if (!mobile || mobile.replace(/\D/g, '').length < 10) {
+      setErrorMsg('Mobile number must be at least 10 digits.');
+      return;
+    }
+
+    setErrorMsg('');
+    setLoading(true);
+
+    try {
+      await completeProfileOnboarding({
+        firstName,
+        lastName,
+        dateOfBirth,
+        mobileNumber: mobile
+      });
+      addToast('Profile completed successfully! Welcome to Ashvin Pharmacy.', 'success');
+      handleClose(true);
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || err.message || 'Failed to complete profile.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDemoCustomer = async () => {
     setErrorMsg('');
     setLoading(true);
@@ -262,13 +367,15 @@ export default function AuthModal({ isOpen, onClose }) {
     }
   };
 
+  const todayIso = new Date().toISOString().split('T')[0];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
       <div className="my-auto max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto overflow-x-hidden bg-white border border-slate-200 rounded-3xl shadow-2xl p-5 sm:p-8 relative">
         
         {/* Close Button */}
         <button
-          onClick={handleClose}
+          onClick={() => handleClose(false)}
           className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition cursor-pointer"
         >
           ✕
@@ -277,14 +384,24 @@ export default function AuthModal({ isOpen, onClose }) {
         {/* Shop Logo & Title */}
         <div className="text-center mb-6">
           <div className="w-14 h-14 mx-auto rounded-2xl bg-blue-600 text-white flex items-center justify-center text-3xl shadow-md shadow-blue-500/25 mb-3">
-            {mfaRequired ? '🛡️' : '⚕️'}
+            {mfaRequired ? '🛡️' : unverifiedState ? '✉️' : profileCompletionState ? '📋' : '⚕️'}
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            {mfaRequired ? 'Two-Factor Authentication' : 'Welcome to Ashvin Pharmacy'}
+            {mfaRequired
+              ? 'Two-Factor Authentication'
+              : unverifiedState
+              ? 'Email Verification Required'
+              : profileCompletionState
+              ? 'Complete Your Profile'
+              : 'Welcome to Ashvin Pharmacy'}
           </h2>
           <p className="text-xs text-slate-500 mt-1 font-medium">
             {mfaRequired
               ? `Enter the 6-digit TOTP code for ${mfaChallenge?.email || 'your account'}`
+              : unverifiedState
+              ? 'Your email address has not been verified yet.'
+              : profileCompletionState
+              ? 'Please provide your healthcare details to activate your account.'
               : passwordRecoveryRequired
               ? 'Choose a new password for your account'
               : isForgotPassword
@@ -302,8 +419,140 @@ export default function AuthModal({ isOpen, onClose }) {
           </div>
         )}
 
-        {/* STEP 2: TOTP MULTI-FACTOR AUTHENTICATION CHALLENGE SCREEN */}
-        {mfaRequired ? (
+        {/* VIEW 1: UNVERIFIED EMAIL ACTIVATION SCREEN */}
+        {unverifiedState ? (
+          <div className="space-y-4 animate-fade-in text-center">
+            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs leading-relaxed">
+              <p className="font-bold mb-1">Your email address has not been verified.</p>
+              <p>
+                An activation link was sent to <span className="font-mono font-bold text-slate-900">{unverifiedState.email}</span>.
+                Please check your inbox (and spam folder) to activate your account before logging in.
+              </p>
+            </div>
+
+            {resendStatus && (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium">
+                {resendStatus}
+              </div>
+            )}
+
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={handleResendFromUnverified}
+                disabled={loading}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold py-2.5 rounded-xl text-xs shadow-md shadow-blue-600/20 cursor-pointer transition flex items-center justify-center gap-2"
+              >
+                {loading ? 'Sending link...' : 'Resend verification email'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setUnverifiedState(null);
+                  setEmail('');
+                  setPassword('');
+                  setErrorMsg('');
+                }}
+                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs transition cursor-pointer"
+              >
+                Change email / Try another account
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleClose(false)}
+                className="w-full text-slate-400 hover:text-slate-600 font-medium py-1.5 text-xs transition cursor-pointer"
+              >
+                Dismiss & Close
+              </button>
+            </div>
+          </div>
+        ) : profileCompletionState ? (
+          /* VIEW 2: PROFILE ONBOARDING / COMPLETION SCREEN */
+          <form onSubmit={handleProfileCompletionSubmit} className="space-y-3.5 animate-fade-in">
+            <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs">
+              <span className="font-bold">Required Details:</span> To comply with prescription and pharmacy dispensing regulations, please complete your date of birth and mobile number.
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Verified Email
+              </label>
+              <input
+                type="email"
+                value={profileCompletionState.email}
+                disabled
+                className="w-full px-3.5 py-2.5 text-xs bg-slate-100 border border-slate-200 rounded-xl text-slate-500 font-medium cursor-not-allowed"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  First Name *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ashvin"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  Last Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="Singh"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Date of Birth * (For Prescription & Dosage Safety)
+              </label>
+              <input
+                type="date"
+                max={todayIso}
+                value={dateOfBirth}
+                onChange={(e) => setDateOfBirth(e.target.value)}
+                className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Mobile Number * (For Delivery & OTP Alerts)
+              </label>
+              <input
+                type="tel"
+                placeholder="e.g. 9876543210"
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value)}
+                className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold py-2.5 rounded-xl text-xs shadow-md shadow-blue-600/20 cursor-pointer transition"
+            >
+              {loading ? 'Activating Profile...' : 'Save & Activate Account →'}
+            </button>
+          </form>
+        ) : mfaRequired ? (
+          /* VIEW 3: TOTP MULTI-FACTOR AUTHENTICATION SCREEN */
           <form onSubmit={handleTotpVerify} className="space-y-4 animate-fade-in">
             <div className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-3.5 text-center space-y-1">
               <span className="text-[11px] font-black uppercase text-indigo-700 tracking-wider">
@@ -328,7 +577,6 @@ export default function AuthModal({ isOpen, onClose }) {
                   const val = e.target.value.replace(/\D/g, '').slice(0, 6);
                   setTotpCode(val);
                   if (val.length === 6) {
-                    // Auto-submit on 6th digit
                     setTimeout(() => {
                       if (!loading) handleTotpVerify();
                     }, 50);
@@ -365,7 +613,7 @@ export default function AuthModal({ isOpen, onClose }) {
             </button>
           </form>
         ) : (
-          /* STEP 1: STANDARD AUTHENTICATION & REGISTRATION SCREEN */
+          /* VIEW 4: STANDARD AUTHENTICATION & REGISTRATION SCREEN */
           <>
             {signupEmailVerificationSent ? (
               <div className="text-center py-4 space-y-4">
@@ -374,7 +622,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 </div>
                 <h3 className="text-lg font-black text-slate-800">Check Your Email</h3>
                 <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
-                  We've sent a verification link to <span className="font-bold text-slate-900">{email}</span>. Please click the link in the email to activate your account before signing in.
+                  We've sent an activation link to <span className="font-bold text-slate-900">{email}</span>. Please click the link in the email to activate your account before logging in.
                 </p>
                 <div className="pt-2">
                   <button
@@ -396,7 +644,7 @@ export default function AuthModal({ isOpen, onClose }) {
               </div>
             ) : null}
 
-            {!resetEmailSent && (
+            {!resetEmailSent && !signupEmailVerificationSent && (
               <form onSubmit={isForgotPassword ? handleSendPasswordReset : handleSubmit} className="space-y-3.5">
                 {(import.meta.env.DEV || import.meta.env.VITE_DEMO_ADMIN_ENABLED === 'true') && import.meta.env.VITE_DEMO_ADMIN_ENABLED !== 'false' && !isSignUp && !isForgotPassword && !passwordRecoveryRequired && (
                   <div className="rounded-xl border border-purple-200 bg-purple-50 p-3 text-[11px] text-purple-800">
@@ -405,58 +653,77 @@ export default function AuthModal({ isOpen, onClose }) {
                 )}
 
                 {isSignUp && !passwordRecoveryRequired && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                        First Name *
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Ashvin"
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
-                        required
-                      />
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          First Name *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ashvin"
+                          value={firstName}
+                          onChange={(e) => setFirstName(e.target.value)}
+                          onBlur={() => handleSignupBlur('firstName')}
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                          required
+                        />
+                        {signupErrors.firstName && <p className="mt-1 text-[11px] text-rose-600">{signupErrors.firstName}</p>}
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          Last Name
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Singh"
+                          value={lastName}
+                          onChange={(e) => setLastName(e.target.value)}
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                        Last Name *
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Singh"
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
-                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
-                        required
-                      />
-                    </div>
-                  </div>
-                )}
 
-                {isSignUp && !passwordRecoveryRequired && (
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Mobile Number (Encrypted with AES-256-GCM)
-                    </label>
-                    <input
-                      type="tel"
-                      placeholder="e.g. +91 95899 16475"
-                      value={mobile}
-                      onChange={(e) => setMobile(e.target.value)}
-                      onBlur={() => handleSignupBlur('mobile')}
-                      aria-invalid={Boolean(signupErrors.mobile)}
-                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
-                      required
-                    />
-                    {signupErrors.mobile && <p className="mt-1 text-[11px] text-rose-600">{signupErrors.mobile}</p>}
-                  </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          Date of Birth *
+                        </label>
+                        <input
+                          type="date"
+                          max={todayIso}
+                          value={dateOfBirth}
+                          onChange={(e) => setDateOfBirth(e.target.value)}
+                          onBlur={() => handleSignupBlur('dateOfBirth')}
+                          aria-invalid={Boolean(signupErrors.dateOfBirth)}
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                          required
+                        />
+                        {signupErrors.dateOfBirth && <p className="mt-1 text-[11px] text-rose-600">{signupErrors.dateOfBirth}</p>}
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          Mobile Number *
+                        </label>
+                        <input
+                          type="tel"
+                          placeholder="9876543210"
+                          value={mobile}
+                          onChange={(e) => setMobile(e.target.value)}
+                          onBlur={() => handleSignupBlur('mobile')}
+                          aria-invalid={Boolean(signupErrors.mobile)}
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                          required
+                        />
+                        {signupErrors.mobile && <p className="mt-1 text-[11px] text-rose-600">{signupErrors.mobile}</p>}
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    Email Address
+                    Email Address *
                   </label>
                   <input
                     type="email"
@@ -476,7 +743,7 @@ export default function AuthModal({ isOpen, onClose }) {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                        {passwordRecoveryRequired ? 'New Password' : 'Password'}
+                        {passwordRecoveryRequired ? 'New Password' : 'Password *'}
                       </label>
                       {!isSignUp && !passwordRecoveryRequired && (
                         <button
@@ -485,7 +752,7 @@ export default function AuthModal({ isOpen, onClose }) {
                             setIsForgotPassword(true);
                             setErrorMsg('');
                           }}
-                          className="text-[11px] font-bold text-blue-600 hover:text-blue-800"
+                          className="text-[11px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
                         >
                           Forgot password?
                         </button>
@@ -507,7 +774,7 @@ export default function AuthModal({ isOpen, onClose }) {
                         type="button"
                         onClick={() => setShowPassword((visible) => !visible)}
                         aria-label={showPassword ? 'Hide password' : 'Show password'}
-                        className="absolute inset-y-0 right-3 text-[11px] font-bold text-blue-600 hover:text-blue-800"
+                        className="absolute inset-y-0 right-3 text-[11px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
                       >
                         {showPassword ? 'Hide' : 'Show'}
                       </button>
@@ -533,12 +800,12 @@ export default function AuthModal({ isOpen, onClose }) {
                 {(isSignUp || passwordRecoveryRequired) && (
                   <div>
                     <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      {passwordRecoveryRequired ? 'Confirm New Password' : 'Retype Password'}
+                      {passwordRecoveryRequired ? 'Confirm New Password' : 'Confirm Password *'}
                     </label>
                     <div className="relative">
                       <input
                         type={showConfirmPassword ? 'text' : 'password'}
-                        placeholder={passwordRecoveryRequired ? 'Confirm your new password' : 'Retype your password'}
+                        placeholder={passwordRecoveryRequired ? 'Confirm your new password' : 'Confirm your password'}
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         onBlur={() => {
@@ -553,7 +820,7 @@ export default function AuthModal({ isOpen, onClose }) {
                         type="button"
                         onClick={() => setShowConfirmPassword((visible) => !visible)}
                         aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'}
-                        className="absolute inset-y-0 right-3 text-[11px] font-bold text-blue-600 hover:text-blue-800"
+                        className="absolute inset-y-0 right-3 text-[11px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
                       >
                         {showConfirmPassword ? 'Hide' : 'Show'}
                       </button>
@@ -583,7 +850,7 @@ export default function AuthModal({ isOpen, onClose }) {
             )}
 
             {/* Divider */}
-            {!isForgotPassword && !passwordRecoveryRequired && (
+            {!isForgotPassword && !passwordRecoveryRequired && !signupEmailVerificationSent && (
               <div className="relative my-4 flex items-center">
                 <div className="flex-grow border-t border-slate-200"></div>
                 <span className="flex-shrink mx-3 text-slate-400 text-[10px] font-bold uppercase tracking-wider">OR</span>
@@ -592,7 +859,7 @@ export default function AuthModal({ isOpen, onClose }) {
             )}
 
             {/* Google OAuth Button */}
-            {!isForgotPassword && !passwordRecoveryRequired && (
+            {!isForgotPassword && !passwordRecoveryRequired && !signupEmailVerificationSent && (
               isSupabaseConfigured ? (
                 <button
                   onClick={handleGoogleLogin}
@@ -611,7 +878,7 @@ export default function AuthModal({ isOpen, onClose }) {
             )}
 
             {/* Quick Demo Access */}
-            {(demoCustomerEnabled || demoAdminEnabled) && !isForgotPassword && !passwordRecoveryRequired && (
+            {(demoCustomerEnabled || demoAdminEnabled) && !isForgotPassword && !passwordRecoveryRequired && !signupEmailVerificationSent && (
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 text-center">Instant Demo Access</p>
                 <div className={`grid grid-cols-1 ${demoCustomerEnabled && demoAdminEnabled ? 'sm:grid-cols-2' : ''} gap-2`}>
@@ -638,7 +905,7 @@ export default function AuthModal({ isOpen, onClose }) {
             )}
 
             {/* Toggle Sign Up / Login */}
-            {!passwordRecoveryRequired && (
+            {!passwordRecoveryRequired && !signupEmailVerificationSent && (
               <div className="mt-4 text-center">
                 <p className="text-xs text-slate-500 font-medium">
                   {isForgotPassword

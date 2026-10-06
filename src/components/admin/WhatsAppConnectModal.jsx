@@ -20,7 +20,10 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
     let pollTimeout;
 
     const pollStatus = async () => {
-      await loadWhatsAppStatus();
+      const status = await loadWhatsAppStatus();
+      if (!cancelled && status && !status.isConnected && !status.qrCode) {
+        generateWhatsAppQR().catch(() => {});
+      }
       if (!cancelled) pollTimeout = setTimeout(pollStatus, 3000);
     };
 

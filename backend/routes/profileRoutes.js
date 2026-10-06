@@ -99,7 +99,7 @@ router.get('/', async (req, res) => {
 router.put('/', async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
-        const { firstName, lastName, phone } = req.body || {};
+        const { firstName, lastName, phone, mobileNumber, dateOfBirth } = req.body || {};
         if (firstName !== undefined && (typeof firstName !== 'string' || firstName.trim().length > 100)) {
             return res.status(400).json({ success: false, error: 'firstName must be a string up to 100 characters.' });
         }
@@ -117,9 +117,10 @@ router.put('/', async (req, res) => {
         const nextLastName = lastName === undefined
             ? existing?.lastName || existing?.name?.trim().split(/\s+/).slice(1).join(' ') || ''
             : lastName.trim();
-        const nextPhone = phone === undefined ? existing?.phone || existing?.mobile || '' : phone.trim();
+        const nextPhone = phone === undefined ? (mobileNumber || existing?.phone || existing?.mobile || '') : phone.trim();
         const name = [nextFirstName, nextLastName].filter(Boolean).join(' ');
         const email = String(req.user.email || existing?.email || '').toLowerCase().trim();
+        const nextDob = dateOfBirth || existing?.dateOfBirth || null;
 
         const profile = await UserProfile.findOneAndUpdate(
             profileIdentity(req.user.supabaseId),
@@ -133,6 +134,8 @@ router.put('/', async (req, res) => {
                     name,
                     phone: nextPhone,
                     mobile: nextPhone,
+                    mobileNumber: nextPhone,
+                    dateOfBirth: nextDob,
                     email
                 }
             },
@@ -141,6 +144,54 @@ router.put('/', async (req, res) => {
         return res.status(200).json({ success: true, profile });
     } catch (error) {
         return respondWithError(res, error, 'Could not update profile.');
+    }
+});
+
+router.put('/onboarding', async (req, res) => {
+    const { firstName, lastName, dateOfBirth, mobileNumber, phone } = req.body || {};
+    const effectivePhone = (mobileNumber || phone || '').trim();
+
+    if (!firstName || !firstName.trim()) {
+        return res.status(400).json({ success: false, error: 'First name is required.' });
+    }
+    if (!dateOfBirth) {
+        return res.status(400).json({ success: false, error: 'Date of birth is required.' });
+    }
+    const d = new Date(dateOfBirth);
+    if (Number.isNaN(d.getTime()) || d > new Date()) {
+        return res.status(400).json({ success: false, error: 'Date of birth must be a valid past date.' });
+    }
+    if (!effectivePhone || effectivePhone.replace(/\D/g, '').length < 10) {
+        return res.status(400).json({ success: false, error: 'Valid mobile number with at least 10 digits is required.' });
+    }
+
+    if (!requireDatabase(res)) return;
+    try {
+        const name = [firstName.trim(), lastName?.trim()].filter(Boolean).join(' ');
+        const profile = await UserProfile.findOneAndUpdate(
+            profileIdentity(req.user.supabaseId),
+            {
+                $set: {
+                    supabaseId: req.user.supabaseId,
+                    supabase_user_id: req.user.supabaseId,
+                    userId: req.user.supabaseId,
+                    firstName: firstName.trim(),
+                    lastName: (lastName || '').trim(),
+                    name,
+                    phone: effectivePhone,
+                    mobile: effectivePhone,
+                    mobileNumber: effectivePhone,
+                    dateOfBirth,
+                    profileCompleted: true,
+                    accountStatus: 'ACTIVE',
+                    status: 'ACTIVE'
+                }
+            },
+            { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+        ).lean();
+        return res.status(200).json({ success: true, profile, message: 'Profile completed successfully.' });
+    } catch (error) {
+        return respondWithError(res, error, 'Could not complete onboarding.');
     }
 });
 

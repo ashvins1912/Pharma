@@ -9,7 +9,7 @@ export default function VerifyEmailView({ token, onClose, onOpenSignIn }) {
   useEffect(() => {
     if (!token) {
       setLoading(false);
-      setErrorMessage('No verification token provided in the link.');
+      setErrorMessage('No activation token was provided in the link.');
       return;
     }
 
@@ -17,12 +17,17 @@ export default function VerifyEmailView({ token, onClose, onOpenSignIn }) {
       try {
         setLoading(true);
         setErrorMessage('');
-        await apiClient.post('/api/v1/auth/verify-email', { token });
+        try {
+          await apiClient.post('/api/v1/auth/activate', { token });
+        } catch (postErr) {
+          // Fallback to /api/v1/auth/verify-email
+          await apiClient.post('/api/v1/auth/verify-email', { token });
+        }
         setVerified(true);
       } catch (err) {
         const msg = err.response?.data?.error?.message
           || err.response?.data?.message
-          || 'The verification link is invalid or has expired.';
+          || 'The activation link is invalid, already used, or has expired.';
         setErrorMessage(msg);
       } finally {
         setLoading(false);
@@ -51,17 +56,17 @@ export default function VerifyEmailView({ token, onClose, onOpenSignIn }) {
 
         <h2 className="text-xl font-black text-slate-800 mb-2">
           {loading
-            ? 'Verifying Email Address...'
+            ? 'Activating Your Account...'
             : verified
-            ? 'Email Verified Successfully!'
-            : 'Verification Failed'}
+            ? 'Account Activated Successfully!'
+            : 'Activation Failed'}
         </h2>
 
         <p className="text-sm text-slate-600 mb-6">
           {loading
-            ? 'Please wait while we confirm your email verification token with the secure medical gateway.'
+            ? 'Please wait while we confirm your activation token with the secure pharmacy identity gateway.'
             : verified
-            ? 'Your Ashvin Pharmacy account is now active and verified. You can now log in and order medicines or manage your prescriptions.'
+            ? 'Your Ashvin Pharmacy account is now active and verified. You can now log in, submit medicine requests, and place orders.'
             : errorMessage}
         </p>
 

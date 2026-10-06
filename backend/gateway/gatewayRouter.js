@@ -16,6 +16,7 @@ import medicineRequestsRouter from './routes/medicineRequests.js';
 import integrationsRouter from './routes/integrations.js';
 import notificationsRouter from './routes/notifications.js';
 import authRouter from './routes/auth.js';
+import profileRouter from './routes/profile.js';
 import adminTenantsRouter from './routes/adminTenants.js';
 import vendorRouter from './routes/vendorRoutes.js';
 import prescriptionsRouter from './routes/prescriptions.js';
@@ -42,6 +43,7 @@ gateway.get('/health', (req, res) => {
 
 // 3. Domain Subrouters
 gateway.use('/auth', authRouter);
+gateway.use('/profile', profileRouter);
 gateway.use('/admin/tenants', adminTenantsRouter);
 gateway.use('/vendors', vendorRouter);
 gateway.use('/vendor', vendorRouter);

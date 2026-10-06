@@ -7,36 +7,51 @@ import PaymentSnooze from '../../models/PaymentSnooze.js';
 import { createPaymentSnoozeToken } from './SignedPaymentActionService.js';
 import { sendWhatsAppDirectMessage } from '../../config/whatsapp.js';
 import { getIsConnected } from '../../config/db.js';
+import dataStore from '../../dataStore.js';
 
 const MAX_ORDER_SCAN = 5000;
 const CLOSED_STATUSES = new Set(['cancelled', 'canceled', 'rejected', 'refunded', 'returned', 'disputed']);
 const toMinorUnits = value => Math.round(Number(value || 0) * 100);
 const fail = (statusCode, code, message) => Object.assign(new Error(message), { statusCode, code });
 
-export const isEligibleForPaymentReminder = order => order.paymentStatus === 'PENDING_DIGITAL'
+export const isEligibleForPaymentReminder = order => (
+    order.paymentStatus === 'PENDING_DIGITAL'
+    || (order.paymentMethod === 'ONLINE' && !order.paymentStatus)
+    || order.paymentStatus === 'UNPAID'
+)
     && !CLOSED_STATUSES.has(String(order.orderStatus || order.status || '').toLowerCase())
     && toMinorUnits(order.finalTotal ?? order.totalAmount) > toMinorUnits(order.amountPaid);
 
 const summarizeOrder = order => ({
-    orderId: String(order._id),
+    orderId: String(order._id || order.id),
     invoiceReference: order.orderNumber || null,
     amountOutstanding: (toMinorUnits(order.finalTotal ?? order.totalAmount) - toMinorUnits(order.amountPaid)) / 100,
-    paymentStatus: order.paymentStatus,
+    paymentStatus: order.paymentStatus || 'PENDING_DIGITAL',
     orderStatus: order.orderStatus || order.status,
     createdAt: order.createdAt
 });
 
 export const getOutstandingPayments = async ({ customerId = null, limit = 100 } = {}) => {
-    if (!getIsConnected()) throw fail(503, 'SERVICE_UNAVAILABLE', 'Payment data is temporarily unavailable.');
     const boundedLimit = Math.min(500, Math.max(1, Number.parseInt(limit, 10) || 100));
-    const filter = { paymentStatus: 'PENDING_DIGITAL' };
-    if (customerId) filter.customerId = String(customerId);
-    const orders = await Order.find(filter).sort({ createdAt: 1 }).limit(MAX_ORDER_SCAN + 1).lean();
+    let orders = [];
+
+    if (getIsConnected()) {
+        const filter = { paymentStatus: 'PENDING_DIGITAL' };
+        if (customerId) filter.customerId = String(customerId);
+        orders = await Order.find(filter).sort({ createdAt: 1 }).limit(MAX_ORDER_SCAN + 1).lean();
+    } else {
+        const allOrders = await dataStore.getAllOrders();
+        orders = allOrders.filter(order => {
+            if (customerId && String(order.customerId || order.userId || '') !== String(customerId)) return false;
+            return isEligibleForPaymentReminder(order);
+        });
+    }
+
     const truncated = orders.length > MAX_ORDER_SCAN;
     const groups = new Map();
     for (const order of orders.slice(0, MAX_ORDER_SCAN)) {
         if (!isEligibleForPaymentReminder(order)) continue;
-        const id = String(order.customerId || order.userId || '');
+        const id = String(order.customerId || order.userId || order.customerMobile || 'guest_customer');
         if (!id) continue;
         if (!groups.has(id)) groups.set(id, { customerId: id, amountOutstandingMinor: 0, invoices: [] });
         const group = groups.get(id);
@@ -46,15 +61,15 @@ export const getOutstandingPayments = async ({ customerId = null, limit = 100 } 
     const customerIds = [...groups.keys()];
     const now = new Date();
     const [snoozes, recentReminders] = await Promise.all([
-        customerIds.length ? PaymentSnooze.find({ customerId: { $in: customerIds }, snoozedUntil: { $gt: now } }).lean() : [],
-        customerIds.length ? PaymentReminder.aggregate([
+        getIsConnected() && customerIds.length ? PaymentSnooze.find({ customerId: { $in: customerIds }, snoozedUntil: { $gt: now } }).lean() : [],
+        getIsConnected() && customerIds.length ? PaymentReminder.aggregate([
             { $match: { customerId: { $in: customerIds } } },
             { $sort: { createdAt: -1 } },
             { $group: { _id: '$customerId', reminder: { $first: '$$ROOT' } } }
         ]) : []
     ]);
-    const snoozeByCustomer = new Map(snoozes.map(record => [record.customerId, record]));
-    const reminderByCustomer = new Map(recentReminders.map(record => [record._id, record.reminder]));
+    const snoozeByCustomer = new Map((snoozes || []).map(record => [record.customerId, record]));
+    const reminderByCustomer = new Map((recentReminders || []).map(record => [record._id, record.reminder]));
     const customers = [...groups.values()].map(group => {
         const snooze = snoozeByCustomer.get(group.customerId);
         const lastReminder = reminderByCustomer.get(group.customerId);

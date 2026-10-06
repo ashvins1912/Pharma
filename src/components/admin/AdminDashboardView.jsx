@@ -9,6 +9,7 @@ import AdminOrderFinancials from './AdminOrderFinancials';
 import AdminMedicineRequestsTab from './requests/AdminMedicineRequestsTab';
 import AdminIntegrationsView from './AdminIntegrationsView';
 import PlatformTenantsView from './PlatformTenantsView';
+import OutstandingPaymentsView from './OutstandingPaymentsView';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 
@@ -424,6 +425,18 @@ export default function AdminDashboardView() {
           <span>Branch POS & C-Square</span>
         </button>
 
+        <button
+          onClick={() => setAdminTab('payments')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+            adminTab === 'payments'
+              ? 'bg-amber-600 text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <span>💳</span>
+          <span>Outstanding Payments</span>
+        </button>
+
         {isSuperAdmin && (
           <button
             onClick={() => setAdminTab('tenants')}
@@ -440,6 +453,9 @@ export default function AdminDashboardView() {
       </div>
 
       {/* Tab Content Display */}
+      {adminTab === 'payments' && (
+        <OutstandingPaymentsView />
+      )}
       {adminTab === 'tenants' && isSuperAdmin && (
         <PlatformTenantsView />
       )}

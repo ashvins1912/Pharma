@@ -5,6 +5,7 @@
 import { domainEvents } from '../../shared/events/DomainEvents.js';
 import { logger } from '../../shared/observability/logger.js';
 import { emailService } from './EmailService.js';
+import { sendCustomWhatsAppAlert, sendWhatsAppMedicineRequestAlert } from '../../config/whatsapp.js';
 
 export class NotificationService {
     constructor() {
@@ -65,22 +66,28 @@ export class NotificationService {
             this.send({
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
-                recipientUserId: evt.actor.userId,
+                recipientUserId: evt.actor?.userId,
                 title: 'Order Confirmed',
-                body: `Your order #${evt.payload.orderNumber} has been received and queued for pharmacy verification.`,
+                body: `Your order #${evt.payload?.orderNumber} has been received and queued for pharmacy verification.`,
                 channels: ['IN_APP', 'WHATSAPP']
             });
+            if (evt.payload?.order) {
+                sendCustomWhatsAppAlert(evt.payload.order, 'Placed').catch(err => logger.warn('[WhatsApp] OrderCreated alert failed:', err?.message));
+            }
         });
 
         domainEvents.on('ORDER_ACCEPTED', (evt) => {
             this.send({
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
-                recipientUserId: evt.actor.userId,
+                recipientUserId: evt.actor?.userId,
                 title: 'Order Processing',
                 body: `Pharmacist has verified your medicines and started packing.`,
                 channels: ['IN_APP', 'WHATSAPP']
             });
+            if (evt.payload?.order) {
+                sendCustomWhatsAppAlert(evt.payload.order, 'Ready to Dispatch').catch(err => logger.warn('[WhatsApp] OrderAccepted alert failed:', err?.message));
+            }
         });
 
         domainEvents.on('RIDER_ASSIGNED', (evt) => {
@@ -88,7 +95,7 @@ export class NotificationService {
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
                 title: 'Delivery Partner Assigned',
-                body: `Rider ${evt.payload.riderName} has been assigned to deliver your order.`,
+                body: `Rider ${evt.payload?.riderName} has been assigned to deliver your order.`,
                 channels: ['IN_APP', 'WHATSAPP']
             });
             this._broadcastDeliveryEvent({
@@ -98,33 +105,39 @@ export class NotificationService {
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
                 orderId: evt.aggregateId,
-                riderId: evt.payload.riderId,
-                riderName: evt.payload.riderName,
-                jobId: evt.payload.jobId,
+                riderId: evt.payload?.riderId,
+                riderName: evt.payload?.riderName,
+                jobId: evt.payload?.jobId,
                 timestamp: new Date().toISOString()
             });
+            if (evt.payload?.order) {
+                sendCustomWhatsAppAlert(evt.payload.order, 'Assigned', evt.payload?.riderMobile).catch(err => logger.warn('[WhatsApp] RiderAssigned alert failed:', err?.message));
+            }
         });
 
         domainEvents.on('DELIVERY_STATUS_CHANGED', (evt) => {
             this.send({
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
-                title: `Delivery Update: ${evt.payload.status}`,
-                body: `Order #${evt.payload.orderNumber || evt.aggregateId} status changed to ${evt.payload.status}.`,
+                title: `Delivery Update: ${evt.payload?.status}`,
+                body: `Order #${evt.payload?.orderNumber || evt.aggregateId} status changed to ${evt.payload?.status}.`,
                 channels: ['IN_APP', 'WHATSAPP']
             });
             this._broadcastDeliveryEvent({
                 type: 'DELIVERY_STATUS_CHANGED',
                 eventType: 'DELIVERY_STATUS_CHANGED',
-                status: evt.payload.status,
+                status: evt.payload?.status,
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
-                orderId: evt.aggregateId || evt.payload.orderNumber,
-                riderName: evt.payload.riderName,
-                riderMobile: evt.payload.riderMobile,
-                jobId: evt.payload.jobId,
+                orderId: evt.aggregateId || evt.payload?.orderNumber,
+                riderName: evt.payload?.riderName,
+                riderMobile: evt.payload?.riderMobile,
+                jobId: evt.payload?.jobId,
                 timestamp: new Date().toISOString()
             });
+            if (evt.payload?.order) {
+                sendCustomWhatsAppAlert(evt.payload.order, evt.payload?.status, evt.payload?.riderMobile).catch(err => logger.warn('[WhatsApp] DeliveryStatus alert failed:', err?.message));
+            }
         });
 
         domainEvents.on('ORDER_DELIVERED', (evt) => {
@@ -132,7 +145,7 @@ export class NotificationService {
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
                 title: 'Order Delivered',
-                body: `Order #${evt.payload.orderNumber} was delivered successfully. Stay healthy!`,
+                body: `Order #${evt.payload?.orderNumber} was delivered successfully. Stay healthy!`,
                 channels: ['IN_APP', 'WHATSAPP']
             });
             this._broadcastDeliveryEvent({
@@ -141,12 +154,15 @@ export class NotificationService {
                 status: 'DELIVERED',
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
-                orderId: evt.aggregateId || evt.payload.orderNumber,
-                riderName: evt.payload.riderName,
-                riderMobile: evt.payload.riderMobile,
-                jobId: evt.payload.jobId,
+                orderId: evt.aggregateId || evt.payload?.orderNumber,
+                riderName: evt.payload?.riderName,
+                riderMobile: evt.payload?.riderMobile,
+                jobId: evt.payload?.jobId,
                 timestamp: new Date().toISOString()
             });
+            if (evt.payload?.order) {
+                sendCustomWhatsAppAlert(evt.payload.order, 'Delivered', evt.payload?.riderMobile).catch(err => logger.warn('[WhatsApp] OrderDelivered alert failed:', err?.message));
+            }
         });
 
         domainEvents.on('PROPOSAL_CREATED', (evt) => {
@@ -157,6 +173,9 @@ export class NotificationService {
                 body: `Pharmacy formulated a proposal for your medicine request. Please review and approve.`,
                 channels: ['IN_APP', 'WHATSAPP']
             });
+            if (evt.payload?.request) {
+                sendWhatsAppMedicineRequestAlert(evt.payload.request, 'MedicineProposalReady').catch(err => logger.warn('[WhatsApp] Proposal alert failed:', err?.message));
+            }
         });
     }
 

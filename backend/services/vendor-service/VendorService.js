@@ -4,7 +4,7 @@
  * and transactional Tenant + Tenant Admin User creation.
  */
 import crypto from 'node:crypto';
-import bcrypt from 'bcryptjs';
+import bcrypt from '../../security/hasher.js';
 import mongoose from 'mongoose';
 import Vendor from '../../models/Vendor.js';
 import Tenant from '../../models/Tenant.js';

@@ -73,9 +73,57 @@ const userProfileSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['PENDING_VERIFICATION', 'ACTIVE', 'SUSPENDED', 'DISABLED'],
         default: 'ACTIVE',
         index: true
+    },
+    accountStatus: {
+        type: String,
+        enum: [
+            'PENDING_EMAIL_VERIFICATION',
+            'PENDING_ACCOUNT_ACTIVATION',
+            'PROFILE_INCOMPLETE',
+            'ACTIVE',
+            'SUSPENDED',
+            'DISABLED',
+            'DELETED'
+        ],
+        default: 'ACTIVE',
+        index: true
+    },
+    dateOfBirth: {
+        type: String,
+        default: null
+    },
+    mobileNumber: {
+        type: String,
+        default: '',
+        trim: true
+    },
+    mobileVerified: {
+        type: Boolean,
+        default: false
+    },
+    mobileVerifiedAt: {
+        type: Date,
+        default: null
+    },
+    profileCompleted: {
+        type: Boolean,
+        default: true,
+        index: true
+    },
+    primaryAuthProvider: {
+        type: String,
+        enum: ['LOCAL', 'GOOGLE'],
+        default: 'LOCAL'
+    },
+    activatedAt: {
+        type: Date,
+        default: null
+    },
+    version: {
+        type: Number,
+        default: 1
     },
     // Application-level AES-256-GCM encrypted sensitive PII
     encryptedPii: {

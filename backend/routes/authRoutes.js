@@ -10,7 +10,7 @@
  */
 import crypto from 'node:crypto';
 import express from 'express';
-import bcrypt from 'bcryptjs';
+import bcrypt from '../security/hasher.js';
 import { SignJWT, jwtVerify } from 'jose';
 import { supabase, isSupabaseConfigured } from '../config/supabase.js';
 import {
@@ -42,6 +42,7 @@ import { emailService } from '../services/email-service/EmailService.js';
 import { tenantService } from '../services/tenant-service/TenantService.js';
 import { isPlatformSuperAdmin } from '../shared/contracts/index.js';
 import { logger } from '../shared/observability/logger.js';
+import { authService, maskEmail, isValidDOB, isValidMobile, calculateAge } from '../services/identity-service/AuthService.js';
 import {
     getDemoAdminIdentity,
     isDemoAdminEnabled,
@@ -451,6 +452,38 @@ router.post('/signup', authLimiter, validateSignup, async (req, res) => {
 });
 
 /**
+ * POST /api/auth/activate & /api/v1/auth/activate
+ * Verifies user email via single-use cryptographically secure token & activates account
+ */
+router.post('/activate', authLimiter, async (req, res) => {
+    const { token } = req.body;
+    if (!token || typeof token !== 'string') {
+        return res.status(400).json({
+            success: false,
+            code: 'INVALID_TOKEN',
+            message: 'Activation token is required.'
+        });
+    }
+
+    try {
+        const result = await authService.activateAccount(token);
+        res.json({
+            success: true,
+            status: 'ACTIVE',
+            emailVerified: true,
+            message: '🎉 Account activated successfully! You can now log in.',
+            user: result.user
+        });
+    } catch (err) {
+        res.status(err.status || 400).json({
+            success: false,
+            code: err.code || 'ACTIVATION_ERROR',
+            message: err.message || 'Failed to activate account.'
+        });
+    }
+});
+
+/**
  * POST /api/auth/verify-email & /api/v1/auth/verify-email
  * Verifies user email via single-use cryptographically secure token
  */
@@ -465,55 +498,19 @@ router.post('/verify-email', authLimiter, async (req, res) => {
     }
 
     try {
-        const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
-        const user = await findUserProfile({ verificationTokenHash: tokenHash });
-
-        if (!user) {
-            return res.status(400).json({
-                success: false,
-                code: 'INVALID_TOKEN',
-                message: 'Invalid or already used email verification token.'
-            });
-        }
-
-        if (user.verificationTokenExpiresAt && new Date(user.verificationTokenExpiresAt) < new Date()) {
-            return res.status(410).json({
-                success: false,
-                code: 'TOKEN_EXPIRED',
-                message: 'This verification link has expired. Please request a new verification email.'
-            });
-        }
-
-        // Activate user and invalidate single-use token
-        user.emailVerified = true;
-        user.status = 'ACTIVE';
-        user.verificationTokenHash = null;
-        user.verificationTokenExpiresAt = null;
-
-        await saveUserProfile(user.userId || user.supabase_user_id, user);
-
-        logger.info('EMAIL_VERIFICATION_COMPLETED', {
-            userId: user.userId || user.supabase_user_id,
-            email: user.email
-        });
-
+        const result = await authService.activateAccount(token);
         res.json({
             success: true,
+            status: 'ACTIVE',
+            emailVerified: true,
             message: '🎉 Email verified successfully! You can now log in to your account.',
-            user: {
-                id: user.userId || user.supabase_user_id,
-                email: user.email,
-                name: user.name,
-                emailVerified: true,
-                status: 'ACTIVE'
-            }
+            user: result.user
         });
     } catch (err) {
-        logger.error('Email verification error:', { error: err.message });
-        res.status(500).json({
+        res.status(err.status || 400).json({
             success: false,
-            code: 'VERIFICATION_ERROR',
-            message: 'Failed to verify email address.'
+            code: err.code || 'VERIFICATION_ERROR',
+            message: err.message || 'Failed to verify email address.'
         });
     }
 });
@@ -532,39 +529,21 @@ router.post('/resend-verification', authLimiter, async (req, res) => {
         });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
     try {
-        const user = await findUserProfile({ normalizedEmail });
-        if (user && !user.emailVerified) {
-            const rawVerificationToken = crypto.randomBytes(32).toString('hex');
-            user.verificationTokenHash = crypto.createHash('sha256').update(rawVerificationToken).digest('hex');
-            user.verificationTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-            await saveUserProfile(user.userId || user.supabase_user_id, user);
-
-            const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-            const verificationUrl = `${frontendUrl}/verify-email?token=${rawVerificationToken}`;
-
-            await emailService.sendEmailVerification({
-                email: normalizedEmail,
-                name: user.name,
-                token: rawVerificationToken,
-                verificationUrl
-            });
-
-            logger.info('EMAIL_VERIFICATION_RESENT', { email: normalizedEmail });
-        }
-
-        // Return uniform response to prevent user enumeration
-        res.json({
+        const result = await authService.resendVerificationEmail({
+            email,
+            requestIp: req.ip
+        });
+        res.status(202).json({
             success: true,
-            message: 'If an unverified account exists with this email, a verification link has been sent.'
+            canResendVerification: true,
+            message: result.message
         });
     } catch (err) {
-        logger.error('Resend verification error:', { error: err.message });
-        res.status(500).json({
+        res.status(err.status || 500).json({
             success: false,
-            message: 'Could not process verification request.'
+            code: err.code || 'RESEND_ERROR',
+            message: err.message || 'Could not process verification request.'
         });
     }
 });
@@ -688,13 +667,56 @@ router.post('/login', authLimiter, validateLogin, async (req, res) => {
                     });
                 }
 
-                // Check email verification if required
-                if (user.emailVerified === false && user.status === 'PENDING_VERIFICATION') {
+                // Check email verification / account activation
+                if (user.accountStatus === 'PENDING_EMAIL_VERIFICATION' || (user.emailVerified === false && (user.status === 'PENDING_VERIFICATION' || user.accountStatus === 'PENDING_VERIFICATION'))) {
                     logger.warn('USER_LOGIN_FAILED: Email unverified', { email: normalizedEmail });
                     return res.status(403).json({
                         success: false,
-                        code: 'EMAIL_NOT_VERIFIED',
-                        message: 'Please verify your email address before logging in. Check your inbox for the activation link.'
+                        code: 'EMAIL_VERIFICATION_REQUIRED',
+                        error: {
+                            code: 'EMAIL_VERIFICATION_REQUIRED',
+                            message: 'Please verify your email address.',
+                            email: maskEmail(normalizedEmail),
+                            canResendVerification: true
+                        },
+                        message: 'Please verify your email address.',
+                        email: maskEmail(normalizedEmail),
+                        canResendVerification: true
+                    });
+                }
+
+                if (user.accountStatus === 'PENDING_ACCOUNT_ACTIVATION') {
+                    return res.status(403).json({
+                        success: false,
+                        code: 'ACCOUNT_ACTIVATION_REQUIRED',
+                        error: {
+                            code: 'ACCOUNT_ACTIVATION_REQUIRED',
+                            message: 'Please activate your Pharma account.',
+                            email: maskEmail(normalizedEmail),
+                            canResendVerification: true
+                        },
+                        message: 'Please activate your Pharma account.',
+                        email: maskEmail(normalizedEmail),
+                        canResendVerification: true
+                    });
+                }
+
+                if (user.accountStatus === 'PROFILE_INCOMPLETE' || user.profileCompleted === false) {
+                    return res.json({
+                        success: false,
+                        code: 'PROFILE_INCOMPLETE',
+                        message: 'Please complete your profile to continue.',
+                        requiresProfileCompletion: true,
+                        user: {
+                            id: user.userId || user.supabase_user_id,
+                            email: user.email,
+                            firstName: user.firstName,
+                            lastName: user.lastName,
+                            dateOfBirth: user.dateOfBirth,
+                            mobileNumber: user.mobileNumber || user.mobile,
+                            accountStatus: 'PROFILE_INCOMPLETE',
+                            profileCompleted: false
+                        }
                     });
                 }
 
@@ -999,6 +1021,154 @@ router.post('/mfa/mfa-disable', authenticateUser, async (req, res) => {
 router.post('/logout', (req, res) => {
     clearSessionCookies(res);
     res.json({ success: true, message: 'Logged out successfully.' });
+});
+
+/**
+ * POST /api/auth/google & /api/v1/auth/google
+ * Google OAuth authentication and account linking
+ */
+router.post('/google', authLimiter, async (req, res) => {
+    const {
+        credential,
+        token,
+        providerUserId,
+        email,
+        email_verified,
+        emailVerified,
+        firstName,
+        lastName,
+        picture
+    } = req.body || {};
+
+    let sub = providerUserId;
+    let userEmail = email;
+    let isEmailVerified = email_verified !== undefined ? email_verified : (emailVerified !== undefined ? emailVerified : true);
+    let fName = firstName || '';
+    let lName = lastName || '';
+
+    if (credential && typeof credential === 'string') {
+        try {
+            const parts = credential.split('.');
+            if (parts.length === 3) {
+                const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+                sub = payload.sub || sub;
+                userEmail = payload.email || userEmail;
+                isEmailVerified = payload.email_verified !== undefined ? payload.email_verified : true;
+                fName = payload.given_name || payload.name?.split(' ')[0] || fName;
+                lName = payload.family_name || payload.name?.split(' ').slice(1).join(' ') || lName;
+            }
+        } catch (e) {
+            // fallback
+        }
+    }
+
+    if (!sub || !userEmail) {
+        return res.status(400).json({
+            success: false,
+            code: 'INVALID_CREDENTIALS',
+            message: 'Google credentials could not be verified.'
+        });
+    }
+
+    try {
+        const result = await authService.authenticateGoogle({
+            providerUserId: sub,
+            email: userEmail,
+            emailVerified: isEmailVerified,
+            firstName: fName,
+            lastName: lName,
+            picture
+        });
+
+        if (result.accessToken) {
+            setSessionCookies(res, { accessToken: result.accessToken });
+        }
+
+        return res.json({
+            success: true,
+            data: result,
+            user: result.user,
+            requiresProfileCompletion: Boolean(result.requiresProfileCompletion),
+            code: result.code,
+            message: result.message || 'Google sign-in successful.'
+        });
+    } catch (err) {
+        if (err.code === 'ACCOUNT_ACTIVATION_REQUIRED') {
+            return res.status(403).json({
+                success: false,
+                code: err.code,
+                error: {
+                    code: err.code,
+                    message: err.message,
+                    email: err.email || maskEmail(userEmail),
+                    canResendVerification: true
+                },
+                message: err.message,
+                email: err.email || maskEmail(userEmail),
+                canResendVerification: true
+            });
+        }
+
+        return res.status(err.status || 401).json({
+            success: false,
+            code: err.code || 'GOOGLE_AUTH_FAILED',
+            message: err.message || 'Google authentication failed.'
+        });
+    }
+});
+
+/**
+ * PUT /api/auth/onboarding
+ * Completes profile after Google login or profile incomplete state
+ */
+router.put('/onboarding', authenticateUser, async (req, res) => {
+    const userId = req.user?.sub || req.user?.id || req.body?.userId;
+    if (!userId) {
+        return res.status(401).json({
+            success: false,
+            message: 'Authentication required to complete profile.'
+        });
+    }
+
+    const { firstName, lastName, dateOfBirth, mobileNumber, mobile } = req.body || {};
+    const phone = (mobileNumber || mobile || '').trim();
+
+    if (!firstName || !firstName.trim()) {
+        return res.status(400).json({ success: false, message: 'First name is required.' });
+    }
+    if (!dateOfBirth || !isValidDOB(dateOfBirth)) {
+        return res.status(400).json({ success: false, message: 'Date of birth must be a valid past date.' });
+    }
+    if (!phone || !isValidMobile(phone)) {
+        return res.status(400).json({ success: false, message: 'Valid mobile number with at least 10 digits is required.' });
+    }
+
+    try {
+        const result = await authService.completeProfile({
+            userId,
+            firstName,
+            lastName,
+            dateOfBirth,
+            mobileNumber: phone
+        });
+
+        if (result.accessToken) {
+            setSessionCookies(res, { accessToken: result.accessToken });
+        }
+
+        return res.json({
+            success: true,
+            data: result,
+            user: result.user,
+            message: 'Profile completed successfully.'
+        });
+    } catch (err) {
+        return res.status(err.status || 400).json({
+            success: false,
+            code: err.code || 'PROFILE_ERROR',
+            message: err.message || 'Failed to complete profile.'
+        });
+    }
 });
 
 /**
