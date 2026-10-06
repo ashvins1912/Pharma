@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import mongoose from 'mongoose';
 import { Audit, Inventory, Product, Reservation } from './models.js';
+import { config } from './config.js';
 
 const asPositiveQuantity = value => Number.isSafeInteger(value) && value > 0;
 const normalizeItems = items => {
@@ -85,13 +86,14 @@ export async function reserveInventory({ orderId, items, idempotencyKey, actor, 
       error.statusCode = 409;
       throw error;
     }
-    return { reservationId: existing.reservationId, status: existing.status, items: existing.items };
+    return { reservationId: existing.reservationId, status: existing.status, items: existing.items, expiresAt: existing.expiresAt || null };
   };
   const existing = await Reservation.findOne({ idempotencyKey: normalizedIdempotencyKey }).lean();
   if (existing) return replayExisting(existing);
 
   const session = await mongoose.startSession();
   const reservationId = `RES-${randomUUID()}`;
+  const expiresAt = new Date(Date.now() + (config.reservationTTLHours || 24) * 3600_000);
   try {
     await session.withTransaction(async () => {
       const productIds = normalized.map(item => new mongoose.Types.ObjectId(item.productId));
@@ -121,6 +123,7 @@ export async function reserveInventory({ orderId, items, idempotencyKey, actor, 
         idempotencyKey: normalizedIdempotencyKey,
         orderId: normalizedOrderId,
         status: 'RESERVED',
+        expiresAt,
         items: reservedItems
       }], { session });
       await Audit.create([{
@@ -128,7 +131,7 @@ export async function reserveInventory({ orderId, items, idempotencyKey, actor, 
         operation: 'reserve',
         requestId,
         correlationId,
-        details: { orderId: normalizedOrderId, reservationId }
+        details: { orderId: normalizedOrderId, reservationId, expiresAt }
       }], { session });
     });
   } catch (error) {
@@ -140,7 +143,7 @@ export async function reserveInventory({ orderId, items, idempotencyKey, actor, 
   } finally {
     await session.endSession();
   }
-  return { reservationId, status: 'RESERVED', items: normalized };
+  return { reservationId, status: 'RESERVED', items: normalized, expiresAt };
 }
 
 export async function transitionReservation(reservationId, targetStatus, { actor, requestId, correlationId }) {

@@ -46,12 +46,15 @@ const reservationSchema = new mongoose.Schema({
   parentJobId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
   orderId: { type: 'string', required: true, index: true },
   status: { type: 'string', enum: ['RESERVED', 'RELEASED', 'DEDUCTED'], default: 'RESERVED' },
+  expiresAt: { type: Date, default: null, index: true },
   items: [{
     productId: { type: mongoose.Schema.Types.ObjectId, required: true },
     sku: { type: 'string', required: true },
     quantity: { type: 'number', required: true, min: 1 }
   }]
 }, { timestamps: true });
+
+reservationSchema.index({ status: 1, expiresAt: 1 });
 
 const importJobSchema = new mongoose.Schema({
   tenantId: { type: 'string', required: true, default: 'tenant-ashvin-main', index: true },

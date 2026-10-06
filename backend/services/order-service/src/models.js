@@ -53,10 +53,43 @@ const orderSchema = new mongoose.Schema({
     lng: Number
   },
   prescriptionUrl: { type: String, default: null },
+  prescriptionId: { type: String, default: null, index: true },
+  patientPuid: { type: String, default: null, index: true },
+  tenantId: { type: String, default: null, index: true },
+  branchId: { type: String, default: null, index: true },
+  version: { type: Number, default: 1 },
+  reservationExpiresAt: { type: Date, default: null },
+  fulfillmentGate: {
+    payment: {
+      type: String,
+      enum: ['PASSED', 'PENDING', 'FAILED'],
+      default: 'PASSED'
+    },
+    inventory: {
+      type: String,
+      enum: ['RESERVED', 'RELEASED', 'DEDUCTED', 'EXPIRED', 'PENDING'],
+      default: 'PENDING'
+    },
+    prescription: {
+      type: String,
+      enum: ['NOT_REQUIRED', 'PENDING_REVIEW', 'APPROVED', 'REJECTED', 'INACTIVE'],
+      default: 'NOT_REQUIRED'
+    },
+    customer: {
+      type: String,
+      enum: ['READY', 'PENDING'],
+      default: 'READY'
+    },
+    delivery: {
+      type: String,
+      enum: ['NOT_STARTED', 'ASSIGNED', 'COMPLETED'],
+      default: 'NOT_STARTED'
+    }
+  },
   orderStatus: {
     type: String,
     enum: ['Pending_Review', 'Approved', 'Rejected', 'Processing Order', 'Ready to Dispatch', 'Dispatched', 'Delivered', 'Cancelled'],
-    default: 'Pending_Review',
+    default: 'Approved',
     index: true
   },
   reservationId: { type: String, required: true },
@@ -68,6 +101,9 @@ const orderSchema = new mongoose.Schema({
   },
   statusHistory: { type: [statusHistorySchema], default: [] }
 }, { timestamps: true });
+
+orderSchema.index({ 'fulfillmentGate.prescription': 1, orderStatus: 1 });
+orderSchema.index({ tenantId: 1, branchId: 1, createdAt: -1 });
 
 orderSchema.index({ orderNumber: 1 }, { unique: true });
 orderSchema.index({ source: 1, externalReference: 1 }, {

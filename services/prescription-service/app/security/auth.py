@@ -10,7 +10,10 @@ class ServiceUserContext(BaseModel):
     tenant_id: Optional[str] = None
     branch_id: Optional[str] = None
     role: str
+    roles: List[str] = []
     permissions: List[str] = []
+    scopes: List[str] = []
+    is_admin: bool = False
 
 security = HTTPBearer()
 
@@ -26,12 +29,22 @@ def get_current_service_context(
             issuer=settings.SERVICE_JWT_ISSUER,
             audience=settings.SERVICE_JWT_AUDIENCE
         )
+        role = payload.get("role", "customer")
+        roles = payload.get("roles") or ([role] if role else [])
+        permissions = payload.get("permissions") or []
+        scopes = payload.get("scope") or payload.get("scopes") or []
+        if isinstance(scopes, str):
+            scopes = [s for s in scopes.replace(",", " ").split() if s]
+        is_admin = bool(payload.get("isAdmin") or payload.get("admin") or role in ("admin", "ADMIN", "SUPER_ADMIN"))
         return ServiceUserContext(
             user_id=payload.get("sub", ""),
             tenant_id=payload.get("tenantId"),
             branch_id=payload.get("branchId"),
-            role=payload.get("role", "customer"),
-            permissions=payload.get("permissions", [])
+            role=role,
+            roles=roles,
+            permissions=permissions,
+            scopes=scopes,
+            is_admin=is_admin,
         )
     except jwt.PyJWTError as e:
         raise HTTPException(

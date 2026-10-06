@@ -64,22 +64,72 @@ const upload = multer({
 
 const validateFileSignature = (file) => {
     if (!file || !file.buffer) return true;
-    if (file.mimetype === 'application/pdf') return file.buffer.subarray(0, 5).toString() === '%PDF-';
+
+    const buffer = file.buffer;
+    const len = buffer.length;
+
+    // Helper functions for common buffer checks
+    const matchString = (start, end, str) => len >= end && buffer.subarray(start, end).toString('utf8') === str;
+    const matchBytes = (bytes) => len >= bytes.length && bytes.every((b, i) => buffer[i] === b);
+
+    // 1. PDF
+    if (file.mimetype === 'application/pdf') {
+        return matchString(0, 5, '%PDF-');
+    }
+
+    // 2. JPEG (Safe check requires only the first 2 marker bytes)
     if (file.mimetype === 'image/jpeg') {
-        return file.buffer.length >= 3
-            && file.buffer[0] === 0xff
-            && file.buffer[1] === 0xd8
-            && file.buffer[2] === 0xff;
+        return matchBytes([0xFF, 0xD8]);
     }
+
+    // 3. PNG
     if (file.mimetype === 'image/png') {
-        return file.buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+        return matchBytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
     }
+
+    // 4. WEBP
     if (file.mimetype === 'image/webp') {
-        return file.buffer.subarray(0, 4).toString() === 'RIFF'
-            && file.buffer.subarray(8, 12).toString() === 'WEBP';
+        return matchString(0, 4, 'RIFF') && matchString(8, 12, 'WEBP');
     }
+
+    // 5. GIF
+    if (file.mimetype === 'image/gif') {
+        return matchString(0, 3, 'GIF');
+    }
+
+    // 6. BMP
+    if (file.mimetype === 'image/bmp' || file.mimetype === 'image/x-ms-bmp') {
+        return matchString(0, 2, 'BM');
+    }
+
+    // 7. TIFF
+    if (file.mimetype === 'image/tiff') {
+        return matchBytes([0x49, 0x49, 0x2A, 0x00]) || matchBytes([0x4D, 0x4D, 0x00, 0x2A]);
+    }
+
+    // 8. HEIC / HEIF (Robust check for container major/compatible brands)
+    if (file.mimetype === 'image/heic' || file.mimetype === 'image/heif') {
+        if (!matchString(4, 8, 'ftyp')) return false;
+        const brand = len >= 12 ? buffer.subarray(8, 12).toString('utf8') : '';
+        return ['heic', 'heix', 'hevc', 'heim', 'mif1', 'msf1'].includes(brand);
+    }
+
+    // 9. AVIF (Robust check for container major/compatible brands)
+    if (file.mimetype === 'image/avif') {
+        if (!matchString(4, 8, 'ftyp')) return false;
+        const brand = len >= 12 ? buffer.subarray(8, 12).toString('utf8') : '';
+        return ['avif', 'avis'].includes(brand);
+    }
+
+    // 10. SVG (Safely inspect XML tags while stripping non-printable padding)
+    if (file.mimetype === 'image/svg+xml') {
+        const sample = buffer.subarray(0, Math.min(len, 512)).toString('utf8').trim().toLowerCase();
+        return sample.includes('<svg') || sample.includes('<?xml');
+    }
+
     return false;
 };
+
 
 const handleAttachments = (req, res, next) => {
     upload.fields([

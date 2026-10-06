@@ -1,7 +1,7 @@
 import express from 'express';
 import { Order, OrderEvent } from './models.js';
 import { requireOrderScope } from './service-auth.js';
-import { createOrder, getOrder, listOrders, transitionOrder } from './orders.js';
+import { createOrder, getOrder, listOrders, transitionOrder, updateFulfillmentGate } from './orders.js';
 
 const router = express.Router();
 const asyncHandler = handler => (req, res, next) => {
@@ -35,6 +35,18 @@ router.get('/:orderNumber', requireOrderScope('orders.read'), asyncHandler(async
 router.patch('/:orderNumber/status', requireOrderScope('orders.manage'), requireAdmin, asyncHandler(async (req, res) => {
   const order = await transitionOrder(req.params.orderNumber, req.body?.newStatus, req.service);
   return order ? res.json({ order }) : res.status(404).json({ message: 'Order was not found.' });
+}));
+
+router.post('/:orderNumber/fulfillment-gate', requireOrderScope('orders.manage'), asyncHandler(async (req, res) => {
+  const result = await updateFulfillmentGate(req.params.orderNumber, {
+    gate: req.body?.gate,
+    status: req.body?.status,
+    actor: req.service.userId || req.service.service || 'system',
+    idempotencyKey: req.get('idempotency-key') || req.body?.idempotencyKey || null,
+    forceInactive: Boolean(req.body?.forceInactive)
+  });
+  if (!result) return res.status(404).json({ message: 'Order was not found.' });
+  return res.json(result);
 }));
 
 router.get('/:orderNumber/events', requireOrderScope('orders.read'), asyncHandler(async (req, res) => {

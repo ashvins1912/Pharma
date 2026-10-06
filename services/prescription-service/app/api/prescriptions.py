@@ -8,38 +8,69 @@ from ..models.schemas import (
     PrescriptionUploadData, PrescriptionStatusData,
     PrescriptionRemovalRequest, PrescriptionRemovalData,
     PrescriptionReviewRequest, PrescriptionReviewData,
-    HospitalCreateRequest, HospitalItem
+    HospitalCreateRequest, HospitalItem,
+    ProcessingProgress, PatientExtraction, MedicineItem, QualityMetadata,
 )
+from ..db import get_db
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/v1/prescriptions", tags=["prescriptions"])
+
+def _require_review_permission(context: ServiceUserContext):
+    scopes = set(getattr(context, "scopes", None) or [])
+    roles = set(getattr(context, "roles", None) or [])
+    perms = set(getattr(context, "permissions", None) or [])
+    if "prescription.review" in scopes or "prescription.review" in perms:
+        return
+    if roles & {"admin", "pharmacist", "ADMIN", "PHARMACIST", "SUPER_ADMIN", "TENANT_ADMIN"}:
+        return
+    if getattr(context, "is_admin", False):
+        return
+    raise HTTPException(status_code=403, detail="prescription.review permission required")
 
 @router.post("/upload", response_model=ApiResponse[PrescriptionUploadData], status_code=status.HTTP_201_CREATED)
 async def upload_prescription(
     file: Optional[UploadFile] = File(None),
     notes: Optional[str] = Form(None),
+    order_id: Optional[str] = Form(None),
+    patient_puid: Optional[str] = Form(None),
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     context: ServiceUserContext = Depends(get_current_service_context)
 ):
     file_bytes = await file.read() if file else None
     filename = file.filename if file else None
     content_type = file.content_type if file else None
-
-    result = await prescription_engine.create_prescription(
-        customer_id=context.user_id,
-        tenant_id=context.tenant_id,
-        branch_id=context.branch_id,
-        file_bytes=file_bytes,
-        filename=filename,
-        content_type=content_type,
-        idempotency_key=idempotency_key
-    )
+    try:
+        result = await prescription_engine.create_prescription(
+            customer_id=context.user_id,
+            tenant_id=context.tenant_id,
+            branch_id=context.branch_id,
+            user_id=context.user_id,
+            file_bytes=file_bytes,
+            filename=filename,
+            content_type=content_type,
+            idempotency_key=idempotency_key,
+            order_id=order_id,
+            patient_puid=patient_puid,
+            correlation_id=None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return ApiResponse(
         success=True,
         data=PrescriptionUploadData(**result),
         message="Prescription uploaded successfully"
     )
 
-@router.get("/{prescription_id}", response_model=ApiResponse[PrescriptionStatusData])
+@router.get("/reviews/queue")
+async def review_queue(context: ServiceUserContext = Depends(get_current_service_context)):
+    _require_review_permission(context)
+    if not context.tenant_id:
+        raise HTTPException(status_code=403, detail="tenant required")
+    items = await prescription_engine.list_review_queue(context.tenant_id, context.branch_id)
+    return {"success": True, "data": items}
+
+@router.get("/{prescription_id}")
 async def get_prescription(
     prescription_id: str,
     context: ServiceUserContext = Depends(get_current_service_context)
@@ -47,12 +78,125 @@ async def get_prescription(
     record = await prescription_engine.get_prescription(prescription_id)
     if not record:
         raise HTTPException(status_code=404, detail="Prescription not found")
-
-    return ApiResponse(
-        success=True,
-        data=PrescriptionStatusData(**record),
-        message="Prescription retrieved successfully"
+    if context.tenant_id and record.get("tenantId") and record.get("tenantId") != context.tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant access denied")
+    extraction = record.get("extraction") or {}
+    progress_map = {
+        "UPLOADED": ("UPLOADED", 10),
+        "QUEUED": ("QUEUED", 20),
+        "PROCESSING": ("PROCESSING", 50),
+        "REVIEW_REQUIRED": ("REVIEW_REQUIRED", 80),
+        "AUTO_APPROVED": ("AUTO_APPROVED", 95),
+        "APPROVED": ("APPROVED", 100),
+        "REJECTED": ("REJECTED", 100),
+        "FAILED": ("FAILED", 100),
+        "INACTIVE": ("INACTIVE", 100),
+    }
+    stage, percent = progress_map.get(record.get("status"), (record.get("status"), 0))
+    data = PrescriptionStatusData(
+        prescriptionId=record["prescriptionId"],
+        status=record["status"],
+        progress=ProcessingProgress(stage=stage, percent=percent),
+        patient=PatientExtraction(name=extraction.get("patientName"), confidence=extraction.get("overallConfidence") or 0),
+        medicines=[MedicineItem(**m) if isinstance(m, dict) else m for m in (extraction.get("medicines") or [])],
+        quality=QualityMetadata(
+            overallConfidence=extraction.get("overallConfidence") or 0,
+            requiresReview=bool(extraction.get("reviewRequired")),
+            ocrModelVersion=extraction.get("ocrVersion") or "unknown",
+            nlpModelVersion=extraction.get("nlpVersion") or "unknown",
+        ),
+        createdAt=record.get("createdAt"),
+        updatedAt=record.get("updatedAt"),
     )
+    return {"success": True, "data": data.model_dump(), "message": "Prescription retrieved successfully", "version": record.get("version")}
+
+@router.post("/{prescription_id}/review/claim")
+async def claim_review(
+    prescription_id: str,
+    expected_version: Optional[int] = None,
+    context: ServiceUserContext = Depends(get_current_service_context)
+):
+    _require_review_permission(context)
+    try:
+        result = await prescription_engine.claim_review(prescription_id, context.user_id, expected_version)
+        return {"success": True, "data": result}
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Review not found")
+    except RuntimeError as exc:
+        if str(exc) == "VERSION_CONFLICT":
+            raise HTTPException(status_code=409, detail="This prescription was already updated by another reviewer.")
+        if str(exc) == "LEASE_HELD":
+            raise HTTPException(status_code=409, detail="Review lease held by another reviewer.")
+        raise HTTPException(status_code=409, detail=str(exc))
+
+@router.post("/{prescription_id}/review/approve")
+async def approve_review(
+    prescription_id: str,
+    expected_version: int = Form(...),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    context: ServiceUserContext = Depends(get_current_service_context)
+):
+    _require_review_permission(context)
+    try:
+        result = await prescription_engine.approve_review(prescription_id, context.user_id, expected_version, idempotency_key)
+        return {"success": True, "data": result}
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    except RuntimeError as exc:
+        code = str(exc)
+        if code == "VERSION_CONFLICT":
+            raise HTTPException(status_code=409, detail="This prescription was already updated by another reviewer.")
+        if code == "INACTIVE":
+            raise HTTPException(status_code=409, detail="Prescription is inactive")
+        raise HTTPException(status_code=409, detail=code)
+
+@router.post("/{prescription_id}/review/reject")
+async def reject_review(
+    prescription_id: str,
+    expected_version: int = Form(...),
+    reason: str = Form(...),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    context: ServiceUserContext = Depends(get_current_service_context)
+):
+    _require_review_permission(context)
+    try:
+        result = await prescription_engine.reject_review(prescription_id, context.user_id, expected_version, reason, idempotency_key)
+        return {"success": True, "data": result}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    except RuntimeError as exc:
+        if str(exc) == "VERSION_CONFLICT":
+            raise HTTPException(status_code=409, detail="This prescription was already updated by another reviewer.")
+        raise HTTPException(status_code=409, detail=str(exc))
+
+@router.post("/{prescription_id}/review/wait")
+async def wait_review(
+    prescription_id: str,
+    context: ServiceUserContext = Depends(get_current_service_context)
+):
+    _require_review_permission(context)
+    result = await prescription_engine.wait_review(prescription_id, context.user_id)
+    return {"success": True, "data": result}
+
+@router.post("/{prescription_id}/review", response_model=ApiResponse[PrescriptionReviewData])
+async def review_prescription_legacy(
+    prescription_id: str,
+    payload: PrescriptionReviewRequest,
+    context: ServiceUserContext = Depends(get_current_service_context)
+):
+    """Legacy combined review endpoint → approve path with optimistic lock."""
+    _require_review_permission(context)
+    try:
+        result = await prescription_engine.approve_review(
+            prescription_id=prescription_id,
+            reviewer_id=context.user_id,
+            expected_version=payload.expectedVersion or 1,
+        )
+        return ApiResponse(success=True, data=PrescriptionReviewData(**result), message="Prescription review completed")
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 @router.post("/{prescription_id}/remove", response_model=ApiResponse[PrescriptionRemovalData])
 async def remove_prescription(
@@ -61,43 +205,28 @@ async def remove_prescription(
     context: ServiceUserContext = Depends(get_current_service_context)
 ):
     reason = payload.reason if payload else "Customer requested removal"
-    record = await prescription_engine.remove_prescription(prescription_id, reason=reason)
+    record = await prescription_engine.remove_prescription(prescription_id, context.user_id, reason=reason)
     if not record:
         raise HTTPException(status_code=404, detail="Prescription not found")
-
     return ApiResponse(
         success=True,
         data=PrescriptionRemovalData(
             prescriptionId=record["prescriptionId"],
             status="INACTIVE",
-            removalRequestedAt=record["removalRequestedAt"],
-            inactiveAt=record["inactiveAt"]
+            removalRequestedAt=record.get("inactiveAt"),
+            inactiveAt=record.get("inactiveAt")
         ),
         message="Prescription successfully deactivated"
     )
 
-@router.post("/{prescription_id}/review", response_model=ApiResponse[PrescriptionReviewData])
-async def review_prescription(
-    prescription_id: str,
-    payload: PrescriptionReviewRequest,
-    context: ServiceUserContext = Depends(get_current_service_context)
-):
+@router.get("/{prescription_id}/document-url")
+async def document_url(prescription_id: str, context: ServiceUserContext = Depends(get_current_service_context)):
+    _require_review_permission(context)
     try:
-        result = await prescription_engine.review_prescription(
-            prescription_id=prescription_id,
-            patient=payload.patient.dict() if payload.patient else None,
-            diagnosis=[d.dict() for d in payload.diagnosis] if payload.diagnosis else None,
-            medicines=[m.dict() for m in payload.medicines] if payload.medicines else None,
-            expected_version=payload.expectedVersion,
-            reviewer_id=context.user_id
-        )
-        return ApiResponse(
-            success=True,
-            data=PrescriptionReviewData(**result),
-            message="Prescription review completed"
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        data = await prescription_engine.create_document_token(prescription_id, context.user_id)
+        return {"success": True, "data": data}
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Not found")
 
 @router.post("/hospitals", response_model=ApiResponse[HospitalItem])
 async def match_hospital(

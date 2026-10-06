@@ -12,11 +12,33 @@ const allowedStatuses = new Set([
 ]);
 
 const fail = (statusCode, message) => Object.assign(new Error(message), { statusCode });
+export function isFulfillmentReady(order) {
+  if (!order) return false;
+  if (['Cancelled', 'Rejected'].includes(order.orderStatus)) return false;
+  const gate = order.fulfillmentGate || {};
+  const paymentOk = gate.payment === 'PASSED';
+  const inventoryOk = gate.inventory === 'RESERVED' || gate.inventory === 'DEDUCTED';
+  const prescriptionOk = gate.prescription === 'NOT_REQUIRED' || gate.prescription === 'APPROVED';
+  const customerOk = gate.customer === 'READY';
+  return Boolean(paymentOk && inventoryOk && prescriptionOk && customerOk);
+}
+
 const serializeOrder = order => ({
   orderId: order.orderNumber,
   source: order.source,
   externalReference: order.externalReference,
   status: order.orderStatus,
+  displayStatus: order.orderStatus === 'Approved' && order.fulfillmentGate?.prescription === 'PENDING_REVIEW'
+    ? 'Order Confirmed — Prescription Verification Pending'
+    : order.orderStatus,
+  fulfillmentGate: order.fulfillmentGate || null,
+  fulfillmentReady: isFulfillmentReady(order),
+  prescriptionId: order.prescriptionId || null,
+  patientPuid: order.patientPuid || null,
+  tenantId: order.tenantId || null,
+  branchId: order.branchId || null,
+  reservationExpiresAt: order.reservationExpiresAt || null,
+  version: order.version || 1,
   items: order.items.map(item => ({
     productId: item.sku,
     sku: item.sku,
@@ -82,7 +104,12 @@ export function normalizeCreateRequest(body, userId) {
     addressDetails: body.addressDetails || {},
     coordinates: body.coordinates || null,
     paymentMethod: body.paymentMethod || 'Cash on Delivery (COD)',
-    prescriptionUrl: body.prescriptionUrl || null
+    prescriptionUrl: body.prescriptionUrl || null,
+    prescriptionId: body.prescriptionId || null,
+    patientPuid: body.patientPuid || null,
+    tenantId: body.tenantId || null,
+    branchId: body.branchId || null,
+    prescriptionRequired: Boolean(body.prescriptionRequired || body.prescriptionUrl || body.prescriptionId)
   };
   const requestFingerprint = createHash('sha256')
     .update(JSON.stringify({
@@ -95,7 +122,10 @@ export function normalizeCreateRequest(body, userId) {
       addressDetails: request.addressDetails,
       coordinates: request.coordinates,
       paymentMethod: request.paymentMethod,
-      prescriptionUrl: request.prescriptionUrl
+      prescriptionUrl: request.prescriptionUrl,
+      prescriptionId: request.prescriptionId,
+      patientPuid: request.patientPuid,
+      prescriptionRequired: request.prescriptionRequired
     }))
     .digest('hex');
   return { ...request, requestFingerprint };
@@ -214,6 +244,10 @@ export async function createOrder(body, user) {
     throw fail(409, `Inventory reservation is ${String(reservation.status || 'unavailable').toLowerCase()}.`);
   }
 
+  const prescriptionGate = request.prescriptionRequired ? 'PENDING_REVIEW' : 'NOT_REQUIRED';
+  // Order is confirmed immediately; prescription is an independent fulfillment gate.
+  const initialStatus = 'Approved';
+
   let session;
   try {
     session = await mongoose.startSession();
@@ -238,15 +272,31 @@ export async function createOrder(body, user) {
         addressDetails: request.addressDetails,
         coordinates: request.coordinates,
         prescriptionUrl: request.prescriptionUrl,
+        prescriptionId: request.prescriptionId,
+        patientPuid: request.patientPuid,
+        tenantId: request.tenantId || user.tenantId || null,
+        branchId: request.branchId || user.branchId || null,
         reservationId: reservation.reservationId,
-        orderStatus: 'Pending_Review',
+        reservationExpiresAt: reservation.expiresAt ? new Date(reservation.expiresAt) : null,
+        fulfillmentGate: {
+          payment: 'PASSED',
+          inventory: 'RESERVED',
+          prescription: prescriptionGate,
+          customer: 'READY',
+          delivery: 'NOT_STARTED'
+        },
+        orderStatus: initialStatus,
         statusHistory: [{
-          newStatus: 'Pending_Review',
+          newStatus: initialStatus,
           changedBy: user.userId,
-          timestamp: snapshotAt
+          timestamp: snapshotAt,
+          notes: prescriptionGate === 'PENDING_REVIEW'
+            ? 'Order confirmed; prescription verification pending'
+            : 'Order confirmed'
         }]
       }], { session });
       await writeEvent(session, order, 'OrderCreated');
+      await writeEvent(session, order, 'OrderConfirmed');
       await writeEvent(session, order, 'OrderInventoryReserved');
     });
     return { order: serializeOrder(order), replayed: false };
@@ -332,6 +382,9 @@ export async function transitionOrder(orderNumber, newStatus, user) {
   if (!transitions[previousStatus]?.has(newStatus)) {
     throw fail(409, `Cannot transition an order from ${previousStatus} to ${newStatus}.`);
   }
+  if (['Processing Order', 'Ready to Dispatch', 'Dispatched'].includes(newStatus) && !isFulfillmentReady(order)) {
+    throw fail(409, 'Fulfillment gates are not ready (check prescription / inventory / payment).');
+  }
   let inventoryEvent = null;
   if (newStatus === 'Cancelled' || newStatus === 'Rejected') {
     await inventoryRequest(`/reservations/${encodeURIComponent(order.reservationId)}/release`, {});
@@ -370,4 +423,82 @@ export async function transitionOrder(orderNumber, newStatus, user) {
   }
 }
 
-export { allowedStatuses, serializeOrder };
+export async function updateFulfillmentGate(orderNumber, {
+  gate,
+  status,
+  actor = 'system',
+  idempotencyKey = null,
+  forceInactive = false
+} = {}) {
+  if (!['payment', 'inventory', 'prescription', 'customer', 'delivery'].includes(gate)) {
+    throw fail(400, 'Unsupported fulfillment gate.');
+  }
+  const order = await Order.findOne({ orderNumber });
+  if (!order) return null;
+
+  // Cancellation / removal races: late approvals must not revive the order.
+  if (['Cancelled', 'Rejected'].includes(order.orderStatus)) {
+    return { order: serializeOrder(order), ignored: true, reason: 'ORDER_TERMINAL' };
+  }
+  if (gate === 'prescription' && status === 'APPROVED' && order.fulfillmentGate?.prescription === 'INACTIVE') {
+    return { order: serializeOrder(order), ignored: true, reason: 'PRESCRIPTION_INACTIVE' };
+  }
+  if (forceInactive && gate === 'prescription') {
+    status = 'INACTIVE';
+  }
+
+  if (idempotencyKey) {
+    const existingEvent = await OrderEvent.findOne({ eventKey: `${orderNumber}:gate:${gate}:${idempotencyKey}` }).lean();
+    if (existingEvent) {
+      return { order: serializeOrder(order), replayed: true };
+    }
+  }
+
+  // On prescription approval after reservation expiry → re-reserve idempotently
+  if (gate === 'prescription' && status === 'APPROVED') {
+    const expired = order.reservationExpiresAt && new Date(order.reservationExpiresAt) < new Date();
+    const needsReserve = expired
+      || order.fulfillmentGate?.inventory === 'RELEASED'
+      || order.fulfillmentGate?.inventory === 'EXPIRED';
+    if (needsReserve) {
+      const reservation = await inventoryRequest('/reservations', {
+        orderId: order.orderNumber,
+        items: order.items.map(item => ({ productId: item.productId, quantity: item.quantity })),
+        idempotencyKey: `order-re-reserve:${order.orderNumber}:${order.version || 1}`
+      }, `order-re-reserve:${order.orderNumber}:${order.version || 1}`);
+      order.reservationId = reservation.reservationId;
+      order.reservationExpiresAt = reservation.expiresAt ? new Date(reservation.expiresAt) : null;
+      order.fulfillmentGate.inventory = 'RESERVED';
+    }
+  }
+
+  order.fulfillmentGate = order.fulfillmentGate || {};
+  order.fulfillmentGate[gate] = status;
+  order.version = (order.version || 1) + 1;
+  order.markModified('fulfillmentGate');
+
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await order.save({ session });
+      const eventKey = idempotencyKey
+        ? `${orderNumber}:gate:${gate}:${idempotencyKey}`
+        : `${orderNumber}:gate:${gate}:${status}:${order.version}`;
+      await OrderEvent.updateOne({ eventKey }, {
+        $setOnInsert: {
+          eventId: randomUUID(),
+          eventKey,
+          event: `FulfillmentGate${gate[0].toUpperCase()}${gate.slice(1)}${status}`,
+          orderId: order.orderNumber,
+          occurredAt: new Date(),
+          payload: { gate, status, actor, order: serializeOrder(order) }
+        }
+      }, { upsert: true, session });
+    });
+    return { order: serializeOrder(order), ignored: false };
+  } finally {
+    await session.endSession();
+  }
+}
+
+export { allowedStatuses, serializeOrder, isFulfillmentReady };

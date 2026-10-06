@@ -1,8 +1,9 @@
 /**
- * Authoritative Prescription Service
- * Implements strict state machine, optimistic locking, customer removal, 
- * hospital deduplication, and multi-tenant isolation.
- * No other collection/service stores prescriptions.
+ * @deprecated DEPRECATED — Do not extend this Node implementation.
+ * Authoritative Prescription Service is the Python FastAPI service at:
+ *   services/prescription-service/
+ * Keep this file only for temporary reference during route migration.
+ * Implements (legacy) state machine remnants; production traffic must use Python.
  */
 import { randomBytes, randomUUID, createCipheriv, createDecipheriv, createHash } from 'node:crypto';
 import mongoose from 'mongoose';

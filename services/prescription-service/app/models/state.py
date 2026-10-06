@@ -6,39 +6,50 @@ class PrescriptionState(str, Enum):
     QUEUED = "QUEUED"
     PROCESSING = "PROCESSING"
     REVIEW_REQUIRED = "REVIEW_REQUIRED"
-    COMPLETED = "COMPLETED"
+    AUTO_APPROVED = "AUTO_APPROVED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
     FAILED = "FAILED"
     INACTIVE = "INACTIVE"
 
 VALID_TRANSITIONS: Dict[PrescriptionState, Set[PrescriptionState]] = {
     PrescriptionState.UPLOADED: {
         PrescriptionState.QUEUED,
-        PrescriptionState.INACTIVE
+        PrescriptionState.INACTIVE,
     },
     PrescriptionState.QUEUED: {
         PrescriptionState.PROCESSING,
         PrescriptionState.FAILED,
-        PrescriptionState.INACTIVE
+        PrescriptionState.INACTIVE,
     },
     PrescriptionState.PROCESSING: {
         PrescriptionState.REVIEW_REQUIRED,
-        PrescriptionState.COMPLETED,
+        PrescriptionState.AUTO_APPROVED,
         PrescriptionState.FAILED,
-        PrescriptionState.INACTIVE
+        PrescriptionState.INACTIVE,
+    },
+    PrescriptionState.AUTO_APPROVED: {
+        PrescriptionState.APPROVED,
+        PrescriptionState.INACTIVE,
     },
     PrescriptionState.REVIEW_REQUIRED: {
-        PrescriptionState.COMPLETED,
+        PrescriptionState.APPROVED,
+        PrescriptionState.REJECTED,
         PrescriptionState.PROCESSING,
-        PrescriptionState.INACTIVE
+        PrescriptionState.INACTIVE,
     },
-    PrescriptionState.COMPLETED: {
-        PrescriptionState.INACTIVE
+    PrescriptionState.APPROVED: {
+        PrescriptionState.INACTIVE,
+    },
+    PrescriptionState.REJECTED: {
+        PrescriptionState.INACTIVE,
+        PrescriptionState.QUEUED,
     },
     PrescriptionState.FAILED: {
         PrescriptionState.QUEUED,
-        PrescriptionState.INACTIVE
+        PrescriptionState.INACTIVE,
     },
-    PrescriptionState.INACTIVE: set()  # Terminal state: NO transitions allowed
+    PrescriptionState.INACTIVE: set(),
 }
 
 def can_transition(from_state: str, to_state: str) -> bool:
@@ -53,5 +64,4 @@ def is_inactive(state: str) -> bool:
     return state == PrescriptionState.INACTIVE.value
 
 def is_queryable(state: str) -> bool:
-    """Normal application queries must exclude INACTIVE records."""
     return state != PrescriptionState.INACTIVE.value
