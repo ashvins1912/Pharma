@@ -8,17 +8,15 @@ const emailVerificationTokenSchema = new mongoose.Schema({
     id: {
         type: String,
         required: true,
-        unique: true
     },
     userId: {
         type: String,
         required: true,
-        index: true
+        unique: true // Keeps userId unique; dropped inline "index: true" since unique creates an index
     },
     tokenHash: {
         type: String,
-        required: true,
-        index: true
+        required: true // ❌ REMOVED index: true from here (handled at the bottom)
     },
     purpose: {
         type: String,
@@ -46,7 +44,10 @@ const emailVerificationTokenSchema = new mongoose.Schema({
     timestamps: true
 });
 
+// Single-field index for cryptographic lookups
 emailVerificationTokenSchema.index({ tokenHash: 1 });
+
+// Compound index for querying user tokens by specific flows
 emailVerificationTokenSchema.index({ userId: 1, purpose: 1 });
 
 const EmailVerificationToken = mongoose.models.EmailVerificationToken || mongoose.model('EmailVerificationToken', emailVerificationTokenSchema);

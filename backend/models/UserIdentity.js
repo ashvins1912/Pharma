@@ -13,7 +13,7 @@ const userIdentitySchema = new mongoose.Schema({
     userId: {
         type: String,
         required: true,
-        index: true
+        unique: true // Keep this unique index inline
     },
     provider: {
         type: String,
@@ -50,7 +50,6 @@ const userIdentitySchema = new mongoose.Schema({
 });
 
 userIdentitySchema.index({ provider: 1, providerUserId: 1 }, { unique: true });
-userIdentitySchema.index({ userId: 1 });
 
 const UserIdentity = mongoose.models.UserIdentity || mongoose.model('UserIdentity', userIdentitySchema);
 export default UserIdentity;

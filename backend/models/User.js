@@ -24,8 +24,7 @@ const userSchema = new mongoose.Schema({
     userId: {
         type: String,
         required: true,
-        unique: true,
-        index: true
+        unique: true, // Keep this unique inline
     },
     // Backward-compatibility alias for legacy references
     supabase_user_id: {
@@ -43,7 +42,7 @@ const userSchema = new mongoose.Schema({
         required: true,
         lowercase: true,
         trim: true,
-        index: true
+        unique: true // Changed from "index: true" to ensure it stays unique cleanly
     },
     emailVerified: {
         type: Boolean,
@@ -173,8 +172,7 @@ const userSchema = new mongoose.Schema({
     timestamps: true
 });
 
-userSchema.index({ normalizedEmail: 1 }, { unique: true });
-userSchema.index({ userId: 1 }, { unique: true });
+// ❌ REMOVED BOTH userSchema.index() LINES FROM HERE TO AVOID CODE DUPLICATION
 
 // Virtual getter for dynamically calculated age
 userSchema.virtual('age').get(function () {
