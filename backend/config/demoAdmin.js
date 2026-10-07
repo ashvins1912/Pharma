@@ -4,13 +4,10 @@ import { timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify } from 'jose';
 import { env } from './env.js';
 
-const demoAdminEnabled = env.NODE_ENV !== 'production'
-    ? process.env.DEMO_ADMIN_ENABLED !== 'false'
-    : process.env.DEMO_ADMIN_ENABLED === 'true';
+const demoAdminEnabled = ['development', 'test'].includes(env.NODE_ENV)
+    && process.env.DEMO_ADMIN_ENABLED !== 'false';
 const instantDemoAdminEnabled = demoAdminEnabled
-    && (env.NODE_ENV === 'production'
-        ? process.env.DEMO_ADMIN_INSTANT_ACCESS_ENABLED === 'true'
-        : process.env.DEMO_ADMIN_INSTANT_ACCESS_ENABLED !== 'false');
+    && process.env.DEMO_ADMIN_INSTANT_ACCESS_ENABLED !== 'false';
 const demoAdminEmail = (process.env.DEMO_ADMIN_EMAIL || 'ashvinsingh25@gmail.com').trim().toLowerCase();
 const demoAdminUserId = process.env.DEMO_ADMIN_USER_ID || 'admin';
 const configuredPassword = process.env.DEMO_ADMIN_PASSWORD || '';
