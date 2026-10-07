@@ -848,7 +848,11 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
         });
     } catch (err) {
         console.error("Transition error:", err);
-        res.status(400).json({ message: err.message || "State transition failed" });
+        res.status(getErrorStatus(err)).json({
+            code: err.code || 'ORDER_TRANSITION_FAILED',
+            message: err.message || "State transition failed",
+            retryable: ['PRESCRIPTION_PROCESSING_STUCK', 'PRESCRIPTION_SERVICE_UNAVAILABLE'].includes(err.code)
+        });
     }
 });
 
