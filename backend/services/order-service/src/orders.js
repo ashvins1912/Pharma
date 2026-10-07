@@ -129,6 +129,8 @@ export function normalizeCreateRequest(body, userContext) {
       prescriptionUrl: request.prescriptionUrl,
       prescriptionId: request.prescriptionId,
       patientPuid: request.patientPuid,
+      tenantId: request.tenantId,
+      branchId: request.branchId,
       prescriptionRequired: request.prescriptionRequired
     }))
     .digest('hex');
