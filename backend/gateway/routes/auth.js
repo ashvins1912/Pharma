@@ -52,6 +52,9 @@ router.post('/signup', authLimiter, async (req, res) => {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         validationDetails.push({ field: 'email', code: 'INVALID_EMAIL', message: 'Enter a valid email address.' });
     }
+    if (gender && !['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'].includes(gender)) {
+        validationDetails.push({ field: 'gender', code: 'INVALID_GENDER', message: 'Select a valid gender option.' });
+    }
     if (!dateOfBirth) {
         validationDetails.push({ field: 'dateOfBirth', code: 'REQUIRED', message: 'Date of birth is required.' });
     } else if (!isValidDOB(dateOfBirth)) {
@@ -363,7 +366,7 @@ const handleProfileCompletion = async (req, res) => {
         });
     }
 
-    const { firstName, lastName, dateOfBirth, mobileNumber, mobile } = req.body || {};
+    const { firstName, lastName, dateOfBirth, mobileNumber, mobile, gender } = req.body || {};
     const phone = (mobileNumber || mobile || '').trim();
 
     const validationDetails = [];
@@ -395,7 +398,8 @@ const handleProfileCompletion = async (req, res) => {
             firstName,
             lastName,
             dateOfBirth,
-            mobileNumber: phone
+            mobileNumber: phone,
+            gender
         });
 
         if (result.accessToken) {
