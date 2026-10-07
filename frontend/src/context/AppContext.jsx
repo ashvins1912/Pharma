@@ -555,9 +555,31 @@ export function AppProvider({ children }) {
     addToast('Coupon removed', 'info');
   };
 
+  // Synchronize canonical customer/PUID data. This is idempotent.
+  const ensureCustomerProfile = useCallback(async (profile = {}) => {
+    if (!isFullyAuthenticated || !user?.id) return null;
+    try {
+      const res = await apiClient.post('/api/v1/customers/ensure', {
+        name: profile.name || user?.user_metadata?.name || user?.name || '',
+        email: profile.email || user?.email || '',
+        phone: profile.phone || user?.user_metadata?.mobile || user?.mobile || ''
+      });
+      return res.data?.data || res.data || null;
+    } catch (error) {
+      console.warn('Customer/PUID synchronization skipped:', error?.message || error);
+      return null;
+    }
+  }, [isFullyAuthenticated, user?.id, user?.email, user?.user_metadata?.name, user?.user_metadata?.mobile, user?.name, user?.mobile]);
+
+  useEffect(() => {
+    if (!isFullyAuthenticated) return;
+    void ensureCustomerProfile();
+  }, [isFullyAuthenticated, ensureCustomerProfile]);
+
   // Save address helper
   const saveAddress = async (addressData) => {
     try {
+      await ensureCustomerProfile({ name: addressData.fullName, phone: addressData.mobile });
       const res = await apiClient.post('/api/user/addresses', addressData);
       const savedAddress = res.data;
       setAddresses(prev => [
@@ -575,6 +597,7 @@ export function AppProvider({ children }) {
 
   const updateAddress = async (addressId, addressData) => {
     try {
+      await ensureCustomerProfile({ name: addressData.fullName, phone: addressData.mobile });
       const res = await apiClient.patch(`/api/user/addresses/${encodeURIComponent(addressId)}`, addressData);
       const updatedAddress = res.data;
       setAddresses(prev => prev.map(address => {
@@ -665,6 +688,7 @@ export function AppProvider({ children }) {
         saveAddress,
         updateAddress,
         deleteAddress,
+        ensureCustomerProfile,
 
         // Orders
         orders,
