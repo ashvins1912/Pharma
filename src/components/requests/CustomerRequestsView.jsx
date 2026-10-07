@@ -313,6 +313,49 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
 
                 </div>
 
+                {req.prescriptionVerification?.medicines?.length > 0 && (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-emerald-900">
+                          Prescription Medicines Extracted
+                        </p>
+                        <p className="text-[11px] text-emerald-800">
+                          {req.prescriptionVerification.status || 'PROCESSING'}
+                        </p>
+                      </div>
+                      {req.prescriptionVerification.overallConfidence > 0 && (
+                        <span className="rounded-lg bg-white px-2 py-1 text-[10px] font-bold text-emerald-700">
+                          {Math.round(req.prescriptionVerification.overallConfidence * 100)}% confidence
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2 space-y-1.5">
+                      {req.prescriptionVerification.medicines.map((medicine, index) => (
+                        <div key={`${medicine.rawName || medicine.normalizedName || index}-${index}`} className="rounded-xl bg-white border border-emerald-100 p-2.5">
+                          <p className="text-xs font-black text-slate-900">
+                            {medicine.normalizedName || medicine.rawName || 'Medicine'}
+                          </p>
+                          <p className="mt-0.5 text-[10px] text-slate-600">
+                            Strength: {medicine.strength?.value != null ? `${medicine.strength.value} ${medicine.strength.unit || ''}` : medicine.strength || '—'}
+                            {' • '}Dose: {medicine.dose?.value != null ? `${medicine.dose.value} ${medicine.dose.unit || ''}` : medicine.dose || '—'}
+                            {' • '}Frequency: {medicine.frequency?.normalized || medicine.frequency?.raw || medicine.frequency || '—'}
+                          </p>
+                          <p className="text-[10px] text-slate-500">
+                            Duration/Course: {medicine.duration?.value != null ? `${medicine.duration.value} ${medicine.duration.unit || ''}` : medicine.duration || '—'}
+                            {medicine.course?.value != null ? ` • Qty ${medicine.course.value}` : ''}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                    {req.prescriptionVerification.issues?.length > 0 && (
+                      <p className="mt-2 text-[10px] font-semibold text-amber-800">
+                        {req.prescriptionVerification.issues.join(' ')}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Proposal Callout Card / Action Bar */}
                 {isProposalActionable && (
                   <div className="bg-purple-50/90 border border-purple-200 rounded-2xl p-3.5 space-y-3 text-xs animate-fade-in">
