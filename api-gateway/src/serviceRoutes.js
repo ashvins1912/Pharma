@@ -7,6 +7,7 @@ import { createServiceToken } from './serviceAuth.js';
 function hasScopePermission(user, scope) {
   const role = user?.app_metadata?.role || user?.role || 'customer';
   if (['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_OWNER', 'TENANT_ADMIN'].includes(role)) return true;
+  if (role === 'customer' && scope.startsWith('customer.profile.')) return true;
   const permissions = Array.isArray(user?.permissions) ? user.permissions : (user?.app_metadata?.permissions || []);
   if (permissions.includes('*') || permissions.includes(scope)) return true;
   const aliases = {
