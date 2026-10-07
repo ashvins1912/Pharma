@@ -130,6 +130,31 @@ const fetchPrescription = async ({ prescriptionId, userId, role, isAdmin }) => {
   }
 };
 
+export async function reinitiatePrescriptionProcessing({ prescriptionId, userId, role = 'admin', isAdmin = true }) {
+  const token = serviceToken({ userId, role, isAdmin });
+  try {
+    const response = await axios.post(
+      `${config.prescriptionServiceUrl}/api/v1/prescriptions/${encodeURIComponent(prescriptionId)}/reprocess`,
+      {},
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 10_000
+      }
+    );
+    return response.data?.data || response.data;
+  } catch (error) {
+    if (error.response?.status) {
+      const detail = error.response.data?.detail || error.response.data?.message || 'Prescription reprocessing failed.';
+      throw Object.assign(new Error(detail), {
+        statusCode: error.response.status === 404 ? 404 : error.response.status === 409 ? 409 : 502
+      });
+    }
+    throw Object.assign(new Error('Prescription Service is unavailable.'), {
+      statusCode: error.code === 'ECONNABORTED' ? 504 : 503
+    });
+  }
+}
+
 export async function verifyPrescriptionAgainstItems({
   prescriptionId,
   items,
