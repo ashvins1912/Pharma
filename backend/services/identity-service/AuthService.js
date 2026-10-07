@@ -248,7 +248,7 @@ export class AuthService {
             dateOfBirth: userData.dateOfBirth || null,
             mobileNumber: userData.mobileNumber || userData.mobile || '',
             mobile: userData.mobileNumber || userData.mobile || '',
-            accountStatus: userData.status === 'ACTIVE' ? 'ACTIVE' : (userData.accountStatus || 'PENDING_EMAIL_VERIFICATION'),
+            accountStatus: userData.accountStatus || (userData.status === 'ACTIVE' ? 'ACTIVE' : 'PENDING_EMAIL_VERIFICATION'),
             status: (userData.accountStatus === 'ACTIVE' || userData.status === 'ACTIVE') ? 'ACTIVE' : (userData.status || 'PENDING_VERIFICATION'),
             profileCompleted: userData.profileCompleted !== undefined ? Boolean(userData.profileCompleted) : true,
             primaryAuthProvider: userData.primaryAuthProvider || 'LOCAL',
