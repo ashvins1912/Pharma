@@ -7,6 +7,8 @@ import { getPrescription, savePrescription } from '../config/prescriptionStorage
 import { getIsConnected } from '../config/db.js';
 import MedicineRequest from '../models/MedicineRequest.js';
 import UserAddress from '../models/UserAddress.js';
+import { customerService } from '../services/customer-service/CustomerService.js';
+import prescriptionClient from '../services/prescription-service-client/PrescriptionClient.js';
 
 const router = express.Router();
 
@@ -131,6 +133,65 @@ const validateFileSignature = (file) => {
 };
 
 
+const normalizePrescriptionVerification = prescription => ({
+    status: prescription?.status === 'APPROVED'
+        ? 'MATCHED'
+        : prescription?.status === 'REVIEW_REQUIRED'
+            ? 'REVIEW_REQUIRED'
+            : prescription?.status === 'REJECTED'
+                ? 'REJECTED'
+                : prescription?.status === 'INACTIVE'
+                    ? 'INACTIVE'
+                    : 'PROCESSING',
+    prescriptionId: prescription?.prescriptionId || null,
+    patientPuid: prescription?.patientPuid || null,
+    overallConfidence: Number(prescription?.quality?.overallConfidence || prescription?.extraction?.overallConfidence || 0),
+    lastCheckedAt: new Date(),
+    source: 'PYTHON_PRESCRIPTION_SERVICE',
+    medicines: (prescription?.medicines || prescription?.extraction?.medicines || []).map((medicine, index) => ({
+        rawName: medicine.rawName || '',
+        normalizedName: medicine.normalizedName || medicine.rawName || '',
+        strength: medicine.strength || null,
+        dose: medicine.dose || null,
+        frequency: medicine.frequency || null,
+        duration: medicine.duration || null,
+        course: medicine.course || null,
+        instructions: medicine.instructions || null,
+        confidence: Number(medicine.confidence || 0),
+        validationStatus: medicine.medicineValidation?.status || 'EXTRACTED',
+        productId: medicine.medicineValidation?.productId || null,
+        prescriptionMedicineIndex: index
+    })),
+    issues: prescription?.status === 'REVIEW_REQUIRED'
+        ? ['Prescription requires pharmacist verification.']
+        : prescription?.status === 'REJECTED'
+            ? ['Prescription was rejected.']
+            : []
+});
+
+const syncPrescriptionVerification = async request => {
+    if (!request?.prescriptionId || !prescriptionClient.isConfigured()) return request;
+    const currentStatus = request.prescriptionVerification?.status;
+    if (currentStatus && currentStatus !== 'PROCESSING') return request;
+    try {
+        const prescription = await prescriptionClient.get(request.prescriptionId, {
+            userId: request.customerId,
+            tenantId: request.tenantId || null,
+            branchId: request.branchId || null,
+            role: 'customer'
+        });
+        const verification = normalizePrescriptionVerification(prescription);
+        const updated = await MedicineRequest.findOneAndUpdate(
+            { _id: request._id },
+            { $set: { prescriptionVerification: verification } },
+            { new: true }
+        ).lean();
+        return updated || { ...request, prescriptionVerification: verification };
+    } catch {
+        return request;
+    }
+};
+
 const handleAttachments = (req, res, next) => {
     upload.fields([
         { name: 'prescription', maxCount: 1 },
@@ -153,12 +214,115 @@ const handleAttachments = (req, res, next) => {
 // CUSTOMER APIS
 // -------------------------------------------------------------
 
+// Replace/re-upload the prescription for an existing customer medicine request.
+router.put('/:id/prescription', authenticateUser, authorizeCustomerAction, handleAttachments, async (req, res) => {
+    try {
+        if (!requireDatabase(res)) return;
+        const customerId = req.user.sub;
+        const request = await MedicineRequest.findOne({ _id: req.params.id, customerId });
+        if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
+
+        if (['CONVERTED_TO_ORDER', 'CUSTOMER_APPROVED', 'CANCELLED', 'CUSTOMER_REJECTED', 'PHARMACY_REJECTED'].includes(request.status)) {
+            return res.status(409).json({ message: 'This medicine request cannot accept a prescription update in its current state.' });
+        }
+        const presFile = req.files?.prescription?.[0];
+        if (!presFile) return res.status(400).json({ message: 'A replacement prescription file is required.' });
+        if (!request.prescriptionId) {
+            return res.status(409).json({ code: 'PRESCRIPTION_NOT_LINKED', message: 'This request is not linked to the Python Prescription Service.' });
+        }
+        try {
+            await customerService.assertUserCanAccessPuid(customerId, request.patientPuid);
+        } catch {
+            return res.status(403).json({ code: 'PUID_ACCESS_DENIED', message: 'Prescription patient access is not authorized.' });
+        }
+        if (!prescriptionClient.isConfigured()) {
+            return res.status(503).json({ code: 'PRESCRIPTION_SERVICE_UNAVAILABLE', message: 'Prescription processing is temporarily unavailable.' });
+        }
+
+        const oldUrl = request.prescriptionUrl || null;
+        const newUrl = await savePrescription(presFile, customerId);
+        try {
+            const result = await prescriptionClient.replace(request.prescriptionId, {
+                buffer: presFile.buffer,
+                filename: presFile.originalname,
+                contentType: presFile.mimetype,
+                idempotencyKey: req.get('idempotency-key') || `medicine-request-replace:${request._id}:${Date.now()}`,
+                userId: customerId,
+                tenantId: request.tenantId || req.user.tenantId || null,
+                branchId: request.branchId || req.user.branchId || null,
+                role: req.user.app_metadata?.role || req.user.role || 'customer'
+            });
+            const verification = {
+                status: 'PROCESSING',
+                prescriptionId: request.prescriptionId,
+                patientPuid: request.patientPuid || null,
+                overallConfidence: 0,
+                lastCheckedAt: new Date(),
+                source: 'PYTHON_PRESCRIPTION_SERVICE',
+                medicines: [],
+                issues: [],
+                documentVersion: result?.documentVersion || null
+            };
+            const updated = await MedicineRequest.findOneAndUpdate(
+                { _id: request._id, customerId },
+                {
+                    $set: { prescriptionUrl: newUrl, prescriptionVerification: verification },
+                    $push: {
+                        auditTrail: {
+                            action: 'PRESCRIPTION_UPDATED',
+                            actorId: customerId,
+                            role: 'Customer',
+                            timestamp: new Date(),
+                            notes: 'Customer replaced the prescription document; previous extraction is no longer authoritative.'
+                        }
+                    }
+                },
+                { new: true }
+            ).lean();
+            if (oldUrl && oldUrl !== newUrl) {
+                try { await (await import('../config/prescriptionStorage.js')).removePrescription(oldUrl); } catch {}
+            }
+            return res.json({
+                success: true,
+                request: updated,
+                prescription: result,
+                message: 'Prescription updated. It has been queued for reprocessing and re-verification.'
+            });
+        } catch (error) {
+            try { await (await import('../config/prescriptionStorage.js')).removePrescription(newUrl); } catch {}
+            return res.status(error.statusCode || 503).json({
+                code: error.code || 'PRESCRIPTION_UPDATE_FAILED',
+                message: error.message || 'Prescription update could not be processed.'
+            });
+        }
+    } catch (error) {
+        console.error('Prescription replacement failed:', error);
+        return res.status(500).json({ message: 'Unable to update prescription.' });
+    }
+});
+
 // Create a new medicine request
 router.post('/', authenticateUser, authorizeCustomerAction, handleAttachments, async (req, res) => {
     try {
         if (!requireDatabase(res)) return;
 
         const customerId = req.user.sub;
+        const customer = await customerService.ensureCustomerForUser(customerId, {
+            name: req.user.user_metadata?.name,
+            email: req.user.email,
+            phone: req.user.user_metadata?.mobile
+        });
+        const patientPuid = String(req.body.patientPuid || customer.selfPuid || '').trim() || null;
+        if (patientPuid) {
+            try {
+                await customerService.assertUserCanAccessPuid(customerId, patientPuid);
+            } catch (error) {
+                return res.status(error.statusCode || 403).json({
+                    code: 'PUID_ACCESS_DENIED',
+                    message: 'You are not authorized to use this patient profile for the prescription.'
+                });
+            }
+        }
         const addressId = String(req.body.addressId || '').trim();
         if (!mongoose.isValidObjectId(addressId)) {
             return res.status(400).json({
@@ -197,11 +361,66 @@ router.post('/', authenticateUser, authorizeCustomerAction, handleAttachments, a
         }
 
         let prescriptionUrl = req.body.prescriptionUrl || null;
+        let prescriptionId = req.body.prescriptionId || null;
         let productImageUrl = req.body.productImageUrl || null;
+        let prescriptionVerification = null;
+        let savedPrescriptionUrl = null;
 
         const presFile = req.files?.prescription?.[0];
         if (presFile) {
-            prescriptionUrl = await savePrescription(presFile, req.user.sub);
+            if (!prescriptionClient.isConfigured()) {
+                return res.status(503).json({
+                    code: 'PRESCRIPTION_SERVICE_UNAVAILABLE',
+                    message: 'Prescription processing is temporarily unavailable.'
+                });
+            }
+
+            savedPrescriptionUrl = await savePrescription(presFile, req.user.sub);
+            prescriptionUrl = savedPrescriptionUrl;
+
+            try {
+                const result = await prescriptionClient.upload({
+                    buffer: presFile.buffer,
+                    filename: presFile.originalname,
+                    contentType: presFile.mimetype,
+                    idempotencyKey: req.get('idempotency-key') || `medicine-request:${customerId}:${Date.now()}`,
+                    userId: customerId,
+                    tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null,
+                    branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
+                    role: req.user.app_metadata?.role || req.user.role || 'customer',
+                    patientPuid
+                });
+                prescriptionId = result?.prescriptionId || null;
+                prescriptionVerification = {
+                    status: 'PROCESSING',
+                    prescriptionId,
+                    patientPuid,
+                    overallConfidence: 0,
+                    lastCheckedAt: new Date(),
+                    source: 'PYTHON_PRESCRIPTION_SERVICE',
+                    medicines: [],
+                    issues: []
+                };
+            } catch (error) {
+                if (savedPrescriptionUrl) {
+                    try { await (await import('../config/prescriptionStorage.js')).removePrescription(savedPrescriptionUrl); } catch {}
+                }
+                return res.status(error.statusCode || 503).json({
+                    code: error.code || 'PRESCRIPTION_SERVICE_UNAVAILABLE',
+                    message: error.message || 'Prescription processing could not be started.'
+                });
+            }
+        } else if (prescriptionId) {
+            prescriptionVerification = {
+                status: 'PROCESSING',
+                prescriptionId,
+                patientPuid,
+                overallConfidence: 0,
+                lastCheckedAt: new Date(),
+                source: 'PYTHON_PRESCRIPTION_SERVICE',
+                medicines: [],
+                issues: []
+            };
         }
 
         const imgFile = req.files?.productImage?.[0];
@@ -231,6 +450,9 @@ router.post('/', authenticateUser, authorizeCustomerAction, handleAttachments, a
         const requestDoc = await dataStore.createMedicineRequest({
             requestedItems,
             prescriptionUrl,
+            prescriptionId,
+            patientPuid,
+            prescriptionVerification,
             productImageUrl,
             customerNote: req.body.customerNote || '',
             addressId: String(selectedAddress._id),
@@ -316,11 +538,14 @@ router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
         const total = await MedicineRequest.countDocuments(query);
         const totalPages = Math.ceil(total / limit);
         const currentPage = Math.min(page, Math.max(totalPages, 1));
-        const requests = await MedicineRequest.find(query)
+        let requests = await MedicineRequest.find(query)
             .sort({ createdAt: -1, _id: -1 })
             .skip((currentPage - 1) * limit)
             .limit(limit)
             .lean();
+        if (prescriptionClient.isConfigured()) {
+            requests = await Promise.all(requests.map(request => syncPrescriptionVerification(request)));
+        }
         res.json({
             requests,
             items: requests,
@@ -395,16 +620,57 @@ router.get('/:id', authenticateUser, authorizeRequestDetails, async (req, res) =
     }
 });
 
-// Scan & verify attached prescription using clinical analytics OCR
+// Return the real Python Prescription Service extraction/verification result.
 router.get('/:id/scan-prescription', authenticateUser, authorizeRequestDetails, async (req, res) => {
     try {
-        let request = null;
-        if (getIsConnected()) {
-            request = await dataStore.getMedicineRequestById(req.params.id, req.user);
-        } else {
-            request = await dataStore.getMedicineRequestById(req.params.id, req.user);
+        const request = await dataStore.getMedicineRequestById(req.params.id, req.user);
+        if (!request) return res.status(404).json({ success: false, message: 'Medicine request not found.' });
+        if (!request.prescriptionId) {
+            return res.status(409).json({
+                success: false,
+                code: 'PRESCRIPTION_NOT_LINKED',
+                message: 'This request does not have a linked Prescription Service record.'
+            });
         }
-        if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
+        if (!prescriptionClient.isConfigured()) {
+            return res.status(503).json({ success: false, code: 'PRESCRIPTION_SERVICE_UNAVAILABLE', message: 'Prescription processing service is unavailable.' });
+        }
+
+        const prescription = await prescriptionClient.get(request.prescriptionId, {
+            userId: req.user.sub,
+            tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || request.tenantId || null,
+            branchId: req.user.branchId || req.user.app_metadata?.branchId || request.branchId || null,
+            role: req.user.app_metadata?.role || req.user.role || 'admin',
+            isAdmin: isStaff(req.user)
+        });
+        const verification = normalizePrescriptionVerification(prescription);
+        const updated = await MedicineRequest.findByIdAndUpdate(
+            request._id,
+            { $set: { prescriptionVerification: verification } },
+            { new: true }
+        ).lean();
+
+        return res.json({
+            success: true,
+            prescriptionId: request.prescriptionId,
+            verified: prescription.status === 'APPROVED',
+            status: prescription.status,
+            confidence: verification.overallConfidence,
+            scannedMedicines: verification.medicines,
+            issues: verification.issues,
+            rawText: prescription.extraction?.rawText || null,
+            ocrModel: prescription.extraction?.ocrVersion || null,
+            verifiedAt: verification.lastCheckedAt,
+            request: updated || request
+        });
+    } catch (error) {
+        console.error('Prescription scan failed:', error);
+        res.status(error.statusCode || 503).json({
+            success: false,
+            message: error.message || 'Failed to read prescription processing result.'
+        });
+    }
+});
 
         const firstItem = request.requestedItems?.[0] || {};
         const requestedName = firstItem.requestedName || request.medicineName || 'Prescribed Medicine';
