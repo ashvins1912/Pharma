@@ -15,6 +15,7 @@ import {
 import {
   adjustInventory,
   lookupInventory,
+  searchInventoryProducts,
   reserveInventory,
   transitionReservation
 } from './inventory.js';
@@ -32,6 +33,18 @@ const upload = multer({
   }),
   limits: { fileSize: config.maxFileBytes, files: 1 }
 });
+
+router.get('/products/search', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
+  const result = await searchInventoryProducts({
+    tenantId: req.query.tenantId || null,
+    branchId: req.query.branchId || null,
+    query: req.query.q || '',
+    category: req.query.category || '',
+    page: req.query.page || 1,
+    limit: req.query.limit || 50
+  });
+  return res.json(result);
+}));
 
 router.get('/products/:productId', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
   const result = await lookupInventory({ productIds: [req.params.productId] });
