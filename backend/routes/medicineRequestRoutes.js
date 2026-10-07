@@ -338,6 +338,7 @@ router.post('/', authenticateUser, authorizeCustomerAction, handleAttachments, a
                 });
             }
         }
+        const addressId = String(req.body.addressId || '').trim();
         if (!mongoose.isValidObjectId(addressId)) {
             return res.status(400).json({
                 code: 'ADDRESS_REQUIRED',
