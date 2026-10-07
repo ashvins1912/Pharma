@@ -83,3 +83,6 @@ button, a, input, select, textarea {
   50% { transform: translateX(180%); }
   100% { transform: translateX(420%); }
 }
+
+
+body.modal-open { overscroll-behavior: none; }
