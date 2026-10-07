@@ -4,7 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { friendlyAuthError } from '../api/apiErrors';
 import { isSupabaseConfigured } from '../supabaseClient';
 
-const signupFields = ['name', 'mobile', 'email', 'password', 'confirmPassword'];
+const signupFields = ['name', 'mobile', 'dateOfBirth', 'gender', 'email', 'password', 'confirmPassword'];
 
 function validateSignupField(field, values) {
   switch (field) {
@@ -12,6 +12,10 @@ function validateSignupField(field, values) {
       return values.name.trim().length < 2 ? 'Full name must be at least 2 characters.' : '';
     case 'mobile':
       return values.mobile.replace(/\D/g, '').length < 10 ? 'Mobile number must be at least 10 digits.' : '';
+    case 'dateOfBirth':
+      return !values.dateOfBirth ? 'Date of birth is required.' : '';
+    case 'gender':
+      return !values.gender ? 'Please select your gender.' : '';
     case 'email':
       return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(values.email.trim())
         ? ''
@@ -58,6 +62,8 @@ export default function AuthModal({ isOpen, onClose }) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [gender, setGender] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -83,6 +89,8 @@ export default function AuthModal({ isOpen, onClose }) {
     setShowConfirmPassword(false);
     setName('');
     setMobile('');
+    setDateOfBirth('');
+    setGender('');
     setLoading(false);
     setGoogleLoading(false);
     setErrorMsg('');
@@ -95,7 +103,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  const getSignupValues = () => ({ name, mobile, email, password, confirmPassword });
+  const getSignupValues = () => ({ name, mobile, dateOfBirth, gender, email, password, confirmPassword });
   const validateSignup = () => {
     const values = getSignupValues();
     const errors = Object.fromEntries(
@@ -146,7 +154,7 @@ export default function AuthModal({ isOpen, onClose }) {
           setLoading(false);
           return;
         }
-        await signUpWithEmail(email, password, name, mobile);
+        await signUpWithEmail(email, password, name, mobile, '', '', dateOfBirth, gender);
         addToast('Account created successfully!', 'success');
         handleClose(true);
       } else {
