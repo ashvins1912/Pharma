@@ -34,6 +34,8 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
   // Prescription status
   const [prescriptionStatus, setPrescriptionStatus] = useState('Verified');
   const [scannedMedicine, setScannedMedicine] = useState(null);
+  const [scannedMedicines, setScannedMedicines] = useState([]);
+  const [prescriptionVerification, setPrescriptionVerification] = useState(null);
   const [scanningPrescription, setScanningPrescription] = useState(false);
 
   // Validity
@@ -168,23 +170,42 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
       setShowRejectBox(false);
       setRejectReason('');
 
-      // Auto-scan prescription with clinical analytics OCR
-      if (request.prescriptionUrl) {
+      // Read actual Python Prescription Service extraction/verification.
+      if (request.prescriptionId || request.prescriptionUrl) {
         setScanningPrescription(true);
         apiClient.get(`/api/medicine-requests/${request._id}/scan-prescription`)
           .then(res => {
-            if (active && res.data?.verified) {
-              const scannedName = res.data.scannedMedicineName || res.data.primaryScannedMedicine;
-              setScannedMedicine(scannedName);
-              setPrescriptionStatus('Verified');
+            if (!active) return;
+            setPrescriptionVerification({
+              status: res.data?.status || 'PROCESSING',
+              confidence: Number(res.data?.confidence || 0),
+              issues: res.data?.issues || []
+            });
+            const medicines = Array.isArray(res.data?.scannedMedicines) ? res.data.scannedMedicines : [];
+            setScannedMedicines(medicines);
+            const first = medicines[0];
+            setScannedMedicine(first?.prescriptionMedicine || first?.normalizedName || first?.rawName || null);
+            const status = res.data?.status;
+            setPrescriptionStatus(status === 'MATCHED' ? 'Verified'
+              : status === 'NOT_REQUIRED' ? 'Not Required'
+                : status === 'REJECTED' ? 'Rejected'
+                  : 'Pending Verification');
+          })
+          .catch(() => {
+            if (active) {
+              setPrescriptionVerification({ status: 'PROCESSING', confidence: 0, issues: ['Prescription verification is not available yet.'] });
+              setScannedMedicines([]);
+              setScannedMedicine(null);
+              setPrescriptionStatus('Pending Verification');
             }
           })
-          .catch(() => {})
           .finally(() => {
             if (active) setScanningPrescription(false);
           });
       } else {
         setScannedMedicine(null);
+        setScannedMedicines([]);
+        setPrescriptionVerification(null);
       }
     }
     return () => { active = false; };
@@ -442,41 +463,72 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
             <span className="font-extrabold text-amber-950 block">Prescription Verification Status</span>
             <p className="text-[11px] text-amber-800">Confirm clinical verification before customer approval.</p>
           </div>
-          <select
-            value={prescriptionStatus}
-            onChange={(e) => setPrescriptionStatus(e.target.value)}
-            disabled={!canEditProposal || !reviewReady}
-            className="px-3 py-1.5 text-xs font-bold bg-white border border-amber-300 rounded-xl text-amber-950 outline-none"
-          >
-            <option value="Verified">✓ Verified by Pharmacist</option>
-            <option value="Pending Verification">⏳ Pending Verification</option>
-            <option value="Not Required">Not Required (OTC)</option>
-            <option value="Rejected">✕ Prescription Rejected</option>
-          </select>
+          <div className="rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-950">
+            {prescriptionStatus === 'Verified' ? '✓ Prescription Matched'
+              : prescriptionStatus === 'Rejected' ? '✕ Prescription Rejected'
+                : prescriptionStatus === 'Not Required' ? 'Not Required (OTC)'
+                  : '⏳ Verification Pending'}
+          </div>
         </div>
 
-        {/* Scanned Medicine Name from Prescription Analytics */}
-        {scannedMedicine && (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-base">🔬</span>
+        {(request.prescriptionId || request.prescriptionUrl) && (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-2">
               <div>
-                <span className="font-extrabold text-emerald-950 flex items-center gap-1.5">
-                  <span>Prescription Analytics Verified</span>
-                  <span className="bg-emerald-200 text-emerald-900 text-[10px] font-black px-1.5 py-0.2 rounded-md">✓ 96% Match</span>
-                </span>
-                <span className="text-slate-600 block mt-0.5">
-                  Scanned Medicine: <strong className="text-emerald-950 font-black">{scannedMedicine}</strong>
-                </span>
+                <span className="font-extrabold text-slate-900 text-xs">Prescription medicines extracted</span>
+                <p className="text-[11px] text-slate-500">
+                  {prescriptionVerification?.status || 'PROCESSING'}
+                  {prescriptionVerification?.confidence ? ` • ${Math.round(prescriptionVerification.confidence * 100)}% overall confidence` : ''}
+                </p>
               </div>
+              {scanningPrescription && <span className="text-[10px] font-bold text-blue-600">Checking…</span>}
             </div>
-            <button
-              type="button"
-              onClick={() => setMedicineName(scannedMedicine)}
-              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold cursor-pointer transition whitespace-nowrap self-start sm:self-auto shadow-xs"
-            >
-              Apply to Proposal
-            </button>
+
+            {scannedMedicines.length === 0 ? (
+              <p className="text-[11px] text-slate-500">No structured medicine extraction is available yet. Keep this request in manual verification.</p>
+            ) : (
+              <div className="space-y-2">
+                {scannedMedicines.map((medicine, index) => (
+                  <div key={`${medicine.rawName || medicine.prescriptionMedicine || index}-${index}`} className="rounded-xl border border-white bg-white p-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-black text-slate-900">
+                          {medicine.prescriptionMedicine || medicine.normalizedName || medicine.rawName || 'Medicine'}
+                        </p>
+                        {medicine.rawName && medicine.rawName !== medicine.prescriptionMedicine && (
+                          <p className="text-[10px] text-slate-500">Extracted: {medicine.rawName}</p>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-500">{medicine.status || medicine.validationStatus || 'EXTRACTED'}</span>
+                    </div>
+                    <div className="mt-1.5 grid grid-cols-2 gap-1.5 text-[10px] text-slate-600 sm:grid-cols-4">
+                      <span>Strength: <b>{medicine.strength?.value != null ? `${medicine.strength.value} ${medicine.strength.unit || ''}` : medicine.strength || '—'}</b></span>
+                      <span>Dose: <b>{medicine.dose?.value != null ? `${medicine.dose.value} ${medicine.dose.unit || ''}` : medicine.dose || '—'}</b></span>
+                      <span>Frequency: <b>{medicine.frequency?.normalized || medicine.frequency?.raw || medicine.frequency || '—'}</b></span>
+                      <span>Course: <b>{medicine.prescribedQuantity || medicine.course?.calculatedQuantity || medicine.course?.value || medicine.duration?.value || medicine.duration || '—'}</b></span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setMedicineName(medicine.prescriptionMedicine || medicine.normalizedName || medicine.rawName || '')}
+                        className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold"
+                      >
+                        Use in Proposal
+                      </button>
+                      {medicine.quantityMatch === false && (
+                        <span className="rounded-lg bg-rose-100 px-2 py-1 text-[10px] font-bold text-rose-700">Quantity mismatch</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {prescriptionVerification?.issues?.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-[10px] font-semibold text-amber-900">
+                {prescriptionVerification.issues.join(' ')}
+              </div>
+            )}
           </div>
         )}
 
