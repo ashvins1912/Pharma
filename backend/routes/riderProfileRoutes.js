@@ -1,7 +1,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import Rider from '../models/Rider.js';
-import { authenticateSupabaseUser } from '../middleware/auth.js';
+import { authenticateUser } from '../middleware/auth.js';
 import { getIsConnected } from '../config/db.js';
 
 const router = express.Router();
@@ -34,7 +34,7 @@ const normalizeLocation = (location) => {
     return null;
 };
 
-router.use(authenticateSupabaseUser);
+router.use(authenticateUser);
 
 router.post('/', async (req, res) => {
     if (!requireDatabase(res)) return;
