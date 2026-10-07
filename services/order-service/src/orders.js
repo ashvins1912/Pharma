@@ -268,7 +268,11 @@ export async function createOrder(body, user) {
   const existing = await findExistingOrder(request);
   if (existing) return checkReplay(existing, request);
   const skus = request.items.map(([sku]) => sku);
-  const catalog = await inventoryRequest('/bulk/lookup', { skus });
+  const catalog = await inventoryRequest('/bulk/lookup', {
+    skus,
+    tenantId: request.tenantId,
+    branchId: request.branchId
+  });
   const products = new Map((catalog.items || []).map(item => [String(item.sku).toUpperCase(), item]));
   const snapshotAt = new Date();
   const items = request.items.map(([sku, quantity]) => {
@@ -314,6 +318,8 @@ export async function createOrder(body, user) {
   const reservation = await inventoryRequest('/reservations', {
     orderId: orderNumber,
     items: items.map(item => ({ productId: item.productId, quantity: item.quantity })),
+    tenantId: request.tenantId,
+    branchId: request.branchId,
     idempotencyKey: `order-reservation:${orderNumber}`
   }, `order-reservation:${orderNumber}`);
   if (reservation.status !== 'RESERVED') {
