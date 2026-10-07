@@ -154,6 +154,9 @@ router.put('/onboarding', async (req, res) => {
     if (!firstName || !firstName.trim()) {
         return res.status(400).json({ success: false, error: 'First name is required.' });
     }
+    if (gender && !['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'].includes(gender)) {
+        validationDetails.push({ field: 'gender', code: 'INVALID_GENDER', message: 'Select a valid gender option.' });
+    }
     if (!dateOfBirth) {
         return res.status(400).json({ success: false, error: 'Date of birth is required.' });
     }
