@@ -83,6 +83,7 @@ const syncOrderPrescriptionVerification = async (order, actorUser) => {
 
     const verification = await verifyPrescriptionAgainstItems({
         prescriptionId: order.prescriptionId,
+        patientPuid: order.patientPuid || null,
         items: (order.items || order.medicineItems || []).map(item => ({
             productId: item.productId || item.medicineId || null,
             name: item.productName || item.name || '',
