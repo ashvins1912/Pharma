@@ -71,7 +71,7 @@ function MainApp() {
       if (token) {
         if (path.includes('vendor') || path.includes('onboarding') || urlParams.get('type') === 'vendor') {
           setVendorOnboardingToken(token);
-        } else if (path.includes('verify') || path === '/verify-email' || urlParams.get('type') === 'verify') {
+        } else if (path.includes('verify') || path.includes('activate') || path === '/verify-email' || path === '/activate-account' || urlParams.get('type') === 'verify' || urlParams.get('type') === 'activation') {
           setVerifyEmailToken(token);
         }
       }
