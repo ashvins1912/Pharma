@@ -1,9 +1,9 @@
 name: Repository architecture migration
 
 on:
-  push:
+  pull_request:
     branches:
-      - architecture/independent-services
+      - main
 
 permissions:
   contents: write
@@ -18,12 +18,22 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.head_ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Skip after migration commits
+        run: |
+          set -euo pipefail
+          message="$(git log -1 --pretty=%s)"
+          if [[ "$message" == "architecture: complete independent-service migration" || "$message" == "chore: remove temporary architecture migration workflow" ]]; then
+            echo "Migration already applied."
+            exit 0
+          fi
 
       - name: Move standalone services and remove duplicates
         run: |
@@ -483,4 +493,4 @@ jobs:
           git rm -f .github/workflows/repository-architecture-migration.yml
           git commit -m "chore: remove temporary architecture migration workflow"
 
-          git push origin HEAD:architecture/independent-services
+          git push origin HEAD:${{ github.head_ref }}
