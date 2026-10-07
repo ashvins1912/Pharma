@@ -299,7 +299,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
@@ -452,6 +452,67 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
                 })}
               </tbody>
             </table>
+          </div>
+
+          <div className="lg:hidden space-y-3">
+            {requests.map((req) => {
+              const firstItem = req.requestedItems?.[0] || {};
+              const proposal = req.pharmacyProposal;
+              return (
+                <article key={req._id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-3 min-w-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-xs font-black text-slate-900">#{req.requestNumber}</p>
+                      <p className="text-[10px] text-slate-400">{new Date(req.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    <div className="shrink-0">{getStatusBadge(req.status)}</div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Customer</p>
+                      <p className="font-bold text-slate-900 truncate">{req.customerName}</p>
+                      <p className="text-[11px] text-slate-500 truncate">{req.customerPhone || 'No phone'}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Medicine</p>
+                      <p className="font-bold text-slate-900 break-words">{firstItem.requestedName || 'Medicine'}</p>
+                      <p className="text-[11px] text-slate-500">{firstItem.strength ? firstItem.strength + ' • ' : ''}Qty: {firstItem.quantity || 1}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {req.prescriptionUrl && (
+                      <button type="button" onClick={() => openPrescription(req.prescriptionUrl)}
+                        className="min-h-10 rounded-xl border border-blue-200 bg-blue-50 px-3 text-[11px] font-bold text-blue-700">
+                        📄 Prescription
+                      </button>
+                    )}
+                    {req.productImageUrl && (
+                      <a href={req.productImageUrl} target="_blank" rel="noreferrer"
+                        className="min-h-10 rounded-xl border border-indigo-200 bg-indigo-50 px-3 flex items-center text-[11px] font-bold text-indigo-700">
+                        📷 Product Photo
+                      </a>
+                    )}
+                    {proposal && (
+                      <span className="min-h-10 rounded-xl bg-emerald-50 border border-emerald-100 px-3 flex items-center text-[11px] font-black text-emerald-700">
+                        ₹{proposal.finalPrice ?? proposal.totalPrice ?? proposal.approximatePrice}
+                      </span>
+                    )}
+                  </div>
+                  {req.customerNote && (
+                    <p className="text-[11px] text-slate-500 line-clamp-2 break-words">Note: "{req.customerNote}"</p>
+                  )}
+                  {req.status === 'PROPOSAL_SENT' && (
+                    <p className="text-[10px] font-bold text-purple-700">Waiting for Customer Approval</p>
+                  )}
+                  <button
+                    onClick={() => { setActiveRequest(req); setProposalModalOpen(true); }}
+                    className="w-full min-h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold shadow-sm"
+                  >
+                    {req.status === 'PROPOSAL_SENT' ? 'View / Edit Proposal' : ['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER', 'CUSTOMER_REJECTED', 'PHARMACY_REJECTED', 'EXPIRED'].includes(req.status) ? 'View Details' : 'Review & Propose'}
+                  </button>
+                </article>
+              );
+            })}
           </div>
         )}
 
