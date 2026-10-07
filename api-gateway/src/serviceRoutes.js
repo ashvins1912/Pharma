@@ -4,6 +4,22 @@ import { config } from './config.js';
 import { proxyRequest } from './proxy.js';
 import { createServiceToken } from './serviceAuth.js';
 
+function hasScopePermission(user, scope) {
+  const role = user?.app_metadata?.role || user?.role || 'customer';
+  if (['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_OWNER', 'TENANT_ADMIN'].includes(role)) return true;
+  const permissions = Array.isArray(user?.permissions) ? user.permissions : (user?.app_metadata?.permissions || []);
+  if (permissions.includes('*') || permissions.includes(scope)) return true;
+  const aliases = {
+    'inventory.read': ['inventory.view'],
+    'inventory.write': ['inventory.update'],
+    'orders.read': ['orders.view'],
+    'prescription.read': ['prescriptions.view'],
+    'prescription.write': ['prescriptions.write'],
+    'prescription.review': ['prescriptions.review']
+  };
+  return (aliases[scope] || []).some(permission => permissions.includes(permission));
+}
+
 function createServiceHandler({ audience, getScope, target, includeCustomerProfile = false }, gatewayConfig) {
   return (req, res) => {
     if (!target) {
@@ -13,11 +29,19 @@ function createServiceHandler({ audience, getScope, target, includeCustomerProfi
         requestId: req.requestId
       });
     }
+    const scope = getScope(req);
+    if (!hasScopePermission(req.user, scope)) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: `Permission required: ${scope}` },
+        requestId: req.requestId
+      });
+    }
     let token;
     try {
       token = createServiceToken({
         audience,
-        scope: getScope(req),
+        scope,
         user: req.user,
         includeCustomerProfile
       }, gatewayConfig);
