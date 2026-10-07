@@ -1,4 +1,34 @@
 /**
+
+/**
+ * PUT /api/v1/profile/me
+ * Update editable profile fields for the authenticated user.
+ */
+router.put('/me', authenticateUser, async (req, res) => {
+    const userId = req.user?.id || req.user?.sub || req.user?.userId;
+    if (!userId) return sendError(res, { code: 'UNAUTHORIZED', message: 'Authentication required.', statusCode: 401, req });
+
+    const { firstName, lastName, mobileNumber, mobile, gender, dateOfBirth } = req.body || {};
+    try {
+        const result = await authService.updateProfile({
+            userId,
+            firstName,
+            lastName,
+            mobileNumber: mobileNumber || mobile,
+            gender,
+            dateOfBirth
+        });
+        if (result.accessToken) setSessionCookies(res, { accessToken: result.accessToken });
+        return sendSuccess(res, { data: result, message: 'Profile updated successfully.', statusCode: 200, req });
+    } catch (err) {
+        return sendError(res, {
+            code: err.code || 'PROFILE_UPDATE_FAILED',
+            message: err.message || 'Could not update profile.',
+            statusCode: err.status || 400,
+            req
+        });
+    }
+});
  * API Gateway Profile & Onboarding Routes (/api/v1/profile/*)
  */
 import express from 'express';
