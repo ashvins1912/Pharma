@@ -402,6 +402,15 @@ export function AuthProvider({ children }) {
   const completeGoogleProfile = async (profileData) => {
     let result;
     try {
+      // Ensure the restricted Pharma onboarding cookie is freshly established
+      // before profile completion. This prevents a lost/expired HttpOnly
+      // onboarding cookie from producing a 401 on the first PUT.
+      if (supabase) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session?.access_token) {
+          await exchangeGoogleSession(sessionData.session);
+        }
+      }
       const { data } = await apiClient.put('/api/v1/auth/complete-profile', profileData);
       result = data?.data || data;
     } catch (error) {
