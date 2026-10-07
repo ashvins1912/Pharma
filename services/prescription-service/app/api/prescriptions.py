@@ -77,6 +77,40 @@ async def upload_prescription(
         message="Prescription uploaded successfully"
     )
 
+@router.put("/{prescription_id}/document")
+async def replace_prescription_document(
+    prescription_id: str,
+    file: UploadFile = File(...),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    context: ServiceUserContext = Depends(get_current_service_context)
+):
+    try:
+        await _authorized_prescription(prescription_id, context)
+        file_bytes = await file.read()
+        result = await prescription_engine.replace_prescription(
+            prescription_id,
+            user_id=context.user_id,
+            tenant_id=context.tenant_id,
+            branch_id=context.branch_id,
+            file_bytes=file_bytes,
+            filename=file.filename,
+            content_type=file.content_type,
+            idempotency_key=idempotency_key,
+        )
+        return {"success": True, "data": result, "message": "Prescription document replaced and queued for reprocessing."}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        if str(exc) == "INACTIVE":
+            raise HTTPException(status_code=409, detail="Prescription is inactive")
+        if str(exc) == "VERSION_CONFLICT":
+            raise HTTPException(status_code=409, detail="Prescription was updated by another operation.")
+        raise HTTPException(status_code=409, detail=str(exc))
+
 @router.get("/reviews/queue")
 async def review_queue(context: ServiceUserContext = Depends(get_current_service_context)):
     _require_review_permission(context)
