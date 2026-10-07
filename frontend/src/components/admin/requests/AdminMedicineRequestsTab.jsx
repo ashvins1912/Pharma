@@ -5,6 +5,7 @@ import {
 } from '../../../api/medicineRequestService';
 import AdminProposalModal from './AdminProposalModal';
 import apiClient from '../../../api/apiClient';
+import { normalizePrescriptionBlob } from '../../../utils/prescriptionFile';
 
 export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
   const [requests, setRequests] = useState([]);
@@ -58,12 +59,15 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
   const openPrescription = async (prescriptionUrl) => {
     if (!prescriptionUrl) return;
     try {
-      const response = await apiClient.get(prescriptionUrl, { responseType: 'blob' });
-      const contentType = String(response.headers?.['content-type'] || response.data?.type || '').toLowerCase();
-      if (!response.data?.size || !/(application\/pdf|image\/)/.test(contentType)) {
-        throw new Error('Prescription file could not be previewed.');
-      }
-      const objectUrl = URL.createObjectURL(response.data);
+      const response = await apiClient.get(prescriptionUrl, {
+        responseType: 'blob',
+        headers: { Accept: 'application/pdf,image/*' }
+      });
+      const contentType = String(
+        response.headers?.['content-type'] || response.data?.type || ''
+      ).toLowerCase();
+      const blob = await normalizePrescriptionBlob(response.data, contentType);
+      const objectUrl = URL.createObjectURL(blob);
       const popup = window.open(objectUrl, '_blank', 'noopener,noreferrer');
       if (!popup) {
         URL.revokeObjectURL(objectUrl);
