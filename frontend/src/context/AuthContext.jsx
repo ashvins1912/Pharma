@@ -101,6 +101,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const handleAuthenticationRequired = () => {
+      setAuthTransport('cookie');
       localStorage.removeItem('demo_session');
       localStorage.removeItem('demo_auth_token');
       syncSession(null);
