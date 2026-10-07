@@ -74,8 +74,7 @@ export async function verifySupabaseExchangeToken(token) {
     err.status = 503;
     throw err;
   }
-
-  const baseUrl = String(env.SUPABASE_URL).replace(/\\/$/, '');
+  const baseUrl = String(env.SUPABASE_URL).replace(/\/$/, '');
   const expectedIssuer = baseUrl + '/auth/v1';
 
   let decoded;
