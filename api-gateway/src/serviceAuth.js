@@ -14,7 +14,11 @@ export function createServiceToken(
   const claims = {
     scope,
     userId,
-    userRole: role
+    userRole: role,
+    tenantId: typeof user?.tenantId === 'string' ? user.tenantId : null,
+    branchId: typeof user?.branchId === 'string' ? user.branchId : null,
+    authorizedTenantId: typeof user?.authorizedTenantId === 'string' ? user.authorizedTenantId : null,
+    isPlatformUser: Boolean(user?.isPlatformUser)
   };
   if (includeCustomerProfile) {
     claims.email = typeof user.email === 'string' ? user.email : '';
