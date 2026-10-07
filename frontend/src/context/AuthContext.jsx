@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { isSupabaseConfigured, supabase } from '../supabaseClient';
-import apiClient from '../api/apiClient';
+import apiClient, { setAuthTransport } from '../api/apiClient';
 import { env } from '../config/env';
 
 const AuthContext = createContext(null);
@@ -51,6 +51,7 @@ export function AuthProvider({ children }) {
         const { data } = await apiClient.get('/api/auth/session');
         const sessionUser = data?.user || (data?.id ? data : null);
         if (mounted && sessionUser) {
+          setAuthTransport('cookie');
           syncSession({ user: sessionUser }, sessionUser);
           setMfaEnabled(Boolean(data.mfaEnabled));
           setAal(data.aal || 'aal1');
@@ -81,7 +82,10 @@ export function AuthProvider({ children }) {
           setPasswordRecoveryRequired(true);
         }
         if (!mounted) return;
-        if (supaSession) syncSession(supaSession);
+        if (supaSession) {
+          setAuthTransport('bearer');
+          syncSession(supaSession);
+        }
         else if (event === 'SIGNED_OUT') syncSession(null);
       });
       return () => {
@@ -126,6 +130,10 @@ export function AuthProvider({ children }) {
       return { mfaRequired: true, email: data.email };
     }
 
+    // Backend login establishes the secure HttpOnly platform session cookie.
+    // Make that cookie the only API credential for this browser session so a
+    // stale Supabase bearer token can never override the newly authenticated user.
+    setAuthTransport('cookie');
     syncSession({ user: data.user }, data.user);
     setAal(data.aal || 'aal1');
     setMfaRequired(false);
@@ -134,6 +142,7 @@ export function AuthProvider({ children }) {
   };
 
   const loginWithGoogle = async () => {
+    setAuthTransport('bearer');
     if (!isSupabaseConfigured || !supabase) {
       throw new Error('Google sign-in is unavailable until Supabase is configured.');
     }
@@ -158,6 +167,7 @@ export function AuthProvider({ children }) {
       challengeToken: mfaChallenge.challengeToken
     });
 
+    setAuthTransport('cookie');
     syncSession({ user: data.user }, data.user);
     setAal('aal2');
     setMfaEnabled(true);
@@ -211,6 +221,7 @@ export function AuthProvider({ children }) {
   };
 
   const loginDemoCustomer = async () => {
+    setAuthTransport('bearer');
     const { data } = await apiClient.post('/api/auth/demo-customer');
     const demo = { ...data, user: data.user };
     localStorage.setItem('demo_session', JSON.stringify(demo));
@@ -220,6 +231,7 @@ export function AuthProvider({ children }) {
   };
 
   const loginDemoAdmin = async () => {
+    setAuthTransport('bearer');
     const { data } = await apiClient.post('/api/auth/demo-admin/instant');
     const demoSession = { ...data, user: data.user };
     localStorage.setItem('demo_session', JSON.stringify(demoSession));
@@ -232,6 +244,7 @@ export function AuthProvider({ children }) {
     if (logoutInProgress.current) return;
     logoutInProgress.current = true;
     try {
+    setAuthTransport('cookie');
     localStorage.removeItem('demo_session');
     localStorage.removeItem('demo_auth_token');
     syncSession(null);
