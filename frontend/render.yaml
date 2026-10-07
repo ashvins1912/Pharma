@@ -16,6 +16,12 @@ services:
       - key: VITE_GOOGLE_MAPS_API_KEY
         sync: false
     routes:
+      # Keep browser API calls same-origin while routing them through the
+      # public API Gateway. This also preserves legacy /api/orders/*
+      # prescription URLs stored on existing orders.
+      - type: rewrite
+        source: /api/*
+        destination: https://ashvin-pharmacy-api-gateway.onrender.com/api/*
       - type: rewrite
         source: /*
         destination: /index.html
