@@ -162,7 +162,7 @@ export async function searchInventoryProducts({
   };
 }
 
-export async function reserveInventory({ orderId, items, idempotencyKey, actor, requestId, correlationId }) {
+export async function reserveInventory({ orderId, items, idempotencyKey, actor, requestId, correlationId, tenantId = null, branchId = null }) {
   const normalizedOrderId = typeof orderId === 'string' ? orderId.trim() : '';
   const normalizedIdempotencyKey = typeof idempotencyKey === 'string' ? idempotencyKey.trim() : '';
   if (!normalizedOrderId || !normalizedIdempotencyKey
@@ -181,7 +181,10 @@ export async function reserveInventory({ orderId, items, idempotencyKey, actor, 
     }
     return { reservationId: existing.reservationId, status: existing.status, items: existing.items, expiresAt: existing.expiresAt || null };
   };
-  const existing = await Reservation.findOne({ idempotencyKey: normalizedIdempotencyKey }).lean();
+  const reservationFilter = { idempotencyKey: normalizedIdempotencyKey };
+  if (tenantId) reservationFilter.tenantId = String(tenantId).trim();
+  if (branchId) reservationFilter.branchId = String(branchId).trim();
+  const existing = await Reservation.findOne(reservationFilter).lean();
   if (existing) return replayExisting(existing);
 
   const session = await mongoose.startSession();
@@ -190,7 +193,9 @@ export async function reserveInventory({ orderId, items, idempotencyKey, actor, 
   try {
     await session.withTransaction(async () => {
       const productIds = normalized.map(item => new mongoose.Types.ObjectId(item.productId));
-      const products = await Product.find({ _id: { $in: productIds }, active: true }).session(session).lean();
+      const productFilter = { _id: { $in: productIds }, active: true };
+      if (tenantId) productFilter.tenantId = String(tenantId).trim();
+      const products = await Product.find(productFilter).session(session).lean();
       const productById = new Map(products.map(product => [String(product._id), product]));
       const reservedItems = [];
       for (const item of normalized) {
@@ -200,10 +205,13 @@ export async function reserveInventory({ orderId, items, idempotencyKey, actor, 
           error.statusCode = 409;
           throw error;
         }
-        const result = await Inventory.updateOne({
+        const inventoryFilter = {
           productId: product._id,
           $expr: { $gte: [{ $subtract: ['$stockQuantity', '$reservedQuantity'] }, item.quantity] }
-        }, { $inc: { reservedQuantity: item.quantity } }, { session });
+        };
+        if (tenantId) inventoryFilter.tenantId = String(tenantId).trim();
+        if (branchId) inventoryFilter.branchId = String(branchId).trim();
+        const result = await Inventory.updateOne(inventoryFilter, { $inc: { reservedQuantity: item.quantity } }, { session });
         if (result.modifiedCount !== 1) {
           const error = new Error(`Insufficient available inventory for SKU ${product.sku}.`);
           error.statusCode = 409;
@@ -213,6 +221,8 @@ export async function reserveInventory({ orderId, items, idempotencyKey, actor, 
       }
       await Reservation.create([{
         reservationId,
+        tenantId: tenantId || undefined,
+        branchId: branchId || undefined,
         idempotencyKey: normalizedIdempotencyKey,
         orderId: normalizedOrderId,
         status: 'RESERVED',
