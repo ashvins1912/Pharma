@@ -918,7 +918,7 @@ export class AuthService {
             err.status = 400;
             throw err;
         }
-        const updated = await this.saveUser(userId, {
+        await this.saveUser(userId, {
             ...storedUser,
             mfaEnabled: true,
             mfaSecretEncrypted: encryptPII(pending.secret),
