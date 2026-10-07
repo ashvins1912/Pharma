@@ -242,7 +242,7 @@ class PrescriptionServiceEngine:
                     "documentVersion": document_version,
                     "filename": filename or "prescription.pdf",
                     "contentType": "application/pdf",
-                    "originalFilename": normalized.filename.replace(".pdf", "") if normalized.filename else filename,
+                    "originalFilename": normalized.original_filename,
                     "originalContentType": normalized.original_content_type,
                     "documentCiphertext": encrypted,
                     "documentSha256": hashlib.sha256(file_bytes).hexdigest(),
