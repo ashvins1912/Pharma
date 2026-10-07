@@ -2,7 +2,8 @@ import jwt from 'jsonwebtoken';
 import { config } from './config.js';
 
 const callerScopes = {
-  'api-gateway': new Set(['orders.read', 'orders.create', 'orders.manage'])
+  'api-gateway': new Set(['orders.read', 'orders.create', 'orders.manage']),
+  'backend-platform': new Set(['orders.read', 'orders.create', 'orders.manage'])
 };
 
 export function createInventoryToken(scopes, userId) {
