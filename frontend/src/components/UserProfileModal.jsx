@@ -110,7 +110,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
               <div className="space-y-2.5 text-xs">
                 <div className="flex items-center justify-between"><span className="text-slate-400">Name</span><span className="font-bold text-slate-800">{displayName}</span></div>
                 <div className="flex items-center justify-between"><span className="text-slate-400">Gender</span><span className="font-bold text-slate-800">{user.gender || 'Not set'}</span></div>
-                <div className="flex items-center justify-between gap-2"><span className="text-slate-400">Mobile</span><span className="flex items-center gap-2 font-bold text-slate-800">{mobile{'}'} {mobileVerified ? <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700" title="Verified">
+                <div className="flex items-center justify-between gap-2"><span className="text-slate-400">Mobile</span><span className="flex items-center gap-2 font-bold text-slate-800">{mobile} {mobileVerified ? <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700" title="Verified">
                   <span className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center">✓</span> Verified
                 </span> : <span className="text-[10px] text-amber-600 font-bold">Not verified</span>}</span></div>
                 <div className="flex items-center justify-between gap-2"><span className="text-slate-400">Email</span><span className="flex items-center gap-2 font-bold text-slate-800">{user.email} {emailVerified ? <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700" title="Verified">
