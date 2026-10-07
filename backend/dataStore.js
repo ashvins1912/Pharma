@@ -2585,8 +2585,9 @@ export const dataStore = {
                 : 'MANUAL'
         }));
 
-        if (!requestedItems.length || !requestedItems[0].requestedName) {
-            throw inventoryError('Please provide the medicine name you want to request.');
+        const hasNamedManualItem = requestedItems.some(item => String(item?.requestedName || item?.name || '').trim());
+        if (!hasNamedManualItem && !payload.prescriptionId && !payload.prescriptionUrl) {
+            throw inventoryError('Add at least one manual medicine or upload a prescription.');
         }
 
         const deliveryAddress = String(
@@ -2615,7 +2616,9 @@ export const dataStore = {
             actorId: customerId,
             role: 'Customer',
             timestamp: new Date(),
-            notes: `Requested ${requestedItems[0].requestedName} (x${requestedItems[0].quantity})`
+            notes: hasNamedManualItem
+                ? `Requested ${requestedItems.filter(item => item.requestedName)[0].requestedName} (x${requestedItems.filter(item => item.requestedName)[0].quantity})`
+                : 'Prescription uploaded without manual medicine entry'
         };
 
         const requestDoc = {
