@@ -226,6 +226,7 @@ const verifyOrderPrescription = async (request, items, user) => {
   try {
     return await verifyPrescriptionAgainstItems({
       prescriptionId: request.prescriptionId,
+      patientPuid: request.patientPuid || null,
       items,
       userId: user.userId,
       tenantId: request.tenantId || user.tenantId || null,
