@@ -20,6 +20,8 @@ import { isPlatformSuperAdmin } from '../../shared/contracts/index.js';
 import { logger } from '../../shared/observability/logger.js';
 import { issuePharmaAccessToken } from '../../security/pharmaToken.js';
 import { authorizationService } from '../../authorization/AuthorizationService.js';
+import { generateTotpSecret, verifyTotpCode, buildOtpauthUri, generateQrCodeDataUrl } from '../../security/totp.js';
+import { encryptPII, decryptPII } from '../../security/cryptoVault.js';
 
 const JWT_SECRET = process.env.DEMO_ADMIN_JWT_SECRET
     || process.env.ENCRYPTION_SECRET_KEY
@@ -106,6 +108,8 @@ export const inMemoryTokens = new Map();
 
 // Rate limiter for verification resend (key -> timestamps array)
 const resendRateLimitMap = new Map();
+const passwordResetRateLimitMap = new Map();
+const pendingMfaEnrollments = new Map();
 
 // Pre-seed demo users in memory
 const defaultAdminHash = bcrypt.hashSync('Admin@123', 10);
@@ -355,7 +359,7 @@ export class AuthService {
     /**
      * User Registration with single-use verification token & persistent User model
      */
-    async registerUser({ firstName, lastName, email, mobile, mobileNumber, dateOfBirth, password }) {
+    async registerUser({ firstName, lastName, email, mobile, mobileNumber, dateOfBirth, gender, password }) {
         const normalizedEmail = (email || '').trim().toLowerCase();
         const fName = (firstName || '').trim();
         const lName = (lastName || '').trim();
@@ -373,6 +377,13 @@ export class AuthService {
         if (!fName) {
             const err = new Error('First name is required.');
             err.code = 'REQUIRED_FIELD';
+            err.status = 400;
+            throw err;
+        }
+
+        if (!gender || !['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'].includes(gender)) {
+            const err = new Error('Gender is required.');
+            err.code = 'INVALID_GENDER';
             err.status = 400;
             throw err;
         }
@@ -422,7 +433,8 @@ export class AuthService {
             firstName: fName,
             lastName: lName,
             name: `${fName} ${lName}`.trim(),
-            dateOfBirth,
+            dateOfBirth: effectiveDob,
+            gender,
             mobileNumber: normalizedPhone.e164,
             mobile: normalizedPhone.e164,
             passwordHash,
@@ -499,6 +511,7 @@ export class AuthService {
                 email: normalizedEmail,
                 mobileNumber: phone,
                 dateOfBirth: effectiveDob,
+                gender,
                 age: calculateAge(effectiveDob),
                 accountStatus: 'PENDING_EMAIL_VERIFICATION',
                 status: 'PENDING_VERIFICATION',
@@ -766,47 +779,166 @@ export class AuthService {
         };
     }
 
+    assertAccountState(user, { allowProfileIncomplete = false } = {}) {
+        const status = user?.accountStatus || user?.status || 'ACTIVE';
+        if (['SUSPENDED', 'DISABLED', 'DELETED'].includes(status)) {
+            const err = new Error('Your account is suspended or disabled. Please contact support.');
+            err.code = status === 'SUSPENDED' ? 'ACCOUNT_SUSPENDED' : 'ACCOUNT_DISABLED';
+            err.status = 403;
+            throw err;
+        }
+        if (status === 'PENDING_EMAIL_VERIFICATION' || user?.emailVerified === false) {
+            const err = new Error('Please verify your email address before logging in.');
+            err.code = 'EMAIL_VERIFICATION_REQUIRED';
+            err.status = 403;
+            err.email = maskEmail(user?.email);
+            err.canResendVerification = true;
+            throw err;
+        }
+        if (status === 'PENDING_ACCOUNT_ACTIVATION') {
+            const err = new Error('Please activate your Pharma account.');
+            err.code = 'ACCOUNT_ACTIVATION_REQUIRED';
+            err.status = 403;
+            err.email = maskEmail(user?.email);
+            err.canResendVerification = true;
+            throw err;
+        }
+        if (status === 'PROFILE_INCOMPLETE' && !allowProfileIncomplete) {
+            const err = new Error('Please complete your profile to continue.');
+            err.code = 'PROFILE_INCOMPLETE';
+            err.status = 403;
+            throw err;
+        }
+        return user;
+    }
+
+    async createOnboardingToken(user) {
+        const authorization = await authorizationService.resolve({
+            ...user,
+            tokenType: 'ONBOARDING',
+            permissions: ['profile.complete']
+        });
+        return issuePharmaAccessToken({
+            sub: user.id || user.userId,
+            email: user.email || '',
+            name: user.name || '',
+            firstName: user.firstName || '',
+            lastName: user.lastName || '',
+            accountStatus: 'PROFILE_INCOMPLETE',
+            profileCompleted: false,
+            role: 'ONBOARDING',
+            roles: ['ONBOARDING'],
+            permissions: ['profile.complete'],
+            permissionVersion: authorization.permissionVersion,
+            tenantId: null,
+            branchId: null,
+            scope: 'ONBOARDING',
+            tokenType: 'pharma_onboarding',
+            expiresIn: '10m'
+        });
+    }
+
+    async createMfaChallengeToken(user, factorId) {
+        return issuePharmaAccessToken({
+            sub: user.id || user.userId,
+            email: user.email || '',
+            role: 'MFA_CHALLENGE',
+            roles: ['MFA_CHALLENGE'],
+            permissions: ['mfa.verify'],
+            scope: 'MFA',
+            accountStatus: 'ACTIVE',
+            factorId,
+            tokenType: 'pharma_mfa_challenge',
+            expiresIn: '5m'
+        });
+    }
+
+    async verifyMfaChallenge(challengeToken, code) {
+        if (!challengeToken || !code) {
+            const err = new Error('MFA challenge token and code are required.');
+            err.code = 'CHALLENGE_TOKEN_REQUIRED';
+            err.status = 400;
+            throw err;
+        }
+        let payload;
+        try {
+            ({ payload } = await verifyPharmaAccessToken(challengeToken));
+        } catch {
+            const err = new Error('MFA challenge expired or invalid. Please sign in again.');
+            err.code = 'MFA_EXPIRED';
+            err.status = 401;
+            throw err;
+        }
+        if (payload.token_type !== 'pharma_mfa_challenge') {
+            const err = new Error('Invalid MFA challenge.');
+            err.code = 'MFA_INVALID_CHALLENGE';
+            err.status = 401;
+            throw err;
+        }
+        const user = await this.findUser({ userId: payload.sub });
+        this.assertAccountState(user);
+        const secret = user?.mfaSecretEncrypted ? decryptPII(user.mfaSecretEncrypted) : null;
+        if (!secret || !verifyTotpCode(secret, code)) {
+            const err = new Error('Invalid 6-digit authenticator code.');
+            err.code = 'INVALID_TOTP_CODE';
+            err.status = 401;
+            throw err;
+        }
+        const token = await this.createAuthToken(user, 'aal2');
+        return { user, accessToken: token };
+    }
+
+    async enrollMfa(user) {
+        this.assertAccountState(user);
+        const secret = generateTotpSecret(20);
+        const otpauthUri = buildOtpauthUri({
+            issuer: 'Ashvin Pharmacy',
+            accountName: user.email,
+            secret
+        });
+        const qrCode = await generateQrCodeDataUrl(otpauthUri);
+        pendingMfaEnrollments.set(user.id || user.sub || user.userId, { secret, createdAt: Date.now() });
+        return { secret, qrCode, otpauthUri, accountName: user.email, issuer: 'Ashvin Pharmacy' };
+    }
+
+    async confirmMfaEnrollment(user, code) {
+        this.assertAccountState(user);
+        const userId = user.id || user.sub || user.userId;
+        const pending = pendingMfaEnrollments.get(userId);
+        if (!pending || Date.now() - pending.createdAt > 10 * 60 * 1000) {
+            const err = new Error('MFA enrollment session expired. Please start enrollment again.');
+            err.code = 'MFA_ENROLLMENT_EXPIRED';
+            err.status = 400;
+            throw err;
+        }
+        if (!verifyTotpCode(pending.secret, code)) {
+            const err = new Error('Invalid 6-digit code.');
+            err.code = 'INVALID_TOTP_CODE';
+            err.status = 400;
+            throw err;
+        }
+        const updated = await this.saveUser(userId, {
+            ...user,
+            mfaEnabled: true,
+            mfaSecretEncrypted: encryptPII(pending.secret),
+            mfaEnrolledAt: new Date()
+        });
+        pendingMfaEnrollments.delete(userId);
+        return { success: true, user: updated };
+    }
+
+    async disableMfa(user) {
+        this.assertAccountState(user);
+        const userId = user.id || user.sub || user.userId;
+        await this.saveUser(userId, { ...user, mfaEnabled: false, mfaSecretEncrypted: null, mfaEnrolledAt: null });
+        return { success: true };
+    }
+
     /**
      * Authenticate credentials and enforce activation status
      */
     async authenticateCredentials({ email, password }) {
         const normalizedEmail = (email || '').trim().toLowerCase();
-
-        // 1. Direct Demo Admin Match
-        if (normalizedEmail === 'ashvinsingh25@gmail.com' && password === 'Admin@123') {
-            const user = inMemoryUsers.get('ashvinsingh25@gmail.com') || adminUser;
-            const token = await this.createAuthToken(user);
-            return {
-                user: {
-                    ...user,
-                    age: calculateAge(user.dateOfBirth),
-                    scope: 'PLATFORM',
-                    tenantId: null,
-                    tenant: null
-                },
-                tenant: null,
-                membership: null,
-                accessToken: token
-            };
-        }
-
-        // 2. Direct Demo Customer Match
-        if (normalizedEmail === 'customer@ashvinpharma.com' && password === 'Customer@123') {
-            const user = inMemoryUsers.get('customer@ashvinpharma.com') || customerUser;
-            const token = await this.createAuthToken(user);
-            return {
-                user: {
-                    ...user,
-                    age: calculateAge(user.dateOfBirth),
-                    scope: 'CUSTOMER',
-                    tenantId: null,
-                    tenant: null
-                },
-                tenant: null,
-                membership: null,
-                accessToken: token
-            };
-        }
 
         // 3. Database / memory lookup
         const user = await this.findUser({ normalizedEmail });
@@ -839,38 +971,18 @@ export class AuthService {
             throw err;
         }
 
-        // 4. Check account status
-        if (user.accountStatus === 'SUSPENDED' || user.status === 'SUSPENDED' || user.accountStatus === 'DISABLED' || user.status === 'DISABLED') {
+        // 4. One provider-independent account state policy
+        this.assertAccountState(user, { allowProfileIncomplete: true });
             const err = new Error('Your account is suspended or disabled. Please contact support.');
             err.code = 'FORBIDDEN';
             err.status = 403;
             throw err;
         }
 
-        // 5. Check if email verification / account activation is pending
-        const isVerifiedAndActive = Boolean(user.emailVerified) && (user.status === 'ACTIVE' || user.accountStatus === 'ACTIVE');
-        if (!isVerifiedAndActive && (user.accountStatus === 'PENDING_EMAIL_VERIFICATION' || user.status === 'PENDING_VERIFICATION' || !user.emailVerified)) {
-            const err = new Error('Please verify your email address before logging in.');
-            err.code = 'EMAIL_NOT_VERIFIED';
-            err.subCode = 'EMAIL_VERIFICATION_REQUIRED';
-            err.status = 403;
-            err.email = maskEmail(user.email);
-            err.canResendVerification = true;
-            throw err;
-        }
-
-        if (user.accountStatus === 'PENDING_ACCOUNT_ACTIVATION') {
-            const err = new Error('Please activate your Pharma account.');
-            err.code = 'ACCOUNT_ACTIVATION_REQUIRED';
-            err.status = 403;
-            err.email = maskEmail(user.email);
-            err.canResendVerification = true;
-            throw err;
-        }
-
+        // 5. Verification/activation checks are part of assertAccountState.
         // 6. Check if profile completion is required
         if (user.accountStatus === 'PROFILE_INCOMPLETE' || user.profileCompleted === false) {
-            const token = await this.createAuthToken(user);
+            const token = await this.createOnboardingToken(user);
             return {
                 code: 'PROFILE_INCOMPLETE',
                 requiresProfileCompletion: true,
@@ -965,6 +1077,13 @@ export class AuthService {
 
         const normalizedEmail = email.trim().toLowerCase();
 
+        if (!googleEmailVerified) {
+            const err = new Error('Google email verification is required.');
+            err.code = 'INVALID_GOOGLE_IDENTITY';
+            err.status = 401;
+            throw err;
+        }
+
         // 1. Check existing GOOGLE UserIdentity
         let identity = await this.findIdentity('GOOGLE', providerUserId);
         let user = null;
@@ -1026,13 +1145,16 @@ export class AuthService {
             }
         }
 
+        // Every provider uses the same account-state policy before issuing a session.
+        this.assertAccountState(user, { allowProfileIncomplete: true });
+
         // Update last login
         user.lastLoginAt = new Date();
         await this.saveUser(user.userId || user.id, user);
 
         // Check onboarding / profile status
         if (!user.profileCompleted || user.accountStatus === 'PROFILE_INCOMPLETE') {
-            const token = await this.createAuthToken(user);
+            const token = await this.createOnboardingToken(user);
             return {
                 code: 'PROFILE_INCOMPLETE',
                 requiresProfileCompletion: true,
@@ -1141,6 +1263,8 @@ export class AuthService {
             throw err;
         }
 
+        this.assertAccountState(user, { allowProfileIncomplete: true });
+
         // Update profile details
         user.firstName = fName;
         user.lastName = lName;
@@ -1186,6 +1310,105 @@ export class AuthService {
             accessToken: token,
             message: 'Profile completed successfully.'
         };
+    }
+
+    async requestPasswordReset({ email, requestIp }) {
+        const normalizedEmail = String(email || '').trim().toLowerCase();
+        const key = normalizedEmail || 'unknown';
+        const now = Date.now();
+        const attempts = (passwordResetRateLimitMap.get(key) || []).filter(t => now - t < 10 * 60 * 1000);
+        if (attempts.length >= 3) {
+            const err = new Error('Too many password reset requests. Please try again later.');
+            err.code = 'RATE_LIMIT_EXCEEDED';
+            err.status = 429;
+            throw err;
+        }
+        attempts.push(now);
+        passwordResetRateLimitMap.set(key, attempts);
+
+        const user = normalizedEmail ? await this.findUser({ normalizedEmail }) : null;
+        if (user && user.accountStatus === 'ACTIVE' && user.emailVerified) {
+            if (getIsConnected()) {
+                await EmailVerificationToken.updateMany(
+                    { userId: user.userId || user.id, purpose: 'PASSWORD_RESET', usedAt: null, revokedAt: null },
+                    { $set: { revokedAt: new Date() } }
+                ).catch(() => {});
+            }
+            for (const t of inMemoryTokens.values()) {
+                if (t.userId === (user.userId || user.id) && t.purpose === 'PASSWORD_RESET' && !t.usedAt && !t.revokedAt) {
+                    t.revokedAt = new Date();
+                }
+            }
+            const rawToken = crypto.randomBytes(32).toString('hex');
+            const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+            const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+            await this.saveVerificationToken({
+                id: `tok_${crypto.randomUUID()}`,
+                userId: user.userId || user.id,
+                tokenHash,
+                purpose: 'PASSWORD_RESET',
+                expiresAt,
+                usedAt: null,
+                revokedAt: null,
+                requestIp: requestIp || null,
+                createdAt: new Date()
+            });
+            const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+            await emailService.sendPasswordResetEmail({
+                email: normalizedEmail,
+                name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+                token: rawToken,
+                resetUrl: `${frontendUrl}/reset-password?token=${encodeURIComponent(rawToken)}`
+            });
+        }
+        return {
+            success: true,
+            message: 'If an active account exists for this email, a password reset link has been sent.'
+        };
+    }
+
+    async resetPassword({ token, password }) {
+        if (!token || !isStrongPassword(password)) {
+            const err = new Error('A valid reset token and strong password are required.');
+            err.code = 'INVALID_RESET_REQUEST';
+            err.status = 400;
+            throw err;
+        }
+        const tokenHash = crypto.createHash('sha256').update(String(token).trim()).digest('hex');
+        const tokenDoc = await this.findVerificationToken(tokenHash);
+        if (!tokenDoc || tokenDoc.purpose !== 'PASSWORD_RESET' || tokenDoc.revokedAt || tokenDoc.usedAt) {
+            const err = new Error('Invalid or expired password reset token.');
+            err.code = 'INVALID_RESET_TOKEN';
+            err.status = 400;
+            throw err;
+        }
+        if (tokenDoc.expiresAt && new Date(tokenDoc.expiresAt) < new Date()) {
+            const err = new Error('Invalid or expired password reset token.');
+            err.code = 'RESET_TOKEN_EXPIRED';
+            err.status = 410;
+            throw err;
+        }
+        const user = await this.findUser({ userId: tokenDoc.userId });
+        if (!user) {
+            const err = new Error('Invalid or expired password reset token.');
+            err.code = 'INVALID_RESET_TOKEN';
+            err.status = 400;
+            throw err;
+        }
+        this.assertAccountState(user, { allowProfileIncomplete: false });
+        const passwordHash = await bcrypt.hash(password, 12);
+        user.passwordHash = passwordHash;
+        user.lastLoginAt = new Date();
+        await this.saveUser(user.userId || user.id, user);
+        const identity = await this.findIdentity('LOCAL', user.normalizedEmail || user.email?.toLowerCase());
+        if (identity) {
+            identity.passwordHash = passwordHash;
+            await this.saveIdentity(identity);
+        }
+        tokenDoc.usedAt = new Date();
+        await this.saveVerificationToken(tokenDoc);
+        const accessToken = await this.createAuthToken(user);
+        return { success: true, user, accessToken };
     }
 
     /**
