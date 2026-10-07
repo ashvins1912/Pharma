@@ -1,88 +1,96 @@
 /**
- * API Gateway Catalog & Branch Listing Routes (/api/v1/catalog)
+ * Public catalog facade.
+ *
+ * Product/stock authority lives in Inventory Service. This router only translates
+ * the stable /api/v1/catalog contract to the Inventory API.
  */
 import express from 'express';
-import { catalogService } from '../../services/catalog-service/CatalogService.js';
-import { productService } from '../../services/catalog-service/ProductService.js';
+import { inventoryClient } from '../../services/inventory-client/InventoryClient.js';
 import { tenantService } from '../../services/tenant-service/TenantService.js';
 
 const router = express.Router();
+const asyncHandler = handler => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 
-// Search master catalog
-router.get('/products', async (req, res, next) => {
-    try {
-        const { q, category } = req.query;
-        const products = await catalogService.searchProducts(q, category);
-        res.json({ success: true, data: products });
-    } catch (err) {
-        next(err);
-    }
-});
+router.get('/products', asyncHandler(async (req, res) => {
+    const result = await inventoryClient.searchProducts({
+        tenantId: req.query.tenantId || req.context?.tenantId || null,
+        branchId: req.query.branchId || req.context?.branchId || null,
+        query: req.query.q || '',
+        category: req.query.category || '',
+        page: req.query.page || 1,
+        limit: req.query.limit || 50,
+        userId: req.context?.userId || 'backend'
+    });
+    return res.json({ success: true, data: result.items || [] });
+}));
 
-// Dual-source harmonized products (Master Catalog + MongoDB Branch Database)
-router.get('/unified', async (req, res, next) => {
-    try {
-        const branchId = req.query.branchId || req.context?.branchId || 'branch-indore-central';
-        const tenantId = req.query.tenantId || req.context?.tenantId || 'tenant-ashvin-main';
-        const { category, search, page, limit } = req.query;
-
-        const result = await productService.getProducts({
+router.get('/unified', asyncHandler(async (req, res) => {
+    const tenantId = req.query.tenantId || req.context?.tenantId || 'tenant-ashvin-main';
+    const branchId = req.query.branchId || req.context?.branchId || 'branch-indore-central';
+    const result = await inventoryClient.searchProducts({
+        tenantId,
+        branchId,
+        query: req.query.search || '',
+        category: req.query.category || '',
+        page: req.query.page || 1,
+        limit: req.query.limit || 50,
+        userId: req.context?.userId || 'backend'
+    });
+    return res.json({
+        success: true,
+        data: {
+            items: result.items || [],
+            total: result.total || 0,
             tenantId,
-            branchId,
-            category,
-            search,
-            page: Number(page) || 1,
-            limit: Number(limit) || 50
-        });
-
-        res.json({ success: true, data: result });
-    } catch (err) {
-        next(err);
-    }
-});
-
-// Single product by SKU (Dual-Source Harmonized)
-router.get('/products/:sku', async (req, res, next) => {
-    try {
-        const branchId = req.query.branchId || req.context?.branchId || 'branch-indore-central';
-        const tenantId = req.query.tenantId || req.context?.tenantId || 'tenant-ashvin-main';
-        const item = await productService.getProductBySku(req.params.sku, tenantId, branchId);
-        if (!item) {
-            return res.status(404).json({ success: false, message: 'Product not found' });
+            branchId
         }
-        res.json({ success: true, data: item });
-    } catch (err) {
-        next(err);
-    }
-});
+    });
+}));
 
-// Browse branch listings with live stock availability
-router.get('/listings', async (req, res, next) => {
-    try {
-        const branchId = req.query.branchId || req.context?.branchId || 'branch-indore-central';
-        const branch = await tenantService.getBranchById(branchId);
-        if (!branch) {
-            return res.status(404).json({ success: false, message: 'Branch not found' });
+router.get('/products/:sku', asyncHandler(async (req, res) => {
+    const tenantId = req.query.tenantId || req.context?.tenantId || null;
+    const branchId = req.query.branchId || req.context?.branchId || null;
+    const result = await inventoryClient.lookup({
+        skus: [req.params.sku],
+        tenantId,
+        branchId,
+        userId: req.context?.userId || 'backend'
+    });
+    const item = (result.items || [])[0];
+    if (!item) return res.status(404).json({ success: false, message: 'Product not found' });
+    return res.json({ success: true, data: item });
+}));
+
+router.get('/listings', asyncHandler(async (req, res) => {
+    const branchId = req.query.branchId || req.context?.branchId || 'branch-indore-central';
+    const branch = await tenantService.getBranchById(branchId);
+    if (!branch) return res.status(404).json({ success: false, message: 'Branch not found' });
+
+    const result = await inventoryClient.searchProducts({
+        tenantId: branch.tenantId,
+        branchId,
+        query: req.query.q || '',
+        category: req.query.category || '',
+        page: req.query.page || 1,
+        limit: req.query.limit || 100,
+        userId: req.context?.userId || 'backend'
+    });
+
+    return res.json({
+        success: true,
+        data: {
+            branch: {
+                id: branch.id,
+                name: branch.name,
+                tenantId: branch.tenantId,
+                serviceRadiusKm: branch.serviceRadiusKm,
+                minimumOrderValue: branch.minimumOrderValue,
+                freeDeliveryAbove: branch.freeDeliveryAbove,
+                deliveryFee: branch.deliveryFee
+            },
+            listings: result.items || []
         }
-        const listings = await catalogService.getBranchListings(branch.tenantId, branchId, req.query.q);
-        res.json({
-            success: true,
-            data: {
-                branch: {
-                    id: branch.id,
-                    name: branch.name,
-                    tenantId: branch.tenantId,
-                    serviceRadiusKm: branch.serviceRadiusKm,
-                    minimumOrderValue: branch.minimumOrderValue,
-                    freeDeliveryAbove: branch.freeDeliveryAbove,
-                    deliveryFee: branch.deliveryFee
-                },
-                listings
-            }
-        });
-    } catch (err) {
-        next(err);
-    }
-});
+    });
+}));
 
 export default router;
