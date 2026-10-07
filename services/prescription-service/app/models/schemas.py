@@ -53,19 +53,27 @@ class DiagnosisItem(BaseModel):
     confidence: float = 0.0
     requiresReview: bool = False
 
+class MedicineCourseField(BaseModel):
+    value: Optional[Any] = None
+    unit: Optional[str] = None
+    raw: Optional[str] = None
+    calculatedQuantity: Optional[float] = None
+    confidence: float = 0.0
+
 class MedicineItem(BaseModel):
     rawName: Optional[str] = None
     normalizedName: Optional[str] = None
-    strength: Optional[str] = None
-    dose: Optional[str] = None
+    strength: Optional[ConfidenceUnitField] = None
+    dose: Optional[ConfidenceUnitField] = None
     unit: Optional[str] = None
-    route: Optional[str] = None
-    frequency: Optional[str] = None
-    duration: Optional[str] = None
-    course: Optional[str] = None
-    instructions: Optional[str] = None
+    route: Optional[ConfidenceField] = None
+    frequency: Optional[FrequencyField] = None
+    duration: Optional[ConfidenceUnitField] = None
+    course: Optional[MedicineCourseField] = None
+    instructions: Optional[ConfidenceField] = None
     confidence: float = 0.0
     requiresReview: bool = False
+    medicineValidation: Optional[MedicineValidationResult] = None
 
 class QualityMetadata(BaseModel):
     overallConfidence: float = 0.0
