@@ -61,13 +61,30 @@ export function AuthProvider({ children }) {
         // Initialize anti-CSRF token
         await apiClient.get('/api/v1/auth/csrf').catch(() => {});
 
-        // Check active session via HttpOnly cookie
-        const { data } = await apiClient.get('/api/v1/auth/me');
-        const sessionUser = data?.user || (data?.id ? data : null);
-        if (mounted && sessionUser) {
-          syncSession({ user: sessionUser }, sessionUser);
-          setMfaEnabled(Boolean(data.mfaEnabled));
-          setAal(data.aal || 'aal1');
+        // Do not probe /auth/me while an upstream Google OAuth session is
+        // waiting to be exchanged or while the account is in PROFILE_INCOMPLETE.
+        // The Google exchange returns the Pharma user and establishes the
+        // restricted onboarding session; protected profile APIs start only
+        // after profile completion.
+        let upstreamGoogleSession = null;
+        if (isSupabaseConfigured && supabase) {
+          try {
+            const { data: supaData } = await supabase.auth.getSession();
+            upstreamGoogleSession = supaData?.session || null;
+          } catch {
+            upstreamGoogleSession = null;
+          }
+        }
+
+        if (!upstreamGoogleSession) {
+          const { data } = await apiClient.get('/api/v1/auth/me');
+          const sessionUser = data?.user || (data?.id ? data : null);
+          if (mounted && sessionUser && sessionUser.profileCompleted !== false
+              && String(sessionUser.accountStatus || 'ACTIVE').toUpperCase() === 'ACTIVE') {
+            syncSession({ user: sessionUser }, sessionUser);
+            setMfaEnabled(Boolean(data.mfaEnabled));
+            setAal(data.aal || 'aal1');
+          }
         }
       } catch (error) {
         // Do not treat cached identity data as a valid authenticated session.
