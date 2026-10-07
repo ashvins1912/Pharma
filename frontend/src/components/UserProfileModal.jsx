@@ -44,8 +44,10 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
 
   if (!isOpen || !user) return null;
 
-  const displayName = user.user_metadata?.name || user.name || user.email?.split('@')[0] || "Valued Customer";
-  const mobile = user.user_metadata?.mobile || user.mobile || user.mobileNumber || 'Mobile not added';
+  // Prefer the canonical profile fields returned by the profile API.
+  // This prevents an older user_metadata snapshot from hiding recent edits.
+  const displayName = user.name || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.user_metadata?.name || user.email?.split('@')[0] || "Valued Customer";
+  const mobile = user.mobileNumber || user.mobile || user.user_metadata?.mobile || 'Mobile not added';
 
   const handleDisableMfa = async () => {
     setDisablingMfa(true);
@@ -109,7 +111,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
             {!editMode ? (
               <div className="space-y-2.5 text-xs">
                 <div className="flex items-center justify-between"><span className="text-slate-400">Name</span><span className="font-bold text-slate-800">{displayName}</span></div>
-                <div className="flex items-center justify-between"><span className="text-slate-400">Gender</span><span className="font-bold text-slate-800">{user.gender || 'Not set'}</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-400">Gender</span><span className="font-bold text-slate-800">{user.gender || user.user_metadata?.gender || 'Not set'}</span></div>
                 <div className="flex items-center justify-between gap-2"><span className="text-slate-400">Mobile</span><span className="flex items-center gap-2 font-bold text-slate-800">{mobile} {mobileVerified ? <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700" title="Verified">
                   <span className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center">✓</span> Verified
                 </span> : <span className="text-[10px] text-amber-600 font-bold">Not verified</span>}</span></div>
