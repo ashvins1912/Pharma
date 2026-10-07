@@ -53,17 +53,8 @@ router.post('/signup', authLimiter, async (req, res) => {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         validationDetails.push({ field: 'email', code: 'INVALID_EMAIL', message: 'Enter a valid email address.' });
     }
-    if (!gender || !['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'].includes(gender)) {
-        validationDetails.push({ field: 'gender', code: 'INVALID_GENDER', message: 'Select a valid gender option.' });
-    }
-    if (!dateOfBirth) {
-        validationDetails.push({ field: 'dateOfBirth', code: 'REQUIRED', message: 'Date of birth is required.' });
-    } else if (!isValidDOB(dateOfBirth)) {
-        validationDetails.push({ field: 'dateOfBirth', code: 'INVALID_DOB', message: 'Date of birth must be a valid past date.' });
-    }
-    if (!mobile || !isValidMobile(mobile)) {
-        validationDetails.push({ field: 'mobileNumber', code: 'INVALID_MOBILE', message: 'Enter a valid mobile number (at least 10 digits).' });
-    }
+    // DOB, gender and mobile are completed during onboarding. Mobile verification
+    // is intentionally deferred for the initial Phase-0 signup flow.
     if (!password || !isStrongPassword(password)) {
         validationDetails.push({
             field: 'password',
@@ -96,7 +87,7 @@ router.post('/signup', authLimiter, async (req, res) => {
 
         return sendSuccess(res, {
             data: result,
-            message: 'Account created. Please check your email to activate your account.',
+            message: 'Account created. Enter the 6-digit code sent to your email to continue.',
             statusCode: 201,
             req
         });
@@ -162,6 +153,33 @@ router.post('/verify-email', authLimiter, async (req, res) => {
         return sendSuccess(res, {
             data: result,
             message: 'Email verified and account activated successfully.',
+            statusCode: 200,
+            req
+        });
+    } catch (err) {
+        return sendError(res, {
+            code: err.code || 'VERIFICATION_ERROR',
+            message: err.message || 'Failed to verify email address.',
+            statusCode: err.status || 400,
+            req
+        });
+    }
+});
+
+/**
+ * POST /auth/verify-email-code
+ * Verifies the 6-digit email code and returns a restricted onboarding session.
+ */
+router.post('/verify-email-code', authLimiter, async (req, res) => {
+    const { email, code } = req.body || {};
+    try {
+        const result = await authService.verifyEmailCode({ email, code });
+        if (result.accessToken) {
+            setSessionCookies(res, { accessToken: result.accessToken });
+        }
+        return sendSuccess(res, {
+            data: result,
+            message: result.message || 'Email verified. Please complete your profile.',
             statusCode: 200,
             req
         });
