@@ -1,3 +1,4 @@
+import { issuePharmaAccessToken } from '../security/pharmaToken.js';
 import { SignJWT, jwtVerify } from 'jose';
 import { env } from './env.js';
 
@@ -31,20 +32,16 @@ export const getDemoCustomerIdentity = () => ({
 export const issueDemoCustomerToken = async () => {
     if (!demoCustomerEnabled) throw new Error('Demo customer access is disabled.');
     const user = getDemoCustomerIdentity();
-    return new SignJWT({
+    return issuePharmaAccessToken({
+        sub: user.id,
         email: user.email,
-        app_metadata: user.app_metadata,
-        user_metadata: user.user_metadata
-    })
-        .setProtectedHeader({ alg: 'HS256' })
-        .setSubject(user.id)
-        .setIssuer('pharma-demo-customer')
-        .setAudience('pharma-api')
-        .setIssuedAt()
-        .setExpirationTime('1h')
-        .sign(getSigningKey());
+        name: user.user_metadata?.name || 'Demo Customer',
+        role: 'customer',
+        roles: ['customer'],
+        permissions: ['orders.read', 'orders.create', 'prescription.read', 'prescription.write'],
+        scope: 'CUSTOMER'
+    });
 };
-
 export const verifyDemoCustomerToken = async token => {
     if (!demoCustomerEnabled) return null;
     try {
