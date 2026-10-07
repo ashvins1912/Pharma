@@ -49,6 +49,7 @@ export function loadConfig(environment = process.env) {
   const backendApiUrl = parseOrigin(environment.BACKEND_API_URL || (production ? '' : 'http://localhost:8090'));
   const inventoryServiceUrl = parseOrigin(environment.INVENTORY_SERVICE_URL || '');
   const orderServiceUrl = parseOrigin(environment.ORDER_SERVICE_URL || '');
+  const prescriptionServiceUrl = parseOrigin(environment.PRESCRIPTION_SERVICE_URL || '');
   const healthCheckEnabled = environment.HEALTH_CHECK_ENABLED !== 'false';
   const healthCheckIntervalMinutes = Number(environment.HEALTH_CHECK_INTERVAL_MINUTES || 15);
   const healthCheckTimeoutMs = Number(environment.HEALTH_CHECK_TIMEOUT_MS || 5000);
@@ -70,11 +71,14 @@ export function loadConfig(environment = process.env) {
   if (environment.ORDER_SERVICE_URL && !orderServiceUrl) {
     errors.push('ORDER_SERVICE_URL must be an HTTP(S) origin without credentials, path, query, or fragment.');
   }
+  if (environment.PRESCRIPTION_SERVICE_URL && !prescriptionServiceUrl) {
+    errors.push('PRESCRIPTION_SERVICE_URL must be an HTTP(S) origin without credentials, path, query, or fragment.');
+  }
   if (production && !environment.BACKEND_API_URL) errors.push('BACKEND_API_URL is required in production.');
-  if ((inventoryServiceUrl || orderServiceUrl) && serviceAuthSecret.length < 32) {
+  if ((inventoryServiceUrl || orderServiceUrl || prescriptionServiceUrl) && serviceAuthSecret.length < 32) {
     errors.push('SERVICE_AUTH_SECRET must contain at least 32 characters when a service URL is configured.');
   }
-  if ((inventoryServiceUrl || orderServiceUrl) && gatewayAuthSecret.length < 32) {
+  if ((inventoryServiceUrl || orderServiceUrl || prescriptionServiceUrl) && gatewayAuthSecret.length < 32) {
     errors.push('GATEWAY_AUTH_SECRET must contain at least 32 characters when a service URL is configured.');
   }
   if (production && gatewayAuthSecret.length < 32) {
@@ -105,6 +109,7 @@ export function loadConfig(environment = process.env) {
     backendApiUrl,
     inventoryServiceUrl,
     orderServiceUrl,
+    prescriptionServiceUrl,
     healthCheckEnabled,
     healthCheckIntervalMs: healthCheckIntervalMinutes * 60 * 1000,
     healthCheckTimeoutMs,
@@ -112,13 +117,15 @@ export function loadConfig(environment = process.env) {
     healthServices: [
       { name: 'backend-api', baseUrl: backendApiUrl, healthPath: '/api/v1/health', critical: true },
       ...(inventoryServiceUrl ? [{ name: 'inventory-service', baseUrl: inventoryServiceUrl, healthPath: '/ready', critical: false }] : []),
-      ...(orderServiceUrl ? [{ name: 'order-service', baseUrl: orderServiceUrl, healthPath: '/ready', critical: false }] : [])
+      ...(orderServiceUrl ? [{ name: 'order-service', baseUrl: orderServiceUrl, healthPath: '/ready', critical: false }] : []),
+      ...(prescriptionServiceUrl ? [{ name: 'prescription-service', baseUrl: prescriptionServiceUrl, healthPath: '/health', critical: false }] : [])
     ],
     serviceAuthSecret,
     gatewayAuthSecret,
     serviceJwtIssuer: environment.SERVICE_JWT_ISSUER || 'ashvin-pharmacy',
     inventoryJwtAudience: environment.SERVICE_JWT_AUDIENCE || 'inventory-service',
     orderJwtAudience: environment.ORDER_SERVICE_JWT_AUDIENCE || 'order-service',
+    prescriptionJwtAudience: environment.PRESCRIPTION_SERVICE_JWT_AUDIENCE || 'prescription-service',
     allowedOrigins: [...new Set(allowedOrigins)],
     proxyTimeoutMs: Math.min(proxyTimeoutMs, 300_000),
     authTimeoutMs: Math.min(authTimeoutMs, 30_000)
