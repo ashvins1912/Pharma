@@ -13,6 +13,17 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [passwordRecoveryRequired, setPasswordRecoveryRequired] = useState(false);
   const [profileCompletionRequired, setProfileCompletionRequired] = useState(false);
+  // A user object alone is not enough to authorize application API calls.
+  // Google first-time users receive a restricted PROFILE_INCOMPLETE token.
+  // Only a completed ACTIVE Pharma profile is considered fully authenticated.
+  const isFullyAuthenticated = Boolean(
+    !loading &&
+    !profileCompletionRequired &&
+    !mfaRequired &&
+    user?.id &&
+    user?.profileCompleted !== false &&
+    String(user?.accountStatus || 'ACTIVE').toUpperCase() === 'ACTIVE'
+  );
 
   // Zero-Cost TOTP Multi-Factor Authentication State
   const [mfaRequired, setMfaRequired] = useState(false);
@@ -362,6 +373,7 @@ export function AuthProvider({ children }) {
         aal,
         passwordRecoveryRequired,
         profileCompletionRequired,
+        isFullyAuthenticated,
         loginWithGoogle,
         loginWithEmail,
         verifyTotp,
