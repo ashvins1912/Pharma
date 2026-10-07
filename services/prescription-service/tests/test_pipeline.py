@@ -26,3 +26,13 @@ def test_response_schema_accepts_structured_medicine_fields():
     assert model.frequency.normalized == "TWICE_DAILY"
     assert model.duration.value == 5
     assert model.course.calculatedQuantity == 10
+
+def test_dose_is_not_mistaken_for_course_quantity():
+    item = _parse_medicine_line("Amoxicillin 500mg 1 tablet TDS for 5 days")
+    assert item["course"]["value"] is None if item["course"] else True
+    assert item["course"]["calculatedQuantity"] == 15
+
+def test_explicit_course_quantity_is_preserved():
+    item = _parse_medicine_line("Amoxicillin 500mg 1 tablet TDS for 5 days Qty 15 tablets")
+    assert item["course"]["value"] == 15
+    assert item["course"]["calculatedQuantity"] == 15
