@@ -155,8 +155,8 @@ export default function AuthModal({ isOpen, onClose }) {
           return;
         }
         await signUpWithEmail(email, password, name, mobile, '', '', dateOfBirth, gender);
-        addToast('Account created successfully!', 'success');
-        handleClose(true);
+        addToast('Account created. Please verify your email before signing in.', 'success');
+        handleClose(false);
       } else {
         // Step 1: Submit primary credentials
         const result = await loginWithEmail(email, password);
