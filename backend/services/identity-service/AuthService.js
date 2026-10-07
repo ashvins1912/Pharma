@@ -1096,6 +1096,7 @@ export class AuthService {
         const fName = (firstName || '').trim();
         const lName = (lastName || '').trim();
         const phone = (mobileNumber || mobile || '').trim();
+        const normalizedPhone = normalizeIndianMobile(phone);
 
         if (!fName) {
             const err = new Error('First name is required.');
@@ -1118,8 +1119,8 @@ export class AuthService {
             throw err;
         }
 
-        if (!phone || !isValidMobile(phone)) {
-            const err = new Error('A valid mobile number with at least 10 digits is required.');
+        if (!normalizedPhone) {
+            const err = new Error('A valid Indian mobile number is required. Use 10 digits or 91/+91/0 prefix.');
             err.code = 'INVALID_MOBILE';
             err.status = 400;
             throw err;
@@ -1153,7 +1154,7 @@ export class AuthService {
             await identityService.getOrCreateCustomer(userId, {
                 name: user.name,
                 email: user.email,
-                phone
+                normalizedPhone.e164
             });
         } catch (e) {
             logger.warn('Failed linking Customer record on profile completion:', { error: e.message });
@@ -1170,7 +1171,7 @@ export class AuthService {
                 name: user.name,
                 dateOfBirth,
                 age: calculateAge(dateOfBirth),
-                mobileNumber: phone,
+                mobileNumber: normalizedPhone.e164,
                 accountStatus: 'ACTIVE',
                 profileCompleted: true,
                 emailVerified: Boolean(user.emailVerified)
