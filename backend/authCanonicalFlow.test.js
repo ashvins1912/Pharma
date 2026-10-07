@@ -27,17 +27,19 @@ test('canonical email signup and activation issue only Pharma RS256 sessions', a
 });
 
 test('suspended and disabled accounts are rejected by the same policy', async () => {
+  const email = 'suspended-' + Date.now() + '@example.com';
+  const hash = await (await import('./security/hasher.js')).default.hash('Password@2026', 12);
   const suspended = await authService.saveUser('qa-suspended-' + Date.now(), {
-    email: 'suspended-' + Date.now() + '@example.com',
-    normalizedEmail: 'suspended-' + Date.now() + '@example.com',
-    passwordHash: '$2b$12$abcdefghijklmnopqrstuu',
+    email,
+    normalizedEmail: email,
+    passwordHash: hash,
     emailVerified: true,
     accountStatus: 'SUSPENDED',
     status: 'SUSPENDED',
     profileCompleted: true
   });
   await assert.rejects(
-    () => authService.authenticateCredentials({ email: suspended.email, password: 'Password@2026' }),
+    () => authService.authenticateCredentials({ email, password: 'Password@2026' }),
     err => err.code === 'ACCOUNT_SUSPENDED' && err.status === 403
   );
 });
