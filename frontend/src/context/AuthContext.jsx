@@ -117,7 +117,11 @@ export function AuthProvider({ children }) {
 
           if (provider !== 'google') {
             if (event !== 'INITIAL_SESSION') {
-              void supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+              // Supabase is only the upstream Google identity broker.
+              // Do not call Supabase signOut here: it performs a network logout
+              // request which can return 403 when the upstream session is already
+              // expired/revoked. Clear the local broker copy instead.
+              clearSupabaseLocalSession();
             }
             return;
           }
@@ -159,9 +163,10 @@ export function AuthProvider({ children }) {
       localStorage.removeItem('demo_session');
       localStorage.removeItem('demo_auth_token');
       syncSession(null);
-      if (supabase) void supabase.auth.signOut({ scope: 'local' }).then(({ error }) => {
-        if (error) console.warn('Could not clear expired local Supabase session.', { name: error.name, status: error.status });
-      });
+      // Pharma owns the application session. Supabase is only the upstream
+      // Google identity broker, so local broker cleanup must never make an
+      // authentication-required event issue a second remote logout request.
+      clearSupabaseLocalSession();
     };
     window.addEventListener('ashvin:authentication-required', handleAuthenticationRequired);
     return () => window.removeEventListener('ashvin:authentication-required', handleAuthenticationRequired);
@@ -174,13 +179,10 @@ export function AuthProvider({ children }) {
   const loginWithEmail = async (email, password) => {
     // Email/password login is a first-party platform session. Clear any old
     // browser-only Supabase session first so it cannot compete with this login.
-    if (supabase) {
-      try {
-        await supabase.auth.signOut({ scope: 'local' });
-      } catch {
-        // Backend authentication remains authoritative; do not block login.
-      }
-    }
+    // Remove any stale upstream Google broker session locally. Do not call
+    // Supabase signOut because the broker session may already be expired and
+    // the remote logout endpoint can legitimately return 403.
+    clearSupabaseLocalSession();
     const res = await apiClient.post('/api/v1/auth/login', { email, password });
     const data = res.data?.data || res.data;
 
@@ -210,7 +212,8 @@ export function AuthProvider({ children }) {
       throw new Error('Google sign-in is unavailable until Supabase is configured.');
     }
 
-    await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+    // Clear any stale broker session locally before starting a new OAuth flow.
+    clearSupabaseLocalSession();
 
     const redirectTo = env.VITE_FRONTEND_URL || window.location.origin;
     const { error } = await supabase.auth.signInWithOAuth({
