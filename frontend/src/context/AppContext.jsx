@@ -616,10 +616,14 @@ export function AppProvider({ children }) {
       await ensureCustomerProfile({ name: addressData.fullName, phone: addressData.mobile });
       const res = await apiClient.post('/api/user/addresses', addressData);
       const savedAddress = res.data;
-      setAddresses(prev => [
-        ...(savedAddress.isDefault ? prev.map(address => ({ ...address, isDefault: false })) : prev),
-        savedAddress
-      ]);
+      setAddresses(prev => {
+        const next = [
+          ...(savedAddress.isDefault ? prev.map(address => ({ ...address, isDefault: false })) : prev),
+          savedAddress
+        ];
+        if (addressCacheKey) writeLocalCache(addressCacheKey, next);
+        return next;
+      });
       setSelectedAddressId(savedAddress._id);
       addToast('Delivery address saved to directory!', 'success');
       return savedAddress;
@@ -634,10 +638,14 @@ export function AppProvider({ children }) {
       await ensureCustomerProfile({ name: addressData.fullName, phone: addressData.mobile });
       const res = await apiClient.patch(`/api/user/addresses/${encodeURIComponent(addressId)}`, addressData);
       const updatedAddress = res.data;
-      setAddresses(prev => prev.map(address => {
-        if (address._id === updatedAddress._id) return updatedAddress;
-        return updatedAddress.isDefault ? { ...address, isDefault: false } : address;
-      }));
+      setAddresses(prev => {
+        const next = prev.map(address => {
+          if (address._id === updatedAddress._id) return updatedAddress;
+          return updatedAddress.isDefault ? { ...address, isDefault: false } : address;
+        });
+        if (addressCacheKey) writeLocalCache(addressCacheKey, next);
+        return next;
+      });
       addToast('Saved address updated. Existing orders keep their original delivery address.', 'success');
       return updatedAddress;
     } catch (err) {
@@ -654,6 +662,7 @@ export function AppProvider({ children }) {
         ? remaining
         : remaining.map((address, index) => ({ ...address, isDefault: index === 0 }));
       setAddresses(nextAddresses);
+      if (addressCacheKey) writeLocalCache(addressCacheKey, nextAddresses);
       if (selectedAddressId === addressId) {
         setSelectedAddressId(nextAddresses.find(address => address.isDefault)?._id || nextAddresses[0]?._id || '');
       }
