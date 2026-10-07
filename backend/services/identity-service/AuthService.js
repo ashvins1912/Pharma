@@ -862,7 +862,10 @@ export class AuthService {
             branchId: null,
             scope: 'ONBOARDING',
             token_type: 'pharma_onboarding',
-            expiresIn: '10m'
+            // Profile onboarding can involve user input and email/account setup.
+            // Keep the restricted token aligned with the 1-hour session cookie so
+            // users are not unexpectedly logged out while completing their profile.
+            expiresIn: '1h'
         });
     }
 
