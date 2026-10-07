@@ -13,7 +13,7 @@ const userIdentitySchema = new mongoose.Schema({
     userId: {
         type: String,
         required: true,
-        unique: true // Keep this unique index inline
+        index: true
     },
     provider: {
         type: String,
