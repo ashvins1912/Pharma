@@ -582,8 +582,15 @@ class PrescriptionServiceEngine:
             query["branch_id"] = branch_id
         # Expire leases
         now = _now()
+        lease_query: Dict[str, Any] = {
+            "status": "IN_REVIEW",
+            "lease_until": {"$lte": now},
+            "tenant_id": tenant_id,
+        }
+        if branch_id:
+            lease_query["branch_id"] = branch_id
         await db.prescription_reviews.update_many(
-            {"status": "IN_REVIEW", "lease_until": {"$lte": now}},
+            lease_query,
             {"$set": {"status": "PENDING", "claimed_by": None, "claimed_at": None, "lease_until": None, "updated_at": now}},
         )
         cursor = db.prescription_reviews.find({"$or": [query, {**query, "status": "IN_REVIEW"}]}).sort("created_at", 1).limit(100)
