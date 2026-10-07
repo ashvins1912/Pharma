@@ -580,4 +580,145 @@ export async function updateFulfillmentGate(orderNumber, {
   }
 }
 
+
+export async function reconcilePendingPrescriptionOrders({ workerId = randomUUID(), limit = 20 } = {}) {
+  const now = new Date();
+  const leaseUntil = new Date(now.getTime() + 60_000);
+  let processed = 0;
+  let approved = 0;
+  let rejected = 0;
+  let deferred = 0;
+
+  for (; processed < limit; processed += 1) {
+    const order = await Order.findOneAndUpdate(
+      {
+        'fulfillmentGate.prescription': 'PENDING_REVIEW',
+        prescriptionId: { $type: 'string' },
+        orderStatus: { $nin: ['Cancelled', 'Rejected', 'Delivered'] },
+        $or: [
+          { prescriptionReconciliationLeaseUntil: null },
+          { prescriptionReconciliationLeaseUntil: { $lte: now } }
+        ]
+      },
+      {
+        $set: {
+          prescriptionReconciliationLeaseUntil: leaseUntil,
+          prescriptionReconciliationWorkerId: workerId
+        }
+      },
+      { sort: { updatedAt: 1 }, new: true }
+    ).lean();
+
+    if (!order) break;
+
+    try {
+      const verification = await verifyOrderPrescription(
+        {
+          prescriptionRequired: true,
+          prescriptionId: order.prescriptionId,
+          patientPuid: order.patientPuid,
+          tenantId: order.tenantId,
+          branchId: order.branchId
+        },
+        order.items || [],
+        {
+          userId: order.userId,
+          tenantId: order.tenantId,
+          branchId: order.branchId,
+          userRole: 'system'
+        }
+      );
+
+      if (verification.status === 'MATCHED') {
+        await updateFulfillmentGate(order.orderNumber, {
+          gate: 'prescription',
+          status: 'APPROVED',
+          actor: 'prescription-reconciler',
+          idempotencyKey: `rx-reconcile:${order.prescriptionId}:${order.version || 1}`
+        });
+        approved += 1;
+      } else if (verification.status === 'REJECTED') {
+        await Order.updateOne(
+          {
+            orderNumber: order.orderNumber,
+            prescriptionReconciliationWorkerId: workerId,
+            'fulfillmentGate.prescription': 'PENDING_REVIEW'
+          },
+          {
+            $set: {
+              prescriptionVerification: verification,
+              'fulfillmentGate.prescription': 'REJECTED',
+              prescriptionReconciliationLeaseUntil: null,
+              prescriptionReconciliationWorkerId: null
+            },
+            $inc: { version: 1 }
+          }
+        );
+        rejected += 1;
+      } else if (verification.status === 'INACTIVE') {
+        await Order.updateOne(
+          {
+            orderNumber: order.orderNumber,
+            prescriptionReconciliationWorkerId: workerId,
+            'fulfillmentGate.prescription': 'PENDING_REVIEW'
+          },
+          {
+            $set: {
+              prescriptionVerification: verification,
+              'fulfillmentGate.prescription': 'INACTIVE',
+              prescriptionReconciliationLeaseUntil: null,
+              prescriptionReconciliationWorkerId: null
+            },
+            $inc: { version: 1 }
+          }
+        );
+        rejected += 1;
+      } else {
+        await Order.updateOne(
+          {
+            orderNumber: order.orderNumber,
+            prescriptionReconciliationWorkerId: workerId
+          },
+          {
+            $set: {
+              prescriptionVerification: verification,
+              prescriptionReconciliationLeaseUntil: null,
+              prescriptionReconciliationWorkerId: null
+            },
+            $inc: { version: 1 }
+          }
+        );
+        deferred += 1;
+      }
+    } catch (error) {
+      await Order.updateOne(
+        {
+          orderNumber: order.orderNumber,
+          prescriptionReconciliationWorkerId: workerId
+        },
+        {
+          $set: {
+            prescriptionVerification: {
+              status: 'PROCESSING',
+              prescriptionId: order.prescriptionId,
+              patientPuid: order.patientPuid || null,
+              overallConfidence: 0,
+              lastCheckedAt: new Date(),
+              medicines: [],
+              issues: [error.message || 'Prescription reconciliation failed.']
+            },
+            prescriptionReconciliationLeaseUntil: null,
+            prescriptionReconciliationWorkerId: null
+          },
+          $inc: { version: 1 }
+        }
+      );
+      deferred += 1;
+    }
+  }
+
+  return { processed, approved, rejected, deferred };
+}
+
 export { allowedStatuses, serializeOrder, isFulfillmentReady };
+
