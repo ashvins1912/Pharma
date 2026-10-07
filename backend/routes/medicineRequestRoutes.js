@@ -192,7 +192,8 @@ const syncPrescriptionVerification = async request => {
         return request;
     }
 };
-\nconst handleAttachments = (req, res, next) => {
+
+const handleAttachments = (req, res, next) => {
     upload.fields([
         { name: 'prescription', maxCount: 1 },
         { name: 'productImage', maxCount: 1 }
