@@ -59,12 +59,18 @@ export function isValidDOB(dob) {
  */
 export function normalizeIndianMobile(mobile) {
     if (mobile === undefined || mobile === null) return null;
-    const value = String(mobile).trim().replace(/[\\s()-]/g, '');
+
+    // Accept common Indian mobile formats:
+    // 9589916475, 09589916475, 919589916475, +919589916475,
+    // and values containing spaces, brackets or hyphens.
+    const value = String(mobile).trim().replace(/[\s()-]/g, '');
     let number = null;
-    if (/^\\+91[6-9]\\d{9}$/.test(value)) number = value.slice(3);
-    else if (/^91[6-9]\\d{9}$/.test(value)) number = value.slice(2);
-    else if (/^0[6-9]\\d{9}$/.test(value)) number = value.slice(1);
-    else if (/^[6-9]\\d{9}$/.test(value)) number = value;
+
+    if (/^\+91[6-9]\d{9}$/.test(value)) number = value.slice(3);
+    else if (/^91[6-9]\d{9}$/.test(value)) number = value.slice(2);
+    else if (/^0[6-9]\d{9}$/.test(value)) number = value.slice(1);
+    else if (/^[6-9]\d{9}$/.test(value)) number = value;
+
     return number ? { countryCode: '+91', number, e164: `+91${number}` } : null;
 }
 
