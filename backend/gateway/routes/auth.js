@@ -23,6 +23,8 @@ import { authenticateUser } from '../../middleware/auth.js';
 import { authLimiter } from '../../middleware/rateLimiter.js';
 import { sendSuccess, sendError } from '../../shared/responses.js';
 import { setSessionCookies, clearSessionCookies } from '../../security/sessionCookie.js';
+import { verifySupabaseExchangeToken } from '../../security/pharmaToken.js';
+import { env } from '../../config/env.js';
 
 const router = express.Router();
 
@@ -276,59 +278,57 @@ router.post('/resend-verification', authLimiter, async (req, res) => {
  * Server-side verified Google sign-in and account linking
  */
 router.post('/google', authLimiter, async (req, res) => {
-    const {
-        credential,
-        token,
-        providerUserId,
-        email,
-        email_verified,
-        emailVerified,
-        firstName,
-        lastName,
-        picture
-    } = req.body || {};
-
-    let sub = providerUserId;
-    let userEmail = email;
-    let isEmailVerified = email_verified !== undefined ? email_verified : (emailVerified !== undefined ? emailVerified : true);
-    let fName = firstName || '';
-    let lName = lastName || '';
-
-    // If an ID token / JWT credential is provided, decode payload
-    if (credential && typeof credential === 'string') {
-        try {
-            const parts = credential.split('.');
-            if (parts.length === 3) {
-                const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-                sub = payload.sub || sub;
-                userEmail = payload.email || userEmail;
-                isEmailVerified = payload.email_verified !== undefined ? payload.email_verified : true;
-                fName = payload.given_name || payload.name?.split(' ')[0] || fName;
-                lName = payload.family_name || payload.name?.split(' ').slice(1).join(' ') || lName;
-            }
-        } catch (e) {
-            // fallback to explicit properties
-        }
-    }
-
-    if (!sub || !userEmail) {
-        return sendError(res, {
-            code: 'INVALID_CREDENTIALS',
-            message: 'Google identity credentials could not be verified.',
-            statusCode: 400,
-            req
-        });
-    }
+    const upstreamToken = req.body?.supabaseAccessToken || req.body?.access_token || req.body?.token;
 
     try {
-        const result = await authService.authenticateGoogle({
-            providerUserId: sub,
-            email: userEmail,
-            emailVerified: isEmailVerified,
-            firstName: fName,
-            lastName: lName,
-            picture
-        });
+        let identity;
+
+        if (upstreamToken) {
+            const { payload } = await verifySupabaseExchangeToken(upstreamToken);
+            identity = {
+                providerUserId: payload.sub,
+                email: payload.email,
+                emailVerified: payload.email_verified !== false,
+                firstName: payload.user_metadata?.full_name || payload.user_metadata?.name || payload.user_metadata?.first_name || '',
+                lastName: payload.user_metadata?.last_name || '',
+                picture: payload.user_metadata?.avatar_url || payload.user_metadata?.picture || ''
+            };
+
+            const names = String(identity.firstName || '').trim().split(/\\s+/);
+            if (!identity.lastName && names.length > 1) {
+                identity.lastName = names.slice(1).join(' ');
+                identity.firstName = names[0];
+            }
+        } else if (env.NODE_ENV !== 'production' && req.body?.providerUserId && req.body?.email) {
+            // Test/development compatibility only. Production must prove the
+            // upstream identity cryptographically before account linking.
+            identity = {
+                providerUserId: req.body.providerUserId,
+                email: req.body.email,
+                emailVerified: req.body.email_verified !== false,
+                firstName: req.body.firstName || '',
+                lastName: req.body.lastName || '',
+                picture: req.body.picture || ''
+            };
+        } else {
+            return sendError(res, {
+                code: 'UPSTREAM_IDENTITY_REQUIRED',
+                message: 'A verified Google identity exchange token is required.',
+                statusCode: 401,
+                req
+            });
+        }
+
+        if (!identity.providerUserId || !identity.email || !identity.emailVerified) {
+            return sendError(res, {
+                code: 'INVALID_GOOGLE_IDENTITY',
+                message: 'Google identity could not be verified.',
+                statusCode: 401,
+                req
+            });
+        }
+
+        const result = await authService.authenticateGoogle(identity);
 
         if (result.accessToken) {
             setSessionCookies(res, { accessToken: result.accessToken });
@@ -336,36 +336,19 @@ router.post('/google', authLimiter, async (req, res) => {
 
         return sendSuccess(res, {
             data: result,
-            message: result.requiresProfileCompletion ? 'Please complete your profile.' : 'Google sign-in successful.',
+            message: result.requiresProfileCompletion ? 'Please complete your Pharma profile.' : 'Google sign-in successful.',
             statusCode: 200,
             req
         });
     } catch (err) {
-        if (err.code === 'ACCOUNT_ACTIVATION_REQUIRED') {
-            return res.status(403).json({
-                success: false,
-                code: err.code,
-                error: {
-                    code: err.code,
-                    message: err.message,
-                    email: err.email || maskEmail(userEmail),
-                    canResendVerification: true
-                },
-                message: err.message,
-                email: err.email || maskEmail(userEmail),
-                canResendVerification: true
-            });
-        }
-
         return sendError(res, {
             code: err.code || 'GOOGLE_AUTH_FAILED',
-            message: err.message || 'Google authentication failed.',
+            message: err.code === 'ERR_JWT_EXPIRED' ? 'Google sign-in session expired. Please sign in again.' : (err.message || 'Google authentication failed.'),
             statusCode: err.status || 401,
             req
         });
     }
 });
-
 /**
  * PUT /auth/onboarding and PUT /auth/complete-profile
  */
