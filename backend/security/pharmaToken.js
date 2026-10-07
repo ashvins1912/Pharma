@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { createRemoteJWKSet, jwtVerify, SignJWT, importPKCS8, importSPKI } from 'jose';
+import { jwtVerify, SignJWT, importPKCS8, importSPKI } from 'jose';
 import { env } from '../config/env.js';
 import { createClient } from '@supabase/supabase-js';
 
