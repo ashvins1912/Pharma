@@ -267,6 +267,8 @@ export class AuthService {
             lastName: user.lastName || '',
             dateOfBirth: user.dateOfBirth || null,
             mobile: user.mobileNumber || user.mobile || '',
+            mobileVerified: Boolean(user.mobileVerified),
+            gender: user.gender || null,
             accountStatus: user.accountStatus || 'ACTIVE',
             profileCompleted: user.profileCompleted !== false,
             primaryAuthProvider: user.primaryAuthProvider || 'LOCAL',
@@ -1276,6 +1278,99 @@ export class AuthService {
                 scope: 'CUSTOMER'
             },
             accessToken: token
+        };
+    }
+
+    /**
+     * Update an already authenticated user's editable profile details.
+     * Email and verification state remain server-controlled.
+     */
+    async updateProfile({ userId, firstName, lastName, mobileNumber, gender, dateOfBirth }) {
+        if (!userId) {
+            const err = new Error('User ID is required.');
+            err.code = 'REQUIRED_FIELD';
+            err.status = 400;
+            throw err;
+        }
+
+        const user = await this.findUser({ userId });
+        if (!user) {
+            const err = new Error('User not found.');
+            err.code = 'USER_NOT_FOUND';
+            err.status = 404;
+            throw err;
+        }
+        this.assertAccountState(user, { allowProfileIncomplete: false });
+
+        const nextFirstName = firstName === undefined ? (user.firstName || '') : String(firstName).trim();
+        const nextLastName = lastName === undefined ? (user.lastName || '') : String(lastName).trim();
+        const nextGender = gender === undefined ? user.gender : gender;
+        const nextDob = dateOfBirth === undefined ? user.dateOfBirth : dateOfBirth;
+        const rawPhone = mobileNumber === undefined ? (user.mobileNumber || user.mobile || '') : mobileNumber;
+
+        if (!nextFirstName) {
+            const err = new Error('First name is required.'); err.code = 'REQUIRED_FIELD'; err.status = 400; throw err;
+        }
+        if (nextFirstName.length > 100 || nextLastName.length > 100) {
+            const err = new Error('Name must be 100 characters or fewer.'); err.code = 'INVALID_NAME'; err.status = 400; throw err;
+        }
+        if (!['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'].includes(nextGender)) {
+            const err = new Error('Select a valid gender option.'); err.code = 'INVALID_GENDER'; err.status = 400; throw err;
+        }
+        if (!isValidDOB(nextDob)) {
+            const err = new Error('Date of birth must be a valid past date.'); err.code = 'INVALID_DOB'; err.status = 400; throw err;
+        }
+        const normalizedPhone = normalizeIndianMobile(rawPhone);
+        if (!normalizedPhone) {
+            const err = new Error('Enter a valid Indian mobile number.'); err.code = 'INVALID_MOBILE'; err.status = 400; throw err;
+        }
+
+        const previousPhone = user.mobileNumber || user.mobile || '';
+        const phoneChanged = previousPhone !== normalizedPhone.e164;
+        user.firstName = nextFirstName;
+        user.lastName = nextLastName;
+        user.name = [nextFirstName, nextLastName].filter(Boolean).join(' ');
+        user.gender = nextGender;
+        user.dateOfBirth = nextDob;
+        user.mobileNumber = normalizedPhone.e164;
+        user.mobile = normalizedPhone.e164;
+        if (phoneChanged) {
+            user.mobileVerified = false;
+            user.mobileVerifiedAt = null;
+        }
+
+        const savedUser = await this.saveUser(userId, user);
+        try {
+            await identityService.getOrCreateCustomer(userId, {
+                name: savedUser.name,
+                email: savedUser.email,
+                phone: savedUser.mobileNumber
+            });
+        } catch (e) {
+            logger.warn('Failed syncing Customer record after profile update:', { error: e.message });
+        }
+
+        const accessToken = await this.createAuthToken(savedUser);
+        return {
+            user: {
+                id: userId,
+                userId,
+                email: savedUser.email,
+                firstName: savedUser.firstName,
+                lastName: savedUser.lastName,
+                name: savedUser.name,
+                gender: savedUser.gender,
+                dateOfBirth: savedUser.dateOfBirth,
+                age: calculateAge(savedUser.dateOfBirth),
+                mobileNumber: savedUser.mobileNumber,
+                mobile: savedUser.mobileNumber,
+                mobileVerified: Boolean(savedUser.mobileVerified),
+                emailVerified: Boolean(savedUser.emailVerified),
+                accountStatus: savedUser.accountStatus || 'ACTIVE',
+                profileCompleted: savedUser.profileCompleted !== false,
+                role: savedUser.role || 'customer'
+            },
+            accessToken
         };
     }
 
