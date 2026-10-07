@@ -46,14 +46,14 @@ const resolveDispatchRider = async (riderId, orderId = null) => {
         riderMobile: rider.mobile
     };
 };
-const allowedPrescriptionTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+const allowedPrescriptionTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'image/tiff', 'image/x-ms-bmp']);
 const normalizedOrderStatuses = ['pending', 'accepted', 'out_for_delivery', 'delivered', 'cancelled'];
 const uploadPrescription = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024, files: 1 },
     fileFilter: (req, file, callback) => {
-        if (!allowedPrescriptionTypes.has(file.mimetype)) {
-            return callback(new Error('Prescription must be a PDF, JPEG, PNG, or WebP file.'));
+        if (!(allowedPrescriptionTypes.has(file.mimetype) || file.mimetype.startsWith('image/'))) {
+            return callback(new Error('Prescription must be a PDF or image file.'));
         }
         callback(null, true);
     }
@@ -96,7 +96,8 @@ const hasValidPrescriptionSignature = (file) => {
         return file.buffer.subarray(0, 4).toString() === 'RIFF'
             && file.buffer.subarray(8, 12).toString() === 'WEBP';
     }
-    return false;
+    // Other image formats are decoded and validated by the Prescription Service converter.
+    return file.mimetype.startsWith('image/');
 };
 
 const handlePrescriptionUpload = (req, res, next) => {
