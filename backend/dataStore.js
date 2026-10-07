@@ -1968,6 +1968,16 @@ export const dataStore = {
             }
 
             const allowed = validTransitions[order.orderStatus] || [];
+            if (
+                order.prescriptionRequired
+                && ['Processing Order', 'Ready to Dispatch', 'Dispatched'].includes(newStatus)
+                && order.prescriptionVerification?.status !== 'MATCHED'
+            ) {
+                throw inventoryError(
+                    `Prescription verification is not ready. Current status: ${order.prescriptionVerification?.status || 'PENDING'}.`,
+                    409
+                );
+            }
             if (!allowed.includes(newStatus)) {
                 throw inventoryError(
                     `Invalid state transition: Cannot change order from '${order.orderStatus}' to '${newStatus}'`,
