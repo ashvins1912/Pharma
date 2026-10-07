@@ -214,6 +214,95 @@ const syncPrescriptionVerification = async request => {
 // CUSTOMER APIS
 // -------------------------------------------------------------
 
+// Replace/re-upload the prescription for an existing customer medicine request.
+router.put('/:id/prescription', authenticateUser, authorizeCustomerAction, handleAttachments, async (req, res) => {
+    try {
+        if (!requireDatabase(res)) return;
+
+        const customerId = req.user.sub;
+        const request = await MedicineRequest.findOne({ _id: req.params.id, customerId });
+        if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
+
+        if (['CONVERTED_TO_ORDER', 'CUSTOMER_APPROVED', 'CANCELLED', 'CUSTOMER_REJECTED', 'PHARMACY_REJECTED'].includes(request.status)) {
+            return res.status(409).json({ message: 'This medicine request cannot accept a prescription update in its current state.' });
+        }
+
+        const presFile = req.files?.prescription?.[0];
+        if (!presFile) return res.status(400).json({ message: 'A replacement prescription file is required.' });
+        if (!request.prescriptionId) {
+            return res.status(409).json({ code: 'PRESCRIPTION_NOT_LINKED', message: 'This medicine request is not linked to the Python Prescription Service.' });
+        }
+        if (!prescriptionClient.isConfigured()) {
+            return res.status(503).json({ code: 'PRESCRIPTION_SERVICE_UNAVAILABLE', message: 'Prescription processing is temporarily unavailable.' });
+        }
+
+        const oldUrl = request.prescriptionUrl || null;
+        const newUrl = await savePrescription(presFile, customerId);
+        try {
+            const idempotencyKey = req.get('idempotency-key') || ('medicine-request-replace:' + String(request._id) + ':' + Date.now());
+            const result = await prescriptionClient.replace(request.prescriptionId, {
+                buffer: presFile.buffer,
+                filename: presFile.originalname,
+                contentType: presFile.mimetype,
+                idempotencyKey,
+                userId: customerId,
+                tenantId: request.tenantId || req.user.app_metadata?.tenantId || req.user.tenantId || null,
+                branchId: request.branchId || req.user.app_metadata?.branchId || req.user.branchId || null,
+                role: req.user.app_metadata?.role || req.user.role || 'customer'
+            });
+
+            const verification = {
+                status: 'PROCESSING',
+                prescriptionId: request.prescriptionId,
+                patientPuid: request.patientPuid || null,
+                overallConfidence: 0,
+                lastCheckedAt: new Date(),
+                source: 'PYTHON_PRESCRIPTION_SERVICE',
+                medicines: [],
+                issues: [],
+                documentVersion: result?.documentVersion || null
+            };
+
+            const updated = await MedicineRequest.findOneAndUpdate(
+                { _id: request._id, customerId },
+                {
+                    $set: { prescriptionUrl: newUrl, prescriptionVerification: verification },
+                    $push: {
+                        auditTrail: {
+                            action: 'PRESCRIPTION_UPDATED',
+                            actorId: customerId,
+                            role: 'Customer',
+                            timestamp: new Date(),
+                            notes: 'Customer replaced the prescription document; previous extraction is no longer authoritative.'
+                        }
+                    }
+                },
+                { new: true }
+            ).lean();
+
+            if (oldUrl && oldUrl !== newUrl) {
+                try { await (await import('../config/prescriptionStorage.js')).removePrescription(oldUrl); } catch {}
+            }
+
+            return res.json({
+                success: true,
+                request: updated,
+                prescription: result,
+                message: 'Prescription updated. It has been queued for reprocessing and re-verification.'
+            });
+        } catch (error) {
+            try { await (await import('../config/prescriptionStorage.js')).removePrescription(newUrl); } catch {}
+            return res.status(error.statusCode || 503).json({
+                code: error.code || 'PRESCRIPTION_UPDATE_FAILED',
+                message: error.message || 'Prescription update could not be processed.'
+            });
+        }
+    } catch (error) {
+        console.error('Prescription replacement failed:', error);
+        return res.status(500).json({ message: 'Unable to update prescription.' });
+    }
+});
+
 // Create a new medicine request
 router.post('/', authenticateUser, authorizeCustomerAction, handleAttachments, async (req, res) => {
     try {
