@@ -2639,11 +2639,25 @@ export const dataStore = {
             quantity: Math.max(1, Number(item.quantity) || 1),
             originalAvailabilityStatus: item.originalAvailabilityStatus === 'OUT_OF_STOCK'
                 ? 'OUT_OF_STOCK'
-                : 'NOT_IN_CATALOG'
+                : 'NOT_IN_CATALOG',
+            source: ['MANUAL', 'PRESCRIPTION_EXTRACTED', 'PRESCRIPTION_MATCHED'].includes(item.source)
+                ? item.source
+                : 'MANUAL',
+            dose: item.dose || null,
+            frequency: item.frequency || null,
+            duration: item.duration || null,
+            course: item.course || null,
+            instructions: item.instructions || null,
+            prescriptionMedicineIndex: Number.isInteger(Number(item.prescriptionMedicineIndex))
+                ? Number(item.prescriptionMedicineIndex)
+                : null,
+            validationStatus: ['MANUAL', 'EXTRACTED', 'MATCHED', 'PARTIAL_MATCH', 'NOT_FOUND', 'REVIEW_REQUIRED'].includes(item.validationStatus)
+                ? item.validationStatus
+                : 'MANUAL'
         }));
 
-        if (!requestedItems.length || !requestedItems[0].requestedName) {
-            throw inventoryError('Please provide the medicine name you want to request.');
+        if (!requestedItems.some(item => item.requestedName) && !payload.prescriptionId && !payload.prescriptionUrl) {
+            throw inventoryError('Add at least one manual medicine or upload a prescription.');
         }
 
         const deliveryAddress = String(
@@ -2672,7 +2686,9 @@ export const dataStore = {
             actorId: customerId,
             role: 'Customer',
             timestamp: new Date(),
-            notes: `Requested ${requestedItems[0].requestedName} (x${requestedItems[0].quantity})`
+            notes: requestedItems.some(item => item.requestedName)
+                ? `Requested ${requestedItems.filter(item => item.requestedName)[0].requestedName} (x${requestedItems.filter(item => item.requestedName)[0].quantity})`
+                : 'Prescription uploaded without manual medicine entry'
         };
 
         const requestDoc = {
@@ -2684,6 +2700,18 @@ export const dataStore = {
             addressId: payload.addressId || null,
             requestedItems,
             prescriptionUrl: payload.prescriptionUrl || null,
+            prescriptionId: payload.prescriptionId || null,
+            patientPuid: payload.patientPuid || null,
+            prescriptionVerification: payload.prescriptionVerification || {
+                status: payload.prescriptionId ? 'PROCESSING' : 'NOT_REQUIRED',
+                prescriptionId: payload.prescriptionId || null,
+                patientPuid: payload.patientPuid || null,
+                overallConfidence: 0,
+                lastCheckedAt: payload.prescriptionId ? new Date() : null,
+                source: payload.prescriptionId ? 'PYTHON_PRESCRIPTION_SERVICE' : 'MANUAL',
+                medicines: [],
+                issues: []
+            },
             productImageUrl: payload.productImageUrl || null,
             customerNote: String(payload.customerNote || '').trim(),
             deliveryAddress: deliveryAddress,
