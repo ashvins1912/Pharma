@@ -48,7 +48,11 @@ export function requireOrderScope(scope) {
       userRole: typeof payload.userRole === 'string' ? payload.userRole : 'customer',
       email: typeof payload.email === 'string' ? payload.email : '',
       customerName: typeof payload.customerName === 'string' ? payload.customerName : '',
-      customerMobile: typeof payload.customerMobile === 'string' ? payload.customerMobile : ''
+      customerMobile: typeof payload.customerMobile === 'string' ? payload.customerMobile : '',
+      tenantId: typeof payload.tenantId === 'string' ? payload.tenantId : null,
+      branchId: typeof payload.branchId === 'string' ? payload.branchId : null,
+      authorizedTenantId: typeof payload.authorizedTenantId === 'string' ? payload.authorizedTenantId : null,
+      isPlatformUser: Boolean(payload.isPlatformUser)
     };
     if (!req.service.userId) return res.status(401).json({ message: 'A trusted user identity is required.' });
     return next();
