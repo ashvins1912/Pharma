@@ -783,6 +783,10 @@ class PrescriptionServiceEngine:
             {"prescription_id": prescription_id, "status": {"$in": ["PENDING", "IN_REVIEW"]}},
             {"$set": {"status": "CANCELLED", "updated_at": now}},
         )
+        await db.processing_jobs.update_many(
+            {"prescription_id": prescription_id, "status": {"$in": ["QUEUED", "PROCESSING", "RETRY"]}},
+            {"$set": {"status": "CANCELLED", "locked_by": None, "locked_until": None, "updated_at": now}},
+        )
         await self._audit("PRESCRIPTION_REMOVAL_REQUESTED", prescription_id, rx.get("tenantId"), user_id, {})
         await self._audit("PRESCRIPTION_REMOVED", prescription_id, rx.get("tenantId"), user_id, {})
         adapter = await integration_registry.resolve_adapter(rx.get("tenantId"), rx.get("branchId"), "PrescriptionRemoved")
