@@ -80,6 +80,10 @@ function MainApp() {
     }
   }, []);
 
+  useEffect(() => {
+    if (passwordRecoveryRequired) setAuthOpen(true);
+  }, [passwordRecoveryRequired]);
+
   // Tab switch guard: Users must be signed in to access orders, tracking, requests, or addresses
   const handleTabSwitch = (tab) => {
     if ((tab === 'orders' || tab === 'addresses' || tab === 'requests') && !user) {
