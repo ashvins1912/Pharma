@@ -1,0 +1,204 @@
+import prescriptionClient from '../prescription-service-client/PrescriptionClient.js';
+
+const normalize = value => String(value || '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ')
+  .replace(/\b(tab|tablet|tabs|tablets|cap|capsule|caps|syrup|injection)\b/g, '')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const strengthOf = value => {
+  if (!value) return '';
+  if (typeof value === 'string') return normalize(value);
+  if (typeof value === 'object') {
+    const number = value.value == null ? '' : String(value.value);
+    const unit = value.unit == null ? '' : String(value.unit);
+    return normalize(`${number}${unit}`);
+  }
+  return normalize(value);
+};
+
+const tokenOverlap = (left, right) => {
+  const a = new Set(normalize(left).split(' ').filter(Boolean));
+  const b = new Set(normalize(right).split(' ').filter(Boolean));
+  if (!a.size || !b.size) return 0;
+  let intersection = 0;
+  for (const token of a) if (b.has(token)) intersection += 1;
+  return intersection / Math.max(a.size, b.size);
+};
+
+const extractPrescribedQuantity = medicine => {
+  const course = medicine?.course || {};
+  if (Number.isFinite(Number(course.calculatedQuantity))) return Number(course.calculatedQuantity);
+  if (Number.isFinite(Number(course.value))) return Number(course.value);
+  return null;
+};
+
+const compareItem = (orderItem, prescriptionMedicine) => {
+  const orderName = orderItem.name || orderItem.productName || orderItem.genericName || '';
+  const prescriptionName = prescriptionMedicine.normalizedName || prescriptionMedicine.rawName || '';
+  const nameScore = tokenOverlap(orderName, prescriptionName);
+  const orderStrength = strengthOf(orderItem.strength);
+  const rxStrength = strengthOf(prescriptionMedicine.strength);
+  const strengthMatch = !orderStrength || !rxStrength || orderStrength === rxStrength || orderStrength.includes(rxStrength) || rxStrength.includes(orderStrength);
+
+  const prescribedQuantity = extractPrescribedQuantity(prescriptionMedicine);
+  const requestedQuantity = Number(orderItem.quantity || 0);
+  const quantityMatch = prescribedQuantity == null || requestedQuantity <= prescribedQuantity;
+
+  const exactProductMatch = prescriptionMedicine.medicineValidation?.productId
+    && orderItem.productId
+    && String(prescriptionMedicine.medicineValidation.productId) === String(orderItem.productId);
+
+  const matched = Boolean(exactProductMatch || (nameScore >= 0.72 && strengthMatch));
+  const partial = !matched && nameScore >= 0.55 && strengthMatch;
+
+  return {
+    orderMedicine: orderName,
+    prescriptionMedicine: prescriptionName,
+    requestedQuantity,
+    prescribedQuantity,
+    nameScore: Number(nameScore.toFixed(3)),
+    strengthMatch,
+    quantityMatch,
+    exactProductMatch: Boolean(exactProductMatch),
+    status: matched && quantityMatch ? 'MATCHED'
+      : partial && quantityMatch ? 'PARTIAL_MATCH'
+      : 'MISMATCH',
+    reason: !quantityMatch
+      ? `Requested quantity (${requestedQuantity}) exceeds the prescribed quantity (${prescribedQuantity}).`
+      : !strengthMatch
+        ? 'Strength does not match the prescription.'
+        : !matched
+          ? 'Medicine name does not sufficiently match the prescription.'
+          : null
+  };
+};
+
+export { normalize, strengthOf, tokenOverlap, extractPrescribedQuantity, compareItem };
+
+export async function verifyPrescriptionAgainstItems({
+  prescriptionId,
+  items,
+  userId,
+  patientPuid = null,
+  tenantId,
+  branchId,
+  isAdmin = false
+}) {
+  if (!prescriptionId) {
+    return {
+      status: 'NOT_REQUIRED',
+      overallConfidence: 1,
+      medicines: [],
+      issues: []
+    };
+  }
+
+  const prescription = await prescriptionClient.get(prescriptionId, {
+    userId,
+    tenantId,
+    branchId,
+    role: isAdmin ? 'admin' : 'system',
+    isAdmin
+  });
+
+  const status = prescription?.status;
+
+  const prescriptionPuid = prescription?.patientPuid || null;
+  const requestedPuid = patientPuid || null;
+  if (requestedPuid && prescriptionPuid && String(requestedPuid) !== String(prescriptionPuid)) {
+    return {
+      status: 'MISMATCH',
+      prescriptionId,
+      patientPuid: prescriptionPuid,
+      overallConfidence: Number(prescription?.quality?.overallConfidence || 0),
+      medicines: [],
+      issues: ['Prescription patient does not match the order patient PUID.']
+    };
+  }
+  if (requestedPuid && !prescriptionPuid) {
+    return {
+      status: 'REVIEW_REQUIRED',
+      prescriptionId,
+      patientPuid: null,
+      overallConfidence: Number(prescription?.quality?.overallConfidence || 0),
+      medicines: [],
+      issues: ['Prescription is missing patient PUID information required for order verification.']
+    };
+  }
+  if (['QUEUED', 'PROCESSING', 'REVIEW_REQUIRED', 'UPLOADED'].includes(status)) {
+    return {
+      status: 'PROCESSING',
+      prescriptionId,
+      overallConfidence: Number(prescription?.quality?.overallConfidence || 0),
+      medicines: prescription?.medicines || [],
+      issues: ['Prescription processing or manual verification is still pending.']
+    };
+  }
+  if (status === 'REJECTED') {
+    return {
+      status: 'REJECTED',
+      prescriptionId,
+      overallConfidence: Number(prescription?.quality?.overallConfidence || 0),
+      medicines: prescription?.medicines || [],
+      issues: ['Prescription has been rejected.']
+    };
+  }
+  if (status === 'INACTIVE') {
+    return {
+      status: 'INACTIVE',
+      prescriptionId,
+      overallConfidence: 0,
+      medicines: [],
+      issues: ['Prescription is inactive.']
+    };
+  }
+
+  const prescriptionMedicines = Array.isArray(prescription?.medicines) ? prescription.medicines : [];
+  if (!prescriptionMedicines.length) {
+    return {
+      status: 'REVIEW_REQUIRED',
+      prescriptionId,
+      overallConfidence: Number(prescription?.quality?.overallConfidence || 0),
+      medicines: [],
+      issues: ['No medicines could be extracted from the prescription.']
+    };
+  }
+
+  const matched = [];
+  const issues = [];
+  for (const item of items || []) {
+    const candidates = prescriptionMedicines
+      .map(medicine => compareItem(item, medicine))
+      .sort((a, b) => {
+        const rank = { MATCHED: 2, PARTIAL_MATCH: 1, MISMATCH: 0 };
+        return rank[b.status] - rank[a.status] || b.nameScore - a.nameScore;
+      });
+    const best = candidates[0];
+    matched.push(best);
+    if (!best || best.status !== 'MATCHED') {
+      issues.push(best?.reason || `No prescription match found for ${item.name || item.productName || 'medicine'}.`);
+    }
+  }
+
+  const hasMismatch = matched.some(item => item.status === 'MISMATCH');
+  const hasPartial = matched.some(item => item.status === 'PARTIAL_MATCH');
+  const overallConfidence = Number(prescription?.quality?.overallConfidence || 0);
+  const finalStatus = hasMismatch
+    ? 'MISMATCH'
+    : hasPartial || overallConfidence < 0.90
+      ? 'PARTIAL_MATCH'
+      : 'MATCHED';
+
+  return {
+    status: finalStatus,
+    prescriptionId,
+    patientPuid: prescription?.patientPuid || null,
+    overallConfidence,
+    medicines: matched,
+    issues
+  };
+}
+
+export default verifyPrescriptionAgainstItems;
