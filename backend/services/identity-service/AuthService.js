@@ -105,80 +105,86 @@ const resendRateLimitMap = new Map();
 const passwordResetRateLimitMap = new Map();
 const pendingMfaEnrollments = new Map();
 
-// Pre-seed demo users in memory
-const defaultAdminHash = bcrypt.hashSync('Admin@123', 10);
-const adminUser = {
-    id: 'admin',
-    userId: 'admin',
-    name: 'Ashvin Singh (Admin)',
-    firstName: 'Ashvin',
-    lastName: 'Singh',
-    email: 'ashvinsingh25@gmail.com',
-    normalizedEmail: 'ashvinsingh25@gmail.com',
-    dateOfBirth: '1990-01-01',
-    mobileNumber: '+91 95899 16475',
-    mobile: '+91 95899 16475',
-    role: 'SUPER_ADMIN',
-    roles: ['SUPER_ADMIN', 'admin'],
-    passwordHash: defaultAdminHash,
-    emailVerified: true,
-    emailVerifiedAt: new Date('2026-01-01T00:00:00Z'),
-    accountStatus: 'ACTIVE',
-    status: 'ACTIVE',
-    profileCompleted: true,
-    primaryAuthProvider: 'LOCAL',
-    activatedAt: new Date('2026-01-01T00:00:00Z'),
-    version: 1
-};
-inMemoryUsers.set('ashvinsingh25@gmail.com', adminUser);
-inMemoryUsers.set('admin', adminUser);
-inMemoryIdentities.set('LOCAL:ashvinsingh25@gmail.com', {
-    id: 'ident-admin-local',
-    userId: 'admin',
-    provider: 'LOCAL',
-    providerUserId: 'ashvinsingh25@gmail.com',
-    providerEmail: 'ashvinsingh25@gmail.com',
-    providerEmailVerified: true,
-    passwordHash: defaultAdminHash,
-    createdAt: new Date('2026-01-01T00:00:00Z')
-});
-
-const defaultCustomerHash = bcrypt.hashSync('Customer@123', 10);
-const customerUser = {
-    id: 'demo-customer-id',
-    userId: 'demo-customer-id',
-    name: 'Ashvin Singh',
-    firstName: 'Ashvin',
-    lastName: 'Singh',
-    email: 'customer@ashvinpharma.com',
-    normalizedEmail: 'customer@ashvinpharma.com',
-    dateOfBirth: '1995-05-15',
-    mobileNumber: '+91 95899 16475',
-    mobile: '+91 95899 16475',
-    role: 'customer',
-    roles: ['customer'],
-    passwordHash: defaultCustomerHash,
-    emailVerified: true,
-    emailVerifiedAt: new Date('2026-01-01T00:00:00Z'),
-    accountStatus: 'ACTIVE',
-    status: 'ACTIVE',
-    profileCompleted: true,
-    primaryAuthProvider: 'LOCAL',
-    activatedAt: new Date('2026-01-01T00:00:00Z'),
-    version: 1
-};
-inMemoryUsers.set('customer@ashvinpharma.com', customerUser);
-inMemoryUsers.set('demo-customer-id', customerUser);
-inMemoryIdentities.set('LOCAL:customer@ashvinpharma.com', {
-    id: 'ident-customer-local',
-    userId: 'demo-customer-id',
-    provider: 'LOCAL',
-    providerUserId: 'customer@ashvinpharma.com',
-    providerEmail: 'customer@ashvinpharma.com',
-    providerEmailVerified: true,
-    passwordHash: defaultCustomerHash,
-    createdAt: new Date('2026-01-01T00:00:00Z')
-});
+// Local-only demo identities. Production authentication must resolve users from
+// the persistent identity store and must never fall back to hardcoded credentials.
+if (['development', 'test'].includes(process.env.NODE_ENV || 'development')) {
+    // Pre-seed demo users in memory
+    const defaultAdminHash = bcrypt.hashSync('Admin@123', 10);
+    const adminUser = {
+        id: 'admin',
+        userId: 'admin',
+        name: 'Ashvin Singh (Admin)',
+        firstName: 'Ashvin',
+        lastName: 'Singh',
+        email: 'ashvinsingh25@gmail.com',
+        normalizedEmail: 'ashvinsingh25@gmail.com',
+        dateOfBirth: '1990-01-01',
+        mobileNumber: '+91 95899 16475',
+        mobile: '+91 95899 16475',
+        role: 'SUPER_ADMIN',
+        roles: ['SUPER_ADMIN', 'admin'],
+        passwordHash: defaultAdminHash,
+        emailVerified: true,
+        emailVerifiedAt: new Date('2026-01-01T00:00:00Z'),
+        accountStatus: 'ACTIVE',
+        status: 'ACTIVE',
+        profileCompleted: true,
+        primaryAuthProvider: 'LOCAL',
+        activatedAt: new Date('2026-01-01T00:00:00Z'),
+        version: 1
+    };
+    inMemoryUsers.set('ashvinsingh25@gmail.com', adminUser);
+    inMemoryUsers.set('admin', adminUser);
+    inMemoryIdentities.set('LOCAL:ashvinsingh25@gmail.com', {
+        id: 'ident-admin-local',
+        userId: 'admin',
+        provider: 'LOCAL',
+        providerUserId: 'ashvinsingh25@gmail.com',
+        providerEmail: 'ashvinsingh25@gmail.com',
+        providerEmailVerified: true,
+        passwordHash: defaultAdminHash,
+        createdAt: new Date('2026-01-01T00:00:00Z')
+    });
+    
+    const defaultCustomerHash = bcrypt.hashSync('Customer@123', 10);
+    const customerUser = {
+        id: 'demo-customer-id',
+        userId: 'demo-customer-id',
+        name: 'Ashvin Singh',
+        firstName: 'Ashvin',
+        lastName: 'Singh',
+        email: 'customer@ashvinpharma.com',
+        normalizedEmail: 'customer@ashvinpharma.com',
+        dateOfBirth: '1995-05-15',
+        mobileNumber: '+91 95899 16475',
+        mobile: '+91 95899 16475',
+        role: 'customer',
+        roles: ['customer'],
+        passwordHash: defaultCustomerHash,
+        emailVerified: true,
+        emailVerifiedAt: new Date('2026-01-01T00:00:00Z'),
+        accountStatus: 'ACTIVE',
+        status: 'ACTIVE',
+        profileCompleted: true,
+        primaryAuthProvider: 'LOCAL',
+        activatedAt: new Date('2026-01-01T00:00:00Z'),
+        version: 1
+    };
+    inMemoryUsers.set('customer@ashvinpharma.com', customerUser);
+    inMemoryUsers.set('demo-customer-id', customerUser);
+    inMemoryIdentities.set('LOCAL:customer@ashvinpharma.com', {
+        id: 'ident-customer-local',
+        userId: 'demo-customer-id',
+        provider: 'LOCAL',
+        providerUserId: 'customer@ashvinpharma.com',
+        providerEmail: 'customer@ashvinpharma.com',
+        providerEmailVerified: true,
+        passwordHash: defaultCustomerHash,
+        createdAt: new Date('2026-01-01T00:00:00Z')
+    });
+    
+    
+}
 
 export class AuthService {
     /**
