@@ -132,6 +132,7 @@ export function loadConfig(environment = process.env) {
     inventoryJwtAudience: environment.SERVICE_JWT_AUDIENCE || 'inventory-service',
     orderJwtAudience: environment.ORDER_SERVICE_JWT_AUDIENCE || 'order-service',
     prescriptionJwtAudience: environment.PRESCRIPTION_SERVICE_JWT_AUDIENCE || 'prescription-service',
+    customerJwtAudience: environment.CUSTOMER_SERVICE_JWT_AUDIENCE || 'customer-service',
     allowedOrigins: [...new Set(allowedOrigins)],
     proxyTimeoutMs: Math.min(proxyTimeoutMs, 300_000),
     authTimeoutMs: Math.min(authTimeoutMs, 30_000)
