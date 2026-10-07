@@ -40,8 +40,7 @@ export const authenticateUser = async (req, res, next) => {
         }
         const tokenType = payload.token_type;
         const accountStatus = payload.accountStatus || 'ACTIVE';
-        if (!['ACTIVE', 'PROFILE_INCOMPLETE'].includes(accountStatus)
-            && tokenType === 'pharma_access') {
+        if (accountStatus !== 'ACTIVE' && tokenType === 'pharma_access') {
             throw new Error('Inactive account session.');
         }
         req.user = {
