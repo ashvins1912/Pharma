@@ -2850,6 +2850,71 @@ export const dataStore = {
         return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     },
 
+
+    async getMedicineRequestsPage(filter = {}, user = null, page = 1, limit = 8) {
+        const safePage = Math.max(1, Number.parseInt(page, 10) || 1);
+        const safeLimit = Math.min(50, Math.max(1, Number.parseInt(limit, 10) || 8));
+        const isStaff = user && (
+            user.app_metadata?.role === 'admin'
+            || user.app_metadata?.role === 'pharmacy'
+            || user.role === 'admin'
+            || user.role === 'pharmacy'
+        );
+
+        if (getIsConnected()) {
+            const query = {};
+            if (!isStaff) {
+                query.customerId = user ? user.sub : 'unauthenticated';
+            } else if (filter.customerId) {
+                query.customerId = filter.customerId;
+            }
+            if (filter.status && filter.status !== 'ALL') query.status = filter.status;
+            if (filter.search?.trim()) {
+                const s = filter.search.trim();
+                query.$or = [
+                    { requestNumber: { $regex: s, $options: 'i' } },
+                    { customerName: { $regex: s, $options: 'i' } },
+                    { 'requestedItems.requestedName': { $regex: s, $options: 'i' } }
+                ];
+            }
+            const total = await MedicineRequest.countDocuments(query);
+            const totalPages = Math.max(1, Math.ceil(total / safeLimit));
+            const currentPage = Math.min(safePage, totalPages);
+            const requests = await MedicineRequest.find(query)
+                .sort({ createdAt: -1, _id: -1 })
+                .skip((currentPage - 1) * safeLimit)
+                .limit(safeLimit)
+                .lean();
+            return {
+                requests,
+                pagination: {
+                    page: currentPage,
+                    pageSize: safeLimit,
+                    total,
+                    totalPages,
+                    hasNextPage: currentPage < totalPages,
+                    hasPreviousPage: currentPage > 1
+                }
+            };
+        }
+
+        const all = await this.getMedicineRequests(filter, user);
+        const total = all.length;
+        const totalPages = Math.max(1, Math.ceil(total / safeLimit));
+        const currentPage = Math.min(safePage, totalPages);
+        return {
+            requests: all.slice((currentPage - 1) * safeLimit, currentPage * safeLimit),
+            pagination: {
+                page: currentPage,
+                pageSize: safeLimit,
+                total,
+                totalPages,
+                hasNextPage: currentPage < totalPages,
+                hasPreviousPage: currentPage > 1
+            }
+        };
+    },
+
     async getMedicineRequestById(id, user = null) {
         let request = null;
         if (getIsConnected()) {
