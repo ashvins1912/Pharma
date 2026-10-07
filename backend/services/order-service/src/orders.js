@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import { config } from './config.js';
 import { Order, OrderEvent } from './models.js';
 import { createInventoryToken } from './service-auth.js';
+import { verifyPrescriptionAgainstItems } from '../../../services/prescription-verification/PrescriptionVerificationService.js';
 
 const allowedSources = new Set(['WEB', 'MOBILE', 'ADMIN', 'POS', 'ERP', 'PARTNER', 'API', 'MEDICINE_REQUEST']);
 const allowedStatuses = new Set([
@@ -35,6 +36,7 @@ const serializeOrder = order => ({
   fulfillmentReady: isFulfillmentReady(order),
   prescriptionId: order.prescriptionId || null,
   patientPuid: order.patientPuid || null,
+  prescriptionVerification: order.prescriptionVerification || null,
   tenantId: order.tenantId || null,
   branchId: order.branchId || null,
   reservationExpiresAt: order.reservationExpiresAt || null,
@@ -177,6 +179,51 @@ const inventoryRequest = async (path, data, idempotencyKey) => {
   }
 };
 
+const verifyOrderPrescription = async (request, items, user) => {
+  if (!request.prescriptionRequired) {
+    return {
+      status: 'NOT_REQUIRED',
+      prescriptionId: null,
+      patientPuid: null,
+      overallConfidence: 1,
+      lastCheckedAt: new Date(),
+      medicines: [],
+      issues: []
+    };
+  }
+  if (!request.prescriptionId) {
+    return {
+      status: 'REVIEW_REQUIRED',
+      prescriptionId: null,
+      patientPuid: request.patientPuid || null,
+      overallConfidence: 0,
+      lastCheckedAt: new Date(),
+      medicines: [],
+      issues: ['A prescription is required but no Prescription Service record is linked.']
+    };
+  }
+  try {
+    return await verifyPrescriptionAgainstItems({
+      prescriptionId: request.prescriptionId,
+      items,
+      userId: user.userId,
+      tenantId: request.tenantId || user.tenantId || null,
+      branchId: request.branchId || user.branchId || null,
+      isAdmin: user.userRole === 'admin'
+    });
+  } catch (error) {
+    return {
+      status: 'PROCESSING',
+      prescriptionId: request.prescriptionId,
+      patientPuid: request.patientPuid || null,
+      overallConfidence: 0,
+      lastCheckedAt: new Date(),
+      medicines: [],
+      issues: [error.message || 'Prescription verification service is temporarily unavailable.']
+    };
+  }
+};
+
 const writeEvent = async (session, order, event) => {
   const occurredAt = order.updatedAt || new Date();
   const eventKey = `${order.orderNumber}:${event}:${new Date(occurredAt).toISOString()}`;
@@ -228,6 +275,11 @@ export async function createOrder(body, user) {
   const subtotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
   if (!Number.isFinite(subtotal)) throw fail(400, 'Order total exceeds the supported range.');
 
+  const prescriptionVerification = await verifyOrderPrescription(request, items, user);
+  if (['REJECTED', 'INACTIVE', 'MISMATCH'].includes(prescriptionVerification.status)) {
+    throw fail(409, `Prescription verification failed: ${prescriptionVerification.issues?.[0] || prescriptionVerification.status}.`);
+  }
+
   const reservationIdentity = request.externalReference || request.idempotencyKey;
   const stableOrderId = createHash('sha256')
     .update(`${request.source}:${reservationIdentity}`)
@@ -244,7 +296,11 @@ export async function createOrder(body, user) {
     throw fail(409, `Inventory reservation is ${String(reservation.status || 'unavailable').toLowerCase()}.`);
   }
 
-  const prescriptionGate = request.prescriptionRequired ? 'PENDING_REVIEW' : 'NOT_REQUIRED';
+  const prescriptionGate = !request.prescriptionRequired
+    ? 'NOT_REQUIRED'
+    : prescriptionVerification.status === 'MATCHED'
+      ? 'APPROVED'
+      : 'PENDING_REVIEW';
   // Order is confirmed immediately; prescription is an independent fulfillment gate.
   const initialStatus = 'Approved';
 
@@ -273,7 +329,8 @@ export async function createOrder(body, user) {
         coordinates: request.coordinates,
         prescriptionUrl: request.prescriptionUrl,
         prescriptionId: request.prescriptionId,
-        patientPuid: request.patientPuid,
+        patientPuid: prescriptionVerification.patientPuid || request.patientPuid,
+        prescriptionVerification,
         tenantId: request.tenantId || user.tenantId || null,
         branchId: request.branchId || user.branchId || null,
         reservationId: reservation.reservationId,
@@ -454,8 +511,30 @@ export async function updateFulfillmentGate(orderNumber, {
     }
   }
 
-  // On prescription approval after reservation expiry → re-reserve idempotently
+  // Never accept a prescription gate approval without re-verifying the actual order medicines.
   if (gate === 'prescription' && status === 'APPROVED') {
+    const verification = await verifyOrderPrescription({
+      prescriptionRequired: true,
+      prescriptionId: order.prescriptionId,
+      patientPuid: order.patientPuid,
+      tenantId: order.tenantId,
+      branchId: order.branchId
+    }, order.items || [], {
+      userId: order.userId,
+      tenantId: order.tenantId,
+      branchId: order.branchId,
+      userRole: actor === 'system' ? 'admin' : 'system'
+    });
+    order.prescriptionVerification = verification;
+    if (verification.status !== 'MATCHED') {
+      order.markModified('prescriptionVerification');
+      return {
+        order: serializeOrder(order),
+        ignored: true,
+        reason: 'PRESCRIPTION_NOT_VERIFIED'
+      };
+    }
+
     const expired = order.reservationExpiresAt && new Date(order.reservationExpiresAt) < new Date();
     const needsReserve = expired
       || order.fulfillmentGate?.inventory === 'RELEASED'
