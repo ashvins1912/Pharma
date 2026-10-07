@@ -13,6 +13,7 @@ import { normalizeWhatsAppNumber, sendWhatsAppMedicineRequestAlert, sendCustomWh
 import ProfitMarginRewardEngine from './strategies/ProfitMarginRewardEngine.js';
 import DefaultProfitRewardStrategy from './strategies/ProfitRewardStrategy.js';
 import FixedDeliveryRewardStrategy from './strategies/DeliveryRewardStrategy.js';
+import { verifyPrescriptionAgainstItems } from './services/prescription-verification/PrescriptionVerificationService.js';
 
 const profitMarginRewardEngine = new ProfitMarginRewardEngine({
     strategy: new DefaultProfitRewardStrategy()
@@ -1933,6 +1934,16 @@ export const dataStore = {
             }
 
             const allowed = validTransitions[order.orderStatus] || [];
+            if (
+                order.prescriptionRequired
+                && ['Processing Order', 'Ready to Dispatch', 'Dispatched'].includes(newStatus)
+                && order.prescriptionVerification?.status !== 'MATCHED'
+            ) {
+                throw inventoryError(
+                    `Prescription verification is not ready. Current status: ${order.prescriptionVerification?.status || 'PENDING'}.`,
+                    409
+                );
+            }
             if (!allowed.includes(newStatus)) {
                 throw inventoryError(
                     `Invalid state transition: Cannot change order from '${order.orderStatus}' to '${newStatus}'`,
@@ -2888,10 +2899,23 @@ export const dataStore = {
             throw inventoryError('Cannot alter proposal after customer approval or order conversion.', 400);
         }
 
-        const medicineName = String(proposalData.medicineName || proposalData.proposedMedicineName || request.requestedItems?.[0]?.requestedName || '').trim();
+        const extractedFallback = request.prescriptionVerification?.medicines?.[0]?.normalizedName
+            || request.prescriptionVerification?.medicines?.[0]?.rawName
+            || '';
+        const medicineName = String(
+            proposalData.medicineName
+            || proposalData.proposedMedicineName
+            || request.requestedItems?.[0]?.requestedName
+            || extractedFallback
+            || ''
+        ).trim();
         if (!medicineName) throw inventoryError('Medicine name is required in proposal.');
 
-        const quantity = Math.max(1, Number(proposalData.quantity ?? proposalData.proposedQuantity) || 1);
+        const extractedQuantity = request.prescriptionVerification?.medicines?.[0]?.course?.value
+            || request.prescriptionVerification?.medicines?.[0]?.course?.calculatedQuantity
+            || request.requestedItems?.[0]?.quantity
+            || 1;
+        const quantity = Math.max(1, Number(proposalData.quantity ?? proposalData.proposedQuantity ?? extractedQuantity) || 1);
         const unitPrice = Number(proposalData.unitPrice ?? 0);
         if (!Number.isFinite(unitPrice) || unitPrice < 0) {
             throw inventoryError('Unit price must be a valid non-negative amount.');
@@ -2932,10 +2956,14 @@ export const dataStore = {
             label: slot.label || `${slotType.replace('_', ' ')} Delivery (${slot.date || 'Available slot'})`
         };
 
-        const validPrescriptionStatuses = ['Pending Verification', 'Verified', 'Rejected', 'Not Required'];
-        const prescriptionStatus = validPrescriptionStatuses.includes(proposalData.prescriptionStatus)
-            ? proposalData.prescriptionStatus
-            : (request.prescriptionUrl ? 'Verified' : 'Not Required');
+        const prescriptionState = request.prescriptionVerification?.status || (request.prescriptionId || request.prescriptionUrl ? 'PROCESSING' : 'NOT_REQUIRED');
+        const prescriptionStatus = prescriptionState === 'MATCHED'
+            ? 'Verified'
+            : ['REJECTED', 'INACTIVE', 'MISMATCH'].includes(prescriptionState)
+                ? 'Rejected'
+                : prescriptionState === 'NOT_REQUIRED'
+                    ? 'Not Required'
+                    : 'Pending Verification';
 
         // Expiration: custom date or 48 hours default
         let expiresAt = proposalData.expiresAt ? new Date(proposalData.expiresAt) : new Date(Date.now() + 48 * 3600000);
@@ -2958,7 +2986,8 @@ export const dataStore = {
             pharmacyNote: String(proposalData.pharmacyNote || proposalData.pharmacyNotes || '').trim(),
             deliverySlot,
             prescriptionStatus,
-            alternativeProduct: String(proposalData.alternativeProduct || '').trim()
+            alternativeProduct: String(proposalData.alternativeProduct || '').trim(),
+            prescriptionItems: request.prescriptionVerification?.medicines || []
         };
 
         const now = new Date();
@@ -3299,6 +3328,54 @@ export const dataStore = {
             throw inventoryError('The pharmacy proposal is missing valid pricing.', 400);
         }
 
+        let prescriptionVerification = {
+            status: request.prescriptionId || request.prescriptionUrl ? 'REVIEW_REQUIRED' : 'NOT_REQUIRED',
+            prescriptionId: request.prescriptionId || null,
+            overallConfidence: Number(request.prescriptionVerification?.overallConfidence || 0),
+            lastCheckedAt: new Date(),
+            medicines: request.prescriptionVerification?.medicines || [],
+            issues: request.prescriptionId
+                ? ['Prescription verification result is not available yet.']
+                : request.prescriptionUrl
+                    ? ['Legacy prescription is not linked to the Python Prescription Service.']
+                    : []
+        };
+
+        if (request.prescriptionId) {
+            try {
+                prescriptionVerification = await verifyPrescriptionAgainstItems({
+                    prescriptionId: request.prescriptionId,
+                    items: [{
+                        productId: proposal.productId || null,
+                        name: proposal.medicineName,
+                        productName: proposal.medicineName,
+                        strength: proposal.strength,
+                        form: proposal.dosageForm,
+                        quantity: proposal.quantity
+                    }],
+                    userId: customerId,
+                    tenantId: request.tenantId || null,
+                    branchId: request.branchId || null
+                });
+            } catch (verificationError) {
+                prescriptionVerification = {
+                    status: 'PROCESSING',
+                    prescriptionId: request.prescriptionId,
+                    overallConfidence: 0,
+                    lastCheckedAt: new Date(),
+                    medicines: [],
+                    issues: [verificationError.message || 'Prescription verification service is temporarily unavailable.']
+                };
+            }
+        }
+
+        if (['REJECTED', 'INACTIVE', 'MISMATCH'].includes(prescriptionVerification.status)) {
+            throw inventoryError(
+                `Prescription verification failed for the proposed medicine: ${prescriptionVerification.issues?.[0] || prescriptionVerification.status}.`,
+                409
+            );
+        }
+
         const orderId = getIsConnected()
             ? new mongoose.Types.ObjectId()
             : `ord-mr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -3332,7 +3409,10 @@ export const dataStore = {
             items: orderItems,
             medicineItems: [],
             prescriptionUrl: request.prescriptionUrl || null,
-            prescriptionRequired: Boolean(request.prescriptionUrl),
+            prescriptionId: request.prescriptionId || null,
+            patientPuid: request.patientPuid || null,
+            prescriptionRequired: Boolean(request.prescriptionId || request.prescriptionUrl),
+            prescriptionVerification,
             subtotal: orderTotal,
             totalAmount: orderTotal,
             finalTotal: orderTotal,
@@ -3340,7 +3420,7 @@ export const dataStore = {
             addressDetails: request.addressDetails || {},
             coordinates: request.coordinates || null,
             paymentMethod: 'Cash on Delivery (COD)',
-            orderStatus: 'Processing Order',
+            orderStatus: 'Approved',
             status: 'accepted',
             source: 'MEDICINE_REQUEST',
             medicineRequestId: String(request._id),
@@ -3351,7 +3431,9 @@ export const dataStore = {
                     newStatus: 'Processing Order',
                     changedBy: 'Pharmacist Proposal Approval',
                     timestamp: now,
-                    notes: `Created from approved medicine request #${request.requestNumber}. Proposed slot: ${proposal.deliverySlot?.label || 'Standard'}`
+                    notes: prescriptionVerification.status === 'MATCHED'
+                        ? `Created from approved medicine request #${request.requestNumber}. Prescription medicines verified.`
+                        : `Created from approved medicine request #${request.requestNumber}. Prescription verification status: ${prescriptionVerification.status}.`
                 }
             ]
         };
