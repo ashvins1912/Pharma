@@ -4,7 +4,6 @@ import mongoose from 'mongoose';
 import { config } from './config.js';
 import { Order, OrderEvent } from './models.js';
 import { createInventoryToken } from './service-auth.js';
-import { verifyPrescriptionAgainstItems } from '../../../prescription-verification/PrescriptionVerificationService.js';
 
 const allowedSources = new Set(['WEB', 'MOBILE', 'ADMIN', 'POS', 'ERP', 'PARTNER', 'API', 'MEDICINE_REQUEST']);
 const allowedStatuses = new Set([
@@ -36,7 +35,6 @@ const serializeOrder = order => ({
   fulfillmentReady: isFulfillmentReady(order),
   prescriptionId: order.prescriptionId || null,
   patientPuid: order.patientPuid || null,
-  prescriptionVerification: order.prescriptionVerification || null,
   tenantId: order.tenantId || null,
   branchId: order.branchId || null,
   reservationExpiresAt: order.reservationExpiresAt || null,
@@ -70,10 +68,8 @@ const serializeOrder = order => ({
   updatedAt: order.updatedAt
 });
 
-export function normalizeCreateRequest(body, userContext) {
+export function normalizeCreateRequest(body, userId) {
   body = body || {};
-  const serviceUser = typeof userContext === 'string' ? { userId: userContext } : (userContext || {});
-  const userId = serviceUser.userId || '';
   const source = body?.source || 'API';
   const externalReference = typeof body?.externalReference === 'string' ? body.externalReference.trim() : '';
   const idempotencyKey = typeof body?.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
@@ -111,8 +107,8 @@ export function normalizeCreateRequest(body, userContext) {
     prescriptionUrl: body.prescriptionUrl || null,
     prescriptionId: body.prescriptionId || null,
     patientPuid: body.patientPuid || null,
-    tenantId: serviceUser.tenantId || body.tenantId || null,
-    branchId: serviceUser.branchId || body.branchId || null,
+    tenantId: body.tenantId || null,
+    branchId: body.branchId || null,
     prescriptionRequired: Boolean(body.prescriptionRequired || body.prescriptionUrl || body.prescriptionId)
   };
   const requestFingerprint = createHash('sha256')
@@ -129,30 +125,9 @@ export function normalizeCreateRequest(body, userContext) {
       prescriptionUrl: request.prescriptionUrl,
       prescriptionId: request.prescriptionId,
       patientPuid: request.patientPuid,
-      tenantId: request.tenantId,
-      branchId: request.branchId,
       prescriptionRequired: request.prescriptionRequired
     }))
     .digest('hex');
-  if (
-    serviceUser.tenantId
-    && body.tenantId
-    && String(serviceUser.tenantId) !== String(body.tenantId)
-    && !serviceUser.isPlatformUser
-  ) {
-    throw fail(403, 'Tenant context does not match the authenticated service context.');
-  }
-  if (
-    serviceUser.branchId
-    && body.branchId
-    && String(serviceUser.branchId) !== String(body.branchId)
-    && !serviceUser.isPlatformUser
-  ) {
-    throw fail(403, 'Branch context does not match the authenticated service context.');
-  }
-  if (serviceUser.authorizedTenantId && request.tenantId && String(serviceUser.authorizedTenantId) !== String(request.tenantId) && !serviceUser.isPlatformUser) {
-    throw fail(403, 'Authenticated tenant membership does not authorize this tenant.');
-  }
   return { ...request, requestFingerprint };
 }
 
@@ -202,52 +177,6 @@ const inventoryRequest = async (path, data, idempotencyKey) => {
   }
 };
 
-const verifyOrderPrescription = async (request, items, user) => {
-  if (!request.prescriptionRequired) {
-    return {
-      status: 'NOT_REQUIRED',
-      prescriptionId: null,
-      patientPuid: null,
-      overallConfidence: 1,
-      lastCheckedAt: new Date(),
-      medicines: [],
-      issues: []
-    };
-  }
-  if (!request.prescriptionId) {
-    return {
-      status: 'REVIEW_REQUIRED',
-      prescriptionId: null,
-      patientPuid: request.patientPuid || null,
-      overallConfidence: 0,
-      lastCheckedAt: new Date(),
-      medicines: [],
-      issues: ['A prescription is required but no Prescription Service record is linked.']
-    };
-  }
-  try {
-    return await verifyPrescriptionAgainstItems({
-      prescriptionId: request.prescriptionId,
-      patientPuid: request.patientPuid || null,
-      items,
-      userId: user.userId,
-      tenantId: request.tenantId || user.tenantId || null,
-      branchId: request.branchId || user.branchId || null,
-      isAdmin: user.userRole === 'admin'
-    });
-  } catch (error) {
-    return {
-      status: 'PROCESSING',
-      prescriptionId: request.prescriptionId,
-      patientPuid: request.patientPuid || null,
-      overallConfidence: 0,
-      lastCheckedAt: new Date(),
-      medicines: [],
-      issues: [error.message || 'Prescription verification service is temporarily unavailable.']
-    };
-  }
-};
-
 const writeEvent = async (session, order, event) => {
   const occurredAt = order.updatedAt || new Date();
   const eventKey = `${order.orderNumber}:${event}:${new Date(occurredAt).toISOString()}`;
@@ -264,7 +193,7 @@ const writeEvent = async (session, order, event) => {
 };
 
 export async function createOrder(body, user) {
-  const request = normalizeCreateRequest(body, user);
+  const request = normalizeCreateRequest(body, user.userId);
   const existing = await findExistingOrder(request);
   if (existing) return checkReplay(existing, request);
   const skus = request.items.map(([sku]) => sku);
@@ -299,11 +228,6 @@ export async function createOrder(body, user) {
   const subtotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
   if (!Number.isFinite(subtotal)) throw fail(400, 'Order total exceeds the supported range.');
 
-  const prescriptionVerification = await verifyOrderPrescription(request, items, user);
-  if (['REJECTED', 'INACTIVE', 'MISMATCH'].includes(prescriptionVerification.status)) {
-    throw fail(409, `Prescription verification failed: ${prescriptionVerification.issues?.[0] || prescriptionVerification.status}.`);
-  }
-
   const reservationIdentity = request.externalReference || request.idempotencyKey;
   const stableOrderId = createHash('sha256')
     .update(`${request.source}:${reservationIdentity}`)
@@ -320,11 +244,7 @@ export async function createOrder(body, user) {
     throw fail(409, `Inventory reservation is ${String(reservation.status || 'unavailable').toLowerCase()}.`);
   }
 
-  const prescriptionGate = !request.prescriptionRequired
-    ? 'NOT_REQUIRED'
-    : prescriptionVerification.status === 'MATCHED'
-      ? 'APPROVED'
-      : 'PENDING_REVIEW';
+  const prescriptionGate = request.prescriptionRequired ? 'PENDING_REVIEW' : 'NOT_REQUIRED';
   // Order is confirmed immediately; prescription is an independent fulfillment gate.
   const initialStatus = 'Approved';
 
@@ -353,8 +273,7 @@ export async function createOrder(body, user) {
         coordinates: request.coordinates,
         prescriptionUrl: request.prescriptionUrl,
         prescriptionId: request.prescriptionId,
-        patientPuid: prescriptionVerification.patientPuid || request.patientPuid,
-        prescriptionVerification,
+        patientPuid: request.patientPuid,
         tenantId: request.tenantId || user.tenantId || null,
         branchId: request.branchId || user.branchId || null,
         reservationId: reservation.reservationId,
@@ -535,30 +454,8 @@ export async function updateFulfillmentGate(orderNumber, {
     }
   }
 
-  // Never accept a prescription gate approval without re-verifying the actual order medicines.
+  // On prescription approval after reservation expiry → re-reserve idempotently
   if (gate === 'prescription' && status === 'APPROVED') {
-    const verification = await verifyOrderPrescription({
-      prescriptionRequired: true,
-      prescriptionId: order.prescriptionId,
-      patientPuid: order.patientPuid,
-      tenantId: order.tenantId,
-      branchId: order.branchId
-    }, order.items || [], {
-      userId: order.userId,
-      tenantId: order.tenantId,
-      branchId: order.branchId,
-      userRole: actor === 'system' ? 'admin' : 'system'
-    });
-    order.prescriptionVerification = verification;
-    if (verification.status !== 'MATCHED') {
-      order.markModified('prescriptionVerification');
-      return {
-        order: serializeOrder(order),
-        ignored: true,
-        reason: 'PRESCRIPTION_NOT_VERIFIED'
-      };
-    }
-
     const expired = order.reservationExpiresAt && new Date(order.reservationExpiresAt) < new Date();
     const needsReserve = expired
       || order.fulfillmentGate?.inventory === 'RELEASED'
@@ -604,145 +501,4 @@ export async function updateFulfillmentGate(orderNumber, {
   }
 }
 
-
-export async function reconcilePendingPrescriptionOrders({ workerId = randomUUID(), limit = 20 } = {}) {
-  const now = new Date();
-  const leaseUntil = new Date(now.getTime() + 60_000);
-  let processed = 0;
-  let approved = 0;
-  let rejected = 0;
-  let deferred = 0;
-
-  for (; processed < limit; processed += 1) {
-    const order = await Order.findOneAndUpdate(
-      {
-        'fulfillmentGate.prescription': 'PENDING_REVIEW',
-        prescriptionId: { $type: 'string' },
-        orderStatus: { $nin: ['Cancelled', 'Rejected', 'Delivered'] },
-        $or: [
-          { prescriptionReconciliationLeaseUntil: null },
-          { prescriptionReconciliationLeaseUntil: { $lte: now } }
-        ]
-      },
-      {
-        $set: {
-          prescriptionReconciliationLeaseUntil: leaseUntil,
-          prescriptionReconciliationWorkerId: workerId
-        }
-      },
-      { sort: { updatedAt: 1 }, new: true }
-    ).lean();
-
-    if (!order) break;
-
-    try {
-      const verification = await verifyOrderPrescription(
-        {
-          prescriptionRequired: true,
-          prescriptionId: order.prescriptionId,
-          patientPuid: order.patientPuid,
-          tenantId: order.tenantId,
-          branchId: order.branchId
-        },
-        order.items || [],
-        {
-          userId: order.userId,
-          tenantId: order.tenantId,
-          branchId: order.branchId,
-          userRole: 'system'
-        }
-      );
-
-      if (verification.status === 'MATCHED') {
-        await updateFulfillmentGate(order.orderNumber, {
-          gate: 'prescription',
-          status: 'APPROVED',
-          actor: 'prescription-reconciler',
-          idempotencyKey: `rx-reconcile:${order.prescriptionId}:${order.version || 1}`
-        });
-        approved += 1;
-      } else if (verification.status === 'REJECTED') {
-        await Order.updateOne(
-          {
-            orderNumber: order.orderNumber,
-            prescriptionReconciliationWorkerId: workerId,
-            'fulfillmentGate.prescription': 'PENDING_REVIEW'
-          },
-          {
-            $set: {
-              prescriptionVerification: verification,
-              'fulfillmentGate.prescription': 'REJECTED',
-              prescriptionReconciliationLeaseUntil: null,
-              prescriptionReconciliationWorkerId: null
-            },
-            $inc: { version: 1 }
-          }
-        );
-        rejected += 1;
-      } else if (verification.status === 'INACTIVE') {
-        await Order.updateOne(
-          {
-            orderNumber: order.orderNumber,
-            prescriptionReconciliationWorkerId: workerId,
-            'fulfillmentGate.prescription': 'PENDING_REVIEW'
-          },
-          {
-            $set: {
-              prescriptionVerification: verification,
-              'fulfillmentGate.prescription': 'INACTIVE',
-              prescriptionReconciliationLeaseUntil: null,
-              prescriptionReconciliationWorkerId: null
-            },
-            $inc: { version: 1 }
-          }
-        );
-        rejected += 1;
-      } else {
-        await Order.updateOne(
-          {
-            orderNumber: order.orderNumber,
-            prescriptionReconciliationWorkerId: workerId
-          },
-          {
-            $set: {
-              prescriptionVerification: verification,
-              prescriptionReconciliationLeaseUntil: null,
-              prescriptionReconciliationWorkerId: null
-            },
-            $inc: { version: 1 }
-          }
-        );
-        deferred += 1;
-      }
-    } catch (error) {
-      await Order.updateOne(
-        {
-          orderNumber: order.orderNumber,
-          prescriptionReconciliationWorkerId: workerId
-        },
-        {
-          $set: {
-            prescriptionVerification: {
-              status: 'PROCESSING',
-              prescriptionId: order.prescriptionId,
-              patientPuid: order.patientPuid || null,
-              overallConfidence: 0,
-              lastCheckedAt: new Date(),
-              medicines: [],
-              issues: [error.message || 'Prescription reconciliation failed.']
-            },
-            prescriptionReconciliationLeaseUntil: null,
-            prescriptionReconciliationWorkerId: null
-          },
-          $inc: { version: 1 }
-        }
-      );
-      deferred += 1;
-    }
-  }
-
-  return { processed, approved, rejected, deferred };
-}
-
 export { allowedStatuses, serializeOrder, isFulfillmentReady };
-

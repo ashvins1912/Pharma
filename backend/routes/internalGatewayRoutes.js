@@ -1,7 +1,6 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { authenticateUser } from '../middleware/auth.js';
-import { resolveUserContext } from '../middleware/context.js';
 import { env } from '../config/env.js';
 
 const router = express.Router();
@@ -33,47 +32,17 @@ router.post('/authenticate', (req, res, next) => {
     }
 
     return Promise.resolve(authenticateUser(req, res, () => {
-        if (typeof req.user?.sub !== 'string' || !req.user.sub) {
+        const user = req.user;
+        if (typeof user?.sub !== 'string' || !user.sub) {
             return res.status(401).json({ message: 'Authenticated user identity is invalid.' });
         }
-
-        resolveUserContext(req);
-        const requestedTenantId = req.get('x-tenant-id') || null;
-        const requestedBranchId = req.get('x-branch-id') || null;
-        const context = req.context || {};
-
-        if (
-            context.tenantMismatch
-            || (
-                context.authorizedTenantId
-                && context.tenantId
-                && context.authorizedTenantId !== context.tenantId
-                && !context.isPlatformUser
-            )
-        ) {
-            return res.status(403).json({ message: 'Cross-tenant access forbidden.' });
-        }
-
-        if (
-            requestedBranchId
-            && context.tenantMembership?.branchId
-            && requestedBranchId !== context.tenantMembership.branchId
-            && !context.isPlatformUser
-        ) {
-            return res.status(403).json({ message: 'Branch access forbidden.' });
-        }
-
         return res.json({
             user: {
-                sub: req.user.sub,
-                email: req.user.email || '',
-                app_metadata: req.user.app_metadata || {},
-                user_metadata: req.user.user_metadata || {},
-                aal: req.user.aal || 'aal1',
-                tenantId: context.tenantId || requestedTenantId || null,
-                branchId: context.branchId || requestedBranchId || null,
-                authorizedTenantId: context.authorizedTenantId || null,
-                isPlatformUser: Boolean(context.isPlatformUser)
+                sub: user.sub,
+                email: user.email || '',
+                app_metadata: user.app_metadata || {},
+                user_metadata: user.user_metadata || {},
+                aal: user.aal || 'aal1'
             }
         });
     })).catch(next);

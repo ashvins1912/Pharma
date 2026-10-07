@@ -46,6 +46,12 @@ const orderSchema = new mongoose.Schema({
   totalAmount: { type: Number, required: true, min: 0 },
   finalTotal: { type: Number, required: true, min: 0 },
   paymentMethod: { type: String, required: true },
+  cashCollectionStatus: {
+    type: String,
+    enum: ['CASH_RECEIVED', 'CASH_NOT_RECEIVED', 'NOT_APPLICABLE'],
+    default: 'NOT_APPLICABLE',
+    index: true
+  },
   deliveryAddress: { type: String, required: true },
   addressDetails: { type: mongoose.Schema.Types.Mixed, default: {} },
   coordinates: {
@@ -55,25 +61,10 @@ const orderSchema = new mongoose.Schema({
   prescriptionUrl: { type: String, default: null },
   prescriptionId: { type: String, default: null, index: true },
   patientPuid: { type: String, default: null, index: true },
-  prescriptionVerification: {
-    status: {
-      type: String,
-      enum: ['NOT_REQUIRED', 'PROCESSING', 'MATCHED', 'PARTIAL_MATCH', 'MISMATCH', 'REVIEW_REQUIRED', 'REJECTED', 'INACTIVE'],
-      default: 'NOT_REQUIRED'
-    },
-    prescriptionId: { type: String, default: null },
-    patientPuid: { type: String, default: null },
-    overallConfidence: { type: Number, default: 0, min: 0, max: 1 },
-    lastCheckedAt: { type: Date, default: null },
-    medicines: { type: [mongoose.Schema.Types.Mixed], default: [] },
-    issues: { type: [String], default: [] }
-  },
   tenantId: { type: String, default: null, index: true },
   branchId: { type: String, default: null, index: true },
   version: { type: Number, default: 1 },
   reservationExpiresAt: { type: Date, default: null },
-  prescriptionReconciliationLeaseUntil: { type: Date, default: null, index: true },
-  prescriptionReconciliationWorkerId: { type: String, default: null },
   fulfillmentGate: {
     payment: {
       type: String,

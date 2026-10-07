@@ -114,7 +114,11 @@ apiClient.interceptors.response.use(
         const isSessionProbe = /\/api\/auth\/(session|logout)(\/|$)/.test(url);
         if (normalized.status === 401 && !isCredentialSubmission && !isSessionProbe && typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('ashvin:authentication-required', {
-                detail: { requestId: normalized.requestId }
+                detail: { requestId: normalized.requestId, config: error.config }
+            }));
+        } else if (normalized.status === 403 && normalized.code === 'MFA_CHALLENGE_REQUIRED' && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('ashvin:mfa-required', {
+                detail: { requestId: normalized.requestId, config: error.config }
             }));
         }
         console.warn('API request failed', {

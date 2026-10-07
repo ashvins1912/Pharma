@@ -97,6 +97,9 @@ export const processDeliveryEvent = async (event, { requestId = null } = {}) => 
                 const previousStatus = order.orderStatus;
                 order.orderStatus = transition.nextOrderStatus;
                 order.paymentStatus = transition.nextPaymentStatus;
+                if (transition.cashCollectionStatus) {
+                    order.cashCollectionStatus = transition.cashCollectionStatus;
+                }
                 if (event.action === 'cash_received') {
                     const amount = Number(order.finalTotal ?? order.totalAmount);
                     if (!Number.isFinite(amount) || amount < 0) {
@@ -106,6 +109,7 @@ export const processDeliveryEvent = async (event, { requestId = null } = {}) => 
                         throw error;
                     }
                     order.amountPaid = amount;
+                    order.cashCollectionStatus = 'CASH_RECEIVED';
                     await RiderLedger.create([{
                         orderId: order._id,
                         riderId: event.riderId,
@@ -114,23 +118,38 @@ export const processDeliveryEvent = async (event, { requestId = null } = {}) => 
                         type: 'CASH_COLLECTED',
                         occurredAt: now
                     }], { session });
+                } else if (event.action === 'cash_not_received') {
+                    order.cashCollectionStatus = 'CASH_NOT_RECEIVED';
+                    order.amountPaid = 0;
                 }
-                order.deliveredAt = now;
+                if (transition.nextOrderStatus === 'Delivered') {
+                    order.deliveredAt = now;
+                } else if (event.action === 'accept') {
+                    order.outForDeliveryAt = now;
+                }
+                let note = 'Rider updated delivery status.';
+                if (event.action === 'cash_received') note = 'Rider confirmed cash collection.';
+                else if (event.action === 'cash_not_received') note = 'Rider confirmed delivery: Cash not received.';
+                else if (event.action === 'accept') note = 'Rider accepted delivery assignment.';
+                else if (event.action === 'payment_pending') note = 'Rider confirmed delivery; digital payment remains pending.';
+
                 order.statusHistory.push({
                     previousStatus,
                     newStatus: transition.nextOrderStatus,
                     changedBy: `Rider:${event.riderId}`,
                     timestamp: now,
-                    notes: event.action === 'cash_received' ? 'Rider confirmed cash collection.' : 'Rider confirmed delivery; digital payment remains pending.'
+                    notes: note
                 });
                 await order.save({ session });
-                await publishOrderEvent(order, 'OrderDelivered', {
-                    session,
-                    eventKey: `delivery:${event.eventId}:${event.action}`,
-                    payload: { deliveryAction: event.action }
-                });
+                if (transition.nextOrderStatus === 'Delivered') {
+                    await publishOrderEvent(order, 'OrderDelivered', {
+                        session,
+                        eventKey: `delivery:${event.eventId}:${event.action}`,
+                        payload: { deliveryAction: event.action, cashCollectionStatus: order.cashCollectionStatus }
+                    });
+                }
             } else {
-                result = { duplicate: true, alreadyApplied: true, orderId: String(order._id), orderStatus: order.orderStatus };
+                result = { duplicate: true, alreadyApplied: true, orderId: String(order._id), orderStatus: order.orderStatus, cashCollectionStatus: order.cashCollectionStatus };
             }
             const maxAttempts = Number.parseInt(process.env.DELIVERY_MAX_ATTEMPTS || '', 10);
             const safeResult = result || {
@@ -138,6 +157,7 @@ export const processDeliveryEvent = async (event, { requestId = null } = {}) => 
                 orderId: String(order._id),
                 orderStatus: order.orderStatus,
                 paymentStatus: order.paymentStatus || null,
+                cashCollectionStatus: order.cashCollectionStatus || 'NOT_APPLICABLE',
                 deliveryAttempts: Number(order.deliveryAttempts || 0),
                 manualReviewRequired: event.action === 'not_reachable'
                     && Number.isSafeInteger(maxAttempts) && maxAttempts > 0

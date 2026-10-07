@@ -25,6 +25,9 @@ router.get('/', authenticateUser, async (req, res, next) => {
             if (req.query.tenantId) filter.tenantId = req.query.tenantId;
         }
 
+        if (req.query.status) filter.status = req.query.status;
+        if (req.query.search) filter.search = req.query.search;
+
         const orders = await orderService.getOrders(filter);
         res.json({ success: true, data: orders });
     } catch (err) {
@@ -91,8 +94,8 @@ router.post('/', authenticateUser, async (req, res, next) => {
 // Status Transition (Pharmacist / Staff / Platform Admin)
 router.patch('/:id/status', authenticateUser, async (req, res, next) => {
     try {
-        const { status } = req.body;
-        const updated = await orderService.transitionOrderStatus(req.params.id, status, req.context);
+        const { status, cashCollectionStatus } = req.body;
+        const updated = await orderService.transitionOrderStatus(req.params.id, status, req.context, cashCollectionStatus);
         res.json({ success: true, data: updated });
     } catch (err) {
         next(err);

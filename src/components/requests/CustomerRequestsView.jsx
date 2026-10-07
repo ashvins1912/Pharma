@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { cancelMedicineRequest, approveProposal, replaceMedicineRequestPrescription } from '../../api/medicineRequestService';
+import { cancelMedicineRequest, approveProposal } from '../../api/medicineRequestService';
 
 const DEFAULT_PAGINATION = { page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false };
 
@@ -25,7 +25,6 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [approvingId, setApprovingId] = useState(null);
-  const [updatingPrescriptionId, setUpdatingPrescriptionId] = useState(null);
 
   const filteredRequests = medicineRequests.filter(r => {
     if (statusFilter === 'ALL') return true;
@@ -54,24 +53,6 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
       addToast(err.message || 'Failed to cancel medicine request.', 'error');
     } finally {
       setCancelling(false);
-    }
-  };
-
-  const handlePrescriptionReplacement = async (request, file) => {
-    if (!file || updatingPrescriptionId) return;
-    if (file.size > 5 * 1024 * 1024) {
-      addToast('Prescription file size must be under 5 MB.', 'warning');
-      return;
-    }
-    setUpdatingPrescriptionId(request._id);
-    try {
-      const result = await replaceMedicineRequestPrescription(request._id, file);
-      addToast(result.message || 'Prescription updated and queued for reprocessing.', 'success');
-      await loadUserMedicineRequests({ page: 1, statusGroup: statusFilter });
-    } catch (error) {
-      addToast(error.message || 'Failed to update prescription.', 'error');
-    } finally {
-      setUpdatingPrescriptionId(null);
     }
   };
 
@@ -331,76 +312,6 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                   </div>
 
                 </div>
-
-                {req.prescriptionVerification?.medicines?.length > 0 && (
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-wider text-emerald-900">
-                          Prescription Medicines Extracted
-                        </p>
-                        <p className="text-[11px] text-emerald-800">
-                          {req.prescriptionVerification.status || 'PROCESSING'}
-                        </p>
-                      </div>
-                      {req.prescriptionVerification.overallConfidence > 0 && (
-                        <span className="rounded-lg bg-white px-2 py-1 text-[10px] font-bold text-emerald-700">
-                          {Math.round(req.prescriptionVerification.overallConfidence * 100)}% confidence
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-2 space-y-1.5">
-                      {req.prescriptionVerification.medicines.map((medicine, index) => (
-                        <div key={`${medicine.rawName || medicine.normalizedName || index}-${index}`} className="rounded-xl bg-white border border-emerald-100 p-2.5">
-                          <p className="text-xs font-black text-slate-900">
-                            {medicine.normalizedName || medicine.rawName || 'Medicine'}
-                          </p>
-                          <p className="mt-0.5 text-[10px] text-slate-600">
-                            Strength: {medicine.strength?.value != null ? `${medicine.strength.value} ${medicine.strength.unit || ''}` : medicine.strength || '—'}
-                            {' • '}Dose: {medicine.dose?.value != null ? `${medicine.dose.value} ${medicine.dose.unit || ''}` : medicine.dose || '—'}
-                            {' • '}Frequency: {medicine.frequency?.normalized || medicine.frequency?.raw || medicine.frequency || '—'}
-                          </p>
-                          <p className="text-[10px] text-slate-500">
-                            Duration/Course: {medicine.duration?.value != null ? `${medicine.duration.value} ${medicine.duration.unit || ''}` : medicine.duration || '—'}
-                            {medicine.course?.value != null ? ` • Qty ${medicine.course.value}` : ''}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                    {req.prescriptionVerification.issues?.length > 0 && (
-                      <p className="mt-2 text-[10px] font-semibold text-amber-800">
-                        {req.prescriptionVerification.issues.join(' ')}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {req.prescriptionId && !['CONVERTED_TO_ORDER', 'CUSTOMER_APPROVED', 'CANCELLED', 'CUSTOMER_REJECTED', 'PHARMACY_REJECTED'].includes(req.status) && (
-                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-3">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-blue-900">Prescription document</p>
-                      <p className="text-[11px] text-blue-800">
-                        {req.prescriptionVerification?.status === 'PROCESSING'
-                          ? 'Processing the latest prescription…'
-                          : 'Need to correct or replace the prescription?'}
-                      </p>
-                    </div>
-                    <label className="cursor-pointer rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-black text-white hover:bg-blue-700">
-                      {updatingPrescriptionId === req._id ? 'Updating…' : 'Update Prescription'}
-                      <input
-                        type="file"
-                        accept="application/pdf,image/jpeg,image/png,image/webp"
-                        className="hidden"
-                        disabled={updatingPrescriptionId === req._id}
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          event.target.value = '';
-                          void handlePrescriptionReplacement(req, file);
-                        }}
-                      />
-                    </label>
-                  </div>
-                )}
 
                 {/* Proposal Callout Card / Action Bar */}
                 {isProposalActionable && (

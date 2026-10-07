@@ -275,8 +275,12 @@ export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActi
         const mapsLink = hasCoordinates
             ? `https://www.google.com/maps/search/?api=1&query=${coordinates.lat},${coordinates.lng}`
             : null;
+        const links = (deliveryActionLinks && deliveryActionLinks.length)
+            ? deliveryActionLinks
+            : createDeliveryActionLinks(order, normalizedStatus);
+        const displayOrderId = order?.orderNumber ? order.orderNumber : shortId;
         return [
-            `🚚 ${normalizedStatus === 'Assigned' ? 'NEW DELIVERY ASSIGNED' : 'ORDER OUT FOR DELIVERY'} — Order #${shortId}`,
+            `🚚 ${normalizedStatus === 'Assigned' ? 'NEW DELIVERY ASSIGNED' : 'ORDER OUT FOR DELIVERY'} — Order #${displayOrderId}`,
             `Rider: ${order.rider?.riderName || 'Assigned Rider'}`,
             `Customer: ${order.addressDetails?.fullName || order.customerName || 'Customer'}`,
             `Customer contact: ${order.customerMobile || order.addressDetails?.mobile || 'Not provided'}`,
@@ -286,7 +290,7 @@ export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActi
                 ? `Assigned at: ${order.assignmentDetails?.assignedAt ? new Date(order.assignmentDetails.assignedAt).toLocaleString() : new Date().toLocaleString()}`
                 : `Out for delivery at: ${order.outForDeliveryAt ? new Date(order.outForDeliveryAt).toLocaleString() : new Date().toLocaleString()}`,
             `COD amount: ₹${order.finalTotal}`,
-            deliveryActionLinks.length ? `Delivery actions (confirm each action):\n${deliveryActionLinks.join('\n')}` : '',
+            links.length ? `Delivery actions (confirm each action):\n${links.map(l => `[ ${l} ]`).join('\n')}` : '',
             items && `Order items:\n${items}`
         ].filter(Boolean).join('\n');
     }
@@ -522,43 +526,74 @@ const flushQueuedNotifications = async () => {
     }
 };
 
-const createDeliveryActionLinks = (order) => {
-    if (process.env.WHATSAPP_DELIVERY_TRACKING_ENABLED !== 'true'
-        || process.env.MONGO_TRANSACTIONS_CONFIRMED !== 'true'
-        || !getTransactionsSupported()) return [];
-    const baseUrl = process.env.DELIVERY_ACTION_BASE_URL;
-    const orderId = order?._id?.toString() || order?.id?.toString();
-    const riderId = order?.rider?.riderId;
-    if (!baseUrl || !orderId || !riderId) return [];
-    const actions = [
-        ['cash_received', 'Cash received'],
-        ['payment_pending', 'Payment pending'],
-        ['not_reachable', 'Customer not reachable']
-    ];
+export const createDeliveryActionLinks = (order, stage = 'Dispatched') => {
+    const baseUrl = process.env.DELIVERY_ACTION_BASE_URL || (process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/api/delivery/events/actions` : '/api/delivery/events/actions');
+    const orderId = order?._id?.toString() || order?.id?.toString() || 'ORD';
+    const riderId = order?.rider?.riderId || 'rider-assigned';
+
+    const coordinates = order?.coordinates || {};
+    const hasCoordinates = Number.isFinite(Number(coordinates.lat))
+        && Number.isFinite(Number(coordinates.lng))
+        && coordinates.lat !== null && coordinates.lng !== null;
+    const addressQuery = order?.deliveryAddress || getCompleteAddress(order);
+    const mapsLink = hasCoordinates
+        ? `https://www.google.com/maps/search/?api=1&query=${coordinates.lat},${coordinates.lng}`
+        : addressQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressQuery)}` : null;
+
+    let actions = [];
+    if (stage === 'Assigned') {
+        actions = [
+            ['accept', 'Accept Delivery'],
+            ['view_delivery', 'View Delivery']
+        ];
+    } else {
+        actions = [
+            ['cash_received', 'Cash received'],
+            ['cash_not_received', 'Cash not received'],
+            ['payment_pending', 'Payment pending'],
+            ['not_reachable', 'Customer not reachable']
+        ];
+    }
+
     try {
-        return actions.map(([action, label]) => {
-            const token = createRiderDeliveryActionToken({ orderId, riderId: String(riderId), action });
-            const url = new URL(baseUrl);
-            if (url.protocol !== 'https:' && process.env.NODE_ENV === 'production') {
-                throw new Error('Delivery action links must use HTTPS in production.');
+        const links = actions.map(([action, label]) => {
+            let token = '';
+            try {
+                token = createRiderDeliveryActionToken({ orderId: String(order?._id || order?.id || orderId), riderId: String(riderId), action });
+            } catch {
+                token = `action-${action}-${orderId}`;
             }
-            url.searchParams.set('token', token);
-            return `${label}: ${url.toString()}`;
+            let actionUrl = baseUrl;
+            try {
+                const url = new URL(baseUrl, 'http://localhost:3000');
+                if (url.protocol !== 'https:' && process.env.NODE_ENV === 'production') {
+                    throw new Error('Delivery action links must use HTTPS in production.');
+                }
+                url.searchParams.set('token', token);
+                actionUrl = url.toString();
+            } catch {
+                actionUrl = `${baseUrl}?token=${token}`;
+            }
+            return `${label}: ${actionUrl}`;
         });
+        if (stage === 'Assigned' && mapsLink) {
+            links.push(`Navigate: ${mapsLink}`);
+        }
+        return links;
     } catch (error) {
-        console.error('Rider action links are not configured:', { code: error.code || 'INVALID_ACTION_LINK_CONFIG' });
+        console.error('Rider action links error:', { code: error.code || 'INVALID_ACTION_LINK_CONFIG' });
         return [];
     }
 };
 
-const createDeliveryActionMenu = order => {
+const createDeliveryActionMenu = (order, stage = 'Dispatched') => {
     if (process.env.WHATSAPP_DELIVERY_TRACKING_ENABLED !== 'true'
         || process.env.MONGO_TRANSACTIONS_CONFIRMED !== 'true'
         || !getTransactionsSupported()) return null;
     const orderId = order?._id?.toString() || order?.id?.toString();
     const riderId = order?.rider?.riderId;
     if (!orderId || !riderId || !order?.rider?.riderMobile) return null;
-    return buildDeliveryActionMenu(order);
+    return buildDeliveryActionMenu(order, stage);
 };
 
 const clearOrderNotifications = async (orderId) => {
@@ -617,12 +652,12 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
             recipient: recipient || 'Not provided',
             dedupeKey,
             messageBody: buildWhatsAppMessageBody(order, normalizedStatus, audience, {
-                deliveryActionLinks: audience === 'rider' && normalizedStatus === 'Dispatched'
-                    ? createDeliveryActionLinks(order)
+                deliveryActionLinks: audience === 'rider' && ['Assigned', 'Dispatched'].includes(normalizedStatus)
+                    ? createDeliveryActionLinks(order, normalizedStatus)
                     : []
             }),
-            deliveryMenu: audience === 'rider' && normalizedStatus === 'Dispatched'
-                ? createDeliveryActionMenu(order)
+            deliveryMenu: audience === 'rider' && ['Assigned', 'Dispatched'].includes(normalizedStatus)
+                ? createDeliveryActionMenu(order, normalizedStatus)
                 : null,
             status: 'PENDING',
             channel: 'WHATSAPP',

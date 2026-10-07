@@ -1,61 +1,51 @@
 # AI_TASK_TEMPLATE.md
 
-Use with `docs/AI_CONTEXT.md` for low-token future work.
-
-## Default
+Use this prompt for future Pharma modifications.
 
 ```
-Read docs/AI_CONTEXT.md first.
+Read `docs/AI_CONTEXT.md` before changing code.
 
-Task: <feature/fix>
+Repository: ashvins1912/Pharma
+Task: <describe the feature/fix>
 
-Inspect current implementation and all callers.
-Identify the authoritative service/path and any legacy duplicate.
-Preserve service ownership, tenant/branch isolation, RBAC, DB authority,
-idempotency, optimistic locking, audit, and Adapter abstraction.
-Do not add critical in-memory persistence or synchronous workflow blocking.
-Implement the smallest production-safe change.
-Add tests and validate local + Render impact.
+Process:
+1. Inspect current code and all callers.
+2. Find duplicate/legacy implementations.
+3. Identify the authoritative service/path.
+4. Implement the smallest production-safe change.
+5. Preserve service ownership, DB authority, tenant/branch isolation, RBAC, idempotency and optimistic locking.
+6. Use adapters/interfaces for replaceable integrations; never hardwire provider SDKs into domain logic.
+7. Do not introduce critical in-memory persistence or synchronous workflow blocking.
+8. Update DB schema/indexes/config/tests/docs only where required.
+9. Validate local startup impact and Render deployment impact.
 
 Return:
 - changed files
-- flow/behavior change
-- tests/results
-- deployment/config impact
+- behavior/flow change
+- tests run + results
+- deployment/config changes
 - remaining risks
 ```
 
-## Bug
+## Quick examples
 
+### Bug fix
 ```
 Read docs/AI_CONTEXT.md.
 Fix: <bug>.
-Trace root cause, update the authoritative implementation, add regression tests,
-and verify security/idempotency/tenant isolation.
+Trace the current flow, fix the root cause, add regression tests, and verify no tenant/security/idempotency regression.
 ```
 
-## Feature
-
+### New feature
 ```
 Read docs/AI_CONTEXT.md.
 Add: <feature>.
-Use existing service ownership and UI patterns. Do not create duplicate business logic.
+Follow existing service ownership and UI patterns; do not create duplicate services or alternate business logic.
 ```
 
-## Integration
-
+### Future integration
 ```
 Read docs/AI_CONTEXT.md.
 Add adapter support for: <provider>.
-Keep DATABASE as the current default. Provider selection/configuration must not change
-domain state rules.
-```
-
-## Deployment
-
-```
-Read docs/AI_CONTEXT.md.
-Fix/deploy: <service or deployment issue>.
-Verify local startup, health/readiness, environment variables, PORT handling,
-internal service URLs, worker startup, and Render configuration.
+Keep DATABASE as the default; provider configuration must be replaceable and must not change domain-state rules.
 ```

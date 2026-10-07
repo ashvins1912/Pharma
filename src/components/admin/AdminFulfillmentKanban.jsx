@@ -53,7 +53,7 @@ const cleanPhoneForWhatsApp = (phone) => {
 };
 
 const buildOrderWhatsAppText = (order, targetRole = 'rider') => {
-  const shortId = (order._id || '').slice(-6).toUpperCase();
+  const shortId = order.orderNumber || (order._id || '').slice(-6).toUpperCase();
   const customerName = order.customerName || order.addressDetails?.fullName || 'Customer';
   const customerMobile = order.customerMobile || order.addressDetails?.mobile || 'Not provided';
   const address = order.deliveryAddress || 'Address on file';
@@ -63,13 +63,26 @@ const buildOrderWhatsAppText = (order, targetRole = 'rider') => {
   const riderMobile = order.rider?.riderMobile || '';
 
   if (targetRole === 'rider') {
+    const addressQuery = address || '';
+    const mapsLink = (order.coordinates?.lat && order.coordinates?.lng)
+      ? `https://www.google.com/maps/search/?api=1&query=${order.coordinates.lat},${order.coordinates.lng}`
+      : addressQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressQuery)}` : '';
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://ashvinpharmacy.com';
+    const actionLinks = [
+      `[ Accept Delivery: ${baseUrl}/api/delivery/events/actions?orderId=${order._id || order.id || ''}&action=accept ]`,
+      `[ View Delivery: ${baseUrl}/rider/delivery/${order._id || order.id || ''} ]`,
+      mapsLink ? `[ Navigate: ${mapsLink} ]` : ''
+    ].filter(Boolean).join('\n');
+
     return [
       `🛵 ASHVIN PHARMACY DISPATCH — Order #${shortId}`,
       `Status: Assigned for Delivery`,
       `Customer: ${customerName}`,
       `Phone: ${customerMobile}`,
       `Delivery Address: ${address}`,
+      mapsLink ? `Navigate: ${mapsLink}` : '',
       `COD Amount to Collect: ₹${total}`,
+      `Rider Actions:\n${actionLinks}`,
       items ? `Order Items:\n${items}` : ''
     ].filter(Boolean).join('\n\n');
   }
@@ -302,13 +315,14 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     );
   }, [availableRiders, riderSearch]);
 
-  const handleTransition = async (orderId, newStatus, riderInfo = null) => {
+  const handleTransition = async (orderId, newStatus, riderInfo = null, cashCollectionStatus = null) => {
     try {
       setUpdatingId(orderId);
       const res = await apiClient.post('/api/orders/admin/transition', {
         orderId,
         newStatus,
-        riderInfo
+        riderInfo,
+        cashCollectionStatus
       });
       addToast(res.data.message || `Order shifted to ${newStatus}`, 'success');
       refreshBoard();
@@ -436,7 +450,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {COLUMNS.map((col) => {
           const searchMode = Boolean(appliedSearch);
-          if (searchMode && (searchLoading || searchError || searchPagination.total === 0)) return null;
+          if (searchMode && (searchLoading || searchError)) return null;
           const colOrders = searchMode
             ? searchOrders.filter(order => order.orderStatus === col.id)
             : col.id === 'Delivered'
@@ -452,7 +466,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                   {col.title}
                 </span>
                 <span className="text-xs font-black text-slate-500 bg-white border border-slate-200 min-w-6 h-6 px-1 rounded-full flex items-center justify-center">
-                  {col.id === 'Delivered' ? deliveredPagination.total : colOrders.length}
+                  {col.id === 'Delivered' ? (searchMode ? colOrders.length : deliveredPagination.total) : colOrders.length}
                 </span>
               </div>
 
@@ -479,12 +493,16 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                   </div>
                 ) : (
                   colOrders.map((order) => {
-                    const orderId = (order._id || '').slice(-6).toUpperCase();
+                    const displayOrderId = order.orderNumber || (order._id ? (order._id.length > 8 ? order._id.slice(-6).toUpperCase() : order._id) : 'ORD');
                     const isProcessing = updatingId === order._id;
+                    const isCod = /cash|cod/i.test(String(order.paymentMethod || ''));
 
                     if (col.id === 'Delivered') {
                       const isExpanded = String(expandedDeliveredOrderId) === String(order._id);
                       const customerName = order.customerName || order.addressDetails?.fullName || 'Customer';
+                      const isCashReceived = order.cashCollectionStatus === 'CASH_RECEIVED';
+                      const isCashNotReceived = order.cashCollectionStatus === 'CASH_NOT_RECEIVED';
+
                       return (
                         <section key={order._id} className="min-w-0 overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
                           <button
@@ -492,12 +510,21 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                             aria-expanded={isExpanded}
                             aria-controls={`delivered-order-${order._id}`}
                             onClick={() => setExpandedDeliveredOrderId(current => current === String(order._id) ? null : String(order._id))}
-                            className="flex min-h-14 w-full min-w-0 items-center justify-between gap-2 p-3 text-left hover:bg-emerald-50/60"
+                            className="flex min-h-14 w-full min-w-0 items-center justify-between gap-2 p-3 text-left hover:bg-emerald-50/60 cursor-pointer"
                           >
                             <span className="min-w-0 flex-1">
-                              <span className="flex flex-wrap items-center gap-2">
-                                <span className="font-black text-xs text-slate-900">#{orderId}</span>
+                              <span className="flex flex-wrap items-center gap-1.5">
+                                <span className="font-black text-xs text-slate-900">#{displayOrderId}</span>
                                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-800">Delivered</span>
+                                {isCod ? (
+                                  isCashReceived ? (
+                                    <span className="rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-900">💵 Cash Received</span>
+                                  ) : (
+                                    <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-900">⚠️ Cash Not Received</span>
+                                  )
+                                ) : (
+                                  <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">Prepaid</span>
+                                )}
                               </span>
                               <span className="mt-1 block truncate text-xs font-semibold text-slate-600">{customerName}</span>
                             </span>
@@ -505,14 +532,28 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                           </button>
                           {isExpanded && (
                             <div id={`delivered-order-${order._id}`} className="space-y-2 border-t border-slate-100 p-3 text-xs text-slate-600">
-                              <p><span className="font-bold">Order ID:</span> {order._id}</p>
+                              <p><span className="font-bold">Order ID:</span> {order.orderNumber || order._id}</p>
                               <p><span className="font-bold">Customer:</span> {customerName}</p>
                               <p><span className="font-bold">Mobile:</span> {order.customerMobile || 'No phone'}</p>
                               {order.deliveryAddress && <p><span className="font-bold">Address:</span> {order.deliveryAddress}</p>}
-                              <p><span className="font-bold">Total:</span> ₹{order.finalTotal} COD</p>
+                              <p><span className="font-bold">Total:</span> ₹{order.finalTotal} ({order.paymentMethod || 'COD'})</p>
+                              <p><span className="font-bold">Cash Collection:</span> {isCod ? (isCashReceived ? 'Cash Received' : 'Cash Not Received') : 'Not Applicable (Prepaid)'}</p>
+                              <p><span className="font-bold">Payment Status:</span> {order.paymentStatus || (isCashReceived ? 'PAID' : 'PENDING')}</p>
                               {order.outForDeliveryAt && <p><span className="font-bold">Out for delivery:</span> {new Date(order.outForDeliveryAt).toLocaleString()}</p>}
                               {order.deliveredAt && <p><span className="font-bold">Delivered:</span> {new Date(order.deliveredAt).toLocaleString()}</p>}
                               {order.rider && <p><span className="font-bold">Rider:</span> {order.rider.riderName || 'Assigned rider'}{order.rider.riderMobile ? ` · ${order.rider.riderMobile}` : ''}</p>}
+                              {isCod && isCashNotReceived && (
+                                <div className="pt-2 border-t border-slate-100">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTransition(order._id, 'Delivered', null, 'CASH_RECEIVED')}
+                                    disabled={isProcessing}
+                                    className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs cursor-pointer transition disabled:opacity-50"
+                                  >
+                                    💵 Mark Cash Received
+                                  </button>
+                                </div>
+                              )}
                               <div className="border-t border-slate-100 pt-2">
                                 <p className="mb-1 font-bold">Items</p>
                                 {(order.items || []).map((item, index) => (
@@ -821,13 +862,35 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                           )}
 
                           {col.id === 'Dispatched' && (
-                            <button
-                              onClick={() => handleTransition(order._id, 'Delivered')}
-                              disabled={isProcessing}
-                              className="min-h-11 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-2 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-emerald-600/20"
-                            >
-                              {isProcessing ? 'Recording...' : '🏁 Confirm Delivered & Cash Collected'}
-                            </button>
+                            isCod ? (
+                              <div className="space-y-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleTransition(order._id, 'Delivered', null, 'CASH_RECEIVED')}
+                                  disabled={isProcessing}
+                                  className="min-h-11 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-2 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-emerald-600/20 disabled:opacity-50"
+                                >
+                                  {isProcessing ? 'Recording...' : '💵 Confirm Delivered (Cash Received)'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleTransition(order._id, 'Delivered', null, 'CASH_NOT_RECEIVED')}
+                                  disabled={isProcessing}
+                                  className="min-h-11 w-full bg-amber-600 hover:bg-amber-700 text-white font-black text-xs px-2 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-amber-600/20 disabled:opacity-50"
+                                >
+                                  {isProcessing ? 'Recording...' : '⚠️ Confirm Delivered (Cash Not Received)'}
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleTransition(order._id, 'Delivered', null, 'NOT_APPLICABLE')}
+                                disabled={isProcessing}
+                                className="min-h-11 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-2 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-emerald-600/20 disabled:opacity-50"
+                              >
+                                {isProcessing ? 'Recording...' : '🏁 Confirm Delivered'}
+                              </button>
+                            )
                           )}
 
                           {col.id === 'Delivered' && (

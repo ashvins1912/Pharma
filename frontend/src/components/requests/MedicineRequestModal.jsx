@@ -217,9 +217,8 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (submitInProgressRef.current) return;
-    const hasManualMedicine = requestedItems.some(item => item.requestedName.trim());
-    if (!hasManualMedicine && !prescriptionFile) {
-      addToast('Enter at least one medicine, or attach a doctor prescription.', 'warning');
+    if (requestedItems.some(item => !item.requestedName.trim())) {
+      addToast('Please enter a name for each requested medicine or remove the empty item.', 'warning');
       return;
     }
 
@@ -236,18 +235,14 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       setSubmitting(true);
       const formData = new FormData();
 
-      const requestItems = requestedItems
-        .filter(item => item.requestedName.trim())
-        .map(item => ({
-          ...item,
-          requestedName: item.requestedName.trim(),
-          strength: item.strength.trim(),
-          dosageForm: item.dosageForm.trim(),
-          manufacturer: item.manufacturer.trim(),
-          quantity: Math.max(1, Number(item.quantity) || 1),
-          source: 'MANUAL',
-          validationStatus: 'MANUAL'
-        }));
+      const requestItems = requestedItems.map(item => ({
+        ...item,
+        requestedName: item.requestedName.trim(),
+        strength: item.strength.trim(),
+        dosageForm: item.dosageForm.trim(),
+        manufacturer: item.manufacturer.trim(),
+        quantity: Math.max(1, Number(item.quantity) || 1)
+      }));
 
       formData.append('requestedItems', JSON.stringify(requestItems));
       formData.append('addressId', String(selectedAddress._id));

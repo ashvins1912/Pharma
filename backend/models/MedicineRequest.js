@@ -12,22 +12,6 @@ const requestedItemSchema = new mongoose.Schema({
         type: String,
         enum: ['NOT_IN_CATALOG', 'OUT_OF_STOCK'],
         default: 'NOT_IN_CATALOG'
-    },
-    source: {
-        type: String,
-        enum: ['MANUAL', 'PRESCRIPTION_EXTRACTED', 'PRESCRIPTION_MATCHED'],
-        default: 'MANUAL'
-    },
-    dose: { type: mongoose.Schema.Types.Mixed, default: null },
-    frequency: { type: mongoose.Schema.Types.Mixed, default: null },
-    duration: { type: mongoose.Schema.Types.Mixed, default: null },
-    course: { type: mongoose.Schema.Types.Mixed, default: null },
-    instructions: { type: mongoose.Schema.Types.Mixed, default: null },
-    prescriptionMedicineIndex: { type: Number, default: null, min: 0 },
-    validationStatus: {
-        type: String,
-        enum: ['MANUAL', 'EXTRACTED', 'MATCHED', 'PARTIAL_MATCH', 'NOT_FOUND', 'REVIEW_REQUIRED'],
-        default: 'MANUAL'
     }
 }, { _id: false });
 
@@ -69,39 +53,6 @@ const pharmacyProposalSchema = new mongoose.Schema({
     alternativeProduct: { type: String, default: '', trim: true }
 }, { _id: false });
 
-const prescriptionVerificationMedicineSchema = new mongoose.Schema({
-    rawName: { type: String, default: '' },
-    normalizedName: { type: String, default: '' },
-    strength: { type: mongoose.Schema.Types.Mixed, default: null },
-    dose: { type: mongoose.Schema.Types.Mixed, default: null },
-    frequency: { type: mongoose.Schema.Types.Mixed, default: null },
-    duration: { type: mongoose.Schema.Types.Mixed, default: null },
-    course: { type: mongoose.Schema.Types.Mixed, default: null },
-    instructions: { type: mongoose.Schema.Types.Mixed, default: null },
-    confidence: { type: Number, default: 0, min: 0, max: 1 },
-    validationStatus: {
-        type: String,
-        enum: ['EXTRACTED', 'MATCHED', 'PARTIAL_MATCH', 'NOT_FOUND', 'REVIEW_REQUIRED'],
-        default: 'EXTRACTED'
-    },
-    productId: { type: String, default: null }
-}, { _id: false });
-
-const prescriptionVerificationSchema = new mongoose.Schema({
-    status: {
-        type: String,
-        enum: ['NOT_REQUIRED', 'PROCESSING', 'MATCHED', 'PARTIAL_MATCH', 'MISMATCH', 'REVIEW_REQUIRED', 'REJECTED', 'INACTIVE'],
-        default: 'NOT_REQUIRED'
-    },
-    prescriptionId: { type: String, default: null, index: true },
-    patientPuid: { type: String, default: null, index: true },
-    overallConfidence: { type: Number, default: 0, min: 0, max: 1 },
-    lastCheckedAt: { type: Date, default: null },
-    source: { type: String, enum: ['PYTHON_PRESCRIPTION_SERVICE', 'MANUAL'], default: 'MANUAL' },
-    medicines: { type: [prescriptionVerificationMedicineSchema], default: [] },
-    issues: { type: [String], default: [] }
-}, { _id: false });
-
 const auditTrailSchema = new mongoose.Schema({
     action: { type: String, required: true },
     actorId: { type: String, default: 'System' },
@@ -122,9 +73,6 @@ const medicineRequestSchema = new mongoose.Schema({
     requestedItems: { type: [requestedItemSchema], default: [] },
 
     prescriptionUrl: { type: String, default: null },
-    prescriptionId: { type: String, default: null, index: true },
-    patientPuid: { type: String, default: null, index: true },
-    prescriptionVerification: { type: prescriptionVerificationSchema, default: () => ({}) },
     productImageUrl: { type: String, default: null },
 
     customerNote: { type: String, default: '', maxlength: 2000 },

@@ -13,7 +13,6 @@ import { normalizeWhatsAppNumber, sendWhatsAppMedicineRequestAlert, sendCustomWh
 import ProfitMarginRewardEngine from './strategies/ProfitMarginRewardEngine.js';
 import DefaultProfitRewardStrategy from './strategies/ProfitRewardStrategy.js';
 import FixedDeliveryRewardStrategy from './strategies/DeliveryRewardStrategy.js';
-import { verifyPrescriptionAgainstItems } from './services/prescription-verification/PrescriptionVerificationService.js';
 
 const profitMarginRewardEngine = new ProfitMarginRewardEngine({
     strategy: new DefaultProfitRewardStrategy()
@@ -1841,9 +1840,22 @@ export const dataStore = {
     async searchOrders({ type, value, page = 1, limit = 5 }) {
         let filter;
         if (type === 'orderId') {
-            filter = value.orderNumber
-                ? { orderNumber: value.orderNumber }
-                : { _id: value.objectId };
+            const term = String(value.raw || value.orderNumber || value.objectId || '').trim();
+            if (getIsConnected()) {
+                const orConditions = [
+                    { orderNumber: { $regex: term, $options: 'i' } }
+                ];
+                if (value.objectId && mongoose.isValidObjectId(value.objectId)) {
+                    orConditions.push({ _id: new mongoose.Types.ObjectId(value.objectId) });
+                } else if (/^[a-fA-F0-9]{24}$/i.test(term) && mongoose.isValidObjectId(term)) {
+                    orConditions.push({ _id: new mongoose.Types.ObjectId(term) });
+                }
+                if (value.hexSuffix || /^[a-fA-F0-9]{4,12}$/i.test(term)) {
+                    const hex = (value.hexSuffix || term).toLowerCase();
+                    orConditions.push({ $expr: { $regexMatch: { input: { $toString: '$_id' }, regex: `${hex}$`, options: 'i' } } });
+                }
+                filter = { $or: orConditions };
+            }
         } else if (type === 'mobile') {
             const normalized = normalizeWhatsAppNumber(value.digits);
             const candidates = [...new Set([value.digits, normalized, normalized.startsWith('91') ? normalized.slice(2) : normalized])];
@@ -1871,9 +1883,16 @@ export const dataStore = {
         }
 
         const matches = inMemoryOrders.filter(order => {
-            if (type === 'orderId') return value.orderNumber
-                ? String(order.orderNumber || '').toUpperCase() === value.orderNumber
-                : String(order._id) === value.objectId;
+            if (type === 'orderId') {
+                const term = String(value.raw || value.orderNumber || value.objectId || '').trim().toLowerCase();
+                const ordNum = String(order.orderNumber || '').toLowerCase();
+                const ordId = String(order._id || order.id || '').toLowerCase();
+                return ordNum === term
+                    || ordId === term
+                    || ordNum.includes(term)
+                    || ordId.includes(term)
+                    || ordId.endsWith(term);
+            }
             if (type === 'mobile') {
                 return [...new Set([value.digits, normalizeWhatsAppNumber(value.digits), normalizeWhatsAppNumber(value.digits).replace(/^91(?=\d{10}$)/, '')])].includes(String(order.customerMobile || '').replace(/\D/g, ''))
                     || String(order.customerMobile || '') === value.raw;
@@ -1911,7 +1930,7 @@ export const dataStore = {
         return this.getOrder(orderId);
     },
 
-    async transitionOrderStatus(orderId, newStatus, actor = 'Pharmacist', riderInfo = null) {
+    async transitionOrderStatus(orderId, newStatus, actor = 'Pharmacist', riderInfo = null, cashCollectionStatus = null) {
         const validTransitions = {
             'Processing Order': ['Ready to Dispatch', 'Cancelled'],
             'Ready to Dispatch': ['Dispatched', 'Processing Order', 'Cancelled'],
@@ -1920,6 +1939,20 @@ export const dataStore = {
         };
         const completeOrder = async (order, session = null) => {
             if (order.orderStatus === 'Delivered' && newStatus === 'Delivered') {
+                const isCod = /cash|cod/i.test(String(order.paymentMethod || ''));
+                if (isCod && cashCollectionStatus) {
+                    if (cashCollectionStatus === 'CASH_RECEIVED') {
+                        order.cashCollectionStatus = 'CASH_RECEIVED';
+                        order.paymentStatus = 'PAID';
+                        order.amountPaid = Number(order.finalTotal ?? order.totalAmount ?? 0);
+                    } else if (cashCollectionStatus === 'CASH_NOT_RECEIVED') {
+                        order.cashCollectionStatus = 'CASH_NOT_RECEIVED';
+                        order.paymentStatus = order.paymentStatus === 'PAID' ? order.paymentStatus : 'PENDING';
+                        order.amountPaid = 0;
+                    }
+                    if (session) await order.save({ session });
+                    else if (order.save) await order.save();
+                }
                 if (!orderInventoryWasDeducted(order)) {
                     if (session) await deductMongoOrderInventory(order, session);
                     else deductInMemoryOrderInventory(order);
@@ -1934,16 +1967,6 @@ export const dataStore = {
             }
 
             const allowed = validTransitions[order.orderStatus] || [];
-            if (
-                order.prescriptionRequired
-                && ['Processing Order', 'Ready to Dispatch', 'Dispatched'].includes(newStatus)
-                && order.prescriptionVerification?.status !== 'MATCHED'
-            ) {
-                throw inventoryError(
-                    `Prescription verification is not ready. Current status: ${order.prescriptionVerification?.status || 'PENDING'}.`,
-                    409
-                );
-            }
             if (!allowed.includes(newStatus)) {
                 throw inventoryError(
                     `Invalid state transition: Cannot change order from '${order.orderStatus}' to '${newStatus}'`,
@@ -1999,6 +2022,28 @@ export const dataStore = {
                 order.netProfit = finance.netProfit;
                 order.netMarginPercentage = finance.netMarginPercentage;
 
+                // Explicit cash collection status handling for COD orders
+                const isCod = /cash|cod/i.test(String(order.paymentMethod || ''));
+                if (isCod) {
+                    if (cashCollectionStatus === 'CASH_RECEIVED') {
+                        order.cashCollectionStatus = 'CASH_RECEIVED';
+                        order.paymentStatus = 'PAID';
+                        order.amountPaid = Number(order.finalTotal ?? order.totalAmount ?? 0);
+                    } else if (cashCollectionStatus === 'CASH_NOT_RECEIVED') {
+                        order.cashCollectionStatus = 'CASH_NOT_RECEIVED';
+                        order.paymentStatus = order.paymentStatus === 'PAID' ? order.paymentStatus : 'PENDING';
+                        order.amountPaid = 0;
+                    } else {
+                        // Preserve existing or default to uncollected; never assume paid automatically
+                        order.cashCollectionStatus = order.cashCollectionStatus || 'CASH_NOT_RECEIVED';
+                        if (order.cashCollectionStatus !== 'CASH_RECEIVED') {
+                            order.paymentStatus = order.paymentStatus || 'PENDING';
+                        }
+                    }
+                } else {
+                    order.cashCollectionStatus = 'NOT_APPLICABLE';
+                }
+
                 if (session && order.rider?.riderId) {
                     if (!mongoose.isValidObjectId(order.rider.riderId)) {
                         throw inventoryError('The assigned rider record is invalid; delivery completion was not saved.', 409);
@@ -2020,14 +2065,18 @@ export const dataStore = {
             }
 
             if (!order.statusHistory) order.statusHistory = [];
+            const isCod = /cash|cod/i.test(String(order.paymentMethod || ''));
+            const statusNote = newStatus === 'Dispatched'
+                ? 'Reserved stock deducted from inventory on dispatch.'
+                : newStatus === 'Delivered'
+                    ? (isCod ? `Delivery completed. Cash collection: ${order.cashCollectionStatus}.` : 'Delivery completed.')
+                    : riderInfo ? `Rider assigned: ${riderInfo.riderName} (${riderInfo.riderMobile})` : '';
             order.statusHistory.push({
                 previousStatus,
                 newStatus,
                 changedBy: actor,
                 timestamp: transitionAt,
-                notes: newStatus === 'Dispatched'
-                    ? 'Reserved stock deducted from inventory on dispatch.'
-                    : riderInfo ? `Rider assigned: ${riderInfo.riderName} (${riderInfo.riderMobile})` : ''
+                notes: statusNote
             });
             if (session) await order.save({ session });
             else if (order.save) await order.save();
@@ -2579,26 +2628,11 @@ export const dataStore = {
             quantity: Math.max(1, Number(item.quantity) || 1),
             originalAvailabilityStatus: item.originalAvailabilityStatus === 'OUT_OF_STOCK'
                 ? 'OUT_OF_STOCK'
-                : 'NOT_IN_CATALOG',
-            source: ['MANUAL', 'PRESCRIPTION_EXTRACTED', 'PRESCRIPTION_MATCHED'].includes(item.source)
-                ? item.source
-                : 'MANUAL',
-            dose: item.dose || null,
-            frequency: item.frequency || null,
-            duration: item.duration || null,
-            course: item.course || null,
-            instructions: item.instructions || null,
-            prescriptionMedicineIndex: Number.isInteger(Number(item.prescriptionMedicineIndex))
-                ? Number(item.prescriptionMedicineIndex)
-                : null,
-            validationStatus: ['MANUAL', 'EXTRACTED', 'MATCHED', 'PARTIAL_MATCH', 'NOT_FOUND', 'REVIEW_REQUIRED'].includes(item.validationStatus)
-                ? item.validationStatus
-                : 'MANUAL'
+                : 'NOT_IN_CATALOG'
         }));
 
-        const hasNamedManualItem = requestedItems.some(item => String(item?.requestedName || item?.name || '').trim());
-        if (!hasNamedManualItem && !payload.prescriptionId && !payload.prescriptionUrl) {
-            throw inventoryError('Add at least one manual medicine or upload a prescription.');
+        if (!requestedItems.length || !requestedItems[0].requestedName) {
+            throw inventoryError('Please provide the medicine name you want to request.');
         }
 
         const deliveryAddress = String(
@@ -2627,9 +2661,7 @@ export const dataStore = {
             actorId: customerId,
             role: 'Customer',
             timestamp: new Date(),
-            notes: hasNamedManualItem
-                ? `Requested ${requestedItems.filter(item => item.requestedName)[0].requestedName} (x${requestedItems.filter(item => item.requestedName)[0].quantity})`
-                : 'Prescription uploaded without manual medicine entry'
+            notes: `Requested ${requestedItems[0].requestedName} (x${requestedItems[0].quantity})`
         };
 
         const requestDoc = {
@@ -2641,18 +2673,6 @@ export const dataStore = {
             addressId: payload.addressId || null,
             requestedItems,
             prescriptionUrl: payload.prescriptionUrl || null,
-            prescriptionId: payload.prescriptionId || null,
-            patientPuid: payload.patientPuid || null,
-            prescriptionVerification: payload.prescriptionVerification || {
-                status: payload.prescriptionId ? 'PROCESSING' : 'NOT_REQUIRED',
-                prescriptionId: payload.prescriptionId || null,
-                patientPuid: payload.patientPuid || null,
-                overallConfidence: 0,
-                lastCheckedAt: payload.prescriptionId ? new Date() : null,
-                source: payload.prescriptionId ? 'PYTHON_PRESCRIPTION_SERVICE' : 'MANUAL',
-                medicines: [],
-                issues: []
-            },
             productImageUrl: payload.productImageUrl || null,
             customerNote: String(payload.customerNote || '').trim(),
             deliveryAddress: deliveryAddress,
@@ -2899,23 +2919,10 @@ export const dataStore = {
             throw inventoryError('Cannot alter proposal after customer approval or order conversion.', 400);
         }
 
-        const extractedFallback = request.prescriptionVerification?.medicines?.[0]?.normalizedName
-            || request.prescriptionVerification?.medicines?.[0]?.rawName
-            || '';
-        const medicineName = String(
-            proposalData.medicineName
-            || proposalData.proposedMedicineName
-            || request.requestedItems?.[0]?.requestedName
-            || extractedFallback
-            || ''
-        ).trim();
+        const medicineName = String(proposalData.medicineName || proposalData.proposedMedicineName || request.requestedItems?.[0]?.requestedName || '').trim();
         if (!medicineName) throw inventoryError('Medicine name is required in proposal.');
 
-        const extractedQuantity = request.prescriptionVerification?.medicines?.[0]?.course?.value
-            || request.prescriptionVerification?.medicines?.[0]?.course?.calculatedQuantity
-            || request.requestedItems?.[0]?.quantity
-            || 1;
-        const quantity = Math.max(1, Number(proposalData.quantity ?? proposalData.proposedQuantity ?? extractedQuantity) || 1);
+        const quantity = Math.max(1, Number(proposalData.quantity ?? proposalData.proposedQuantity) || 1);
         const unitPrice = Number(proposalData.unitPrice ?? 0);
         if (!Number.isFinite(unitPrice) || unitPrice < 0) {
             throw inventoryError('Unit price must be a valid non-negative amount.');
@@ -2956,14 +2963,10 @@ export const dataStore = {
             label: slot.label || `${slotType.replace('_', ' ')} Delivery (${slot.date || 'Available slot'})`
         };
 
-        const prescriptionState = request.prescriptionVerification?.status || (request.prescriptionId || request.prescriptionUrl ? 'PROCESSING' : 'NOT_REQUIRED');
-        const prescriptionStatus = prescriptionState === 'MATCHED'
-            ? 'Verified'
-            : ['REJECTED', 'INACTIVE', 'MISMATCH'].includes(prescriptionState)
-                ? 'Rejected'
-                : prescriptionState === 'NOT_REQUIRED'
-                    ? 'Not Required'
-                    : 'Pending Verification';
+        const validPrescriptionStatuses = ['Pending Verification', 'Verified', 'Rejected', 'Not Required'];
+        const prescriptionStatus = validPrescriptionStatuses.includes(proposalData.prescriptionStatus)
+            ? proposalData.prescriptionStatus
+            : (request.prescriptionUrl ? 'Verified' : 'Not Required');
 
         // Expiration: custom date or 48 hours default
         let expiresAt = proposalData.expiresAt ? new Date(proposalData.expiresAt) : new Date(Date.now() + 48 * 3600000);
@@ -2986,8 +2989,7 @@ export const dataStore = {
             pharmacyNote: String(proposalData.pharmacyNote || proposalData.pharmacyNotes || '').trim(),
             deliverySlot,
             prescriptionStatus,
-            alternativeProduct: String(proposalData.alternativeProduct || '').trim(),
-            prescriptionItems: request.prescriptionVerification?.medicines || []
+            alternativeProduct: String(proposalData.alternativeProduct || '').trim()
         };
 
         const now = new Date();
@@ -3328,55 +3330,6 @@ export const dataStore = {
             throw inventoryError('The pharmacy proposal is missing valid pricing.', 400);
         }
 
-        let prescriptionVerification = {
-            status: request.prescriptionId || request.prescriptionUrl ? 'REVIEW_REQUIRED' : 'NOT_REQUIRED',
-            prescriptionId: request.prescriptionId || null,
-            overallConfidence: Number(request.prescriptionVerification?.overallConfidence || 0),
-            lastCheckedAt: new Date(),
-            medicines: request.prescriptionVerification?.medicines || [],
-            issues: request.prescriptionId
-                ? ['Prescription verification result is not available yet.']
-                : request.prescriptionUrl
-                    ? ['Legacy prescription is not linked to the Python Prescription Service.']
-                    : []
-        };
-
-        if (request.prescriptionId) {
-            try {
-                prescriptionVerification = await verifyPrescriptionAgainstItems({
-                    prescriptionId: request.prescriptionId,
-                    patientPuid: request.patientPuid || null,
-                    items: [{
-                        productId: proposal.productId || null,
-                        name: proposal.medicineName,
-                        productName: proposal.medicineName,
-                        strength: proposal.strength,
-                        form: proposal.dosageForm,
-                        quantity: proposal.quantity
-                    }],
-                    userId: customerId,
-                    tenantId: request.tenantId || null,
-                    branchId: request.branchId || null
-                });
-            } catch (verificationError) {
-                prescriptionVerification = {
-                    status: 'PROCESSING',
-                    prescriptionId: request.prescriptionId,
-                    overallConfidence: 0,
-                    lastCheckedAt: new Date(),
-                    medicines: [],
-                    issues: [verificationError.message || 'Prescription verification service is temporarily unavailable.']
-                };
-            }
-        }
-
-        if (['REJECTED', 'INACTIVE', 'MISMATCH'].includes(prescriptionVerification.status)) {
-            throw inventoryError(
-                `Prescription verification failed for the proposed medicine: ${prescriptionVerification.issues?.[0] || prescriptionVerification.status}.`,
-                409
-            );
-        }
-
         const orderId = getIsConnected()
             ? new mongoose.Types.ObjectId()
             : `ord-mr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -3410,10 +3363,7 @@ export const dataStore = {
             items: orderItems,
             medicineItems: [],
             prescriptionUrl: request.prescriptionUrl || null,
-            prescriptionId: request.prescriptionId || null,
-            patientPuid: request.patientPuid || null,
-            prescriptionRequired: Boolean(request.prescriptionId || request.prescriptionUrl),
-            prescriptionVerification,
+            prescriptionRequired: Boolean(request.prescriptionUrl),
             subtotal: orderTotal,
             totalAmount: orderTotal,
             finalTotal: orderTotal,
@@ -3421,7 +3371,7 @@ export const dataStore = {
             addressDetails: request.addressDetails || {},
             coordinates: request.coordinates || null,
             paymentMethod: 'Cash on Delivery (COD)',
-            orderStatus: 'Approved',
+            orderStatus: 'Processing Order',
             status: 'accepted',
             source: 'MEDICINE_REQUEST',
             medicineRequestId: String(request._id),
@@ -3432,9 +3382,7 @@ export const dataStore = {
                     newStatus: 'Processing Order',
                     changedBy: 'Pharmacist Proposal Approval',
                     timestamp: now,
-                    notes: prescriptionVerification.status === 'MATCHED'
-                        ? `Created from approved medicine request #${request.requestNumber}. Prescription medicines verified.`
-                        : `Created from approved medicine request #${request.requestNumber}. Prescription verification status: ${prescriptionVerification.status}.`
+                    notes: `Created from approved medicine request #${request.requestNumber}. Proposed slot: ${proposal.deliverySlot?.label || 'Standard'}`
                 }
             ]
         };

@@ -270,18 +270,31 @@ export class OrderService {
         return order;
     }
 
-    async getOrders({ tenantId = null, branchId = null, customerId = null, status = null }) {
+    async getOrders({ tenantId = null, branchId = null, customerId = null, status = null, search = null }) {
         let list = Array.from(this.orders.values());
 
         if (tenantId) list = list.filter(o => o.tenantId === tenantId);
         if (branchId) list = list.filter(o => o.branchId === branchId);
         if (customerId) list = list.filter(o => o.customerId === customerId);
         if (status) list = list.filter(o => o.orderStatus === status);
+        if (search) {
+            const raw = String(search).trim().replace(/^#/, '').toLowerCase();
+            list = list.filter(o => {
+                const ordNum = String(o.orderNumber || '').toLowerCase();
+                const ordId = String(o.id || '').toLowerCase();
+                const custName = String(o.customerName || '').toLowerCase();
+                const custMobile = String(o.customerMobile || '').toLowerCase();
+                return ordNum === raw || ordNum.includes(raw)
+                    || ordId === raw || ordId.includes(raw) || ordId.endsWith(raw)
+                    || custName.includes(raw)
+                    || custMobile.includes(raw);
+            });
+        }
 
         return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     }
 
-    async transitionOrderStatus(orderId, newStatus, actor = null) {
+    async transitionOrderStatus(orderId, newStatus, actor = null, cashCollectionStatus = null) {
         const order = this.orders.get(String(orderId));
         if (!order) throw new Error('Order not found');
 
@@ -315,6 +328,22 @@ export class OrderService {
 
         const prevStatus = order.orderStatus;
         order.orderStatus = newStatus;
+        if (newStatus === MultiTenantOrderStatus.DELIVERED) {
+            const isCod = /cash|cod/i.test(String(order.paymentMethod || ''));
+            if (isCod) {
+                if (cashCollectionStatus === 'CASH_RECEIVED') {
+                    order.cashCollectionStatus = 'CASH_RECEIVED';
+                    order.paymentStatus = 'PAID';
+                } else if (cashCollectionStatus === 'CASH_NOT_RECEIVED') {
+                    order.cashCollectionStatus = 'CASH_NOT_RECEIVED';
+                    order.paymentStatus = 'PENDING';
+                } else {
+                    order.cashCollectionStatus = order.cashCollectionStatus || 'CASH_NOT_RECEIVED';
+                }
+            } else {
+                order.cashCollectionStatus = 'NOT_APPLICABLE';
+            }
+        }
         order.statusHistory.push({
             status: newStatus,
             previousStatus: prevStatus,

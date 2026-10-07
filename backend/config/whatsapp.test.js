@@ -46,6 +46,19 @@ test('rider assignment alert contains order, customer contact, full address, and
     }
 });
 
+test('rider assignment alert contains usable action buttons/links (Accept, View Delivery, Navigate)', () => {
+    const message = buildWhatsAppMessageBody(order, 'Assigned', 'rider');
+    assert.match(message, /Accept Delivery:/, 'Should contain Accept Delivery action');
+    assert.match(message, /View Delivery:/, 'Should contain View Delivery action');
+    assert.match(message, /Navigate:/, 'Should contain Navigate action');
+});
+
+test('rider dispatched alert contains cash collection actions for COD order', () => {
+    const message = buildWhatsAppMessageBody(order, 'Dispatched', 'rider');
+    assert.match(message, /Cash received:/, 'Should contain Cash received action');
+    assert.match(message, /Cash not received:/, 'Should contain Cash not received action');
+});
+
 test('customer assignment alert includes assigned rider details and delivery address', () => {
     const message = buildWhatsAppMessageBody(order, 'Assigned', 'customer');
     assert.match(message, /DELIVERY RIDER ASSIGNED — #123456/);

@@ -23,10 +23,7 @@ export const config = {
   serviceJwtIssuer: process.env.SERVICE_JWT_ISSUER || 'ashvin-pharmacy',
   serviceJwtAudience: process.env.ORDER_SERVICE_JWT_AUDIENCE || 'order-service',
   inventoryJwtAudience: process.env.SERVICE_JWT_AUDIENCE || 'inventory-service',
-  inventoryServiceUrl: (process.env.INVENTORY_SERVICE_URL || '').replace(/\/+$/, ''),
-  prescriptionServiceUrl: (process.env.PRESCRIPTION_SERVICE_URL || '').replace(/\/+$/, ''),
-  prescriptionReconciliationIntervalMs: positiveInteger(process.env.PRESCRIPTION_RECONCILIATION_INTERVAL_MS, 10000, 300000),
-  prescriptionReconciliationBatchSize: positiveInteger(process.env.PRESCRIPTION_RECONCILIATION_BATCH_SIZE, 20, 100)
+  inventoryServiceUrl: (process.env.INVENTORY_SERVICE_URL || '').replace(/\/+$/, '')
 };
 
 export function validateConfig() {
@@ -36,10 +33,6 @@ export function validateConfig() {
   }
   if (!config.serviceAuthSecret || config.serviceAuthSecret.length < 32) {
     errors.push('SERVICE_AUTH_SECRET must contain at least 32 characters.');
-  }
-  const production = process.env.NODE_ENV === 'production';
-  if (production && !config.prescriptionServiceUrl) {
-    errors.push('PRESCRIPTION_SERVICE_URL is required in production for prescription verification and reconciliation.');
   }
   if (errors.length) throw new Error(errors.join(' '));
 }

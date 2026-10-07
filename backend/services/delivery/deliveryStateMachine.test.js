@@ -11,11 +11,42 @@ const dispatchedOrder = {
 
 test('cash received requires the assigned rider, dispatched state, and COD payment', () => {
     assert.deepEqual(evaluateDeliveryAction(dispatchedOrder, 'cash_received', 'rider-1'), {
-        allowed: true, nextOrderStatus: 'Delivered', nextPaymentStatus: 'PAID'
+        allowed: true, nextOrderStatus: 'Delivered', nextPaymentStatus: 'PAID', cashCollectionStatus: 'CASH_RECEIVED'
     });
     assert.equal(evaluateDeliveryAction(dispatchedOrder, 'cash_received', 'rider-2').code, 'RIDER_MISMATCH');
     assert.equal(evaluateDeliveryAction({ ...dispatchedOrder, orderStatus: 'Cancelled' }, 'cash_received', 'rider-1').code, 'INVALID_STATE');
     assert.equal(evaluateDeliveryAction({ ...dispatchedOrder, paymentMethod: 'UPI' }, 'cash_received', 'rider-1').code, 'PAYMENT_METHOD_MISMATCH');
+});
+
+test('cash not received records delivered status with unpaid COD and is idempotent', () => {
+    const outcome = evaluateDeliveryAction(dispatchedOrder, 'cash_not_received', 'rider-1');
+    assert.equal(outcome.allowed, true);
+    assert.equal(outcome.nextOrderStatus, 'Delivered');
+    assert.equal(outcome.nextPaymentStatus, 'PENDING');
+    assert.equal(outcome.cashCollectionStatus, 'CASH_NOT_RECEIVED');
+
+    // Replay after delivered
+    const deliveredNotReceived = {
+        ...dispatchedOrder,
+        orderStatus: 'Delivered',
+        paymentStatus: 'PENDING',
+        cashCollectionStatus: 'CASH_NOT_RECEIVED'
+    };
+    const idempotentOutcome = evaluateDeliveryAction(deliveredNotReceived, 'cash_not_received', 'rider-1');
+    assert.equal(idempotentOutcome.allowed, true);
+    assert.equal(idempotentOutcome.alreadyApplied, true);
+    assert.equal(idempotentOutcome.cashCollectionStatus, 'CASH_NOT_RECEIVED');
+
+    // Non-COD rejects cash collection
+    const upiOrder = { ...dispatchedOrder, paymentMethod: 'UPI' };
+    assert.equal(evaluateDeliveryAction(upiOrder, 'cash_not_received', 'rider-1').code, 'PAYMENT_METHOD_MISMATCH');
+});
+
+test('accept delivery action allows rider to confirm assigned delivery', () => {
+    const assignedOrder = { ...dispatchedOrder, orderStatus: 'Ready to Dispatch' };
+    const outcome = evaluateDeliveryAction(assignedOrder, 'accept', 'rider-1');
+    assert.equal(outcome.allowed, true);
+    assert.equal(outcome.nextOrderStatus, 'Dispatched');
 });
 
 test('payment pending transitions delivery and is safe to replay after delivery', () => {

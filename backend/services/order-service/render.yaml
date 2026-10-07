@@ -21,13 +21,5 @@ services:
         value: order-service
       - key: INVENTORY_SERVICE_URL
         sync: false
-      - key: PRESCRIPTION_SERVICE_URL
-        sync: false
-      - key: PRESCRIPTION_SERVICE_JWT_AUDIENCE
-        value: prescription-service
-      - key: PRESCRIPTION_RECONCILIATION_INTERVAL_MS
-        value: "10000"
-      - key: PRESCRIPTION_RECONCILIATION_BATCH_SIZE
-        value: "20"
       - key: SERVICE_JWT_AUDIENCE
         value: inventory-service

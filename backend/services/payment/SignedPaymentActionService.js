@@ -64,9 +64,11 @@ export const verifyPaymentSnoozeToken = (token, { now = Date.now() } = {}) => {
     }
 };
 
+const ALLOWED_RIDER_ACTIONS = new Set(['cash_received', 'cash_not_received', 'payment_pending', 'not_reachable', 'accept', 'view_delivery']);
+
 export const createRiderDeliveryActionToken = (claims, { now = Date.now(), ttlSeconds = 24 * 60 * 60 } = {}) => {
     if (!claims || typeof claims.orderId !== 'string' || typeof claims.riderId !== 'string'
-        || !['cash_received', 'payment_pending', 'not_reachable'].includes(claims.action)) {
+        || !ALLOWED_RIDER_ACTIONS.has(claims.action)) {
         throw new TypeError('Valid order, rider, and delivery action claims are required.');
     }
     const payload = Buffer.from(JSON.stringify({
@@ -92,7 +94,7 @@ export const verifyRiderDeliveryActionToken = (token, { now = Date.now() } = {})
         const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
         const nowSeconds = Math.floor(now / 1000);
         if (typeof payload.sub !== 'string' || !payload.sub || typeof payload.orderId !== 'string'
-            || !['cash_received', 'payment_pending', 'not_reachable'].includes(payload.action)
+            || !ALLOWED_RIDER_ACTIONS.has(payload.action)
             || typeof payload.eventId !== 'string' || typeof payload.nonce !== 'string'
             || !Number.isSafeInteger(payload.iat) || !Number.isSafeInteger(payload.exp)
             || payload.iat > nowSeconds || payload.exp <= nowSeconds) return null;

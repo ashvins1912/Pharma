@@ -35,21 +35,7 @@ const orderSchema = new mongoose.Schema({
     medicineItems: { type: [medicineItemSchema], default: [] },
     items: { type: [orderItemSchema], default: [] },
     prescriptionUrl: { type: String, default: null },
-    prescriptionId: { type: String, default: null, index: true },
-    patientPuid: { type: String, default: null, index: true },
     prescriptionRequired: { type: Boolean, default: false },
-    prescriptionVerification: {
-        status: {
-            type: String,
-            enum: ['NOT_REQUIRED', 'PROCESSING', 'MATCHED', 'PARTIAL_MATCH', 'MISMATCH', 'REVIEW_REQUIRED', 'REJECTED', 'INACTIVE'],
-            default: 'NOT_REQUIRED'
-        },
-        prescriptionId: { type: String, default: null },
-        overallConfidence: { type: Number, default: 0, min: 0, max: 1 },
-        lastCheckedAt: { type: Date, default: null },
-        medicines: { type: Array, default: [] },
-        issues: { type: [String], default: [] }
-    },
     couponCode: { type: String, default: null },
     subtotal: { type: Number, min: 0 },
     discountApplied: { type: Number, default: 0 },
@@ -97,6 +83,12 @@ const orderSchema = new mongoose.Schema({
     customerRating: { type: Number, min: 1, max: 5 },
     customerComment: { type: String, maxlength: 1000, default: '' },
     paymentMethod: { type: String, default: "Cash on Delivery (COD)" },
+    cashCollectionStatus: {
+        type: String,
+        enum: ['CASH_RECEIVED', 'CASH_NOT_RECEIVED', 'NOT_APPLICABLE'],
+        default: 'NOT_APPLICABLE',
+        index: true
+    },
     // Only explicit PENDING_DIGITAL records are eligible for customer payment reminders.
     // No default is applied so existing payment behavior and historic orders remain unchanged.
     paymentStatus: {
