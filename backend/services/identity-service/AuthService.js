@@ -280,6 +280,13 @@ export class AuthService {
      */
     async registerUser({ firstName, lastName, email, mobile, mobileNumber, dateOfBirth, gender, password }) {
         const normalizedEmail = (email || '').trim().toLowerCase();
+        if (!isStrongPassword(password)) {
+            const err = new Error('Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, and one number.');
+            err.code = 'WEAK_PASSWORD';
+            err.status = 400;
+            throw err;
+        }
+
         const fName = (firstName || '').trim();
         const lName = (lastName || '').trim();
         const phone = (mobileNumber || mobile || '').trim();
@@ -1255,7 +1262,7 @@ export class AuthService {
     /**
      * Complete profile onboarding (e.g. for Google OAuth users)
      */
-    async completeProfile({ userId, firstName, lastName, dateOfBirth, mobileNumber, mobile, gender }) {
+    async completeProfile({ userId, firstName, lastName, dateOfBirth, mobileNumber, mobile, gender, password }) {
         if (!userId) {
             const err = new Error('User ID is required.');
             err.code = 'REQUIRED_FIELD';
@@ -1305,6 +1312,30 @@ export class AuthService {
         }
 
         this.assertAccountState(user, { allowProfileIncomplete: true });
+
+        // Google users can create a local password during onboarding so the
+        // same Pharma account supports both Google and email/password login.
+        const passwordHash = await bcrypt.hash(password, 12);
+        user.passwordHash = passwordHash;
+
+        const localIdentityKey = user.normalizedEmail || user.email?.trim().toLowerCase();
+        const existingLocalIdentity = await this.findIdentity('LOCAL', localIdentityKey);
+        if (existingLocalIdentity) {
+            existingLocalIdentity.passwordHash = passwordHash;
+            existingLocalIdentity.providerEmailVerified = Boolean(user.emailVerified);
+            await this.saveIdentity(existingLocalIdentity);
+        } else {
+            await this.saveIdentity({
+                id: `ident_${crypto.randomUUID()}`,
+                userId,
+                provider: 'LOCAL',
+                providerUserId: localIdentityKey,
+                providerEmail: user.email,
+                providerEmailVerified: Boolean(user.emailVerified),
+                passwordHash,
+                createdAt: new Date()
+            });
+        }
 
         // Update profile details
         user.firstName = fName;
