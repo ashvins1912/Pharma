@@ -40,6 +40,16 @@ router.post('/authenticate', (req, res, next) => {
             user: {
                 sub: user.sub,
                 email: user.email || '',
+                name: user.name || '',
+                firstName: user.firstName || '',
+                lastName: user.lastName || '',
+                role: user.role || user.app_metadata?.role || 'customer',
+                roles: user.roles || [user.role || user.app_metadata?.role || 'customer'],
+                permissions: user.permissions || user.app_metadata?.permissions || [],
+                permissionVersion: user.permissionVersion || 1,
+                tenantId: user.tenantId || user.app_metadata?.tenantId || null,
+                branchId: user.branchId || null,
+                scope: user.scope || 'CUSTOMER',
                 app_metadata: user.app_metadata || {},
                 user_metadata: user.user_metadata || {},
                 aal: user.aal || 'aal1'
