@@ -39,9 +39,10 @@ export async function issuePharmaAccessToken(claims = {}) {
   const sub = String(claims.sub || '');
   if (!sub) throw new Error('Token subject is required.');
 
+  const { expiresIn, ...tokenClaims } = claims;
   return new SignJWT({
-    ...claims,
-    token_type: 'pharma_access'
+    ...tokenClaims,
+    token_type: claims.token_type || 'pharma_access'
   })
     .setProtectedHeader({ alg: 'RS256', typ: 'JWT' })
     .setIssuer(ISSUER)
@@ -49,7 +50,7 @@ export async function issuePharmaAccessToken(claims = {}) {
     .setSubject(sub)
     .setJti(crypto.randomUUID())
     .setIssuedAt()
-    .setExpirationTime(ACCESS_TTL)
+    .setExpirationTime(expiresIn || ACCESS_TTL)
     .sign(privateKey);
 }
 
