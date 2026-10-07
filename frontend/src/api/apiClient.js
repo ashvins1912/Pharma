@@ -47,6 +47,12 @@ function getCsrfCookie() {
 }
 
 apiClient.interceptors.request.use(async (config) => {
+    if (typeof window !== 'undefined' && config.showLoader !== false) {
+        const url = String(config.url || '');
+        const blocking = /\/api\/(?:v1\/auth|auth)\/(login|signup|google|verify-email-code|complete-profile|onboarding|mfa\/verify|password\/forgot|password\/reset)(\/|$)/.test(url);
+        window.dispatchEvent(new CustomEvent('pharma:request-start', { detail: { blocking } }));
+        config.__pharmaLoader = { blocking };
+    }
     if (!config.headers['X-Request-ID']) {
         config.headers['X-Request-ID'] = globalThis.crypto?.randomUUID?.()
             || `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -66,6 +72,9 @@ apiClient.interceptors.request.use(async (config) => {
 
 apiClient.interceptors.response.use(
     (response) => {
+        if (typeof window !== 'undefined' && response.config?.__pharmaLoader) {
+            window.dispatchEvent(new CustomEvent('pharma:request-stop', { detail: response.config.__pharmaLoader }));
+        }
         const url = String(response.config?.url || '');
         const result = response.data?.data || response.data;
         if (/\/api\/(?:v1\/auth|auth)\/(login|signup|google|mfa\/verify|complete-profile|onboarding)(\/|$)/.test(url)
@@ -78,6 +87,9 @@ apiClient.interceptors.response.use(
         return response;
     },
     (error) => {
+        if (typeof window !== 'undefined' && error.config?.__pharmaLoader) {
+            window.dispatchEvent(new CustomEvent('pharma:request-stop', { detail: error.config.__pharmaLoader }));
+        }
         const normalized = normalizeApiError(error);
         const url = String(error.config?.url || '');
         if (normalized.status === 401) {
