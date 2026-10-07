@@ -28,6 +28,10 @@ services:
         sync: false
       - key: PRESCRIPTION_SERVICE_URL
         sync: false
+      - key: CUSTOMER_SERVICE_URL
+        sync: false
+      - key: CUSTOMER_SERVICE_JWT_AUDIENCE
+        value: customer-service
       - key: PRESCRIPTION_SERVICE_JWT_AUDIENCE
         value: prescription-service
       - key: CORS_ALLOWED_ORIGINS
