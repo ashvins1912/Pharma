@@ -1,7 +1,6 @@
 """Normalize uploaded prescription documents to a canonical PDF representation."""
 from __future__ import annotations
 
-import io
 from dataclasses import dataclass
 
 import fitz
