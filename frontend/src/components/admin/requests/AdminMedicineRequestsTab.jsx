@@ -60,7 +60,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
     try {
       const response = await apiClient.get(prescriptionUrl, { responseType: 'blob' });
       const contentType = String(response.headers?.['content-type'] || response.data?.type || '').toLowerCase();
-      if (!response.data?.size || !/(application\\/pdf|image\\/)/.test(contentType)) {
+      if (!response.data?.size || !/(application\/pdf|image\/)/.test(contentType)) {
         throw new Error('Prescription file could not be previewed.');
       }
       const objectUrl = URL.createObjectURL(response.data);
