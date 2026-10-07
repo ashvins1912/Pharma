@@ -9,6 +9,8 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
   const [dateOfBirth, setDateOfBirth] = useState(user?.dateOfBirth || '');
   const [gender, setGender] = useState(user?.gender || '');
   const [mobileNumber, setMobileNumber] = useState(user?.mobileNumber || user?.mobile || '');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -21,8 +23,18 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
     event.preventDefault();
     setError('');
 
-    if (!firstName.trim() || !dateOfBirth || !gender || !mobileValid) {
-      setError('Please complete your name, gender and date of birth. Mobile is optional.');
+    if (!firstName.trim() || !dateOfBirth || !gender || !mobileValid || !password || !confirmPassword) {
+      setError('Please complete the required profile fields and create a password.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+      setError('Password must be at least 8 characters with uppercase, lowercase and a number.');
       return;
     }
 
@@ -33,7 +45,9 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
         lastName: lastName.trim(),
         dateOfBirth,
         gender,
-        mobileNumber
+        mobileNumber,
+        password,
+        confirmPassword
       });
       onComplete?.(data?.data || data);
     } catch (err) {
@@ -150,6 +164,41 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
             <p className="mt-1.5 text-[11px] text-slate-400">
               You can add or verify your mobile number later.
             </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="profile-password" className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-slate-500">
+                Create password <span className="text-rose-500">*</span>
+              </label>
+              <input
+                id="profile-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                placeholder="Create a strong password"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="profile-confirm-password" className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-slate-500">
+                Confirm password <span className="text-rose-500">*</span>
+              </label>
+              <input
+                id="profile-confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                placeholder="Re-enter your password"
+                required
+              />
+            </div>
           </div>
 
           {error && (
