@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 import { config } from './config.js';
 import { Order, OrderEvent } from './models.js';
 import { createInventoryToken } from './service-auth.js';
-import { verifyPrescriptionAgainstItems } from '../../../../services/prescription-verification/PrescriptionVerificationService.js';
+import { verifyPrescriptionAgainstItems } from '../../../prescription-verification/PrescriptionVerificationService.js';
 
 const allowedSources = new Set(['WEB', 'MOBILE', 'ADMIN', 'POS', 'ERP', 'PARTNER', 'API', 'MEDICINE_REQUEST']);
 const allowedStatuses = new Set([
