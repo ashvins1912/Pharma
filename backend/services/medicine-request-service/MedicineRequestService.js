@@ -4,7 +4,7 @@
  * Only customer approval converts it idempotently into an Order.
  */
 import crypto from 'node:crypto';
-import { orderService } from '../order-service/OrderService.js';
+import { orderClient } from '../order-client/OrderClient.js';
 import { domainEvents } from '../../shared/events/DomainEvents.js';
 import { logger } from '../../shared/observability/logger.js';
 import { MedicineRequestStatus, CustomerRole } from '../../shared/contracts/index.js';
@@ -228,7 +228,13 @@ export class MedicineRequestService {
 
         // Idempotency: If already converted, return existing order
         if (request.convertedOrderId) {
-            const existingOrder = await orderService.getOrderById(request.convertedOrderId);
+            const existingOrderResponse = await orderClient.getOrder(request.convertedOrderId, {
+                userId: customerId,
+                tenantId: request.tenantId,
+                branchId: request.branchId,
+                role: 'customer'
+            });
+            const existingOrder = existingOrderResponse?.order || existingOrderResponse?.data || existingOrderResponse;
             return {
                 success: true,
                 order: existingOrder,
@@ -253,7 +259,7 @@ export class MedicineRequestService {
             }
         ];
 
-        const { order } = await orderService.createOrder({
+        const orderResponse = await orderClient.createOrder({
             tenantId: request.tenantId,
             branchId: request.branchId,
             customerId: request.customerId,
@@ -265,7 +271,13 @@ export class MedicineRequestService {
             medicineRequestId: request.id,
             idempotencyKey: `idemp-prop-conv-${request.id}`,
             actor: actor || { role: 'Customer' }
+        }, {
+            userId: customerId,
+            tenantId: request.tenantId,
+            branchId: request.branchId,
+            role: 'customer'
         });
+        const order = orderResponse?.order || orderResponse?.data || orderResponse;
 
         request.status = MedicineRequestStatus.CONVERTED_TO_ORDER;
         request.convertedOrderId = order.id;
