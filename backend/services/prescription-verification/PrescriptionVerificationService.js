@@ -103,6 +103,29 @@ export async function verifyPrescriptionAgainstItems({
   });
 
   const status = prescription?.status;
+
+  const prescriptionPuid = prescription?.patientPuid || null;
+  const requestedPuid = items?.patientPuid || null;
+  if (requestedPuid && prescriptionPuid && String(requestedPuid) !== String(prescriptionPuid)) {
+    return {
+      status: 'MISMATCH',
+      prescriptionId,
+      patientPuid: prescriptionPuid,
+      overallConfidence: Number(prescription?.quality?.overallConfidence || 0),
+      medicines: [],
+      issues: ['Prescription patient does not match the order patient PUID.']
+    };
+  }
+  if (requestedPuid && !prescriptionPuid) {
+    return {
+      status: 'REVIEW_REQUIRED',
+      prescriptionId,
+      patientPuid: null,
+      overallConfidence: Number(prescription?.quality?.overallConfidence || 0),
+      medicines: [],
+      issues: ['Prescription is missing patient PUID information required for order verification.']
+    };
+  }
   if (['QUEUED', 'PROCESSING', 'REVIEW_REQUIRED', 'UPLOADED'].includes(status)) {
     return {
       status: 'PROCESSING',
