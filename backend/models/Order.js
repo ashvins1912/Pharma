@@ -35,7 +35,21 @@ const orderSchema = new mongoose.Schema({
     medicineItems: { type: [medicineItemSchema], default: [] },
     items: { type: [orderItemSchema], default: [] },
     prescriptionUrl: { type: String, default: null },
+    prescriptionId: { type: String, default: null, index: true },
+    patientPuid: { type: String, default: null, index: true },
     prescriptionRequired: { type: Boolean, default: false },
+    prescriptionVerification: {
+        status: {
+            type: String,
+            enum: ['NOT_REQUIRED', 'PROCESSING', 'MATCHED', 'PARTIAL_MATCH', 'MISMATCH', 'REVIEW_REQUIRED', 'REJECTED', 'INACTIVE'],
+            default: 'NOT_REQUIRED'
+        },
+        prescriptionId: { type: String, default: null },
+        overallConfidence: { type: Number, default: 0, min: 0, max: 1 },
+        lastCheckedAt: { type: Date, default: null },
+        medicines: { type: Array, default: [] },
+        issues: { type: [String], default: [] }
+    },
     couponCode: { type: String, default: null },
     subtotal: { type: Number, min: 0 },
     discountApplied: { type: Number, default: 0 },
