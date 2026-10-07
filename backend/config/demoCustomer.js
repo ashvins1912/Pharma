@@ -2,9 +2,8 @@ import { issuePharmaAccessToken } from '../security/pharmaToken.js';
 import { SignJWT, jwtVerify } from 'jose';
 import { env } from './env.js';
 
-const demoCustomerEnabled = env.NODE_ENV === 'production'
-    ? process.env.DEMO_CUSTOMER_ENABLED === 'true'
-    : process.env.DEMO_CUSTOMER_ENABLED !== 'false';
+const demoCustomerEnabled = ['development', 'test'].includes(env.NODE_ENV)
+    && process.env.DEMO_CUSTOMER_ENABLED !== 'false';
 const configuredSecret = process.env.DEMO_CUSTOMER_JWT_SECRET || '';
 const signingSecret = env.NODE_ENV === 'production'
     ? configuredSecret
