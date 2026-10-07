@@ -486,7 +486,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 {isSignUp && !passwordRecoveryRequired && (
                   <div>
                     <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Mobile Number (Encrypted with AES-256-GCM)
+                      Mobile Number (Optional — verification can be added later)
                     </label>
                     <input
                       type="tel"
@@ -496,7 +496,6 @@ export default function AuthModal({ isOpen, onClose }) {
                       onBlur={() => handleSignupBlur('mobile')}
                       aria-invalid={Boolean(signupErrors.mobile)}
                       className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
-                      required
                     />
                     {signupErrors.mobile && <p className="mt-1 text-[11px] text-rose-600">{signupErrors.mobile}</p>}
                   </div>
