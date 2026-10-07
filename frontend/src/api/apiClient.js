@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { supabase } from '../supabaseClient';
 import { normalizeApiError } from './apiErrors';
 
 const rawApiBaseUrl = String(import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
@@ -16,17 +15,8 @@ const apiClient = axios.create({
     withCredentials: true
 });
 
-// First-party platform authentication is cookie-first.
-// Email/password and MFA sessions are issued by the backend as HttpOnly cookies.
-// Google/Supabase sessions use the Supabase bearer token until they are exchanged
-// for the same platform session. Never let a stale bearer token override a valid
-// first-party cookie session.
-let authTransport = 'cookie';
-
-export function setAuthTransport(transport) {
-    authTransport = transport === 'bearer' ? 'bearer' : 'cookie';
-}
-
+// Pharma is the single application authentication transport.
+// Access tokens are HttpOnly cookies; JavaScript never handles bearer credentials.
 function getCsrfCookie() {
     if (typeof document === 'undefined') return null;
     const match = document.cookie.match(new RegExp('(^|;\\s*)XSRF-TOKEN=([^;]*)'));
@@ -40,46 +30,10 @@ apiClient.interceptors.request.use(async (config) => {
     }
 
     const csrfToken = getCsrfCookie();
-    if (csrfToken) {
-        config.headers['X-XSRF-TOKEN'] = csrfToken;
-    }
+    if (csrfToken) config.headers['X-XSRF-TOKEN'] = csrfToken;
 
-    // The HttpOnly platform cookie is authoritative. Do not send a stale
-    // bearer token alongside it because the gateway intentionally prioritizes
-    // Authorization over cookies.
-    if (authTransport === 'cookie') {
-        delete config.headers.Authorization;
-        return config;
-    }
-
-    let token = null;
-
-    // Demo sessions are explicit bearer sessions.
-    try {
-        const savedDemo = localStorage.getItem('demo_session');
-        if (savedDemo) {
-            const parsed = JSON.parse(savedDemo);
-            if (parsed?.access_token) token = parsed.access_token;
-        }
-    } catch {}
-
-    // Google/Supabase bearer session is used only when no platform cookie
-    // session is active.
-    try {
-        if (supabase && !token) {
-            const { data } = await supabase.auth.getSession();
-            if (data?.session?.access_token) token = data.session.access_token;
-        }
-    } catch {}
-
-    if (!token) token = localStorage.getItem('demo_auth_token');
-
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    } else {
-        delete config.headers.Authorization;
-    }
-
+    // Authentication is exclusively the HttpOnly Pharma session cookie.
+    delete config.headers.Authorization;
     return config;
 }, (error) => Promise.reject(error));
 
