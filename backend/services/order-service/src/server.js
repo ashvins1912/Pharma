@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import { config, validateConfig } from './config.js';
 import routes from './routes.js';
 import { Order, OrderEvent } from './models.js';
+import { reconcilePendingPrescriptionOrders } from './orders.js';
 
 validateConfig();
 const app = express();
@@ -62,7 +63,43 @@ await Promise.all([Order.init(), OrderEvent.init()]);
 const server = app.listen(config.port, '0.0.0.0', () => {
   console.info(`Order Service listening on port ${config.port}`);
 });
+
+let reconciliationTimer = null;
+let reconciliationRunning = false;
+
+const runPrescriptionReconciliation = async () => {
+  if (!config.prescriptionServiceUrl || reconciliationRunning) return;
+  reconciliationRunning = true;
+  try {
+    const result = await reconcilePendingPrescriptionOrders({
+      limit: config.prescriptionReconciliationBatchSize
+    });
+    if (result.processed > 0) {
+      console.info(JSON.stringify({
+        serviceName: 'order-service',
+        operation: 'prescription-reconciliation',
+        ...result
+      }));
+    }
+  } catch (error) {
+    console.error(JSON.stringify({
+      serviceName: 'order-service',
+      operation: 'prescription-reconciliation',
+      error: error.message
+    }));
+  } finally {
+    reconciliationRunning = false;
+  }
+};
+
+if (config.prescriptionServiceUrl) {
+  reconciliationTimer = setInterval(runPrescriptionReconciliation, config.prescriptionReconciliationIntervalMs);
+  reconciliationTimer.unref?.();
+  void runPrescriptionReconciliation();
+}
+
 const shutdown = async () => {
+  if (reconciliationTimer) clearInterval(reconciliationTimer);
   server.close();
   await mongoose.disconnect();
 };
