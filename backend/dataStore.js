@@ -13,6 +13,7 @@ import { normalizeWhatsAppNumber, sendWhatsAppMedicineRequestAlert, sendCustomWh
 import ProfitMarginRewardEngine from './strategies/ProfitMarginRewardEngine.js';
 import DefaultProfitRewardStrategy from './strategies/ProfitRewardStrategy.js';
 import FixedDeliveryRewardStrategy from './strategies/DeliveryRewardStrategy.js';
+import { verifyPrescriptionAgainstItems } from './services/prescription-verification/PrescriptionVerificationService.js';
 
 const profitMarginRewardEngine = new ProfitMarginRewardEngine({
     strategy: new DefaultProfitRewardStrategy()
@@ -3330,6 +3331,64 @@ export const dataStore = {
             throw inventoryError('The pharmacy proposal is missing valid pricing.', 400);
         }
 
+        let prescriptionVerification = {
+            status: request.prescriptionId || request.prescriptionUrl ? 'REVIEW_REQUIRED' : 'NOT_REQUIRED',
+            prescriptionId: request.prescriptionId || null,
+            patientPuid: request.patientPuid || null,
+            overallConfidence: Number(request.prescriptionVerification?.overallConfidence || 0),
+            lastCheckedAt: new Date(),
+            medicines: request.prescriptionVerification?.medicines || [],
+            issues: request.prescriptionId
+                ? ['Prescription verification result is not available yet.']
+                : request.prescriptionUrl
+                    ? ['Legacy prescription is not linked to the Python Prescription Service.']
+                    : []
+        };
+
+        if (request.prescriptionId) {
+            try {
+                prescriptionVerification = await verifyPrescriptionAgainstItems({
+                    prescriptionId: request.prescriptionId,
+                    patientPuid: request.patientPuid || null,
+                    items: [{
+                        productId: proposal.productId || null,
+                        name: proposal.medicineName || '',
+                        productName: proposal.medicineName || '',
+                        strength: proposal.strength || '',
+                        form: proposal.dosageForm || '',
+                        quantity: proposal.quantity
+                    }],
+                    userId: customerId,
+                    tenantId: request.tenantId || user?.tenantId || null,
+                    branchId: request.branchId || user?.branchId || null
+                });
+            } catch (verificationError) {
+                prescriptionVerification = {
+                    status: 'PROCESSING',
+                    prescriptionId: request.prescriptionId,
+                    patientPuid: request.patientPuid || null,
+                    overallConfidence: 0,
+                    lastCheckedAt: new Date(),
+                    medicines: [],
+                    issues: [verificationError.message || 'Prescription verification service is temporarily unavailable.']
+                };
+            }
+        }
+
+        if (['REJECTED', 'INACTIVE', 'MISMATCH'].includes(prescriptionVerification.status)) {
+            throw inventoryError(
+                `Prescription verification failed for the proposed medicine: ${prescriptionVerification.issues?.[0] || prescriptionVerification.status}.`,
+                409
+            );
+        }
+
+        if (request.prescriptionId && prescriptionVerification.status !== 'MATCHED') {
+            throw inventoryError(
+                `Prescription verification is not complete for the proposed medicine. Current status: ${prescriptionVerification.status}.`,
+                409
+            );
+        }
+
         const orderId = getIsConnected()
             ? new mongoose.Types.ObjectId()
             : `ord-mr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -3363,7 +3422,10 @@ export const dataStore = {
             items: orderItems,
             medicineItems: [],
             prescriptionUrl: request.prescriptionUrl || null,
-            prescriptionRequired: Boolean(request.prescriptionUrl),
+            prescriptionId: request.prescriptionId || null,
+            patientPuid: request.patientPuid || null,
+            prescriptionRequired: Boolean(request.prescriptionId || request.prescriptionUrl),
+            prescriptionVerification,
             subtotal: orderTotal,
             totalAmount: orderTotal,
             finalTotal: orderTotal,
