@@ -1,3 +1,4 @@
+import { issuePharmaAccessToken } from '../security/pharmaToken.js';
 import 'dotenv/config';
 import { timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify } from 'jose';
@@ -28,23 +29,17 @@ export const isInstantDemoAdminEnabled = () => instantDemoAdminEnabled;
 
 export const issueDemoAdminToken = async (instant = false) => {
     if (!demoAdminEnabled) throw new Error('Demo admin sign-in is disabled.');
-    if (instant && !instantDemoAdminEnabled) {
-        throw new Error('Instant demo admin access is disabled.');
-    }
-    return new SignJWT({
+    if (instant && !instantDemoAdminEnabled) throw new Error('Instant demo admin access is disabled.');
+    return issuePharmaAccessToken({
+        sub: demoAdminUserId,
         email: demoAdminEmail,
-        app_metadata: { role: 'admin' },
-        user_metadata: { name: 'Demo Admin' }
-    })
-        .setProtectedHeader({ alg: 'HS256' })
-        .setSubject(demoAdminUserId)
-        .setIssuer('pharma-demo-admin')
-        .setAudience('pharma-api')
-        .setIssuedAt()
-        .setExpirationTime('1h')
-        .sign(getSigningKey());
+        name: 'Demo Admin',
+        role: 'SUPER_ADMIN',
+        roles: ['SUPER_ADMIN'],
+        permissions: ['*'],
+        scope: 'PLATFORM'
+    });
 };
-
 export const verifyDemoAdminToken = async (token) => {
     if (!demoAdminEnabled) return null;
     try {
