@@ -672,29 +672,6 @@ router.get('/:id/scan-prescription', authenticateUser, authorizeRequestDetails, 
     }
 });
 
-        const firstItem = request.requestedItems?.[0] || {};
-        const requestedName = firstItem.requestedName || request.medicineName || 'Prescribed Medicine';
-
-        res.json({
-            success: true,
-            verified: true,
-            status: 'Verified',
-            confidence: 0.96,
-            scannedMedicineName: requestedName,
-            primaryScannedMedicine: requestedName,
-            scannedMedicines: [
-                { name: requestedName, confidence: 0.96, matched: true },
-                { name: 'Paracetamol 650mg', confidence: 0.94, matched: false }
-            ],
-            rawText: `Rx: ${requestedName} - 1 Tab BD x 5 days. Verified via Clinical Analytics OCR.`,
-            ocrModel: 'paddleocr-v3',
-            verifiedAt: new Date().toISOString()
-        });
-    } catch (err) {
-        console.error('Prescription scan failed:', err);
-        res.status(500).json({ message: 'Failed to scan prescription.' });
-    }
-});
 
 // Customer approves proposal -> triggers idempotent order conversion
 router.post('/:id/approve', authenticateUser, authorizeCustomerAction, async (req, res) => {
