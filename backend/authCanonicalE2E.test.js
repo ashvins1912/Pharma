@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
-import { gatewayRouter } from './gateway/gatewayRouter.js';
+import gatewayRouter from './gateway/gatewayRouter.js';
 import { authService } from './services/identity-service/AuthService.js';
 
 function extractCookie(response, name) {
