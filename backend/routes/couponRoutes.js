@@ -1,12 +1,12 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import Coupon from '../models/Coupon.js';
-import { authenticateSupabaseUser } from '../middleware/auth.js';
+import { authenticateUser } from '../middleware/auth.js';
 import { getIsConnected } from '../config/db.js';
 
 const router = express.Router();
 
-router.post('/', authenticateSupabaseUser, (req, res, next) => {
+router.post('/', authenticateUser, (req, res, next) => {
     if (req.user?.app_metadata?.role !== 'admin') {
         return res.status(403).json({ success: false, error: 'Administrator privileges are required to create coupons.' });
     }
