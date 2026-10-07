@@ -75,6 +75,8 @@ const compareItem = (orderItem, prescriptionMedicine) => {
   };
 };
 
+export { normalize, strengthOf, tokenOverlap, extractPrescribedQuantity, compareItem };
+
 export async function verifyPrescriptionAgainstItems({
   prescriptionId,
   items,
