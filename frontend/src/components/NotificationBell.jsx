@@ -1,14 +1,20 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 
-export default function NotificationBell({ onOpenOrders }) {
+export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
   const { notifications, unreadNotificationsCount, markNotificationRead, setWhatsappModalOpen } = useApp();
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div className="relative flex-shrink-0">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (onRequireAuth && !onOpenOrders) {
+            onRequireAuth();
+            return;
+          }
+          setIsOpen(!isOpen);
+        }}
         className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition cursor-pointer flex items-center justify-center flex-shrink-0"
         aria-label="Customer Notifications"
       >
