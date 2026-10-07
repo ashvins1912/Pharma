@@ -1,23 +1,35 @@
-"""Normalize uploaded prescription documents to a canonical PDF representation."""
+"""Normalize uploaded prescription documents to a canonical PDF representation.
+
+Mobile photos are normalized before OCR so camera orientation, HEIC/HEIF, and
+very large camera images do not leak format-specific behavior into the rest of
+the prescription pipeline.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from io import BytesIO
 
 import fitz
-import numpy as np
-import cv2
+from PIL import Image, ImageOps, ImageFile
+
+try:
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+except ImportError:
+    # HEIC/HEIF uploads will return a clear validation error if the optional
+    # codec is unavailable. The dependency is included in requirements.txt.
+    pass
 
 
-SUPPORTED_IMAGE_TYPES = {
-    "image/jpeg",
-    "image/jpg",
-    "image/png",
-    "image/webp",
-    "image/gif",
-    "image/bmp",
-    "image/tiff",
-    "image/x-ms-bmp",
-}
+ImageFile.LOAD_TRUNCATED_IMAGES = False
+
+# Prevent decompression-bomb / pathological camera images from consuming the
+# Render instance's memory. Normal phone photos are far below this limit.
+MAX_IMAGE_PIXELS = 30_000_000
+MAX_IMAGE_DIMENSION = 3200
+PDF_MAX_DIMENSION = 1440
+JPEG_QUALITY = 88
 
 
 @dataclass(frozen=True)
@@ -33,37 +45,76 @@ def _looks_like_pdf(data: bytes) -> bool:
     return data[:5] == b"%PDF-"
 
 
-def _image_to_pdf(data: bytes, content_type: str) -> bytes:
-    image = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
-    if image is None:
-        raise ValueError("Unable to decode the uploaded image.")
+def _open_mobile_image(data: bytes) -> Image.Image:
+    try:
+        image = Image.open(BytesIO(data))
+        image.verify()
+    except Exception as exc:
+        raise ValueError(
+            "Unable to decode the uploaded image. Please upload a clear JPG, PNG, WebP, HEIC/HEIF, or PDF."
+        ) from exc
 
-    height, width = image.shape[:2]
+    try:
+        image = Image.open(BytesIO(data))
+        image.load()
+    except Exception as exc:
+        raise ValueError("Uploaded image could not be read completely.") from exc
+
+    width, height = image.size
     if width <= 0 or height <= 0:
         raise ValueError("Uploaded image has invalid dimensions.")
+    if width * height > MAX_IMAGE_PIXELS:
+        raise ValueError(
+            f"Image is too large to process safely. Maximum is {MAX_IMAGE_PIXELS:,} pixels."
+        )
 
-    # Encode as PNG first so PDF creation is independent of the source image format.
-    ok, encoded = cv2.imencode(".png", image)
-    if not ok:
-        raise ValueError("Unable to convert the uploaded image to PNG.")
+    # Mobile cameras commonly store the phone orientation in EXIF rather than
+    # physically rotating pixels. Transpose makes OCR and the final PDF match
+    # what the user sees in the gallery.
+    image = ImageOps.exif_transpose(image)
+
+    # Flatten transparency against white so PNG/WebP/GIF images render cleanly.
+    if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
+        rgba = image.convert("RGBA")
+        background = Image.new("RGB", rgba.size, "white")
+        background.paste(rgba, mask=rgba.getchannel("A"))
+        image = background
+    else:
+        image = image.convert("RGB")
+
+    # Downscale only when needed. This controls OCR/PDF memory without making
+    # ordinary mobile photos unnecessarily blurry.
+    if max(image.size) > MAX_IMAGE_DIMENSION:
+        image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.Resampling.LANCZOS)
+
+    return image
+
+
+def _image_to_pdf(data: bytes) -> bytes:
+    image = _open_mobile_image(data)
+
+    # JPEG is substantially smaller than PNG for camera photos and remains
+    # sharp enough for prescription OCR. PyMuPDF embeds it directly.
+    image_buffer = BytesIO()
+    image.save(image_buffer, format="JPEG", quality=JPEG_QUALITY, optimize=True)
+    jpeg_bytes = image_buffer.getvalue()
+
+    width, height = image.size
+    scale = 72.0 / 150.0
+    page_width = max(width * scale, 72.0)
+    page_height = max(height * scale, 72.0)
+
+    if max(page_width, page_height) > PDF_MAX_DIMENSION:
+        factor = PDF_MAX_DIMENSION / max(page_width, page_height)
+        page_width *= factor
+        page_height *= factor
 
     doc = fitz.open()
     try:
-        # Keep the physical page close to the source aspect ratio.
-        # 150 DPI gives OCR enough detail without producing unnecessarily huge PDFs.
-        scale = 72.0 / 150.0
-        page_width = min(max(width * scale, 72.0), 1440.0)
-        page_height = min(max(height * scale, 72.0), 1440.0)
-
-        # If one dimension was capped, preserve aspect ratio.
-        ratio = min(1440.0 / page_width, 1440.0 / page_height, 1.0)
-        page_width *= ratio
-        page_height *= ratio
-
         page = doc.new_page(width=page_width, height=page_height)
         page.insert_image(
             fitz.Rect(0, 0, page_width, page_height),
-            stream=encoded.tobytes(),
+            stream=jpeg_bytes,
         )
         return doc.tobytes(garbage=4, deflate=True)
     finally:
@@ -112,11 +163,13 @@ def normalize_prescription_document(
         raise ValueError("Prescription must be a PDF or image.")
 
     try:
-        pdf_bytes = _image_to_pdf(data, original_type)
+        pdf_bytes = _image_to_pdf(data)
+    except ValueError:
+        raise
     except Exception as exc:
-        if isinstance(exc, ValueError):
-            raise
-        raise ValueError("Unable to convert the uploaded image to PDF.") from exc
+        raise ValueError(
+            "Unable to convert the uploaded image to PDF. Please upload a clearer photo."
+        ) from exc
 
     return NormalizedDocument(
         data=pdf_bytes,
