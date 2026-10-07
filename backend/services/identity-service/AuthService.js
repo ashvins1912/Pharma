@@ -18,6 +18,8 @@ import { tenantService } from '../tenant-service/TenantService.js';
 import { identityService } from './IdentityService.js';
 import { isPlatformSuperAdmin } from '../../shared/contracts/index.js';
 import { logger } from '../../shared/observability/logger.js';
+import { issuePharmaAccessToken } from '../../security/pharmaToken.js';
+import { authorizationService } from '../../authorization/AuthorizationService.js';
 
 const JWT_SECRET = process.env.DEMO_ADMIN_JWT_SECRET
     || process.env.ENCRYPTION_SECRET_KEY
@@ -59,10 +61,19 @@ export function isValidDOB(dob) {
 /**
  * Validates phone / mobile format (at least 10 digits)
  */
+export function normalizeIndianMobile(mobile) {
+    if (mobile === undefined || mobile === null) return null;
+    const value = String(mobile).trim().replace(/[\\s()-]/g, '');
+    let number = null;
+    if (/^\\+91[6-9]\\d{9}$/.test(value)) number = value.slice(3);
+    else if (/^91[6-9]\\d{9}$/.test(value)) number = value.slice(2);
+    else if (/^0[6-9]\\d{9}$/.test(value)) number = value.slice(1);
+    else if (/^[6-9]\\d{9}$/.test(value)) number = value;
+    return number ? { countryCode: '+91', number, e164: `+91${number}` } : null;
+}
+
 export function isValidMobile(mobile) {
-    if (!mobile || typeof mobile !== 'string') return false;
-    const digits = mobile.replace(/\D/g, '');
-    return digits.length >= 10 && digits.length <= 15;
+    return Boolean(normalizeIndianMobile(mobile));
 }
 
 /**
@@ -314,44 +325,33 @@ export class AuthService {
      * Create platform JWT session token
      */
     async createAuthToken(user, aal = 'aal1') {
-        const rawRole = user.role || user.app_metadata?.role || (user.roles && user.roles[0]) || 'customer';
-        const role = isPlatformSuperAdmin(rawRole) ? 'SUPER_ADMIN' : rawRole;
-        const isPlatform = role === 'SUPER_ADMIN';
-        const tenantId = isPlatform ? null : (user.tenantId || user.app_metadata?.tenantId || null);
+        const authorization = await authorizationService.resolve(user);
+        const userId = user.id || user.userId || user.supabase_user_id;
+        const name = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim();
 
-        const age = calculateAge(user.dateOfBirth);
-
-        return new SignJWT({
-            sub: user.id || user.userId || user.supabase_user_id,
-            userId: user.id || user.userId || user.supabase_user_id,
-            email: user.email,
-            name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+        const sessionId = crypto.randomUUID();
+        return issuePharmaAccessToken({
+            sub: userId,
+            email: user.email || '',
+            name,
             firstName: user.firstName || '',
             lastName: user.lastName || '',
             dateOfBirth: user.dateOfBirth || null,
-            age,
+            mobile: user.mobileNumber || user.mobile || '',
             accountStatus: user.accountStatus || 'ACTIVE',
             profileCompleted: user.profileCompleted !== false,
             primaryAuthProvider: user.primaryAuthProvider || 'LOCAL',
-            role,
-            roles: user.roles || [role],
-            tenantId,
-            branchId: user.branchId || null,
-            app_metadata: { role, tenantId },
-            user_metadata: {
-                name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-                mobile: user.mobileNumber || user.mobile,
-                dateOfBirth: user.dateOfBirth || null
-            },
+            role: authorization.role,
+            roles: authorization.roles,
+            permissions: authorization.permissions,
+            permissionVersion: authorization.permissionVersion,
+            tenantId: authorization.tenantId,
+            branchId: authorization.branchId,
+            scope: authorization.scope,
+            sessionId,
             aal
-        })
-            .setProtectedHeader({ alg: 'HS256' })
-            .setSubject(user.id || user.userId || user.supabase_user_id)
-            .setIssuedAt()
-            .setExpirationTime('2h')
-            .sign(SIGNING_KEY);
+        });
     }
-
     /**
      * User Registration with single-use verification token & persistent User model
      */
@@ -360,6 +360,7 @@ export class AuthService {
         const fName = (firstName || '').trim();
         const lName = (lastName || '').trim();
         const phone = (mobileNumber || mobile || '').trim();
+        const normalizedPhone = normalizeIndianMobile(phone);
 
         // 1. Validation
         if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
@@ -384,8 +385,8 @@ export class AuthService {
             throw err;
         }
 
-        if (!phone || !isValidMobile(phone)) {
-            const err = new Error('A valid mobile number with at least 10 digits is required.');
+        if (!normalizedPhone) {
+            const err = new Error('A valid Indian mobile number is required. Use 10 digits or 91/+91/0 prefix.');
             err.code = 'INVALID_MOBILE';
             err.status = 400;
             throw err;
@@ -1084,7 +1085,7 @@ export class AuthService {
     /**
      * Complete profile onboarding (e.g. for Google OAuth users)
      */
-    async completeProfile({ userId, firstName, lastName, dateOfBirth, mobileNumber, mobile }) {
+    async completeProfile({ userId, firstName, lastName, dateOfBirth, mobileNumber, mobile, gender }) {
         if (!userId) {
             const err = new Error('User ID is required.');
             err.code = 'REQUIRED_FIELD';
@@ -1137,8 +1138,9 @@ export class AuthService {
         user.lastName = lName;
         user.name = `${fName} ${lName}`.trim();
         user.dateOfBirth = dateOfBirth;
-        user.mobileNumber = phone;
-        user.mobile = phone;
+        user.mobileNumber = normalizedPhone.e164;
+        user.mobile = normalizedPhone.e164;
+        if (gender) user.gender = gender;
         user.profileCompleted = true;
         user.accountStatus = 'ACTIVE';
         user.status = 'ACTIVE';
