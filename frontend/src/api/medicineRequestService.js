@@ -1,5 +1,14 @@
 import apiClient from './apiClient';
 
+export const replaceMedicineRequestPrescription = async (id, file) => {
+  const formData = new FormData();
+  formData.append('prescription', file);
+  const response = await apiClient.put(`/api/medicine-requests/${id}/prescription`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+  return response.data;
+};
+
 export const createMedicineRequest = async (formData) => {
   const isMultipart = formData instanceof FormData;
   const config = isMultipart
