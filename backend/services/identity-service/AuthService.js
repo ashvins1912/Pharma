@@ -1432,7 +1432,20 @@ export class AuthService {
         tokenDoc.usedAt = new Date();
         await this.saveVerificationToken(tokenDoc);
         const accessToken = await this.createAuthToken(user);
-        return { success: true, user, accessToken };
+        return {
+            success: true,
+            user: {
+                id: user.userId || user.id,
+                userId: user.userId || user.id,
+                email: user.email,
+                firstName: user.firstName || '',
+                lastName: user.lastName || '',
+                accountStatus: user.accountStatus || 'ACTIVE',
+                profileCompleted: user.profileCompleted !== false,
+                role: user.role || 'customer'
+            },
+            accessToken
+        };
     }
 
     /**
