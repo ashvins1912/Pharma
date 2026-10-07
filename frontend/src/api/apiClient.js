@@ -16,74 +16,73 @@ const apiClient = axios.create({
     withCredentials: true
 });
 
+// First-party platform authentication is cookie-first.
+// Email/password and MFA sessions are issued by the backend as HttpOnly cookies.
+// Google/Supabase sessions use the Supabase bearer token until they are exchanged
+// for the same platform session. Never let a stale bearer token override a valid
+// first-party cookie session.
+let authTransport = 'cookie';
+
+export function setAuthTransport(transport) {
+    authTransport = transport === 'bearer' ? 'bearer' : 'cookie';
+}
+
 function getCsrfCookie() {
     if (typeof document === 'undefined') return null;
     const match = document.cookie.match(new RegExp('(^|;\\s*)XSRF-TOKEN=([^;]*)'));
     return match ? decodeURIComponent(match[2]) : null;
 }
 
-// Resilient request interceptor that ensures tokens and anti-CSRF headers are sent
 apiClient.interceptors.request.use(async (config) => {
     if (!config.headers['X-Request-ID']) {
         config.headers['X-Request-ID'] = globalThis.crypto?.randomUUID?.()
             || `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
     }
-    // 1. Auto-attach Anti-CSRF Token header for Double Submit Cookie pattern
+
     const csrfToken = getCsrfCookie();
     if (csrfToken) {
         config.headers['X-XSRF-TOKEN'] = csrfToken;
     }
 
+    // The HttpOnly platform cookie is authoritative. Do not send a stale
+    // bearer token alongside it because the gateway intentionally prioritizes
+    // Authorization over cookies.
+    if (authTransport === 'cookie') {
+        delete config.headers.Authorization;
+        return config;
+    }
+
     let token = null;
 
-    // Keep the server-issued local demo admin token ahead of any prior Supabase session.
+    // Demo sessions are explicit bearer sessions.
     try {
         const savedDemo = localStorage.getItem('demo_session');
         if (savedDemo) {
             const parsed = JSON.parse(savedDemo);
-            if (parsed?.user?.id === 'admin' && parsed?.access_token) {
-                token = parsed.access_token;
-            }
+            if (parsed?.access_token) token = parsed.access_token;
         }
     } catch {}
 
-    // Check active Supabase session
+    // Google/Supabase bearer session is used only when no platform cookie
+    // session is active.
     try {
-        if (supabase) {
+        if (supabase && !token) {
             const { data } = await supabase.auth.getSession();
-            if (!token && data?.session?.access_token) {
-                token = data.session.access_token;
-            }
+            if (data?.session?.access_token) token = data.session.access_token;
         }
-    } catch {
-        // Continue with the saved demo token when Supabase is unavailable.
-    }
+    } catch {}
 
-    // 2. Check demo auth token in localStorage
-    if (!token) {
-        token = localStorage.getItem('demo_auth_token');
-    }
-
-    // 3. Check demo session object in localStorage
-    if (!token) {
-        try {
-            const savedDemo = localStorage.getItem('demo_session');
-            if (savedDemo) {
-                const parsed = JSON.parse(savedDemo);
-                if (parsed?.access_token) token = parsed.access_token;
-            }
-        } catch {}
-    }
+    if (!token) token = localStorage.getItem('demo_auth_token');
 
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     } else {
         delete config.headers.Authorization;
     }
+
     return config;
 }, (error) => Promise.reject(error));
 
-// Resilient response interceptor that prevents false session timeouts
 apiClient.interceptors.response.use(
     (response) => response,
     (error) => {
@@ -91,12 +90,19 @@ apiClient.interceptors.response.use(
         const url = String(error.config?.url || '');
         const isCredentialSubmission = /\/api\/auth\/(login|signup|demo-admin|demo-customer)(\/|$)/.test(url);
         const isSessionProbe = /\/api\/auth\/(session|logout)(\/|$)/.test(url);
+
         if (normalized.status === 401 && !isCredentialSubmission && !isSessionProbe && typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('ashvin:authentication-required', {
                 detail: { requestId: normalized.requestId }
             }));
         }
-        console.warn('API request failed', { requestId: normalized.requestId, endpoint: url, status: normalized.status || null, code: normalized.code });
+
+        console.warn('API request failed', {
+            requestId: normalized.requestId,
+            endpoint: url,
+            status: normalized.status || null,
+            code: normalized.code
+        });
         normalized.response = error.response;
         normalized.config = error.config;
         return Promise.reject(normalized);
