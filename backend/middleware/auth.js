@@ -1,13 +1,11 @@
 import 'dotenv/config';
-import { jwtVerify } from 'jose';
-import { env } from '../config/env.js';
 import { verifyPharmaAccessToken } from '../security/pharmaToken.js';
 
 
 /**
  * Authentication Middleware
  * 1. Intercepts HttpOnly cookies ('access_token') to prevent XSS credential theft.
- * 2. Fallbacks to Authorization: Bearer header for cross-client API consumers.
+ * 2. Allows the same signed Pharma token through Authorization for trusted API clients.
  * 3. Enforces MFA Step-Up: Checks Authenticator Assurance Level (AAL1 vs AAL2).
  * 4. Attaches sanitized user context to req.user.
  */
@@ -42,7 +40,6 @@ export const authenticateUser = async (req, res, next) => {
         req.user = {
             sub: payload.sub,
             id: payload.sub,
-            supabaseId: payload.sub,
             email: payload.email || '',
             name: payload.name || '',
             firstName: payload.firstName || '',
@@ -69,7 +66,7 @@ export const authenticateUser = async (req, res, next) => {
         };
         return next();
     } catch {
-        // Fall through to legacy migration/demo verification.
+        // Invalid signature, issuer, audience, or expiry.
     }
 
 
