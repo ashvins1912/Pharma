@@ -73,3 +73,37 @@ test('Order Service requires valid scopes from its gateway identity', async () =
   assert.equal(allowed.status, 200);
   assert.equal(allowed.user.userId, 'user-1');
 });
+
+test('uses authenticated tenant and branch context and rejects mismatched client scope', () => {
+  const trusted = normalizeCreateRequest({
+    source: 'WEB',
+    externalReference: 'WEB-100',
+    tenantId: 'tenant-1',
+    branchId: 'branch-1',
+    items: [{ sku: 'MED-1', quantity: 1 }],
+    deliveryAddress: 'Main Street'
+  }, {
+    userId: 'user-1',
+    tenantId: 'tenant-1',
+    branchId: 'branch-1',
+    authorizedTenantId: 'tenant-1',
+    userRole: 'customer'
+  });
+  assert.equal(trusted.tenantId, 'tenant-1');
+  assert.equal(trusted.branchId, 'branch-1');
+
+  assert.throws(() => normalizeCreateRequest({
+    source: 'WEB',
+    externalReference: 'WEB-101',
+    tenantId: 'tenant-2',
+    branchId: 'branch-1',
+    items: [{ sku: 'MED-1', quantity: 1 }],
+    deliveryAddress: 'Main Street'
+  }, {
+    userId: 'user-1',
+    tenantId: 'tenant-1',
+    branchId: 'branch-1',
+    authorizedTenantId: 'tenant-1',
+    userRole: 'customer'
+  }), { statusCode: 403 });
+});
