@@ -95,6 +95,23 @@ export function createServiceRouters(gatewayConfig = config) {
   }));
 
 
+  // Keep legacy URLs used by orders created before the Prescription Service migration.
+  const legacyPrescriptionRouter = express.Router();
+  legacyPrescriptionRouter.use((req, res, next) => gatewayConfig.prescriptionServiceUrl
+    ? authenticateUser(req, res, next, gatewayConfig)
+    : next('router'));
+  const legacyPrescription = createServiceHandler({
+    audience: gatewayConfig.prescriptionJwtAudience,
+    getScope: () => 'prescription.read',
+    target: gatewayConfig.prescriptionServiceUrl,
+    includeCustomerProfile: true
+  }, gatewayConfig);
+  legacyPrescriptionRouter.get('/prescriptions/:fileId', (req, res, next) => {
+    req.url = `/api/v1/prescriptions/${encodeURIComponent(req.params.fileId)}/document`;
+    req.originalUrl = req.url;
+    return legacyPrescription(req, res, next);
+  });
+
   const prescriptionRouter = express.Router();
   prescriptionRouter.use((req, res, next) => gatewayConfig.prescriptionServiceUrl
     ? authenticateUser(req, res, next, gatewayConfig)
@@ -109,8 +126,8 @@ export function createServiceRouters(gatewayConfig = config) {
   prescriptionRouter.post('/upload', prescription('prescription.write'));
   prescriptionRouter.put('/:prescriptionId/document', prescription('prescription.write'));
   prescriptionRouter.get('/reviews/queue', prescription('prescription.review'));
-  prescriptionRouter.get('/:prescriptionId', prescription('prescription.read'));
   prescriptionRouter.get('/:prescriptionId/document', prescription('prescription.read'));
+  prescriptionRouter.get('/:prescriptionId', prescription('prescription.read'));
   prescriptionRouter.post('/:prescriptionId/review/claim', prescriptionReview, prescription('prescription.review'));
   prescriptionRouter.post('/:prescriptionId/review/approve', prescriptionReview, prescription('prescription.review'));
   prescriptionRouter.post('/:prescriptionId/review/reject', prescriptionReview, prescription('prescription.review'));
@@ -120,5 +137,5 @@ export function createServiceRouters(gatewayConfig = config) {
   prescriptionRouter.get('/:prescriptionId/document-url', prescription('prescription.review'));
   prescriptionRouter.post('/hospitals', prescription('prescription.write'));
 
-  return { inventoryRouter, orderRouter, prescriptionRouter };
+  return { inventoryRouter, orderRouter, prescriptionRouter, legacyPrescriptionRouter };
 }
