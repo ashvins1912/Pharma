@@ -20,7 +20,6 @@ import adminPaymentReminderRoutes from './routes/adminPaymentReminderRoutes.js';
 import medicineRequestRoutes from './routes/medicineRequestRoutes.js';
 import gatewayRouter from './gateway/gatewayRouter.js';
 import vendorRouter from './gateway/routes/vendorRoutes.js';
-import gatewayAuthRouter from './gateway/routes/auth.js';
 import { csrfProtection } from './security/sessionCookie.js';
 import dataStore from './dataStore.js';
 import DataMartRefreshService from './services/DataMartRefreshService.js';
@@ -90,7 +89,6 @@ app.use('/api/medicine-requests', medicineRequestRoutes);
 app.use('/api/admin/medicine-requests', medicineRequestRoutes);
 
 // Direct and Gateway Auth/Vendor Routes
-app.use('/auth', gatewayAuthRouter);
 app.use('/vendors', vendorRouter);
 app.use('/vendor', vendorRouter);
 app.use('/api/vendors', vendorRouter);
