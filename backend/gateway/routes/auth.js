@@ -380,8 +380,8 @@ const handleProfileCompletion = async (req, res) => {
     } else if (!isValidDOB(dateOfBirth)) {
         validationDetails.push({ field: 'dateOfBirth', code: 'INVALID_DOB', message: 'Date of birth must be a valid past date.' });
     }
-    if (!phone || !isValidMobile(phone)) {
-        validationDetails.push({ field: 'mobileNumber', code: 'INVALID_MOBILE', message: 'Valid mobile number with at least 10 digits is required.' });
+    if (phone && !isValidMobile(phone)) {
+        validationDetails.push({ field: 'mobileNumber', code: 'INVALID_MOBILE', message: 'Enter a valid mobile number with at least 10 digits.' });
     }
     if (!gender || !['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'].includes(gender)) {
         validationDetails.push({ field: 'gender', code: 'INVALID_GENDER', message: 'Select a valid gender option.' });
