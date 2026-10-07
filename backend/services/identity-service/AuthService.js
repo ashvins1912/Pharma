@@ -1105,6 +1105,13 @@ export class AuthService {
             throw err;
         }
 
+        if (!gender || !['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'].includes(gender)) {
+            const err = new Error('Gender is required.');
+            err.code = 'INVALID_GENDER';
+            err.status = 400;
+            throw err;
+        }
+
         if (!dateOfBirth) {
             const err = new Error('Date of birth is required.');
             err.code = 'REQUIRED_FIELD';
