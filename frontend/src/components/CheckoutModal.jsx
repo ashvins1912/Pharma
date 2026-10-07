@@ -238,18 +238,19 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
               {prescriptionRequired && prescriptionChoice !== 'yes' && <p className="mt-2 text-xs font-bold text-rose-800">A prescription is required for one or more items in this cart. Choose Yes and upload it to continue.</p>}
               {(prescriptionRequired || prescriptionChoice === 'yes') && <>
                 <label htmlFor="prescription-upload" className="mt-2 block text-xs font-bold text-slate-800">
-                  Upload Prescription (PDF, JPEG, PNG, or WebP; maximum 5 MB)
+                  Upload Prescription (PDF or image; maximum 5 MB — images are converted to PDF automatically)
                 </label>
                 <input
                   id="prescription-upload"
                   type="file"
-                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  accept="application/pdf,image/*"
                   onChange={event => {
                     const file = event.target.files?.[0] || null;
-                    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
-                    if (file && !allowedTypes.includes(file.type)) {
+                    const isSupportedFile = file
+                      && (file.type === 'application/pdf' || file.type.startsWith('image/'));
+                    if (file && !isSupportedFile) {
                       setPrescriptionFile(null);
-                      setPrescriptionError('Choose a PDF, JPEG, PNG, or WebP file.');
+                      setPrescriptionError('Choose a PDF or image file.');
                       event.target.value = '';
                       return;
                     }
