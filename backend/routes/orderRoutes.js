@@ -12,6 +12,7 @@ import DynamicOrderService from '../services/DynamicOrderService.js';
 import deliveryContainer from '../modules/delivery/container.js';
 import { classifyOrderSearch, paginationResult } from '../services/orderSearch.js';
 import { verifyPrescriptionAgainstItems } from '../services/prescription-verification/PrescriptionVerificationService.js';
+import { reinitiatePrescriptionProcessing } from '../../services/order-service/src/prescription-client.js';
 
 const router = express.Router();
 const dynamicOrderService = new DynamicOrderService({
@@ -401,6 +402,13 @@ router.get(['/prescriptions/:fileId/scan', '/:id/scan-prescription'], authentica
                 issues: ['Order does not have a linked Python Prescription Service record.']
             });
         }
+
+        await reinitiatePrescriptionProcessing({
+            prescriptionId: order.prescriptionId,
+            userId: req.user.sub,
+            role: 'admin',
+            isAdmin: true
+        });
 
         const verification = await verifyPrescriptionAgainstItems({
             prescriptionId: order.prescriptionId,
