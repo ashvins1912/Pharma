@@ -1,6 +1,7 @@
 """Durable MongoDB-backed Prescription Service Engine."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import uuid
@@ -149,13 +150,176 @@ class PrescriptionServiceEngine:
             "uploadedAt": now,
         }
 
-    async def get_prescription(self, prescription_id: str, *, include_sensitive: bool = False) -> Optional[Dict[str, Any]]:
+    async def replace_prescription(
+        self,
+        prescription_id: str,
+        *,
+        user_id: str,
+        tenant_id: Optional[str],
+        branch_id: Optional[str],
+        file_bytes: bytes,
+        filename: Optional[str],
+        content_type: Optional[str],
+        idempotency_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        db = get_db()
+        rx = await db.prescriptions.find_one({"prescriptionId": prescription_id})
+        if not rx:
+            raise LookupError("Prescription not found")
+
+        if rx.get("status") == PrescriptionState.INACTIVE.value:
+            raise RuntimeError("INACTIVE")
+
+        if rx.get("customerId") != user_id and rx.get("createdBy") != user_id:
+            raise PermissionError("Prescription access denied")
+        if tenant_id and rx.get("tenantId") and rx.get("tenantId") != tenant_id:
+            raise PermissionError("Tenant access denied")
+        if branch_id and rx.get("branchId") and rx.get("branchId") != branch_id:
+            raise PermissionError("Branch access denied")
+
+        if not file_bytes:
+            raise ValueError("file is required")
+        if len(file_bytes) > settings.MAX_FILE_SIZE_BYTES:
+            raise ValueError("file too large")
+
+        if idempotency_key:
+            replay = await db.idempotency_keys.find_one({
+                "key": f"rx-replace:{prescription_id}:{tenant_id}:{idempotency_key}"
+            })
+            if replay:
+                updated = await db.prescriptions.find_one({"prescriptionId": prescription_id}, {"documentCiphertext": 0})
+                return {
+                    "prescriptionId": prescription_id,
+                    "status": updated["status"] if updated else PrescriptionState.QUEUED.value,
+                    "version": updated.get("version", 1) if updated else 1,
+                    "replayed": True,
+                }
+
+        now = _now()
+        encrypted = crypto.encrypt(file_bytes)
+        next_version = int(rx.get("version", 1)) + 1
+        document_version = int(rx.get("documentVersion", 1)) + 1
+
+        updated = await db.prescriptions.find_one_and_update(
+            {
+                "prescriptionId": prescription_id,
+                "version": rx.get("version", 1),
+                "status": {"$ne": PrescriptionState.INACTIVE.value},
+            },
+            {
+                "$set": {
+                    "status": PrescriptionState.QUEUED.value,
+                    "version": next_version,
+                    "documentVersion": document_version,
+                    "filename": filename or "prescription.bin",
+                    "contentType": content_type or "application/octet-stream",
+                    "documentCiphertext": encrypted,
+                    "documentSha256": hashlib.sha256(file_bytes).hexdigest(),
+                    "extraction": {
+                        "overallConfidence": None,
+                        "reviewRequired": True,
+                        "medicines": [],
+                        "patientName": None,
+                        "ocrVersion": None,
+                        "nlpVersion": None,
+                    },
+                    "updatedBy": user_id,
+                    "updatedAt": now,
+                }
+            },
+            return_document=True,
+        )
+        if not updated:
+            raise RuntimeError("VERSION_CONFLICT")
+
+        await db.prescription_reviews.update_many(
+            {"prescription_id": prescription_id, "status": {"$in": ["PENDING", "IN_REVIEW"]}},
+            {"$set": {"status": "CANCELLED", "updated_at": now}},
+        )
+
+        await db.processing_jobs.update_many(
+            {"prescription_id": prescription_id, "status": {"$in": ["QUEUED", "PROCESSING", "RETRY"]}},
+            {"$set": {"status": "CANCELLED", "locked_by": None, "locked_until": None, "updated_at": now}},
+        )
+
+        job_id = f"job_{uuid.uuid4().hex[:14]}"
+        await db.processing_jobs.insert_one({
+            "jobId": job_id,
+            "prescription_id": prescription_id,
+            "tenant_id": tenant_id,
+            "status": "QUEUED",
+            "attempt_count": 0,
+            "locked_by": None,
+            "locked_until": None,
+            "next_attempt_at": now,
+            "priority": 90,
+            "last_error_code": None,
+            "last_error_message": None,
+            "created_at": now,
+            "updated_at": now,
+        })
+
+        if idempotency_key:
+            await db.idempotency_keys.insert_one({
+                "key": f"rx-replace:{prescription_id}:{tenant_id}:{idempotency_key}",
+                "prescriptionId": prescription_id,
+                "expires_at": now + timedelta(seconds=settings.IDEMPOTENCY_EXPIRES_SECONDS),
+            })
+
+        await self._audit(
+            "PRESCRIPTION_REPROCESS_REQUESTED",
+            prescription_id,
+            tenant_id,
+            user_id,
+            {"documentVersion": document_version},
+        )
+        adapter = await integration_registry.resolve_adapter(tenant_id, branch_id, "PrescriptionUploaded")
+        await adapter.publish({
+            "eventType": "PrescriptionUploaded",
+            "aggregateType": "Prescription",
+            "aggregateId": prescription_id,
+            "tenantId": tenant_id,
+            "branchId": branch_id,
+            "aggregateVersion": next_version,
+            "payload": {
+                "prescriptionId": prescription_id,
+                "status": PrescriptionState.QUEUED.value,
+                "documentVersion": document_version,
+            },
+        })
+        return {
+            "prescriptionId": prescription_id,
+            "status": PrescriptionState.QUEUED.value,
+            "version": next_version,
+            "documentVersion": document_version,
+            "replayed": False,
+        }
+
+    async def get_prescription(
+        self,
+        prescription_id: str,
+        *,
+        requesting_user_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        branch_id: Optional[str] = None,
+        is_admin: bool = False,
+        include_sensitive: bool = False,
+    ) -> Optional[Dict[str, Any]]:
         db = get_db()
         record = await db.prescriptions.find_one({"prescriptionId": prescription_id}, {"documentCiphertext": 0})
         if not record:
             return None
         if record["status"] == PrescriptionState.INACTIVE.value and not include_sensitive:
             return None
+
+        if not is_admin:
+            if requesting_user_id and record.get("customerId") != requesting_user_id and record.get("createdBy") != requesting_user_id:
+                raise PermissionError("Prescription access denied")
+            if tenant_id and record.get("tenantId") and record.get("tenantId") != tenant_id:
+                raise PermissionError("Tenant access denied")
+            if branch_id and record.get("branchId") and record.get("branchId") != branch_id:
+                raise PermissionError("Branch access denied")
+
         record.pop("_id", None)
         record["patientPuidMasked"] = _mask_puid(record.get("patientPuid"))
         return record
@@ -184,6 +348,34 @@ class PrescriptionServiceEngine:
         )
         return job
 
+    async def _heartbeat_job(self, job_id: str, worker_id: str, stop_event: asyncio.Event):
+        db = get_db()
+        while not stop_event.is_set():
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=settings.HEARTBEAT_INTERVAL_SECONDS)
+            except asyncio.TimeoutError:
+                now = _now()
+                lease_until = now + timedelta(seconds=settings.PROCESSING_LEASE_SECONDS)
+                result = await db.processing_jobs.update_one(
+                    {
+                        "jobId": job_id,
+                        "status": "PROCESSING",
+                        "locked_by": worker_id,
+                    },
+                    {"$set": {"locked_until": lease_until, "updated_at": now}},
+                )
+                if result.matched_count != 1:
+                    stop_event.set()
+                    return
+
+    async def _job_owned(self, job_id: str, worker_id: str) -> bool:
+        db = get_db()
+        row = await db.processing_jobs.find_one(
+            {"jobId": job_id, "status": "PROCESSING", "locked_by": worker_id, "locked_until": {"$gt": _now()}},
+            {"_id": 1},
+        )
+        return bool(row)
+
     async def process_job(self, job: Dict[str, Any], worker_id: str) -> None:
         db = get_db()
         prescription_id = job["prescription_id"]
@@ -192,7 +384,13 @@ class PrescriptionServiceEngine:
             await db.processing_jobs.update_one({"jobId": job["jobId"]}, {"$set": {"status": "DEAD_LETTER", "last_error_code": "RX_MISSING"}})
             return
         if rx["status"] == PrescriptionState.INACTIVE.value:
-            await db.processing_jobs.update_one({"jobId": job["jobId"]}, {"$set": {"status": "CANCELLED", "updated_at": _now()}})
+            await db.processing_jobs.update_one(
+                {"jobId": job["jobId"], "locked_by": worker_id},
+                {"$set": {"status": "CANCELLED", "updated_at": _now(), "locked_until": None, "locked_by": None}}
+            )
+            return
+        if not await self._job_owned(job["jobId"], worker_id):
+            logger.warning("Prescription job lease lost before processing job=%s", job["jobId"])
             return
         if not can_transition(rx["status"], PrescriptionState.PROCESSING.value) and rx["status"] != PrescriptionState.PROCESSING.value:
             # Allow re-entry from QUEUED only
@@ -201,10 +399,26 @@ class PrescriptionServiceEngine:
                 return
 
         now = _now()
-        await db.prescriptions.update_one(
-            {"prescriptionId": prescription_id, "status": {"$ne": PrescriptionState.INACTIVE.value}},
+        processing_update = await db.prescriptions.update_one(
+            {
+                "prescriptionId": prescription_id,
+                "status": {"$in": [
+                    PrescriptionState.QUEUED.value,
+                    PrescriptionState.FAILED.value,
+                    PrescriptionState.REVIEW_REQUIRED.value,
+                    PrescriptionState.PROCESSING.value,
+                ]},
+            },
             {"$set": {"status": PrescriptionState.PROCESSING.value, "updatedAt": now}},
         )
+        if processing_update.matched_count != 1:
+            await db.processing_jobs.update_one(
+                {"jobId": job["jobId"], "locked_by": worker_id},
+                {"$set": {"status": "COMPLETED", "locked_until": None, "locked_by": None, "updated_at": _now()}}
+            )
+            return
+        heartbeat_stop = asyncio.Event()
+        heartbeat_task = asyncio.create_task(self._heartbeat_job(job["jobId"], worker_id, heartbeat_stop))
         await self._audit("PRESCRIPTION_PROCESSING_STARTED", prescription_id, rx.get("tenantId"), worker_id, {})
 
         try:
@@ -212,9 +426,18 @@ class PrescriptionServiceEngine:
             result = process_prescription_bytes(plaintext, rx.get("contentType") or "image/png")
         except ProcessingError as exc:
             await self._fail_job(job, rx, exc.code, exc.message, worker_id)
+            heartbeat_stop.set()
+            heartbeat_task.cancel()
             return
         except Exception as exc:
             await self._fail_job(job, rx, "PROCESSING_ERROR", str(exc), worker_id)
+            heartbeat_stop.set()
+            heartbeat_task.cancel()
+            return
+
+        if not await self._job_owned(job["jobId"], worker_id):
+            heartbeat_stop.set()
+            heartbeat_task.cancel()
             return
 
         extraction = {
@@ -302,9 +525,11 @@ class PrescriptionServiceEngine:
             })
 
         await db.processing_jobs.update_one(
-            {"jobId": job["jobId"]},
+            {"jobId": job["jobId"], "locked_by": worker_id},
             {"$set": {"status": "COMPLETED", "locked_until": None, "locked_by": None, "updated_at": _now()}},
         )
+        heartbeat_stop.set()
+        heartbeat_task.cancel()
         adapter = await integration_registry.resolve_adapter(rx.get("tenantId"), rx.get("branchId"), "PrescriptionProcessingCompleted")
         await adapter.publish({
             "eventType": "PrescriptionProcessingCompleted",
@@ -331,7 +556,7 @@ class PrescriptionServiceEngine:
             rx_status = PrescriptionState.FAILED.value
             next_at = now + timedelta(seconds=min(3600, 2 ** attempt * 5))
         await db.processing_jobs.update_one(
-            {"jobId": job["jobId"]},
+            {"jobId": job["jobId"], "locked_by": worker_id},
             {
                 "$set": {
                     "status": status,
@@ -346,7 +571,7 @@ class PrescriptionServiceEngine:
         )
         if can_transition(PrescriptionState.PROCESSING.value, rx_status) or rx.get("status") == PrescriptionState.PROCESSING.value:
             await db.prescriptions.update_one(
-                {"prescriptionId": rx["prescriptionId"], "status": {"$ne": PrescriptionState.INACTIVE.value}},
+                {"prescriptionId": rx["prescriptionId"], "status": PrescriptionState.PROCESSING.value},
                 {"$set": {"status": rx_status, "updatedAt": now}},
             )
 
@@ -357,8 +582,15 @@ class PrescriptionServiceEngine:
             query["branch_id"] = branch_id
         # Expire leases
         now = _now()
+        lease_query: Dict[str, Any] = {
+            "status": "IN_REVIEW",
+            "lease_until": {"$lte": now},
+            "tenant_id": tenant_id,
+        }
+        if branch_id:
+            lease_query["branch_id"] = branch_id
         await db.prescription_reviews.update_many(
-            {"status": "IN_REVIEW", "lease_until": {"$lte": now}},
+            lease_query,
             {"$set": {"status": "PENDING", "claimed_by": None, "claimed_at": None, "lease_until": None, "updated_at": now}},
         )
         cursor = db.prescription_reviews.find({"$or": [query, {**query, "status": "IN_REVIEW"}]}).sort("created_at", 1).limit(100)
@@ -551,6 +783,10 @@ class PrescriptionServiceEngine:
             {"prescription_id": prescription_id, "status": {"$in": ["PENDING", "IN_REVIEW"]}},
             {"$set": {"status": "CANCELLED", "updated_at": now}},
         )
+        await db.processing_jobs.update_many(
+            {"prescription_id": prescription_id, "status": {"$in": ["QUEUED", "PROCESSING", "RETRY"]}},
+            {"$set": {"status": "CANCELLED", "locked_by": None, "locked_until": None, "updated_at": now}},
+        )
         await self._audit("PRESCRIPTION_REMOVAL_REQUESTED", prescription_id, rx.get("tenantId"), user_id, {})
         await self._audit("PRESCRIPTION_REMOVED", prescription_id, rx.get("tenantId"), user_id, {})
         adapter = await integration_registry.resolve_adapter(rx.get("tenantId"), rx.get("branchId"), "PrescriptionRemoved")
@@ -565,11 +801,25 @@ class PrescriptionServiceEngine:
         })
         return await db.prescriptions.find_one({"prescriptionId": prescription_id}, {"documentCiphertext": 0})
 
-    async def create_document_token(self, prescription_id: str, user_id: str) -> Dict[str, Any]:
-        db = get_db()
-        rx = await db.prescriptions.find_one({"prescriptionId": prescription_id})
-        if not rx or rx["status"] == PrescriptionState.INACTIVE.value:
+    async def create_document_token(
+        self,
+        prescription_id: str,
+        user_id: str,
+        *,
+        tenant_id: Optional[str] = None,
+        branch_id: Optional[str] = None,
+        is_admin: bool = False,
+    ) -> Dict[str, Any]:
+        rx = await self.get_prescription(
+            prescription_id,
+            requesting_user_id=user_id,
+            tenant_id=tenant_id,
+            branch_id=branch_id,
+            is_admin=is_admin,
+        )
+        if not rx:
             raise LookupError("Not found")
+        db = get_db()
         token = uuid.uuid4().hex
         expires = _now() + timedelta(seconds=settings.DOCUMENT_URL_TTL_SECONDS)
         await db.document_tokens.insert_one({
