@@ -40,6 +40,17 @@ export const authenticateUser = async (req, res, next) => {
         }
         const tokenType = payload.token_type;
         const accountStatus = payload.accountStatus || 'ACTIVE';
+        const url = req.originalUrl || req.url || '';
+        if (tokenType === 'pharma_onboarding'
+            && !url.includes('/api/v1/auth/complete-profile')
+            && !url.includes('/api/v1/auth/onboarding')
+            && !url.includes('/api/v1/auth/logout')) {
+            return res.status(403).json({ message: 'Onboarding session is restricted to profile completion.', code: 'ONBOARDING_SESSION_RESTRICTED' });
+        }
+        if (tokenType === 'pharma_mfa_challenge'
+            && !url.includes('/api/v1/auth/mfa/verify')) {
+            return res.status(403).json({ message: 'MFA challenge session is restricted to MFA verification.', code: 'MFA_SESSION_RESTRICTED' });
+        }
         if (accountStatus !== 'ACTIVE' && tokenType === 'pharma_access') {
             throw new Error('Inactive account session.');
         }
