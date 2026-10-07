@@ -60,6 +60,8 @@ export const envSchema = z.object({
     SERVICE_JWT_ISSUER: z.string().trim().default('ashvin-pharmacy'),
     INVENTORY_SERVICE_URL: optionalString(z.string().trim().url()),
     PRESCRIPTION_SERVICE_URL: optionalString(z.string().trim().url()),
+    ORDER_SERVICE_URL: optionalString(z.string().trim().url()),
+    ORDER_SERVICE_JWT_AUDIENCE: z.string().trim().default('order-service'),
     PRESCRIPTION_SERVICE_JWT_AUDIENCE: z.string().trim().default('prescription-service'),
     CORS_ALLOWED_ORIGINS: isProduction ? corsOriginsSchema : optionalString(corsOriginsSchema),
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
