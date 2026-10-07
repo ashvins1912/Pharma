@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
+import { normalizePrescriptionBlob } from '../../utils/prescriptionFile';
 
 const getDistanceToPickup = (rider, order) => {
   const riderCoordinates = rider.currentLocation?.coordinates;
@@ -264,12 +265,15 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     if (!order?.prescriptionUrl || viewingPrescriptionOrderId) return;
     try {
       setViewingPrescriptionOrderId(String(order._id));
-      const res = await apiClient.get(order.prescriptionUrl, { responseType: 'blob' });
-      const contentType = String(res.headers?.['content-type'] || res.data?.type || '').toLowerCase();
-      if (!res.data?.size || !/(application\/pdf|image\/)/.test(contentType)) {
-        throw new Error('Prescription file could not be previewed.');
-      }
-      const url = URL.createObjectURL(res.data);
+      const res = await apiClient.get(order.prescriptionUrl, {
+        responseType: 'blob',
+        headers: { Accept: 'application/pdf,image/*' }
+      });
+      const contentType = String(
+        res.headers?.['content-type'] || res.data?.type || ''
+      ).toLowerCase();
+      const blob = await normalizePrescriptionBlob(res.data, contentType);
+      const url = URL.createObjectURL(blob);
       if (prescriptionPreview) URL.revokeObjectURL(prescriptionPreview);
       setPrescriptionPreview(url);
       const orderId = String(order._id);
