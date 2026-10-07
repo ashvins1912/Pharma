@@ -8,6 +8,7 @@ import './index.css';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { AppProvider } from './context/AppContext';
+import { LoadingProvider, GlobalLoadingIndicator } from './context/LoadingContext';
 import CustomerErrorBoundary from './components/CustomerErrorBoundary';
 
 createRoot(document.getElementById('root')).render(
@@ -15,9 +16,12 @@ createRoot(document.getElementById('root')).render(
     <AuthProvider>
       <ToastProvider>
         <AppProvider>
-          <CustomerErrorBoundary>
+          <LoadingProvider>
+            <GlobalLoadingIndicator />
+            <CustomerErrorBoundary>
             <App />
-          </CustomerErrorBoundary>
+            </CustomerErrorBoundary>
+          </LoadingProvider>
           <SpeedInsights />
         </AppProvider>
       </ToastProvider>
