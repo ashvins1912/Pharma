@@ -454,7 +454,14 @@ router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
                     message: 'This order requires a Prescription Service record before approval.'
                 });
             }
-            const verification = await verifyPrescriptionAgainstItems({
+
+            // A pharmacist/admin may explicitly approve after reviewing the document.
+            // Do not call the automated verifier again for an already recorded manual approval.
+            if (order.prescriptionVerification?.status === 'MATCHED'
+                && order.prescriptionVerification?.manualApproval === true) {
+                // Manual approval is authoritative for this reviewed order.
+            } else {
+                const verification = await verifyPrescriptionAgainstItems({
                 prescriptionId: order.prescriptionId,
                 patientPuid: order.patientPuid || null,
                 items: (order.items || order.medicineItems || []).map(item => ({
@@ -476,14 +483,15 @@ router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
                     verification
                 });
             }
-            if (getIsConnected() && order._id) {
-                await Order.findByIdAndUpdate(order._id, {
-                    $set: {
-                        prescriptionVerification: verification,
-                        prescriptionId: verification.prescriptionId || order.prescriptionId,
-                        patientPuid: verification.patientPuid || order.patientPuid || null
-                    }
-                });
+                if (getIsConnected() && order._id) {
+                    await Order.findByIdAndUpdate(order._id, {
+                        $set: {
+                            prescriptionVerification: verification,
+                            prescriptionId: verification.prescriptionId || order.prescriptionId,
+                            patientPuid: verification.patientPuid || order.patientPuid || null
+                        }
+                    });
+                }
             }
         }
 
