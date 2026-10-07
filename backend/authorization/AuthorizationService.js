@@ -1,26 +1,6 @@
 import { tenantService } from '../services/tenant-service/TenantService.js';
 import { isPlatformSuperAdmin } from '../shared/contracts/index.js';
-
-const ROLE_PERMISSIONS = {
-  SUPER_ADMIN: ['*'],
-  PLATFORM_SUPER_ADMIN: ['*'],
-  admin: ['*'],
-  TENANT_OWNER: ['*'],
-  TENANT_ADMIN: ['*'],
-  PHARMACIST: [
-    'inventory.read','inventory.write','inventory.import',
-    'orders.read','orders.create','orders.manage',
-    'prescription.read','prescription.write','prescription.review'
-  ],
-  PHARMACY_STAFF: [
-    'inventory.read','orders.read','orders.create',
-    'prescription.read','prescription.write'
-  ],
-  INVENTORY_MANAGER: ['inventory.read','inventory.write','inventory.import'],
-  ORDER_MANAGER: ['orders.read','orders.create','orders.manage'],
-  CUSTOMER: ['orders.read','orders.create','prescription.read','prescription.write'],
-  customer: ['orders.read','orders.create','prescription.read','prescription.write']
-};
+import { getRolePermissions, getRoleScope } from './AuthorizationCatalogService.js';
 
 function hasPermission(granted, required) {
   if (!required) return true;
@@ -32,39 +12,65 @@ export class AuthorizationService {
     const userId = user?.sub || user?.id || user?.userId;
     if (!userId) throw new Error('Authorization subject is required.');
 
-    const rawRole = user?.role || user?.app_metadata?.role || user?.roles?.[0] || 'customer';
-    const role = isPlatformSuperAdmin(rawRole) ? 'SUPER_ADMIN' : rawRole;
-    let tenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
-    let branchId = user?.branchId || null;
-    let permissions = new Set([
-      ...(Array.isArray(user?.permissions) ? user.permissions : []),
-      ...(Array.isArray(user?.app_metadata?.permissions) ? user.app_metadata.permissions : []),
-      ...(ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.customer)
-    ]);
+    const tokenType = user?.tokenType;
+    if (tokenType === 'ONBOARDING' || tokenType === 'pharma_onboarding' || tokenType === 'MFA_CHALLENGE' || tokenType === 'pharma_mfa_challenge') {
+      return {
+        sub: userId,
+        role: tokenType.toUpperCase(),
+        roles: [tokenType.toUpperCase()],
+        tenantId: null,
+        branchId: null,
+        scope: tokenType.includes('MFA') ? 'MFA' : 'ONBOARDING',
+        permissions: Array.isArray(user?.permissions) ? [...new Set(user.permissions)] : [],
+        permissionVersion: Number(user?.permissionVersion || 1),
+        membershipId: null
+      };
+    }
 
+    let requestedTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
+    let branchId = user?.branchId || null;
     let membership = null;
-    if (tenantId) {
-      const memberships = await tenantService.getMembershipsForUser(userId);
+
+    // TenantMembership is the authoritative source for tenant-scoped users.
+    const memberships = await tenantService.getMembershipsForUser(userId);
+    if (requestedTenantId) {
       membership = memberships.find(item =>
-        String(item.tenantId) === String(tenantId) &&
+        String(item.tenantId) === String(requestedTenantId) &&
         (!branchId || !item.branchId || String(item.branchId) === String(branchId))
       );
-      if (membership?.status && membership.status !== 'ACTIVE') {
-        throw Object.assign(new Error('Tenant membership is not active.'), { code: 'TENANT_ACCESS_DENIED', status: 403 });
+      if (!membership) {
+        const err = new Error('Active tenant membership is required.');
+        err.code = 'TENANT_ACCESS_DENIED';
+        err.status = 403;
+        throw err;
       }
-      if (membership) {
-        branchId = branchId || membership.branchId || null;
-        for (const permission of membership.permissions || []) permissions.add(permission);
+      if (membership.status !== 'ACTIVE') {
+        const err = new Error('Tenant membership is not active.');
+        err.code = 'TENANT_ACCESS_DENIED';
+        err.status = 403;
+        throw err;
       }
+      requestedTenantId = String(membership.tenantId);
+      branchId = branchId || membership.branchId || null;
     }
+
+    const rawRole = membership?.role || user?.role || user?.app_metadata?.role || user?.roles?.[0] || 'customer';
+    const role = isPlatformSuperAdmin(rawRole) ? 'SUPER_ADMIN' : rawRole;
+    const rolePermissions = await getRolePermissions(role);
+    const permissions = new Set(rolePermissions);
+
+    // Membership permissions are explicit tenant-level grants/overrides.
+    for (const permission of membership?.permissions || []) permissions.add(permission);
+    // Platform/customer explicit permission overrides may be supplied by the user record.
+    if (!membership) for (const permission of user?.permissions || []) permissions.add(permission);
 
     return {
       sub: userId,
       role,
-      roles: Array.isArray(user?.roles) ? user.roles : [role],
-      tenantId: role === 'SUPER_ADMIN' ? null : tenantId,
-      branchId,
-      scope: role === 'SUPER_ADMIN' ? 'PLATFORM' : (tenantId ? 'TENANT' : 'CUSTOMER'),
+      roles: membership?.role ? [membership.role] : (Array.isArray(user?.roles) ? user.roles : [role]),
+      tenantId: role === 'SUPER_ADMIN' ? null : requestedTenantId,
+      branchId: role === 'SUPER_ADMIN' ? null : branchId,
+      scope: role === 'SUPER_ADMIN' ? 'PLATFORM' : (requestedTenantId ? 'TENANT' : getRoleScope(role)),
       permissions: [...permissions],
       permissionVersion: Number(user?.permissionVersion || user?.permissionsVersion || user?.version || 1),
       membershipId: membership?.id || membership?._id?.toString() || null
@@ -77,4 +83,3 @@ export class AuthorizationService {
 }
 
 export const authorizationService = new AuthorizationService();
-export { ROLE_PERMISSIONS };
