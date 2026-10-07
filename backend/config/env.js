@@ -59,7 +59,10 @@ export const envSchema = z.object({
     PHARMA_JWT_PUBLIC_KEY: isProduction ? z.string().trim().min(100) : optionalString(z.string().trim().min(100)),
     PHARMA_JWT_ISSUER: z.string().trim().default('pharma-auth'),
     PHARMA_JWT_AUDIENCE: z.string().trim().default('pharma-api'),
-    // Keep the signed access token lifetime aligned with the 1-hour HttpOnly session cookie.\n    // A shorter default (for example 10m) caused valid browser sessions to hold an\n    // expired JWT and then fail protected requests such as /api/user/addresses.\n    PHARMA_ACCESS_TOKEN_TTL: z.string().trim().default('1h'),
+    // Keep the signed access token lifetime aligned with the 1-hour HttpOnly session cookie.
+    // A shorter default (for example 10m) caused valid browser sessions to hold an
+    // expired JWT and then fail protected requests such as /api/user/addresses.
+    PHARMA_ACCESS_TOKEN_TTL: z.string().trim().default('1h'),
     GATEWAY_AUTH_SECRET: isProduction ? z.string().trim().min(32) : optionalString(z.string().trim().min(32)),
     SERVICE_AUTH_SECRET: isProduction ? z.string().trim().min(32) : optionalString(z.string().trim().min(32)),
     SERVICE_JWT_ISSUER: z.string().trim().default('ashvin-pharmacy'),
