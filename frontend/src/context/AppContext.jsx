@@ -8,6 +8,22 @@ import { useToast } from './ToastContext';
 
 const AppContext = createContext(null);
 
+const CUSTOMER_CACHE_PREFIX = 'pharma_customer_cache_v1:';
+const CACHE_TTL = 5 * 60 * 1000;
+
+function readLocalCache(key, ttl = CACHE_TTL) {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.savedAt || Date.now() - parsed.savedAt > ttl) { window.localStorage.removeItem(key); return null; }
+    return parsed.value ?? null;
+  } catch { return null; }
+}
+function writeLocalCache(key, value) {
+  try { window.localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), value })); } catch {}
+}
+
 export function AppProvider({ children }) {
   const { user, isAdmin, isPharmacyOrAdmin, loading: authLoading, isFullyAuthenticated } = useAuth();
   const { addToast } = useToast();
@@ -39,6 +55,7 @@ export function AppProvider({ children }) {
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [loadingAddresses, setLoadingAddresses] = useState(false);
   const addressLoadSequence = useRef(0);
+  const addressCacheKey = user?.id ? CUSTOMER_CACHE_PREFIX + user.id + ':addresses' : null;
 
   // Orders & Tracking State
   const [orders, setOrders] = useState([]);
@@ -217,8 +234,18 @@ export function AppProvider({ children }) {
   }, [fetchMedicines]);
 
   // Fetch User Addresses
-  const loadAddresses = useCallback(async () => {
+  const loadAddresses = useCallback(async ({ force = false } = {}) => {
     const requestSequence = ++addressLoadSequence.current;
+    if (!isFullyAuthenticated) return null;
+    if (!force && addressCacheKey) {
+      const cached = readLocalCache(addressCacheKey);
+      if (Array.isArray(cached)) {
+        setAddresses(cached);
+        setAddressesError('');
+        setSelectedAddressId(currentId => currentId && cached.some(a => a._id === currentId) ? currentId : ((cached.find(a => a.isDefault) || cached[0])?._id || ''));
+        return cached;
+      }
+    }
     try {
       setLoadingAddresses(true);
       setAddressesError('');
@@ -226,6 +253,7 @@ export function AppProvider({ children }) {
       if (requestSequence === addressLoadSequence.current && Array.isArray(res.data)) {
         const addrs = res.data;
         setAddresses(addrs);
+        if (addressCacheKey) writeLocalCache(addressCacheKey, addrs);
         if (addrs.length > 0) {
           setSelectedAddressId(currentId => {
             if (currentId && addrs.some(address => address._id === currentId)) {
@@ -248,7 +276,7 @@ export function AppProvider({ children }) {
     } finally {
       if (requestSequence === addressLoadSequence.current) setLoadingAddresses(false);
     }
-  }, []);
+  }, [addressCacheKey, isFullyAuthenticated]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -558,13 +586,19 @@ export function AppProvider({ children }) {
   // Synchronize canonical customer/PUID data. This is idempotent.
   const ensureCustomerProfile = useCallback(async (profile = {}) => {
     if (!isFullyAuthenticated || !user?.id) return null;
+    if (!profile.name && !profile.email && !profile.phone) {
+      const cached = readLocalCache(CUSTOMER_CACHE_PREFIX + user.id + ':profile');
+      if (cached) return cached;
+    }
     try {
       const res = await apiClient.post('/api/v1/customers/ensure', {
         name: profile.name || user?.user_metadata?.name || user?.name || '',
         email: profile.email || user?.email || '',
         phone: profile.phone || user?.user_metadata?.mobile || user?.mobile || ''
       });
-      return res.data?.data || res.data || null;
+      const customer = res.data?.data || res.data || null;
+      if (user?.id && customer) writeLocalCache(CUSTOMER_CACHE_PREFIX + user.id + ':profile', customer);
+      return customer;
     } catch (error) {
       console.warn('Customer/PUID synchronization skipped:', error?.message || error);
       return null;
