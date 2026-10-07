@@ -382,4 +382,4 @@ A worker that loses its lease must not overwrite a newer worker's result.
 - Python extraction intentionally does not claim Catalog-level medicine identity; it reports extracted text. Order-level matching is the current safety boundary.
 - Medicine Request conversion still uses the legacy backend Order creation path; full migration to the standalone Order Service for all Medicine Request conversions remains a future architecture step.
 - The request document is currently stored in both legacy GridFS compatibility storage and the Python encrypted document store; consolidate storage after migration.
-- Prescription replacement/re-upload should create a new version and re-run processing before allowing the related order to advance.
+- Prescription replacement/re-upload is now versioned: the old extraction/review is cancelled, the new document is queued, and the same prescriptionId remains blocked until the new extraction is approved/matched.
