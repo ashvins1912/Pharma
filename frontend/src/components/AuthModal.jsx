@@ -161,7 +161,7 @@ export default function AuthModal({ isOpen, onClose }) {
           setLoading(false);
           return;
         }
-        const signupResult = await signUpWithEmail(email, password, name, mobile, '', '', dateOfBirth, gender);
+        const signupResult = await signUpWithEmail(email, password, confirmPassword, name, mobile, '', '', dateOfBirth, gender);
         const signupData = signupResult?.data || signupResult;
         setVerificationEmail(email.trim().toLowerCase());
         setVerificationCode('');
