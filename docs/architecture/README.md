@@ -1,47 +1,39 @@
 # Architecture
 
-## Current deployment shape
+## Canonical deployment
 
-```text
-Browser
-  ├── Vite frontend (`frontend/`)
-  │     └── `/api/*` HTTP requests through the shared API client
-  └── API Gateway (`api-gateway/`)
-        ├── legacy API routes → Backend (`backend/`)
-        ├── `/api/v1/inventory` → Inventory Service when configured
-        └── `/api/v1/orders` → Order Service when configured
+Browser -> Frontend -> Public API Gateway
+                          |-> Private Backend Platform API
+                          |-> Private Inventory Service
+                          |-> Private Order Service
+                                |-> Inventory Service
+                                |-> Prescription Service -> Prescription Worker
 
-API Gateway ── short-lived user identity verification ──> Backend
-API Gateway ── scoped service JWT ──> Inventory / Order Services
+### Ownership
 
-Inventory Service (`services/inventory-service/`) → Inventory MongoDB
-Order Service (`services/order-service/`) → Order MongoDB
-Order Service ── service JWT / HTTP ──> Inventory Service
-```
+- Frontend: the only browser application.
+- API Gateway: the only public API boundary; CORS, request IDs, authentication handoff and scoped service-token issuance.
+- Backend: private platform/orchestration boundary for Customer/Person/PUID, tenant/vendor capabilities, Medicine Request, Delivery, WhatsApp, notifications and other compound workflows.
+- Inventory Service: authoritative owner of product metadata, stock, reservations and imports.
+- Order Service: authoritative owner of Order records, idempotency, lifecycle, fulfillment gates and events.
+- Prescription Service: authoritative owner of documents, OCR/NLP extraction, review, approval and processing jobs.
 
-The independent public Gateway in `api-gateway/` routes legacy requests to
-the backend and, when configured, routes versioned Order/Inventory requests
-directly to those services. The root compatibility deployment still combines
-the frontend and backend. Medicine Request/Proposal, Rider/Delivery,
-WhatsApp/notification, and most inventory/order workflows remain modules in
-the backend. The extracted services do not yet own all live workflows. This
-is an initial development restructuring: no production data migration, dual
-writes, or legacy synchronization is required.
+### Public routes
 
-## Project boundaries
+| Route | Target |
+| --- | --- |
+| `/api/v1/inventory/*` | Inventory Service |
+| `/api/v1/orders/*` | Order Service |
+| other `/api/*` | Backend Platform API |
 
-- `frontend/`: independently buildable Vite/React app; browser-safe config and
-  HTTP API clients only.
-- `backend/`: Express API, user authentication and identity verification,
-  database access, and legacy business modules.
-- `api-gateway/`: public CORS boundary, service authentication/authorization,
-  request IDs, and HTTP routing.
-- `../../backend/inventory-service`: extracted inventory API and dedicated
-  Inventory database.
-- `../../backend/order-service`: extracted versioned Order API and dedicated Order
-  database; Inventory accessed only over the Inventory API.
-- `api/`: Vercel adapter for the Express backend.
+The Gateway is a router and security boundary, not a business-logic layer.
 
-Medicine Request/Proposal, rider/delivery, notifications, and product
-discovery are not represented by empty service directories because they have
-not been independently extracted.
+### Service-to-service
+
+Order calls Inventory and Prescription through authenticated HTTP. Backend calls Prescription through the Prescription client. No service imports another service's implementation code, and no cross-service MongoDB writes are allowed.
+
+### Deployment rule
+
+Deploy Frontend and API Gateway publicly. Deploy Backend, Inventory, Order and Prescription API privately. Deploy the Prescription Worker as a background worker.
+
+Direct browser routing to Prescription is intentionally not enabled yet because PUID ownership authorization is still owned by Customer/Person/Backend. This avoids weakening authorization during the extraction.
