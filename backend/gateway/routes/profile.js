@@ -1,3 +1,15 @@
+/* API Gateway Profile & Onboarding Routes (/api/v1/profile/*)
+ */
+import express from 'express';
+import { authService, calculateAge, isValidDOB, isValidMobile } from '../../services/identity-service/AuthService.js';
+import { authenticateUser } from '../../middleware/auth.js';
+import { sendSuccess, sendError } from '../../shared/responses.js';
+import { setSessionCookies } from '../../security/sessionCookie.js';
+
+
+
+const router = express.Router();
+
 /**
 
 /**
@@ -29,15 +41,6 @@ router.put('/me', authenticateUser, async (req, res) => {
         });
     }
 });
- /* API Gateway Profile & Onboarding Routes (/api/v1/profile/*)
- */
-import express from 'express';
-import { authService, calculateAge, isValidDOB, isValidMobile } from '../../services/identity-service/AuthService.js';
-import { authenticateUser } from '../../middleware/auth.js';
-import { sendSuccess, sendError } from '../../shared/responses.js';
-import { setSessionCookies } from '../../security/sessionCookie.js';
-
-const router = express.Router();
 
 /**
  * PUT /api/v1/profile/onboarding
