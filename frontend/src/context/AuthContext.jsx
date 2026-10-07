@@ -118,6 +118,16 @@ export function AuthProvider({ children }) {
    * Detects if Zero-Cost TOTP MFA is enrolled.
    */
   const loginWithEmail = async (email, password) => {
+    // Email/password login is a first-party platform session. Clear any old
+    // browser-only Supabase session first so it cannot compete with this login.
+    if (supabase) {
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch {
+        // Backend authentication remains authoritative; do not block login.
+      }
+    }
+    setAuthTransport('cookie');
     const res = await apiClient.post('/api/auth/login', { email, password });
     const data = res.data;
 
