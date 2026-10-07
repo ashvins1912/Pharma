@@ -572,10 +572,11 @@ router.post('/admin/:id/prescription/reinitiate', authenticateUser, isAdmin, asy
                 },
                 $push: {
                     statusHistory: {
-                        status: order.orderStatus,
+                        previousStatus: order.orderStatus,
+                        newStatus: order.orderStatus,
                         changedBy: req.user.user_metadata?.name || req.user.email || 'Admin',
                         timestamp: new Date(),
-                        note: 'Prescription verification re-initiated by admin.'
+                        notes: 'Prescription verification re-initiated by admin.'
                     }
                 }
             });
@@ -656,10 +657,11 @@ router.post('/admin/:id/prescription/manual-approve', authenticateUser, isAdmin,
                 },
                 $push: {
                     statusHistory: {
-                        status: order.orderStatus,
+                        previousStatus: order.orderStatus,
+                        newStatus: order.orderStatus,
                         changedBy: req.user.user_metadata?.name || req.user.email || 'Admin',
                         timestamp: new Date(),
-                        note: scope === 'order'
+                        notes: scope === 'order'
                             ? 'Prescription manually approved at order level.'
                             : `Medicine item ${Number(itemIndex) + 1} manually approved.`
                     }
