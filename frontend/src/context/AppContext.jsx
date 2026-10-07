@@ -4,25 +4,13 @@ import { normalizeOrdersResponse } from '../api/orderService';
 import { applyCouponCode } from '../api/couponService';
 import { getCustomerMedicineRequestsPage } from '../api/medicineRequestService';
 import { useAuth } from './AuthContext';
+import usePersistentState from '../hooks/usePersistentState';
 import { useToast } from './ToastContext';
 
 const AppContext = createContext(null);
 
 const CUSTOMER_CACHE_PREFIX = 'pharma_customer_cache_v1:';
 const CACHE_TTL = 5 * 60 * 1000;
-
-function readLocalCache(key, ttl = CACHE_TTL) {
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed?.savedAt || Date.now() - parsed.savedAt > ttl) { window.localStorage.removeItem(key); return null; }
-    return parsed.value ?? null;
-  } catch { return null; }
-}
-function writeLocalCache(key, value) {
-  try { window.localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), value })); } catch {}
-}
 
 export function AppProvider({ children }) {
   const { user, isAdmin, isPharmacyOrAdmin, loading: authLoading, isFullyAuthenticated } = useAuth();
@@ -50,12 +38,16 @@ export function AppProvider({ children }) {
   const [deliveryFee, setDeliveryFee] = useState(0);
 
   // Address Directory State
-  const [addresses, setAddresses] = useState([]);
+  const addressCacheKey = user?.id ? CUSTOMER_CACHE_PREFIX + user.id + ':addresses' : null;
+  const [addresses, setAddresses] = usePersistentState(
+    addressCacheKey,
+    [],
+    { storage: 'local', ttl: CACHE_TTL, enabled: Boolean(isFullyAuthenticated && addressCacheKey) }
+  );
   const [addressesError, setAddressesError] = useState('');
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [loadingAddresses, setLoadingAddresses] = useState(false);
   const addressLoadSequence = useRef(0);
-  const addressCacheKey = user?.id ? CUSTOMER_CACHE_PREFIX + user.id + ':addresses' : null;
 
   // Orders & Tracking State
   const [orders, setOrders] = useState([]);
@@ -238,8 +230,8 @@ export function AppProvider({ children }) {
     const requestSequence = ++addressLoadSequence.current;
     if (!isFullyAuthenticated) return null;
     if (!force && addressCacheKey) {
-      const cached = readLocalCache(addressCacheKey);
-      if (Array.isArray(cached)) {
+      const cached = addresses;
+      if (Array.isArray(cached) && cached.length > 0) {
         setAddresses(cached);
         setAddressesError('');
         setSelectedAddressId(currentId => currentId && cached.some(a => a._id === currentId) ? currentId : ((cached.find(a => a.isDefault) || cached[0])?._id || ''));
@@ -253,7 +245,6 @@ export function AppProvider({ children }) {
       if (requestSequence === addressLoadSequence.current && Array.isArray(res.data)) {
         const addrs = res.data;
         setAddresses(addrs);
-        if (addressCacheKey) writeLocalCache(addressCacheKey, addrs);
         if (addrs.length > 0) {
           setSelectedAddressId(currentId => {
             if (currentId && addrs.some(address => address._id === currentId)) {
@@ -583,12 +574,18 @@ export function AppProvider({ children }) {
     addToast('Coupon removed', 'info');
   };
 
+  const customerProfileKey = user?.id ? CUSTOMER_CACHE_PREFIX + user.id + ':profile' : null;
+  const [customerProfileCache, setCustomerProfileCache] = usePersistentState(
+    customerProfileKey,
+    null,
+    { storage: 'local', ttl: CACHE_TTL, enabled: Boolean(isFullyAuthenticated && customerProfileKey) }
+  );
+
   // Synchronize canonical customer/PUID data. This is idempotent.
   const ensureCustomerProfile = useCallback(async (profile = {}) => {
     if (!isFullyAuthenticated || !user?.id) return null;
     if (!profile.name && !profile.email && !profile.phone) {
-      const cached = readLocalCache(CUSTOMER_CACHE_PREFIX + user.id + ':profile');
-      if (cached) return cached;
+      if (customerProfileCache) return customerProfileCache;
     }
     try {
       const res = await apiClient.post('/api/v1/customers/ensure', {
@@ -597,7 +594,7 @@ export function AppProvider({ children }) {
         phone: profile.phone || user?.user_metadata?.mobile || user?.mobile || ''
       });
       const customer = res.data?.data || res.data || null;
-      if (user?.id && customer) writeLocalCache(CUSTOMER_CACHE_PREFIX + user.id + ':profile', customer);
+      if (customer) setCustomerProfileCache(customer);
       return customer;
     } catch (error) {
       console.warn('Customer/PUID synchronization skipped:', error?.message || error);
@@ -621,7 +618,6 @@ export function AppProvider({ children }) {
           ...(savedAddress.isDefault ? prev.map(address => ({ ...address, isDefault: false })) : prev),
           savedAddress
         ];
-        if (addressCacheKey) writeLocalCache(addressCacheKey, next);
         return next;
       });
       setSelectedAddressId(savedAddress._id);
@@ -662,7 +658,6 @@ export function AppProvider({ children }) {
         ? remaining
         : remaining.map((address, index) => ({ ...address, isDefault: index === 0 }));
       setAddresses(nextAddresses);
-      if (addressCacheKey) writeLocalCache(addressCacheKey, nextAddresses);
       if (selectedAddressId === addressId) {
         setSelectedAddressId(nextAddresses.find(address => address.isDefault)?._id || nextAddresses[0]?._id || '');
       }
