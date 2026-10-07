@@ -112,6 +112,7 @@ export function AppProvider({ children }) {
 
   // Load WhatsApp status
   const loadWhatsAppStatus = useCallback(async () => {
+    if (!isFullyAuthenticated || !isAdmin) return null;
     try {
       const res = await apiClient.get('/api/admin/whatsapp/status', { timeout: 45000 });
       if (res.data) {
@@ -126,7 +127,7 @@ export function AppProvider({ children }) {
       console.warn("WhatsApp status fetch skipped:", err?.message);
     }
     return null;
-  }, []);
+  }, [isFullyAuthenticated, isAdmin]);
 
   const generateWhatsAppQR = async () => {
     try {
