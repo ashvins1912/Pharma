@@ -28,6 +28,21 @@ def _require_review_permission(context: ServiceUserContext):
         return
     raise HTTPException(status_code=403, detail="prescription.review permission required")
 
+async def _authorized_prescription(prescription_id: str, context: ServiceUserContext):
+    try:
+        record = await prescription_engine.get_prescription(
+            prescription_id,
+            requesting_user_id=context.user_id,
+            tenant_id=context.tenant_id,
+            branch_id=context.branch_id,
+            is_admin=context.is_admin,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    if not record:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    return record
+
 @router.post("/upload", response_model=ApiResponse[PrescriptionUploadData], status_code=status.HTTP_201_CREATED)
 async def upload_prescription(
     file: Optional[UploadFile] = File(None),
@@ -62,6 +77,40 @@ async def upload_prescription(
         message="Prescription uploaded successfully"
     )
 
+@router.put("/{prescription_id}/document")
+async def replace_prescription_document(
+    prescription_id: str,
+    file: UploadFile = File(...),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    context: ServiceUserContext = Depends(get_current_service_context)
+):
+    try:
+        await _authorized_prescription(prescription_id, context)
+        file_bytes = await file.read()
+        result = await prescription_engine.replace_prescription(
+            prescription_id,
+            user_id=context.user_id,
+            tenant_id=context.tenant_id,
+            branch_id=context.branch_id,
+            file_bytes=file_bytes,
+            filename=file.filename,
+            content_type=file.content_type,
+            idempotency_key=idempotency_key,
+        )
+        return {"success": True, "data": result, "message": "Prescription document replaced and queued for reprocessing."}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        if str(exc) == "INACTIVE":
+            raise HTTPException(status_code=409, detail="Prescription is inactive")
+        if str(exc) == "VERSION_CONFLICT":
+            raise HTTPException(status_code=409, detail="Prescription was updated by another operation.")
+        raise HTTPException(status_code=409, detail=str(exc))
+
 @router.get("/reviews/queue")
 async def review_queue(context: ServiceUserContext = Depends(get_current_service_context)):
     _require_review_permission(context)
@@ -75,11 +124,7 @@ async def get_prescription(
     prescription_id: str,
     context: ServiceUserContext = Depends(get_current_service_context)
 ):
-    record = await prescription_engine.get_prescription(prescription_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Prescription not found")
-    if context.tenant_id and record.get("tenantId") and record.get("tenantId") != context.tenant_id:
-        raise HTTPException(status_code=403, detail="Tenant access denied")
+    record = await _authorized_prescription(prescription_id, context)
     extraction = record.get("extraction") or {}
     progress_map = {
         "UPLOADED": ("UPLOADED", 10),
@@ -117,6 +162,7 @@ async def claim_review(
     context: ServiceUserContext = Depends(get_current_service_context)
 ):
     _require_review_permission(context)
+    await _authorized_prescription(prescription_id, context)
     try:
         result = await prescription_engine.claim_review(prescription_id, context.user_id, expected_version)
         return {"success": True, "data": result}
@@ -137,6 +183,7 @@ async def approve_review(
     context: ServiceUserContext = Depends(get_current_service_context)
 ):
     _require_review_permission(context)
+    await _authorized_prescription(prescription_id, context)
     try:
         result = await prescription_engine.approve_review(prescription_id, context.user_id, expected_version, idempotency_key)
         return {"success": True, "data": result}
@@ -159,6 +206,7 @@ async def reject_review(
     context: ServiceUserContext = Depends(get_current_service_context)
 ):
     _require_review_permission(context)
+    await _authorized_prescription(prescription_id, context)
     try:
         result = await prescription_engine.reject_review(prescription_id, context.user_id, expected_version, reason, idempotency_key)
         return {"success": True, "data": result}
@@ -177,6 +225,7 @@ async def wait_review(
     context: ServiceUserContext = Depends(get_current_service_context)
 ):
     _require_review_permission(context)
+    await _authorized_prescription(prescription_id, context)
     result = await prescription_engine.wait_review(prescription_id, context.user_id)
     return {"success": True, "data": result}
 
@@ -188,6 +237,7 @@ async def review_prescription_legacy(
 ):
     """Legacy combined review endpoint → approve path with optimistic lock."""
     _require_review_permission(context)
+    await _authorized_prescription(prescription_id, context)
     try:
         result = await prescription_engine.approve_review(
             prescription_id=prescription_id,
@@ -205,6 +255,7 @@ async def remove_prescription(
     context: ServiceUserContext = Depends(get_current_service_context)
 ):
     reason = payload.reason if payload else "Customer requested removal"
+    await _authorized_prescription(prescription_id, context)
     record = await prescription_engine.remove_prescription(prescription_id, context.user_id, reason=reason)
     if not record:
         raise HTTPException(status_code=404, detail="Prescription not found")
@@ -223,7 +274,14 @@ async def remove_prescription(
 async def document_url(prescription_id: str, context: ServiceUserContext = Depends(get_current_service_context)):
     _require_review_permission(context)
     try:
-        data = await prescription_engine.create_document_token(prescription_id, context.user_id)
+        await _authorized_prescription(prescription_id, context)
+        data = await prescription_engine.create_document_token(
+            prescription_id,
+            context.user_id,
+            tenant_id=context.tenant_id,
+            branch_id=context.branch_id,
+            is_admin=context.is_admin,
+        )
         return {"success": True, "data": data}
     except LookupError:
         raise HTTPException(status_code=404, detail="Not found")
