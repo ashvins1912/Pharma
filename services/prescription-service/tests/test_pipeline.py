@@ -1,4 +1,5 @@
 from app.services.pipeline import _parse_medicine_line, _parse_frequency, _parse_duration
+from app.models.schemas import MedicineItem
 
 def test_medicine_line_extracts_dose_frequency_duration_and_course():
     item = _parse_medicine_line("Amoxicillin 500mg 1 tablet TDS for 5 days")
@@ -16,3 +17,12 @@ def test_frequency_aliases():
 
 def test_duration():
     assert _parse_duration("for 2 weeks")["days"] == 14
+
+def test_response_schema_accepts_structured_medicine_fields():
+    item = _parse_medicine_line("Paracetamol 650mg 1 tablet BD for 5 days")
+    model = MedicineItem(**item)
+    assert model.strength.value == 650
+    assert model.dose.value == 1
+    assert model.frequency.normalized == "TWICE_DAILY"
+    assert model.duration.value == 5
+    assert model.course.calculatedQuantity == 10
