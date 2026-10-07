@@ -4,7 +4,11 @@ import OrderSummaryCard from './OrderSummaryCard';
 
 export default function OrderConfirmation({ order, onTrackOrder, onContinueShopping }) {
   const { user } = useAuth();
-  const userName = user?.user_metadata?.name || user?.email?.split('@')[0] || "Valued Patient";
+  const userName = user?.user_metadata?.name
+    || [user?.firstName, user?.lastName].filter(Boolean).join(' ')
+    || user?.name
+    || user?.email?.split('@')[0]
+    || "Valued Patient";
   const orderId = (order?._id || '').slice(-6).toUpperCase();
 
   return (
