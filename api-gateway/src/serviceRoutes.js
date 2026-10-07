@@ -110,6 +110,7 @@ export function createServiceRouters(gatewayConfig = config) {
   prescriptionRouter.put('/:prescriptionId/document', prescription('prescription.write'));
   prescriptionRouter.get('/reviews/queue', prescription('prescription.review'));
   prescriptionRouter.get('/:prescriptionId', prescription('prescription.read'));
+  prescriptionRouter.get('/:prescriptionId/document', prescription('prescription.read'));
   prescriptionRouter.post('/:prescriptionId/review/claim', prescriptionReview, prescription('prescription.review'));
   prescriptionRouter.post('/:prescriptionId/review/approve', prescriptionReview, prescription('prescription.review'));
   prescriptionRouter.post('/:prescriptionId/review/reject', prescriptionReview, prescription('prescription.review'));
