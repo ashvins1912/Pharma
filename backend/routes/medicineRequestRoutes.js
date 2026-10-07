@@ -8,6 +8,7 @@ import { getIsConnected } from '../config/db.js';
 import MedicineRequest from '../models/MedicineRequest.js';
 import UserAddress from '../models/UserAddress.js';
 import prescriptionClient from '../services/prescription-service-client/PrescriptionClient.js';
+import { customerService } from '../services/customer-service/CustomerService.js';
 
 const router = express.Router();
 
@@ -221,6 +222,11 @@ router.put('/:id/prescription', authenticateUser, authorizeCustomerAction, handl
         if (!requireDatabase(res)) return;
 
         const customerId = req.user.sub;
+        const customer = await customerService.ensureCustomerForUser(customerId, {
+            name: req.user.user_metadata?.name,
+            email: req.user.email,
+            phone: req.user.user_metadata?.mobile
+        });
         const request = await MedicineRequest.findOne({ _id: req.params.id, customerId });
         if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
 
@@ -230,6 +236,12 @@ router.put('/:id/prescription', authenticateUser, authorizeCustomerAction, handl
 
         const presFile = req.files?.prescription?.[0];
         if (!presFile) return res.status(400).json({ message: 'A replacement prescription file is required.' });
+        try {
+            await customerService.assertUserCanAccessPuid(customerId, request.patientPuid || customer.selfPuid);
+        } catch {
+            return res.status(403).json({ code: 'PUID_ACCESS_DENIED', message: 'Prescription patient access is not authorized.' });
+        }
+
         if (!request.prescriptionId) {
             return res.status(409).json({ code: 'PRESCRIPTION_NOT_LINKED', message: 'This medicine request is not linked to the Python Prescription Service.' });
         }
@@ -310,7 +322,22 @@ router.post('/', authenticateUser, authorizeCustomerAction, handleAttachments, a
         if (!requireDatabase(res)) return;
 
         const customerId = req.user.sub;
-        const addressId = String(req.body.addressId || '').trim();
+        const customer = await customerService.ensureCustomerForUser(customerId, {
+            name: req.user.user_metadata?.name,
+            email: req.user.email,
+            phone: req.user.user_metadata?.mobile
+        });
+        let patientPuid = String(req.body.patientPuid || customer.selfPuid || '').trim() || null;
+        if (patientPuid) {
+            try {
+                await customerService.assertUserCanAccessPuid(customerId, patientPuid);
+            } catch (error) {
+                return res.status(error.statusCode || 403).json({
+                    code: 'PUID_ACCESS_DENIED',
+                    message: 'You are not authorized to use this patient profile for the prescription.'
+                });
+            }
+        }
         if (!mongoose.isValidObjectId(addressId)) {
             return res.status(400).json({
                 code: 'ADDRESS_REQUIRED',
@@ -373,7 +400,7 @@ router.post('/', authenticateUser, authorizeCustomerAction, handleAttachments, a
                     tenantId: req.user.app_metadata?.tenantId || req.user.tenantId || null,
                     branchId: req.user.app_metadata?.branchId || req.user.branchId || null,
                     role: req.user.app_metadata?.role || req.user.role || 'customer',
-                    patientPuid: req.body.patientPuid || null
+                    patientPuid
                 });
                 prescriptionId = result?.prescriptionId || null;
                 prescriptionVerification = {
@@ -436,7 +463,7 @@ router.post('/', authenticateUser, authorizeCustomerAction, handleAttachments, a
             requestedItems,
             prescriptionUrl,
             prescriptionId,
-            patientPuid: null,
+            patientPuid,
             prescriptionVerification,
             productImageUrl,
             customerNote: req.body.customerNote || '',
