@@ -15,14 +15,9 @@ import { authenticateUser, requireSuperAdmin } from '../../middleware/auth.js';
 import { onboardingLimiter } from '../../middleware/rateLimiter.js';
 import { sendSuccess, sendError } from '../../shared/responses.js';
 import { setSessionCookies } from '../../security/sessionCookie.js';
-import { SignJWT } from 'jose';
+import { authService } from '../../services/identity-service/AuthService.js';
 
 const router = express.Router();
-
-const JWT_SECRET = process.env.DEMO_ADMIN_JWT_SECRET
-    || process.env.ENCRYPTION_SECRET_KEY
-    || 'ashvin-pharmacy-demo-admin-jwt-secret-key-32chars!';
-const SIGNING_KEY = new TextEncoder().encode(JWT_SECRET);
 
 /**
  * -----------------------------------------------------------
@@ -62,10 +57,19 @@ router.post('/onboarding/:token/complete', onboardingLimiter, async (req, res) =
     try {
         const result = await vendorService.completeOnboarding(req.params.token, req.body);
 
-        // Vendor onboarding returns the canonical Pharma RS256 session token.
-        // Never issue the legacy HS256/demo token here.
-        const accessToken = result.accessToken || null;
-        if (accessToken) setSessionCookies(res, { accessToken });
+        // Issue the canonical Pharma RS256 session only after the tenant membership exists.
+        const accessToken = await authService.createAuthToken({
+            ...result.user,
+            id: result.user.id,
+            userId: result.user.id,
+            role: 'TENANT_ADMIN',
+            roles: ['TENANT_ADMIN'],
+            tenantId: result.tenant.id,
+            accountStatus: 'ACTIVE',
+            profileCompleted: true,
+            status: 'ACTIVE'
+        });
+        setSessionCookies(res, { accessToken });
 
         return sendSuccess(res, {
             data: {
