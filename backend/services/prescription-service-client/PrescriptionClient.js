@@ -101,6 +101,37 @@ export const prescriptionClient = {
     }
   },
 
+  async replace(prescriptionId, { buffer, filename, contentType, idempotencyKey, userId, tenantId, branchId, role = 'customer' } = {}) {
+    ensureConfigured();
+    const form = new FormData();
+    form.append('file', new Blob([buffer], { type: contentType || 'application/octet-stream' }), filename || 'prescription');
+    try {
+      const response = await axios.put(
+        `${baseUrl}/api/v1/prescriptions/${encodeURIComponent(prescriptionId)}/document`,
+        form,
+        {
+          headers: {
+            ...headers({
+              userId,
+              tenantId,
+              branchId,
+              role,
+              scopes: ['prescription.write']
+            }),
+            ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+            ...((typeof form.getHeaders === 'function') ? form.getHeaders() : {})
+          },
+          timeout: 15_000,
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity
+        }
+      );
+      return response.data?.data || response.data;
+    } catch (error) {
+      throw normalizeError(error);
+    }
+  },
+
   async get(prescriptionId, { userId, tenantId, branchId, role = 'customer', isAdmin = false } = {}) {
     ensureConfigured();
     try {
