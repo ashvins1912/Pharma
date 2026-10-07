@@ -3002,10 +3002,15 @@ export const dataStore = {
             label: slot.label || `${slotType.replace('_', ' ')} Delivery (${slot.date || 'Available slot'})`
         };
 
-        const validPrescriptionStatuses = ['Pending Verification', 'Verified', 'Rejected', 'Not Required'];
-        const prescriptionStatus = validPrescriptionStatuses.includes(proposalData.prescriptionStatus)
-            ? proposalData.prescriptionStatus
-            : (request.prescriptionUrl ? 'Verified' : 'Not Required');
+        const rxState = request.prescriptionVerification?.status
+            || (request.prescriptionId || request.prescriptionUrl ? 'PROCESSING' : 'NOT_REQUIRED');
+        const prescriptionStatus = rxState === 'MATCHED'
+            ? 'Verified'
+            : ['REJECTED', 'INACTIVE', 'MISMATCH'].includes(rxState)
+                ? 'Rejected'
+                : rxState === 'NOT_REQUIRED'
+                    ? 'Not Required'
+                    : 'Pending Verification';
 
         // Expiration: custom date or 48 hours default
         let expiresAt = proposalData.expiresAt ? new Date(proposalData.expiresAt) : new Date(Date.now() + 48 * 3600000);
@@ -3028,7 +3033,8 @@ export const dataStore = {
             pharmacyNote: String(proposalData.pharmacyNote || proposalData.pharmacyNotes || '').trim(),
             deliverySlot,
             prescriptionStatus,
-            alternativeProduct: String(proposalData.alternativeProduct || '').trim()
+            alternativeProduct: String(proposalData.alternativeProduct || '').trim(),
+            prescriptionItems: request.prescriptionVerification?.medicines || []
         };
 
         const now = new Date();
