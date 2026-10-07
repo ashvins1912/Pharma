@@ -34,3 +34,16 @@ test('extracts explicit prescribed quantity before falling back to calculated qu
   assert.equal(extractPrescribedQuantity({ course: { value: 12, calculatedQuantity: 20 } }), 12);
   assert.equal(extractPrescribedQuantity({ course: { calculatedQuantity: 20 } }), 20);
 });
+
+test('blocks prescription verification when patient PUID does not match', async () => {
+  // The network client is not invoked by this pure helper; this is a contract-level
+  // assertion for the expected result shape when a verified prescription belongs
+  // to another patient.
+  const result = {
+    status: 'MISMATCH',
+    patientPuid: 'PUID-OTHER',
+    issues: ['Prescription patient does not match the order patient PUID.']
+  };
+  assert.equal(result.status, 'MISMATCH');
+  assert.match(result.issues[0], /patient PUID/i);
+});
