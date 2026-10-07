@@ -34,8 +34,15 @@ export const authenticateUser = async (req, res, next) => {
     // upstream Google identity during the one-time token exchange.
     try {
         const { payload } = await verifyPharmaAccessToken(token);
-        if (payload.token_type !== 'pharma_access' || typeof payload.sub !== 'string' || !payload.sub) {
+        if (!['pharma_access', 'pharma_onboarding', 'pharma_mfa_challenge'].includes(payload.token_type)
+            || typeof payload.sub !== 'string' || !payload.sub) {
             throw new Error('Invalid Pharma token claims.');
+        }
+        const tokenType = payload.token_type;
+        const accountStatus = payload.accountStatus || 'ACTIVE';
+        if (!['ACTIVE', 'PROFILE_INCOMPLETE'].includes(accountStatus)
+            && tokenType === 'pharma_access') {
+            throw new Error('Inactive account session.');
         }
         req.user = {
             sub: payload.sub,
@@ -62,7 +69,9 @@ export const authenticateUser = async (req, res, next) => {
                 dateOfBirth: payload.dateOfBirth || null
             },
             aal: payload.aal || 'aal1',
-            sessionId: payload.sessionId || null
+            sessionId: payload.sessionId || null,
+            tokenType,
+            accountStatus
         };
         return next();
     } catch {
