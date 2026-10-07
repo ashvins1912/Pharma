@@ -40,12 +40,19 @@ class Settings(BaseSettings):
 
     MAX_FILE_SIZE_BYTES: int = 25 * 1024 * 1024
     MAX_PDF_PAGES: int = 15
-    ALLOWED_EXTENSIONS: List[str] = [".pdf", ".png", ".jpg", ".jpeg", ".webp"]
+    ALLOWED_EXTENSIONS: List[str] = [
+        ".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".heic", ".heif"
+    ]
     ALLOWED_MIME_TYPES: List[str] = [
         "application/pdf",
         "image/png",
         "image/jpeg",
         "image/webp",
+        "image/gif",
+        "image/bmp",
+        "image/tiff",
+        "image/heic",
+        "image/heif",
     ]
 
     ORDER_SERVICE_URL: str = Field(default_factory=lambda: os.getenv("ORDER_SERVICE_URL", ""))
@@ -64,7 +71,6 @@ class Settings(BaseSettings):
             if not self.PRESCRIPTION_ENCRYPTION_KEY:
                 self.PRESCRIPTION_ENCRYPTION_KEY = os.urandom(32).hex()
             if not self.SERVICE_AUTH_SECRET:
-                # Dev-only ephemeral; production path already rejected empty
                 self.SERVICE_AUTH_SECRET = "dev-only-prescription-service-auth-secret-key!!"
         return self
 
