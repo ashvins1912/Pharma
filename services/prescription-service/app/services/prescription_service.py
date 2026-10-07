@@ -1,6 +1,7 @@
 """Durable MongoDB-backed Prescription Service Engine."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import uuid
@@ -202,6 +203,34 @@ class PrescriptionServiceEngine:
         )
         return job
 
+    async def _heartbeat_job(self, job_id: str, worker_id: str, stop_event: asyncio.Event):
+        db = get_db()
+        while not stop_event.is_set():
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=settings.HEARTBEAT_INTERVAL_SECONDS)
+            except asyncio.TimeoutError:
+                now = _now()
+                lease_until = now + timedelta(seconds=settings.PROCESSING_LEASE_SECONDS)
+                result = await db.processing_jobs.update_one(
+                    {
+                        "jobId": job_id,
+                        "status": "PROCESSING",
+                        "locked_by": worker_id,
+                    },
+                    {"$set": {"locked_until": lease_until, "updated_at": now}},
+                )
+                if result.matched_count != 1:
+                    stop_event.set()
+                    return
+
+    async def _job_owned(self, job_id: str, worker_id: str) -> bool:
+        db = get_db()
+        row = await db.processing_jobs.find_one(
+            {"jobId": job_id, "status": "PROCESSING", "locked_by": worker_id, "locked_until": {"$gt": _now()}},
+            {"_id": 1},
+        )
+        return bool(row)
+
     async def process_job(self, job: Dict[str, Any], worker_id: str) -> None:
         db = get_db()
         prescription_id = job["prescription_id"]
@@ -210,7 +239,13 @@ class PrescriptionServiceEngine:
             await db.processing_jobs.update_one({"jobId": job["jobId"]}, {"$set": {"status": "DEAD_LETTER", "last_error_code": "RX_MISSING"}})
             return
         if rx["status"] == PrescriptionState.INACTIVE.value:
-            await db.processing_jobs.update_one({"jobId": job["jobId"]}, {"$set": {"status": "CANCELLED", "updated_at": _now()}})
+            await db.processing_jobs.update_one(
+                {"jobId": job["jobId"], "locked_by": worker_id},
+                {"$set": {"status": "CANCELLED", "updated_at": _now(), "locked_until": None, "locked_by": None}}
+            )
+            return
+        if not await self._job_owned(job["jobId"], worker_id):
+            logger.warning("Prescription job lease lost before processing job=%s", job["jobId"])
             return
         if not can_transition(rx["status"], PrescriptionState.PROCESSING.value) and rx["status"] != PrescriptionState.PROCESSING.value:
             # Allow re-entry from QUEUED only
@@ -219,10 +254,26 @@ class PrescriptionServiceEngine:
                 return
 
         now = _now()
-        await db.prescriptions.update_one(
-            {"prescriptionId": prescription_id, "status": {"$ne": PrescriptionState.INACTIVE.value}},
+        processing_update = await db.prescriptions.update_one(
+            {
+                "prescriptionId": prescription_id,
+                "status": {"$in": [
+                    PrescriptionState.QUEUED.value,
+                    PrescriptionState.FAILED.value,
+                    PrescriptionState.REVIEW_REQUIRED.value,
+                    PrescriptionState.PROCESSING.value,
+                ]},
+            },
             {"$set": {"status": PrescriptionState.PROCESSING.value, "updatedAt": now}},
         )
+        if processing_update.matched_count != 1:
+            await db.processing_jobs.update_one(
+                {"jobId": job["jobId"], "locked_by": worker_id},
+                {"$set": {"status": "COMPLETED", "locked_until": None, "locked_by": None, "updated_at": _now()}}
+            )
+            return
+        heartbeat_stop = asyncio.Event()
+        heartbeat_task = asyncio.create_task(self._heartbeat_job(job["jobId"], worker_id, heartbeat_stop))
         await self._audit("PRESCRIPTION_PROCESSING_STARTED", prescription_id, rx.get("tenantId"), worker_id, {})
 
         try:
@@ -230,9 +281,18 @@ class PrescriptionServiceEngine:
             result = process_prescription_bytes(plaintext, rx.get("contentType") or "image/png")
         except ProcessingError as exc:
             await self._fail_job(job, rx, exc.code, exc.message, worker_id)
+            heartbeat_stop.set()
+            heartbeat_task.cancel()
             return
         except Exception as exc:
             await self._fail_job(job, rx, "PROCESSING_ERROR", str(exc), worker_id)
+            heartbeat_stop.set()
+            heartbeat_task.cancel()
+            return
+
+        if not await self._job_owned(job["jobId"], worker_id):
+            heartbeat_stop.set()
+            heartbeat_task.cancel()
             return
 
         extraction = {
@@ -320,9 +380,11 @@ class PrescriptionServiceEngine:
             })
 
         await db.processing_jobs.update_one(
-            {"jobId": job["jobId"]},
+            {"jobId": job["jobId"], "locked_by": worker_id},
             {"$set": {"status": "COMPLETED", "locked_until": None, "locked_by": None, "updated_at": _now()}},
         )
+        heartbeat_stop.set()
+        heartbeat_task.cancel()
         adapter = await integration_registry.resolve_adapter(rx.get("tenantId"), rx.get("branchId"), "PrescriptionProcessingCompleted")
         await adapter.publish({
             "eventType": "PrescriptionProcessingCompleted",
@@ -349,7 +411,7 @@ class PrescriptionServiceEngine:
             rx_status = PrescriptionState.FAILED.value
             next_at = now + timedelta(seconds=min(3600, 2 ** attempt * 5))
         await db.processing_jobs.update_one(
-            {"jobId": job["jobId"]},
+            {"jobId": job["jobId"], "locked_by": worker_id},
             {
                 "$set": {
                     "status": status,
@@ -364,7 +426,7 @@ class PrescriptionServiceEngine:
         )
         if can_transition(PrescriptionState.PROCESSING.value, rx_status) or rx.get("status") == PrescriptionState.PROCESSING.value:
             await db.prescriptions.update_one(
-                {"prescriptionId": rx["prescriptionId"], "status": {"$ne": PrescriptionState.INACTIVE.value}},
+                {"prescriptionId": rx["prescriptionId"], "status": PrescriptionState.PROCESSING.value},
                 {"$set": {"status": rx_status, "updatedAt": now}},
             )
 
