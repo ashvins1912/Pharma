@@ -94,6 +94,11 @@ const userProfileSchema = new mongoose.Schema({
         type: String,
         default: null
     },
+    gender: {
+        type: String,
+        enum: ['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'],
+        default: null
+    },
     mobileNumber: {
         type: String,
         default: '',
