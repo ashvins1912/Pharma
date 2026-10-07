@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { isSupabaseConfigured, supabase } from '../supabaseClient';
+import { env } from '../config/env.ts';
 import apiClient from '../api/apiClient';
 import GoogleProfileOnboarding from '../components/auth/GoogleProfileOnboarding';
 
