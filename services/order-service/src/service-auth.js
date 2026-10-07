@@ -19,6 +19,26 @@ export function createInventoryToken(scopes, userId) {
   });
 }
 
+export function createPrescriptionToken({ userId, role = 'customer', isAdmin = false }) {
+  if (!config.prescriptionServiceUrl) {
+    throw new Error('Prescription Service is not configured.');
+  }
+  return jwt.sign({
+    sub: userId,
+    userId,
+    role,
+    roles: [role],
+    permissions: ['prescription.read'],
+    scope: 'prescription.read',
+    isAdmin
+  }, config.serviceAuthSecret, {
+    algorithm: 'HS256',
+    issuer: config.serviceJwtIssuer,
+    audience: config.prescriptionJwtAudience,
+    expiresIn: 60
+  });
+}
+
 export function requireOrderScope(scope) {
   return (req, res, next) => {
     const authorization = req.get('authorization') || '';
