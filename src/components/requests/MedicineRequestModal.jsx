@@ -123,8 +123,9 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (submitInProgressRef.current) return;
-    if (requestedItems.some(item => !item.requestedName.trim())) {
-      addToast('Please enter a name for each requested medicine or remove the empty item.', 'warning');
+    const hasManualMedicine = requestedItems.some(item => item.requestedName.trim());
+    if (!hasManualMedicine && !prescriptionFile) {
+      addToast('Enter at least one medicine, or attach a doctor prescription.', 'warning');
       return;
     }
 
@@ -141,14 +142,18 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       setSubmitting(true);
       const formData = new FormData();
 
-      const requestItems = requestedItems.map(item => ({
-        ...item,
-        requestedName: item.requestedName.trim(),
-        strength: item.strength.trim(),
-        dosageForm: item.dosageForm.trim(),
-        manufacturer: item.manufacturer.trim(),
-        quantity: Math.max(1, Number(item.quantity) || 1)
-      }));
+      const requestItems = requestedItems
+        .filter(item => item.requestedName.trim())
+        .map(item => ({
+          ...item,
+          requestedName: item.requestedName.trim(),
+          strength: item.strength.trim(),
+          dosageForm: item.dosageForm.trim(),
+          manufacturer: item.manufacturer.trim(),
+          quantity: Math.max(1, Number(item.quantity) || 1),
+          source: 'MANUAL',
+          validationStatus: 'MANUAL'
+        }));
 
       formData.append('requestedItems', JSON.stringify(requestItems));
       formData.append('addressId', String(selectedAddress._id));
@@ -222,7 +227,8 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
               <fieldset key={index} className="min-w-0 space-y-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 sm:p-4">
                 <div className="flex items-center justify-between gap-3">
                   <legend className="text-xs font-extrabold text-slate-800">
-                    Medicine / Product {requestedItems.length > 1 ? index + 1 : ''} <span className="text-rose-500">*</span>
+                    Medicine / Product {requestedItems.length > 1 ? index + 1 : ''}
+                    {!prescriptionFile && <span className="text-rose-500"> *</span>}
                   </legend>
                   {requestedItems.length > 1 && (
                     <button
@@ -237,8 +243,8 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
                 </div>
                 <input
                   type="text"
-                  required
-                  placeholder="e.g. Paracetamol, Rifaximin 550mg"
+                  required={!prescriptionFile}
+                  placeholder={prescriptionFile ? 'Optional: add a medicine manually' : 'e.g. Paracetamol, Rifaximin 550mg'}
                   value={item.requestedName}
                   onChange={(e) => updateRequestedItem(index, 'requestedName', e.target.value)}
                   className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium outline-none transition focus:border-blue-500"
@@ -404,6 +410,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
             </div>
             <p className="text-[10px] text-slate-400">
               Attached files are securely encrypted and accessible only to registered pharmacists and your account.
+              {prescriptionFile && ' Manual medicine entry is optional; extracted prescription medicines will be shown after processing.'}
             </p>
           </div>
 
