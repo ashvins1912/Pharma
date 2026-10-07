@@ -24,12 +24,15 @@ router.put('/onboarding', authenticateUser, async (req, res) => {
         });
     }
 
-    const { firstName, lastName, dateOfBirth, mobileNumber, mobile } = req.body || {};
+    const { firstName, lastName, dateOfBirth, mobileNumber, mobile, gender } = req.body || {};
     const phone = (mobileNumber || mobile || '').trim();
 
     const validationDetails = [];
     if (!firstName || !firstName.trim()) {
         validationDetails.push({ field: 'firstName', code: 'REQUIRED', message: 'First name is required.' });
+    }
+    if (gender && !['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'].includes(gender)) {
+        validationDetails.push({ field: 'gender', code: 'INVALID_GENDER', message: 'Select a valid gender option.' });
     }
     if (!dateOfBirth) {
         validationDetails.push({ field: 'dateOfBirth', code: 'REQUIRED', message: 'Date of birth is required.' });
@@ -56,7 +59,8 @@ router.put('/onboarding', authenticateUser, async (req, res) => {
             firstName,
             lastName,
             dateOfBirth,
-            mobileNumber: phone
+            mobileNumber: phone,
+            gender
         });
 
         if (result.accessToken) {
