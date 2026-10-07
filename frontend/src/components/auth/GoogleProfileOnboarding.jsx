@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import apiClient from '../../api/apiClient';
 
 const MOBILE_PATTERN = /^(?:\+?91|0)?[6-9]\d{9}$/;
 
@@ -40,7 +39,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
 
     setSaving(true);
     try {
-      const { data } = await apiClient.put('/api/v1/auth/complete-profile', {
+      await onComplete?.({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         dateOfBirth,
@@ -49,7 +48,6 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
         password,
         confirmPassword
       });
-      onComplete?.(data?.data || data);
     } catch (err) {
       setError(err?.message || 'Could not complete your profile. Please try again.');
     } finally {
