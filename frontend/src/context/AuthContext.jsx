@@ -76,7 +76,15 @@ export function AuthProvider({ children }) {
           }
         }
 
-        if (!upstreamGoogleSession) {
+        if (upstreamGoogleSession) {
+          const result = await exchangeGoogleSession(upstreamGoogleSession);
+          const sessionUser = result?.user || null;
+          if (mounted && sessionUser && sessionUser.profileCompleted !== false
+              && String(sessionUser.accountStatus || 'ACTIVE').toUpperCase() === 'ACTIVE') {
+            setMfaEnabled(Boolean(result?.mfaEnabled));
+            setAal(result?.aal || 'aal1');
+          }
+        } else {
           const { data } = await apiClient.get('/api/v1/auth/me');
           const sessionUser = data?.user || (data?.id ? data : null);
           if (mounted && sessionUser && sessionUser.profileCompleted !== false
