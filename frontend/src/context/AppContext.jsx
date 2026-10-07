@@ -9,7 +9,7 @@ import { useToast } from './ToastContext';
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
-  const { user, isAdmin, isPharmacyOrAdmin, loading: authLoading } = useAuth();
+  const { user, isAdmin, isPharmacyOrAdmin, loading: authLoading, isFullyAuthenticated } = useAuth();
   const { addToast } = useToast();
 
   // Catalog State
@@ -290,19 +290,19 @@ export function AppProvider({ children }) {
   }, [user?.id]);
 
   useEffect(() => {
-    if (user?.id) {
+    if (isFullyAuthenticated) {
       loadAddresses();
     } else {
       setAddresses([]);
       setAddressesError('');
       setSelectedAddressId('');
     }
-  }, [user?.id, loadAddresses]);
+  }, [isFullyAuthenticated, loadAddresses]);
 
   // Fetch Orders
   const loadUserOrders = useCallback(async ({ silent = false } = {}) => {
     const requestSequence = ++orderLoadSequence.current;
-    if (!user?.id) {
+    if (!isFullyAuthenticated) {
       setOrders([]);
       setLoadingOrders(false);
       return;
@@ -322,18 +322,19 @@ export function AppProvider({ children }) {
         setLoadingOrders(false);
       }
     }
-  }, [user?.id]);
+  }, [isFullyAuthenticated]);
 
   useEffect(() => {
+    if (!isFullyAuthenticated) return;
     loadUserOrders();
     const refreshTimer = window.setInterval(() => loadUserOrders({ silent: true }), 15000);
     return () => window.clearInterval(refreshTimer);
-  }, [loadUserOrders]);
+  }, [loadUserOrders, isFullyAuthenticated]);
 
   // Load User Medicine Requests
   const loadUserMedicineRequests = useCallback(async ({ silent = false, page, statusGroup, append = false } = {}) => {
     const requestSequence = ++medicineRequestLoadSequence.current;
-    if (!user || isPharmacyOrAdmin) {
+    if (!isFullyAuthenticated || isPharmacyOrAdmin) {
       setMedicineRequests([]);
       setMedicineRequestsError('');
       setMedicineRequestsPagination({ page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false });
@@ -399,13 +400,14 @@ export function AppProvider({ children }) {
     } finally {
       if (!silent && requestSequence === medicineRequestLoadSequence.current) setLoadingMedicineRequests(false);
     }
-  }, [user?.id, isPharmacyOrAdmin]);
+  }, [isFullyAuthenticated, isPharmacyOrAdmin]);
 
   useEffect(() => {
+    if (!isFullyAuthenticated) return;
     loadUserMedicineRequests();
     const timer = window.setInterval(() => loadUserMedicineRequests({ silent: true }), 15000);
     return () => window.clearInterval(timer);
-  }, [loadUserMedicineRequests]);
+  }, [loadUserMedicineRequests, isFullyAuthenticated]);
 
   const openRequestModal = (prefill = null) => {
     if (isPharmacyOrAdmin) {
@@ -445,20 +447,20 @@ export function AppProvider({ children }) {
 
   // Fetch Admin Inventory Alerts
   const loadInventoryAlerts = useCallback(async () => {
-    if (authLoading || !user?.id || !isAdmin) return;
+    if (authLoading || !isFullyAuthenticated || !isAdmin) return;
     try {
       const res = await apiClient.get('/api/medicines/alerts');
       setInventoryAlerts(res.data || {});
     } catch {
       // ignore
     }
-  }, [authLoading, user?.id, isAdmin]);
+  }, [authLoading, isFullyAuthenticated, isAdmin]);
 
   useEffect(() => {
-    if (!authLoading && user?.id && isAdmin) {
+    if (!authLoading && isFullyAuthenticated && isAdmin) {
       loadInventoryAlerts();
     }
-  }, [authLoading, user?.id, isAdmin, loadInventoryAlerts]);
+  }, [authLoading, isFullyAuthenticated, isAdmin, loadInventoryAlerts]);
 
   // Cart operations
   const addToCart = (med) => {
