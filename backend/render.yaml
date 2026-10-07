@@ -21,6 +21,8 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
+      - key: PHARMA_ACCESS_TOKEN_TTL
+        value: "1h"
       - key: CORS_ALLOWED_ORIGINS
         sync: false
       - key: GATEWAY_AUTH_SECRET
