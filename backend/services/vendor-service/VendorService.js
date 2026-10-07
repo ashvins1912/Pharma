@@ -398,8 +398,6 @@ class VendorService {
         const password = submission.password || '';
         const dateOfBirth = String(submission.dateOfBirth || '').trim();
         const gender = String(submission.gender || '').trim().toUpperCase();
-        const dateOfBirth = (submission.dateOfBirth || '').trim();
-        const gender = (submission.gender || '').trim().toUpperCase();
 
         if (!firstName) {
             validationDetails.push({ field: 'firstName', code: 'REQUIRED', message: 'First name is required.' });
@@ -502,6 +500,7 @@ class VendorService {
             dateOfBirth,
             gender,
             emailVerified: true,
+            emailVerifiedAt: new Date(),
             status: 'ACTIVE',
             accountStatus: 'ACTIVE',
             profileCompleted: true,
