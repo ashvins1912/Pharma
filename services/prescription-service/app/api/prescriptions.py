@@ -28,6 +28,21 @@ def _require_review_permission(context: ServiceUserContext):
         return
     raise HTTPException(status_code=403, detail="prescription.review permission required")
 
+async def _authorized_prescription(prescription_id: str, context: ServiceUserContext):
+    try:
+        record = await prescription_engine.get_prescription(
+            prescription_id,
+            requesting_user_id=context.user_id,
+            tenant_id=context.tenant_id,
+            branch_id=context.branch_id,
+            is_admin=context.is_admin,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    if not record:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    return record
+
 @router.post("/upload", response_model=ApiResponse[PrescriptionUploadData], status_code=status.HTTP_201_CREATED)
 async def upload_prescription(
     file: Optional[UploadFile] = File(None),
@@ -75,11 +90,7 @@ async def get_prescription(
     prescription_id: str,
     context: ServiceUserContext = Depends(get_current_service_context)
 ):
-    record = await prescription_engine.get_prescription(prescription_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Prescription not found")
-    if context.tenant_id and record.get("tenantId") and record.get("tenantId") != context.tenant_id:
-        raise HTTPException(status_code=403, detail="Tenant access denied")
+    record = await _authorized_prescription(prescription_id, context)
     extraction = record.get("extraction") or {}
     progress_map = {
         "UPLOADED": ("UPLOADED", 10),
@@ -117,6 +128,7 @@ async def claim_review(
     context: ServiceUserContext = Depends(get_current_service_context)
 ):
     _require_review_permission(context)
+    await _authorized_prescription(prescription_id, context)
     try:
         result = await prescription_engine.claim_review(prescription_id, context.user_id, expected_version)
         return {"success": True, "data": result}
@@ -137,6 +149,7 @@ async def approve_review(
     context: ServiceUserContext = Depends(get_current_service_context)
 ):
     _require_review_permission(context)
+    await _authorized_prescription(prescription_id, context)
     try:
         result = await prescription_engine.approve_review(prescription_id, context.user_id, expected_version, idempotency_key)
         return {"success": True, "data": result}
@@ -159,6 +172,7 @@ async def reject_review(
     context: ServiceUserContext = Depends(get_current_service_context)
 ):
     _require_review_permission(context)
+    await _authorized_prescription(prescription_id, context)
     try:
         result = await prescription_engine.reject_review(prescription_id, context.user_id, expected_version, reason, idempotency_key)
         return {"success": True, "data": result}
@@ -177,6 +191,7 @@ async def wait_review(
     context: ServiceUserContext = Depends(get_current_service_context)
 ):
     _require_review_permission(context)
+    await _authorized_prescription(prescription_id, context)
     result = await prescription_engine.wait_review(prescription_id, context.user_id)
     return {"success": True, "data": result}
 
@@ -205,6 +220,7 @@ async def remove_prescription(
     context: ServiceUserContext = Depends(get_current_service_context)
 ):
     reason = payload.reason if payload else "Customer requested removal"
+    await _authorized_prescription(prescription_id, context)
     record = await prescription_engine.remove_prescription(prescription_id, context.user_id, reason=reason)
     if not record:
         raise HTTPException(status_code=404, detail="Prescription not found")
@@ -223,7 +239,14 @@ async def remove_prescription(
 async def document_url(prescription_id: str, context: ServiceUserContext = Depends(get_current_service_context)):
     _require_review_permission(context)
     try:
-        data = await prescription_engine.create_document_token(prescription_id, context.user_id)
+        await _authorized_prescription(prescription_id, context)
+        data = await prescription_engine.create_document_token(
+            prescription_id,
+            context.user_id,
+            tenant_id=context.tenant_id,
+            branch_id=context.branch_id,
+            is_admin=context.is_admin,
+        )
         return {"success": True, "data": data}
     except LookupError:
         raise HTTPException(status_code=404, detail="Not found")
