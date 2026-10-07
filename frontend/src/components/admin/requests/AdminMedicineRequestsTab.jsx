@@ -299,7 +299,8 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
             </p>
           </div>
         ) : (
-          <div className="hidden lg:block overflow-x-auto">
+          <>
+            <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
@@ -514,6 +515,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
               );
             })}
           </div>
+          </>
         )}
 
         {pagination.total > 0 && (
