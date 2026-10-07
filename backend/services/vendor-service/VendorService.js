@@ -42,7 +42,17 @@ class VendorService {
         }
 
         const vendorId = vendorData.id || `vnd_${crypto.randomUUID().slice(0, 12)}`;
-        const invitedUserId = `usr_${crypto.randomUUID()}`;
+        let invitedUserId = `usr_${crypto.randomUUID()}`;
+        const existingUser = await authService.findUser({ normalizedEmail: email });
+        if (existingUser) {
+            if (existingUser.accountStatus !== 'PROFILE_INCOMPLETE' || existingUser.profileCompleted === true) {
+                const err = new Error('An active Pharma account already exists for this email. Use tenant membership management instead of creating another account.');
+                err.code = 'ACCOUNT_ALREADY_EXISTS';
+                err.status = 409;
+                throw err;
+            }
+            invitedUserId = existingUser.userId || existingUser.id;
+        }
 
         // Generate 256-bit cryptographically secure token
         const rawToken = crypto.randomBytes(32).toString('hex');
