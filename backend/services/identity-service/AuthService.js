@@ -865,7 +865,7 @@ export class AuthService {
             // Profile onboarding can involve user input and email/account setup.
             // Keep the restricted token aligned with the 1-hour session cookie so
             // users are not unexpectedly logged out while completing their profile.
-            expiresIn: '1h'
+            expiresIn: '24h'
         });
     }
 
