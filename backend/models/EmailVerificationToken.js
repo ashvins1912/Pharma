@@ -32,6 +32,10 @@ const emailVerificationTokenSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
+    attempts: {
+        type: Number,
+        default: 0
+    },
     requestIp: {
         type: String,
         default: null
