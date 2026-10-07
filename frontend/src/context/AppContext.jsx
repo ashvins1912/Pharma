@@ -329,7 +329,7 @@ export function AppProvider({ children }) {
     }
     try {
       if (!silent) setLoadingOrders(true);
-      const res = await apiClient.get('/api/orders/mine');
+      const res = await apiClient.get('/api/orders/mine', { showLoader: !silent });
       if (requestSequence === orderLoadSequence.current) {
         setOrders(normalizeOrdersResponse(res.data));
         setOrdersError('');
