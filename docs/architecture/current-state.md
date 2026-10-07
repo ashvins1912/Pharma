@@ -1,53 +1,30 @@
-# Existing application flows and boundaries
+# Current architecture state
 
-## Dependency findings
+## Canonical projects
 
-- Frontend entrypoints: `index.html`, `src/main.jsx`, and the root Vite config;
-  now organized under `frontend/`.
-- Frontend pages/components, app/auth/toast state, API clients, Supabase browser
-  client, and Vite environment validation are browser code.
-- The existing shared Axios client centralizes auth headers, CSRF headers,
-  timeout, credentials, and API errors. Existing feature-specific API modules
-  build on it.
-- Backend entrypoints: `backend/server.js` (Express app), root `server.ts`
-  (combined Vite/API runner), and `api/[...path].js` (Vercel API adapter).
-- Backend owns Mongo/Mongoose models and access, authentication validation,
-  prescription GridFS storage, inventory imports, Order checkout/lifecycle,
-  Medicine Request/Proposal, riders/delivery, WhatsApp, and admin APIs.
-- Frontend imports from backend or extracted-service implementation files:
-  none found during the source import audit.
-- Backend imports from frontend: none. The root compatibility runner serves
-  frontend assets but the backend API package itself does not require them.
-- Existing web checkout still uses `/api/orders/checkout`; the optional
-  versioned Order Service path is separate and does not yet replace that route.
-- Uploads (prescriptions and inventory spreadsheets) go through backend API
-  handlers; no frontend filesystem access was found.
+- `frontend/` — only frontend
+- `api-gateway/` — only public gateway
+- `backend/` — private platform/orchestration API
+- `services/inventory-service/` — canonical Inventory Service
+- `services/order-service/` — canonical Order Service
+- `services/prescription-service/` — canonical Python Prescription Service plus worker
 
-## Current data/behavior flows
+## Removed duplicate surfaces
 
-```text
-Web → /api/orders/checkout → backend reserveOrder → main MongoDB
-Web → /api/medicines → backend catalog; search impressions → daily metric model
-Backend startup/15 min → refresh data mart from medicines + delivered orders + search metrics
-Web → /api/medicines/discovery → ProductDiscoveryService → MedicineDataMart
-```
+The restructuring removes the root Vite/React application, root combined Express/Vite runner, Vercel Express adapter, root combined Render deployment, duplicate Inventory service trees, legacy Node Prescription implementation, and legacy internal Inventory/Order/Prescription gateway routes.
 
-The root compatibility deployment remains available. The `frontend/`,
-`api-gateway/`, and `backend/` projects run independently; the Gateway routes
-legacy traffic to the private backend and configured versioned APIs directly
-to Inventory/Order services. The extracted services do not yet own every live
-workflow.
+## Routing
 
-## Required follow-up before full acceptance
+The public Gateway directly routes versioned Inventory and Order APIs to their private authoritative services. Compound workflows and PUID-sensitive Prescription workflows remain backend orchestrated until their service-level authorization is complete.
 
-- Install and run each project independently from a clean checkout.
-- Configure separate frontend/backend deployment origins and verify CORS,
-  authentication cookies, file uploads, and every critical operational flow.
-- Complete direct development-time ownership changes so Inventory and Order
-  workflows use their service APIs; no production data migration or dual-write
-  process is required.
-- Continue migrating legacy `/api/*` routes to versioned public contracts
-  without breaking existing UI clients.
-- Add end-to-end browser/API tests for login, checkout, prescription upload,
-  Medicine Request → Proposal → Order, imports, rider assignment, dispatch,
-  delivery, WhatsApp, and failure behavior.
+## Persistence
+
+- Inventory Service owns Inventory MongoDB.
+- Order Service owns Order MongoDB.
+- Prescription Service owns Prescription MongoDB.
+- Backend owns only platform data it has not yet extracted.
+- Cross-service database access is prohibited.
+
+## Validation
+
+A real clean-checkout build/test and Render smoke test is still required before merging to main. The repository boundary is now explicit, but end-to-end checkout, Medicine Request, Prescription, Order, Delivery and WhatsApp flows should be exercised against the deployed topology.
