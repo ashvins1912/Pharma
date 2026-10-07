@@ -18,8 +18,8 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
     event.preventDefault();
     setError('');
 
-    if (!firstName.trim() || !dateOfBirth || !gender || !mobileValid) {
-      setError('Please complete your name, gender, date of birth and valid Indian mobile number.');
+    if (!firstName.trim() || !dateOfBirth || !gender || (mobileNumber && !mobileValid)) {
+      setError('Please complete your name, gender and date of birth. Mobile is optional for now.');
       return;
     }
 
@@ -62,7 +62,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
         </label>
 
         <label>Date of birth<input type="date" value={dateOfBirth} onChange={e=>setDateOfBirth(e.target.value)} required /></label>
-        <label>Indian mobile number<input inputMode="tel" placeholder="9876543210 / +91 9876543210" value={mobileNumber} onChange={e=>setMobileNumber(e.target.value)} required /></label>
+        <label>Indian mobile number <span style={{color:'#94a3b8'}}>(optional)</span><input inputMode="tel" placeholder="Add mobile later or enter it now" value={mobileNumber} onChange={e=>setMobileNumber(e.target.value)} /></label>
 
         {error && <div role="alert" style={{color:'#b91c1c',margin:'10px 0'}}>{error}</div>}
 
