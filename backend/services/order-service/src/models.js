@@ -46,6 +46,18 @@ const orderSchema = new mongoose.Schema({
   totalAmount: { type: Number, required: true, min: 0 },
   finalTotal: { type: Number, required: true, min: 0 },
   paymentMethod: { type: String, required: true },
+  cashCollectionStatus: {
+    type: String,
+    enum: ['CASH_RECEIVED', 'CASH_NOT_RECEIVED', 'NOT_APPLICABLE'],
+    default: 'NOT_APPLICABLE',
+    index: true
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['PENDING', 'PAID', 'FAILED'],
+    default: 'PENDING'
+  },
+  amountPaid: { type: Number, min: 0, default: 0 },
   deliveryAddress: { type: String, required: true },
   addressDetails: { type: mongoose.Schema.Types.Mixed, default: {} },
   coordinates: {
