@@ -1,7 +1,7 @@
 /**
  * Authoritative Server-Side Pricing Engine with Stacking Rule Validation
  */
-import { catalogService } from '../catalog-service/CatalogService.js';
+import { inventoryClient } from '../inventory-client/InventoryClient.js';
 import { tenantService } from '../tenant-service/TenantService.js';
 import { identityService } from '../identity-service/IdentityService.js';
 import {
@@ -99,14 +99,24 @@ export class PricingEngine {
         let totalMrp = 0;
         const itemSnapshots = [];
 
-        // 1. Calculate base prices from Branch Listings
-        for (const item of items) {
-            const listKey = `${tenantId}:${branchId}:${item.productId}`;
-            const listing = catalogService.listings.get(listKey);
-            const product = await catalogService.getProductById(item.productId);
+        // 1. Read authoritative product price/metadata from Inventory Service.
+        const lookup = await inventoryClient.lookup({
+            skus: items.map(item => String(item.productId || item.sku || '').trim().toUpperCase()),
+            tenantId,
+            branchId,
+            userId: customerId || 'backend'
+        });
+        const products = new Map((lookup.items || []).map(item => [String(item.sku).toUpperCase(), item]));
 
-            const mrp = Number(listing?.mrp || product?.price || 50);
-            const sellingPrice = Number(listing?.sellingPrice || mrp);
+        for (const item of items) {
+            const sku = String(item.productId || item.sku || '').trim().toUpperCase();
+            const product = products.get(sku);
+            if (!product || product.price == null) {
+                throw new Error(`Product ${sku} is unavailable in the selected branch.`);
+            }
+
+            const mrp = Number(product.mrp ?? product.price);
+            const sellingPrice = Number(product.sellingPrice ?? product.price);
             const quantity = Math.max(1, Number(item.quantity) || 1);
             const lineSubtotal = Math.round(sellingPrice * quantity * 100) / 100;
             const lineMrp = Math.round(mrp * quantity * 100) / 100;
@@ -115,9 +125,15 @@ export class PricingEngine {
             totalMrp += lineMrp;
 
             itemSnapshots.push({
-                productId: item.productId,
-                listingId: listing?.id || `list-${item.productId}`,
-                name: product?.name || 'Pharmaceutical Item',
+                productId: String(product.productId),
+                listingId: product.listingId || `list-${product.productId}`,
+                sku: product.sku,
+                name: product.name || 'Pharmaceutical Item',
+                genericName: product.genericName || '',
+                strength: product.strength || '',
+                form: product.form || product.dosageForm || '',
+                manufacturer: product.manufacturer || '',
+                requiresPrescription: Boolean(product.requiresPrescription),
                 quantity,
                 mrpSnapshot: mrp,
                 sourceSellingPriceSnapshot: sellingPrice,
@@ -127,7 +143,6 @@ export class PricingEngine {
                 subtotal: lineSubtotal
             });
         }
-
         subtotal = Math.round(subtotal * 100) / 100;
 
         // 2. Compute branch automatic offers (e.g. 5% automatic cart discount above 500)
