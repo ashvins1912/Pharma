@@ -4,6 +4,7 @@ import { config } from './config.js';
 const callerScopes = {
   'order-service': new Set(['inventory.read', 'inventory.reserve', 'inventory.release', 'inventory.deduct']),
   'medicine-request-service': new Set(['inventory.read']),
+  'backend-platform': new Set(['inventory.read', 'inventory.adjust']),
   'api-gateway': new Set(['inventory.read', 'inventory.import', 'inventory.adjust'])
 };
 
