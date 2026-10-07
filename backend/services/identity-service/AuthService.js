@@ -375,21 +375,7 @@ export class AuthService {
             throw err;
         }
 
-        if (!gender || !['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'].includes(gender)) {
-            const err = new Error('Gender is required.');
-            err.code = 'INVALID_GENDER';
-            err.status = 400;
-            throw err;
-        }
-
-        const effectiveDob = dateOfBirth || '2000-01-01';
-        if (dateOfBirth && !isValidDOB(dateOfBirth)) {
-            const err = new Error('Date of birth must be a valid date and cannot be in the future.');
-            err.code = 'INVALID_DOB';
-            err.status = 400;
-            throw err;
-        }
-
+        const effectiveDob = dateOfBirth && isValidDOB(dateOfBirth) ? dateOfBirth : null;
         if (!isStrongPassword(password)) {
             const err = new Error('Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, and one number.');
             err.code = 'WEAK_PASSWORD';
@@ -422,8 +408,8 @@ export class AuthService {
             name: `${fName} ${lName}`.trim(),
             dateOfBirth: effectiveDob,
             gender,
-            mobileNumber: normalizedPhone.e164,
-            mobile: normalizedPhone.e164,
+            mobileNumber: normalizedPhone?.e164 || '',
+            mobile: normalizedPhone?.e164 || '',
             passwordHash,
             emailVerified: false,
             emailVerifiedAt: null,
