@@ -22,7 +22,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
     event.preventDefault();
     setError('');
 
-    if (!firstName.trim() || !dateOfBirth || !gender || !mobileValid || !password || !confirmPassword) {
+    if (!firstName.trim() || !dateOfBirth || !gender || !mobileNumber.trim() || !mobileValid || !password || !confirmPassword) {
       setError('Please complete the required profile fields and create a password.');
       return;
     }
@@ -147,7 +147,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
 
           <div>
             <label htmlFor="profile-mobile" className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-slate-500">
-              Indian mobile number <span className="font-semibold normal-case tracking-normal text-slate-400">(optional)</span>
+              Indian mobile number <span className="text-rose-500">*</span>
             </label>
             <input
               id="profile-mobile"
@@ -160,7 +160,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
             />
             <p className="mt-1.5 text-[11px] text-slate-400">
-              You can add or verify your mobile number later.
+              Enter a valid Indian mobile number. This is required to complete your profile.
             </p>
           </div>
 
