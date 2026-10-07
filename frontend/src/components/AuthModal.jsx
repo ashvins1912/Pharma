@@ -68,14 +68,11 @@ export default function AuthModal({ isOpen, onClose }) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [signupErrors, setSignupErrors] = useState({});
-  const instantDemoEnabled = import.meta.env.VITE_INSTANT_DEMO_ACCESS_ENABLED === 'true'
-    || (import.meta.env.DEV && import.meta.env.VITE_INSTANT_DEMO_ACCESS_ENABLED !== 'false');
-  const demoCustomerEnabled = instantDemoEnabled
-    && (import.meta.env.DEV || import.meta.env.VITE_DEMO_CUSTOMER_ENABLED === 'true');
+  const instantDemoEnabled = import.meta.env.DEV
+    && import.meta.env.VITE_INSTANT_DEMO_ACCESS_ENABLED !== 'false';
+  const demoCustomerEnabled = instantDemoEnabled;
   const demoAdminEnabled = instantDemoEnabled
-    && (import.meta.env.DEV
-      ? import.meta.env.VITE_DEMO_ADMIN_ENABLED !== 'false'
-      : import.meta.env.VITE_DEMO_ADMIN_ENABLED === 'true');
+    && import.meta.env.VITE_DEMO_ADMIN_ENABLED !== 'false';
 
   const resetForm = () => {
     setIsSignUp(false);
