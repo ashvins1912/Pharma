@@ -76,7 +76,8 @@ export const authenticateUser = async (req, res, next) => {
             user_metadata: {
                 name: payload.name || '',
                 mobile: payload.mobile || '',
-                dateOfBirth: payload.dateOfBirth || null
+                dateOfBirth: payload.dateOfBirth || null,
+                gender: payload.gender || null
             },
             aal: payload.aal || 'aal1',
             sessionId: payload.sessionId || null,
