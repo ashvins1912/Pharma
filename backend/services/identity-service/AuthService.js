@@ -902,8 +902,9 @@ export class AuthService {
     }
 
     async confirmMfaEnrollment(user, code) {
-        this.assertAccountState(user);
         const userId = user.id || user.sub || user.userId;
+        const storedUser = await this.findUser({ userId });
+        this.assertAccountState(storedUser);
         const pending = pendingMfaEnrollments.get(userId);
         if (!pending || Date.now() - pending.createdAt > 10 * 60 * 1000) {
             const err = new Error('MFA enrollment session expired. Please start enrollment again.');
@@ -918,7 +919,7 @@ export class AuthService {
             throw err;
         }
         const updated = await this.saveUser(userId, {
-            ...user,
+            ...storedUser,
             mfaEnabled: true,
             mfaSecretEncrypted: encryptPII(pending.secret),
             mfaEnrolledAt: new Date()
@@ -928,9 +929,10 @@ export class AuthService {
     }
 
     async disableMfa(user) {
-        this.assertAccountState(user);
         const userId = user.id || user.sub || user.userId;
-        await this.saveUser(userId, { ...user, mfaEnabled: false, mfaSecretEncrypted: null, mfaEnrolledAt: null });
+        const storedUser = await this.findUser({ userId });
+        this.assertAccountState(storedUser);
+        await this.saveUser(userId, { ...storedUser, mfaEnabled: false, mfaSecretEncrypted: null, mfaEnrolledAt: null });
         return { success: true };
     }
 
