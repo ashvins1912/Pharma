@@ -331,3 +331,55 @@ Implement, test, build/typecheck as applicable, and verify local + Render impact
 Report: changed files, flow change, tests/results, deployment/config impact,
 and remaining risks.
 ```
+
+
+## 19. Latest Prescription → Medicine Request → Order flow
+
+Current implemented flow:
+
+`Customer → Medicine Request → optional manual medicines + prescription upload → Python Prescription Service → durable processing job → OCR/NLP/dose/course extraction → REVIEW_REQUIRED or APPROVED → persisted prescriptionVerification → pharmacist proposal → customer approval → Order conversion → order-level medicine verification → fulfillment gate reconciliation`
+
+Rules:
+- Prescription upload is sent to the Python service; fake legacy scan responses are no longer authoritative.
+- Manual medicine entries are optional when a prescription is uploaded.
+- Empty manual rows are ignored.
+- Customer/admin UI shows extracted medicine name, strength, dose, frequency, duration/course and confidence/status.
+- Prescription verification against an order checks every included order medicine independently.
+- Verification uses exact productId when available, otherwise normalized medicine-name/strength matching plus quantity checks where prescription quantity is explicit/calculable.
+- `MATCHED` is required before prescription fulfillment gate can become `APPROVED`.
+- `PROCESSING`, `REVIEW_REQUIRED`, and `PARTIAL_MATCH` keep the order confirmed but not fulfillable.
+- `MISMATCH` is a safety block; it does not grant dispensing authorization.
+- Prescription approval/removal/cancellation races are resolved by current authoritative state.
+
+## 20. Latest Order prescription reconciliation
+
+The standalone Order Service now runs a DB-backed reconciliation loop:
+- claims `PENDING_REVIEW` prescription-gated orders with a lease
+- calls the Python Prescription Service
+- re-verifies all included order medicines
+- sets fulfillment prescription gate to `APPROVED` only on `MATCHED`
+- preserves `PENDING_REVIEW` for processing/review/partial-match states
+- marks `REJECTED` / `INACTIVE` when the authoritative prescription reaches those terminal states
+- re-reserves inventory through the existing fulfillment-gate path if the previous reservation expired
+- uses idempotent gate events and order versioning
+
+This makes frontend polling optional; correctness does not depend on the browser.
+
+## 21. Latest worker safety
+
+Python Prescription Worker now uses:
+- atomic lease ownership
+- heartbeat extension while OCR/NLP runs
+- worker-owned completion/failure updates
+- lease-loss detection before applying extraction results
+
+A worker that loses its lease must not overwrite a newer worker's result.
+
+## 22. Current remaining production gaps
+
+- The root Render blueprint is still a compatibility/single-service deployment; the standalone Order + Prescription API/worker topology must still be deployed and validated end-to-end on Render.
+- The integration outbox is durable, but the current order gate is completed by DB reconciliation rather than an external broker.
+- Python extraction intentionally does not claim Catalog-level medicine identity; it reports extracted text. Order-level matching is the current safety boundary.
+- Medicine Request conversion still uses the legacy backend Order creation path; full migration to the standalone Order Service for all Medicine Request conversions remains a future architecture step.
+- The request document is currently stored in both legacy GridFS compatibility storage and the Python encrypted document store; consolidate storage after migration.
+- Prescription replacement/re-upload should create a new version and re-run processing before allowing the related order to advance.
