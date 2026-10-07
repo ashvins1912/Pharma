@@ -383,3 +383,20 @@ A worker that loses its lease must not overwrite a newer worker's result.
 - Medicine Request conversion still uses the legacy backend Order creation path; full migration to the standalone Order Service for all Medicine Request conversions remains a future architecture step.
 - The request document is currently stored in both legacy GridFS compatibility storage and the Python encrypted document store; consolidate storage after migration.
 - Prescription replacement/re-upload is now versioned: the old extraction/review is cancelled, the new document is queued, and the same prescriptionId remains blocked until the new extraction is approved/matched.
+
+
+## 23. Latest security/deployment fixes
+
+The API Gateway authentication chain now forwards the requested tenant/branch context to the backend identity check. The backend resolves and validates that context, and the Gateway includes the verified tenant/branch claims in service credentials.
+
+Standalone Order Service now:
+- consumes verified tenantId/branchId claims,
+- rejects mismatched client tenant/branch values,
+- includes tenant/branch in idempotency fingerprints,
+- passes patientPuid into prescription verification.
+
+Prescription Render configuration now has:
+- web/API service
+- separate background worker
+- shared MongoDB/encryption/service-auth configuration
+
