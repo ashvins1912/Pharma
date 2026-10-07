@@ -127,24 +127,11 @@ export function AuthProvider({ children }) {
           setTimeout(() => {
             void (async () => {
               try {
-                const { data } = await apiClient.post('/api/v1/auth/google', {
-                  supabaseAccessToken: supaSession.access_token
-                });
-                const result = data?.data || data;
-                syncSession({ user: result?.user }, result?.user);
-                setProfileCompletionRequired(Boolean(result?.requiresProfileCompletion || result?.code === 'PROFILE_INCOMPLETE'));
-                // The Supabase session is only an upstream OAuth credential.
-                // Its cleanup must never invalidate a successfully created Pharma session.
-                if (supabase) {
-                  try {
-                    await supabase.auth.signOut({ scope: 'local' });
-                  } catch (cleanupError) {
-                    console.warn('Supabase OAuth cleanup failed after successful Pharma exchange.', {
-                      name: cleanupError?.name,
-                      status: cleanupError?.status
-                    });
-                  }
-                }
+                await exchangeGoogleSession(supaSession);
+                // Keep the upstream Google session available while the user
+                // completes the restricted Pharma onboarding flow. This lets
+                // us re-establish the onboarding cookie if a proxy drops the
+                // Set-Cookie header from the exchange response.
               } catch (error) {
                 console.error('Google identity exchange failed.', error);
                 syncSession(null);
@@ -362,18 +349,7 @@ export function AuthProvider({ children }) {
     } catch (error) {
       console.warn('Server logout request failed; local logout was completed.', { code: error.code, status: error.status, requestId: error.requestId });
     }
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) console.warn('Could not inspect Supabase session during logout.', { name: sessionError.name, status: sessionError.status });
-        if (data?.session) {
-          const { error } = await supabase.auth.signOut({ scope: 'local' });
-          if (error) console.warn('Supabase local logout returned an error.', { name: error.name, status: error.status });
-        }
-      } catch (error) {
-        console.warn('Supabase local logout failed.', { name: error.name, status: error.status });
-      }
-    }
+    clearSupabaseLocalSession();
     } finally {
       logoutInProgress.current = false;
     }
@@ -394,10 +370,54 @@ export function AuthProvider({ children }) {
     return result;
   };
 
-  const completeGoogleProfile = async (result) => {
+  const clearSupabaseLocalSession = () => {
+    if (!isSupabaseConfigured || !supabase || typeof window === 'undefined') return;
+    // Supabase is only the upstream Google identity broker in Pharma. Once
+    // the identity has been exchanged, the Pharma HttpOnly cookie is the
+    // application session. Remove the broker's browser copy without making a
+    // second logout API request that can legitimately return 403 when the
+    // upstream session is already gone.
+    try {
+      const projectRef = new URL(env.VITE_SUPABASE_URL).hostname.split('.')[0];
+      window.localStorage.removeItem(`sb-${projectRef}-auth-token`);
+    } catch {
+      // Local cleanup is best-effort; Pharma auth remains authoritative.
+    }
+  };
+
+  const exchangeGoogleSession = async (supaSession) => {
+    if (!supaSession?.access_token) throw new Error('Google sign-in session is unavailable.');
+    const { data } = await apiClient.post('/api/v1/auth/google', {
+      supabaseAccessToken: supaSession.access_token
+    });
+    const result = data?.data || data;
+    syncSession({ user: result?.user }, result?.user);
+    setProfileCompletionRequired(Boolean(result?.requiresProfileCompletion || result?.code === 'PROFILE_INCOMPLETE'));
+    return result;
+  };
+
+  const completeGoogleProfile = async (profileData) => {
+    let result;
+    try {
+      const { data } = await apiClient.put('/api/v1/auth/complete-profile', profileData);
+      result = data?.data || data;
+    } catch (error) {
+      // If a hosting proxy dropped the Set-Cookie from the Google exchange,
+      // recover the restricted onboarding session from the still-active
+      // upstream Google session and retry exactly once.
+      if (Number(error?.status) !== 401 || !supabase) throw error;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const supaSession = sessionData?.session;
+      if (!supaSession?.access_token) throw error;
+      await exchangeGoogleSession(supaSession);
+      const { data } = await apiClient.put('/api/v1/auth/complete-profile', profileData);
+      result = data?.data || data;
+    }
+
     const completedUser = result?.user || result;
     setProfileCompletionRequired(false);
     syncSession({ user: completedUser }, completedUser);
+    clearSupabaseLocalSession();
 
     // Profile completion is the first point at which the application should
     // re-hydrate the canonical Pharma session from /auth/me.
