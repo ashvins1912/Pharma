@@ -282,10 +282,11 @@ export function AuthProvider({ children }) {
     return result;
   };
 
-  const signUpWithEmail = async (email, password, name = '', mobile = '', firstName = '', lastName = '', dateOfBirth = '', gender = '') => {
+  const signUpWithEmail = async (email, password, confirmPassword = '', name = '', mobile = '', firstName = '', lastName = '', dateOfBirth = '', gender = '') => {
     const { data } = await apiClient.post('/api/v1/auth/signup', {
       email,
       password,
+      confirmPassword,
       name,
       firstName,
       lastName,
