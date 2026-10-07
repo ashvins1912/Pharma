@@ -390,13 +390,6 @@ export class AuthService {
             throw err;
         }
 
-        if (!normalizedPhone) {
-            const err = new Error('A valid Indian mobile number is required. Use 10 digits or 91/+91/0 prefix.');
-            err.code = 'INVALID_MOBILE';
-            err.status = 400;
-            throw err;
-        }
-
         if (!isStrongPassword(password)) {
             const err = new Error('Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, and one number.');
             err.code = 'WEAK_PASSWORD';
@@ -437,7 +430,7 @@ export class AuthService {
             mobileVerified: false,
             accountStatus: 'PENDING_EMAIL_VERIFICATION',
             status: 'PENDING_VERIFICATION',
-            profileCompleted: true,
+            profileCompleted: false,
             primaryAuthProvider: 'LOCAL',
             role: 'customer',
             roles: ['customer'],
@@ -457,38 +450,42 @@ export class AuthService {
             createdAt: new Date()
         });
 
-        // 6. Generate single-use verification token (Raw token never saved in DB)
+        // 6. Generate both a secure link token and a short-lived 6-digit email code.
+        // The raw values are never persisted; only SHA-256 hashes are stored.
         const rawToken = crypto.randomBytes(32).toString('hex');
         const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const verificationCode = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+        const codeHash = crypto.createHash('sha256').update(verificationCode).digest('hex');
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
         await this.saveVerificationToken({
             id: `tok_${crypto.randomUUID()}`,
             userId,
-            tokenHash,
-            purpose: 'ACCOUNT_ACTIVATION',
+            tokenHash: codeHash,
+            purpose: 'EMAIL_VERIFICATION',
             expiresAt,
             usedAt: null,
             revokedAt: null,
+            requestIp: null,
             createdAt: new Date()
         });
 
-        // Also store verificationTokenHash on user for backwards compat lookup
+        // Keep the link hash only for backwards-compatible activation links.
         userDoc.verificationTokenHash = tokenHash;
-        userDoc.verificationTokenExpiresAt = expiresAt;
+        userDoc.verificationTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
         inMemoryUsers.set(normalizedEmail, userDoc);
         inMemoryUsers.set(userId, userDoc);
 
-        // 7. Dispatch activation email
+        // 7. Dispatch verification email with the 6-digit code.
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
         const activationUrl = `${frontendUrl}/activate-account?token=${rawToken}`;
-        const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
 
         try {
             await emailService.sendEmailVerification({
                 email: normalizedEmail,
                 name: `${fName} ${lName}`.trim(),
                 token: rawToken,
+                code: verificationCode,
                 verificationUrl: activationUrl,
                 activationUrl
             });
@@ -515,7 +512,7 @@ export class AuthService {
             },
             verification: {
                 required: true,
-                message: 'Activation link sent. Please verify your email to activate your account.'
+                message: 'A 6-digit verification code has been sent to your email. It expires in 10 minutes.'
             }
         };
     }
@@ -627,8 +624,9 @@ export class AuthService {
         // 3. Activate user atomically
         user.emailVerified = true;
         user.emailVerifiedAt = now;
-        user.accountStatus = 'ACTIVE';
+        user.accountStatus = 'PROFILE_INCOMPLETE';
         user.status = 'ACTIVE';
+        user.profileCompleted = false;
         user.activatedAt = now;
         user.verificationTokenHash = null;
         user.verificationTokenExpiresAt = null;
@@ -657,19 +655,136 @@ export class AuthService {
         logger.info('Account activated successfully:', { userId: user.userId, email: user.email });
 
         return {
-            status: 'ACTIVE',
+            status: 'PROFILE_INCOMPLETE',
             emailVerified: true,
-            message: 'Your account has been activated successfully.',
+            requiresProfileCompletion: true,
+            message: 'Email verified. Please complete your Pharma profile.',
             user: {
                 id: user.userId || user.id,
                 userId: user.userId || user.id,
                 email: user.email,
                 firstName: user.firstName,
                 lastName: user.lastName,
-                accountStatus: 'ACTIVE',
+                accountStatus: 'PROFILE_INCOMPLETE',
+                profileCompleted: false,
                 emailVerified: true,
                 age: calculateAge(user.dateOfBirth)
             }
+        };
+    }
+
+    /**
+     * Verify the 6-digit email verification code.
+     * Successful verification moves the account to PROFILE_INCOMPLETE and
+     * returns the restricted onboarding token. No normal session is issued.
+     */
+    async verifyEmailCode({ email, code }) {
+        const normalizedEmail = String(email || '').trim().toLowerCase();
+        const normalizedCode = String(code || '').replace(/\D/g, '');
+
+        if (!normalizedEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalizedEmail)) {
+            const err = new Error('A valid email address is required.');
+            err.code = 'INVALID_EMAIL';
+            err.status = 400;
+            throw err;
+        }
+        if (!/^\d{6}$/.test(normalizedCode)) {
+            const err = new Error('Enter the 6-digit verification code.');
+            err.code = 'INVALID_VERIFICATION_CODE';
+            err.status = 400;
+            throw err;
+        }
+
+        const user = await this.findUser({ normalizedEmail });
+        if (!user) {
+            const err = new Error('Invalid verification code.');
+            err.code = 'INVALID_VERIFICATION_CODE';
+            err.status = 400;
+            throw err;
+        }
+        if (user.emailVerified && user.accountStatus === 'PROFILE_INCOMPLETE') {
+            const token = await this.createOnboardingToken(user);
+            return {
+                code: 'PROFILE_INCOMPLETE',
+                requiresProfileCompletion: true,
+                emailVerified: true,
+                user: {
+                    id: user.userId || user.id,
+                    userId: user.userId || user.id,
+                    email: user.email,
+                    firstName: user.firstName || '',
+                    lastName: user.lastName || '',
+                    accountStatus: 'PROFILE_INCOMPLETE',
+                    profileCompleted: false
+                },
+                accessToken: token
+            };
+        }
+
+        const codeHash = crypto.createHash('sha256').update(normalizedCode).digest('hex');
+        let verification = null;
+        if (getIsConnected()) {
+            verification = await EmailVerificationToken.findOne({
+                userId: user.userId || user.id,
+                purpose: 'EMAIL_VERIFICATION'
+            }).lean().exec().catch(() => null);
+        }
+        if (!verification) {
+            for (const candidate of inMemoryTokens.values()) {
+                if (candidate.userId === (user.userId || user.id) && candidate.purpose === 'EMAIL_VERIFICATION') {
+                    verification = candidate;
+                    break;
+                }
+            }
+        }
+
+        if (!verification || verification.revokedAt || verification.usedAt ||
+            !verification.expiresAt || new Date(verification.expiresAt) < new Date() ||
+            verification.tokenHash !== codeHash) {
+            const err = new Error('Invalid or expired verification code.');
+            err.code = 'INVALID_VERIFICATION_CODE';
+            err.status = 400;
+            throw err;
+        }
+
+        const now = new Date();
+        if (getIsConnected()) {
+            await EmailVerificationToken.updateOne(
+                { userId: user.userId || user.id, purpose: 'EMAIL_VERIFICATION', usedAt: null },
+                { $set: { usedAt: now } }
+            ).catch(() => {});
+        }
+        verification.usedAt = now;
+        inMemoryTokens.set(verification.tokenHash, verification);
+
+        user.emailVerified = true;
+        user.emailVerifiedAt = now;
+        user.accountStatus = 'PROFILE_INCOMPLETE';
+        user.status = 'ACTIVE';
+        user.profileCompleted = false;
+        user.verificationTokenHash = null;
+        user.verificationTokenExpiresAt = null;
+        await this.saveUser(user.userId || user.id, user);
+
+        const token = await this.createOnboardingToken(user);
+        return {
+            code: 'PROFILE_INCOMPLETE',
+            requiresProfileCompletion: true,
+            emailVerified: true,
+            message: 'Email verified. Please complete your Pharma profile.',
+            user: {
+                id: user.userId || user.id,
+                userId: user.userId || user.id,
+                email: user.email,
+                firstName: user.firstName || '',
+                lastName: user.lastName || '',
+                dateOfBirth: user.dateOfBirth || null,
+                mobileNumber: user.mobileNumber || user.mobile || '',
+                gender: user.gender || '',
+                accountStatus: 'PROFILE_INCOMPLETE',
+                profileCompleted: false
+            },
+            accessToken: token
         };
     }
 
@@ -728,16 +843,18 @@ export class AuthService {
                 }
             }
 
-            // Generate new token
+            // Generate a new short-lived 6-digit verification code.
             const rawToken = crypto.randomBytes(32).toString('hex');
             const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+            const verificationCode = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+            const codeHash = crypto.createHash('sha256').update(verificationCode).digest('hex');
+            const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
             await this.saveVerificationToken({
                 id: `tok_${crypto.randomUUID()}`,
                 userId: user.userId,
-                tokenHash,
-                purpose: 'ACCOUNT_ACTIVATION',
+                tokenHash: codeHash,
+                purpose: 'EMAIL_VERIFICATION',
                 expiresAt,
                 usedAt: null,
                 revokedAt: null,
@@ -746,7 +863,7 @@ export class AuthService {
             });
 
             user.verificationTokenHash = tokenHash;
-            user.verificationTokenExpiresAt = expiresAt;
+            user.verificationTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
             await this.saveUser(user.userId, user);
 
             const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -757,6 +874,7 @@ export class AuthService {
                     email: normalizedEmail,
                     name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
                     token: rawToken,
+                    code: verificationCode,
                     verificationUrl: activationUrl,
                     activationUrl
                 });
@@ -769,7 +887,7 @@ export class AuthService {
         return {
             success: true,
             canResendVerification: true,
-            message: 'If the account exists and requires activation, an activation email has been sent.'
+            message: 'If the account exists and requires verification, a new 6-digit verification code has been sent.'
         };
     }
 
@@ -1259,13 +1377,6 @@ export class AuthService {
             throw err;
         }
 
-        if (!normalizedPhone) {
-            const err = new Error('A valid Indian mobile number is required. Use 10 digits or 91/+91/0 prefix.');
-            err.code = 'INVALID_MOBILE';
-            err.status = 400;
-            throw err;
-        }
-
         const user = await this.findUser({ userId });
         if (!user) {
             const err = new Error('User not found.');
@@ -1281,8 +1392,10 @@ export class AuthService {
         user.lastName = lName;
         user.name = `${fName} ${lName}`.trim();
         user.dateOfBirth = dateOfBirth;
-        user.mobileNumber = normalizedPhone.e164;
-        user.mobile = normalizedPhone.e164;
+        if (normalizedPhone) {
+            user.mobileNumber = normalizedPhone.e164;
+            user.mobile = normalizedPhone.e164;
+        }
         if (gender) user.gender = gender;
         user.profileCompleted = true;
         user.accountStatus = 'ACTIVE';
@@ -1313,7 +1426,7 @@ export class AuthService {
                 name: user.name,
                 dateOfBirth,
                 age: calculateAge(dateOfBirth),
-                mobileNumber: normalizedPhone.e164,
+                mobileNumber: normalizedPhone?.e164 || user.mobileNumber || user.mobile || '',
                 accountStatus: 'ACTIVE',
                 profileCompleted: true,
                 emailVerified: Boolean(user.emailVerified)
