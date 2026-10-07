@@ -92,7 +92,7 @@ export default function Header({
               💊 Store
             </button>
 
-            {(!isPharmacyOrAdmin || user) && (
+            {user && !isPharmacyOrAdmin && (
               <>
                 <button
                   onClick={() => setActiveTab('orders')}
@@ -151,8 +151,8 @@ export default function Header({
           {/* Right: Actions Bar (Notifications, Cart, User Profile, Mobile Menu) */}
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             
-            {/* Customer actions stay visible on the store landing page; guests are prompted to sign in. */}
-            {!isPharmacyOrAdmin && (
+            {/* Customer actions render only after authenticated state has hydrated. */}
+            {user && !isPharmacyOrAdmin && (
               <>
                 <NotificationBell
                   onOpenOrders={user ? () => setActiveTab('orders') : null}
