@@ -5,13 +5,13 @@ import {
     classifyImportError,
     normalizeImportRow,
     buildFailureWorkbook
-} from '../backend/inventory-service/src/imports.js';
+} from '../services/inventory-service/src/imports.js';
 import {
     Product,
     Inventory,
     ImportJob,
     ImportFailure
-} from '../backend/inventory-service/src/models.js';
+} from '../services/inventory-service/src/models.js';
 
 test('Bulk Import: Schema Validation & Column Alias Normalization', () => {
     // 1. Valid row with standard column headers
