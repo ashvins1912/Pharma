@@ -18,7 +18,7 @@ import { tenantService } from '../tenant-service/TenantService.js';
 import { identityService } from './IdentityService.js';
 import { isPlatformSuperAdmin } from '../../shared/contracts/index.js';
 import { logger } from '../../shared/observability/logger.js';
-import { issuePharmaAccessToken } from '../../security/pharmaToken.js';
+import { issuePharmaAccessToken, verifyPharmaAccessToken } from '../../security/pharmaToken.js';
 import { authorizationService } from '../../authorization/AuthorizationService.js';
 import { generateTotpSecret, verifyTotpCode, buildOtpauthUri, generateQrCodeDataUrl } from '../../security/totp.js';
 import { encryptPII, decryptPII } from '../../security/cryptoVault.js';
