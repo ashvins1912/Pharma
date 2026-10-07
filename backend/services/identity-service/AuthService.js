@@ -518,6 +518,11 @@ export class AuthService {
                 logger.warn('Failed saving EmailVerificationToken to Mongo:', { error: e.message });
             }
         }
+        for (const [key, existing] of inMemoryTokens.entries()) {
+            if (existing?.userId === tokenData.userId && existing?.purpose === tokenData.purpose) {
+                inMemoryTokens.delete(key);
+            }
+        }
         inMemoryTokens.set(tokenData.tokenHash, tokenData);
         return tokenData;
     }
