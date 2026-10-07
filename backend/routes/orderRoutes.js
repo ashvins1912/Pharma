@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
 import Order from '../models/Order.js';
 import Rider from '../models/Rider.js';
-import { authenticateUser, authenticateSupabaseUser, isAdmin } from '../middleware/auth.js';
+import { authenticateUser, authenticateUser, isAdmin } from '../middleware/auth.js';
 import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
 import { getPrescription, removePrescription, savePrescription } from '../config/prescriptionStorage.js';
 import { getIsConnected } from '../config/db.js';
@@ -111,7 +111,7 @@ const handlePrescriptionUpload = (req, res, next) => {
     });
 };
 
-router.post('/', authenticateSupabaseUser, async (req, res) => {
+router.post('/', authenticateUser, async (req, res) => {
     if (!getIsConnected()) {
         return res.status(503).json({ error: 'MongoDB is unavailable. Order was not created.' });
     }
@@ -157,7 +157,7 @@ router.post('/', authenticateSupabaseUser, async (req, res) => {
     }
 });
 
-router.get('/', authenticateSupabaseUser, async (req, res) => {
+router.get('/', authenticateUser, async (req, res) => {
     if (!getIsConnected()) {
         return res.status(503).json({ error: 'MongoDB is unavailable. Orders cannot be fetched.' });
     }
