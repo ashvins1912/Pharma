@@ -24,7 +24,7 @@ export const config = {
   serviceJwtAudience: process.env.ORDER_SERVICE_JWT_AUDIENCE || 'order-service',
   inventoryJwtAudience: process.env.SERVICE_JWT_AUDIENCE || 'inventory-service',
   inventoryServiceUrl: (process.env.INVENTORY_SERVICE_URL || '').replace(/\/+$/, ''),
-  prescriptionServiceUrl: (process.env.PRESCRIPTION_SERVICE_URL || '').replace(/\/+$/, ''),
+  prescriptionServiceUrl: (process.env.PRESCRIPTION_SERVICE_URL || '').replace(/\/+$/, ''),\n  prescriptionJwtAudience: process.env.PRESCRIPTION_SERVICE_JWT_AUDIENCE || 'prescription-service',
   prescriptionReconciliationIntervalMs: positiveInteger(process.env.PRESCRIPTION_RECONCILIATION_INTERVAL_MS, 10000, 300000),
   prescriptionReconciliationBatchSize: positiveInteger(process.env.PRESCRIPTION_RECONCILIATION_BATCH_SIZE, 20, 100)
 };
