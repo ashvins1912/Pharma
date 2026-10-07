@@ -83,23 +83,34 @@ export function AuthProvider({ children }) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, supaSession) => {
         if (!mounted) return;
         if (supaSession) {
-          // Supabase is an upstream Google identity only. Exchange it once for
-          // the first-party Pharma session, then immediately clear the local
-          // Supabase browser session so it cannot become an API credential.
-          void (async () => {
-            try {
-              const { data } = await apiClient.post('/api/v1/auth/google', {
-                supabaseAccessToken: supaSession.access_token
-              });
-              const result = data?.data || data;
-              syncSession({ user: result?.user }, result?.user);
-              setProfileCompletionRequired(Boolean(result?.requiresProfileCompletion || result?.code === 'PROFILE_INCOMPLETE'));
-              if (supabase) await supabase.auth.signOut({ scope: 'local' });
-            } catch (error) {
-              console.error('Google identity exchange failed.', error);
-              syncSession(null);
+          const provider = supaSession.user?.app_metadata?.provider
+            || supaSession.user?.identities?.[0]?.provider;
+
+          if (provider !== 'google') {
+            if (event !== 'INITIAL_SESSION') {
+              void supabase.auth.signOut({ scope: 'local' }).catch(() => {});
             }
-          })();
+            return;
+          }
+
+          // Supabase auth callbacks must not await another Supabase auth
+          // operation. Defer exchange and cleanup until the callback returns.
+          setTimeout(() => {
+            void (async () => {
+              try {
+                const { data } = await apiClient.post('/api/v1/auth/google', {
+                  supabaseAccessToken: supaSession.access_token
+                });
+                const result = data?.data || data;
+                syncSession({ user: result?.user }, result?.user);
+                setProfileCompletionRequired(Boolean(result?.requiresProfileCompletion || result?.code === 'PROFILE_INCOMPLETE'));
+                if (supabase) await supabase.auth.signOut({ scope: 'local' });
+              } catch (error) {
+                console.error('Google identity exchange failed.', error);
+                syncSession(null);
+              }
+            })();
+          }, 0);
         } else if (event === 'SIGNED_OUT') {
           // Do not clear the first-party Pharma session just because the
           // temporary upstream Google session was removed after exchange.
@@ -171,12 +182,18 @@ export function AuthProvider({ children }) {
     if (!isSupabaseConfigured || !supabase) {
       throw new Error('Google sign-in is unavailable until Supabase is configured.');
     }
+
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+
     const redirectTo = env.VITE_FRONTEND_URL || window.location.origin;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo,
-        queryParams: { access_type: 'offline', prompt: 'select_account' }
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'select_account'
+        }
       }
     });
     if (error) throw error;
