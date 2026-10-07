@@ -827,7 +827,7 @@ export class AuthService {
             tenantId: null,
             branchId: null,
             scope: 'ONBOARDING',
-            tokenType: 'pharma_onboarding',
+            token_type: 'pharma_onboarding',
             expiresIn: '10m'
         });
     }
@@ -842,7 +842,7 @@ export class AuthService {
             scope: 'MFA',
             accountStatus: 'ACTIVE',
             factorId,
-            tokenType: 'pharma_mfa_challenge',
+            token_type: 'pharma_mfa_challenge',
             expiresIn: '5m'
         });
     }
