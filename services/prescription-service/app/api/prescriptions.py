@@ -237,6 +237,7 @@ async def review_prescription_legacy(
 ):
     """Legacy combined review endpoint → approve path with optimistic lock."""
     _require_review_permission(context)
+    await _authorized_prescription(prescription_id, context)
     try:
         result = await prescription_engine.approve_review(
             prescription_id=prescription_id,
