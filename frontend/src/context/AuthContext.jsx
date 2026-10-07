@@ -394,10 +394,27 @@ export function AuthProvider({ children }) {
     return result;
   };
 
-  const completeGoogleProfile = (result) => {
+  const completeGoogleProfile = async (result) => {
     const completedUser = result?.user || result;
     setProfileCompletionRequired(false);
     syncSession({ user: completedUser }, completedUser);
+
+    // Profile completion is the first point at which the application should
+    // re-hydrate the canonical Pharma session from /auth/me.
+    try {
+      const { data } = await apiClient.get('/api/v1/auth/me');
+      const sessionUser = data?.user || (data?.id ? data : null);
+      if (sessionUser) {
+        syncSession({ user: sessionUser }, sessionUser);
+        setMfaEnabled(Boolean(data?.mfaEnabled));
+        setAal(data?.aal || 'aal1');
+      }
+    } catch (error) {
+      console.warn('Completed profile but could not refresh Pharma session profile.', {
+        code: error?.code,
+        status: error?.status
+      });
+    }
   };
 
   return (
