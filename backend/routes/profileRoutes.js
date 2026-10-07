@@ -2,7 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import UserProfile from '../models/UserProfile.js';
 import UserAddress from '../models/UserAddress.js';
-import { authenticateUser, authenticateUser } from '../middleware/auth.js';
+import { authenticateUser } from '../middleware/auth.js';
 import { getIsConnected } from '../config/db.js';
 
 const router = express.Router();

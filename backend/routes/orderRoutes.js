@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
 import Order from '../models/Order.js';
 import Rider from '../models/Rider.js';
-import { authenticateUser, authenticateUser, isAdmin } from '../middleware/auth.js';
+import { authenticateUser, isAdmin } from '../middleware/auth.js';
 import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
 import { getPrescription, removePrescription, savePrescription } from '../config/prescriptionStorage.js';
 import { getIsConnected } from '../config/db.js';
