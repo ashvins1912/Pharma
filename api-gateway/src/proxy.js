@@ -38,6 +38,12 @@ export function proxyRequest(
     delete headers['x-xsrf-token'];
     delete headers['x-csrf-token'];
     headers.authorization = serviceAuthorization;
+    // Internal services receive the already-authenticated identity context.
+    // These headers are set only after gateway authentication and are never
+    // accepted from the browser as a source of trust.
+    if (req.user?.id) headers['x-user-id'] = String(req.user.id);
+    const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId;
+    if (tenantId) headers['x-tenant-id'] = String(tenantId);
   }
   headers['x-request-id'] = requestId;
   headers['x-correlation-id'] = req.correlationId || requestId;
