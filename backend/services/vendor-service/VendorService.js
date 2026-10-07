@@ -309,13 +309,23 @@ class VendorService {
                     pincode: vendor.address?.pincode || null
                 }
             },
+            identity: {
+                firstTimeUser: true,
+                accountStatus: 'PROFILE_INCOMPLETE',
+                profileCompleted: false,
+                onboardingStage: 'PROFILE'
+            },
             requiredFields: [
                 'firstName',
                 'lastName',
+                'dateOfBirth',
+                'gender',
                 'mobile',
                 'password',
                 'companyName',
-                'address'
+                'address.city',
+                'address.state',
+                'address.pincode'
             ]
         };
     }
@@ -373,6 +383,8 @@ class VendorService {
         const lastName = (submission.lastName || '').trim();
         const mobile = (submission.mobile || vendor.mobile || '').trim();
         const password = submission.password || '';
+        const dateOfBirth = String(submission.dateOfBirth || '').trim();
+        const gender = String(submission.gender || '').trim().toUpperCase();
         const dateOfBirth = (submission.dateOfBirth || '').trim();
         const gender = (submission.gender || '').trim().toUpperCase();
 
