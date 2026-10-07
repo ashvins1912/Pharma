@@ -62,29 +62,10 @@ router.post('/onboarding/:token/complete', onboardingLimiter, async (req, res) =
     try {
         const result = await vendorService.completeOnboarding(req.params.token, req.body);
 
-        // Issue session JWT for the newly created Tenant Administrator
-        let accessToken = null;
-        try {
-            accessToken = await new SignJWT({
-                sub: result.user.id,
-                email: result.user.email,
-                name: `${result.user.firstName} ${result.user.lastName}`.trim(),
-                role: 'TENANT_ADMIN',
-                roles: ['TENANT_ADMIN'],
-                tenantId: result.tenant.id,
-                app_metadata: { role: 'TENANT_ADMIN', tenantId: result.tenant.id },
-                user_metadata: { name: `${result.user.firstName} ${result.user.lastName}`.trim() }
-            })
-                .setProtectedHeader({ alg: 'HS256' })
-                .setSubject(result.user.id)
-                .setIssuedAt()
-                .setExpirationTime('2h')
-                .sign(SIGNING_KEY);
-
-            setSessionCookies(res, { accessToken });
-        } catch (jwtErr) {
-            console.warn('JWT generation note:', jwtErr.message);
-        }
+        // Vendor onboarding returns the canonical Pharma RS256 session token.
+        // Never issue the legacy HS256/demo token here.
+        const accessToken = result.accessToken || null;
+        if (accessToken) setSessionCookies(res, { accessToken });
 
         return sendSuccess(res, {
             data: {
