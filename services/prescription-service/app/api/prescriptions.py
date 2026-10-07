@@ -155,6 +155,26 @@ async def get_prescription(
     )
     return {"success": True, "data": data.model_dump(), "message": "Prescription retrieved successfully", "version": record.get("version")}
 
+@router.post("/{prescription_id}/reprocess")
+async def reprocess_prescription(
+    prescription_id: str,
+    context: ServiceUserContext = Depends(get_current_service_context)
+):
+    _require_review_permission(context)
+    await _authorized_prescription(prescription_id, context)
+    try:
+        result = await prescription_engine.reprocess_prescription(
+            prescription_id,
+            context.user_id,
+        )
+        return {"success": True, "data": result, "message": "Prescription processing re-initiated."}
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    except RuntimeError as exc:
+        if str(exc) == "INACTIVE":
+            raise HTTPException(status_code=409, detail="Prescription is inactive")
+        raise HTTPException(status_code=409, detail=str(exc))
+
 @router.post("/{prescription_id}/review/claim")
 async def claim_review(
     prescription_id: str,
