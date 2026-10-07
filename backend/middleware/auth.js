@@ -96,6 +96,7 @@ export const authenticateUser = async (req, res, next) => {
         req.user = {
             sub: payload.sub,
             id: payload.sub,
+            supabaseId: payload.sub,
             email: payload.email || '',
             name: payload.name || '',
             firstName: payload.firstName || '',
@@ -157,36 +158,7 @@ export const authenticateUser = async (req, res, next) => {
     return res.status(401).json({ message: 'Invalid or expired authentication token.', code: 'INVALID_PHARMA_TOKEN' });
 };
 
-export const authenticateSupabaseUser = async (req, res, next) => {
-    const authorization = req.headers.authorization || '';
-    const [scheme, token] = authorization.split(' ');
-    if (scheme !== 'Bearer' || !token) {
-        return res.status(401).json({ error: 'A Supabase bearer token is required.' });
-    }
-    if (!SUPABASE_JWKS || !SUPABASE_URL) {
-        return res.status(401).json({ error: 'Supabase authentication is not configured.' });
-    }
-
-    try {
-        const { payload } = await jwtVerify(token, SUPABASE_JWKS, {
-            issuer: `${SUPABASE_URL}/auth/v1`,
-            audience: 'authenticated'
-        });
-        if (typeof payload.sub !== 'string' || !payload.sub) {
-            return res.status(401).json({ error: 'The Supabase token does not include a valid user ID.' });
-        }
-        req.user = {
-            supabaseId: payload.sub,
-            sub: payload.sub,
-            email: payload.email,
-            app_metadata: payload.app_metadata || {},
-            user_metadata: payload.user_metadata || {}
-        };
-        return next();
-    } catch {
-        return res.status(401).json({ error: 'The Supabase bearer token is invalid or expired.' });
-    }
-};
+export const authenticateSupabaseUser = authenticateUser;
 
 export const requireSuperAdmin = (req, res, next) => {
     const role = req.user?.app_metadata?.role || req.user?.role || req.context?.role;
