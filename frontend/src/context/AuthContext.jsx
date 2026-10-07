@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { isSupabaseConfigured, supabase } from '../supabaseClient';
 import apiClient, { setAuthTransport } from '../api/apiClient';
 import { env } from '../config/env';
+import GoogleProfileOnboarding from '../components/auth/GoogleProfileOnboarding';
 
 const AuthContext = createContext(null);
 
@@ -11,6 +12,7 @@ export function AuthProvider({ children }) {
   const [role, setRole] = useState('customer');
   const [loading, setLoading] = useState(true);
   const [passwordRecoveryRequired, setPasswordRecoveryRequired] = useState(false);
+  const [profileCompletionRequired, setProfileCompletionRequired] = useState(false);
 
   // Zero-Cost TOTP Multi-Factor Authentication State
   const [mfaRequired, setMfaRequired] = useState(false);
@@ -83,10 +85,30 @@ export function AuthProvider({ children }) {
         }
         if (!mounted) return;
         if (supaSession) {
-          setAuthTransport('bearer');
-          syncSession(supaSession);
+          // Supabase is an upstream Google identity only. Exchange it once for
+          // the first-party Pharma session, then immediately clear the local
+          // Supabase browser session so it cannot become an API credential.
+          void (async () => {
+            try {
+              setAuthTransport('bearer');
+              const { data } = await apiClient.post('/api/v1/auth/google', {
+                supabaseAccessToken: supaSession.access_token
+              });
+              setAuthTransport('cookie');
+              const result = data?.data || data;
+              syncSession({ user: result?.user }, result?.user);
+              setProfileCompletionRequired(Boolean(result?.requiresProfileCompletion || result?.code === 'PROFILE_INCOMPLETE'));
+              if (supabase) await supabase.auth.signOut({ scope: 'local' });
+            } catch (error) {
+              console.error('Google identity exchange failed.', error);
+              setAuthTransport('cookie');
+              syncSession(null);
+            }
+          })();
+        } else if (event === 'SIGNED_OUT') {
+          // Do not clear the first-party Pharma session just because the
+          // temporary upstream Google session was removed after exchange.
         }
-        else if (event === 'SIGNED_OUT') syncSession(null);
       });
       return () => {
         mounted = false;
@@ -149,6 +171,7 @@ export function AuthProvider({ children }) {
     setAal(data.aal || 'aal1');
     setMfaRequired(false);
     setMfaChallenge(null);
+    setProfileCompletionRequired(Boolean(data?.requiresProfileCompletion || data?.code === 'PROFILE_INCOMPLETE'));
     return { success: true, user: data.user };
   };
 
@@ -180,6 +203,7 @@ export function AuthProvider({ children }) {
 
     setAuthTransport('cookie');
     syncSession({ user: data.user }, data.user);
+    setProfileCompletionRequired(false);
     setAal('aal2');
     setMfaEnabled(true);
     setMfaRequired(false);
@@ -259,6 +283,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('demo_session');
     localStorage.removeItem('demo_auth_token');
     syncSession(null);
+    setProfileCompletionRequired(false);
     setMfaRequired(false);
     setMfaChallenge(null);
     window.dispatchEvent(new CustomEvent('ashvin:logout-complete'));
@@ -303,6 +328,12 @@ export function AuthProvider({ children }) {
     setPasswordRecoveryRequired(false);
   };
 
+  const completeGoogleProfile = (result) => {
+    const completedUser = result?.user || result;
+    setProfileCompletionRequired(false);
+    syncSession({ user: completedUser }, completedUser);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -321,6 +352,7 @@ export function AuthProvider({ children }) {
         mfaEnabled,
         aal,
         passwordRecoveryRequired,
+        profileCompletionRequired,
         loginWithGoogle,
         loginWithEmail,
         verifyTotp,
@@ -337,6 +369,13 @@ export function AuthProvider({ children }) {
       }}
     >
       {children}
+      {profileCompletionRequired && user && (
+        <GoogleProfileOnboarding
+          user={user}
+          onComplete={completeGoogleProfile}
+          onLogout={logout}
+        />
+      )}
     </AuthContext.Provider>
   );
 }
