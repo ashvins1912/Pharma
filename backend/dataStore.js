@@ -3345,6 +3345,7 @@ export const dataStore = {
             try {
                 prescriptionVerification = await verifyPrescriptionAgainstItems({
                     prescriptionId: request.prescriptionId,
+                    patientPuid: request.patientPuid || null,
                     items: [{
                         productId: proposal.productId || null,
                         name: proposal.medicineName,
