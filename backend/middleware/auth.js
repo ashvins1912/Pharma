@@ -1,22 +1,9 @@
 import 'dotenv/config';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { jwtVerify } from 'jose';
 import { verifyDemoAdminToken } from '../config/demoAdmin.js';
 import { verifyDemoCustomerToken } from '../config/demoCustomer.js';
 import { env } from '../config/env.js';
 import { verifyPharmaAccessToken } from '../security/pharmaToken.js';
-
-const { SUPABASE_URL } = env;
-let SUPABASE_JWKS = null;
-
-if (SUPABASE_URL && SUPABASE_URL.startsWith('https://')) {
-    try {
-        SUPABASE_JWKS = createRemoteJWKSet(
-            new URL(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`)
-        );
-    } catch (error) {
-        console.error('Failed to initialize Supabase JWKS:', error);
-    }
-}
 
 const isDemoAuthEnabled = env.NODE_ENV !== 'production';
 const JWT_SECRET = process.env.DEMO_ADMIN_JWT_SECRET
