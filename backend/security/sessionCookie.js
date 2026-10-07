@@ -24,7 +24,7 @@ export const COOKIE_CONFIG = {
         httpOnly: true,
         secure: isProduction,
         sameSite: isProduction ? 'none' : 'lax',
-        path: '/api/auth',
+        path: '/api/v1/auth',
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     },
     CSRF_TOKEN: {
@@ -63,7 +63,7 @@ export function setSessionCookies(res, { accessToken, refreshToken = null, csrfT
  */
 export function clearSessionCookies(res) {
     res.clearCookie('access_token', { path: '/' });
-    res.clearCookie('refresh_token', { path: '/api/auth' });
+    res.clearCookie('refresh_token', { path: '/api/v1/auth' });
     res.clearCookie('XSRF-TOKEN', { path: '/' });
 }
 
