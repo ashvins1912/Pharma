@@ -25,7 +25,7 @@ test('1. AuthService: isolated authentication, password hashing, and credentials
     // Attempting login before email verification should fail
     await assert.rejects(
         authService.authenticateCredentials({ email: uniqueEmail, password: 'Password@123' }),
-        err => err.code === 'EMAIL_NOT_VERIFIED'
+        err => err.code === 'EMAIL_VERIFICATION_REQUIRED'
     );
 
     // Fetch user and verify token
