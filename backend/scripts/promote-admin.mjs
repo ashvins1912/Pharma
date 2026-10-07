@@ -3,10 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const email = (process.argv[2] || 'ashvinsingh25@gmail.com').trim().toLowerCase();
+const email = String(process.argv[2] || process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
 
-if (!supabaseUrl || !serviceRoleKey) {
-    console.error('Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the local server environment.');
+if (!supabaseUrl || !serviceRoleKey || !email) {
+    console.error('Set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and the target admin email in the local server environment.');
     process.exit(1);
 }
 
