@@ -47,10 +47,10 @@ export function AuthProvider({ children }) {
     async function initAuth() {
       try {
         // Initialize anti-CSRF token
-        await apiClient.get('/api/auth/csrf').catch(() => {});
+        await apiClient.get('/api/v1/auth/csrf').catch(() => {});
 
         // Check active session via HttpOnly cookie
-        const { data } = await apiClient.get('/api/auth/session');
+        const { data } = await apiClient.get('/api/v1/auth/me');
         const sessionUser = data?.user || (data?.id ? data : null);
         if (mounted && sessionUser) {
           syncSession({ user: sessionUser }, sessionUser);
@@ -74,14 +74,15 @@ export function AuthProvider({ children }) {
       }
     }
 
+    if (window.location.pathname === '/reset-password' && new URLSearchParams(window.location.search).get('token')) {
+      setPasswordRecoveryRequired(true);
+    }
+
     initAuth();
 
-    // Supabase Auth listener if configured
+    // Supabase is retained only as the upstream Google identity broker.
     if (isSupabaseConfigured) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, supaSession) => {
-        if (event === 'PASSWORD_RECOVERY') {
-          setPasswordRecoveryRequired(true);
-        }
         if (!mounted) return;
         if (supaSession) {
           // Supabase is an upstream Google identity only. Exchange it once for
@@ -144,7 +145,7 @@ export function AuthProvider({ children }) {
         // Backend authentication remains authoritative; do not block login.
       }
     }
-    const res = await apiClient.post('/api/auth/login', { email, password });
+    const res = await apiClient.post('/api/v1/auth/login', { email, password });
     const data = res.data;
 
     if (data.mfaRequired) {
@@ -188,7 +189,7 @@ export function AuthProvider({ children }) {
       throw new Error('MFA challenge session expired. Please sign in again.');
     }
 
-    const { data } = await apiClient.post('/api/auth/mfa/verify', {
+    const { data } = await apiClient.post('/api/v1/auth/mfa/verify', {
       code,
       challengeToken: mfaChallenge.challengeToken
     });
@@ -211,32 +212,34 @@ export function AuthProvider({ children }) {
    * MFA Enrollment Methods
    */
   const enrollMfa = async () => {
-    const { data } = await apiClient.post('/api/auth/mfa/enroll');
+    const { data } = await apiClient.post('/api/v1/auth/mfa/enroll');
     return data;
   };
 
   const confirmMfaEnroll = async (code) => {
-    const { data } = await apiClient.post('/api/auth/mfa/confirm-enroll', { code });
+    const { data } = await apiClient.post('/api/v1/auth/mfa/confirm-enroll', { code });
     setMfaEnabled(true);
     setAal('aal2');
     return data;
   };
 
   const disableMfa = async () => {
-    const { data } = await apiClient.post('/api/auth/mfa/mfa-disable');
+    const { data } = await apiClient.post('/api/v1/auth/mfa/mfa-disable');
     setMfaEnabled(false);
     setAal('aal1');
     return data;
   };
 
-  const signUpWithEmail = async (email, password, name = '', mobile = '', firstName = '', lastName = '') => {
+  const signUpWithEmail = async (email, password, name = '', mobile = '', firstName = '', lastName = '', dateOfBirth = '', gender = '') => {
     const { data } = await apiClient.post('/api/v1/auth/signup', {
       email,
       password,
       name,
       firstName,
       lastName,
-      mobile
+      mobile,
+      dateOfBirth,
+      gender
     });
     if (data?.data?.user && data?.data?.user?.status === 'ACTIVE') {
       syncSession({ user: data.data.user }, data.data.user);
@@ -276,7 +279,7 @@ export function AuthProvider({ children }) {
     setMfaChallenge(null);
     window.dispatchEvent(new CustomEvent('ashvin:logout-complete'));
     try {
-      await apiClient.post('/api/auth/logout');
+      await apiClient.post('/api/v1/auth/logout');
     } catch (error) {
       console.warn('Server logout request failed; local logout was completed.', { code: error.code, status: error.status, requestId: error.requestId });
     }
@@ -298,22 +301,15 @@ export function AuthProvider({ children }) {
   };
 
   const sendPasswordResetEmail = async (email) => {
-    if (!isSupabaseConfigured) {
-      throw new Error('Password reset is unavailable until Supabase is configured.');
-    }
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: env.VITE_FRONTEND_URL || window.location.origin
-    });
-    if (error) throw error;
+    await apiClient.post('/api/v1/auth/password/forgot', { email });
   };
 
   const updatePassword = async (password) => {
-    if (!isSupabaseConfigured) {
-      throw new Error('Password reset is unavailable until Supabase is configured.');
-    }
-    const { error } = await supabase.auth.updateUser({ password });
-    if (error) throw error;
+    const token = new URLSearchParams(window.location.search).get('token');
+    if (!token) throw new Error('Password reset link is missing or expired.');
+    await apiClient.post('/api/v1/auth/password/reset', { token, password });
     setPasswordRecoveryRequired(false);
+    window.history.replaceState({}, document.title, window.location.pathname);
   };
 
   const completeGoogleProfile = (result) => {
