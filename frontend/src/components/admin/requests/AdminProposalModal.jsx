@@ -414,23 +414,24 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
           </div>
         </div>
 
-        {/* Prescription Verification Dropdown */}
+        {/* Prescription Verification Status
+             Server-owned: the client cannot manually override the verification result. */}
         <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
           <div>
             <span className="font-extrabold text-amber-950 block">Prescription Verification Status</span>
-            <p className="text-[11px] text-amber-800">Confirm clinical verification before customer approval.</p>
+            <p className="text-[11px] text-amber-800">
+              Verification is authoritative on the server before the proposal/order can proceed.
+            </p>
           </div>
-          <select
-            value={prescriptionStatus}
-            onChange={(e) => setPrescriptionStatus(e.target.value)}
-            disabled={!canEditProposal || !reviewReady}
-            className="px-3 py-1.5 text-xs font-bold bg-white border border-amber-300 rounded-xl text-amber-950 outline-none"
-          >
-            <option value="Verified">✓ Verified by Pharmacist</option>
-            <option value="Pending Verification">⏳ Pending Verification</option>
-            <option value="Not Required">Not Required (OTC)</option>
-            <option value="Rejected">✕ Prescription Rejected</option>
-          </select>
+          <div className="px-3 py-1.5 text-xs font-bold bg-white border border-amber-300 rounded-xl text-amber-950">
+            {prescriptionStatus === 'Verified'
+              ? '✓ Matched'
+              : prescriptionStatus === 'Rejected'
+                ? '✕ Rejected'
+                : prescriptionStatus === 'Not Required'
+                  ? 'Not Required (OTC)'
+                  : '⏳ Pending Verification'}
+          </div>
         </div>
 
         {/* Proposal Formulation Form */}
