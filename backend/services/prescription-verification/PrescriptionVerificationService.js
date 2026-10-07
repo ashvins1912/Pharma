@@ -81,6 +81,7 @@ export async function verifyPrescriptionAgainstItems({
   prescriptionId,
   items,
   userId,
+  patientPuid = null,
   tenantId,
   branchId,
   isAdmin = false
@@ -105,7 +106,7 @@ export async function verifyPrescriptionAgainstItems({
   const status = prescription?.status;
 
   const prescriptionPuid = prescription?.patientPuid || null;
-  const requestedPuid = items?.patientPuid || null;
+  const requestedPuid = patientPuid || null;
   if (requestedPuid && prescriptionPuid && String(requestedPuid) !== String(prescriptionPuid)) {
     return {
       status: 'MISMATCH',
