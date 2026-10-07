@@ -1154,7 +1154,7 @@ export class AuthService {
             await identityService.getOrCreateCustomer(userId, {
                 name: user.name,
                 email: user.email,
-                normalizedPhone.e164
+                phone: normalizedPhone.e164
             });
         } catch (e) {
             logger.warn('Failed linking Customer record on profile completion:', { error: e.message });
