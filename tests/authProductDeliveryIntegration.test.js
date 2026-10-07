@@ -12,6 +12,8 @@ test('1. AuthService: isolated authentication, password hashing, and credentials
         lastName: 'Tester',
         email: uniqueEmail,
         mobile: '9876543210',
+        dateOfBirth: '1992-04-10',
+        gender: 'PREFER_NOT_TO_SAY',
         password: 'Password@123'
     });
 
