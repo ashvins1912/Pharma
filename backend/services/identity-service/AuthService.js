@@ -973,11 +973,6 @@ export class AuthService {
 
         // 4. One provider-independent account state policy
         this.assertAccountState(user, { allowProfileIncomplete: true });
-            const err = new Error('Your account is suspended or disabled. Please contact support.');
-            err.code = 'FORBIDDEN';
-            err.status = 403;
-            throw err;
-        }
 
         // 5. Verification/activation checks are part of assertAccountState.
         // 6. Check if profile completion is required
