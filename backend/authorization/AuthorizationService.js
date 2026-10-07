@@ -56,6 +56,12 @@ export class AuthorizationService {
 
     const rawRole = membership?.role || user?.role || user?.app_metadata?.role || user?.roles?.[0] || 'customer';
     const role = isPlatformSuperAdmin(rawRole) ? 'SUPER_ADMIN' : rawRole;
+    if (getRoleScope(role) === 'TENANT' && !membership) {
+      const err = new Error('Active tenant membership is required.');
+      err.code = 'TENANT_ACCESS_DENIED';
+      err.status = 403;
+      throw err;
+    }
     const rolePermissions = await getRolePermissions(role);
     const permissions = new Set(rolePermissions);
 
