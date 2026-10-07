@@ -100,15 +100,15 @@ class VendorService {
         if (getIsConnected()) {
             try {
                 await Vendor.findByIdAndUpdate(vendorId, { $set: doc }, { upsert: true, new: true });
-                await UserProfile.findOneAndUpdate(
-                    { normalizedEmail: email },
-                    { $setOnInsert: pendingUserDoc },
-                    { upsert: true, new: true }
-                );
             } catch (err) {
                 logger.error('Failed to save Vendor in MongoDB:', { error: err.message });
             }
         }
+
+        // Register the invited identity immediately as a first-time user.
+        // The account deliberately remains PROFILE_INCOMPLETE until the invitation
+        // flow collects all required personal + tenant details.
+        await authService.saveUser(invitedUserId, pendingUserDoc);
 
         inMemoryVendors.set(vendorId, doc);
         inMemoryVendors.set(onboardingTokenHash, doc);
