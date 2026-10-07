@@ -238,7 +238,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
               {prescriptionRequired && prescriptionChoice !== 'yes' && <p className="mt-2 text-xs font-bold text-rose-800">A prescription is required for one or more items in this cart. Choose Yes and upload it to continue.</p>}
               {(prescriptionRequired || prescriptionChoice === 'yes') && <>
                 <label htmlFor="prescription-upload" className="mt-2 block text-xs font-bold text-slate-800">
-                  Upload Prescription (PDF or image; maximum 5 MB — images are converted to PDF automatically)
+                  Upload Prescription (PDF or image; maximum 8 MB — mobile photos are converted to PDF automatically)
                 </label>
                 <input
                   id="prescription-upload"
@@ -254,9 +254,9 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                       event.target.value = '';
                       return;
                     }
-                    if (file && file.size > 5 * 1024 * 1024) {
+                    if (file && file.size > 8 * 1024 * 1024) {
                       setPrescriptionFile(null);
-                      setPrescriptionError('The prescription file must be 5 MB or smaller.');
+                      setPrescriptionError('The prescription file must be 8 MB or smaller.');
                       event.target.value = '';
                       return;
                     }
