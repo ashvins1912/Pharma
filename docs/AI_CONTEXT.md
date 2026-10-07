@@ -2,7 +2,7 @@
 
 **Purpose:** Compact source-of-truth for future AI coding/modification tasks.
 **Last verified against `main`:** 2026-10-07
-**Latest verified HEAD:** `89de520676a67c07659b766ce17008d5f7dc5766`
+**Latest verified HEAD:** `61adf96a5058a6ecf30db9571b9b4a295eb33281`
 
 ## 1. Current repository reality
 
