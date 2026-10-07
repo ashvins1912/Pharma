@@ -1,46 +1,51 @@
 # AI_CONTEXT.md — Ashvin Pharma Working Contract
 
-**Purpose:** Compact context for future AI coding/modification tasks. Read this file first. Do not re-infer architecture from scratch.
+**Purpose:** Compact source-of-truth for future AI coding/modification tasks.
+**Last verified against `main`:** 2026-10-07
+**Latest verified HEAD:** `61adf96a5058a6ecf30db9571b9b4a295eb33281`
 
-## 1. Repository reality
+## 1. Current repository reality
 
-Repo: `ashvins1912/Pharma`
-Default branch: `main`
+Repository: `ashvins1912/Pharma`
 
-Current repository is a **hybrid/migration state**, not a fully consolidated microservice platform.
+The repo is still a **hybrid migration platform**, but the latest `main` has moved further toward durable service architecture.
 
-Important live paths:
-- `frontend/` — React/Vite frontend
-- `api-gateway/` — gateway
-- `backend/` — legacy/active Express business platform plus extracted services
-- `services/` — newer standalone services, including Python Prescription Service
-- root `server.ts` — compatibility/full-stack runner still present
-- `render.yaml` — current root Render blueprint
+Important paths:
+- `frontend/` — React/Vite application
+- `api-gateway/` — centralized gateway
+- `backend/` — legacy/active Express platform plus extracted services
+- `backend/shared/integration/` — integration adapter/outbox abstraction
+- `backend/services/` — extracted Node services, including Customer/Person and legacy Prescription
+- `services/prescription-service/` — Python FastAPI Prescription Service + durable worker
+- `render.yaml` — root Render compatibility deployment
+- root `server.ts` — compatibility runner
 
-Do not assume existing architecture docs equal completed migration.
+**Do not assume every architecture document describes completed migration. Verify code before changing ownership or deployment.**
 
-## 2. Core architecture rule
+## 2. Core target architecture
 
-Target:
+`Frontend → API Gateway → Domain Service → owned persistence`
 
-`Frontend → API Gateway → Domain Services → owned persistence`
-
-No frontend-to-service direct business calls when gateway routing exists.
-No service may directly mutate another service's database.
+Rules:
+- Gateway is the public API boundary.
+- Services own their domain data.
+- No direct cross-service DB mutation.
+- Prefer internal authenticated service-to-service calls.
+- Legacy routes may remain during migration, but do not create a second business implementation.
 
 ## 3. Domain ownership
 
 - **Identity:** authentication, accounts, credentials, OAuth, activation, sessions, refresh tokens, MFA, auth audit.
 - **Customer/Person:** Customer, Person, PUID, family relationships/invitations.
 - **Tenant:** tenants, branches, memberships, branch policies.
-- **Catalog/Pricing:** global product identity, branch listing, authoritative server pricing.
-- **Inventory:** sole authority for stock, reservation, release, deduction, imports.
-- **Order:** order record, lifecycle FSM, price/address snapshots, fulfillment decision.
-- **Prescription:** prescription document, OCR/NLP/matching, review workflow, approval/rejection/removal.
-- **Delivery:** riders, jobs, assignment, routes, delivery lifecycle.
-- **Notification:** email/SMS/WhatsApp/in-app notification delivery.
-- **Pharmacy Integration:** external POS/ERP provider adapters.
-- **Vendor/Pricing/other services:** keep ownership explicit and avoid duplicate implementations.
+- **Catalog/Pricing:** global product identity, branch listing, authoritative pricing.
+- **Inventory:** sole stock authority; reservation/release/deduction/imports.
+- **Order:** order lifecycle/state machine, price/address snapshots, fulfillment decision/gates.
+- **Prescription:** document, OCR/NLP/matching, processing jobs, review, approval/rejection/removal.
+- **Delivery:** riders, delivery jobs, assignment, routes, lifecycle.
+- **Notification:** notification delivery/fanout.
+- **Pharmacy Integration:** external POS/ERP adapters.
+- Keep any other service ownership explicit; never duplicate domain ownership.
 
 ## 4. Identity ≠ PUID
 
@@ -50,109 +55,144 @@ No service may directly mutate another service's database.
 
 One user can manage multiple PUIDs.
 
-PUID:
-- server-generated
+PUID is:
+- server generated
 - immutable
 - never reused
+- opaque
 - not derived from name/email/mobile/DOB
 - not an authorization credential
 
-Prescription/order must reference the patient PUID when patient identity is required.
+Healthcare authorization must be checked separately from possession of a PUID.
 
-## 5. Multi-tenant security
+## 5. Multi-tenant security contract
 
-Every protected operation must derive trusted identity from authenticated context.
+Trusted authorization context must come from authenticated identity and verified membership.
 
-Important context:
-- userId
-- customerId
-- tenantId
-- branchId
-- roles
-- permissions
-- platform-user status
+Typical context:
+`userId, customerId, tenantId, branchId, roles, permissions, isPlatformUser`
 
-Never trust request body/query values such as tenantId, branchId, userId, role, permissions for authorization.
+Never use request body/query values as the source of authorization for:
+`tenantId, branchId, userId, customerId, role, permissions, PUID`
 
-Tenant and branch isolation are mandatory.
+Every tenant-scoped read/write must enforce tenant/branch isolation.
 
-## 6. Prescription target flow
+## 6. Current Customer/Person direction
 
-Prescription processing is asynchronous and must NOT synchronously block Order Service.
+A Customer/Person Service now exists under:
+`backend/services/customer-service/`
 
-Target flow:
+Current capabilities include:
+- durable Customer profile
+- Person/PUID creation
+- family relationship records
+- family invitation record
+- managed-person listing
+- PUID access check
+- masked PUID responses
+- `/health` and `/ready`
 
-`UPLOAD → QUEUED → PROCESSING → OCR → NLP → MEDICINE MATCHING → confidence decision`
+Current implementation is still an incremental extraction path. Review gateway authentication/service-JWT enforcement before treating the standalone service as fully hardened.
 
-High confidence:
-`AUTO_APPROVED → APPROVED`
+## 7. Prescription — current target and latest implementation
 
-Low confidence:
-`REVIEW_REQUIRED → persistent admin review item`
+Authoritative target implementation: Python FastAPI service at:
+`services/prescription-service/`
 
-Admin:
+The latest `main` now includes durable Mongo-backed Prescription state, processing jobs, review records, audit, idempotency, integration outbox support, document tokens, and a lease-based worker.
+
+Critical lifecycle:
+
+`UPLOADED → QUEUED → PROCESSING → confidence decision`
+
+Then:
+- high confidence → `AUTO_APPROVED → APPROVED`
+- low confidence → `REVIEW_REQUIRED`
+- rejected manually → `REJECTED`
+- removed → `INACTIVE`
+- infrastructure failure → `FAILED/RETRY/DEAD_LETTER`
+
+Admin review actions:
 - Open
 - Verify/Approve
 - Reject (reason required)
-- Wait (no state transition)
+- Wait = no business state transition
 
-Prescription Service owns prescription state.
-Order Service owns order state.
-They coordinate through persisted state/integration records, not synchronous waiting.
+Production rules:
+- no fake OCR/extraction data
+- no critical Prescription state in in-memory Maps
+- no synchronous waiting by Order Service
+- optimistic locking for review updates
+- durable idempotency
+- private document access via short-lived token/URL
+- audit without unnecessary medical content
 
-## 7. DB-first integration model
+### Important remaining Prescription warning
 
-Current design should work without Kafka/RabbitMQ/SQS.
+A legacy Node Prescription implementation still exists under:
+`backend/services/prescription-service/PrescriptionService.js`
 
-Business state is authoritative in the domain DB.
+Do not reintroduce or extend it as a second authoritative implementation.
+Before changing Prescription, trace all callers and move/redirect them deliberately to the Python service.
 
-Use a durable integration/outbox abstraction for propagation:
+## 8. Durable processing model
 
-`Domain transaction → state change + outbox record → adapter`
+Prescription processing uses a DB-backed job model with lease semantics.
 
-Current adapter:
+Conceptual records:
+- `prescriptions`
+- `processing_jobs`
+- `prescription_reviews`
+- `prescription_audit`
+- `idempotency_keys`
+- `integration_outbox`
+- document access tokens
+
+Worker requirements:
+- atomic claim
+- lease/lock
+- retry/backoff
+- heartbeat where processing duration requires it
+- restart safety
+- dead-letter handling
+- indexed polling
+
+## 9. DB-first integration / Adapter model
+
+The integration abstraction is now present.
+
+Node shared integration:
+`backend/shared/integration/`
+
+Current provider:
 - `DATABASE`
 
-Future adapters:
+Future provider extension points:
 - Kafka
 - RabbitMQ
 - AWS SQS
 - Webhook
-- other providers
 
-Business code must depend on an `IntegrationAdapter`/port, not a provider SDK.
+Current DB Adapter writes durable `integration_outbox` records and supports lease-based batch claiming/retry state.
 
-Super Admin may configure/enable adapter providers and scope them globally/tenant/branch, but Super Admin must NOT override domain state-machine rules.
+Provider configuration supports:
+- GLOBAL / TENANT / BRANCH scope
+- enabled flag
+- priority
+- event-type filtering
+- config/secret references
 
-## 8. Important prescription persistence requirements
+Business services must call the adapter/registry abstraction, not provider SDKs directly.
 
-Production-critical state MUST NOT live only in in-memory Maps.
+**Domain state remains authoritative. The outbox/integration record is not the business truth.**
 
-Needed durable records include:
-- prescriptions
-- processing jobs
-- idempotency keys
-- review queue/items
-- audit records
-- integration/outbox records
+Super Admin may configure integration providers but must not override domain state-machine rules.
 
-Processing jobs require:
-- status
-- attempts
-- lease/lock
-- next attempt time
-- retry/backoff
-- dead-letter/failure state
+## 10. Fulfillment architecture
 
-Use optimistic locking/versioning for manual review and concurrent updates.
+Order lifecycle and fulfillment readiness are separate.
 
-## 9. Fulfillment gate model
-
-Do NOT make order lifecycle depend on a synchronous “pending prescription review” blocking state.
-
-Keep order lifecycle and fulfillment readiness separate.
-
-Example:
+For prescription-required orders:
 
 `payment = PASSED`
 `inventory = RESERVED`
@@ -160,137 +200,203 @@ Example:
 `customer = READY`
 `delivery = NOT_STARTED`
 
-Only fulfill when all required gates pass.
+Only the fulfillment gate evaluator may decide readiness.
 
-OTC orders:
+OTC:
 `prescription = NOT_REQUIRED`
 
-If inventory reservation expires during prescription review:
-- release reservation
-- on approval, re-reserve idempotently
+Never implement:
+`Create Order → wait for Prescription → continue`
 
-Cancellation or prescription removal must win races against late approval.
+If inventory reservation expires while waiting:
+- release it
+- after approval, re-reserve idempotently
 
-## 10. Prescription security
+Cancellation and prescription removal must win races against late approval.
 
-- private document storage
-- short-lived signed URLs
-- authenticated admin/pharmacist access
-- tenant/branch authorization
-- permission such as `prescription.review`
-- authenticated encryption such as AES-256-GCM where implemented
-- no medical data in JWT
-- no medical content in generic audit/event payloads unless required
-- never log secrets, tokens, prescription images, or unnecessary medical details
+## 11. Inventory
 
-Mandatory production secrets must not have insecure fallbacks.
+Latest `main` includes reservation expiry support:
+- `expiresAt`
+- TTL-aware configuration
+- reservation status/index support
 
-## 11. Existing repo warnings
+Inventory remains the only stock authority.
 
-The current repo contains legacy/duplicate implementations and mixed deployment modes.
+Never write inventory quantities directly from Order/Prescription/Admin UI code.
 
-Known examples:
-- old Node Prescription implementation under `backend/services/prescription-service/`
-- newer Python Prescription Service under `services/prescription-service/`
-- root compatibility runner `server.ts`
-- legacy `/api/*` routes still coexist with `/api/v1/*`
+## 12. Integration event envelope
 
-When modifying a feature:
-1. locate all implementations
-2. identify the authoritative path
-3. avoid dual business logic
-4. migrate/redirect callers
-5. remove obsolete duplicate code only after references are removed
+Logical integration events may include:
 
-## 12. Current repo documentation that may contain useful details
+`UserActivated, PuidCreated, PrescriptionUploaded, PrescriptionProcessingCompleted, PrescriptionReviewRequired, PrescriptionApproved, PrescriptionRejected, PrescriptionRemoved, OrderCreated, OrderConfirmed, OrderCancelled, InventoryReserved, InventoryReleased, InventoryDeducted, DeliveryAssigned, DeliveryCompleted`
 
-Read when needed:
-- `docs/AI_SYSTEM_MAP.md`
-- `docs/AI_IMPLEMENTATION_STATUS.md`
-- `docs/MULTI_TENANT_ARCHITECTURE.md`
-- `docs/AUTHORIZATION_MODEL.md`
-- `docs/API_CONTRACTS.md`
-- `docs/EVENT_CATALOG.md`
-- `docs/DATA_MODEL.md`
-- `docs/architecture/current-state.md`
-- `docs/architecture/frontend-backend.md`
-- `docs/DEPLOYMENT.md`
-- `docs/BUG_AUDIT.md`
-- `docs/PRODUCTION_READINESS_REPORT.md`
+Envelope fields:
+`eventId, eventType, aggregateId, aggregateType, tenantId, branchId, timestamp, schemaVersion, correlationId, aggregateVersion, payload`
 
-Treat status/readiness claims critically; verify code before declaring something production-ready.
+Do not place full prescription/medical documents in event payloads.
 
-## 13. Deployment model
+## 13. Security
 
-Local development must support starting the complete required platform with one documented workflow.
+Required:
+- JWT issuer/audience/signature/expiry validation
+- RBAC/permissions
+- tenant/branch checks
+- service-to-service authentication
+- secure secrets
+- idempotency
+- optimistic locking where concurrent writes are possible
+- input validation
+- rate limiting/CSRF as applicable
+- no sensitive logging
 
-Render deployment must:
-- use Render-assigned `PORT`
-- bind services to `0.0.0.0`
-- expose health/readiness endpoints
-- separate services when the target architecture requires separation
-- use private service URLs for internal calls where supported
-- use environment variables for secrets
-- never commit real secrets
+Never commit or use production fallback secrets.
 
-Current root Render config still represents the compatibility deployment, so verify the actual service topology before changing deployment.
+Prescription encryption must use authenticated encryption and production-managed keys.
+Private prescription files must not be permanently public.
 
-## 14. Future enhancement rules
+## 14. Deployment — current reality
 
-When adding any feature:
-- prefer configuration over hardcoding
-- prefer adapter/strategy interfaces for replaceable providers
-- keep domain state authoritative
-- keep integration provider replaceable
-- add tenant/branch scope
-- add idempotency for money/order/stock/medical workflow actions
-- add optimistic locking where concurrent updates are possible
-- add audit where business/security decisions matter
-- add tests for duplicate requests and race conditions
-- update this file only when architecture rules materially change
+The repo still has a compatibility root Render deployment, and the current root `render.yaml` is still a single Node web-service definition.
 
-## 15. Compact AI task template
+Therefore:
 
-Use this instead of a long architecture prompt:
+**Do not claim “all services deploy independently on Render” until the Render topology is actually changed and validated.**
+
+Target deployment:
+- explicit web/background service definitions where required
+- Render `PORT`
+- bind `0.0.0.0`
+- health/readiness checks
+- private internal service URLs
+- service-specific environment variables/secrets
+- separate Prescription API and Prescription worker deployment if required by runtime
+
+Local development target:
+- one documented command to start required services
+- deterministic ports
+- health checks
+- no hidden legacy process dependency
+
+## 15. Current known migration gaps
+
+Before declaring production-complete, verify:
+1. all critical live flows are routed to authoritative extracted services
+2. legacy Node Prescription callers are removed/re-routed
+3. standalone Customer Service uses authenticated internal service credentials, not trust of arbitrary public headers
+4. no critical in-memory fallback remains in migrated business paths
+5. Order ↔ Prescription fulfillment-gate integration is fully wired
+6. DB outbox consumer/dispatcher is complete for all required consumers
+7. Render deploys every required service/worker
+8. local full-stack orchestration works from a clean checkout
+9. end-to-end tests cover prescription review + order fulfillment races
+
+## 16. Safe modification rules
+
+For every future feature/fix:
+1. Read this file.
+2. Inspect current code and all callers.
+3. Identify authoritative implementation.
+4. Search for duplicate/legacy implementations.
+5. Make the smallest compatible production-safe change.
+6. Preserve ownership, tenant isolation, RBAC, idempotency, locking and audit.
+7. Use adapters for replaceable infrastructure/providers.
+8. Do not add critical in-memory persistence.
+9. Add/modify tests.
+10. Validate local startup and Render impact.
+11. Update architecture docs only when the architecture actually changes.
+
+## 17. Source-of-truth hierarchy
+
+When information conflicts:
+1. **Current code/database behavior** = current reality
+2. **This file** = target engineering rules + verified known state
+3. Other architecture/status docs = supporting documentation
+
+Always resolve conflicts deliberately; never silently assume migration is complete.
+
+## 18. Minimal future AI prompt
 
 ```
 Read docs/AI_CONTEXT.md first.
 
-Task: <feature/change>
+Task: <feature/fix>
 
-Rules:
-- preserve service ownership and tenant/branch isolation
-- no direct cross-service DB mutation
-- no critical in-memory persistence
-- DB state is authoritative
-- use IntegrationAdapter abstraction for replaceable integrations
-- prescription/order remain asynchronous and independently owned
-- preserve idempotency, optimistic locking, audit and security
-- do not duplicate existing implementations
+Inspect current implementation + callers and identify the authoritative path.
+Preserve service ownership, tenant/branch isolation, RBAC, DB authority,
+idempotency, optimistic locking, audit and Adapter abstraction.
+Do not create duplicate business logic or critical in-memory persistence.
+Implement, test, build/typecheck as applicable, and verify local + Render impact.
 
-Before coding:
-1. inspect current implementation and all callers
-2. identify authoritative path
-3. list impacted files/services
-
-Implement:
-- production-safe code
-- migrations/indexes/config if required
-- tests
-- local startup impact
-- Render/deployment impact
-
-After coding:
-- run targeted tests
-- build/typecheck/lint as applicable
-- report changed files, tests, risks, and remaining limitations
+Report: changed files, flow change, tests/results, deployment/config impact,
+and remaining risks.
 ```
 
-## 16. Source-of-truth principle
 
-**This file is a compact working contract, not a substitute for code verification.**
+## 19. Latest Prescription → Medicine Request → Order flow
 
-When code conflicts with documentation:
-- code is current reality
-- this file defines target engineering rules
-- inspect both and reconcile deliberately
+Current implemented flow:
+
+`Customer → Medicine Request → optional manual medicines + prescription upload → Python Prescription Service → durable processing job → OCR/NLP/dose/course extraction → REVIEW_REQUIRED or APPROVED → persisted prescriptionVerification → pharmacist proposal → customer approval → Order conversion → order-level medicine verification → fulfillment gate reconciliation`
+
+Rules:
+- Prescription upload is sent to the Python service; fake legacy scan responses are no longer authoritative.
+- Manual medicine entries are optional when a prescription is uploaded.
+- Empty manual rows are ignored.
+- Customer/admin UI shows extracted medicine name, strength, dose, frequency, duration/course and confidence/status.
+- Prescription verification against an order checks every included order medicine independently.
+- Verification uses exact productId when available, otherwise normalized medicine-name/strength matching plus quantity checks where prescription quantity is explicit/calculable.
+- `MATCHED` is required before prescription fulfillment gate can become `APPROVED`.
+- `PROCESSING`, `REVIEW_REQUIRED`, and `PARTIAL_MATCH` keep the order confirmed but not fulfillable.
+- `MISMATCH` is a safety block; it does not grant dispensing authorization.
+- Prescription approval/removal/cancellation races are resolved by current authoritative state.
+
+## 20. Latest Order prescription reconciliation
+
+The standalone Order Service now runs a DB-backed reconciliation loop:
+- claims `PENDING_REVIEW` prescription-gated orders with a lease
+- calls the Python Prescription Service
+- re-verifies all included order medicines
+- sets fulfillment prescription gate to `APPROVED` only on `MATCHED`
+- preserves `PENDING_REVIEW` for processing/review/partial-match states
+- marks `REJECTED` / `INACTIVE` when the authoritative prescription reaches those terminal states
+- re-reserves inventory through the existing fulfillment-gate path if the previous reservation expired
+- uses idempotent gate events and order versioning
+
+This makes frontend polling optional; correctness does not depend on the browser.
+
+## 21. Latest worker safety
+
+Python Prescription Worker now uses:
+- atomic lease ownership
+- heartbeat extension while OCR/NLP runs
+- worker-owned completion/failure updates
+- lease-loss detection before applying extraction results
+
+A worker that loses its lease must not overwrite a newer worker's result.
+
+## 22. Current remaining production gaps
+
+- The root Render blueprint is still a compatibility/single-service deployment; the standalone Order + Prescription API/worker topology must still be deployed and validated end-to-end on Render.
+- The integration outbox is durable, but the current order gate is completed by DB reconciliation rather than an external broker.
+- Python extraction intentionally does not claim Catalog-level medicine identity; it reports extracted text. Order-level matching is the current safety boundary.
+- Medicine Request conversion still uses the legacy backend Order creation path; full migration to the standalone Order Service for all Medicine Request conversions remains a future architecture step.
+- The request document is currently stored in both legacy GridFS compatibility storage and the Python encrypted document store; consolidate storage after migration.
+- Prescription replacement/re-upload is now versioned: the old extraction/review is cancelled, the new document is queued, and the same prescriptionId remains blocked until the new extraction is approved/matched.
+
+
+## 23. Latest security/deployment fixes
+
+The API Gateway authentication chain now forwards the requested tenant/branch context to the backend identity check. The backend resolves and validates that context, and the Gateway includes the verified tenant/branch claims in service credentials.
+
+Standalone Order Service now:
+- consumes verified tenantId/branchId claims,
+- rejects mismatched client tenant/branch values,
+- includes tenant/branch in idempotency fingerprints,
+- passes patientPuid into prescription verification.
+
+Prescription Render configuration now has:
+- web/API service
+- separate background worker
+- shared MongoDB/encryption/service-auth configuration
+
