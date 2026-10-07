@@ -22,7 +22,6 @@ import gatewayRouter from './gateway/gatewayRouter.js';
 import vendorRouter from './gateway/routes/vendorRoutes.js';
 import gatewayAuthRouter from './gateway/routes/auth.js';
 import { csrfProtection } from './security/sessionCookie.js';
-import { sanitizeBodyMiddleware, validateLogin } from './security/validator.js';
 import dataStore from './dataStore.js';
 import DataMartRefreshService from './services/DataMartRefreshService.js';
 import { authenticateUser, isAdmin } from './middleware/auth.js';
