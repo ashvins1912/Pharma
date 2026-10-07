@@ -4,6 +4,7 @@ import {
   getAdminMedicineRequestMetrics
 } from '../../../api/medicineRequestService';
 import AdminProposalModal from './AdminProposalModal';
+import apiClient from '../../../api/apiClient';
 
 export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
   const [requests, setRequests] = useState([]);
@@ -52,6 +53,27 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     loadRequests();
+  };
+
+  const openPrescription = async (prescriptionUrl) => {
+    if (!prescriptionUrl) return;
+    try {
+      const response = await apiClient.get(prescriptionUrl, { responseType: 'blob' });
+      const contentType = String(response.headers?.['content-type'] || response.data?.type || '').toLowerCase();
+      if (!response.data?.size || !/(application\\/pdf|image\\/)/.test(contentType)) {
+        throw new Error('Prescription file could not be previewed.');
+      }
+      const objectUrl = URL.createObjectURL(response.data);
+      const popup = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      if (!popup) {
+        URL.revokeObjectURL(objectUrl);
+        throw new Error('Popup blocked');
+      }
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (error) {
+      console.error('Failed to open prescription:', error);
+      window.alert('Could not open the prescription file. Please try again.');
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -321,14 +343,13 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
                       <td className="py-3.5 px-3">
                         <div className="flex items-center gap-1.5">
                           {req.prescriptionUrl ? (
-                            <a
-                              href={req.prescriptionUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-[10px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200"
+                            <button
+                              type="button"
+                              onClick={() => openPrescription(req.prescriptionUrl)}
+                              className="text-[10px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200 cursor-pointer"
                             >
                               📄 Rx
-                            </a>
+                            </button>
                           ) : (
                             <span className="text-[10px] text-slate-300">—</span>
                           )}
