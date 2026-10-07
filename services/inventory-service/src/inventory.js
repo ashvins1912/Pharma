@@ -309,7 +309,7 @@ export async function transitionReservation(reservationId, targetStatus, { actor
   return { reservationId: result.reservationId, status: result.status };
 }
 
-export async function adjustInventory({ sku, stockQuantity, price, batchNumber, expiryDate, actor, requestId, correlationId, operationKey }) {
+export async function adjustInventory({ sku, stockQuantity, price, batchNumber, expiryDate, actor, requestId, correlationId, operationKey, tenantId = null, branchId = null }) {
   const normalizedSku = typeof sku === 'string' ? sku.trim().toUpperCase() : '';
   const normalizedOperationKey = typeof operationKey === 'string' ? operationKey.trim() : '';
   const normalizedExpiry = expiryDate ? new Date(expiryDate) : null;
@@ -346,16 +346,21 @@ export async function adjustInventory({ sku, stockQuantity, price, batchNumber, 
         result = replayExisting(priorOperation);
         return;
       }
-      const product = await Product.findOne({ sku: normalizedSku, active: true }).session(session);
+      const productFilter = { sku: normalizedSku, active: true };
+      if (tenantId) productFilter.tenantId = String(tenantId).trim();
+      const product = await Product.findOne(productFilter).session(session);
       if (!product) {
         const error = new Error('Product SKU was not found.');
         error.statusCode = 404;
         throw error;
       }
-      const inventory = await Inventory.findOneAndUpdate({
+      const inventoryFilter = {
         productId: product._id,
         reservedQuantity: { $lte: stockQuantity },
-      }, {
+      };
+      if (tenantId) inventoryFilter.tenantId = String(tenantId).trim();
+      if (branchId) inventoryFilter.branchId = String(branchId).trim();
+      const inventory = await Inventory.findOneAndUpdate(inventoryFilter, {
         $set: {
           stockQuantity,
           price,
