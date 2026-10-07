@@ -68,6 +68,7 @@ test('4. Local Signup Flow: Account Created with PENDING_EMAIL_VERIFICATION & To
         email: `rajesh.test.${Date.now()}@example.com`,
         mobile: '9876543210',
         dateOfBirth: '1992-06-20',
+        gender: 'PREFER_NOT_TO_SAY',
         password: 'Password@2026'
     };
 
@@ -98,6 +99,7 @@ test('5. Login Guarding: Unverified account is rejected with EMAIL_VERIFICATION_
         email: testEmail,
         mobile: '9876543211',
         dateOfBirth: '1998-03-12',
+        gender: 'PREFER_NOT_TO_SAY',
         password: 'Password@2026'
     });
 
@@ -126,6 +128,7 @@ test('6. Activation Endpoint: Single-use Token activates account and updates sta
         email: testEmail,
         mobile: '9876543212',
         dateOfBirth: '1990-11-25',
+        gender: 'PREFER_NOT_TO_SAY',
         password: 'Password@2026'
     });
 
@@ -182,6 +185,7 @@ test('7. Resend Verification: Revokes prior token and issues new active token', 
         email: testEmail,
         mobile: '9876543213',
         dateOfBirth: '1994-08-14',
+        gender: 'PREFER_NOT_TO_SAY',
         password: 'Password@2026'
     });
 
@@ -236,6 +240,7 @@ test('9. Google OAuth: Account Linking to existing verified local account', asyn
         email: commonEmail,
         mobile: '9876543215',
         dateOfBirth: '1996-09-05',
+        gender: 'PREFER_NOT_TO_SAY',
         password: 'Password@2026'
     });
 
