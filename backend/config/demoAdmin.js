@@ -8,8 +8,8 @@ const demoAdminEnabled = ['development', 'test'].includes(env.NODE_ENV)
     && process.env.DEMO_ADMIN_ENABLED !== 'false';
 const instantDemoAdminEnabled = demoAdminEnabled
     && process.env.DEMO_ADMIN_INSTANT_ACCESS_ENABLED !== 'false';
-const demoAdminEmail = (process.env.DEMO_ADMIN_EMAIL || 'ashvinsingh25@gmail.com').trim().toLowerCase();
-const demoAdminUserId = process.env.DEMO_ADMIN_USER_ID || 'admin';
+const demoAdminEmail = String(process.env.DEMO_ADMIN_EMAIL || '').trim().toLowerCase();
+const demoAdminUserId = String(process.env.DEMO_ADMIN_USER_ID || '').trim();
 const configuredPassword = process.env.DEMO_ADMIN_PASSWORD || '';
 const configuredSecret = process.env.DEMO_ADMIN_JWT_SECRET || '';
 
@@ -25,6 +25,7 @@ export const isDemoAdminEnabled = () => demoAdminEnabled;
 export const isInstantDemoAdminEnabled = () => instantDemoAdminEnabled;
 
 export const issueDemoAdminToken = async (instant = false) => {
+    if (!demoAdminEmail || !demoAdminUserId || !configuredPassword) throw new Error('Demo admin credentials are not configured.');
     if (!demoAdminEnabled) throw new Error('Demo admin sign-in is disabled.');
     if (instant && !instantDemoAdminEnabled) throw new Error('Instant demo admin access is disabled.');
     return issuePharmaAccessToken({
