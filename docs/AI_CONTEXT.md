@@ -423,3 +423,31 @@ Current main validation:
 - Order reconciliation configuration is restored
 
 The repository still requires a real Render deployment/build smoke test; GitHub Actions did not expose a workflow run for the validation commit, and local clone/build was unavailable in the execution environment.
+
+## Canonical independent-service layout (2026-10-07)
+
+The repository restructuring uses one canonical deployment surface:
+- `frontend/` — only frontend
+- `api-gateway/` — only public Gateway
+- `backend/` — private platform/orchestration API
+- `services/inventory-service/` — canonical Inventory Service
+- `services/order-service/` — canonical Order Service
+- `services/prescription-service/` — canonical Python Prescription API + worker
+
+Removed from the restructuring branch:
+- root React/Vite application and root Vite config
+- root combined Express/Vite runner
+- root Vercel API adapter
+- root combined Render blueprint
+- duplicate Inventory service trees under `backend/`
+- legacy Node Prescription implementation
+- legacy backend internal Inventory/Order/Prescription gateway routes
+
+The public Gateway directly routes authoritative versioned Inventory and Order
+APIs to their private services. Backend remains the private platform boundary
+for compound/PUID-sensitive workflows until their authorization and persistence
+ownership can move without weakening security.
+
+Order Service no longer imports backend Prescription implementation. It calls
+the standalone Prescription Service over HTTP. No service may import another
+standalone service's implementation or write another service's database.

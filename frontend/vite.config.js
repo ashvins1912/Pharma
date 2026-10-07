@@ -10,7 +10,7 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '/api': {
-        target: process.env.VITE_DEV_API_PROXY || 'http://localhost:3001',
+        target: process.env.VITE_DEV_API_PROXY || 'http://localhost:8080',
         changeOrigin: true
       }
     }

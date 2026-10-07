@@ -3,10 +3,10 @@
  * Manages branch POS / C-Square integration configuration, sync operations, and health
  */
 import { csquareAdapter } from './adapters/CSquareAdapter.js';
-import { catalogService } from '../catalog-service/CatalogService.js';
+import { inventoryClient } from '../inventory-client/InventoryClient.js';
 import { domainEvents } from '../../shared/events/DomainEvents.js';
 import { logger } from '../../shared/observability/logger.js';
-import { IntegrationStatus, IntegrationProvider, InventorySource } from '../../shared/contracts/index.js';
+import { IntegrationStatus, IntegrationProvider } from '../../shared/contracts/index.js';
 
 export class PharmacyIntegrationService {
     constructor() {
@@ -149,18 +149,30 @@ export class PharmacyIntegrationService {
         try {
             const syncResult = await adapter.syncInventory(integ.config);
 
-            // Update Ashvin Inventory Snapshot with synced stock
-            if (syncResult.stockItems) {
+            // Persist supplier stock through the Inventory Service authority.
+            if (Array.isArray(syncResult.stockItems) && syncResult.stockItems.length) {
+                const productIds = syncResult.stockItems
+                    .map(item => item.productId)
+                    .filter(Boolean);
+                const current = productIds.length
+                    ? await inventoryClient.lookup({ productIds, tenantId, branchId, userId: actor?.userId || 'integration-service' })
+                    : { items: [] };
+                const currentById = new Map((current.items || []).map(item => [String(item.productId), item]));
+
                 for (const item of syncResult.stockItems) {
-                    const key = `${tenantId}:${branchId}:${item.productId}`;
-                    const existing = catalogService.inventory.get(key);
-                    if (existing) {
-                        existing.availableQuantity = item.availableQuantity;
-                        existing.batchNumber = item.batchNumber;
-                        existing.expiryDate = item.expiryDate;
-                        existing.source = InventorySource.CSQUARE;
-                        existing.lastSyncedAt = new Date().toISOString();
-                    }
+                    const existing = currentById.get(String(item.productId));
+                    if (!existing?.sku) continue;
+                    await inventoryClient.adjust({
+                        sku: existing.sku,
+                        tenantId,
+                        branchId,
+                        stockQuantity: Math.max(0, Math.floor(Number(item.availableQuantity) || 0)),
+                        price: Math.max(0, Number(item.price ?? existing.price ?? 0)),
+                        batchNumber: item.batchNumber || existing.batchNumber || '',
+                        expiryDate: item.expiryDate || existing.expiryDate || null,
+                        userId: actor?.userId || 'integration-service',
+                        operationKey: `csquare:${tenantId}:${branchId}:${existing.sku}:${String(item.availableQuantity)}`
+                    });
                 }
             }
 

@@ -1,0 +1,33 @@
+services:
+  - type: pserv
+    name: ashvin-pharmacy-order
+    runtime: node
+    rootDir: services/order-service
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ORDER_MONGO_URI
+        sync: false
+      - key: ORDER_DB_NAME
+        value: pharma_orders
+      - key: SERVICE_AUTH_SECRET
+        sync: false
+      - key: SERVICE_JWT_ISSUER
+        value: ashvin-pharmacy
+      - key: ORDER_SERVICE_JWT_AUDIENCE
+        value: order-service
+      - key: INVENTORY_SERVICE_URL
+        sync: false
+      - key: PRESCRIPTION_SERVICE_URL
+        sync: false
+      - key: PRESCRIPTION_SERVICE_JWT_AUDIENCE
+        value: prescription-service
+      - key: PRESCRIPTION_RECONCILIATION_INTERVAL_MS
+        value: "10000"
+      - key: PRESCRIPTION_RECONCILIATION_BATCH_SIZE
+        value: "20"
+      - key: SERVICE_JWT_AUDIENCE
+        value: inventory-service
