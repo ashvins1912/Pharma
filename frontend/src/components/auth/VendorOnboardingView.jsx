@@ -16,6 +16,8 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
     firstName: '',
     lastName: '',
     mobile: '',
+    dateOfBirth: '',
+    gender: '',
     password: '',
     confirmPassword: '',
     companyName: '',
@@ -95,6 +97,8 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
     if (!formData.mobile.trim() || formData.mobile.replace(/\D/g, '').length < 10) {
       errors.mobile = 'Enter a valid 10-digit mobile number.';
     }
+    if (!formData.dateOfBirth) errors.dateOfBirth = 'Date of birth is required.';
+    if (!formData.gender) errors.gender = 'Gender is required.';
     if (!formData.password) {
       errors.password = 'Password is required.';
     } else if (formData.password.length < 8) {
@@ -127,6 +131,8 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         mobile: formData.mobile.trim(),
+        dateOfBirth: formData.dateOfBirth,
+        gender: formData.gender,
         password: formData.password,
         company: {
           companyName: formData.companyName.trim(),
@@ -250,9 +256,14 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
         {/* Header */}
         <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 p-6 text-white">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs uppercase tracking-wider font-extrabold bg-indigo-500/30 px-3 py-1 rounded-full border border-indigo-400/30">
-              Vendor Activation Flow
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs uppercase tracking-wider font-extrabold bg-indigo-500/30 px-3 py-1 rounded-full border border-indigo-400/30">
+                First-time user
+              </span>
+              <span className="text-[10px] uppercase tracking-wider font-bold bg-amber-400/15 text-amber-100 px-3 py-1 rounded-full border border-amber-300/20">
+                PROFILE_INCOMPLETE · TENANT ONBOARDING
+              </span>
+            </div>
             <button
               type="button"
               onClick={onClose}
@@ -263,7 +274,7 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
           </div>
           <h2 className="text-2xl font-black">Complete Pharmacy Onboarding</h2>
           <p className="text-xs text-indigo-200 mt-1">
-            Verify and complete your business information to activate your independent tenant workspace.
+            This secure invitation is your first-time account setup. Complete your personal details, create your password, and register your pharmacy tenant.
           </p>
         </div>
 
@@ -431,6 +442,33 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
                   placeholder="Singh"
                 />
                 {fieldErrors.lastName && <p className="text-rose-600 text-xs mt-1">{fieldErrors.lastName}</p>}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Date of Birth *</label>
+                <input
+                  type="date"
+                  value={formData.dateOfBirth}
+                  onChange={(e) => handleChange('dateOfBirth', e.target.value)}
+                  className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none ${fieldErrors.dateOfBirth ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
+                />
+                {fieldErrors.dateOfBirth && <p className="text-rose-600 text-xs mt-1">{fieldErrors.dateOfBirth}</p>}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Gender *</label>
+                <select
+                  value={formData.gender}
+                  onChange={(e) => handleChange('gender', e.target.value)}
+                  className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none ${fieldErrors.gender ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
+                >
+                  <option value="">Select gender</option>
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                  <option value="OTHER">Other</option>
+                  <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+                </select>
+                {fieldErrors.gender && <p className="text-rose-600 text-xs mt-1">{fieldErrors.gender}</p>}
               </div>
 
               <div>
