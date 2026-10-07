@@ -73,7 +73,36 @@ export class CustomerService {
   async ensureCustomerForUser(userId, { name, email, phone, tenantId } = {}) {
     if (!userId) throw Object.assign(new Error('userId required'), { statusCode: 401 });
     let customer = await CustomerProfile.findOne({ userId });
-    if (customer) return this._serializeCustomer(customer);
+    if (customer) {
+      const updates = {};
+      if (name && name.trim() && name.trim() !== customer.name) updates.name = name.trim();
+      if (email && email !== customer.email) updates.email = email;
+      if (phone && phone !== customer.phone) updates.phone = phone;
+      if (Object.keys(updates).length) {
+        customer = await CustomerProfile.findOneAndUpdate({ userId }, { $set: updates }, { new: true });
+      }
+
+      await Person.updateOne(
+        { puid: customer.selfPuid, createdByUserId: userId },
+        { $set: {
+          ...(name?.trim() ? { displayName: name.trim() } : {}),
+          ...(tenantId ? { tenantId } : {})
+        } }
+      );
+
+      await PersonRelationship.updateOne(
+        { ownerUserId: userId, personPuid: customer.selfPuid },
+        { $setOnInsert: {
+          ownerUserId: userId,
+          ownerCustomerId: customer.customerId,
+          personPuid: customer.selfPuid,
+          relationship: 'SELF',
+          canManage: true
+        } },
+        { upsert: true }
+      );
+      return this._serializeCustomer(customer);
+    }
 
     const puid = generatePuid();
     const person = await Person.create({
