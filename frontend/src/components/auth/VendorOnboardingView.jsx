@@ -94,6 +94,7 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
     if (!formData.firstName.trim()) errors.firstName = 'First name is required.';
     if (!formData.lastName.trim()) errors.lastName = 'Last name is required.';
     if (!formData.companyName.trim()) errors.companyName = 'Pharmacy / Company name is required.';
+    if (!formData.drugLicenseNumber.trim()) errors.drugLicenseNumber = 'Drug licence number is required for pharmacy onboarding.';
     if (!formData.mobile.trim() || formData.mobile.replace(/\D/g, '').length < 10) {
       errors.mobile = 'Enter a valid 10-digit mobile number.';
     }
@@ -136,7 +137,8 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
         password: formData.password,
         company: {
           companyName: formData.companyName.trim(),
-          gstNumber: formData.gstNumber.trim()
+          gstNumber: formData.gstNumber.trim(),
+          drugLicenseNumber: formData.drugLicenseNumber.trim()
         },
         address: {
           line1: formData.street.trim(),
@@ -330,6 +332,18 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
                   placeholder="+91 98765 43210"
                 />
                 {fieldErrors.mobile && <p className="text-rose-600 text-xs mt-1">{fieldErrors.mobile}</p>}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Drug Licence Number *</label>
+                <input
+                  type="text"
+                  value={formData.drugLicenseNumber}
+                  onChange={(e) => handleChange('drugLicenseNumber', e.target.value)}
+                  className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none uppercase ${fieldErrors.drugLicenseNumber ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
+                  placeholder="State pharmacy/drug licence number"
+                />
+                {fieldErrors.drugLicenseNumber && <p className="text-rose-600 text-xs mt-1">{fieldErrors.drugLicenseNumber}</p>}
               </div>
 
               <div>
