@@ -34,7 +34,7 @@ const router = express.Router();
  * Local signup flow with persistent User model & LOCAL UserIdentity
  */
 router.post('/signup', authLimiter, async (req, res) => {
-    const { email, password, gender } = req.body || {};
+    const { email, password, confirmPassword, gender } = req.body || {};
     const mobile = req.body?.mobileNumber || req.body?.mobile || '';
     const dateOfBirth = req.body?.dateOfBirth;
     let firstName = (req.body?.firstName || '').trim();
@@ -58,6 +58,12 @@ router.post('/signup', authLimiter, async (req, res) => {
         validationDetails.push({ field: 'confirmPassword', code: 'PASSWORD_MISMATCH', message: 'Passwords do not match.' });
     }
 
+
+    if (!confirmPassword) {
+        validationDetails.push({ field: 'confirmPassword', code: 'REQUIRED', message: 'Please confirm your password.' });
+    } else if (password !== confirmPassword) {
+        validationDetails.push({ field: 'confirmPassword', code: 'PASSWORD_MISMATCH', message: 'Passwords do not match.' });
+    }
 
     if (!firstName) {
         validationDetails.push({ field: 'firstName', code: 'REQUIRED', message: 'First name is required.' });
@@ -392,8 +398,20 @@ const handleProfileCompletion = async (req, res) => {
     } else if (!isValidDOB(dateOfBirth)) {
         validationDetails.push({ field: 'dateOfBirth', code: 'INVALID_DOB', message: 'Date of birth must be a valid past date.' });
     }
-    if (phone && !isValidMobile(phone)) {
+    if (!phone) {
+        validationDetails.push({ field: 'mobileNumber', code: 'REQUIRED', message: 'Mobile number is required.' });
+    } else if (!isValidMobile(phone)) {
         validationDetails.push({ field: 'mobileNumber', code: 'INVALID_MOBILE', message: 'Enter a valid mobile number with at least 10 digits.' });
+    }
+    if (!password) {
+        validationDetails.push({ field: 'password', code: 'REQUIRED', message: 'Password is required.' });
+    } else if (!isStrongPassword(password)) {
+        validationDetails.push({ field: 'password', code: 'WEAK_PASSWORD', message: 'Password must be at least 8 characters with uppercase, lowercase and a number.' });
+    }
+    if (!confirmPassword) {
+        validationDetails.push({ field: 'confirmPassword', code: 'REQUIRED', message: 'Please confirm your password.' });
+    } else if (password !== confirmPassword) {
+        validationDetails.push({ field: 'confirmPassword', code: 'PASSWORD_MISMATCH', message: 'Passwords do not match.' });
     }
     if (!gender || !['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'].includes(gender)) {
         validationDetails.push({ field: 'gender', code: 'INVALID_GENDER', message: 'Select a valid gender option.' });
