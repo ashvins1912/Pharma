@@ -17,7 +17,6 @@ import profileRoutes from './routes/profileRoutes.js';
 import assignmentRoutes from './modules/delivery/routes/assignmentRoutes.js';
 import paymentActionRoutes from './routes/paymentActionRoutes.js';
 import adminPaymentReminderRoutes from './routes/adminPaymentReminderRoutes.js';
-import authRoutes from './routes/authRoutes.js';
 import medicineRequestRoutes from './routes/medicineRequestRoutes.js';
 import gatewayRouter from './gateway/gatewayRouter.js';
 import vendorRouter from './gateway/routes/vendorRoutes.js';
@@ -27,18 +26,9 @@ import { sanitizeBodyMiddleware, validateLogin } from './security/validator.js';
 import dataStore from './dataStore.js';
 import DataMartRefreshService from './services/DataMartRefreshService.js';
 import { authenticateUser, isAdmin } from './middleware/auth.js';
-import {
-    getDemoAdminIdentity,
-    isDemoAdminEnabled,
-    isInstantDemoAdminEnabled,
-    issueDemoAdminToken,
-    verifyDemoAdminPassword
-} from './config/demoAdmin.js';
-import {
-    getDemoCustomerIdentity,
-    isDemoCustomerEnabled,
-    issueDemoCustomerToken
-} from './config/demoCustomer.js';
+import localDemoAuthRoutes from './routes/localDemoAuthRoutes.js';
+import { ensureAuthorizationCatalog } from './authorization/AuthorizationCatalogService.js';
+
 
 const app = express();
 const corsAllowedOrigins = env.CORS_ALLOWED_ORIGINS
@@ -80,13 +70,13 @@ connectDB()
     .then(async connected => {
         if (!connected) return;
         await dataStore.ensureCatalogSeeded();
+        await ensureAuthorizationCatalog();
         await refreshDataMart();
         const refreshTimer = setInterval(() => void refreshDataMart(), 15 * 60 * 1000);
         refreshTimer.unref();
     })
     .catch(error => console.error('MongoDB catalog initialization failed:', error));
 
-app.use('/api/auth', authRoutes);
 app.use('/api/medicines', medicineRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/riders', riderProfileRoutes);
@@ -110,51 +100,9 @@ app.use('/api/vendor', vendorRouter);
 // Ashvin Platform API Gateway (v1 Multi-Tenant Engine)
 app.use('/api/v1', gatewayRouter);
 
-app.post('/api/auth/demo-admin', sanitizeBodyMiddleware, validateLogin, async (req, res) => {
-    if (!isDemoAdminEnabled()) {
-        return res.status(404).json({ message: 'Demo admin sign-in is disabled.' });
-    }
-    if (!verifyDemoAdminPassword(req.body?.email, req.body?.password)) {
-        return res.status(401).json({ message: 'Invalid demo admin email or password.' });
-    }
-    try {
-        const access_token = await issueDemoAdminToken();
-        res.json({ access_token, token_type: 'Bearer', expires_in: 3600, user: getDemoAdminIdentity() });
-    } catch (error) {
-        console.error('Demo admin token creation failed:', error);
-        res.status(503).json({ message: 'Demo admin sign-in is not configured correctly.' });
-    }
-});
-
-app.post('/api/auth/demo-admin/instant', async (req, res) => {
-    if (!isDemoAdminEnabled() || !isInstantDemoAdminEnabled()) {
-        return res.status(404).json({ message: 'Instant demo admin access is disabled.' });
-    }
-    try {
-        const access_token = await issueDemoAdminToken(true);
-        res.json({ access_token, token_type: 'Bearer', expires_in: 3600, user: getDemoAdminIdentity() });
-    } catch (error) {
-        console.error('Instant demo admin sign-in failed:', error);
-        res.status(503).json({ message: 'Instant demo admin access is not configured correctly.' });
-    }
-});
-
-app.post('/api/auth/demo-customer', async (req, res) => {
-    if (!isDemoCustomerEnabled()) {
-        return res.status(404).json({ message: 'Demo customer access is disabled.' });
-    }
-    try {
-        const access_token = await issueDemoCustomerToken();
-        res.json({ access_token, token_type: 'Bearer', expires_in: 3600, user: getDemoCustomerIdentity() });
-    } catch (error) {
-        console.error('Demo customer token creation failed:', error);
-        res.status(503).json({ message: 'Demo customer access is not configured correctly.' });
-    }
-});
-
-app.get('/api/auth/session', authenticateUser, (req, res) => {
-    res.json(req.user);
-});
+if (env.NODE_ENV !== 'production') {
+    app.use('/api/auth', localDemoAuthRoutes);
+}
 
 // User Profile & Addresses
 app.post('/api/user/profile', authenticateUser, async (req, res) => {
