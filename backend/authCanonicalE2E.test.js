@@ -89,10 +89,10 @@ test('HTTP E2E: first-time Google identity gets restricted onboarding then compl
     const onboardingCookie = extractCookie(google, 'access_token');
     assert.ok(onboardingCookie);
 
-    const forbidden = await fetch(base + '/api/v1/orders', {
+    const forbidden = await fetch(base + '/api/v1/auth/me', {
       headers: { cookie: onboardingCookie }
     });
-    assert.ok([401, 403, 404].includes(forbidden.status));
+    assert.equal(forbidden.status, 403);
 
     const complete = await fetch(base + '/api/v1/auth/complete-profile', {
       method: 'PUT',
