@@ -1,19 +1,51 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import MFAEnrollmentModal from './auth/MFAEnrollmentModal';
 
 export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
-  const { user, role, isAdmin, mfaEnabled, aal, disableMfa, logout } = useAuth();
+  const { user, role, isAdmin, mfaEnabled, aal, disableMfa, logout, updateProfile } = useAuth();
   const { addToast } = useToast();
   const [enrollModalOpen, setEnrollModalOpen] = useState(false);
   const [disablingMfa, setDisablingMfa] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({ firstName: '', lastName: '', gender: '', mobileNumber: '', dateOfBirth: '' });
+
+  useEffect(() => {
+    if (!user) return;
+    const parts = String(user.name || user.user_metadata?.name || '').trim().split(/\s+/);
+    setProfileForm({
+      firstName: user.firstName || parts[0] || '',
+      lastName: user.lastName || parts.slice(1).join(' ') || '',
+      gender: user.gender || '',
+      mobileNumber: user.mobileNumber || user.mobile || user.user_metadata?.mobile || '',
+      dateOfBirth: user.dateOfBirth || ''
+    });
+  }, [user, isOpen]);
+
+  const emailVerified = Boolean(user.emailVerified);
+  const mobileVerified = Boolean(user.mobileVerified);
+
+  const handleSaveProfile = async (event) => {
+    event.preventDefault();
+    setSavingProfile(true);
+    try {
+      await updateProfile(profileForm);
+      addToast('Profile details updated successfully.', 'success');
+      setEditMode(false);
+    } catch (err) {
+      addToast(err.message || 'Could not update profile.', 'error');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   if (!isOpen || !user) return null;
 
   const displayName = user.user_metadata?.name || user.name || user.email?.split('@')[0] || "Valued Customer";
-  const mobile = user.user_metadata?.mobile || user.mobile || "+91 95899 16475";
+  const mobile = user.user_metadata?.mobile || user.mobile || user.mobileNumber || 'Mobile not added';
 
   const handleDisableMfa = async () => {
     setDisablingMfa(true);
@@ -63,6 +95,54 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
             </div>
           </div>
 
+
+          <div className="my-3.5 p-3.5 bg-white border border-slate-200 rounded-2xl">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h4 className="text-xs font-black text-slate-800">Personal Details</h4>
+                <p className="text-[10px] text-slate-400">Keep your delivery and account details up to date.</p>
+              </div>
+              {!editMode && (
+                <button onClick={() => setEditMode(true)} className="text-[11px] font-black text-blue-600 hover:text-blue-800 cursor-pointer">✎ Edit</button>
+              )}
+            </div>
+            {!editMode ? (
+              <div className="space-y-2.5 text-xs">
+                <div className="flex items-center justify-between"><span className="text-slate-400">Name</span><span className="font-bold text-slate-800">{displayName}</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-400">Gender</span><span className="font-bold text-slate-800">{user.gender || 'Not set'}</span></div>
+                <div className="flex items-center justify-between gap-2"><span className="text-slate-400">Mobile</span><span className="flex items-center gap-2 font-bold text-slate-800">{mobile{'}'} {mobileVerified ? <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700" title="Verified">
+                  <span className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center">✓</span> Verified
+                </span> : <span className="text-[10px] text-amber-600 font-bold">Not verified</span>}</span></div>
+                <div className="flex items-center justify-between gap-2"><span className="text-slate-400">Email</span><span className="flex items-center gap-2 font-bold text-slate-800">{user.email} {emailVerified ? <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700" title="Verified">
+                  <span className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center">✓</span> Verified
+                </span> : <span className="text-[10px] text-amber-600 font-bold">Not verified</span>}</span></div>
+              </div>
+            ) : (
+              <form onSubmit={handleSaveProfile} className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <input value={profileForm.firstName} onChange={e => setProfileForm(p => ({...p, firstName:e.target.value}))} placeholder="First name" required className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:ring-2 focus:ring-blue-100" />
+                  <input value={profileForm.lastName} onChange={e => setProfileForm(p => ({...p, lastName:e.target.value}))} placeholder="Last name" className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:ring-2 focus:ring-blue-100" />
+                </div>
+                <select value={profileForm.gender} onChange={e => setProfileForm(p => ({...p, gender:e.target.value}))} required className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white">
+                  <option value="">Select gender</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option><option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+                </select>
+                <input type="date" value={profileForm.dateOfBirth} onChange={e => setProfileForm(p => ({...p, dateOfBirth:e.target.value}))} required className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <input value={profileForm.mobileNumber} onChange={e => setProfileForm(p => ({...p, mobileNumber:e.target.value}))} required className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs" placeholder="+91 9876543210" />
+                    {mobileVerified && <span title="Verified" className="text-emerald-600 font-black">✓</span>}
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">Changing your mobile requires verification before it can become verified.</p>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button type="button" onClick={() => setEditMode(false)} className="flex-1 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer">Cancel</button>
+                  <button type="submit" disabled={savingProfile} className="flex-1 py-2 rounded-xl bg-blue-600 text-white text-xs font-black disabled:opacity-60 cursor-pointer">
+                    {savingProfile ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
           {/* Security & Multi-Factor Authentication Card */}
           <div className="my-3.5 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
             <div className="flex items-center justify-between">
