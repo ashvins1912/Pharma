@@ -10,6 +10,8 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
   const [mobileNumber, setMobileNumber] = useState(user?.mobileNumber || user?.mobile || '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -171,15 +173,23 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
               </label>
               <input
                 id="profile-password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="new-password"
                 minLength={8}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 pr-20 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 placeholder="Create a strong password"
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((visible) => !visible)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="mt-1 text-[11px] font-bold text-blue-600 transition hover:text-blue-800"
+              >
+                {showPassword ? 'Hide password' : 'Show password'}
+              </button>
             </div>
             <div>
               <label htmlFor="profile-confirm-password" className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-slate-500">
@@ -187,15 +197,23 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
               </label>
               <input
                 id="profile-confirm-password"
-                type="password"
+                type={showConfirmPassword ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 autoComplete="new-password"
                 minLength={8}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 pr-20 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 placeholder="Re-enter your password"
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((visible) => !visible)}
+                aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'}
+                className="mt-1 text-[11px] font-bold text-blue-600 transition hover:text-blue-800"
+              >
+                {showConfirmPassword ? 'Hide password' : 'Show password'}
+              </button>
             </div>
           </div>
 
