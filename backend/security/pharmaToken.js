@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { createRemoteJWKSet, jwtVerify, SignJWT, importPKCS8, importSPKI } from 'jose';
 import { env } from '../config/env.js';
+import { createClient } from '@supabase/supabase-js';
 
 const ISSUER = env.PHARMA_JWT_ISSUER;
 const AUDIENCE = env.PHARMA_JWT_AUDIENCE;
@@ -63,16 +64,50 @@ export async function verifyPharmaAccessToken(token) {
   });
 }
 
-let supabaseJwks;
+let supabaseAuthClient;
 export async function verifySupabaseExchangeToken(token) {
-  if (!env.SUPABASE_URL || !token) throw new Error('Supabase exchange token is unavailable.');
-  if (!supabaseJwks) {
-    supabaseJwks = createRemoteJWKSet(
-      new URL(`${env.SUPABASE_URL}/auth/v1/.well-known/jwks.json`)
-    );
+  if (!env.SUPABASE_URL || !token) {
+    const err = new Error('Supabase exchange token is unavailable.');
+    err.code = 'SUPABASE_EXCHANGE_UNAVAILABLE';
+    err.status = 503;
+    throw err;
   }
-  return jwtVerify(token, supabaseJwks, {
-    issuer: `${env.SUPABASE_URL}/auth/v1`,
-    audience: 'authenticated'
-  });
+
+  // Do not assume a particular Supabase JWT signing algorithm. Supabase
+  // projects may use legacy HMAC signing or asymmetric signing. The official
+  // Auth API validates the presented access token against the actual project.
+  if (!supabaseAuthClient) {
+    const key = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY;
+    if (!key) {
+      const err = new Error('Supabase server authentication is not configured.');
+      err.code = 'SUPABASE_SERVER_KEY_MISSING';
+      err.status = 503;
+      throw err;
+    }
+    supabaseAuthClient = createClient(env.SUPABASE_URL, key, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+  }
+
+  const { data, error } = await supabaseAuthClient.auth.getUser(token);
+  if (error || !data?.user) {
+    const err = new Error('Supabase identity could not be verified.');
+    err.code = 'INVALID_SUPABASE_EXCHANGE_TOKEN';
+    err.status = 401;
+    throw err;
+  }
+
+  return {
+    payload: {
+      sub: data.user.id,
+      email: data.user.email,
+      email_verified: Boolean(data.user.email_confirmed_at),
+      user_metadata: data.user.user_metadata || {},
+      app_metadata: data.user.app_metadata || {},
+      aud: 'authenticated'
+    }
+  };
 }
