@@ -149,24 +149,25 @@ def _parse_duration(text: str) -> Optional[Dict[str, Any]]:
 
 
 def _parse_course(text: str) -> Optional[Dict[str, Any]]:
+    # A course quantity must be explicit. Do not interpret the dosage ("1 tablet")
+    # as the total course quantity; that is calculated separately from
+    # dose × frequency × duration.
     normalized = _normalize_spaces(text)
-    patterns = [
+    match = re.search(
         rf"\b(?:qty|quantity|course|dispense|#)\s*[:=]?\s*(\d+)\s*({_UNIT_PATTERN})?\b",
-        rf"\b(\d+)\s*({_UNIT_PATTERN})\b",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, normalized, re.I)
-        if not match:
-            continue
-        quantity = int(match.group(1))
-        unit = (match.group(2) or "").lower() or None
-        return {
-            "value": quantity,
-            "unit": unit,
-            "raw": match.group(0),
-            "confidence": 0.91,
-        }
-    return None
+        normalized,
+        re.I,
+    )
+    if not match:
+        return None
+    quantity = int(match.group(1))
+    unit = (match.group(2) or "").lower() or None
+    return {
+        "value": quantity,
+        "unit": unit,
+        "raw": match.group(0),
+        "confidence": 0.96,
+    }
 
 
 def _parse_route(text: str) -> Optional[Dict[str, Any]]:
