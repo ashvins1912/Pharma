@@ -26,10 +26,17 @@ ImageFile.LOAD_TRUNCATED_IMAGES = False
 
 # Prevent decompression-bomb / pathological camera images from consuming the
 # Render instance's memory. Normal phone photos are far below this limit.
-MAX_IMAGE_PIXELS = 30_000_000
-MAX_IMAGE_DIMENSION = 3200
-PDF_MAX_DIMENSION = 1440
-JPEG_QUALITY = 88
+# Conservative limits keep peak Pillow/OpenCV/OCR memory low on small Render instances.
+# 24 MP is enough for essentially all phone prescription photos while blocking
+# pathological camera images from allocating hundreds of MB during decoding.
+MAX_IMAGE_PIXELS = 24_000_000
+# 2400px is enough detail for prescription OCR while substantially reducing RAM.
+MAX_IMAGE_DIMENSION = 2400
+# Keep the generated PDF compact; the raster image is the actual OCR payload.
+PDF_MAX_DIMENSION = 1200
+# Strong JPEG compression gives much smaller encrypted documents while retaining
+# readable medicine names, dosage and handwritten text.
+JPEG_QUALITY = 72
 
 
 @dataclass(frozen=True)
@@ -93,8 +100,8 @@ def _open_mobile_image(data: bytes) -> Image.Image:
 def _image_to_pdf(data: bytes) -> bytes:
     image = _open_mobile_image(data)
 
-    # JPEG is substantially smaller than PNG for camera photos and remains
-    # sharp enough for prescription OCR. PyMuPDF embeds it directly.
+    # JPEG is substantially smaller than PNG for camera photos. Quality 72 is an
+    # intentional memory/storage optimization while retaining OCR-readable text. PyMuPDF embeds it directly.
     image_buffer = BytesIO()
     image.save(image_buffer, format="JPEG", quality=JPEG_QUALITY, optimize=True)
     jpeg_bytes = image_buffer.getvalue()
@@ -116,7 +123,7 @@ def _image_to_pdf(data: bytes) -> bytes:
             fitz.Rect(0, 0, page_width, page_height),
             stream=jpeg_bytes,
         )
-        return doc.tobytes(garbage=4, deflate=True)
+        return doc.tobytes(garbage=4, deflate=True, clean=True)
     finally:
         doc.close()
 
