@@ -414,9 +414,7 @@ export class TenantService {
         if (getIsConnected()) {
             try {
                 const dbMemberships = await TenantMembership.find({ userId, status: 'ACTIVE' }).lean();
-                if (dbMemberships.length > 0) {
-                    return dbMemberships.map(m => ({ id: m._id, ...m }));
-                }
+                return dbMemberships.map(m => ({ id: m._id, ...m }));
             } catch (err) {
                 logger.warn('Failed to query TenantMembership from MongoDB', { error: err.message });
             }
@@ -446,7 +444,7 @@ export class TenantService {
             tenantId,
             branchId: branchId || null,
             role: role || TenantRoles.TENANT_ADMIN,
-            permissions: permissions.length ? permissions : ['READ_WRITE'],
+            permissions: Array.isArray(permissions) ? permissions : [],
             status: 'ACTIVE',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -492,7 +490,7 @@ export class TenantService {
             tenantId,
             branchId: inviteData.branchId || null,
             role: TenantRoles.TENANT_ADMIN,
-            permissions: inviteData.permissions?.length ? inviteData.permissions : ['*'],
+            permissions: Array.isArray(inviteData.permissions) ? inviteData.permissions : [],
             status: 'INVITED',
             invitationToken,
             invitedBy: actor?.userId || 'platform-super-admin',
