@@ -150,6 +150,151 @@ class PrescriptionServiceEngine:
             "uploadedAt": now,
         }
 
+    async def replace_prescription(
+        self,
+        prescription_id: str,
+        *,
+        user_id: str,
+        tenant_id: Optional[str],
+        branch_id: Optional[str],
+        file_bytes: bytes,
+        filename: Optional[str],
+        content_type: Optional[str],
+        idempotency_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        db = get_db()
+        rx = await db.prescriptions.find_one({"prescriptionId": prescription_id})
+        if not rx:
+            raise LookupError("Prescription not found")
+
+        if rx.get("status") == PrescriptionState.INACTIVE.value:
+            raise RuntimeError("INACTIVE")
+
+        if rx.get("customerId") != user_id and rx.get("createdBy") != user_id:
+            raise PermissionError("Prescription access denied")
+        if tenant_id and rx.get("tenantId") and rx.get("tenantId") != tenant_id:
+            raise PermissionError("Tenant access denied")
+        if branch_id and rx.get("branchId") and rx.get("branchId") != branch_id:
+            raise PermissionError("Branch access denied")
+
+        if not file_bytes:
+            raise ValueError("file is required")
+        if len(file_bytes) > settings.MAX_FILE_SIZE_BYTES:
+            raise ValueError("file too large")
+
+        if idempotency_key:
+            replay = await db.idempotency_keys.find_one({
+                "key": f"rx-replace:{prescription_id}:{tenant_id}:{idempotency_key}"
+            })
+            if replay:
+                updated = await db.prescriptions.find_one({"prescriptionId": prescription_id}, {"documentCiphertext": 0})
+                return {
+                    "prescriptionId": prescription_id,
+                    "status": updated["status"] if updated else PrescriptionState.QUEUED.value,
+                    "version": updated.get("version", 1) if updated else 1,
+                    "replayed": True,
+                }
+
+        now = _now()
+        encrypted = crypto.encrypt(file_bytes)
+        next_version = int(rx.get("version", 1)) + 1
+        document_version = int(rx.get("documentVersion", 1)) + 1
+
+        updated = await db.prescriptions.find_one_and_update(
+            {
+                "prescriptionId": prescription_id,
+                "version": rx.get("version", 1),
+                "status": {"$ne": PrescriptionState.INACTIVE.value},
+            },
+            {
+                "$set": {
+                    "status": PrescriptionState.QUEUED.value,
+                    "version": next_version,
+                    "documentVersion": document_version,
+                    "filename": filename or "prescription.bin",
+                    "contentType": content_type or "application/octet-stream",
+                    "documentCiphertext": encrypted,
+                    "documentSha256": hashlib.sha256(file_bytes).hexdigest(),
+                    "extraction": {
+                        "overallConfidence": None,
+                        "reviewRequired": True,
+                        "medicines": [],
+                        "patientName": None,
+                        "ocrVersion": None,
+                        "nlpVersion": None,
+                    },
+                    "updatedBy": user_id,
+                    "updatedAt": now,
+                }
+            },
+            return_document=True,
+        )
+        if not updated:
+            raise RuntimeError("VERSION_CONFLICT")
+
+        await db.prescription_reviews.update_many(
+            {"prescription_id": prescription_id, "status": {"$in": ["PENDING", "IN_REVIEW"]}},
+            {"$set": {"status": "CANCELLED", "updated_at": now}},
+        )
+
+        await db.processing_jobs.update_many(
+            {"prescription_id": prescription_id, "status": {"$in": ["QUEUED", "PROCESSING", "RETRY"]}},
+            {"$set": {"status": "CANCELLED", "locked_by": None, "locked_until": None, "updated_at": now}},
+        )
+
+        job_id = f"job_{uuid.uuid4().hex[:14]}"
+        await db.processing_jobs.insert_one({
+            "jobId": job_id,
+            "prescription_id": prescription_id,
+            "tenant_id": tenant_id,
+            "status": "QUEUED",
+            "attempt_count": 0,
+            "locked_by": None,
+            "locked_until": None,
+            "next_attempt_at": now,
+            "priority": 90,
+            "last_error_code": None,
+            "last_error_message": None,
+            "created_at": now,
+            "updated_at": now,
+        })
+
+        if idempotency_key:
+            await db.idempotency_keys.insert_one({
+                "key": f"rx-replace:{prescription_id}:{tenant_id}:{idempotency_key}",
+                "prescriptionId": prescription_id,
+                "expires_at": now + timedelta(seconds=settings.IDEMPOTENCY_EXPIRES_SECONDS),
+            })
+
+        await self._audit(
+            "PRESCRIPTION_REPROCESS_REQUESTED",
+            prescription_id,
+            tenant_id,
+            user_id,
+            {"documentVersion": document_version},
+        )
+        adapter = await integration_registry.resolve_adapter(tenant_id, branch_id, "PrescriptionUploaded")
+        await adapter.publish({
+            "eventType": "PrescriptionUploaded",
+            "aggregateType": "Prescription",
+            "aggregateId": prescription_id,
+            "tenantId": tenant_id,
+            "branchId": branch_id,
+            "aggregateVersion": next_version,
+            "payload": {
+                "prescriptionId": prescription_id,
+                "status": PrescriptionState.QUEUED.value,
+                "documentVersion": document_version,
+            },
+        })
+        return {
+            "prescriptionId": prescription_id,
+            "status": PrescriptionState.QUEUED.value,
+            "version": next_version,
+            "documentVersion": document_version,
+            "replayed": False,
+        }
+
     async def get_prescription(
         self,
         prescription_id: str,
