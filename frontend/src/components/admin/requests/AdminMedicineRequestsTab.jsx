@@ -56,8 +56,16 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
     loadRequests();
   };
 
+  const [prescriptionPreview, setPrescriptionPreview] = useState(null);
+  const [prescriptionLoading, setPrescriptionLoading] = useState(false);
+  const [prescriptionError, setPrescriptionError] = useState('');
+  
   const openPrescription = async (prescriptionUrl) => {
-    if (!prescriptionUrl) return;
+    if (!prescriptionUrl || prescriptionLoading) return;
+    setPrescriptionLoading(true);
+    setPrescriptionError('');
+    setPrescriptionPreview(null);
+
     try {
       const response = await apiClient.get(prescriptionUrl, {
         responseType: 'blob',
@@ -68,16 +76,28 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
       ).toLowerCase();
       const blob = await normalizePrescriptionBlob(response.data, contentType);
       const objectUrl = URL.createObjectURL(blob);
-      const popup = window.open(objectUrl, '_blank', 'noopener,noreferrer');
-      if (!popup) {
-        URL.revokeObjectURL(objectUrl);
-        throw new Error('Popup blocked');
-      }
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      setPrescriptionPreview({
+        url: objectUrl,
+        type: blob.type
+      });
     } catch (error) {
       console.error('Failed to open prescription:', error);
-      window.alert('Could not open the prescription file. Please try again.');
+      setPrescriptionError(
+        error?.response?.status === 404
+          ? 'Prescription file was not found. Please re-upload the prescription.'
+          : 'Could not open the prescription file. Please try again.'
+      );
+    } finally {
+      setPrescriptionLoading(false);
     }
+  };
+
+  const closePrescriptionPreview = () => {
+    if (prescriptionPreview?.url) {
+      URL.revokeObjectURL(prescriptionPreview.url);
+    }
+    setPrescriptionPreview(null);
+    setPrescriptionError('');
   };
 
   const getStatusBadge = (status) => {
@@ -432,6 +452,77 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
         )}
 
       </div>
+
+      {prescriptionLoading && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-900/70 p-4" role="status" aria-live="polite">
+          <div className="rounded-2xl bg-white px-6 py-5 text-sm font-semibold text-slate-700 shadow-2xl">
+            Loading prescription…
+          </div>
+        </div>
+      )}
+
+      {(prescriptionError || prescriptionPreview) && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/70 p-3 sm:p-5"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) closePrescriptionPreview();
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="medicine-request-prescription-title"
+            className="flex h-[92dvh] w-full max-w-5xl min-h-0 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+          >
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+              <h4 id="medicine-request-prescription-title" className="text-sm font-black text-slate-900">
+                Prescription
+              </h4>
+              <div className="flex items-center gap-2">
+                {prescriptionPreview?.url && (
+                  <a
+                    href={prescriptionPreview.url}
+                    download="prescription"
+                    className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
+                  >
+                    Download
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={closePrescriptionPreview}
+                  aria-label="Close prescription preview"
+                  className="min-h-10 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 bg-slate-100 p-2 sm:p-3">
+              {prescriptionError ? (
+                <div role="alert" className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-rose-700">
+                  {prescriptionError}
+                </div>
+              ) : prescriptionPreview?.type?.startsWith('image/') ? (
+                <div className="flex h-full items-center justify-center overflow-auto rounded-xl bg-slate-200 p-3">
+                  <img
+                    src={prescriptionPreview.url}
+                    alt="Uploaded prescription"
+                    className="max-h-full max-w-full rounded-lg object-contain shadow"
+                  />
+                </div>
+              ) : (
+                <iframe
+                  title="Uploaded prescription PDF"
+                  src={prescriptionPreview.url}
+                  className="h-full w-full rounded-xl border border-slate-200 bg-white"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Proposal Builder & Review Modal */}
       {proposalModalOpen && activeRequest && (
