@@ -1371,6 +1371,10 @@ export class AuthService {
                 requestIp: requestIp || null,
                 createdAt: new Date()
             });
+            if (process.env.NODE_ENV === 'test') {
+                const testToken = inMemoryTokens.get(tokenHash);
+                if (testToken) testToken.__qaRawToken = rawToken;
+            }
             const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
             await emailService.sendPasswordResetEmail({
                 email: normalizedEmail,
