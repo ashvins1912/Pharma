@@ -32,17 +32,21 @@ export function usePersistentState(
   { storage = 'local', ttl = DEFAULT_TTL, enabled = true } = {}
 ) {
   const initialRef = useRef(initialValue);
-  const [value, setValue] = useState(() =>
-    enabled && key ? readValue(key, initialRef.current, storage, ttl) : initialRef.current
-  );
+  const hydratedKeyRef = useRef(null);
+  const [value, setValue] = useState(() => {
+    if (!enabled || !key) return initialRef.current;
+    hydratedKeyRef.current = key;
+    return readValue(key, initialRef.current, storage, ttl);
+  });
 
   useEffect(() => {
     if (!enabled || !key) return;
     setValue(readValue(key, initialRef.current, storage, ttl));
+    hydratedKeyRef.current = key;
   }, [key, storage, ttl, enabled]);
 
   useEffect(() => {
-    if (!enabled || !key) return;
+    if (!enabled || !key || hydratedKeyRef.current !== key) return;
 
     try {
       const target = getStorage(storage);
