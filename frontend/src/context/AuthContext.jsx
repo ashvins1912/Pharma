@@ -61,13 +61,11 @@ export function AuthProvider({ children }) {
         // Do not treat cached identity data as a valid authenticated session.
         if (mounted) {
           syncSession(null);
-          if (error.status === 401) {
-            localStorage.removeItem('demo_session');
-            localStorage.removeItem('demo_auth_token');
-            if (supabase) void supabase.auth.signOut({ scope: 'local' }).catch(signOutError => {
-              console.warn('Could not clear expired local Supabase session.', { name: signOutError.name, status: signOutError.status });
-            });
-          }
+          localStorage.removeItem('demo_session');
+          localStorage.removeItem('demo_auth_token');
+          // Never clear the temporary Supabase OAuth session here. During the
+          // Google redirect callback, /me can legitimately return 401 before
+          // the Supabase session is exchanged for a Pharma session.
         }
       } finally {
         if (mounted) setLoading(false);
@@ -173,9 +171,13 @@ export function AuthProvider({ children }) {
     if (!isSupabaseConfigured || !supabase) {
       throw new Error('Google sign-in is unavailable until Supabase is configured.');
     }
+    const redirectTo = env.VITE_FRONTEND_URL || window.location.origin;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: env.VITE_FRONTEND_URL || window.location.origin }
+      options: {
+        redirectTo,
+        queryParams: { access_type: 'offline', prompt: 'select_account' }
+      }
     });
     if (error) throw error;
   };
