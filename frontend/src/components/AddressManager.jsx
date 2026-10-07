@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
 const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -62,6 +63,7 @@ export default function AddressManager({
     deleteAddress
   } = useApp();
   const { addToast } = useToast();
+  const { user } = useAuth();
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingAddress, setEditingAddress] = useState(null);
@@ -104,6 +106,7 @@ export default function AddressManager({
   const [landmark, setLandmark] = useState('');
   const [coords, setCoords] = useState(null);
   const [isDefault, setIsDefault] = useState(false);
+  const [useSelfDetails, setUseSelfDetails] = useState(true);
 
   useEffect(() => {
     if (autoAddIfEmpty && addresses.length === 0 && !showAddForm && !addressesError) {
@@ -291,8 +294,9 @@ export default function AddressManager({
   const resetAddressForm = () => {
     setEditingAddress(null);
     setLabel('Home');
-    setFullName('');
-    setMobile('');
+    setUseSelfDetails(true);
+    setFullName(user?.user_metadata?.name || user?.name || user?.email?.split('@')[0] || '');
+    setMobile(user?.user_metadata?.mobile || user?.mobile || '');
     setAddressLine1('');
     setAddressLine2('');
     setCity('Bengaluru');
@@ -308,6 +312,7 @@ export default function AddressManager({
 
   const startEditingAddress = (event, address) => {
     event.stopPropagation();
+    setUseSelfDetails(Boolean(address.fullName && (address.fullName === (user?.user_metadata?.name || user?.name) || address.mobile === (user?.user_metadata?.mobile || user?.mobile))));
     setEditingAddress(address);
     setLabel(address.label || 'Home');
     setFullName(address.fullName || '');
@@ -647,6 +652,22 @@ export default function AddressManager({
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Receiver details */}
+          <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 space-y-2">
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+              <input type="checkbox" checked={useSelfDetails} onChange={(event) => {
+                const checked = event.target.checked;
+                setUseSelfDetails(checked);
+                if (checked) {
+                  setFullName(user?.user_metadata?.name || user?.name || user?.email?.split('@')[0] || '');
+                  setMobile(user?.user_metadata?.mobile || user?.mobile || '');
+                }
+              }} />
+              <span>Use my details (SELF)</span>
+            </label>
+            <p className="text-[10px] text-slate-500">Turn this off to enter another family member or receiver.</p>
           </div>
 
           {/* Name & Mobile */}
