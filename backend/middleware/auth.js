@@ -1,15 +1,8 @@
 import 'dotenv/config';
 import { jwtVerify } from 'jose';
-import { verifyDemoAdminToken } from '../config/demoAdmin.js';
-import { verifyDemoCustomerToken } from '../config/demoCustomer.js';
 import { env } from '../config/env.js';
 import { verifyPharmaAccessToken } from '../security/pharmaToken.js';
 
-const isDemoAuthEnabled = env.NODE_ENV !== 'production';
-const JWT_SECRET = process.env.DEMO_ADMIN_JWT_SECRET
-    || process.env.ENCRYPTION_SECRET_KEY
-    || 'ashvin-pharmacy-demo-admin-jwt-secret-key-32chars!';
-const LOCAL_SIGNING_KEY = new TextEncoder().encode(JWT_SECRET);
 
 /**
  * Authentication Middleware
@@ -37,41 +30,7 @@ export const authenticateUser = async (req, res, next) => {
         });
     }
 
-    // 3. Signed demo customer sessions
-    const demoCustomer = await verifyDemoCustomerToken(token);
-    if (demoCustomer) {
-        req.user = {
-            ...demoCustomer,
-            id: demoCustomer.sub,
-            aal: 'aal1'
-        };
-        return next();
-    }
-
-    // Legacy local-only demo token
-    if (isDemoAuthEnabled && token === 'demo-customer-token') {
-        req.user = {
-            sub: 'demo-customer-id',
-            id: 'demo-customer-id',
-            email: 'customer@ashvinpharma.com',
-            app_metadata: { role: 'customer' },
-            user_metadata: { name: 'Ashvin Singh', mobile: '+91 95899 16475' },
-            aal: 'aal1'
-        };
-        return next();
-    }
-
-    // 4. Demo Admin token
-    const demoAdmin = await verifyDemoAdminToken(token);
-    if (demoAdmin) {
-        req.user = {
-            ...demoAdmin,
-            id: demoAdmin.sub,
-            aal: demoAdmin.aal || 'aal2'
-        };
-        return next();
-    }
-
+    // All development and production sessions use the same Pharma RS256 token format.
     // 5. First-party Pharma RS256 session token.
     // Supabase is deliberately NOT accepted here. It is used only as an
     // upstream Google identity during the one-time token exchange.
@@ -113,39 +72,11 @@ export const authenticateUser = async (req, res, next) => {
         // Fall through to legacy migration/demo verification.
     }
 
-    // 5. Check Local/Intermediate JWT signature (for TOTP AAL2 sessions)
-    try {
-        const { payload } = await jwtVerify(token, LOCAL_SIGNING_KEY, {
-            algorithms: ['HS256']
-        });
-
-        // Check if token is only an intermediate MFA challenge token attempting to access protected endpoints
-        if (payload.mfa_required && !payload.mfa_verified) {
-            return res.status(403).json({
-                message: 'Two-factor authentication step incomplete. Please submit your 6-digit TOTP code.',
-                code: 'MFA_CHALLENGE_REQUIRED'
-            });
-        }
-
-        req.user = {
-            sub: payload.sub,
-            id: payload.sub,
-            email: payload.email,
-            app_metadata: payload.app_metadata || { role: payload.role || 'customer' },
-            user_metadata: payload.user_metadata || {},
-            aal: payload.aal || 'aal1'
-        };
-        return next();
-    } catch {
-        // Fallthrough to Supabase JWKS verification
-    }
 
     // Supabase JWTs are no longer accepted as application sessions.
     // Google OAuth must first exchange the upstream identity for a Pharma token.
     return res.status(401).json({ message: 'Invalid or expired authentication token.', code: 'INVALID_PHARMA_TOKEN' });
 };
-
-export const authenticateSupabaseUser = authenticateUser;
 
 export const requireSuperAdmin = (req, res, next) => {
     const role = req.user?.app_metadata?.role || req.user?.role || req.context?.role;
