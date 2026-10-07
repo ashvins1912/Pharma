@@ -43,7 +43,7 @@ class EmailService {
     /**
      * Send email verification link to newly registered user
      */
-    async sendEmailVerification({ email, name, token, verificationUrl }) {
+    async sendEmailVerification({ email, name, token, code, verificationUrl }) {
         const targetUrl = verificationUrl || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${encodeURIComponent(token)}`;
         const recipientName = name || 'Valued Member';
 
@@ -70,11 +70,12 @@ class EmailService {
     <div class="brand">💊 Ashvin Pharmacy Platform</div>
     <span class="badge">Account Verification</span>
     <h1>Welcome, ${recipientName}!</h1>
-    <p>Thank you for signing up for Ashvin Pharmacy. Please confirm your email address to activate your digital pharmacy account and browse verified medicines.</p>
+    <p>Thank you for signing up for Ashvin Pharmacy. Confirm your email address using the verification code below before continuing to your profile setup.</p>
+    ${code ? `<div style="text-align:center; margin:24px 0;"><div style="font-size:12px; color:#64748b; margin-bottom:8px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Your 6-digit verification code</div><div style="display:inline-block; padding:16px 24px; background:#f0fdfa; border:1px solid #99f6e4; border-radius:14px; font-size:32px; letter-spacing:8px; font-weight:900; color:#0f766e; font-family:monospace;">${code}</div></div>` : ''}
     <div style="text-align: center;">
       <a href="${targetUrl}" class="btn" target="_blank">Verify Email Address</a>
     </div>
-    <p>This verification link is valid for <strong>24 hours</strong>. If you cannot click the button above, copy and paste the following link into your browser:</p>
+    <p>Your 6-digit code is valid for <strong>10 minutes</strong>. You can also use the verification link below while it remains available:</p>
     <div class="link-box">${targetUrl}</div>
     <p style="font-size: 12px; color: #64748b;">If you did not request this account, please ignore this email.</p>
     <div class="footer">
