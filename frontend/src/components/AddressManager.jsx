@@ -550,7 +550,7 @@ export default function AddressManager({
         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
           <p className="font-bold">Address directory is temporarily unavailable.</p>
           <p className="mt-1">Please try again later. Your saved addresses have not been changed.</p>
-          <button type="button" onClick={loadAddresses} disabled={loadingAddresses} className="mt-2 font-bold underline disabled:opacity-50">
+          <button type="button" onClick={() => loadAddresses({ force: true })} disabled={loadingAddresses} className="mt-2 font-bold underline disabled:opacity-50">
             {loadingAddresses ? 'Retrying…' : 'Try again'}
           </button>
         </div>
