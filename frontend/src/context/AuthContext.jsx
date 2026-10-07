@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { isSupabaseConfigured, supabase } from '../supabaseClient';
 import apiClient from '../api/apiClient';
-import { env } from '../config/env';
 import GoogleProfileOnboarding from '../components/auth/GoogleProfileOnboarding';
 
 const AuthContext = createContext(null);
