@@ -94,5 +94,30 @@ export function createServiceRouters(gatewayConfig = config) {
     requestId: req.requestId
   }));
 
-  return { inventoryRouter, orderRouter };
+
+  const prescriptionRouter = express.Router();
+  prescriptionRouter.use((req, res, next) => gatewayConfig.prescriptionServiceUrl
+    ? authenticateUser(req, res, next, gatewayConfig)
+    : next('router'));
+  const prescription = scope => createServiceHandler({
+    audience: gatewayConfig.prescriptionJwtAudience,
+    getScope: () => scope,
+    target: gatewayConfig.prescriptionServiceUrl,
+    includeCustomerProfile: true
+  }, gatewayConfig);
+  const prescriptionReview = (req, res, next) => requireAdmin(req, res, next);
+  prescriptionRouter.post('/upload', prescription('prescription.write'));
+  prescriptionRouter.put('/:prescriptionId/document', prescription('prescription.write'));
+  prescriptionRouter.get('/reviews/queue', prescription('prescription.review'));
+  prescriptionRouter.get('/:prescriptionId', prescription('prescription.read'));
+  prescriptionRouter.post('/:prescriptionId/review/claim', prescriptionReview, prescription('prescription.review'));
+  prescriptionRouter.post('/:prescriptionId/review/approve', prescriptionReview, prescription('prescription.review'));
+  prescriptionRouter.post('/:prescriptionId/review/reject', prescriptionReview, prescription('prescription.review'));
+  prescriptionRouter.post('/:prescriptionId/review/wait', prescriptionReview, prescription('prescription.review'));
+  prescriptionRouter.post('/:prescriptionId/review', prescriptionReview, prescription('prescription.review'));
+  prescriptionRouter.post('/:prescriptionId/remove', prescription('prescription.write'));
+  prescriptionRouter.get('/:prescriptionId/document-url', prescription('prescription.review'));
+  prescriptionRouter.post('/hospitals', prescription('prescription.write'));
+
+  return { inventoryRouter, orderRouter, prescriptionRouter };
 }
