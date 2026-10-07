@@ -2,7 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import UserProfile from '../models/UserProfile.js';
 import UserAddress from '../models/UserAddress.js';
-import { authenticateSupabaseUser, authenticateUser } from '../middleware/auth.js';
+import { authenticateUser, authenticateUser } from '../middleware/auth.js';
 import { getIsConnected } from '../config/db.js';
 
 const router = express.Router();
@@ -70,7 +70,7 @@ const getAddressFields = (body) => {
     };
 };
 
-router.use(authenticateSupabaseUser);
+router.use(authenticateUser);
 
 router.get('/', async (req, res) => {
     if (!requireDatabase(res)) return;
