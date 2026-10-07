@@ -1130,7 +1130,7 @@ router.put('/onboarding', authenticateUser, async (req, res) => {
         });
     }
 
-    const { firstName, lastName, dateOfBirth, mobileNumber, mobile } = req.body || {};
+    const { firstName, lastName, dateOfBirth, mobileNumber, mobile, gender } = req.body || {};
     const phone = (mobileNumber || mobile || '').trim();
 
     if (!firstName || !firstName.trim()) {
@@ -1149,7 +1149,8 @@ router.put('/onboarding', authenticateUser, async (req, res) => {
             firstName,
             lastName,
             dateOfBirth,
-            mobileNumber: phone
+            mobileNumber: phone,
+            gender
         });
 
         if (result.accessToken) {
