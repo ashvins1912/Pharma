@@ -310,9 +310,12 @@ export function AuthProvider({ children }) {
   const updatePassword = async (password) => {
     const token = new URLSearchParams(window.location.search).get('token');
     if (!token) throw new Error('Password reset link is missing or expired.');
-    await apiClient.post('/api/v1/auth/password/reset', { token, password });
+    const { data } = await apiClient.post('/api/v1/auth/password/reset', { token, password });
+    const result = data?.data || data;
+    if (result?.user) syncSession({ user: result.user }, result.user);
     setPasswordRecoveryRequired(false);
     window.history.replaceState({}, document.title, window.location.pathname);
+    return result;
   };
 
   const completeGoogleProfile = (result) => {
