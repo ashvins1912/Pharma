@@ -52,8 +52,20 @@ export const rejectProposal = async (id, reason = '') => {
 
 // Admin & Pharmacy APIs
 export const getAdminMedicineRequests = async (params = {}) => {
-  const response = await apiClient.get('/api/admin/medicine-requests', { params });
-  return response.data?.requests || [];
+  const response = await apiClient.get('/api/admin/medicine-requests', {
+    params: { page: 1, pageSize: 8, ...params }
+  });
+  return {
+    requests: response.data?.requests || response.data?.items || [],
+    pagination: response.data?.pagination || {
+      page: 1,
+      pageSize: 8,
+      total: response.data?.requests?.length || 0,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false
+    }
+  };
 };
 
 export const getAdminMedicineRequestMetrics = async () => {
