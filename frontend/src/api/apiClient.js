@@ -1,20 +1,25 @@
 import axios from 'axios';
 import { normalizeApiError } from './apiErrors';
 
-// Production browser traffic stays same-origin. Render rewrites /api/* to the API Gateway,
- // so HttpOnly session cookies remain first-party to the Pharma UI origin.
+// Production browser traffic MUST stay on the Pharma UI origin.
+// Render rewrites /api/* to the API Gateway, which keeps HttpOnly session
+// cookies first-party to the browser's current site. Never use the gateway
+// hostname as a browser API base URL in production.
 const configuredApiBaseUrl = String(import.meta.env.VITE_API_URL || '/api').trim();
 const rawApiBaseUrl = import.meta.env.PROD
-    ? '/api'
+    ? (typeof window !== 'undefined' ? window.location.origin : '')
     : configuredApiBaseUrl.replace(/\/+$/, '');
-const apiBaseUrl = rawApiBaseUrl === '/api'
-    ? ''
-    : rawApiBaseUrl.endsWith('/api')
-        ? rawApiBaseUrl.slice(0, -4)
-        : rawApiBaseUrl;
+const apiBaseUrl = import.meta.env.PROD
+    ? rawApiBaseUrl
+    : rawApiBaseUrl === '/api'
+        ? ''
+        : rawApiBaseUrl.endsWith('/api')
+            ? rawApiBaseUrl.slice(0, -4)
+            : rawApiBaseUrl;
 
 const apiClient = axios.create({
-    // Call sites already include /api; keep VITE_API_URL as an origin or /api base.
+    // Call sites already include /api. In production this resolves explicitly
+    // to https://pharma-ui.onrender.com/api/... and Render rewrites internally.
     baseURL: apiBaseUrl,
     timeout: 10000,
     withCredentials: true
@@ -47,9 +52,13 @@ apiClient.interceptors.response.use(
     (error) => {
         const normalized = normalizeApiError(error);
         const url = String(error.config?.url || '');
-        const isCredentialSubmission = /\/api\/auth\/(login|signup|demo-admin|demo-customer)(\/|$)/.test(url);
-        const isSessionProbe = /\/api\/auth\/(session|logout)(\/|$)/.test(url);
+        const isCredentialSubmission = /\/api\/(?:v1\/auth|auth)\/(login|signup|google|verify-email-code|resend-verification|complete-profile|onboarding|password\/forgot|password\/reset|mfa\/verify)(\/|$)/.test(url);
+        const isSessionProbe = /\/api\/(?:v1\/auth|auth)\/(session|me|logout|csrf)(\/|$)/.test(url);
 
+        // A failed onboarding/auth endpoint must not globally clear the
+        // current React auth state. In particular, a transient 401 from
+        // complete-profile should be shown in the onboarding dialog instead
+        // of redirecting the user to the login screen.
         if (normalized.status === 401 && !isCredentialSubmission && !isSessionProbe && typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('ashvin:authentication-required', {
                 detail: { requestId: normalized.requestId }
