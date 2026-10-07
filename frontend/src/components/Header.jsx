@@ -92,7 +92,7 @@ export default function Header({
               💊 Store
             </button>
 
-            {user && (
+            {(!isPharmacyOrAdmin || user) && (
               <>
                 <button
                   onClick={() => setActiveTab('orders')}
@@ -151,17 +151,39 @@ export default function Header({
           {/* Right: Actions Bar (Notifications, Cart, User Profile, Mobile Menu) */}
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             
-            {/* Notification Bell (Only shown when user is signed in) */}
-            {user && (
-              isAdmin ? (
-                <AdminAlertBell onOpenAlerts={onOpenAdminAlerts} />
-              ) : (
-                <NotificationBell onOpenOrders={() => setActiveTab('orders')} />
-              )
+            {/* Customer actions stay visible on the store landing page; guests are prompted to sign in. */}
+            {!isPharmacyOrAdmin && (
+              <>
+                <NotificationBell
+                  onOpenOrders={user ? () => setActiveTab('orders') : null}
+                  onRequireAuth={onOpenAuth}
+                />
+
+                <button
+                  onClick={() => {
+                    if (!user) {
+                      onOpenAuth();
+                      return;
+                    }
+                    onOpenCart();
+                  }}
+                  className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition cursor-pointer flex items-center justify-center flex-shrink-0"
+                  aria-label="View Shopping Cart"
+                >
+                  <svg className="w-5 h-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                  </svg>
+                  {cartItemCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] sm:text-[10px] font-black w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center shadow-md animate-pulse">
+                      {cartItemCount}
+                    </span>
+                  )}
+                </button>
+              </>
             )}
 
-            {/* Shopping Cart Icon with Live Count Badge (Only shown when user is signed in) */}
-            {user && (
+            {/* Admin notification bell */}
+            {isPharmacyOrAdmin && isAdmin && <AdminAlertBell onOpenAlerts={onOpenAdminAlerts} />}
               <button
                 onClick={onOpenCart}
                 className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition cursor-pointer flex items-center justify-center flex-shrink-0"
