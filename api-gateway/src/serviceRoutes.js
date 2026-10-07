@@ -62,6 +62,21 @@ function createServiceHandler({ audience, getScope, target, includeCustomerProfi
 }
 
 export function createServiceRouters(gatewayConfig = config) {
+  const customerRouter = express.Router();
+  customerRouter.use((req, res, next) => gatewayConfig.customerServiceUrl
+    ? authenticateUser(req, res, next, gatewayConfig)
+    : next('router'));
+  const customer = createServiceHandler({
+    audience: gatewayConfig.customerJwtAudience,
+    getScope: () => 'customer.profile.write',
+    target: gatewayConfig.customerServiceUrl,
+    includeCustomerProfile: false
+  }, gatewayConfig);
+  customerRouter.post('/ensure', customer);
+  customerRouter.get('/persons', customer);
+  customerRouter.post('/persons', customer);
+  customerRouter.post('/family-invitations', customer);
+
   const inventoryRouter = express.Router();
   inventoryRouter.use((req, res, next) => {
     if (!gatewayConfig.inventoryServiceUrl) {
@@ -161,5 +176,5 @@ export function createServiceRouters(gatewayConfig = config) {
   prescriptionRouter.get('/:prescriptionId/document-url', prescription('prescription.review'));
   prescriptionRouter.post('/hospitals', prescription('prescription.write'));
 
-  return { inventoryRouter, orderRouter, prescriptionRouter, legacyPrescriptionRouter };
+  return { customerRouter, inventoryRouter, orderRouter, prescriptionRouter, legacyPrescriptionRouter };
 }
