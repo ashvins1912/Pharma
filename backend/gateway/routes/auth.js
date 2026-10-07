@@ -20,9 +20,10 @@ import {
     calculateAge
 } from '../../services/identity-service/AuthService.js';
 import { authenticateUser } from '../../middleware/auth.js';
+import { authorize } from '../../middleware/authorization.js';
 import { authLimiter } from '../../middleware/rateLimiter.js';
 import { sendSuccess, sendError } from '../../shared/responses.js';
-import { setSessionCookies, clearSessionCookies } from '../../security/sessionCookie.js';
+import { setSessionCookies, clearSessionCookies, generateCsrfToken } from '../../security/sessionCookie.js';
 import { verifySupabaseExchangeToken } from '../../security/pharmaToken.js';
 import { env } from '../../config/env.js';
 
@@ -33,7 +34,7 @@ const router = express.Router();
  * Local signup flow with persistent User model & LOCAL UserIdentity
  */
 router.post('/signup', authLimiter, async (req, res) => {
-    const { email, password } = req.body || {};
+    const { email, password, gender } = req.body || {};
     const mobile = req.body?.mobileNumber || req.body?.mobile || '';
     const dateOfBirth = req.body?.dateOfBirth;
     let firstName = (req.body?.firstName || '').trim();
@@ -89,6 +90,7 @@ router.post('/signup', authLimiter, async (req, res) => {
             mobileNumber: mobile,
             mobile,
             dateOfBirth,
+            gender,
             password
         });
 
@@ -356,7 +358,7 @@ router.post('/google', authLimiter, async (req, res) => {
  * PUT /auth/onboarding and PUT /auth/complete-profile
  */
 const handleProfileCompletion = async (req, res) => {
-    const userId = req.user?.id || req.user?.sub || req.user?.userId || req.body?.userId;
+    const userId = req.user?.id || req.user?.sub || req.user?.userId;
     if (!userId) {
         return sendError(res, {
             code: 'UNAUTHORIZED',
@@ -380,6 +382,9 @@ const handleProfileCompletion = async (req, res) => {
     }
     if (!phone || !isValidMobile(phone)) {
         validationDetails.push({ field: 'mobileNumber', code: 'INVALID_MOBILE', message: 'Valid mobile number with at least 10 digits is required.' });
+    }
+    if (!gender || !['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'].includes(gender)) {
+        validationDetails.push({ field: 'gender', code: 'INVALID_GENDER', message: 'Select a valid gender option.' });
     }
 
     if (validationDetails.length > 0) {
@@ -422,8 +427,119 @@ const handleProfileCompletion = async (req, res) => {
     }
 };
 
-router.put('/onboarding', authenticateUser, handleProfileCompletion);
-router.put('/complete-profile', authenticateUser, handleProfileCompletion);
+router.put('/onboarding', authenticateUser, authorize('profile.complete'), handleProfileCompletion);
+router.put('/complete-profile', authenticateUser, authorize('profile.complete'), handleProfileCompletion);
+
+/**
+ * GET /auth/csrf
+ */
+router.get('/csrf', (req, res) => {
+    const token = generateCsrfToken();
+    setSessionCookies(res, { csrfToken: token });
+    return res.json({ csrfToken: token });
+});
+
+/**
+ * POST /auth/password/forgot
+ */
+router.post('/password/forgot', authLimiter, async (req, res) => {
+    try {
+        const result = await authService.requestPasswordReset({ email: req.body?.email, requestIp: req.ip });
+        return sendSuccess(res, { data: result, message: result.message, statusCode: 202, req });
+    } catch (err) {
+        return sendError(res, {
+            code: err.code || 'PASSWORD_RESET_REQUEST_FAILED',
+            message: err.message || 'Unable to process password reset request.',
+            statusCode: err.status || 429,
+            req
+        });
+    }
+});
+
+/**
+ * POST /auth/password/reset
+ */
+router.post('/password/reset', authLimiter, async (req, res) => {
+    try {
+        const result = await authService.resetPassword({
+            token: req.body?.token,
+            password: req.body?.password
+        });
+        if (result.accessToken) setSessionCookies(res, { accessToken: result.accessToken });
+        return sendSuccess(res, {
+            data: result,
+            message: 'Password updated successfully.',
+            statusCode: 200,
+            req
+        });
+    } catch (err) {
+        return sendError(res, {
+            code: err.code || 'PASSWORD_RESET_FAILED',
+            message: err.message || 'Unable to reset password.',
+            statusCode: err.status || 400,
+            req
+        });
+    }
+});
+
+/**
+ * POST /auth/mfa/verify
+ */
+router.post('/mfa/verify', authLimiter, async (req, res) => {
+    try {
+        const result = await authService.verifyMfaChallenge(req.body?.challengeToken, req.body?.code);
+        setSessionCookies(res, { accessToken: result.accessToken });
+        return sendSuccess(res, {
+            data: { user: result.user, accessToken: result.accessToken, aal: 'aal2' },
+            message: 'MFA verification successful.',
+            statusCode: 200,
+            req
+        });
+    } catch (err) {
+        return sendError(res, {
+            code: err.code || 'MFA_VERIFY_FAILED',
+            message: err.message || 'MFA verification failed.',
+            statusCode: err.status || 401,
+            req
+        });
+    }
+});
+
+/**
+ * POST /auth/mfa/enroll
+ */
+router.post('/mfa/enroll', authenticateUser, async (req, res) => {
+    try {
+        const result = await authService.enrollMfa(req.user);
+        return sendSuccess(res, { data: result, message: 'MFA enrollment initialized.', statusCode: 200, req });
+    } catch (err) {
+        return sendError(res, { code: err.code || 'MFA_ENROLL_FAILED', message: err.message, statusCode: err.status || 400, req });
+    }
+});
+
+/**
+ * POST /auth/mfa/confirm-enroll
+ */
+router.post('/mfa/confirm-enroll', authenticateUser, async (req, res) => {
+    try {
+        const result = await authService.confirmMfaEnrollment(req.user, req.body?.code);
+        return sendSuccess(res, { data: result, message: 'MFA enabled successfully.', statusCode: 200, req });
+    } catch (err) {
+        return sendError(res, { code: err.code || 'MFA_ENROLL_FAILED', message: err.message, statusCode: err.status || 400, req });
+    }
+});
+
+/**
+ * POST /auth/mfa/mfa-disable
+ */
+router.post('/mfa/mfa-disable', authenticateUser, async (req, res) => {
+    try {
+        const result = await authService.disableMfa(req.user);
+        return sendSuccess(res, { data: result, message: 'MFA disabled successfully.', statusCode: 200, req });
+    } catch (err) {
+        return sendError(res, { code: err.code || 'MFA_DISABLE_FAILED', message: err.message, statusCode: err.status || 400, req });
+    }
+});
 
 /**
  * GET /auth/me
