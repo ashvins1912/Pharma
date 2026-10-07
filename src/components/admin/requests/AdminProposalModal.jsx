@@ -463,17 +463,12 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
             <span className="font-extrabold text-amber-950 block">Prescription Verification Status</span>
             <p className="text-[11px] text-amber-800">Confirm clinical verification before customer approval.</p>
           </div>
-          <select
-            value={prescriptionStatus}
-            onChange={(e) => setPrescriptionStatus(e.target.value)}
-            disabled={!canEditProposal || !reviewReady}
-            className="px-3 py-1.5 text-xs font-bold bg-white border border-amber-300 rounded-xl text-amber-950 outline-none"
-          >
-            <option value="Verified">✓ Verified by Pharmacist</option>
-            <option value="Pending Verification">⏳ Pending Verification</option>
-            <option value="Not Required">Not Required (OTC)</option>
-            <option value="Rejected">✕ Prescription Rejected</option>
-          </select>
+          <div className="rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-950">
+            {prescriptionStatus === 'Verified' ? '✓ Prescription Matched'
+              : prescriptionStatus === 'Rejected' ? '✕ Prescription Rejected'
+                : prescriptionStatus === 'Not Required' ? 'Not Required (OTC)'
+                  : '⏳ Verification Pending'}
+          </div>
         </div>
 
         {(request.prescriptionId || request.prescriptionUrl) && (
