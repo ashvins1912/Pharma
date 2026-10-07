@@ -3,6 +3,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { verifyDemoAdminToken } from '../config/demoAdmin.js';
 import { verifyDemoCustomerToken } from '../config/demoCustomer.js';
 import { env } from '../config/env.js';
+import { verifyPharmaAccessToken } from '../security/pharmaToken.js';
 
 const { SUPABASE_URL } = env;
 let SUPABASE_JWKS = null;
@@ -84,6 +85,46 @@ export const authenticateUser = async (req, res, next) => {
         return next();
     }
 
+    // 5. First-party Pharma RS256 session token.
+    // Supabase is deliberately NOT accepted here. It is used only as an
+    // upstream Google identity during the one-time token exchange.
+    try {
+        const { payload } = await verifyPharmaAccessToken(token);
+        if (payload.token_type !== 'pharma_access' || typeof payload.sub !== 'string' || !payload.sub) {
+            throw new Error('Invalid Pharma token claims.');
+        }
+        req.user = {
+            sub: payload.sub,
+            id: payload.sub,
+            email: payload.email || '',
+            name: payload.name || '',
+            firstName: payload.firstName || '',
+            lastName: payload.lastName || '',
+            role: payload.role || 'customer',
+            roles: payload.roles || [payload.role || 'customer'],
+            permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
+            permissionVersion: Number(payload.permissionVersion || 1),
+            tenantId: payload.tenantId || null,
+            branchId: payload.branchId || null,
+            scope: payload.scope || 'CUSTOMER',
+            app_metadata: {
+                role: payload.role || 'customer',
+                tenantId: payload.tenantId || null,
+                permissions: Array.isArray(payload.permissions) ? payload.permissions : []
+            },
+            user_metadata: {
+                name: payload.name || '',
+                mobile: payload.mobile || '',
+                dateOfBirth: payload.dateOfBirth || null
+            },
+            aal: payload.aal || 'aal1',
+            sessionId: payload.sessionId || null
+        };
+        return next();
+    } catch {
+        // Fall through to legacy migration/demo verification.
+    }
+
     // 5. Check Local/Intermediate JWT signature (for TOTP AAL2 sessions)
     try {
         const { payload } = await jwtVerify(token, LOCAL_SIGNING_KEY, {
@@ -111,34 +152,9 @@ export const authenticateUser = async (req, res, next) => {
         // Fallthrough to Supabase JWKS verification
     }
 
-    // 6. Supabase RS256 JWKS verification
-    if (!SUPABASE_JWKS || !SUPABASE_URL) {
-        return res.status(401).json({ message: 'Invalid or expired authentication token.' });
-    }
-
-    try {
-        const { payload } = await jwtVerify(token, SUPABASE_JWKS, {
-            issuer: `${SUPABASE_URL}/auth/v1`,
-            audience: 'authenticated'
-        });
-
-        if (typeof payload.sub !== 'string' || !payload.sub) {
-            return res.status(401).json({ message: 'Invalid authentication token claims.' });
-        }
-
-        req.user = {
-            sub: payload.sub,
-            id: payload.sub,
-            email: payload.email,
-            app_metadata: payload.app_metadata || {},
-            user_metadata: payload.user_metadata || {},
-            aal: payload.aal || 'aal1'
-        };
-        return next();
-    } catch (error) {
-        console.warn('Authentication token verification rejected:', error.message);
-        return res.status(401).json({ message: 'Invalid or expired authentication token.' });
-    }
+    // Supabase JWTs are no longer accepted as application sessions.
+    // Google OAuth must first exchange the upstream identity for a Pharma token.
+    return res.status(401).json({ message: 'Invalid or expired authentication token.', code: 'INVALID_PHARMA_TOKEN' });
 };
 
 export const authenticateSupabaseUser = async (req, res, next) => {
