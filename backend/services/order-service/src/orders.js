@@ -70,8 +70,10 @@ const serializeOrder = order => ({
   updatedAt: order.updatedAt
 });
 
-export function normalizeCreateRequest(body, userId) {
+export function normalizeCreateRequest(body, userContext) {
   body = body || {};
+  const serviceUser = typeof userContext === 'string' ? { userId: userContext } : (userContext || {});
+  const userId = serviceUser.userId || '';
   const source = body?.source || 'API';
   const externalReference = typeof body?.externalReference === 'string' ? body.externalReference.trim() : '';
   const idempotencyKey = typeof body?.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
@@ -109,8 +111,8 @@ export function normalizeCreateRequest(body, userId) {
     prescriptionUrl: body.prescriptionUrl || null,
     prescriptionId: body.prescriptionId || null,
     patientPuid: body.patientPuid || null,
-    tenantId: body.tenantId || null,
-    branchId: body.branchId || null,
+    tenantId: serviceUser.tenantId || body.tenantId || null,
+    branchId: serviceUser.branchId || body.branchId || null,
     prescriptionRequired: Boolean(body.prescriptionRequired || body.prescriptionUrl || body.prescriptionId)
   };
   const requestFingerprint = createHash('sha256')
@@ -130,6 +132,25 @@ export function normalizeCreateRequest(body, userId) {
       prescriptionRequired: request.prescriptionRequired
     }))
     .digest('hex');
+  if (
+    serviceUser.tenantId
+    && body.tenantId
+    && String(serviceUser.tenantId) !== String(body.tenantId)
+    && !serviceUser.isPlatformUser
+  ) {
+    throw fail(403, 'Tenant context does not match the authenticated service context.');
+  }
+  if (
+    serviceUser.branchId
+    && body.branchId
+    && String(serviceUser.branchId) !== String(body.branchId)
+    && !serviceUser.isPlatformUser
+  ) {
+    throw fail(403, 'Branch context does not match the authenticated service context.');
+  }
+  if (serviceUser.authorizedTenantId && request.tenantId && String(serviceUser.authorizedTenantId) !== String(request.tenantId) && !serviceUser.isPlatformUser) {
+    throw fail(403, 'Authenticated tenant membership does not authorize this tenant.');
+  }
   return { ...request, requestFingerprint };
 }
 
@@ -240,7 +261,7 @@ const writeEvent = async (session, order, event) => {
 };
 
 export async function createOrder(body, user) {
-  const request = normalizeCreateRequest(body, user.userId);
+  const request = normalizeCreateRequest(body, user);
   const existing = await findExistingOrder(request);
   if (existing) return checkReplay(existing, request);
   const skus = request.items.map(([sku]) => sku);
