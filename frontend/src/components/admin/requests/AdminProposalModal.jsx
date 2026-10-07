@@ -515,7 +515,7 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
           </div>
         )}
 
-        {/* Proposal Formulation Form */
+        {/* Proposal Formulation Form */}
         <form onSubmit={handleSubmitProposal} className="space-y-4">
           
           <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 border-b border-slate-100 pb-1">
