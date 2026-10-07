@@ -21,7 +21,7 @@ services:
       # prescription URLs stored on existing orders.
       - type: rewrite
         source: /api/*
-        destination: https://ashvin-pharmacy-api-gateway.onrender.com/api/*
+        destination: https://pharma-api-gateway.onrender.com/api/*
       - type: rewrite
         source: /*
         destination: /index.html
