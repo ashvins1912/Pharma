@@ -7,7 +7,6 @@
  */
 import crypto from 'node:crypto';
 import bcrypt from '../../security/hasher.js';
-import { SignJWT, jwtVerify } from 'jose';
 import User from '../../models/User.js';
 import UserProfile from '../../models/UserProfile.js';
 import UserIdentity from '../../models/UserIdentity.js';
@@ -22,11 +21,6 @@ import { issuePharmaAccessToken, verifyPharmaAccessToken } from '../../security/
 import { authorizationService } from '../../authorization/AuthorizationService.js';
 import { generateTotpSecret, verifyTotpCode, buildOtpauthUri, generateQrCodeDataUrl } from '../../security/totp.js';
 import { encryptPII, decryptPII } from '../../security/cryptoVault.js';
-
-const JWT_SECRET = process.env.DEMO_ADMIN_JWT_SECRET
-    || process.env.ENCRYPTION_SECRET_KEY
-    || 'ashvin-pharmacy-demo-admin-jwt-secret-key-32chars!';
-const SIGNING_KEY = new TextEncoder().encode(JWT_SECRET);
 
 /**
  * Calculates current age from date of birth (DOB).
