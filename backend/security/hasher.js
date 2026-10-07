@@ -40,12 +40,8 @@ function nativeCompareSync(password, storedHash) {
         return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(originalHash));
     }
 
-    // Default seeded hash fallbacks for demo accounts when bcryptjs is absent
-    if (strHash.startsWith('$2a$') || strHash.startsWith('$2b$') || strHash.startsWith('$2y$')) {
-        if (String(password) === 'Admin@123' || String(password) === 'Customer@123') {
-            return true;
-        }
-    }
+    // Never accept hardcoded demo passwords. Authentication must always
+    // validate the persisted bcrypt hash.
 
     return false;
 }
