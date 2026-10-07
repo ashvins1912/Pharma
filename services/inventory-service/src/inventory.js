@@ -29,7 +29,7 @@ const normalizeItems = items => {
   return [...aggregated].map(([productId, quantity]) => ({ productId, quantity }));
 };
 
-export async function lookupInventory({ productIds = [], skus = [] }) {
+export async function lookupInventory({ productIds = [], skus = [], tenantId = null, branchId = null }) {
   if (!Array.isArray(productIds) || !Array.isArray(skus) || productIds.length + skus.length > 100) {
     const error = new Error('Lookup accepts at most 100 product IDs or SKUs.');
     error.statusCode = 400;
@@ -45,8 +45,13 @@ export async function lookupInventory({ productIds = [], skus = [] }) {
   if (productIds.length) filters.push({ _id: { $in: productIds.map(id => id.toLowerCase()) } });
   if (skus.length) filters.push({ sku: { $in: skus.map(sku => String(sku).trim().toUpperCase()) } });
   if (!filters.length) return [];
-  const products = await Product.find({ $or: filters, active: true }).lean();
-  const inventories = await Inventory.find({ productId: { $in: products.map(product => product._id) } }).lean();
+  const productFilter = { $or: filters, active: true };
+  if (tenantId) productFilter.tenantId = String(tenantId).trim();
+  const products = await Product.find(productFilter).lean();
+  const inventoryFilter = { productId: { $in: products.map(product => product._id) } };
+  if (tenantId) inventoryFilter.tenantId = String(tenantId).trim();
+  if (branchId) inventoryFilter.branchId = String(branchId).trim();
+  const inventories = await Inventory.find(inventoryFilter).lean();
   const inventoryByProductId = new Map(inventories.map(item => [String(item.productId), item]));
   return products.map(product => {
     const inventory = inventoryByProductId.get(String(product._id));
@@ -67,6 +72,94 @@ export async function lookupInventory({ productIds = [], skus = [] }) {
       availableQuantity: inventory ? Math.max(0, inventory.stockQuantity - inventory.reservedQuantity) : 0
     };
   });
+}
+
+export async function searchInventoryProducts({
+  tenantId = null,
+  branchId = null,
+  query = '',
+  category = '',
+  page = 1,
+  limit = 50
+} = {}) {
+  const normalizedPage = Math.max(1, Math.floor(Number(page) || 1));
+  const normalizedLimit = Math.min(100, Math.max(1, Math.floor(Number(limit) || 50)));
+  const normalizedQuery = String(query || '').trim();
+  const filter = { active: true };
+  if (tenantId) filter.tenantId = String(tenantId).trim();
+  if (category) filter.category = String(category).trim();
+
+  if (normalizedQuery) {
+    const pattern = new RegExp(normalizedQuery.replace(/[.*+?^()|[\]{}\\]/g, '\\$&'), 'i');
+    filter.$or = [
+      { sku: pattern },
+      { name: pattern },
+      { genericName: pattern },
+      { manufacturer: pattern },
+      { category: pattern }
+    ];
+  }
+
+  const products = await Product.find(filter)
+    .sort({ name: 1 })
+    .skip((normalizedPage - 1) * normalizedLimit)
+    .limit(normalizedLimit)
+    .lean();
+
+  const productIds = products.map(product => product._id);
+  const inventoryFilter = productIds.length
+    ? { productId: { $in: productIds } }
+    : { productId: { $in: [] } };
+  if (tenantId) inventoryFilter.tenantId = String(tenantId).trim();
+  if (branchId) inventoryFilter.branchId = String(branchId).trim();
+
+  const [inventories, total] = await Promise.all([
+    Inventory.find(inventoryFilter).lean(),
+    Product.countDocuments(filter)
+  ]);
+
+  const byProductId = new Map(inventories.map(item => [String(item.productId), item]));
+  const items = products.map(product => {
+    const inventory = byProductId.get(String(product._id));
+    const price = inventory?.price ?? null;
+    const availableQuantity = inventory
+      ? Math.max(0, inventory.stockQuantity - inventory.reservedQuantity)
+      : 0;
+    return {
+      listingId: inventory ? `${inventory.tenantId}:${inventory.branchId}:${String(product._id)}` : null,
+      productId: String(product._id),
+      productVersion: product.version,
+      sku: product.sku,
+      name: product.name,
+      genericName: product.genericName,
+      composition: product.genericName,
+      manufacturer: product.manufacturer,
+      strength: product.strength,
+      dosageForm: product.form,
+      form: product.form,
+      category: product.category,
+      requiresPrescription: product.requiresPrescription,
+      mrp: price,
+      sellingPrice: price,
+      price,
+      stockQuantity: inventory?.stockQuantity ?? 0,
+      reservedQuantity: inventory?.reservedQuantity ?? 0,
+      availableQuantity,
+      stockStatus: availableQuantity > 10 ? 'IN_STOCK' : availableQuantity > 0 ? 'LOW_STOCK' : 'OUT_OF_STOCK',
+      batchNumber: inventory?.batchNumber || '',
+      expiryDate: inventory?.expiryDate || null,
+      tenantId: inventory?.tenantId || tenantId || product.tenantId,
+      branchId: inventory?.branchId || branchId || null
+    };
+  });
+
+  return {
+    items,
+    total,
+    page: normalizedPage,
+    limit: normalizedLimit,
+    pages: Math.ceil(total / normalizedLimit)
+  };
 }
 
 export async function reserveInventory({ orderId, items, idempotencyKey, actor, requestId, correlationId }) {
