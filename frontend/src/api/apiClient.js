@@ -1,6 +1,19 @@
 import axios from 'axios';
 import { normalizeApiError } from './apiErrors';
 
+// Runtime-only bearer fallback for deployments where the browser cannot
+// persist the gateway's HttpOnly cookie (for example, an older direct-gateway
+// deployment). The token is never written to localStorage/sessionStorage.
+let runtimeAccessToken = null;
+
+export function setRuntimeAccessToken(token) {
+    runtimeAccessToken = typeof token === 'string' && token.trim() ? token.trim() : null;
+}
+
+export function clearRuntimeAccessToken() {
+    runtimeAccessToken = null;
+}
+
 // Production browser traffic MUST stay on the Pharma UI origin.
 // Render rewrites /api/* to the API Gateway, which keeps HttpOnly session
 // cookies first-party to the browser's current site. Never use the gateway
@@ -42,16 +55,34 @@ apiClient.interceptors.request.use(async (config) => {
     const csrfToken = getCsrfCookie();
     if (csrfToken) config.headers['X-XSRF-TOKEN'] = csrfToken;
 
-    // Authentication is exclusively the HttpOnly Pharma session cookie.
-    delete config.headers.Authorization;
+    // Prefer the HttpOnly cookie. If the browser did not retain/send that
+    // cookie, use the short-lived runtime-only token returned by Pharma auth.
+    // This does not persist credentials in browser storage.
+    if (runtimeAccessToken && !config.headers.Authorization) {
+        config.headers.Authorization = `Bearer ${runtimeAccessToken}`;
+    }
     return config;
 }, (error) => Promise.reject(error));
 
 apiClient.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        const url = String(response.config?.url || '');
+        const result = response.data?.data || response.data;
+        if (/\/api\/(?:v1\/auth|auth)\/(login|signup|google|mfa\/verify|complete-profile|onboarding)(\/|$)/.test(url)
+            && result?.accessToken) {
+            setRuntimeAccessToken(result.accessToken);
+        }
+        if (/\/api\/(?:v1\/auth|auth)\/logout(\/|$)/.test(url)) {
+            clearRuntimeAccessToken();
+        }
+        return response;
+    },
     (error) => {
         const normalized = normalizeApiError(error);
         const url = String(error.config?.url || '');
+        if (normalized.status === 401) {
+            clearRuntimeAccessToken();
+        }
         const isCredentialSubmission = /\/api\/(?:v1\/auth|auth)\/(login|signup|google|verify-email-code|resend-verification|complete-profile|onboarding|password\/forgot|password\/reset|mfa\/verify)(\/|$)/.test(url);
         const isSessionProbe = /\/api\/(?:v1\/auth|auth)\/(session|me|logout|csrf)(\/|$)/.test(url);
 
