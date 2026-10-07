@@ -409,6 +409,7 @@ export default function AuthModal({ isOpen, onClose }) {
                   </div>
                 )}
 
+                {!passwordRecoveryRequired && (
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                     Email Address
@@ -425,7 +426,7 @@ export default function AuthModal({ isOpen, onClose }) {
                     required
                   />
                   {isSignUp && signupErrors.email && <p className="mt-1 text-[11px] text-rose-600">{signupErrors.email}</p>}
-                </div>
+                </div>                )}
 
                 {!isForgotPassword && (
                   <div>
