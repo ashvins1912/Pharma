@@ -510,7 +510,7 @@ export class AuthService {
         if (getIsConnected()) {
             try {
                 await EmailVerificationToken.findOneAndUpdate(
-                    { tokenHash: tokenData.tokenHash },
+                    { userId: tokenData.userId, purpose: tokenData.purpose || 'ACCOUNT_ACTIVATION' },
                     { $set: tokenData },
                     { upsert: true, new: true }
                 );
