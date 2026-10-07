@@ -1,5 +1,5 @@
 services:
-  - type: web
+  - type: pserv
     name: ashvin-pharmacy-prescription-service
     runtime: python
     rootDir: services/prescription-service
