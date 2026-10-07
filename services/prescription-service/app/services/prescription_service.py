@@ -149,13 +149,31 @@ class PrescriptionServiceEngine:
             "uploadedAt": now,
         }
 
-    async def get_prescription(self, prescription_id: str, *, include_sensitive: bool = False) -> Optional[Dict[str, Any]]:
+    async def get_prescription(
+        self,
+        prescription_id: str,
+        *,
+        requesting_user_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        branch_id: Optional[str] = None,
+        is_admin: bool = False,
+        include_sensitive: bool = False,
+    ) -> Optional[Dict[str, Any]]:
         db = get_db()
         record = await db.prescriptions.find_one({"prescriptionId": prescription_id}, {"documentCiphertext": 0})
         if not record:
             return None
         if record["status"] == PrescriptionState.INACTIVE.value and not include_sensitive:
             return None
+
+        if not is_admin:
+            if requesting_user_id and record.get("customerId") != requesting_user_id and record.get("createdBy") != requesting_user_id:
+                raise PermissionError("Prescription access denied")
+            if tenant_id and record.get("tenantId") and record.get("tenantId") != tenant_id:
+                raise PermissionError("Tenant access denied")
+            if branch_id and record.get("branchId") and record.get("branchId") != branch_id:
+                raise PermissionError("Branch access denied")
+
         record.pop("_id", None)
         record["patientPuidMasked"] = _mask_puid(record.get("patientPuid"))
         return record
@@ -565,11 +583,25 @@ class PrescriptionServiceEngine:
         })
         return await db.prescriptions.find_one({"prescriptionId": prescription_id}, {"documentCiphertext": 0})
 
-    async def create_document_token(self, prescription_id: str, user_id: str) -> Dict[str, Any]:
-        db = get_db()
-        rx = await db.prescriptions.find_one({"prescriptionId": prescription_id})
-        if not rx or rx["status"] == PrescriptionState.INACTIVE.value:
+    async def create_document_token(
+        self,
+        prescription_id: str,
+        user_id: str,
+        *,
+        tenant_id: Optional[str] = None,
+        branch_id: Optional[str] = None,
+        is_admin: bool = False,
+    ) -> Dict[str, Any]:
+        rx = await self.get_prescription(
+            prescription_id,
+            requesting_user_id=user_id,
+            tenant_id=tenant_id,
+            branch_id=branch_id,
+            is_admin=is_admin,
+        )
+        if not rx:
             raise LookupError("Not found")
+        db = get_db()
         token = uuid.uuid4().hex
         expires = _now() + timedelta(seconds=settings.DOCUMENT_URL_TTL_SECONDS)
         await db.document_tokens.insert_one({
