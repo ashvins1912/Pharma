@@ -385,9 +385,8 @@ export default function AuthModal({ isOpen, onClose }) {
               ← Back to signup
             </button>
           </form>
-        ) : (
+        ) : mfaRequired ? (
         /* STEP 2: TOTP MULTI-FACTOR AUTHENTICATION CHALLENGE SCREEN */
-        {mfaRequired ? (
           <form onSubmit={handleTotpVerify} className="space-y-4 animate-fade-in">
             <div className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-3.5 text-center space-y-1">
               <span className="text-[11px] font-black uppercase text-indigo-700 tracking-wider">
@@ -618,7 +617,6 @@ export default function AuthModal({ isOpen, onClose }) {
               </form>
             )}
 
-          )}
         )}
 
             {/* Divider */}
