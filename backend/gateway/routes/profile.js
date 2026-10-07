@@ -11,8 +11,6 @@ import { setSessionCookies } from '../../security/sessionCookie.js';
 const router = express.Router();
 
 /**
-
-/**
  * PUT /api/v1/profile/me
  * Update editable profile fields for the authenticated user.
  */
