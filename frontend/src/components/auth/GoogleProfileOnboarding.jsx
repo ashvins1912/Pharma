@@ -1,25 +1,28 @@
 import React, { useMemo, useState } from 'react';
 import apiClient from '../../api/apiClient';
 
-const MOBILE_PATTERN = /^(?:\\+?91|0)?[6-9]\\d{9}$/;
+const MOBILE_PATTERN = /^(?:\+?91|0)?[6-9]\d{9}$/;
 
 export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) {
   const [firstName, setFirstName] = useState(user?.firstName || user?.name?.split(' ')?.[0] || '');
   const [lastName, setLastName] = useState(user?.lastName || user?.name?.split(' ')?.slice(1).join(' ') || '');
   const [dateOfBirth, setDateOfBirth] = useState(user?.dateOfBirth || '');
   const [gender, setGender] = useState(user?.gender || '');
-  const [mobileNumber, setMobileNumber] = useState('');
+  const [mobileNumber, setMobileNumber] = useState(user?.mobileNumber || user?.mobile || '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const mobileValid = useMemo(() => MOBILE_PATTERN.test(mobileNumber.replace(/[\\s()-]/g, '')), [mobileNumber]);
+  const mobileValid = useMemo(
+    () => !mobileNumber || MOBILE_PATTERN.test(mobileNumber.replace(/[\s()-]/g, '')),
+    [mobileNumber]
+  );
 
   const submit = async (event) => {
     event.preventDefault();
     setError('');
 
-    if (!firstName.trim() || !dateOfBirth || !gender || (mobileNumber && !mobileValid)) {
-      setError('Please complete your name, gender and date of birth. Mobile is optional for now.');
+    if (!firstName.trim() || !dateOfBirth || !gender || !mobileValid) {
+      setError('Please complete your name, gender and date of birth. Mobile is optional.');
       return;
     }
 
@@ -41,34 +44,139 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
   };
 
   return (
-    <div style={{position:'fixed',inset:0,zIndex:9999,display:'grid',placeItems:'center',background:'rgba(15,23,42,.62)',padding:20}}>
-      <form onSubmit={submit} style={{width:'min(520px,100%)',background:'#fff',borderRadius:20,padding:28,boxShadow:'0 24px 80px rgba(0,0,0,.25)'}}>
-        <h2 style={{margin:'0 0 8px'}}>Complete your Pharma profile</h2>
-        <p style={{margin:'0 0 22px',color:'#64748b'}}>One more step before you can use your account.</p>
-
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-          <label>First name<input value={firstName} onChange={e=>setFirstName(e.target.value)} required /></label>
-          <label>Last name<input value={lastName} onChange={e=>setLastName(e.target.value)} /></label>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-slate-950/60 px-4 py-6 backdrop-blur-sm animate-fade-in">
+      <form
+        onSubmit={submit}
+        className="w-full max-w-lg overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+        aria-labelledby="profile-completion-title"
+      >
+        <div className="border-b border-slate-100 bg-gradient-to-br from-blue-50 via-white to-slate-50 px-5 py-6 sm:px-8">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-2xl text-white shadow-lg shadow-blue-600/20">
+              ⚕️
+            </div>
+            <div className="min-w-0">
+              <div className="mb-2 inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-blue-700">
+                Profile setup · 1 of 1
+              </div>
+              <h2 id="profile-completion-title" className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
+                Complete your Pharma profile
+              </h2>
+              <p className="mt-1.5 text-sm leading-6 text-slate-500">
+                One more step before you can use your account.
+              </p>
+            </div>
+          </div>
         </div>
 
-        <label>Gender
-          <select value={gender} onChange={e=>setGender(e.target.value)} required>
-            <option value="">Select gender</option>
-            <option value="MALE">Male</option>
-            <option value="FEMALE">Female</option>
-            <option value="OTHER">Other</option>
-            <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
-          </select>
-        </label>
+        <div className="space-y-5 px-5 py-6 sm:px-8 sm:py-7">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="profile-first-name" className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-slate-500">
+                First name <span className="text-rose-500">*</span>
+              </label>
+              <input
+                id="profile-first-name"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                autoComplete="given-name"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                required
+              />
+            </div>
 
-        <label>Date of birth<input type="date" value={dateOfBirth} onChange={e=>setDateOfBirth(e.target.value)} required /></label>
-        <label>Indian mobile number <span style={{color:'#94a3b8'}}>(optional)</span><input inputMode="tel" placeholder="Add mobile later or enter it now" value={mobileNumber} onChange={e=>setMobileNumber(e.target.value)} /></label>
+            <div>
+              <label htmlFor="profile-last-name" className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-slate-500">
+                Last name
+              </label>
+              <input
+                id="profile-last-name"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                autoComplete="family-name"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+              />
+            </div>
+          </div>
 
-        {error && <div role="alert" style={{color:'#b91c1c',margin:'10px 0'}}>{error}</div>}
+          <div>
+            <label htmlFor="profile-gender" className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-slate-500">
+              Gender <span className="text-rose-500">*</span>
+            </label>
+            <select
+              id="profile-gender"
+              value={gender}
+              onChange={(e) => setGender(e.target.value)}
+              className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+              required
+            >
+              <option value="">Select gender</option>
+              <option value="MALE">Male</option>
+              <option value="FEMALE">Female</option>
+              <option value="OTHER">Other</option>
+              <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+            </select>
+          </div>
 
-        <div style={{display:'flex',gap:10,marginTop:18}}>
-          <button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Continue securely'}</button>
-          <button type="button" onClick={onLogout} disabled={saving}>Sign out</button>
+          <div>
+            <label htmlFor="profile-dob" className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-slate-500">
+              Date of birth <span className="text-rose-500">*</span>
+            </label>
+            <input
+              id="profile-dob"
+              type="date"
+              value={dateOfBirth}
+              onChange={(e) => setDateOfBirth(e.target.value)}
+              autoComplete="bday"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+              required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="profile-mobile" className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-slate-500">
+              Indian mobile number <span className="font-semibold normal-case tracking-normal text-slate-400">(optional)</span>
+            </label>
+            <input
+              id="profile-mobile"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="+91 98765 43210"
+              value={mobileNumber}
+              onChange={(e) => setMobileNumber(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+            />
+            <p className="mt-1.5 text-[11px] text-slate-400">
+              You can add or verify your mobile number later.
+            </p>
+          </div>
+
+          {error && (
+            <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-xs font-semibold leading-5 text-rose-700">
+              <span aria-hidden="true">⚠️</span>
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-8">
+          <button
+            type="button"
+            onClick={onLogout}
+            disabled={saving}
+            className="w-full rounded-xl px-4 py-2.5 text-xs font-bold text-slate-500 transition hover:bg-white hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          >
+            Sign out
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-black text-white shadow-md shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
+          >
+            {saving && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />}
+            {saving ? 'Saving profile…' : 'Continue securely'}
+          </button>
         </div>
       </form>
     </div>
