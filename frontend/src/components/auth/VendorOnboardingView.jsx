@@ -15,6 +15,8 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
+    dateOfBirth: '',
+    gender: '',
     mobile: '',
     dateOfBirth: '',
     gender: '',
@@ -35,6 +37,7 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
   const [showPassword, setShowPassword] = useState(false);
   const [completedSuccess, setCompletedSuccess] = useState(false);
   const [createdTenant, setCreatedTenant] = useState(null);
+  const [step, setStep] = useState(1);
 
   // Fetch Onboarding Details by Token
   useEffect(() => {
@@ -93,6 +96,9 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
     const errors = {};
     if (!formData.firstName.trim()) errors.firstName = 'First name is required.';
     if (!formData.lastName.trim()) errors.lastName = 'Last name is required.';
+    if (!formData.dateOfBirth) errors.dateOfBirth = 'Date of birth is required.';
+    else if (new Date(formData.dateOfBirth) > new Date()) errors.dateOfBirth = 'Date of birth cannot be in the future.';
+    if (!formData.gender) errors.gender = 'Gender is required.';
     if (!formData.companyName.trim()) errors.companyName = 'Pharmacy / Company name is required.';
     if (!formData.drugLicenseNumber.trim()) errors.drugLicenseNumber = 'Drug licence number is required for pharmacy onboarding.';
     if (!formData.mobile.trim() || formData.mobile.replace(/\D/g, '').length < 10) {
@@ -120,6 +126,20 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
     return Object.keys(errors).length === 0;
   };
 
+  const handleProfileNext = () => {
+    const errors = {};
+    if (!formData.firstName.trim()) errors.firstName = 'First name is required.';
+    if (!formData.lastName.trim()) errors.lastName = 'Last name is required.';
+    if (!formData.dateOfBirth) errors.dateOfBirth = 'Date of birth is required.';
+    if (formData.dateOfBirth && new Date(formData.dateOfBirth) > new Date()) errors.dateOfBirth = 'Date of birth cannot be in the future.';
+    if (!formData.gender) errors.gender = 'Gender is required.';
+    if (!formData.mobile.trim() || formData.mobile.replace(/\D/g, '').length < 10) errors.mobile = 'Enter a valid 10-digit mobile number.';
+    if (!formData.password || formData.password.length < 8 || !/[A-Z]/.test(formData.password) || !/[a-z]/.test(formData.password) || !/[0-9]/.test(formData.password)) errors.password = 'Use at least 8 characters with uppercase, lowercase and a number.';
+    if (formData.password !== formData.confirmPassword) errors.confirmPassword = 'Passwords do not match.';
+    setFieldErrors(errors);
+    if (!Object.keys(errors).length) setStep(2);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
@@ -131,6 +151,8 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
       const payload = {
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
+        dateOfBirth: formData.dateOfBirth,
+        gender: formData.gender,
         mobile: formData.mobile.trim(),
         dateOfBirth: formData.dateOfBirth,
         gender: formData.gender,
@@ -282,15 +304,53 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-6">
-          {submitError && (
-            <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-start gap-2">
-              <span className="font-bold">Error:</span>
-              <span>{submitError}</span>
-            </div>
-          )}
-
-          {/* Section 1: Pre-filled Vendor Information */}
+          {step === 1 ? (
+            <>
           <div className="space-y-4">
+            <h3 className="text-xs font-black uppercase text-indigo-700 tracking-wider flex items-center gap-2 border-b border-indigo-100 pb-2"><span>👤</span> First-time User Profile</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><label className="block text-xs font-bold text-slate-700 mb-1">First Name *</label><input value={formData.firstName} onChange={(e)=>handleChange('firstName',e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />{fieldErrors.firstName && <p className="text-rose-600 text-xs mt-1">{fieldErrors.firstName}</p>}</div>
+              <div><label className="block text-xs font-bold text-slate-700 mb-1">Last Name *</label><input value={formData.lastName} onChange={(e)=>handleChange('lastName',e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />{fieldErrors.lastName && <p className="text-rose-600 text-xs mt-1">{fieldErrors.lastName}</p>}</div>
+              <div><label className="block text-xs font-bold text-slate-700 mb-1">Date of Birth *</label><input type="date" value={formData.dateOfBirth} onChange={(e)=>handleChange('dateOfBirth',e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl" />{fieldErrors.dateOfBirth && <p className="text-rose-600 text-xs mt-1">{fieldErrors.dateOfBirth}</p>}</div>
+              <div><label className="block text-xs font-bold text-slate-700 mb-1">Gender *</label><select value={formData.gender} onChange={(e)=>handleChange('gender',e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl"><option value="">Select gender</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option><option value="PREFER_NOT_TO_SAY">Prefer not to say</option></select>{fieldErrors.gender && <p className="text-rose-600 text-xs mt-1">{fieldErrors.gender}</p>}</div>
+            </div>
+          </div>
+          {          {/* Action Buttons */}
+          <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="px-7 py-3 text-xs font-black text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md transition disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+            >
+              {submitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Activating Workspace...</span>
+                </>
+              ) : (
+                <span>Complete Onboarding & Activate Tenant →</span>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+              <div className="pt-4 flex justify-end border-t border-slate-100"><button type="button" onClick={handleProfileNext} className="px-7 py-3 text-xs font-black text-white bg-indigo-600 rounded-xl">Continue to Tenant Setup →</button></div>
+            </>
+          ) : (
+            <>
+{          <div className="space-y-4">
             <h3 className="text-xs font-black uppercase text-indigo-700 tracking-wider flex items-center gap-2 border-b border-indigo-100 pb-2">
               <span>🏢</span> 1. Pharmacy / Vendor Information
             </h3>
@@ -358,7 +418,6 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
               </div>
             </div>
           </div>
-
           {/* Section 2: Address Information */}
           <div className="space-y-4">
             <h3 className="text-xs font-black uppercase text-indigo-700 tracking-wider flex items-center gap-2 border-b border-indigo-100 pb-2">
@@ -423,109 +482,13 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
             </div>
           </div>
 
-          {/* Section 3: Tenant Admin Credentials */}
-          <div className="space-y-4">
-            <h3 className="text-xs font-black uppercase text-indigo-700 tracking-wider flex items-center gap-2 border-b border-indigo-100 pb-2">
-              <span>👤</span> 3. Tenant Administrator Account
-            </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">First Name *</label>
-                <input
-                  type="text"
-                  value={formData.firstName}
-                  onChange={(e) => handleChange('firstName', e.target.value)}
-                  className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none ${
-                    fieldErrors.firstName ? 'border-rose-400 bg-rose-50' : 'border-slate-200'
-                  }`}
-                  placeholder="Ashvin"
-                />
-                {fieldErrors.firstName && <p className="text-rose-600 text-xs mt-1">{fieldErrors.firstName}</p>}
+              <div className="pt-4 flex items-center justify-between gap-3 border-t border-slate-100">
+                <button type="button" onClick={()=>setStep(1)} className="px-5 py-2.5 text-xs font-bold text-slate-600 rounded-xl">← Back to Profile</button>
+                <button type="submit" disabled={submitting} className="px-7 py-3 text-xs font-black text-white bg-indigo-600 rounded-xl">{submitting ? 'Activating Tenant...' : 'Complete Onboarding & Activate Tenant →'}</button>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Last Name *</label>
-                <input
-                  type="text"
-                  value={formData.lastName}
-                  onChange={(e) => handleChange('lastName', e.target.value)}
-                  className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none ${
-                    fieldErrors.lastName ? 'border-rose-400 bg-rose-50' : 'border-slate-200'
-                  }`}
-                  placeholder="Singh"
-                />
-                {fieldErrors.lastName && <p className="text-rose-600 text-xs mt-1">{fieldErrors.lastName}</p>}
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Date of Birth *</label>
-                <input
-                  type="date"
-                  value={formData.dateOfBirth}
-                  onChange={(e) => handleChange('dateOfBirth', e.target.value)}
-                  className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none ${fieldErrors.dateOfBirth ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
-                />
-                {fieldErrors.dateOfBirth && <p className="text-rose-600 text-xs mt-1">{fieldErrors.dateOfBirth}</p>}
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Gender *</label>
-                <select
-                  value={formData.gender}
-                  onChange={(e) => handleChange('gender', e.target.value)}
-                  className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none ${fieldErrors.gender ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
-                >
-                  <option value="">Select gender</option>
-                  <option value="MALE">Male</option>
-                  <option value="FEMALE">Female</option>
-                  <option value="OTHER">Other</option>
-                  <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
-                </select>
-                {fieldErrors.gender && <p className="text-rose-600 text-xs mt-1">{fieldErrors.gender}</p>}
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-xs font-bold text-slate-700">Admin Password *</label>
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="text-[11px] text-indigo-600 font-semibold"
-                  >
-                    {showPassword ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={formData.password}
-                  onChange={(e) => handleChange('password', e.target.value)}
-                  className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none ${
-                    fieldErrors.password ? 'border-rose-400 bg-rose-50' : 'border-slate-200'
-                  }`}
-                  placeholder="••••••••"
-                />
-                {fieldErrors.password && <p className="text-rose-600 text-xs mt-1">{fieldErrors.password}</p>}
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Confirm Password *</label>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={formData.confirmPassword}
-                  onChange={(e) => handleChange('confirmPassword', e.target.value)}
-                  className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none ${
-                    fieldErrors.confirmPassword ? 'border-rose-400 bg-rose-50' : 'border-slate-200'
-                  }`}
-                  placeholder="••••••••"
-                />
-                {fieldErrors.confirmPassword && (
-                  <p className="text-rose-600 text-xs mt-1">{fieldErrors.confirmPassword}</p>
-                )}
-              </div>
-            </div>
-          </div>
-
+            </>
+          )}
           {/* Action Buttons */}
           <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
             <button
