@@ -1032,6 +1032,15 @@ export class AuthService {
 
         const isPlatform = role === 'SUPER_ADMIN';
         const scope = isPlatform ? 'PLATFORM' : (tenantId ? 'TENANT' : 'CUSTOMER');
+        if (user.mfaEnabled) {
+            return {
+                mfaRequired: true,
+                factorId: 'local-totp-factor',
+                challengeToken: await this.createMfaChallengeToken({ id: user.userId || user.id, email: user.email }, 'local-totp-factor'),
+                email: user.email,
+                user: { id: user.userId || user.id, email: user.email, role, name: user.name || '' }
+            };
+        }
         const token = await this.createAuthToken({ ...user, role, tenantId });
 
         // Update last login
@@ -1183,6 +1192,15 @@ export class AuthService {
             throw err;
         }
 
+        if (user.mfaEnabled) {
+            return {
+                mfaRequired: true,
+                factorId: 'local-totp-factor',
+                challengeToken: await this.createMfaChallengeToken({ id: user.userId || user.id, email: user.email }, 'local-totp-factor'),
+                email: user.email,
+                user: { id: user.userId || user.id, email: user.email, role: user.role || 'customer', name: user.name || '' }
+            };
+        }
         const token = await this.createAuthToken(user);
         return {
             user: {
