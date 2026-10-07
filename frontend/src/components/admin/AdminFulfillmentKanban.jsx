@@ -261,6 +261,48 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     }
   };
 
+  const reinitiatePrescriptionVerification = async (order) => {
+    try {
+      setUpdatingId(order._id);
+      const res = await apiClient.post(`/api/orders/admin/${encodeURIComponent(order._id)}/prescription/reinitiate`);
+      addToast(res.data.message || 'Prescription verification re-initiated.', 'success');
+      refreshBoard();
+    } catch (err) {
+      addToast(err.response?.data?.message || err.message || 'Could not re-initiate prescription verification.', 'error');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const manualApprovePrescription = async (order, scope = 'order', itemIndex = null) => {
+    const reason = window.prompt(
+      scope === 'order'
+        ? 'Reason for manual order-level prescription approval (optional):'
+        : 'Reason for manual medicine approval (optional):',
+      ''
+    );
+    if (reason === null) return;
+
+    try {
+      setUpdatingId(order._id);
+      const res = await apiClient.post(
+        `/api/orders/admin/${encodeURIComponent(order._id)}/prescription/manual-approve`,
+        {
+          scope,
+          itemIndex,
+          reason
+        }
+      );
+      addToast(res.data.message || 'Manual prescription approval saved.', 'success');
+      setVerifiedOrderIds(prev => prev.includes(String(order._id)) ? prev : [...prev, String(order._id)]);
+      refreshBoard();
+    } catch (err) {
+      addToast(err.response?.data?.message || err.message || 'Manual prescription approval failed.', 'error');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const viewPrescription = async (order) => {
     if (!order?.prescriptionUrl || viewingPrescriptionOrderId) return;
     try {
@@ -495,6 +537,49 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                                 )}
                               </div>
                             )}
+                            {order.prescriptionRequired && (
+                              <div className="rounded-xl border border-amber-200 bg-amber-50 p-2 space-y-2">
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => reinitiatePrescriptionVerification(order)}
+                                    disabled={isProcessing}
+                                    className="min-h-9 rounded-lg border border-amber-300 bg-white px-3 text-[11px] font-extrabold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                                  >
+                                    🔄 Re-initiate Verification
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => manualApprovePrescription(order, 'order')}
+                                    disabled={isProcessing}
+                                    className="min-h-9 rounded-lg bg-amber-600 px-3 text-[11px] font-extrabold text-white hover:bg-amber-700 disabled:opacity-50"
+                                  >
+                                    ✓ Manual Approve Order
+                                  </button>
+                                </div>
+                                <div className="space-y-1.5">
+                                  {(order.items || order.medicineItems || []).map((item, index) => (
+                                    <div key={`${item.productId || item.medicineId || item.name || 'medicine'}-${index}`} className="flex items-center justify-between gap-2 rounded-lg bg-white/80 px-2 py-1.5">
+                                      <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-slate-700">
+                                        {index + 1}. {item.productName || item.name || item.genericName || 'Medicine'}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => manualApprovePrescription(order, 'medicine', index)}
+                                        disabled={isProcessing}
+                                        className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-extrabold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                                      >
+                                        Approve medicine
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                                <p className="text-[10px] text-amber-800">
+                                  Use manual approval only after reviewing the uploaded prescription. Order fulfillment remains blocked until every required medicine is approved.
+                                </p>
+                              </div>
+                            )}
+
                             <div className="flex gap-2">
                               <button
                                 type="button"
