@@ -222,9 +222,33 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
         if (prescriptionUrl && !prescriptionUrl.startsWith('/api/orders/prescriptions/')) {
             return res.status(400).json({ message: 'Prescription URL must refer to a private uploaded prescription.' });
         }
-        uploadedPrescriptionUrl = req.file
-            ? await savePrescription(req.file, req.user.sub)
-            : (prescriptionUrl || null);
+        let uploadedPrescriptionId = null;
+        if (req.file) {
+            if (!prescriptionClient.isConfigured()) {
+                return res.status(503).json({
+                    message: 'Prescription processing service is unavailable. Please try again shortly.'
+                });
+            }
+            const uploaded = await prescriptionClient.upload({
+                buffer: req.file.buffer,
+                filename: req.file.originalname,
+                contentType: req.file.mimetype,
+                idempotencyKey: req.get('Idempotency-Key') || null,
+                userId: req.user.sub,
+                tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null,
+                branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
+                role: req.user?.app_metadata?.role || req.user?.role || 'customer',
+                patientPuid: req.body.patientPuid || null,
+                orderId: null
+            });
+            uploadedPrescriptionId = uploaded?.prescriptionId || null;
+            if (!uploadedPrescriptionId) {
+                throw Object.assign(new Error('Prescription upload did not return a prescription ID.'), { statusCode: 502 });
+            }
+            uploadedPrescriptionUrl = `/api/v1/prescriptions/${encodeURIComponent(uploadedPrescriptionId)}/document`;
+        } else {
+            uploadedPrescriptionUrl = prescriptionUrl || null;
+        }
         if (prescriptionUrl && !req.file) {
             const existingPrescription = await getPrescription(prescriptionUrl.split('/').at(-1));
             if (!existingPrescription || existingPrescription.ownerId !== req.user.sub) {
@@ -240,6 +264,7 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             pointsToRedeem,
             couponCode,
             prescriptionUrl: uploadedPrescriptionUrl,
+            prescriptionId: uploadedPrescriptionId,
             deliveryAddress: chosenAddressLine,
             addressDetails: addressSnapshot ? {
                 label: addressSnapshot.label,
