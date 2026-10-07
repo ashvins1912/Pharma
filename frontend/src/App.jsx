@@ -25,7 +25,7 @@ import VerifyEmailView from './components/auth/VerifyEmailView';
 import VendorOnboardingView from './components/auth/VendorOnboardingView';
 
 function MainApp() {
-  const { user, isAdmin, isPharmacyOrAdmin, passwordRecoveryRequired } = useAuth();
+  const { user, isAdmin, isPharmacyOrAdmin, passwordRecoveryRequired, isFullyAuthenticated } = useAuth();
   const {
     cart,
     orders,
@@ -153,7 +153,7 @@ function MainApp() {
 
   useEffect(() => {
     let cancelled = false;
-    if (user && isAdmin) {
+    if (isFullyAuthenticated && isAdmin) {
       loadWhatsAppStatus().then((status) => {
         if (!cancelled && status && !status.isConnected && !adminCheckedRef.current) {
           adminCheckedRef.current = true;
@@ -167,7 +167,7 @@ function MainApp() {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, isAdmin, loadWhatsAppStatus, setWhatsappModalOpen]);
+  }, [isFullyAuthenticated, isAdmin, loadWhatsAppStatus, setWhatsappModalOpen]);
 
   useEffect(() => {
     if (passwordRecoveryRequired) setAuthOpen(true);
