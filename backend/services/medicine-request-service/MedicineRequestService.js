@@ -280,7 +280,7 @@ export class MedicineRequestService {
         const order = orderResponse?.order || orderResponse?.data || orderResponse;
 
         request.status = MedicineRequestStatus.CONVERTED_TO_ORDER;
-        request.convertedOrderId = order.id;
+        request.convertedOrderId = order.orderId || order.id || null;
         request.customerResponse = {
             approved: true,
             respondedAt: new Date().toISOString(),
