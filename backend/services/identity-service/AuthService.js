@@ -1106,6 +1106,8 @@ export class AuthService {
             user = await this.findUser({ normalizedEmail });
 
             if (user) {
+                // Apply account state policy before linking any new identity.
+                this.assertAccountState(user, { allowProfileIncomplete: true });
                 // Securely link Google identity to existing account if email is verified
                 identity = await this.saveIdentity({
                     id: `ident_${crypto.randomUUID()}`,
