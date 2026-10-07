@@ -79,13 +79,18 @@ export function csrfProtection(req, res, next) {
 
     // Exempt public unauthenticated onboarding/login endpoints where no session cookie exists yet
     const PUBLIC_EXEMPT_ROUTES = [
-        '/api/auth/login',
-        '/api/auth/signup',
+        '/api/v1/auth/login',
+        '/api/v1/auth/signup',
+        '/api/v1/auth/google',
+        '/api/v1/auth/activate',
+        '/api/v1/auth/verify-email',
+        '/api/v1/auth/resend-verification',
+        '/api/v1/auth/password/forgot',
+        '/api/v1/auth/password/reset',
+        '/api/v1/auth/mfa/verify',
         '/api/auth/demo-admin',
         '/api/auth/demo-admin/instant',
-        '/api/auth/demo-customer',
-        '/api/auth/mfa/challenge',
-        '/api/auth/mfa/verify'
+        '/api/auth/demo-customer'
     ];
 
     if (PUBLIC_EXEMPT_ROUTES.some(route => req.path === route || req.originalUrl?.startsWith(route))) {
