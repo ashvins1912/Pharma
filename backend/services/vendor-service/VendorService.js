@@ -15,6 +15,7 @@ import { emailService } from '../email-service/EmailService.js';
 import { tenantService } from '../tenant-service/TenantService.js';
 import { logger } from '../../shared/observability/logger.js';
 import { domainEvents } from '../../shared/events/DomainEvents.js';
+import { authService } from '../identity-service/AuthService.js';
 
 export const inMemoryVendors = new Map();
 
@@ -41,6 +42,7 @@ class VendorService {
         }
 
         const vendorId = vendorData.id || `vnd_${crypto.randomUUID().slice(0, 12)}`;
+        const invitedUserId = `usr_${crypto.randomUUID()}`;
 
         // Generate 256-bit cryptographically secure token
         const rawToken = crypto.randomBytes(32).toString('hex');
@@ -68,7 +70,28 @@ class VendorService {
             onboardingTokenHash,
             onboardingTokenExpiresAt,
             onboardingCompletedAt: null,
+            userId: invitedUserId,
             invitedBy: actor?.userId || actor?.sub || 'platform-super-admin',
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        const pendingUserDoc = {
+            userId: invitedUserId,
+            supabase_user_id: invitedUserId,
+            name: name || companyName,
+            firstName: '',
+            lastName: '',
+            email,
+            normalizedEmail: email,
+            mobile: doc.mobile || '',
+            emailVerified: true,
+            status: 'ACTIVE',
+            accountStatus: 'PROFILE_INCOMPLETE',
+            profileCompleted: false,
+            role: 'TENANT_ADMIN',
+            roles: ['TENANT_ADMIN'],
+            onboardingType: 'TENANT',
             createdAt: new Date(),
             updatedAt: new Date()
         };
@@ -76,6 +99,11 @@ class VendorService {
         if (getIsConnected()) {
             try {
                 await Vendor.findByIdAndUpdate(vendorId, { $set: doc }, { upsert: true, new: true });
+                await UserProfile.findOneAndUpdate(
+                    { normalizedEmail: email },
+                    { $setOnInsert: pendingUserDoc },
+                    { upsert: true, new: true }
+                );
             } catch (err) {
                 logger.error('Failed to save Vendor in MongoDB:', { error: err.message });
             }
@@ -345,6 +373,8 @@ class VendorService {
         const lastName = (submission.lastName || '').trim();
         const mobile = (submission.mobile || vendor.mobile || '').trim();
         const password = submission.password || '';
+        const dateOfBirth = (submission.dateOfBirth || '').trim();
+        const gender = (submission.gender || '').trim().toUpperCase();
 
         if (!firstName) {
             validationDetails.push({ field: 'firstName', code: 'REQUIRED', message: 'First name is required.' });
@@ -354,6 +384,14 @@ class VendorService {
         }
         if (!mobile || mobile.replace(/\D/g, '').length < 10) {
             validationDetails.push({ field: 'mobile', code: 'INVALID_MOBILE', message: 'Enter a valid mobile number.' });
+        }
+        if (!dateOfBirth) {
+            validationDetails.push({ field: 'dateOfBirth', code: 'REQUIRED', message: 'Date of birth is required.' });
+        } else if (Number.isNaN(new Date(dateOfBirth).getTime()) || new Date(dateOfBirth) > new Date()) {
+            validationDetails.push({ field: 'dateOfBirth', code: 'INVALID_DOB', message: 'Enter a valid date of birth.' });
+        }
+        if (!['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'].includes(gender)) {
+            validationDetails.push({ field: 'gender', code: 'INVALID_GENDER', message: 'Select a valid gender.' });
         }
         if (!password || password.length < 8) {
             validationDetails.push({ field: 'password', code: 'WEAK_PASSWORD', message: 'Password must be at least 8 characters long.' });
@@ -410,7 +448,7 @@ class VendorService {
         };
 
         // 2. Create or link User
-        const userId = `usr_${crypto.randomUUID()}`;
+        const userId = vendor.userId || `usr_${crypto.randomUUID()}`;
         const userDoc = {
             supabase_user_id: userId,
             userId,
@@ -421,8 +459,12 @@ class VendorService {
             normalizedEmail: vendorEmail,
             mobile,
             passwordHash,
+            dateOfBirth,
+            gender,
             emailVerified: true,
             status: 'ACTIVE',
+            accountStatus: 'ACTIVE',
+            profileCompleted: true,
             role: 'TENANT_ADMIN',
             roles: ['TENANT_ADMIN'],
             tenantId
@@ -552,6 +594,18 @@ class VendorService {
         domainEvents.emitDomainEvent('VENDOR_ONBOARDING_COMPLETED', vendor._id || vendor.id, { tenantId, userId }, null, tenantId);
         logger.info('VENDOR_ONBOARDING_SUCCESS', { vendorId: vendor._id || vendor.id, tenantId, userId });
 
+        const accessToken = await authService.createAuthToken({
+            id: userId,
+            userId,
+            email: vendorEmail,
+            name: fullName,
+            role: 'TENANT_ADMIN',
+            roles: ['TENANT_ADMIN'],
+            tenantId,
+            accountStatus: 'ACTIVE',
+            profileCompleted: true
+        });
+
         return {
             onboarding: {
                 status: 'COMPLETED',
@@ -569,13 +623,18 @@ class VendorService {
                 lastName,
                 email: vendorEmail,
                 emailVerified: true,
-                status: 'ACTIVE'
+                status: 'ACTIVE',
+                accountStatus: 'ACTIVE',
+                profileCompleted: true,
+                role: 'TENANT_ADMIN',
+                tenantId
             },
             membership: {
                 id: membershipId,
                 role: 'TENANT_ADMIN',
                 status: 'ACTIVE'
-            }
+            },
+            accessToken
         };
     }
 }
