@@ -641,6 +641,67 @@ class PrescriptionServiceEngine:
             })
         return items
 
+    async def reprocess_prescription(self, prescription_id: str, user_id: str) -> Dict[str, Any]:
+        db = get_db()
+        rx = await db.prescriptions.find_one({"prescriptionId": prescription_id})
+        if not rx:
+            raise LookupError("Prescription not found")
+        if rx.get("status") == PrescriptionState.INACTIVE.value:
+            raise RuntimeError("INACTIVE")
+
+        now = _now()
+        version = int(rx.get("version", 1)) + 1
+        job_id = f"job_{uuid.uuid4().hex[:14]}"
+
+        await db.processing_jobs.update_many(
+            {"prescription_id": prescription_id, "status": {"$in": ["QUEUED", "PROCESSING", "RETRY"]}},
+            {"$set": {"status": "CANCELLED", "locked_by": None, "locked_until": None, "updated_at": now}},
+        )
+        await db.prescription_reviews.update_many(
+            {"prescription_id": prescription_id, "status": {"$in": ["PENDING", "IN_REVIEW"]}},
+            {"$set": {"status": "CANCELLED", "claimed_by": None, "claimed_at": None, "lease_until": None, "updated_at": now}},
+        )
+        await db.prescriptions.update_one(
+            {"prescriptionId": prescription_id},
+            {"$set": {
+                "status": PrescriptionState.QUEUED.value,
+                "version": version,
+                "updatedAt": now,
+                "updatedBy": user_id,
+                "extraction": {
+                    "overallConfidence": None,
+                    "reviewRequired": True,
+                    "medicines": [],
+                    "patientName": None,
+                    "ocrVersion": None,
+                    "nlpVersion": None,
+                },
+            }},
+        )
+        await db.processing_jobs.insert_one({
+            "jobId": job_id,
+            "prescription_id": prescription_id,
+            "tenant_id": rx.get("tenantId"),
+            "status": "QUEUED",
+            "attempt_count": 0,
+            "locked_by": None,
+            "locked_until": None,
+            "next_attempt_at": now,
+            "priority": 100,
+            "last_error_code": None,
+            "last_error_message": None,
+            "created_at": now,
+            "updated_at": now,
+        })
+        await self._audit(
+            "PRESCRIPTION_REPROCESS_REQUESTED",
+            prescription_id,
+            rx.get("tenantId"),
+            user_id,
+            {"previousStatus": rx.get("status"), "version": version},
+        )
+        return {"prescriptionId": prescription_id, "status": PrescriptionState.QUEUED.value, "version": version}
+
     async def claim_review(self, prescription_id: str, reviewer_id: str, expected_version: Optional[int] = None) -> Dict[str, Any]:
         db = get_db()
         now = _now()
