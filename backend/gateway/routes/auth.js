@@ -299,7 +299,7 @@ router.post('/google', authLimiter, async (req, res) => {
                 picture: payload.user_metadata?.avatar_url || payload.user_metadata?.picture || ''
             };
 
-            const names = String(identity.firstName || '').trim().split(/\\s+/);
+            const names = String(identity.firstName || '').trim().split(/\s+/);
             if (!identity.lastName && names.length > 1) {
                 identity.lastName = names.slice(1).join(' ');
                 identity.firstName = names[0];
