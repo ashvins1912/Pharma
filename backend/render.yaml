@@ -29,6 +29,12 @@ services:
         sync: false
       - key: SERVICE_JWT_ISSUER
         value: ashvin-pharmacy
+      - key: SERVICE_JWT_AUDIENCE
+        value: inventory-service
+      - key: ORDER_SERVICE_URL
+        sync: false
+      - key: ORDER_SERVICE_JWT_AUDIENCE
+        value: order-service
       - key: DEMO_ADMIN_ENABLED
         value: "false"
       - key: DEMO_ADMIN_INSTANT_ACCESS_ENABLED
