@@ -199,31 +199,7 @@ async function saveUserProfile(userId, profileData) {
  * Issue standard platform session JWT
  */
 async function issueSessionToken(user, aal = 'aal1') {
-    const rawRole = user.role || user.app_metadata?.role || (user.roles && user.roles[0]) || 'customer';
-    const role = isPlatformSuperAdmin(rawRole) ? 'SUPER_ADMIN' : rawRole;
-    const isPlatform = role === 'SUPER_ADMIN';
-    const tenantId = isPlatform ? null : (user.tenantId || user.app_metadata?.tenantId || null);
-
-    return new SignJWT({
-        sub: user.id || user.userId || user.supabase_user_id,
-        email: user.email,
-        name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-        role,
-        roles: user.roles || [role],
-        tenantId,
-        branchId: user.branchId || null,
-        app_metadata: { role, tenantId },
-        user_metadata: {
-            name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-            mobile: user.mobile
-        },
-        aal
-    })
-        .setProtectedHeader({ alg: 'HS256' })
-        .setSubject(user.id || user.userId || user.supabase_user_id)
-        .setIssuedAt()
-        .setExpirationTime('2h')
-        .sign(SIGNING_KEY);
+    return authService.createAuthToken(user, aal);
 }
 
 /**
