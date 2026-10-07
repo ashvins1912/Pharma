@@ -4,7 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { friendlyAuthError } from '../api/apiErrors';
 import { isSupabaseConfigured } from '../supabaseClient';
 
-const signupFields = ['name', 'dateOfBirth', 'gender', 'email', 'password', 'confirmPassword'];
+const signupFields = ['name', 'email', 'password', 'confirmPassword'];
 
 function validateSignupField(field, values) {
   switch (field) {
