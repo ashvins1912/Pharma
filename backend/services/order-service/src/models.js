@@ -72,6 +72,8 @@ const orderSchema = new mongoose.Schema({
   branchId: { type: String, default: null, index: true },
   version: { type: Number, default: 1 },
   reservationExpiresAt: { type: Date, default: null },
+  prescriptionReconciliationLeaseUntil: { type: Date, default: null, index: true },
+  prescriptionReconciliationWorkerId: { type: String, default: null },
   fulfillmentGate: {
     payment: {
       type: String,
