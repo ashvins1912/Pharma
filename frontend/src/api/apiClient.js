@@ -1,7 +1,9 @@
 import axios from 'axios';
 import { normalizeApiError } from './apiErrors';
 
-const rawApiBaseUrl = String(import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
+// Production browser traffic stays same-origin. Render rewrites /api/* to the API Gateway,
+ // so HttpOnly session cookies remain first-party to the Pharma UI origin.
+const rawApiBaseUrl = String(import.meta.env.VITE_API_URL || '/api').trim().replace(/\/+$/, '');
 const apiBaseUrl = rawApiBaseUrl === '/api'
     ? ''
     : rawApiBaseUrl.endsWith('/api')
