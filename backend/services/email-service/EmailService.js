@@ -11,7 +11,7 @@ class EmailService {
         this.port = Number.parseInt(process.env.SMTP_PORT || '587', 10);
         this.secure = process.env.SMTP_SECURE === 'true' || this.port === 465;
         this.user = process.env.SMTP_USER || 'ashvinsingh25@gmail.com';
-        this.pass = process.env.SMTP_PASSWORD || '';
+        this.pass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '';
         this.from = process.env.SMTP_FROM || `"Ashvin Pharmacy" <${this.user}>`;
 
         this.transporter = null;
