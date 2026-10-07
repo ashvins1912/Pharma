@@ -27,6 +27,7 @@ class NormalizedDocument:
     filename: str
     content_type: str
     original_content_type: str
+    original_filename: str
 
 
 def _looks_like_pdf(data: bytes) -> bool:
@@ -105,6 +106,7 @@ def normalize_prescription_document(
             filename=f"{original_name.rsplit('.', 1)[0]}.pdf",
             content_type="application/pdf",
             original_content_type=original_type or "application/pdf",
+            original_filename=original_name,
         )
 
     if not original_type.startswith("image/"):
@@ -122,4 +124,5 @@ def normalize_prescription_document(
         filename=f"{original_name.rsplit('.', 1)[0]}.pdf",
         content_type="application/pdf",
         original_content_type=original_type,
+        original_filename=original_name,
     )
