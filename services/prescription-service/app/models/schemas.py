@@ -27,6 +27,12 @@ class ApiErrorResponse(BaseModel):
     requestId: Optional[str] = None
 
 # Extraction Schemas
+class MedicineValidationResult(BaseModel):
+    status: str = "NOT_FOUND"
+    productId: Optional[str] = None
+    candidateCount: int = 0
+    confidence: float = 0.0
+
 class PatientExtraction(BaseModel):
     name: Optional[str] = None
     rawName: Optional[str] = None
