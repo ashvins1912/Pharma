@@ -116,7 +116,18 @@ export function AuthProvider({ children }) {
                 const result = data?.data || data;
                 syncSession({ user: result?.user }, result?.user);
                 setProfileCompletionRequired(Boolean(result?.requiresProfileCompletion || result?.code === 'PROFILE_INCOMPLETE'));
-                if (supabase) await supabase.auth.signOut({ scope: 'local' });
+                // The Supabase session is only an upstream OAuth credential.
+                // Its cleanup must never invalidate a successfully created Pharma session.
+                if (supabase) {
+                  try {
+                    await supabase.auth.signOut({ scope: 'local' });
+                  } catch (cleanupError) {
+                    console.warn('Supabase OAuth cleanup failed after successful Pharma exchange.', {
+                      name: cleanupError?.name,
+                      status: cleanupError?.status
+                    });
+                  }
+                }
               } catch (error) {
                 console.error('Google identity exchange failed.', error);
                 syncSession(null);
@@ -283,6 +294,23 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const verifyEmailCode = async (email, code) => {
+    const { data } = await apiClient.post('/api/v1/auth/verify-email-code', { email, code });
+    const result = data?.data || data;
+    if (result?.user) {
+      syncSession({ user: result.user }, result.user);
+    }
+    setProfileCompletionRequired(Boolean(result?.requiresProfileCompletion || result?.code === 'PROFILE_INCOMPLETE'));
+    setMfaRequired(false);
+    setMfaChallenge(null);
+    return result;
+  };
+
+  const resendVerificationEmail = async (email) => {
+    const { data } = await apiClient.post('/api/v1/auth/resend-verification', { email });
+    return data?.data || data;
+  };
+
   const loginDemoCustomer = async () => {
     const { data } = await apiClient.post('/api/auth/demo-customer');
     const demo = { ...data, user: data.user };
@@ -383,6 +411,8 @@ export function AuthProvider({ children }) {
         confirmMfaEnroll,
         disableMfa,
         signUpWithEmail,
+        verifyEmailCode,
+        resendVerificationEmail,
         sendPasswordResetEmail,
         updatePassword,
         loginDemoCustomer,
