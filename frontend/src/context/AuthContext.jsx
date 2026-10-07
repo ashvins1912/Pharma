@@ -13,6 +13,13 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [passwordRecoveryRequired, setPasswordRecoveryRequired] = useState(false);
   const [profileCompletionRequired, setProfileCompletionRequired] = useState(false);
+  // Zero-Cost TOTP Multi-Factor Authentication State
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaChallenge, setMfaChallenge] = useState(null); // { challengeToken, factorId, email }
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [aal, setAal] = useState('aal1'); // 'aal1' (Single Factor) | 'aal2' (MFA Verified)
+  const logoutInProgress = useRef(false);
+
   // A user object alone is not enough to authorize application API calls.
   // Google first-time users receive a restricted PROFILE_INCOMPLETE token.
   // Only a completed ACTIVE Pharma profile is considered fully authenticated.
@@ -25,12 +32,6 @@ export function AuthProvider({ children }) {
     String(user?.accountStatus || 'ACTIVE').toUpperCase() === 'ACTIVE'
   );
 
-  // Zero-Cost TOTP Multi-Factor Authentication State
-  const [mfaRequired, setMfaRequired] = useState(false);
-  const [mfaChallenge, setMfaChallenge] = useState(null); // { challengeToken, factorId, email }
-  const [mfaEnabled, setMfaEnabled] = useState(false);
-  const [aal, setAal] = useState('aal1'); // 'aal1' (Single Factor) | 'aal2' (MFA Verified)
-  const logoutInProgress = useRef(false);
 
   // Synchronize user and role
   const syncSession = (currSession, userData = null) => {
