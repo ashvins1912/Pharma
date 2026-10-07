@@ -11,13 +11,9 @@ function findActiveModal() {
 
   if (dialogs.length) return dialogs[dialogs.length - 1];
 
-  const overlays = Array.from(document.querySelectorAll('#root .fixed')).filter((element) => {
-    const style = window.getComputedStyle(element);
-    const zIndex = Number.parseInt(style.zIndex || '0', 10);
-    return style.position === 'fixed' && zIndex >= 40;
-  });
-
-  return overlays.length ? overlays[overlays.length - 1] : null;
+  // Only explicit modal surfaces may lock page scrolling.
+  // Fixed UI such as loading indicators must never disable mobile scrolling.
+  return null;
 }
 
 export default function ModalInteractionGuard() {
