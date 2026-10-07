@@ -2,7 +2,7 @@
 
 **Purpose:** Compact source-of-truth for future AI coding/modification tasks.
 **Last verified against `main`:** 2026-10-07
-**Latest verified HEAD:** `61adf96a5058a6ecf30db9571b9b4a295eb33281`
+**Latest verified HEAD:** `7a21b631ebe4faf05b98b5ca233f015330738644`
 
 ## 1. Current repository reality
 
@@ -400,3 +400,26 @@ Prescription Render configuration now has:
 - separate background worker
 - shared MongoDB/encryption/service-auth configuration
 
+
+
+## 24. Recent main merge/review status
+
+Commit `776e707` introduced and retained:
+- COD cash collection states `CASH_RECEIVED`, `CASH_NOT_RECEIVED`, `NOT_APPLICABLE`
+- rider WhatsApp action links/buttons
+- Fulfillment Order ID/status search improvements
+
+That commit also removed/reverted several Prescription integration pieces. Those pieces have now been restored selectively without reverting the delivery/cash/search changes.
+
+Current main validation:
+- active frontend AdminProposalModal JSX is structurally balanced
+- fabricated prescription scan responses are removed from active backend scan routes
+- Prescription Service/client/verification/reconciliation files are restored
+- prescription-only Medicine Requests are supported
+- customer PUID access is checked before prescription association
+- order conversion requires medicine-level prescription MATCHED status
+- fulfillment transitions remain blocked until prescription MATCHED
+- Prescription API + worker Render configuration is restored
+- Order reconciliation configuration is restored
+
+The repository still requires a real Render deployment/build smoke test; GitHub Actions did not expose a workflow run for the validation commit, and local clone/build was unavailable in the execution environment.
