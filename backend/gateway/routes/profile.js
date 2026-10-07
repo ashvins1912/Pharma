@@ -29,7 +29,7 @@ router.put('/me', authenticateUser, async (req, res) => {
         });
     }
 });
- * API Gateway Profile & Onboarding Routes (/api/v1/profile/*)
+ /* API Gateway Profile & Onboarding Routes (/api/v1/profile/*)
  */
 import express from 'express';
 import { authService, calculateAge, isValidDOB, isValidMobile } from '../../services/identity-service/AuthService.js';
