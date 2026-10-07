@@ -290,6 +290,14 @@ export function AuthProvider({ children }) {
     return result;
   };
 
+  const updateProfile = async (profileData) => {
+    const { data } = await apiClient.put('/api/v1/profile/me', profileData);
+    const result = data?.data || data;
+    const updatedUser = result?.user || result;
+    if (updatedUser?.id) syncSession({ user: updatedUser }, updatedUser);
+    return result;
+  };
+
   const signUpWithEmail = async (email, password, confirmPassword = '', name = '', mobile = '', firstName = '', lastName = '', dateOfBirth = '', gender = '') => {
     const { data } = await apiClient.post('/api/v1/auth/signup', {
       email,
@@ -490,6 +498,7 @@ export function AuthProvider({ children }) {
         resendVerificationEmail,
         sendPasswordResetEmail,
         updatePassword,
+        updateProfile,
         loginDemoCustomer,
         loginDemoAdmin,
         logout
