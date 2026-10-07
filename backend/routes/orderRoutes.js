@@ -522,6 +522,156 @@ router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
     }
 });
 
+router.post('/admin/:id/prescription/reinitiate', authenticateUser, isAdmin, async (req, res) => {
+    try {
+        const order = await dataStore.getOrderById(req.params.id);
+        if (!order) return res.status(404).json({ message: 'Order not found.' });
+        if (!order.prescriptionRequired) {
+            return res.status(400).json({ message: 'This order does not require prescription verification.' });
+        }
+
+        const items = (order.items || order.medicineItems || []).map(item => ({
+            productId: item.productId || item.medicineId || null,
+            name: item.productName || item.name || '',
+            productName: item.productName || item.name || '',
+            strength: item.strength || '',
+            form: item.form || item.dosageForm || '',
+            quantity: Number(item.quantity || 0)
+        }));
+
+        if (!order.prescriptionId) {
+            return res.status(409).json({
+                code: 'PRESCRIPTION_NOT_LINKED',
+                message: 'No Prescription Service record is linked to this order. Manual approval is required.'
+            });
+        }
+
+        const verification = await verifyPrescriptionAgainstItems({
+            prescriptionId: order.prescriptionId,
+            patientPuid: order.patientPuid || null,
+            items,
+            userId: req.user.sub,
+            tenantId: order.tenantId || req.user.tenantId || null,
+            branchId: order.branchId || req.user.branchId || null,
+            isAdmin: true
+        });
+
+        if (getIsConnected() && order._id) {
+            await Order.findByIdAndUpdate(order._id, {
+                $set: {
+                    prescriptionVerification: verification,
+                    'fulfillmentGate.prescription': verification.status === 'MATCHED' ? 'APPROVED' : 'PENDING_REVIEW'
+                },
+                $push: {
+                    statusHistory: {
+                        status: order.orderStatus,
+                        changedBy: req.user.user_metadata?.name || req.user.email || 'Admin',
+                        timestamp: new Date(),
+                        note: 'Prescription verification re-initiated by admin.'
+                    }
+                }
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: verification.status === 'MATCHED'
+                ? 'Prescription verification completed successfully.'
+                : 'Prescription verification was re-initiated. If it remains pending, use manual medicine or order approval.',
+            verification
+        });
+    } catch (err) {
+        console.error('Prescription re-initiation failed:', err);
+        return res.status(getErrorStatus(err)).json({ message: err.message || 'Could not re-initiate prescription verification.' });
+    }
+});
+
+router.post('/admin/:id/prescription/manual-approve', authenticateUser, isAdmin, async (req, res) => {
+    try {
+        const { scope = 'order', itemIndex, reason = '' } = req.body || {};
+        const order = await dataStore.getOrderById(req.params.id);
+        if (!order) return res.status(404).json({ message: 'Order not found.' });
+        if (!order.prescriptionRequired) {
+            return res.status(400).json({ message: 'This order does not require prescription approval.' });
+        }
+        if (scope === 'medicine' && (!Number.isInteger(Number(itemIndex)) || Number(itemIndex) < 0)) {
+            return res.status(400).json({ message: 'A valid medicine itemIndex is required.' });
+        }
+
+        const items = order.items || order.medicineItems || [];
+        if (scope === 'medicine' && Number(itemIndex) >= items.length) {
+            return res.status(400).json({ message: 'Medicine item was not found in this order.' });
+        }
+
+        const existingVerification = order.prescriptionVerification || {};
+        const existingMedicines = Array.isArray(existingVerification.medicines)
+            ? existingVerification.medicines
+            : [];
+        const medicines = items.map((item, index) => {
+            const current = existingMedicines[index] || {};
+            const shouldApprove = scope === 'order' || index === Number(itemIndex);
+            return {
+                ...current,
+                orderMedicine: current.orderMedicine || item.productName || item.name || item.genericName || 'Medicine',
+                productId: current.productId || item.productId || item.medicineId || null,
+                status: shouldApprove ? 'MATCHED' : (current.status || 'REVIEW_REQUIRED'),
+                manualApproved: shouldApprove ? true : Boolean(current.manualApproved),
+                manualApprovedBy: shouldApprove
+                    ? (req.user.user_metadata?.name || req.user.email || 'Admin')
+                    : current.manualApprovedBy,
+                manualApprovedAt: shouldApprove ? new Date().toISOString() : current.manualApprovedAt,
+                manualApprovalReason: shouldApprove ? String(reason || 'Admin manual approval').slice(0, 500) : current.manualApprovalReason
+            };
+        });
+
+        const allMedicinesApproved = medicines.length > 0 && medicines.every(medicine => medicine.manualApproved === true);
+        const verification = {
+            ...existingVerification,
+            status: allMedicinesApproved ? 'MATCHED' : 'REVIEW_REQUIRED',
+            prescriptionId: order.prescriptionId || existingVerification.prescriptionId || null,
+            patientPuid: order.patientPuid || existingVerification.patientPuid || null,
+            overallConfidence: allMedicinesApproved ? 1 : Number(existingVerification.overallConfidence || 0),
+            lastCheckedAt: new Date(),
+            medicines,
+            issues: allMedicinesApproved ? [] : ['One or more medicines still require manual approval.'],
+            manualApproval: true,
+            manualApprovalScope: scope,
+            manualApprovedBy: req.user.user_metadata?.name || req.user.email || 'Admin',
+            manualApprovalAt: new Date()
+        };
+
+        if (getIsConnected() && order._id) {
+            await Order.findByIdAndUpdate(order._id, {
+                $set: {
+                    prescriptionVerification: verification,
+                    'fulfillmentGate.prescription': allMedicinesApproved ? 'APPROVED' : 'PENDING_REVIEW'
+                },
+                $push: {
+                    statusHistory: {
+                        status: order.orderStatus,
+                        changedBy: req.user.user_metadata?.name || req.user.email || 'Admin',
+                        timestamp: new Date(),
+                        note: scope === 'order'
+                            ? 'Prescription manually approved at order level.'
+                            : `Medicine item ${Number(itemIndex) + 1} manually approved.`
+                    }
+                }
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: allMedicinesApproved
+                ? 'All prescription medicines approved. Order is now eligible for fulfillment.'
+                : 'Medicine manually approved. Remaining medicines still require review.',
+            verification
+        });
+    } catch (err) {
+        console.error('Manual prescription approval failed:', err);
+        return res.status(getErrorStatus(err)).json({ message: err.message || 'Manual prescription approval failed.' });
+    }
+});
+
 router.put('/:id/dispatch', authenticateUser, isAdmin, async (req, res) => {
     try {
         const riderInfo = await resolveDispatchRider(req.body.riderInfo?.riderId, req.params.id);
