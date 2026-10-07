@@ -14,6 +14,7 @@ from ..models.state import PrescriptionState, can_transition
 from ..security.encryption import crypto
 from ..integration.registry import integration_registry
 from .pipeline import process_prescription_bytes, ProcessingError
+from .document_normalizer import normalize_prescription_document
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,19 @@ class PrescriptionServiceEngine:
         if len(file_bytes) > settings.MAX_FILE_SIZE_BYTES:
             raise ValueError("file too large")
 
+        normalized = normalize_prescription_document(
+            file_bytes,
+            filename,
+            content_type,
+            max_pages=settings.MAX_PDF_PAGES,
+        )
+        file_bytes = normalized.data
+        filename = normalized.filename
+        content_type = normalized.content_type
+
+        if len(file_bytes) > settings.MAX_FILE_SIZE_BYTES:
+            raise ValueError("normalized file too large")
+
         prescription_id = f"prs_{uuid.uuid4().hex[:14]}"
         job_id = f"job_{uuid.uuid4().hex[:14]}"
         now = _now()
@@ -90,7 +104,9 @@ class PrescriptionServiceEngine:
             "status": PrescriptionState.QUEUED.value,
             "version": 1,
             "filename": filename or "prescription.bin",
-            "contentType": content_type or "application/octet-stream",
+            "contentType": "application/pdf",
+            "originalFilename": normalized.filename.replace(".pdf", "") if normalized.filename else filename,
+            "originalContentType": normalized.original_content_type,
             "documentCiphertext": encrypted,
             "documentSha256": hashlib.sha256(file_bytes).hexdigest(),
             "extraction": {
@@ -182,6 +198,19 @@ class PrescriptionServiceEngine:
         if len(file_bytes) > settings.MAX_FILE_SIZE_BYTES:
             raise ValueError("file too large")
 
+        normalized = normalize_prescription_document(
+            file_bytes,
+            filename,
+            content_type,
+            max_pages=settings.MAX_PDF_PAGES,
+        )
+        file_bytes = normalized.data
+        filename = normalized.filename
+        content_type = normalized.content_type
+
+        if len(file_bytes) > settings.MAX_FILE_SIZE_BYTES:
+            raise ValueError("normalized file too large")
+
         if idempotency_key:
             replay = await db.idempotency_keys.find_one({
                 "key": f"rx-replace:{prescription_id}:{tenant_id}:{idempotency_key}"
@@ -211,8 +240,10 @@ class PrescriptionServiceEngine:
                     "status": PrescriptionState.QUEUED.value,
                     "version": next_version,
                     "documentVersion": document_version,
-                    "filename": filename or "prescription.bin",
-                    "contentType": content_type or "application/octet-stream",
+                    "filename": filename or "prescription.pdf",
+                    "contentType": "application/pdf",
+                    "originalFilename": normalized.filename.replace(".pdf", "") if normalized.filename else filename,
+                    "originalContentType": normalized.original_content_type,
                     "documentCiphertext": encrypted,
                     "documentSha256": hashlib.sha256(file_bytes).hexdigest(),
                     "extraction": {
