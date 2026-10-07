@@ -59,6 +59,21 @@ class DiagnosisItem(BaseModel):
     confidence: float = 0.0
     requiresReview: bool = False
 
+class ConfidenceField(BaseModel):
+    value: Any = None
+    confidence: float = 0.0
+
+class ConfidenceUnitField(BaseModel):
+    value: Any = None
+    unit: Optional[str] = None
+    confidence: float = 0.0
+
+class FrequencyField(BaseModel):
+    raw: str = ""
+    normalized: str = ""
+    timesPerDay: Optional[float] = None
+    confidence: float = 0.0
+
 class MedicineCourseField(BaseModel):
     value: Optional[Any] = None
     unit: Optional[str] = None
