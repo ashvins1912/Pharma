@@ -513,8 +513,14 @@ router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
             { $set: { status: 'EXPIRED' } }
         );
         if (req.baseUrl.startsWith('/api/admin/')) {
-            const requests = await dataStore.getMedicineRequests(req.query, req.user);
-            return res.json({ requests });
+            const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+            const pageSize = Math.min(50, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 8));
+            const result = await dataStore.getMedicineRequestsPage(req.query, req.user, page, pageSize);
+            let requests = result.requests || [];
+            if (prescriptionClient.isConfigured()) {
+                requests = await Promise.all(requests.map(request => syncPrescriptionVerification(request)));
+            }
+            return res.json({ requests, items: requests, pagination: result.pagination });
         }
         const query = { customerId: req.user.sub };
 
