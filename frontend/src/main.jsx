@@ -9,6 +9,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { AppProvider } from './context/AppContext';
 import { LoadingProvider, GlobalLoadingIndicator } from './context/LoadingContext';
+import ModalInteractionGuard from './components/ModalInteractionGuard';
 import CustomerErrorBoundary from './components/CustomerErrorBoundary';
 
 createRoot(document.getElementById('root')).render(
@@ -18,6 +19,7 @@ createRoot(document.getElementById('root')).render(
         <AppProvider>
           <LoadingProvider>
             <GlobalLoadingIndicator />
+      <ModalInteractionGuard />
             <CustomerErrorBoundary>
             <App />
             </CustomerErrorBoundary>
