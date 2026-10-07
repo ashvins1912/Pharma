@@ -925,7 +925,7 @@ export class AuthService {
             mfaEnrolledAt: new Date()
         });
         pendingMfaEnrollments.delete(userId);
-        return { success: true, user: updated };
+        return { success: true, user: updated.toSafeObject ? updated.toSafeObject() : undefined };
     }
 
     async disableMfa(user) {
