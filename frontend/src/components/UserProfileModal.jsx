@@ -25,8 +25,8 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
     });
   }, [user, isOpen]);
 
-  const emailVerified = Boolean(user.emailVerified);
-  const mobileVerified = Boolean(user.mobileVerified);
+  const emailVerified = Boolean(user?.emailVerified);
+  const mobileVerified = Boolean(user?.mobileVerified);
 
   const handleSaveProfile = async (event) => {
     event.preventDefault();
