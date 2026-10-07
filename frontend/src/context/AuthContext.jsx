@@ -146,7 +146,7 @@ export function AuthProvider({ children }) {
       }
     }
     const res = await apiClient.post('/api/v1/auth/login', { email, password });
-    const data = res.data;
+    const data = res.data?.data || res.data;
 
     if (data.mfaRequired) {
       setMfaRequired(true);
@@ -194,13 +194,14 @@ export function AuthProvider({ children }) {
       challengeToken: mfaChallenge.challengeToken
     });
 
-    syncSession({ user: data.user }, data.user);
+    const result = data?.data || data;
+    syncSession({ user: result.user }, result.user);
     setProfileCompletionRequired(false);
-    setAal('aal2');
+    setAal(result.aal || 'aal2');
     setMfaEnabled(true);
     setMfaRequired(false);
     setMfaChallenge(null);
-    return data;
+    return result;
   };
 
   const cancelMfa = () => {
@@ -213,21 +214,23 @@ export function AuthProvider({ children }) {
    */
   const enrollMfa = async () => {
     const { data } = await apiClient.post('/api/v1/auth/mfa/enroll');
-    return data;
+    return data?.data || data;
   };
 
   const confirmMfaEnroll = async (code) => {
     const { data } = await apiClient.post('/api/v1/auth/mfa/confirm-enroll', { code });
+    const result = data?.data || data;
     setMfaEnabled(true);
     setAal('aal2');
-    return data;
+    return result;
   };
 
   const disableMfa = async () => {
     const { data } = await apiClient.post('/api/v1/auth/mfa/mfa-disable');
+    const result = data?.data || data;
     setMfaEnabled(false);
     setAal('aal1');
-    return data;
+    return result;
   };
 
   const signUpWithEmail = async (email, password, name = '', mobile = '', firstName = '', lastName = '', dateOfBirth = '', gender = '') => {
