@@ -278,8 +278,15 @@ export class AuthService {
     /**
      * User Registration with single-use verification token & persistent User model
      */
-    async registerUser({ firstName, lastName, email, mobile, mobileNumber, dateOfBirth, gender, password }) {
+    async registerUser({ firstName, lastName, email, mobile, mobileNumber, dateOfBirth, gender, password, confirmPassword }) {
         const normalizedEmail = (email || '').trim().toLowerCase();
+        if (!confirmPassword || password !== confirmPassword) {
+            const err = new Error('Passwords do not match.');
+            err.code = 'PASSWORD_MISMATCH';
+            err.status = 400;
+            throw err;
+        }
+
         if (!isStrongPassword(password)) {
             const err = new Error('Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, and one number.');
             err.code = 'WEAK_PASSWORD';
@@ -291,6 +298,13 @@ export class AuthService {
         const lName = (lastName || '').trim();
         const phone = (mobileNumber || mobile || '').trim();
         const normalizedPhone = normalizeIndianMobile(phone);
+
+        if (!phone || !normalizedPhone) {
+            const err = new Error('Mobile number is required and must be a valid Indian mobile number.');
+            err.code = 'INVALID_MOBILE';
+            err.status = 400;
+            throw err;
+        }
 
         // 1. Validation
         if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
