@@ -34,6 +34,8 @@ export async function authenticateUser(req, res, next, gatewayConfig = config) {
         'X-Gateway-Authorization': `Bearer ${assertion}`,
         'X-Request-ID': req.requestId,
         'X-Correlation-ID': req.correlationId,
+        ...(req.get('x-tenant-id') ? { 'X-Tenant-ID': req.get('x-tenant-id') } : {}),
+        ...(req.get('x-branch-id') ? { 'X-Branch-ID': req.get('x-branch-id') } : {}),
         Accept: 'application/json'
       },
       signal: AbortSignal.timeout(gatewayConfig.authTimeoutMs)
