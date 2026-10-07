@@ -66,7 +66,7 @@ export class AuthorizationService {
       branchId,
       scope: role === 'SUPER_ADMIN' ? 'PLATFORM' : (tenantId ? 'TENANT' : 'CUSTOMER'),
       permissions: [...permissions],
-      permissionVersion: Number(user?.permissionVersion || user?.permissionsVersion || 1),
+      permissionVersion: Number(user?.permissionVersion || user?.permissionsVersion || user?.version || 1),
       membershipId: membership?.id || membership?._id?.toString() || null
     };
   }
