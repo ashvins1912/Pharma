@@ -4,14 +4,14 @@ import { useToast } from '../context/ToastContext';
 import { friendlyAuthError } from '../api/apiErrors';
 import { isSupabaseConfigured } from '../supabaseClient';
 
-const signupFields = ['name', 'mobile', 'dateOfBirth', 'gender', 'email', 'password', 'confirmPassword'];
+const signupFields = ['name', 'dateOfBirth', 'gender', 'email', 'password', 'confirmPassword'];
 
 function validateSignupField(field, values) {
   switch (field) {
     case 'name':
       return values.name.trim().length < 2 ? 'Full name must be at least 2 characters.' : '';
     case 'mobile':
-      return values.mobile.replace(/\D/g, '').length < 10 ? 'Mobile number must be at least 10 digits.' : '';
+      return values.mobile && values.mobile.replace(/\D/g, '').length < 10 ? 'Mobile number must be at least 10 digits.' : '';
     case 'dateOfBirth':
       return !values.dateOfBirth ? 'Date of birth is required.' : '';
     case 'gender':
@@ -43,6 +43,8 @@ export default function AuthModal({ isOpen, onClose }) {
     mfaRequired,
     mfaChallenge,
     signUpWithEmail,
+    verifyEmailCode,
+    resendVerificationEmail,
     sendPasswordResetEmail,
     updatePassword,
     passwordRecoveryRequired,
@@ -66,6 +68,10 @@ export default function AuthModal({ isOpen, onClose }) {
   const [gender, setGender] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [verificationEmail, setVerificationEmail] = useState('');
+  const [resendingVerification, setResendingVerification] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [signupErrors, setSignupErrors] = useState({});
   const instantDemoEnabled = import.meta.env.DEV
@@ -90,6 +96,10 @@ export default function AuthModal({ isOpen, onClose }) {
     setGender('');
     setLoading(false);
     setGoogleLoading(false);
+    setEmailVerificationRequired(false);
+    setVerificationCode('');
+    setVerificationEmail('');
+    setResendingVerification(false);
     setErrorMsg('');
     setSignupErrors({});
   };
@@ -151,9 +161,12 @@ export default function AuthModal({ isOpen, onClose }) {
           setLoading(false);
           return;
         }
-        await signUpWithEmail(email, password, name, mobile, '', '', dateOfBirth, gender);
-        addToast('Account created. Please verify your email before signing in.', 'success');
-        handleClose(false);
+        const signupResult = await signUpWithEmail(email, password, name, mobile, '', '', dateOfBirth, gender);
+        const signupData = signupResult?.data || signupResult;
+        setVerificationEmail(email.trim().toLowerCase());
+        setVerificationCode('');
+        setEmailVerificationRequired(true);
+        addToast(signupData?.verification?.message || 'Account created. Enter the 6-digit code sent to your email.', 'success');
       } else {
         // Step 1: Submit primary credentials
         const result = await loginWithEmail(email, password);
@@ -169,6 +182,40 @@ export default function AuthModal({ isOpen, onClose }) {
       setErrorMsg(isSignUp ? friendlyAuthError(err, 'signup') : friendlyAuthError(err, 'login'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEmailVerification = async (e) => {
+    e?.preventDefault();
+    const code = verificationCode.replace(/\D/g, '');
+    if (code.length !== 6) {
+      setErrorMsg('Please enter the 6-digit code sent to your email.');
+      return;
+    }
+    setErrorMsg('');
+    setLoading(true);
+    try {
+      const result = await verifyEmailCode(verificationEmail, code);
+      addToast('Email verified. Complete your profile to continue.', 'success');
+      handleClose(true);
+      return result;
+    } catch (err) {
+      setErrorMsg(friendlyAuthError(err, 'email verification'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setErrorMsg('');
+    setResendingVerification(true);
+    try {
+      await resendVerificationEmail(verificationEmail);
+      addToast('A new verification code has been sent.', 'success');
+    } catch (err) {
+      setErrorMsg(friendlyAuthError(err, 'verification code resend'));
+    } finally {
+      setResendingVerification(false);
     }
   };
 
@@ -289,7 +336,57 @@ export default function AuthModal({ isOpen, onClose }) {
           </div>
         )}
 
-        {/* STEP 2: TOTP MULTI-FACTOR AUTHENTICATION CHALLENGE SCREEN */}
+        {/* EMAIL VERIFICATION: required before onboarding */}
+        {emailVerificationRequired ? (
+          <form onSubmit={handleEmailVerification} className="space-y-4 animate-fade-in">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-center">
+              <div className="text-2xl mb-1">✉️</div>
+              <h3 className="text-sm font-black text-emerald-900">Verify your email</h3>
+              <p className="text-xs text-emerald-800 mt-1">
+                Enter the 6-digit code sent to <strong>{verificationEmail}</strong>.
+              </p>
+              <p className="text-[11px] text-emerald-700 mt-2">The code expires in 10 minutes.</p>
+            </div>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={verificationCode}
+              onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="000000"
+              autoFocus
+              className="w-full text-center tracking-[0.45em] font-mono font-black text-2xl py-3 bg-slate-50 border border-slate-200 focus:border-emerald-600 focus:bg-white rounded-xl outline-none transition"
+            />
+            <button
+              type="submit"
+              disabled={loading || verificationCode.length !== 6}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold py-2.5 rounded-xl text-xs shadow-md cursor-pointer transition"
+            >
+              {loading ? 'Verifying…' : 'Verify Email & Continue'}
+            </button>
+            <button
+              type="button"
+              onClick={handleResendVerification}
+              disabled={resendingVerification}
+              className="w-full text-center text-xs font-bold text-blue-600 hover:text-blue-800 py-1"
+            >
+              {resendingVerification ? 'Sending…' : 'Resend verification code'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEmailVerificationRequired(false);
+                setVerificationCode('');
+                setErrorMsg('');
+              }}
+              className="w-full text-center text-xs font-bold text-slate-500 hover:text-slate-800 py-1"
+            >
+              ← Back to signup
+            </button>
+          </form>
+        ) : (
+        /* STEP 2: TOTP MULTI-FACTOR AUTHENTICATION CHALLENGE SCREEN */
         {mfaRequired ? (
           <form onSubmit={handleTotpVerify} className="space-y-4 animate-fade-in">
             <div className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-3.5 text-center space-y-1">
@@ -520,6 +617,9 @@ export default function AuthModal({ isOpen, onClose }) {
                 </button>
               </form>
             )}
+
+          )}
+        )}
 
             {/* Divider */}
             {!isForgotPassword && !passwordRecoveryRequired && (
