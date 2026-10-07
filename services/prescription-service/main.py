@@ -18,6 +18,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+@app.get("/")
+async def root_check():
+    return {
+        "status": "UP",
+        "service": settings.SERVICE_NAME,
+        "environment": settings.ENVIRONMENT
+    }
+
+@app.head("/")
+async def root_head_check():
+    return None
+
 @app.get("/health")
 async def health_check():
     return {
