@@ -12,7 +12,7 @@
     "dev": "tsx server.ts",
     "build": "vite build",
     "lint": "tsc --noEmit",
-    "test": "node --test tests/*.test.js backend/*.test.js backend/routes/*.test.js backend/security/*.test.js backend/modules/delivery/use-cases/*.test.js backend/modules/delivery/controllers/*.test.js backend/services/delivery/*.test.js backend/services/payment/*.test.js backend/services/orderSearch.test.js backend/middleware/*.test.js backend/config/*.test.js src/api/*.test.js frontend/src/api/*.test.js api-gateway/src/*.test.js services/*/*.test.js",
+    "test": "node --test tests/*.test.js backend/*.test.js backend/routes/*.test.js backend/security/*.test.js backend/modules/delivery/use-cases/*.test.js backend/modules/delivery/controllers/*.test.js backend/services/delivery/*.test.js backend/services/payment/*.test.js backend/services/orderSearch.test.js backend/services/prescription-verification/*.test.js backend/middleware/*.test.js backend/config/*.test.js src/api/*.test.js frontend/src/api/*.test.js api-gateway/src/*.test.js services/*/*.test.js",
     "admin:promote": "node scripts/promote-admin.mjs",
     "admin:bootstrap": "node scripts/bootstrap-super-admin.mjs",
     "tenant:create": "node scripts/create-tenant.mjs",
