@@ -4,7 +4,7 @@ import { getRolePermissions, getRoleScope } from './AuthorizationCatalogService.
 
 function hasPermission(granted, required) {
   if (!required) return true;
-  return granted.includes('*') || granted.includes(required);
+  return granted.includes('*') || granted.includes(required) || granted.some(item => item.endsWith('.*') && required.startsWith(item.slice(0, -1)));
 }
 
 export class AuthorizationService {
