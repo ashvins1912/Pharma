@@ -50,7 +50,7 @@ const allowedPrescriptionTypes = new Set(['application/pdf', 'image/jpeg', 'imag
 const normalizedOrderStatuses = ['pending', 'accepted', 'out_for_delivery', 'delivered', 'cancelled'];
 const uploadPrescription = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+    limits: { fileSize: 8 * 1024 * 1024, files: 1 },
     fileFilter: (req, file, callback) => {
         if (!(allowedPrescriptionTypes.has(file.mimetype) || file.mimetype.startsWith('image/'))) {
             return callback(new Error('Prescription must be a PDF or image file.'));
