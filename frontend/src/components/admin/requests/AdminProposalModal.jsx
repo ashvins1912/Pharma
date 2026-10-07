@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useToast } from '../../../context/ToastContext';
+import apiClient from '../../../api/apiClient';
 import {
   sendPharmacyProposal,
   updatePharmacyProposal,
