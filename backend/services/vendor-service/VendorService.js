@@ -324,6 +324,8 @@ class VendorService {
                 'mobile',
                 'password',
                 'companyName',
+                'drugLicenseNumber',
+                'address.line1',
                 'address.city',
                 'address.state',
                 'address.pincode'
@@ -413,9 +415,20 @@ class VendorService {
         }
 
         const companyName = (submission.company?.companyName || submission.companyName || vendor.companyName || '').trim();
+        const street = (submission.address?.line1 || submission.address?.street || '').trim();
+        const city = (submission.address?.city || '').trim();
+        const state = (submission.address?.state || '').trim();
+        const pincode = (submission.address?.pincode || '').trim();
+        const gstNumber = (submission.company?.gstNumber || submission.gstNumber || vendor.gstNumber || '').trim().toUpperCase();
+        const drugLicenseNumber = (submission.company?.drugLicenseNumber || submission.drugLicenseNumber || vendor.drugLicenseNumber || '').trim().toUpperCase();
         if (!companyName) {
             validationDetails.push({ field: 'companyName', code: 'REQUIRED', message: 'Company name is required.' });
         }
+        if (!street) validationDetails.push({ field: 'address.line1', code: 'REQUIRED', message: 'Pharmacy street address is required.' });
+        if (!city) validationDetails.push({ field: 'address.city', code: 'REQUIRED', message: 'City is required.' });
+        if (!state) validationDetails.push({ field: 'address.state', code: 'REQUIRED', message: 'State is required.' });
+        if (!/^\d{6}$/.test(pincode)) validationDetails.push({ field: 'address.pincode', code: 'INVALID_PINCODE', message: 'Enter a valid 6-digit pincode.' });
+        if (!drugLicenseNumber) validationDetails.push({ field: 'drugLicenseNumber', code: 'REQUIRED', message: 'Drug licence number is required for pharmacy onboarding.' });
 
         if (validationDetails.length > 0) {
             const err = new Error('Please correct the highlighted fields.');
@@ -451,6 +464,9 @@ class VendorService {
             status: 'ACTIVE',
             contactEmail: vendorEmail,
             contactPhone: mobile,
+            address: { line1: street, city, state, pincode },
+            gstNumber,
+            drugLicenseNumber,
             timezone: 'Asia/Kolkata',
             currency: 'INR',
             settings: {
@@ -562,6 +578,9 @@ class VendorService {
                 if (session) session.endSession();
             }
         }
+
+        // Keep the canonical identity store synchronized in both Mongo and local/test mode.
+        await authService.saveUser(userId, userDoc);
 
         // Update in-memory collections
         vendor.tenantId = tenantId;
