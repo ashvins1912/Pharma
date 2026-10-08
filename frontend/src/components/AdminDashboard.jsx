@@ -173,13 +173,13 @@ export default function AdminDashboard() {
                                                     await apiClient.patch(`/api/orders/admin/${o._id}/ready`);
                                                     loadOrders();
                                                 }}
-                                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 font-bold rounded-lg cursor-pointer transition text-xs shadow-sm"
+                                                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 font-bold rounded-lg cursor-pointer transition text-xs shadow-sm"
                                             >
                                                 Verify & Pack
                                             </button>
                                         )}
                                         {o.orderStatus === 'Ready to Dispatch' && (
-                                            <span className="text-indigo-600 bg-indigo-50 px-2 py-1 rounded text-[11px] font-bold">
+                                            <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded text-[11px] font-bold">
                                                 Awaiting Courier Assignment
                                             </span>
                                         )}
