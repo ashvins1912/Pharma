@@ -3,7 +3,15 @@ import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
 import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
 
-const emptyForm = { displayName: '', relationship: '', dateOfBirth: '', gender: '' };
+const RELATIONSHIP_OPTIONS = [
+  { value: 'FATHER', label: 'Father' }, { value: 'MOTHER', label: 'Mother' },
+  { value: 'SPOUSE', label: 'Spouse' }, { value: 'SON', label: 'Son' },
+  { value: 'DAUGHTER', label: 'Daughter' }, { value: 'BROTHER', label: 'Brother' },
+  { value: 'SISTER', label: 'Sister' }, { value: 'GRANDFATHER', label: 'Grandfather' },
+  { value: 'GRANDMOTHER', label: 'Grandmother' }, { value: 'FATHER_IN_LAW', label: 'Father-in-law' },
+  { value: 'MOTHER_IN_LAW', label: 'Mother-in-law' }, { value: 'OTHER', label: 'Other' }
+];
+const emptyForm = { displayName: '', relationship: '', customRelationship: '', dateOfBirth: '', gender: '' };
 
 export default function RelativeProfiles({ user, onSelfPuid }) {
   const { addToast } = useToast();
@@ -36,7 +44,8 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
     setSelected(person);
     setForm({
       displayName: person.displayName || '',
-      relationship: person.relationshipToOwner || '',
+      relationship: RELATIONSHIP_OPTIONS.some((option) => option.value === String(person.relationshipToOwner || '').toUpperCase()) ? String(person.relationshipToOwner).toUpperCase() : 'OTHER',
+      customRelationship: RELATIONSHIP_OPTIONS.some((option) => option.value === String(person.relationshipToOwner || '').toUpperCase()) ? '' : person.relationshipToOwner || '',
       dateOfBirth: person.dateOfBirth || '',
       gender: person.gender || ''
     });
@@ -45,7 +54,8 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
 
   const saveRelative = async (event) => {
     event.preventDefault();
-    if (!form.displayName.trim() || !form.relationship.trim()) {
+    const relationship = form.relationship === 'OTHER' ? form.customRelationship.trim() : form.relationship.trim();
+    if (!form.displayName.trim() || !relationship) {
       addToast('Relative name and relationship are required.', 'warning');
       return;
     }
@@ -53,8 +63,8 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
     await runAction(action, async () => {
       try {
         const response = selected
-          ? await apiClient.patch(`/api/v1/customers/persons/${encodeURIComponent(selected.puid)}`, form)
-          : await apiClient.post('/api/v1/customers/persons', form);
+          ? await apiClient.patch(`/api/v1/customers/persons/${encodeURIComponent(selected.puid)}`, { ...form, relationship })
+          : await apiClient.post('/api/v1/customers/persons', { ...form, relationship });
         const person = response.data?.data || response.data;
         setPeople((current) => selected
           ? current.map((item) => item.puid === person.puid ? person : item)
@@ -126,7 +136,11 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
         <form onSubmit={saveRelative} className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} placeholder="Relative name" disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" required />
-            <input value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })} placeholder="Relationship e.g. Mother" disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" required />
+            <select value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" required>
+              <option value="">Select relationship</option>
+              {RELATIONSHIP_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            {form.relationship === 'OTHER' && <input value={form.customRelationship} onChange={(e) => setForm({ ...form, customRelationship: e.target.value })} placeholder="Specify relationship" disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" required />}
             <input type="date" value={form.dateOfBirth} onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" />
             <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs">
               <option value="">Gender</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option>
