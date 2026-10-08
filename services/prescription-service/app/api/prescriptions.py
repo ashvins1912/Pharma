@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, UploadFile, File, Form, Header, HTTPException, Query, Response, status
 from typing import Optional
 from ..security.auth import get_current_service_context, ServiceUserContext
 from ..services.prescription_service import prescription_engine
@@ -154,6 +154,38 @@ async def get_prescription(
         updatedAt=record.get("updatedAt"),
     )
     return {"success": True, "data": data.model_dump(), "message": "Prescription retrieved successfully", "version": record.get("version")}
+
+@router.get("/{prescription_id}/document")
+async def prescription_document(
+    prescription_id: str,
+    token: Optional[str] = Query(None),
+    context: ServiceUserContext = Depends(get_current_service_context),
+):
+    record = await _authorized_prescription(prescription_id, context)
+    db = get_db()
+    if token:
+        token_doc = await db.document_tokens.find_one({
+            "token": token,
+            "prescriptionId": prescription_id,
+            "userId": context.user_id,
+        })
+        if not token_doc or token_doc.get("expires_at") <= datetime.now(timezone.utc):
+            raise HTTPException(status_code=410, detail="Prescription document link is expired or invalid.")
+    encrypted = record.get("documentCiphertext")
+    if not encrypted:
+        raise HTTPException(status_code=404, detail="Prescription document is unavailable.")
+    try:
+        document = crypto.decrypt(encrypted)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Prescription document could not be decrypted.")
+    return Response(
+        content=document,
+        media_type=record.get("contentType") or "application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{record.get("filename") or "prescription.pdf"}"',
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 @router.post("/{prescription_id}/reprocess")
 async def reprocess_prescription(
