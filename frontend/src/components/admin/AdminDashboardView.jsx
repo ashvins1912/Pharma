@@ -9,6 +9,7 @@ import AdminOrderFinancials from './AdminOrderFinancials';
 import AdminMedicineRequestsTab from './requests/AdminMedicineRequestsTab';
 import AdminPaymentReminders from './AdminPaymentReminders';
 import PlatformTenantsView from './PlatformTenantsView';
+import PlatformAccessControl from './PlatformAccessControl';
 import { getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -344,7 +345,12 @@ export default function AdminDashboardView() {
             }`}
           >
             <span>🌐</span>
-            <span>Platform Tenants & Access</span>
+            <span>Platform Tenants</span>
+          </button>
+        )}
+        {isSuperAdmin && (
+          <button onClick={() => setAdminTab('access')} className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${adminTab === 'access' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white text-emerald-700 hover:bg-emerald-50 border border-emerald-200'}`}>
+            <span>🛡️</span><span>Security Access</span>
           </button>
         )}
       </div>
@@ -352,6 +358,9 @@ export default function AdminDashboardView() {
       {/* Tab Content Display */}
       {adminTab === 'tenants' && isSuperAdmin && (
         <PlatformTenantsView />
+      )}
+      {adminTab === 'access' && isSuperAdmin && (
+        <PlatformAccessControl />
       )}
       {adminTab === 'fulfillment' && (
         <div className="space-y-3">
