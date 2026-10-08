@@ -12,6 +12,7 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [role, setRole] = useState('customer');
   const [loading, setLoading] = useState(true);
+  const [authTransitionLoading, setAuthTransitionLoading] = useState(false);
   const [passwordRecoveryRequired, setPasswordRecoveryRequired] = useState(false);
   const [profileCompletionRequired, setProfileCompletionRequired] = useState(false);
   // Zero-Cost TOTP Multi-Factor Authentication State
@@ -20,6 +21,7 @@ export function AuthProvider({ children }) {
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [aal, setAal] = useState('aal1'); // 'aal1' (Single Factor) | 'aal2' (MFA Verified)
   const logoutInProgress = useRef(false);
+  const googleExchangePromiseRef = useRef(null);
   const { runAction } = useActionLoading();
 
   // A user object alone is not enough to authorize application API calls.
@@ -107,7 +109,10 @@ export function AuthProvider({ children }) {
           // the Supabase session is exchanged for a Pharma session.
         }
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          setAuthTransitionLoading(false);
+        }
       }
     }
 
@@ -233,6 +238,7 @@ export function AuthProvider({ children }) {
    * Detects if Zero-Cost TOTP MFA is enrolled.
    */
   const loginWithEmail = async (email, password) => runAction(LOADING_ACTIONS.SIGN_IN, async () => {
+    setAuthTransitionLoading(true);
     // Email/password login is a first-party platform session. Clear any old
     // browser-only Supabase session first so it cannot compete with this login.
     // Remove any stale upstream Google broker session locally. Do not call
@@ -249,6 +255,7 @@ export function AuthProvider({ children }) {
         factorId: data.factorId,
         email: data.email
       });
+      setAuthTransitionLoading(false);
       return { mfaRequired: true, email: data.email };
     }
 
@@ -260,11 +267,14 @@ export function AuthProvider({ children }) {
     setMfaRequired(false);
     setMfaChallenge(null);
     setProfileCompletionRequired(Boolean(data?.requiresProfileCompletion || data?.code === 'PROFILE_INCOMPLETE'));
+    setAuthTransitionLoading(false);
     return { success: true, user: data.user };
   });
 
   const loginWithGoogle = async () => {
+    setAuthTransitionLoading(true);
     if (!isSupabaseConfigured || !supabase) {
+      setAuthTransitionLoading(false);
       throw new Error('Google sign-in is unavailable until Supabase is configured.');
     }
 
@@ -282,7 +292,10 @@ export function AuthProvider({ children }) {
         }
       }
     });
-    if (error) throw error;
+    if (error) {
+      setAuthTransitionLoading(false);
+      throw error;
+    }
   };
 
   /**
@@ -457,13 +470,26 @@ export function AuthProvider({ children }) {
 
   const exchangeGoogleSession = async (supaSession) => {
     if (!supaSession?.access_token) throw new Error('Google sign-in session is unavailable.');
-    const { data } = await apiClient.post('/api/v1/auth/google', {
-      supabaseAccessToken: supaSession.access_token
+
+    // The initial auth hydration and Supabase onAuthStateChange can fire for
+    // the same OAuth callback. Share one exchange promise so we never create
+    // two Pharma sessions or race user/profile state updates.
+    if (googleExchangePromiseRef.current) return googleExchangePromiseRef.current;
+
+    googleExchangePromiseRef.current = (async () => {
+      const { data } = await apiClient.post('/api/v1/auth/google', {
+        supabaseAccessToken: supaSession.access_token
+      });
+      const result = data?.data || data;
+      syncSession({ user: result?.user }, result?.user);
+      setProfileCompletionRequired(Boolean(result?.requiresProfileCompletion || result?.code === 'PROFILE_INCOMPLETE'));
+      setAuthTransitionLoading(false);
+      return result;
+    })().finally(() => {
+      googleExchangePromiseRef.current = null;
     });
-    const result = data?.data || data;
-    syncSession({ user: result?.user }, result?.user);
-    setProfileCompletionRequired(Boolean(result?.requiresProfileCompletion || result?.code === 'PROFILE_INCOMPLETE'));
-    return result;
+
+    return googleExchangePromiseRef.current;
   };
 
   const completeGoogleProfile = async (profileData) => {
@@ -530,6 +556,7 @@ export function AuthProvider({ children }) {
         tenantId: user?.tenantId || user?.app_metadata?.tenantId || null,
         scope: (role === 'SUPER_ADMIN' || role === 'admin' || role === 'PLATFORM_SUPER_ADMIN') ? 'PLATFORM' : ((user?.tenantId || user?.app_metadata?.tenantId) ? 'TENANT' : 'CUSTOMER'),
         loading,
+        authTransitionLoading,
         mfaRequired,
         mfaChallenge,
         mfaEnabled,
