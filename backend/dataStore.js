@@ -1285,9 +1285,7 @@ export const dataStore = {
                         });
                     }
 
-                    const coupon = orderData.couponCode
-                        ? await this.validateCoupon(orderData.couponCode, totalAmount)
-                        : { valid: true, discountPercentage: 0 };
+                    const coupon = await this.validateCoupon(orderData.couponCode || '', totalAmount, { customerId: orderData.userId, tenantId: orderData.tenantId });
                     if (!coupon.valid) throw inventoryError(coupon.message || 'Coupon is invalid.');
                     const discountApplied = Number(coupon.discountAmount
                         ?? (totalAmount * (coupon.discountPercentage || 0) / 100));
@@ -1363,7 +1361,7 @@ export const dataStore = {
                         items: itemSnapshots,
                         prescriptionUrl: orderData.prescriptionUrl || null,
                         prescriptionRequired,
-                        couponCode: orderData.couponCode || null,
+                        couponCode: coupon.code || orderData.couponCode || null,
                         subtotal: totalAmount,
                         discountApplied,
                         pointsRedeemed: allowedPoints,
@@ -1450,9 +1448,7 @@ export const dataStore = {
                 });
             }
 
-            const coupon = orderData.couponCode
-                ? await this.validateCoupon(orderData.couponCode, totalAmount)
-                : { valid: true, discountPercentage: 0 };
+            const coupon = await this.validateCoupon(orderData.couponCode || '', totalAmount, { customerId: orderData.userId, tenantId: orderData.tenantId });
             if (!coupon.valid) throw inventoryError(coupon.message || 'Coupon is invalid.');
             const discountApplied = Number(coupon.discountAmount
                 ?? (totalAmount * (coupon.discountPercentage || 0) / 100));
@@ -2466,12 +2462,42 @@ export const dataStore = {
         this.logAudit('Admin', 'COUPON_CREATED', 'COUPON', uppercase, { discountPercentage, minOrderValue });
     },
 
-    async validateCoupon(code, orderTotal = 0) {
+    async validateCoupon(code, orderTotal = 0, context = {}) {
         const uppercase = (code || '').toUpperCase().trim();
-        const c = getIsConnected()
-            ? await Coupon.findOne({ code: uppercase, isActive: true }).lean()
-            : inMemoryCoupons.find(x => x.code === uppercase && x.isActive);
-        if (!c) return { valid: false, message: "Invalid or expired promo code" };
+        let c = null;
+        if (getIsConnected()) {
+            if (uppercase) {
+                c = await Coupon.findOne({ code: uppercase, isActive: true }).lean();
+            } else if (context.customerId) {
+                const filter = {
+                    customerId: String(context.customerId),
+                    isActive: true,
+                    autoApply: true,
+                    ...(context.tenantId ? { tenantId: String(context.tenantId) } : {})
+                };
+                const candidates = await Coupon.find(filter).sort({ createdAt: -1 }).lean();
+                c = candidates
+                    .filter(item => !item.expiryDate || new Date(item.expiryDate) > new Date())
+                    .filter(item => item.usageLimit == null || Number(item.usageCount || 0) < Number(item.usageLimit))
+                    .sort((a, b) => {
+                        const amount = item => item.discountType === 'fixed'
+                            ? Math.min(Number(item.discountValue || 0), Number(orderTotal) || 0)
+                            : (Number(orderTotal) * Number(item.discountValue ?? item.discountPercentage ?? 0) / 100);
+                        return amount(b) - amount(a);
+                    })[0] || null;
+            }
+        } else {
+            c = uppercase
+                ? inMemoryCoupons.find(x => x.code === uppercase && x.isActive)
+                : null;
+        }
+        if (!c) return uppercase ? { valid: false, message: "Invalid or expired promo code" } : { valid: true, discountPercentage: 0, discountType: 'percentage', discountValue: 0, discountAmount: 0, code: null };
+        if (c.customerId && String(c.customerId) !== String(context.customerId || '')) {
+            return { valid: false, message: 'This coupon is assigned to another customer.' };
+        }
+        if (c.tenantId && String(c.tenantId) !== String(context.tenantId || '')) {
+            return { valid: false, message: 'This coupon is not valid for the current pharmacy.' };
+        }
         if (c.expiryDate && new Date(c.expiryDate) <= new Date()) {
             return { valid: false, message: 'Coupon has expired.' };
         }
