@@ -22,6 +22,7 @@ export function AuthProvider({ children }) {
   const [aal, setAal] = useState('aal1'); // 'aal1' (Single Factor) | 'aal2' (MFA Verified)
   const logoutInProgress = useRef(false);
   const googleExchangePromiseRef = useRef(null);
+  const googleSignInInProgressRef = useRef(false);
   const { runAction } = useActionLoading();
 
   // A user object alone is not enough to authorize application API calls.
@@ -277,8 +278,11 @@ export function AuthProvider({ children }) {
   });
 
   const loginWithGoogle = async () => {
+    if (googleSignInInProgressRef.current) return { skipped: true };
+    googleSignInInProgressRef.current = true;
     setAuthTransitionLoading(true);
     if (!isSupabaseConfigured || !supabase) {
+      googleSignInInProgressRef.current = false;
       setAuthTransitionLoading(false);
       throw new Error('Google sign-in is unavailable until Supabase is configured.');
     }
@@ -298,6 +302,7 @@ export function AuthProvider({ children }) {
       }
     });
     if (error) {
+      googleSignInInProgressRef.current = false;
       setAuthTransitionLoading(false);
       throw error;
     }
