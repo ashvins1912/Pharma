@@ -4,21 +4,23 @@ import Role from '../models/Role.js';
 import RolePermission from '../models/RolePermission.js';
 import { getIsConnected } from '../config/db.js';
 
-const FEATURES = ['profile','mfa','inventory','orders','prescription','billing','referrals','tenants','users','platform'];
+const FEATURES = ['profile','mfa','inventory','orders','prescription','billing','referrals','tenants','users','platform','medicine_requests'];
 const PERMISSIONS = [
   ['profile','view'],['profile','complete'],['mfa','verify'],['mfa','manage'],
   ['inventory','read'],['inventory','write'],['inventory','import'],
   ['orders','read'],['orders','create'],['orders','manage'],
   ['prescription','read'],['prescription','write'],['prescription','review'],
   ['billing','read'],['billing','write'],['referrals','read'],['referrals','manage'],
-  ['tenants','read'],['tenants','manage'],['users','read'],['users','manage'],['platform','*']
+  ['tenants','read'],['tenants','manage'],['users','read'],['users','manage'],
+  ['medicine_requests','read'],['medicine_requests','pending_count'],['medicine_requests','create'],['medicine_requests','proposal'],['medicine_requests','manage'],
+  ['platform','*']
 ];
 const ROLE_PERMISSIONS = {
   SUPER_ADMIN:['platform.*'], PLATFORM_SUPER_ADMIN:['platform.*'], admin:['platform.*'],
-  TENANT_OWNER:['inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','tenants.read','tenants.manage','users.read','users.manage'],
-  TENANT_ADMIN:['inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','users.read'],
-  PHARMACIST:['inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review'],
-  PHARMACY_STAFF:['inventory.read','orders.read','orders.create','prescription.read','prescription.write'],
+  TENANT_OWNER:['medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','medicine_requests.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','tenants.read','tenants.manage','users.read','users.manage'],
+  TENANT_ADMIN:['medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','medicine_requests.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','users.read'],
+  PHARMACIST:['medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review'],
+  PHARMACY_STAFF:['medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','inventory.read','orders.read','orders.create','prescription.read','prescription.write'],
   INVENTORY_MANAGER:['inventory.read','inventory.write','inventory.import'],
   ORDER_MANAGER:['orders.read','orders.create','orders.manage'],
   CUSTOMER:['orders.read','orders.create','prescription.read','prescription.write'],
