@@ -105,6 +105,11 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
     requireAdmin,
     (req, res) => res.json({ ...healthMonitor.snapshot(), requestId: req.requestId })
   );
+  app.get('/api/v1/health/services',
+    (req, res, next) => authenticateUser(req, res, next, gatewayConfig),
+    requireAdmin,
+    (req, res) => res.json({ ...healthMonitor.snapshot(), gatewayStatus: 'UP', requestId: req.requestId })
+  );
   app.get('/ready', (_req, res) => {
     const probe = transport.get(target, { timeout: 3000 }, response => {
       response.resume();
