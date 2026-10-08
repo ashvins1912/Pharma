@@ -57,7 +57,9 @@ function normalizeUser(payload) {
 
 export async function authenticateUser(req, res, next, gatewayConfig = config) {
   const userToken = getUserToken(req);
+  const hasRefreshCookie = /(?:^|;\\s*)refresh_token=/.test(req.get('cookie') || '');
   if (!userToken || userToken === 'undefined' || userToken === 'null') {
+    if (hasRefreshCookie) res.set('X-Session-Refreshable', 'true');
     return res.status(401).json({ success: false, error: { code: 'SESSION_REQUIRED', message: 'Authentication session required.' }, requestId: req.requestId });
   }
 
@@ -100,6 +102,7 @@ export async function authenticateUser(req, res, next, gatewayConfig = config) {
       correlationId: req.correlationId,
       code: error.code || error.name
     }));
+    if (hasRefreshCookie && status === 401) res.set('X-Session-Refreshable', 'true');
     return res.status(status).json({
       success: false,
       error: {
