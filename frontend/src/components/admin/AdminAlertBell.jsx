@@ -14,7 +14,7 @@ export default function AdminAlertBell({ onOpenAlerts }) {
           setIsOpen(!isOpen);
           if (onOpenAlerts) onOpenAlerts();
         }}
-        className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 transition cursor-pointer flex items-center justify-center flex-shrink-0"
+        className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 transition cursor-pointer flex items-center justify-center flex-shrink-0"
         aria-label="Admin Inventory Alerts"
       >
         <span className="text-sm sm:text-base select-none">🔔</span>
