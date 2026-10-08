@@ -390,18 +390,20 @@ export default function AdminDashboardView() {
               Loading ongoing and delivered orders…
             </div>
           ) : (
-            <AdminFulfillmentKanban orders={orders} onRefresh={loadAllOrders} />
-          {!loadingOrders && !ordersError && (
-            <Pagination
-              page={activeOrdersPage}
-              totalPages={Number(snapshotPagination?.totalPages || 0)}
-              total={Number(snapshotPagination?.total || 0)}
-              pageSize={10}
-              onPageChange={setActiveOrdersPage}
-              loading={loadingOrders}
-              label="active orders"
-            />
-          )}
+            <>
+              <AdminFulfillmentKanban orders={orders} onRefresh={loadAllOrders} />
+              {!loadingOrders && !ordersError && (
+                <Pagination
+                  page={activeOrdersPage}
+                  totalPages={Number(snapshotPagination?.totalPages || 0)}
+                  total={Number(snapshotPagination?.total || 0)}
+                  pageSize={10}
+                  onPageChange={setActiveOrdersPage}
+                  loading={loadingOrders}
+                  label="active orders"
+                />
+              )}
+            </>
           )}
           {!loadingOrders && recentOrders.length > 0 && (
             <section aria-labelledby="admin-financial-insights" className="space-y-3 pt-3">
