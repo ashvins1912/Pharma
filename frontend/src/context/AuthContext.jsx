@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { isSupabaseConfigured, supabase } from '../supabaseClient';
 import { env } from '../config/env.ts';
-import apiClient, { setAuthorizationCapabilities, clearAuthorizationCapabilities, setApplicationSessionAuthenticated } from '../api/apiClient';
+import apiClient, { setAuthorizationCapabilities, clearAuthorizationCapabilities, setApplicationSessionAuthenticated, getAuthMe, getCsrf } from '../api/apiClient';
 import GoogleProfileOnboarding from '../components/auth/GoogleProfileOnboarding';
 import { useActionLoading, LOADING_ACTIONS } from './LoadingContext';
 
@@ -71,7 +71,7 @@ export function AuthProvider({ children }) {
     async function initAuth() {
       try {
         // Initialize anti-CSRF token
-        await apiClient.get('/api/v1/auth/csrf').catch(() => {});
+        await getCsrf().catch(() => {});
 
         // Do not probe /auth/me while an upstream Google OAuth session is
         // waiting to be exchanged or while the account is in PROFILE_INCOMPLETE.
@@ -97,7 +97,7 @@ export function AuthProvider({ children }) {
             setAal(result?.aal || 'aal1');
           }
         } else {
-          const { data } = await apiClient.get('/api/v1/auth/me');
+          const { data } = await getAuthMe();
           const sessionUser = data?.user || (data?.id ? data : null);
           if (mounted && sessionUser && sessionUser.profileCompleted !== false
               && String(sessionUser.accountStatus || 'ACTIVE').toUpperCase() === 'ACTIVE') {
