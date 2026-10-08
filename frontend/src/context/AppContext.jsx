@@ -63,7 +63,7 @@ export function AppProvider({ children }) {
   const [medicineRequestsError, setMedicineRequestsError] = useState('');
   const [loadingMedicineRequests, setLoadingMedicineRequests] = useState(false);
   const [medicineRequestsPagination, setMedicineRequestsPagination] = useState({
-    page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false
+    page: 1, pageSize: 10, limit: 10, total: 0, totalPages: 0, hasNextPage: false
   });
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [requestPrefillData, setRequestPrefillData] = useState(null);
@@ -289,7 +289,7 @@ export function AppProvider({ children }) {
         setLoadingOrders(false);
         setMedicineRequests([]);
         setMedicineRequestsError('');
-        setMedicineRequestsPagination({ page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false });
+        setMedicineRequestsPagination({ page: 1, pageSize: 10, limit: 10, total: 0, totalPages: 0, hasNextPage: false });
         setLoadingMedicineRequests(false);
         setCart([]);
         setAppliedCoupon(null);
@@ -356,10 +356,10 @@ export function AppProvider({ children }) {
   // Load User Medicine Requests
   const loadUserMedicineRequests = useCallback(async ({ silent = false, page, statusGroup, append = false } = {}) => {
     const requestSequence = ++medicineRequestLoadSequence.current;
-    if (!isFullyAuthenticated || isPharmacyOrAdmin) {
+    if (!isFullyAuthenticated || (isPharmacyOrAdmin && !isSuperAdmin)) {
       setMedicineRequests([]);
       setMedicineRequestsError('');
-      setMedicineRequestsPagination({ page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false });
+      setMedicineRequestsPagination({ page: 1, pageSize: 10, limit: 10, total: 0, totalPages: 0, hasNextPage: false });
       setLoadingMedicineRequests(false);
       return;
     }
@@ -373,7 +373,7 @@ export function AppProvider({ children }) {
       if (!append) setMedicineRequestsError('');
       const result = await getCustomerMedicineRequestsPage({
         page: medicineRequestPage.current.page,
-        pageSize: 3,
+        pageSize: 10,
         statusGroup: medicineRequestPage.current.statusGroup
       });
       if (requestSequence !== medicineRequestLoadSequence.current) return;
@@ -390,7 +390,7 @@ export function AppProvider({ children }) {
         return [...byId.values()];
       });
       setMedicineRequestsPagination(result.pagination || {
-        page: medicineRequestPage.current.page, pageSize: 3, limit: 3, total: list.length, totalPages: list.length ? 1 : 0, hasNextPage: false
+        page: medicineRequestPage.current.page, pageSize: 10, limit: 10, total: list.length, totalPages: list.length ? 1 : 0, hasNextPage: false
       });
 
       // Check if any proposals are ready to notify customer in notification bell
