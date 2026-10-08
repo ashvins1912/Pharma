@@ -93,8 +93,8 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
             </div>
             {!isSuperAdmin && <RelativeProfiles user={user} onSelfPuid={setSelfPuid} />}
             <div className="grid grid-cols-2 gap-2">
-              <button onClick={()=>onNavigate('orders')} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-black hover:bg-slate-50">📦 Orders</button>
-              <button onClick={()=>onNavigate('addresses')} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-black hover:bg-slate-50">🏠 Addresses</button>
+              <button onClick={()=>{onClose();onNavigate('orders')}} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-black hover:bg-slate-50">📦 Orders</button>
+              <button onClick={()=>{onClose();onNavigate('addresses')}} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-black hover:bg-slate-50">🏠 Addresses</button>
               {isAdmin && <button onClick={()=>onNavigate('admin')} className="col-span-2 rounded-xl bg-purple-50 px-3 py-2.5 text-[11px] font-black text-purple-800 hover:bg-purple-100">⚙️ Open Operations Dashboard</button>}
             </div>
           </div>}
