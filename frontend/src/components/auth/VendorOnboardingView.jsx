@@ -109,21 +109,21 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
 
   if (loading) return <Overlay><Spinner /><h3 className="text-lg font-bold">Opening your onboarding...</h3><p className="text-xs text-slate-500 mt-2">Validating the secure invitation and loading required details.</p></Overlay>;
   if (error && !data) return <Overlay><div className="text-rose-600 text-3xl mb-3">✕</div><h3 className="text-xl font-bold">Onboarding Link Invalid</h3><p className="text-sm text-slate-600 my-5">{error}</p><button onClick={onClose} className="w-full py-3 bg-slate-800 text-white rounded-xl font-bold">Back to Home</button></Overlay>;
-  if (done) return <Overlay><div className="text-emerald-600 text-5xl mb-3">✓</div><h2 className="text-2xl font-black">Tenant Onboarding Completed</h2><p className="text-sm text-slate-600 my-5"><strong>{tenant?.name}</strong> is active and your account has <strong>TENANT_ADMIN</strong> access.</p><div className="p-4 bg-slate-50 rounded-xl text-left text-xs mb-5"><div>Tenant: <strong>{tenant?.name}</strong></div><div>Status: <strong>{tenant?.status}</strong></div><div>Role: <strong>TENANT_ADMIN</strong></div></div><button onClick={() => { onClose?.(); window.location.reload(); }} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold">Open Tenant Operations →</button></Overlay>;
+  if (done) return <Overlay><div className="text-emerald-600 text-5xl mb-3">✓</div><h2 className="text-2xl font-black">Tenant Onboarding Completed</h2><p className="text-sm text-slate-600 my-5"><strong>{tenant?.name}</strong> is active and your account has <strong>TENANT_ADMIN</strong> access.</p><div className="p-4 bg-slate-50 rounded-xl text-left text-xs mb-5"><div>Tenant: <strong>{tenant?.name}</strong></div><div>Status: <strong>{tenant?.status}</strong></div><div>Role: <strong>TENANT_ADMIN</strong></div></div><button onClick={() => { onClose?.(); window.location.reload(); }} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold">Open Tenant Operations →</button></Overlay>;
 
   const v = data?.vendor || {};
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
       <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl my-8 overflow-hidden">
-        <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 p-6 text-white">
+        <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-slate-900 p-6 text-white">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] uppercase font-extrabold bg-indigo-500/30 px-3 py-1 rounded-full">First-time user</span>
+            <span className="text-[11px] uppercase font-extrabold bg-blue-500/30 px-3 py-1 rounded-full">First-time user</span>
             <span className="text-[10px] uppercase font-bold bg-amber-400/15 text-amber-100 px-3 py-1 rounded-full">PROFILE_INCOMPLETE</span>
           </div>
           <h2 className="text-2xl font-black mt-3">Welcome to Pharma</h2>
-          <p className="text-xs text-indigo-200 mt-1">Complete your personal profile first, then activate your pharmacy tenant.</p>
+          <p className="text-xs text-blue-200 mt-1">Complete your personal profile first, then activate your pharmacy tenant.</p>
           <div className="flex gap-2 mt-5"><div className={`h-1.5 flex-1 rounded-full ${step >= 1 ? 'bg-emerald-400' : 'bg-white/20'}`} /><div className={`h-1.5 flex-1 rounded-full ${step >= 2 ? 'bg-emerald-400' : 'bg-white/20'}`} /></div>
-          <div className="text-[11px] mt-2 text-indigo-200">Step {step} of 2 — {step === 1 ? 'Personal Profile' : 'Tenant / Pharmacy Setup'}</div>
+          <div className="text-[11px] mt-2 text-blue-200">Step {step} of 2 — {step === 1 ? 'Personal Profile' : 'Tenant / Pharmacy Setup'}</div>
         </div>
 
         <form onSubmit={submit} className="p-6 md:p-8 space-y-6">
@@ -135,7 +135,7 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
                 <Field label="First name *" value={form.firstName} onChange={x => set('firstName', x)} error={fieldErrors.firstName} />
                 <Field label="Last name *" value={form.lastName} onChange={x => set('lastName', x)} error={fieldErrors.lastName} />
                 <Field label="Date of birth *" type="date" value={form.dateOfBirth} onChange={x => set('dateOfBirth', x)} error={fieldErrors.dateOfBirth} />
-                <div><label className="block text-xs font-bold text-slate-700 mb-1">Gender *</label><select className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" value={form.gender} onChange={e => set('gender', e.target.value)}><option value="">Select gender</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option><option value="PREFER_NOT_TO_SAY">Prefer not to say</option></select><Err x={fieldErrors.gender}/></div>
+                <div><label className="block text-xs font-bold text-slate-700 mb-1">Gender *</label><select className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" value={form.gender} onChange={e => set('gender', e.target.value)}><option value="">Select gender</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option><option value="PREFER_NOT_TO_SAY">Prefer not to say</option></select><Err x={fieldErrors.gender}/></div>
                 <Field label="Mobile *" type="tel" value={form.mobile} onChange={x => set('mobile', x)} error={fieldErrors.mobile} />
                 <div><label className="block text-xs font-bold text-slate-700 mb-1">Email</label><input className="input bg-slate-100" value={v.email || ''} disabled /></div>
               </div>
@@ -145,13 +145,13 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
                 <Field label="Password *" type={showPassword ? 'text' : 'password'} value={form.password} onChange={x => set('password', x)} error={fieldErrors.password} />
                 <Field label="Confirm password *" type={showPassword ? 'text' : 'password'} value={form.confirmPassword} onChange={x => set('confirmPassword', x)} error={fieldErrors.confirmPassword} />
               </div>
-              <button type="button" onClick={() => setShowPassword(x => !x)} className="text-xs text-indigo-600 font-bold">{showPassword ? 'Hide password' : 'Show password'}</button>
+              <button type="button" onClick={() => setShowPassword(x => !x)} className="text-xs text-blue-600 font-bold">{showPassword ? 'Hide password' : 'Show password'}</button>
             </Section>
-            <div className="flex justify-end border-t pt-4"><button className="px-7 py-3 bg-indigo-600 text-white rounded-xl font-black">Continue to Tenant Setup →</button></div>
+            <div className="flex justify-end border-t pt-4"><button className="px-7 py-3 bg-blue-600 text-white rounded-xl font-black">Continue to Tenant Setup →</button></div>
           </>}
 
           {step === 2 && <>
-            <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-800">Profile complete ✓. Configure the pharmacy tenant that will be linked to your account as <strong>TENANT_ADMIN</strong>.</div>
+            <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-xs text-blue-800">Profile complete ✓. Configure the pharmacy tenant that will be linked to your account as <strong>TENANT_ADMIN</strong>.</div>
             <Section title="3. Pharmacy tenant">
               <div className="grid md:grid-cols-2 gap-4">
                 <Field label="Pharmacy / Company name *" value={form.companyName} onChange={x => set('companyName', x)} error={fieldErrors.companyName} />
@@ -163,7 +163,7 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
               <Field label="Street address" value={form.street} onChange={x => set('street', x)} />
               <div className="grid md:grid-cols-3 gap-4 mt-4"><Field label="City *" value={form.city} onChange={x => set('city', x)} error={fieldErrors.city}/><Field label="State *" value={form.state} onChange={x => set('state', x)} error={fieldErrors.state}/><Field label="Pincode *" value={form.pincode} onChange={x => set('pincode', x)} error={fieldErrors.pincode}/></div>
             </Section>
-            <div className="flex justify-between border-t pt-4"><button type="button" onClick={() => setStep(1)} className="px-5 py-3 text-xs font-bold text-slate-600">← Back to Profile</button><button disabled={submitting} className="px-7 py-3 bg-indigo-600 text-white rounded-xl font-black disabled:opacity-50">{submitting ? 'Activating Tenant...' : 'Complete Onboarding & Activate Tenant →'}</button></div>
+            <div className="flex justify-between border-t pt-4"><button type="button" onClick={() => setStep(1)} className="px-5 py-3 text-xs font-bold text-slate-600">← Back to Profile</button><button disabled={submitting} className="px-7 py-3 bg-blue-600 text-white rounded-xl font-black disabled:opacity-50">{submitting ? 'Activating Tenant...' : 'Complete Onboarding & Activate Tenant →'}</button></div>
           </>}
         </form>
       </div>
@@ -172,7 +172,7 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
 }
 
 function Overlay({ children }) { return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"><div className="bg-white rounded-2xl max-w-lg w-full p-8 shadow-2xl text-center">{children}</div></div>; }
-function Spinner() { return <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />; }
-function Section({ title, children }) { return <section className="space-y-4"><h3 className="text-xs font-black uppercase text-indigo-700 tracking-wider border-b border-indigo-100 pb-2">{title}</h3>{children}</section>; }
-function Field({ label, value, onChange, error, type='text' }) { return <div><label className="block text-xs font-bold text-slate-700 mb-1">{label}</label><input type={type} value={value} onChange={e => onChange(e.target.value)} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />{error && <Err x={error}/>}</div>; }
+function Spinner() { return <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />; }
+function Section({ title, children }) { return <section className="space-y-4"><h3 className="text-xs font-black uppercase text-blue-700 tracking-wider border-b border-blue-100 pb-2">{title}</h3>{children}</section>; }
+function Field({ label, value, onChange, error, type='text' }) { return <div><label className="block text-xs font-bold text-slate-700 mb-1">{label}</label><input type={type} value={value} onChange={e => onChange(e.target.value)} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />{error && <Err x={error}/>}</div>; }
 function Err({ x }) { return x ? <p className="text-rose-600 text-xs mt-1">{x}</p> : null; }
