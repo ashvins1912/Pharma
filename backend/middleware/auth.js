@@ -11,7 +11,7 @@ import { resolveApiCapability } from '../authorization/ApiCapabilityRegistry.js'
  * 3. Enforces MFA Step-Up: Checks Authenticator Assurance Level (AAL1 vs AAL2).
  * 4. Attaches sanitized user context to req.user.
  */
-export const authenticateUser = async (req, res, next) => {
+export const authenticateUser = async (req, res, next, options = {}) => {
     // Requests forwarded by the API Gateway carry a short-lived, signed trust
     // credential. The gateway has already verified the user's session token and
     // RBAC before forwarding. The backend still verifies the gateway signature,
@@ -65,7 +65,7 @@ export const authenticateUser = async (req, res, next) => {
             return res.status(401).json({ success: false, code: 'INVALID_GATEWAY_TRUST', message: 'Gateway trust credential is invalid or expired.' });
         }
     }
-    if (process.env.REQUIRE_GATEWAY_TRUST === 'true') {
+    if (process.env.REQUIRE_GATEWAY_TRUST === 'true' && !options.allowDirect) {
         return res.status(401).json({ success: false, code: 'GATEWAY_TRUST_REQUIRED', message: 'Protected API access must come through the API Gateway.' });
     }
 
