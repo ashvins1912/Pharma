@@ -296,14 +296,14 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
 
         if (uploadedPrescriptionId && order?._id) {
             try {
-                await prescriptionClient.convertToOrder(uploadedPrescriptionId, order._id, {
+                await prescriptionClient.linkOrder(uploadedPrescriptionId, order._id, {
                     userId: req.user.sub,
                     tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null,
                     branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
                     role: req.user?.app_metadata?.role || req.user?.role || 'customer'
                 });
             } catch (conversionError) {
-                console.error('Prescription conversion state update failed after order creation:', conversionError);
+                console.error('Prescription-to-order association failed after order creation:', conversionError);
             }
         }
 
