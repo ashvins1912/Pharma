@@ -13,6 +13,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
   const [disablingMfa, setDisablingMfa] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [profileForm, setProfileForm] = useState({ firstName: '', lastName: '', gender: '', mobileNumber: '', dateOfBirth: '' });
+  const [selfPuid, setSelfPuid] = useState(user?.puid || user?.userPuid || '');
 
   useEffect(() => {
     if (!user) return;
@@ -90,7 +91,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
             </div>
             <h3 className="font-black text-slate-900 text-base">{displayName}</h3>
             <p className="text-xs text-slate-500 font-medium">{user.email}</p>
-            <p className="mt-1 text-[10px] font-black text-blue-700">PUID: {user.puid || user.userPuid || 'Loading from patient profile...'}</p>
+            <p className="mt-1 text-[10px] font-black text-blue-700">PUID: {selfPuid || 'Loading from patient profile...'}</p>
             <div className="mt-2 flex items-center justify-center gap-2">
               <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
                 isAdmin ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
@@ -150,7 +151,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
               </form>
             )}
           </div>
-          <RelativeProfiles user={user} />
+          <RelativeProfiles user={user} onSelfPuid={setSelfPuid} />
 
           {/* Security & Multi-Factor Authentication Card */}
           <div className="my-3.5 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
