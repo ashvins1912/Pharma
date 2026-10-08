@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import apiClient from '../../api/apiClient';
+import { useActionLoading, LOADING_ACTIONS } from '../../context/LoadingContext';
 import { useToast } from '../../context/ToastContext';
 import { normalizePrescriptionBlob } from '../../utils/prescriptionFile';
 
@@ -51,6 +52,7 @@ const COLUMNS = [
 
 export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const { addToast } = useToast();
+  const { runAction, isActionLoading } = useActionLoading();
   const [updatingId, setUpdatingId] = useState(null);
   const [assignRiderModal, setAssignRiderModal] = useState(null);
   const [availableRiders, setAvailableRiders] = useState([]);
@@ -327,6 +329,29 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     }
   };
 
+  const reviewPrescription = async (order, decision) => {
+    if (!order?.prescriptionId) return;
+    await runAction(decision === 'approve' ? LOADING_ACTIONS.APPROVE_PRESCRIPTION : LOADING_ACTIONS.REJECT_PRESCRIPTION, async () => {
+      try {
+        const current = await apiClient.get(`/api/v1/prescriptions/${encodeURIComponent(order.prescriptionId)}`);
+        const version = current.data?.version || current.data?.data?.version || 1;
+        const form = new FormData();
+        form.append('expected_version', String(version));
+        if (decision === 'reject') {
+          const reason = window.prompt('Reason for prescription rejection:');
+          if (reason === null) return;
+          form.append('reason', reason.trim());
+        }
+        const endpoint = decision === 'approve' ? 'approve' : 'reject';
+        await apiClient.post(`/api/v1/prescriptions/${encodeURIComponent(order.prescriptionId)}/review/${endpoint}`, form);
+        addToast(decision === 'approve' ? 'Prescription approved.' : 'Prescription rejected.', decision === 'approve' ? 'success' : 'info');
+        await onRefresh();
+      } catch (error) {
+        addToast(error.message || `Could not ${decision} prescription.`, 'error');
+      }
+    });
+  };
+
   const closePrescriptionPreview = () => {
     if (prescriptionPreview) URL.revokeObjectURL(prescriptionPreview);
     setPrescriptionPreview(null);
@@ -520,10 +545,10 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                                   <button
                                     type="button"
                                     onClick={() => viewPrescription(order)}
-                                    disabled={viewingPrescriptionOrderId === String(order._id)}
+                                    disabled={viewingPrescriptionOrderId === String(order._id) || isActionLoading(LOADING_ACTIONS.VIEW_PRESCRIPTION)}
                                     className="mt-1 min-h-11 font-bold underline disabled:cursor-wait disabled:opacity-60"
                                   >
-                                    {viewingPrescriptionOrderId === String(order._id) ? 'Opening prescription…' : 'View uploaded prescription'}
+                                    {viewingPrescriptionOrderId === String(order._id) ? 'Opening prescription…' : isActionLoading(LOADING_ACTIONS.VIEW_PRESCRIPTION) ? 'Opening prescription…' : 'View uploaded prescription'}
                                   </button>
                                 ) : (
                                   <p>Prescription file is missing.</p>
@@ -548,6 +573,20 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                                   >
                                     🔄 Re-initiate Verification
                                   </button>
+                                  {order.prescriptionId && (
+                                    <>
+                                      <button type="button" onClick={() => reviewPrescription(order, 'approve')}
+                                        disabled={isActionLoading(LOADING_ACTIONS.APPROVE_PRESCRIPTION) || isActionLoading(LOADING_ACTIONS.REJECT_PRESCRIPTION)}
+                                        className="min-h-9 rounded-lg bg-emerald-600 px-3 text-[11px] font-extrabold text-white disabled:opacity-50">
+                                        {isActionLoading(LOADING_ACTIONS.APPROVE_PRESCRIPTION) ? 'Approving…' : '✓ Approve Prescription'}
+                                      </button>
+                                      <button type="button" onClick={() => reviewPrescription(order, 'reject')}
+                                        disabled={isActionLoading(LOADING_ACTIONS.APPROVE_PRESCRIPTION) || isActionLoading(LOADING_ACTIONS.REJECT_PRESCRIPTION)}
+                                        className="min-h-9 rounded-lg bg-rose-50 px-3 text-[11px] font-extrabold text-rose-700 disabled:opacity-50">
+                                        {isActionLoading(LOADING_ACTIONS.REJECT_PRESCRIPTION) ? 'Rejecting…' : '✕ Reject Prescription'}
+                                      </button>
+                                    </>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => manualApprovePrescription(order, 'order')}
