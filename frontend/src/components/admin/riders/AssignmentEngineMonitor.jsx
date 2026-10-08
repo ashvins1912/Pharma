@@ -77,7 +77,7 @@ export default function AssignmentEngineMonitor({
                             </p>
                         </div>
                     </div>
-                    <span className="text-[10px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2.5 py-1 rounded-full">
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2.5 py-1 rounded-full">
                         {engineStatus.pipeline?.length || 2} Strategies Active
                     </span>
                 </div>
@@ -85,8 +85,8 @@ export default function AssignmentEngineMonitor({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                     <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-3.5 space-y-1.5">
                         <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
-                                <span className="w-5 h-5 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-[10px] font-mono">
+                            <span className="text-xs font-bold text-blue-300 flex items-center gap-1.5">
+                                <span className="w-5 h-5 rounded-full bg-blue-500/30 text-blue-300 flex items-center justify-center text-[10px] font-mono">
                                     1
                                 </span>
                                 OrderClubbingStrategy
@@ -187,7 +187,7 @@ export default function AssignmentEngineMonitor({
                                                 <button
                                                     onClick={() => handleRunAuto(order.id)}
                                                     disabled={executing}
-                                                    className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white text-xs font-black px-3.5 py-2 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                                                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-xs font-black px-3.5 py-2 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer"
                                                 >
                                                     <span>⚡</span>
                                                     <span>Auto-Assign</span>
@@ -233,7 +233,7 @@ export default function AssignmentEngineMonitor({
                                         <span className="text-[10px] text-slate-400">({log.customerName})</span>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <span className="font-mono text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-bold">
+                                        <span className="font-mono text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">
                                             {log.strategyUsed}
                                         </span>
                                         <span className="text-[10px] text-slate-400 font-mono">{log.totalDurationMs}ms</span>
