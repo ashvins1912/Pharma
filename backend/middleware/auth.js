@@ -65,6 +65,10 @@ export const authenticateUser = async (req, res, next) => {
             return res.status(401).json({ success: false, code: 'INVALID_GATEWAY_TRUST', message: 'Gateway trust credential is invalid or expired.' });
         }
     }
+    if (process.env.REQUIRE_GATEWAY_TRUST === 'true') {
+        return res.status(401).json({ success: false, code: 'GATEWAY_TRUST_REQUIRED', message: 'Protected API access must come through the API Gateway.' });
+    }
+
     // 1. Check HttpOnly cookie first (XSS Hardened)
     let token = req.cookies?.['access_token'];
 
