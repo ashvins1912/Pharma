@@ -79,6 +79,26 @@ test('browser security allows anonymous login from the configured application or
   assert.equal(outcome.result, null);
 });
 
+test('browser security allows trusted cross-origin SPA authentication exchange', () => {
+  const outcome = run({
+    origin: 'https://pharma-ui.onrender.com',
+    'sec-fetch-site': 'cross-site'
+  });
+  assert.equal(outcome.nextCalled, true);
+  assert.equal(outcome.result, null);
+});
+
+test('trusted cross-origin authenticated mutation still requires the CSRF proof', () => {
+  const outcome = run({
+    origin: 'https://pharma-ui.onrender.com',
+    'sec-fetch-site': 'cross-site',
+    cookie: 'access_token=opaque-session; XSRF-TOKEN=csrf-123',
+    'x-xsrf-token': 'csrf-123'
+  });
+  assert.equal(outcome.nextCalled, true);
+  assert.equal(outcome.result, null);
+});
+
 test('safe catalog reads do not require browser CSRF metadata', () => {
   const outcome = run({}, 'GET');
   assert.equal(outcome.nextCalled, true);
