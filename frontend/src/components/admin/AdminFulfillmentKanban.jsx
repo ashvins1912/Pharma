@@ -148,8 +148,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       setSearchError('Please enter an Order ID, mobile number, or email address.');
       return;
     }
-    setSearchOrders([]);
-    setSearchPagination({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+    setSearchPagination(current => ({ ...current, page: 1 }));
     setSearchError('');
     setSearchLoading(true);
     setSearchPagination(current => ({ ...current, page: 1 }));
@@ -167,7 +166,6 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
 
   const changeSearchPage = (page) => {
     if (page < 1 || page > searchPagination.totalPages || page === searchPagination.page) return;
-    setSearchOrders([]);
     setSearchLoading(true);
     setSearchPagination(current => ({ ...current, page }));
   };
@@ -425,7 +423,6 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {COLUMNS.map((col) => {
           const searchMode = Boolean(appliedSearch);
-          if (searchMode && (searchLoading || searchError || searchPagination.total === 0)) return null;
           const colOrders = searchMode
             ? searchOrders.filter(order => order.orderStatus === col.id)
             : col.id === 'Delivered'
