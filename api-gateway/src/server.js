@@ -137,6 +137,12 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
   app.use('/api/orders', legacyPrescriptionRouter);
   const publicApiPath = (method, path) => isGatewayPublicPath(method, path);
 
+  app.use('/api/v1/auth', (req, res, next) => {
+    // Authentication/session responses are user-specific and must never be cached.
+    res.set('Cache-Control', 'no-store');
+    return next();
+  });
+
   app.use('/api', (req, res, next) => {
     // Browser CSRF/origin policy must run at the gateway before public auth
     // endpoints are proxied and before authenticated cookies are stripped.
