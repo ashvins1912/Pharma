@@ -198,7 +198,7 @@ export default function MedicineRequestsView({ onOrderCreated }) {
                             (₹{req.proposal.price}/unit)
                           </span>
                         </p>
-                        <span className="inline-block text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded">
+                        <span className="inline-block text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded">
                           {req.proposal.priceType}
                         </span>
                       </div>
