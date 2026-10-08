@@ -422,7 +422,7 @@ export function AppProvider({ children }) {
     } finally {
       if (!silent && requestSequence === medicineRequestLoadSequence.current) setLoadingMedicineRequests(false);
     }
-  }, [isFullyAuthenticated, isPharmacyOrAdmin]);
+  }, [isFullyAuthenticated, isPharmacyOrAdmin, isSuperAdmin]);
 
   useEffect(() => {
     if (!isFullyAuthenticated) return;
