@@ -3548,7 +3548,7 @@ export const dataStore = {
             );
         }
 
-        if (request.prescriptionId && prescriptionVerification.status !== 'MATCHED') {
+        if ((request.prescriptionId || request.prescriptionUrl) && prescriptionVerification.status !== 'MATCHED') {
             throw inventoryError(
                 `Prescription verification is not complete for the proposed medicine. Current status: ${prescriptionVerification.status}.`,
                 409
