@@ -306,8 +306,9 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   };
 
   const viewPrescription = async (order) => {
-    if (!order?.prescriptionUrl || viewingPrescriptionOrderId) return;
-    try {
+    if (!order?.prescriptionUrl || viewingPrescriptionOrderId || isActionLoading(LOADING_ACTIONS.VIEW_PRESCRIPTION)) return;
+    await runAction(LOADING_ACTIONS.VIEW_PRESCRIPTION, async () => {
+      try {
       setViewingPrescriptionOrderId(String(order._id));
       const res = await apiClient.get(order.prescriptionUrl, {
         responseType: 'blob',
@@ -324,9 +325,10 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       setVerifiedOrderIds(prev => prev.includes(orderId) ? prev : [...prev, orderId]);
     } catch {
       addToast('Could not open the prescription file. Please try again.', 'error');
-    } finally {
-      setViewingPrescriptionOrderId(null);
-    }
+      } finally {
+        setViewingPrescriptionOrderId(null);
+      }
+    });
   };
 
   const reviewPrescription = async (order, decision) => {
