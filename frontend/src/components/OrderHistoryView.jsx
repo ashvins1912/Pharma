@@ -107,7 +107,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                       <td className="py-3.5 px-3 text-slate-500 text-[11px]">
                         {new Date(order.createdAt).toLocaleDateString()}
                       </td>
-                      <td className="py-3.5 px-3 text-slate-600 max-w-[200px] truncate">
+                      <td className="py-3.5 px-3 text-slate-600 max-w-[200px] truncate"><div className="text-[10px] font-bold text-slate-500">Ordered by: {order.orderedByName || 'Customer'}</div><div className="text-[10px] font-bold text-blue-700">Ordered for: {order.orderedForName || 'Customer'}</div>
                         {(order.items || []).map(i => `${i.name} (x${i.quantity})`).join(', ')}
                       </td>
                       <td className="py-3.5 px-3 font-black text-emerald-600">
