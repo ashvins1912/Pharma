@@ -46,7 +46,7 @@ export default function Header({
                 </span>
                 {isPharmacyOrAdmin && (
                   <div className="flex items-center gap-1 shrink-0">
-                    <span className="bg-purple-100 text-purple-700 text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                    <span className="bg-blue-100 text-blue-700 text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider">
                       {isSuperAdmin ? 'Super Admin' : (isTenantAdmin ? 'Tenant Admin' : (role === 'admin' ? 'Admin' : 'Pharmacy'))}
                     </span>
                     {isAdmin && (
@@ -115,7 +115,7 @@ export default function Header({
                   >
                     📋 Requests
                     {proposalsWaitingCount > 0 && (
-                      <span className="ml-1.5 bg-purple-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
+                      <span className="ml-1.5 bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
                         {proposalsWaitingCount}
                       </span>
                     )}
@@ -191,7 +191,7 @@ export default function Header({
                 className="w-9 h-9 sm:w-auto p-0 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition flex items-center justify-center gap-1.5 flex-shrink-0"
                 aria-label="User Account Profile"
               >
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center uppercase shadow-sm">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-600 to-blue-600 text-white font-black text-xs flex items-center justify-center uppercase shadow-sm">
                   {user.user_metadata?.name ? user.user_metadata.name.charAt(0) : user.email?.charAt(0) || 'U'}
                 </div>
                 <span className="hidden sm:inline text-xs font-bold text-slate-700 max-w-[85px] truncate">
@@ -262,7 +262,7 @@ export default function Header({
                 <div className="flex items-center gap-2">
                   <span>📋 My Medicine Requests</span>
                   {proposalsWaitingCount > 0 && (
-                    <span className="bg-purple-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full">
+                    <span className="bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full">
                       {proposalsWaitingCount} new
                     </span>
                   )}
