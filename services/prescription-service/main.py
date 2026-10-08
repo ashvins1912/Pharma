@@ -15,6 +15,14 @@ async def lifespan(app: FastAPI):
     yield
     await close_client()
 
+
+app = FastAPI(
+    title="Ashvin Pharmacy Prescription Intelligence Service",
+    description="HIPAA-grade, patient-controlled prescription intelligence and clinical extraction service",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
 @app.middleware("http")
 async def request_logging_middleware(request: Request, call_next):
     request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
@@ -40,12 +48,6 @@ async def request_logging_middleware(request: Request, call_next):
             response.headers["X-Request-Id"] = request_id
             response.headers["X-Correlation-Id"] = correlation_id
 
-app = FastAPI(
-    title="Ashvin Pharmacy Prescription Intelligence Service",
-    description="HIPAA-grade, patient-controlled prescription intelligence and clinical extraction service",
-    version="1.0.0",
-    lifespan=lifespan,
-)
 
 @app.get("/")
 async def root_check():
