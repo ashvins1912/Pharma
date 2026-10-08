@@ -26,6 +26,7 @@ import DataMartRefreshService from './services/DataMartRefreshService.js';
 import { authenticateUser, isAdmin } from './middleware/auth.js';
 import localDemoAuthRoutes from './routes/localDemoAuthRoutes.js';
 import { ensureAuthorizationCatalog } from './authorization/AuthorizationCatalogService.js';
+import internalGatewayRoutes from './routes/internalGatewayRoutes.js';
 
 
 const app = express();
@@ -96,6 +97,9 @@ app.use('/api/vendor', vendorRouter);
 
 // Ashvin Platform API Gateway (v1 Multi-Tenant Engine)
 app.use('/api/v1', gatewayRouter);
+// Internal gateway-to-backend identity verification channel. This endpoint is
+// protected by GATEWAY_AUTH_SECRET and is never exposed as a browser API.
+app.use('/internal/gateway', internalGatewayRoutes);
 
 if (env.NODE_ENV !== 'production') {
     app.use('/api/auth', localDemoAuthRoutes);
