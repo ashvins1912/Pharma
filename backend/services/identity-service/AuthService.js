@@ -1110,6 +1110,7 @@ export class AuthService {
 
         const isPlatform = role === 'SUPER_ADMIN';
         const scope = isPlatform ? 'PLATFORM' : (tenantId ? 'TENANT' : 'CUSTOMER');
+        const authorization = await authorizationService.resolve({ ...user, role, tenantId });
         if (user.mfaEnabled) {
             return {
                 mfaRequired: true,
@@ -1279,6 +1280,7 @@ export class AuthService {
             throw err;
         }
 
+        const googleAuthorization = await authorizationService.resolve(user);
         if (user.mfaEnabled) {
             return {
                 mfaRequired: true,
@@ -1302,8 +1304,12 @@ export class AuthService {
                 emailVerified: Boolean(user.emailVerified),
                 accountStatus: user.accountStatus || 'ACTIVE',
                 profileCompleted: true,
-                role: user.role || 'customer',
-                scope: 'CUSTOMER'
+                role: googleAuthorization.role,
+                scope: googleAuthorization.scope,
+                tenantId: googleAuthorization.tenantId,
+                permissions: googleAuthorization.permissions,
+                revokedPermissions: googleAuthorization.revokedPermissions || [],
+                permissionVersion: googleAuthorization.permissionVersion
             },
             accessToken: token
         };
