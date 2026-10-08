@@ -21,6 +21,15 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
+      # Shared signing pair: the backend signs Pharma access/refresh JWTs.
+      - key: PHARMA_JWT_PRIVATE_KEY
+        sync: false
+      - key: PHARMA_JWT_PUBLIC_KEY
+        sync: false
+      - key: PHARMA_JWT_ISSUER
+        value: pharma-auth
+      - key: PHARMA_JWT_AUDIENCE
+        value: pharma-api
       - key: PHARMA_ACCESS_TOKEN_TTL
         value: "1h"
       - key: PHARMA_REFRESH_TOKEN_TTL
