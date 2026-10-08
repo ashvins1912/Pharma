@@ -41,7 +41,7 @@ function PendingMedicineRequestsNotice({ count, onOpen }) {
 }
 
 export default function AdminDashboardView() {
-  const { isAdmin, isSuperAdmin, isPharmacyOrAdmin, role, loading: authLoading } = useAuth();
+  const { isAdmin, isSuperAdmin, isPharmacyOrAdmin, hasPermission, role, loading: authLoading } = useAuth();
   const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen } = useApp();
   const [adminTab, setAdminTab] = useState('fulfillment'); // 'fulfillment' | 'inventory' | 'routes' | 'audits'
   const [orders, setOrders] = useState([]);
@@ -58,7 +58,7 @@ export default function AdminDashboardView() {
   const [snapshotPagination, setSnapshotPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
 
   const loadPendingMedicineRequestCount = async () => {
-    if (authLoading || !isPharmacyOrAdmin) return;
+    if (authLoading || !isPharmacyOrAdmin || !hasPermission('medicine_requests.pending_count')) return;
     try {
       const count = await getAdminPendingMedicineRequestCount();
       setPendingMedicineRequestCount(Number.isInteger(count) && count > 0 ? count : 0);
@@ -100,11 +100,11 @@ export default function AdminDashboardView() {
   };
 
   useEffect(() => {
-    if (authLoading || !isPharmacyOrAdmin) return;
+    if (authLoading || !isPharmacyOrAdmin || !hasPermission('medicine_requests.pending_count')) return;
     loadPendingMedicineRequestCount();
     const timer = window.setInterval(loadPendingMedicineRequestCount, 15000);
     return () => window.clearInterval(timer);
-  }, [authLoading, isPharmacyOrAdmin]);
+  }, [authLoading, isPharmacyOrAdmin, hasPermission]);
 
   useEffect(() => {
     if (authLoading || !isAdmin || adminTab !== 'fulfillment') return;
@@ -440,7 +440,14 @@ export default function AdminDashboardView() {
       )}
 
       {adminTab === 'requests' && (
-        <AdminMedicineRequestsTab />
+        hasPermission('medicine_requests.read') ? (
+          <AdminMedicineRequestsTab onPendingCountRefresh={loadPendingMedicineRequestCount} />
+        ) : (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
+            <div className="text-sm font-black text-amber-900">Access restricted</div>
+            <p className="mt-1 text-xs text-amber-700">Your current role does not have permission to view medicine requests.</p>
+          </div>
+        )
       )}
 
       {adminTab === 'riders' && (
