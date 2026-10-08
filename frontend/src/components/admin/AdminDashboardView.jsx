@@ -117,7 +117,7 @@ export default function AdminDashboardView() {
   if (role === 'pharmacy') {
     return (
       <div className="min-w-0 space-y-6 animate-fade-in">
-        <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-3xl p-6 shadow-md">
+        <div className="bg-slate-950 text-white rounded-3xl p-6 shadow-md">
           <span className="text-[11px] font-black uppercase tracking-wider text-indigo-400">
             Pharmacy Review
           </span>
@@ -143,7 +143,7 @@ export default function AdminDashboardView() {
     <div className="min-w-0 space-y-6 animate-fade-in">
       
       {/* Top Banner & Metric Cards */}
-      <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-3xl p-6 shadow-md space-y-5">
+      <div className="bg-slate-950 text-white rounded-3xl p-6 shadow-md space-y-5">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div>
             <span className="text-[11px] font-black uppercase tracking-wider text-indigo-400">
