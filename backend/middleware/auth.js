@@ -56,7 +56,23 @@ export const authenticateUser = async (req, res, next) => {
         if (accountStatus !== 'ACTIVE' && tokenType === 'pharma_access') {
             throw new Error('Inactive account session.');
         }
-        const role = payload.role || (Array.isArray(payload.roles) ? payload.roles.find(value => ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'admin', 'TENANT_ADMIN', 'TENANT_OWNER', 'pharmacy', 'PHARMACIST', 'PHARMACY_STAFF'].includes(value)) : null) || 'customer';
+        // Normalize legacy/platform administrator role aliases at the authentication boundary.
+        // This is critical because the central API capability gate runs before route-level
+        // middleware and must not reject an older token that still says `admin`.
+        const rawRole = payload.role
+            || (Array.isArray(payload.roles)
+                ? payload.roles.find(value => ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'admin', 'TENANT_ADMIN', 'TENANT_OWNER', 'pharmacy', 'PHARMACIST', 'PHARMACY_STAFF'].includes(value))
+                : null)
+            || 'customer';
+        const role = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'admin'].includes(rawRole)
+            ? 'SUPER_ADMIN'
+            : rawRole;
+        const normalizedRoles = Array.isArray(payload.roles) && payload.roles.length
+            ? payload.roles.map(value => ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'admin'].includes(value) ? 'SUPER_ADMIN' : value)
+            : [role];
+        const normalizedPermissions = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'admin'].includes(rawRole)
+            ? ['*']
+            : (Array.isArray(payload.permissions) ? payload.permissions : []);
         req.user = {
             sub: payload.sub,
             id: payload.sub,
@@ -65,8 +81,8 @@ export const authenticateUser = async (req, res, next) => {
             firstName: payload.firstName || '',
             lastName: payload.lastName || '',
             role,
-            roles: Array.isArray(payload.roles) && payload.roles.length ? payload.roles : [role],
-            permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
+            roles: normalizedRoles,
+            permissions: normalizedPermissions,
             revokedPermissions: Array.isArray(payload.revokedPermissions) ? payload.revokedPermissions : [],
             permissionVersion: Number(payload.permissionVersion || 1),
             tenantId: payload.tenantId || null,
@@ -75,7 +91,7 @@ export const authenticateUser = async (req, res, next) => {
             app_metadata: {
                 role,
                 tenantId: payload.tenantId || null,
-                permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
+                permissions: normalizedPermissions,
                 revokedPermissions: Array.isArray(payload.revokedPermissions) ? payload.revokedPermissions : []
             },
             user_metadata: {
