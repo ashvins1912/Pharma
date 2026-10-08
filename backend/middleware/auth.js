@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { verifyPharmaAccessToken } from '../security/pharmaToken.js';
+import { authorizationService } from '../authorization/AuthorizationService.js';
 
 
 /**
@@ -148,4 +149,21 @@ export const isPharmacyOrAdmin = (req, res, next) => {
     });
 };
 
-export default { authenticateUser, requireSuperAdmin, isAdmin, isPharmacyOrAdmin };
+export const requirePermission = (permission) => async (req, res, next) => {
+    try {
+        const role = req.user?.app_metadata?.role || req.user?.role || req.context?.role;
+        if (role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN' || role === 'admin') return next();
+        const allowed = authorizationService.isAllowed(req.user, permission);
+        if (allowed) return next();
+        return res.status(403).json({
+            success: false,
+            code: 'FORBIDDEN',
+            message: 'You do not have permission to perform this action.',
+            permission
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
+export default { authenticateUser, requireSuperAdmin, isAdmin, isPharmacyOrAdmin, requirePermission };
