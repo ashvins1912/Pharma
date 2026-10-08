@@ -740,19 +740,18 @@ export const dataStore = {
         return inMemoryAuditLogs.slice(0, 50);
     },
 
-    async getInventoryAudits() {
+    async getInventoryAudits(page = 1, limit = 10) {
+        const parsedLimit = Math.min(50, Math.max(1, Number(limit) || 10));
+        const parsedPage = Math.max(1, Number(page) || 1);
         const deliveredOrders = getIsConnected()
             ? await Order.find({ orderStatus: 'Delivered' })
                 .select('_id deliveredAt createdAt customerName statusHistory medicineItems items')
                 .sort({ deliveredAt: -1, createdAt: -1 })
-                .limit(50)
                 .lean()
             : inMemoryOrders.filter(order => order.orderStatus === 'Delivered')
-                .sort((a, b) => new Date(b.deliveredAt || b.createdAt) - new Date(a.deliveredAt || a.createdAt))
-                .slice(0, 50);
+                .sort((a, b) => new Date(b.deliveredAt || b.createdAt) - new Date(a.deliveredAt || a.createdAt));
         const deliveryAudits = deliveredOrders.flatMap(order => {
-            const actor = order.statusHistory?.findLast?.(entry => entry.newStatus === 'Delivered')?.changedBy
-                || 'Delivery';
+            const actor = order.statusHistory?.findLast?.(entry => entry.newStatus === 'Delivered')?.changedBy || 'Delivery';
             return getOrderInventoryItems(order).map(item => ({
                 eventType: 'DELIVERY',
                 importId: `ORDER-${String(order._id).slice(-8).toUpperCase()}`,
@@ -768,9 +767,21 @@ export const dataStore = {
                 adminId: actor
             }));
         });
-        return [...inMemoryInventoryAudits, ...deliveryAudits]
-            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-            .slice(0, 50);
+        const allAudits = [...inMemoryInventoryAudits, ...deliveryAudits].sort(
+            (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+        );
+        const total = allAudits.length;
+        const totalPages = Math.ceil(total / parsedLimit) || 1;
+        const currentPage = Math.min(parsedPage, totalPages);
+        return {
+            items: allAudits.slice((currentPage - 1) * parsedLimit, currentPage * parsedLimit),
+            page: currentPage,
+            limit: parsedLimit,
+            total,
+            totalPages,
+            hasNextPage: currentPage < totalPages,
+            hasPreviousPage: currentPage > 1
+        };
     },
 
     // Medicines: Supports server-side pagination & "out-of-stock only on search" logic
@@ -1824,23 +1835,37 @@ export const dataStore = {
         };
     },
 
-    async getFulfillmentSnapshot() {
+    async getFulfillmentSnapshot(page = 1, limit = 10) {
         const activeFilter = { orderStatus: { $nin: ['Delivered', 'delivered'] } };
+        const parsedLimit = Math.min(50, Math.max(1, Number(limit) || 10));
+        const parsedPage = Math.max(1, Number(page) || 1);
         if (getIsConnected()) {
-            const [items, total, deliveredCount, recentOrders] = await Promise.all([
-                Order.find(activeFilter).sort({ createdAt: -1 }).lean(),
+            const [activeTotal, total, deliveredCount, items, recentOrders] = await Promise.all([
+                Order.countDocuments(activeFilter),
                 Order.countDocuments({}),
                 Order.countDocuments({ orderStatus: 'Delivered' }),
+                Order.find(activeFilter).sort({ createdAt: -1, _id: -1 }).skip((parsedPage - 1) * parsedLimit).limit(parsedLimit).lean(),
                 Order.find().sort({ createdAt: -1, _id: -1 }).limit(6).lean()
             ]);
-            return { items, total, deliveredCount, recentOrders };
+            const totalPages = Math.ceil(activeTotal / parsedLimit) || 1;
+            const currentPage = Math.min(parsedPage, totalPages);
+            return {
+                items, total, activeTotal, deliveredCount, recentOrders,
+                pagination: { page: currentPage, limit: parsedLimit, total: activeTotal, totalPages, hasNextPage: currentPage < totalPages, hasPreviousPage: currentPage > 1 }
+            };
         }
         const allOrders = [...inMemoryOrders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const activeOrders = allOrders.filter(order => !['Delivered', 'delivered'].includes(order.orderStatus));
+        const activeTotal = activeOrders.length;
+        const totalPages = Math.ceil(activeTotal / parsedLimit) || 1;
+        const currentPage = Math.min(parsedPage, totalPages);
         return {
-            items: allOrders.filter(order => !['Delivered', 'delivered'].includes(order.orderStatus)),
+            items: activeOrders.slice((currentPage - 1) * parsedLimit, currentPage * parsedLimit),
             total: allOrders.length,
+            activeTotal,
             deliveredCount: allOrders.filter(order => order.orderStatus === 'Delivered').length,
-            recentOrders: allOrders.slice(0, 6)
+            recentOrders: allOrders.slice(0, 6),
+            pagination: { page: currentPage, limit: parsedLimit, total: activeTotal, totalPages, hasNextPage: currentPage < totalPages, hasPreviousPage: currentPage > 1 }
         };
     },
 
