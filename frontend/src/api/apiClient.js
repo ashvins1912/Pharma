@@ -4,6 +4,7 @@ import { resolveApiCapability } from './apiCapabilities';
 
 let runtimeAccessToken = null;
 let sessionRefreshPromise = null;
+let authorizationRevalidationPromise = null;
 let authorizationCapabilities = { userId: null, role: null, permissions: [] };
 
 export function setRuntimeAccessToken(token) {
@@ -37,6 +38,39 @@ function hasCapability(permission) {
         || granted.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)));
 }
 
+// Revalidate the canonical application RBAC snapshot before blocking a protected
+// UI API call. This handles permission/role changes made in another tab or by
+// an administrator without requiring a logout/login cycle. /auth/me is the
+// identity/authorization probe and is deliberately exempt from capability
+// preflight to avoid recursive revalidation.
+async function revalidateAuthorization() {
+    if (authorizationRevalidationPromise) return authorizationRevalidationPromise;
+    authorizationRevalidationPromise = axios.get('/api/v1/auth/me', {
+        baseURL: apiBaseUrl,
+        withCredentials: true,
+        __skipAuthorizationRevalidation: true,
+        __skipRuntimeAuth: false
+    }).then(response => {
+        const data = response.data?.data || response.data || {};
+        const refreshedUser = data.user || data;
+        if (refreshedUser?.id) {
+            const refreshedRole = refreshedUser.app_metadata?.role || refreshedUser.role || 'customer';
+            const refreshedPermissions = Array.isArray(refreshedUser.permissions) ? refreshedUser.permissions : [];
+            setAuthorizationCapabilities({
+                userId: refreshedUser.id,
+                role: refreshedRole,
+                permissions: refreshedPermissions
+            });
+        } else {
+            clearAuthorizationCapabilities();
+        }
+        return refreshedUser;
+    }).finally(() => {
+        authorizationRevalidationPromise = null;
+    });
+    return authorizationRevalidationPromise;
+}
+
 
 const configuredApiBaseUrl = String(import.meta.env.VITE_API_URL || '/api').trim();
 const rawApiBaseUrl = import.meta.env.PROD
@@ -66,12 +100,21 @@ apiClient.interceptors.request.use(async (config) => {
     const capability = config.permission
         ? { permission: config.permission }
         : resolveApiCapability(config.method, config.url);
-    if (capability?.permission && !hasCapability(capability.permission)) {
-        const denied = new Error('API request blocked by frontend RBAC policy.');
-        denied.code = 'FRONTEND_PERMISSION_DENIED';
-        denied.status = 403;
-        denied.permission = capability.permission;
-        return Promise.reject(denied);
+    if (capability?.permission && !hasCapability(capability.permission) && !config.__skipAuthorizationRevalidation) {
+        // Revalidate once before denying. This prevents stale UI RBAC state from
+        // incorrectly blocking a permission that is currently granted.
+        try {
+            await revalidateAuthorization();
+        } catch {
+            // If authorization cannot be revalidated, fail closed below.
+        }
+        if (!hasCapability(capability.permission)) {
+            const denied = new Error('API request blocked by frontend RBAC policy.');
+            denied.code = 'FRONTEND_PERMISSION_DENIED';
+            denied.status = 403;
+            denied.permission = capability.permission;
+            return Promise.reject(denied);
+        }
     }
 
     if (typeof window !== 'undefined' && config.loadingAction) {
