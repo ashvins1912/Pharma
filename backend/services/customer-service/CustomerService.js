@@ -155,6 +155,42 @@ export class CustomerService {
     return this._serializePerson(person);
   }
 
+  async updateFamilyPerson(userId, puid, updates = {}) {
+    await this.assertUserCanAccessPuid(userId, puid);
+    const allowed = {};
+    if (updates.displayName != null) allowed.displayName = String(updates.displayName).trim();
+    if (updates.relationship != null) {
+      allowed.relationshipToOwner = String(updates.relationship).trim();
+    }
+    if (updates.dateOfBirth !== undefined) allowed.dateOfBirth = updates.dateOfBirth || null;
+    if (updates.gender !== undefined) allowed.gender = updates.gender || null;
+    if (allowed.displayName !== undefined && !allowed.displayName) {
+      throw Object.assign(new Error('displayName is required'), { statusCode: 400 });
+    }
+    const person = await Person.findOneAndUpdate(
+      { puid, createdByUserId: userId, status: 'ACTIVE' },
+      { $set: allowed },
+      { new: true }
+    ).lean();
+    if (!person) throw Object.assign(new Error('Relative not found'), { statusCode: 404 });
+    return this._serializePerson(person);
+  }
+
+  async removeFamilyPerson(userId, puid) {
+    await this.assertUserCanAccessPuid(userId, puid);
+    const person = await Person.findOneAndUpdate(
+      { puid, createdByUserId: userId, status: 'ACTIVE' },
+      { $set: { status: 'INACTIVE' } },
+      { new: true }
+    ).lean();
+    if (!person) throw Object.assign(new Error('Relative not found'), { statusCode: 404 });
+    await PersonRelationship.updateOne(
+      { ownerUserId: userId, personPuid: puid, status: 'ACTIVE' },
+      { $set: { status: 'REVOKED' } }
+    );
+    return { puid, status: 'INACTIVE' };
+  }
+
   async listManagedPersons(userId) {
     const rels = await PersonRelationship.find({ ownerUserId: userId, status: 'ACTIVE' }).lean();
     const puids = rels.map(r => r.personPuid);
