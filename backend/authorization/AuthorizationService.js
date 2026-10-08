@@ -95,7 +95,11 @@ export class AuthorizationService {
   }
 
   isAllowed(context, permission) {
-    if (context?.role === 'SUPER_ADMIN' || context?.role === 'PLATFORM_SUPER_ADMIN') return true;
+    // Treat all legacy platform-admin aliases as Super Admin at the final
+    // authorization boundary as well. This protects APIs when an older JWT
+    // has not yet been refreshed/reissued with the canonical role.
+    const role = context?.role || context?.app_metadata?.role;
+    if (role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN' || role === 'admin') return true;
     return hasPermission(context?.permissions || [], permission, context?.revokedPermissions || []);
   }
 }
