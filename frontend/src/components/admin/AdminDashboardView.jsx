@@ -134,7 +134,7 @@ export default function AdminDashboardView() {
     return (
       <div className="min-w-0 space-y-6 animate-fade-in">
         <div className="bg-slate-950 text-white rounded-3xl p-6 shadow-md">
-          <span className="text-[11px] font-black uppercase tracking-wider text-indigo-400">
+          <span className="text-[11px] font-black uppercase tracking-wider text-blue-400">
             Pharmacy Review
           </span>
           <h2 className="text-xl sm:text-2xl font-black tracking-tight">
@@ -162,7 +162,7 @@ export default function AdminDashboardView() {
       <div className="bg-slate-950 text-white rounded-3xl p-6 shadow-md space-y-5">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div>
-            <span className="text-[11px] font-black uppercase tracking-wider text-indigo-400">
+            <span className="text-[11px] font-black uppercase tracking-wider text-blue-400">
               Dispensary Control Hub
             </span>
             <h2 className="text-xl sm:text-2xl font-black tracking-tight">
