@@ -12,7 +12,7 @@ import DynamicOrderService from '../services/DynamicOrderService.js';
 import deliveryContainer from '../modules/delivery/container.js';
 import { classifyOrderSearch, paginationResult } from '../services/orderSearch.js';
 import { verifyPrescriptionAgainstItems } from '../services/prescription-verification/PrescriptionVerificationService.js';
-import { reinitiatePrescriptionProcessing } from '../../services/order-service/src/prescription-client.js';
+import { prescriptionClient, reinitiatePrescriptionProcessing } from '../../services/order-service/src/prescription-client.js';
 import { customerService } from '../services/customer-service/CustomerService.js';
 
 const router = express.Router();
