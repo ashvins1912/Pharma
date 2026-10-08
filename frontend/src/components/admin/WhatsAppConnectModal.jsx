@@ -66,15 +66,15 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in" aria-modal="true" role="dialog">
       <div
         className="fixed inset-0"
         onClick={handleClose}
       />
 
-      <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-3xl shadow-2xl z-10 overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="pharma-modal-surface relative flex h-[620px] max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl z-10">
         {/* Modal Header */}
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-700 p-4 sm:p-5 text-white flex items-center justify-between">
+        <div className="bg-slate-950 p-4 sm:p-5 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-xl">
               📲
@@ -85,7 +85,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
                   WhatsApp Dispatch Gateway
                 </h3>
                 {whatsappStatus.isConnected ? (
-                  <span className="bg-emerald-400/30 text-emerald-100 border border-emerald-300/40 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  <span className="bg-emerald-400/15 text-emerald-300 border border-emerald-300/30 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
                     ● Connected
                   </span>
                 ) : (
@@ -94,7 +94,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-emerald-100 font-medium mt-0.5">
+              <p className="text-[11px] text-slate-300 font-medium mt-0.5">
                 Real-time customer delivery updates, rider tracking & OTP dispatch
               </p>
             </div>
@@ -115,7 +115,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
           {whatsappStatus.isConnected ? (
             /* Connected View */
             <div className="space-y-4 text-center py-3">
-              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-3xl flex items-center justify-center text-3xl mx-auto shadow-inner">
+              <div className="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-3xl flex items-center justify-center text-3xl mx-auto shadow-inner">
                 ✓
               </div>
               <div>
@@ -154,7 +154,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
                 </button>
                 <button
                   onClick={onClose}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition cursor-pointer shadow-sm"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition cursor-pointer shadow-sm"
                 >
                   Done
                 </button>
@@ -178,7 +178,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
                 
                 {/* QR Code Box */}
                 <div className="flex flex-col items-center flex-shrink-0">
-                  <div className="relative w-44 h-44 bg-white border-2 border-emerald-500/30 rounded-2xl p-2 shadow-sm flex items-center justify-center overflow-hidden">
+                  <div className="relative w-44 h-44 bg-white border-2 border-blue-500/20 rounded-2xl p-2 shadow-sm flex items-center justify-center overflow-hidden">
                     {whatsappStatus.qrCode ? (
                       <img
                         src={whatsappStatus.qrCode}
@@ -195,7 +195,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
                   <button
                     onClick={handleRefreshQR}
                     disabled={loading}
-                    className="mt-2 text-[11px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 cursor-pointer"
+                    className="mt-2 text-[11px] text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 cursor-pointer"
                   >
                     <span>🔄</span>
                     <span>Refresh QR Code</span>
