@@ -1100,13 +1100,15 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
             const parsedPage = Number.parseInt(req.query.page, 10);
             const parsedLimit = Number.parseInt(req.query.limit, 10);
             const requestedPage = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
-            const limit = Number.isSafeInteger(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 50) : 5;
+            const limit = Number.isSafeInteger(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 50) : 10;
             const result = await dataStore.getDeliveredOrdersPage(requestedPage, limit);
             const page = result.page || 1;
             return res.json(paginationResult(result.items, result.total, page, limit));
         }
         if (req.query.fulfillmentSnapshot === 'true') {
-            return res.json(await dataStore.getFulfillmentSnapshot());
+            const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+            const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
+            return res.json(await dataStore.getFulfillmentSnapshot(page, limit));
         }
         const orders = await dataStore.getAllOrders();
         res.json(orders);
