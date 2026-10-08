@@ -369,17 +369,21 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
 
         const presFile = req.files?.prescription?.[0];
         if (presFile) {
-            if (!prescriptionClient.isConfigured()) {
-                return res.status(503).json({
-                    code: 'PRESCRIPTION_SERVICE_UNAVAILABLE',
-                    message: 'Prescription processing is temporarily unavailable.'
-                });
-            }
-
             savedPrescriptionUrl = await savePrescription(presFile, req.user.sub);
             prescriptionUrl = savedPrescriptionUrl;
 
-            try {
+            if (!prescriptionClient.isConfigured()) {
+                prescriptionVerification = {
+                    status: 'PROCESSING',
+                    prescriptionId: null,
+                    patientPuid,
+                    overallConfidence: 0,
+                    lastCheckedAt: new Date(),
+                    source: 'PRESCRIPTION_SERVICE_PENDING',
+                    medicines: [],
+                    issues: ['Prescription processing service is temporarily unavailable; pharmacy review is required before dispensing.']
+                };
+            } else try {
                 const result = await prescriptionClient.upload({
                     buffer: presFile.buffer,
                     filename: presFile.originalname,
@@ -403,13 +407,16 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
                     issues: []
                 };
             } catch (error) {
-                if (savedPrescriptionUrl) {
-                    try { await (await import('../config/prescriptionStorage.js')).removePrescription(savedPrescriptionUrl); } catch {}
-                }
-                return res.status(error.statusCode || 503).json({
-                    code: error.code || 'PRESCRIPTION_SERVICE_UNAVAILABLE',
-                    message: error.message || 'Prescription processing could not be started.'
-                });
+                prescriptionVerification = {
+                    status: 'PROCESSING',
+                    prescriptionId: null,
+                    patientPuid,
+                    overallConfidence: 0,
+                    lastCheckedAt: new Date(),
+                    source: 'PYTHON_PRESCRIPTION_SERVICE',
+                    medicines: [],
+                    issues: [error.message || 'Prescription processing could not be started; pharmacy review is required.']
+                };
             }
         } else if (prescriptionId) {
             prescriptionVerification = {
