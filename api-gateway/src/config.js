@@ -52,6 +52,7 @@ export function loadConfig(environment = process.env) {
   const prescriptionServiceUrl = parseOrigin(environment.PRESCRIPTION_SERVICE_URL || '');
   const customerServiceUrl = parseOrigin(environment.CUSTOMER_SERVICE_URL || '');
   const healthCheckEnabled = environment.HEALTH_CHECK_ENABLED !== 'false';
+  const loggingEnabled = environment.LOGGING_ENABLED !== 'false';
   const healthCheckIntervalMinutes = Number(environment.HEALTH_CHECK_INTERVAL_MINUTES || 15);
   const healthCheckTimeoutMs = Number(environment.HEALTH_CHECK_TIMEOUT_MS || 5000);
   const healthCheckRunOnStartup = environment.HEALTH_CHECK_RUN_ON_STARTUP === 'true';
@@ -119,6 +120,7 @@ export function loadConfig(environment = process.env) {
     healthCheckIntervalMs: healthCheckIntervalMinutes * 60 * 1000,
     healthCheckTimeoutMs,
     healthCheckRunOnStartup,
+    loggingEnabled,
     healthServices: [
       { name: 'backend-api', baseUrl: backendApiUrl, healthPath: '/api/v1/health', critical: true },
       ...(inventoryServiceUrl ? [{ name: 'inventory-service', baseUrl: inventoryServiceUrl, healthPath: '/ready', critical: false }] : []),
