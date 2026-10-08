@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 
 const LoadingContext = createContext(null);
 
@@ -27,20 +27,20 @@ export const LOADING_ACTIONS = Object.freeze({
 
 export function LoadingProvider({ children }) {
   const [loadingAction, setLoadingAction] = useState(null);
+  const loadingActionRef = useRef(null);
 
   const startAction = useCallback((action) => {
-    if (!action) return false;
-    let started = false;
-    setLoadingAction((current) => {
-      if (current) return current;
-      started = true;
-      return action;
-    });
-    return started;
+    if (!action || loadingActionRef.current) return false;
+    loadingActionRef.current = action;
+    setLoadingAction(action);
+    return true;
   }, []);
 
   const stopAction = useCallback((action) => {
-    setLoadingAction((current) => (!action || current === action ? null : current));
+    if (!action || loadingActionRef.current === action) {
+      loadingActionRef.current = null;
+      setLoadingAction(null);
+    }
   }, []);
 
   const runAction = useCallback(async (action, operation) => {
