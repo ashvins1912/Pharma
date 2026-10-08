@@ -111,6 +111,7 @@ export function normalizeCreateRequest(body, userContext) {
     prescriptionUrl: body.prescriptionUrl || null,
     prescriptionId: body.prescriptionId || null,
     patientPuid: body.patientPuid || null,
+    orderedForName: typeof body.orderedForName === 'string' && body.orderedForName.trim() ? body.orderedForName.trim() : null,
     tenantId: serviceUser.tenantId || body.tenantId || null,
     branchId: serviceUser.branchId || body.branchId || null,
     prescriptionRequired: Boolean(body.prescriptionRequired || body.prescriptionUrl || body.prescriptionId)
@@ -343,6 +344,8 @@ export async function createOrder(body, user) {
         orderNumber,
         userId: request.userId,
         customerName: user.customerName || user.email || 'Customer',
+        orderedByName: user.customerName || user.email || 'Customer',
+        orderedForName: request.orderedForName || user.customerName || user.email || 'Customer',
         customerMobile: user.customerMobile || '',
         source: request.source,
         externalReference: request.externalReference,
