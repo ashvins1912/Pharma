@@ -132,6 +132,22 @@ export const prescriptionClient = {
     }
   },
 
+  async convertToOrder(prescriptionId, orderId, { userId, tenantId, branchId, role = 'customer' } = {}) {
+    ensureConfigured();
+    const form = new FormData();
+    form.append('order_id', String(orderId));
+    try {
+      const response = await axios.post(
+        `${baseUrl}/api/v1/prescriptions/${encodeURIComponent(prescriptionId)}/convert-to-order`,
+        form,
+        { headers: { ...headers({ userId, tenantId, branchId, role, scopes: ['prescription.write'] }) }, timeout: 10_000 }
+      );
+      return response.data?.data || response.data;
+    } catch (error) {
+      throw normalizeError(error);
+    }
+  },
+
   async get(prescriptionId, { userId, tenantId, branchId, role = 'customer', isAdmin = false } = {}) {
     ensureConfigured();
     try {
