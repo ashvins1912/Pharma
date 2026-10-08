@@ -86,6 +86,11 @@ const PUBLIC_PATHS = [
   ['POST', /^\/api\/v1\/auth\/(?:signup|activate|verify-email|login|google|resend-verification|refresh|password\/forgot|password\/reset|mfa\/verify)$/],
   ['GET', /^\/api\/v1\/auth\/csrf$/],
   ['GET', /^\/api\/v1\/health(?:\/|$)/],
+  // Public storefront catalog. Backend exposes GET /api/medicines as a
+  // deliberately unauthenticated, sanitized catalog endpoint. Keep admin
+  // inventory (/admin/inventory) and all mutations protected by capabilities.
+  ['GET', /^\/api\/medicines$/],
+  ['GET', /^\/api\/medicines\/discovery$/],
   ['GET', /^\/api\/public\//], ['POST', /^\/api\/public\//],
   ['GET', /^\/api\/vendors\//], ['POST', /^\/api\/vendors\//],
   ['GET', /^\/api\/vendor\//], ['POST', /^\/api\/vendor\//]
