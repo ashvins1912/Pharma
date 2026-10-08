@@ -21,12 +21,15 @@ const ROLE_PERMISSIONS = {
   TENANT_ADMIN:['csquare.read','csquare.manage','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','medicine_requests.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','promotions.read','promotions.manage','users.read'],
   PHARMACIST:['csquare.read','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','promotions.read','promotions.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review'],
   PHARMACY_STAFF:['csquare.read','promotions.read','promotions.manage','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','inventory.read','orders.read','orders.create','prescription.read','prescription.write'],
+  // Legacy pharmacy accounts are tenant pharmacy staff and must retain the same
+  // medicine-request authority after the gateway/RBAC hardening rollout.
+  pharmacy:['csquare.read','promotions.read','promotions.manage','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','inventory.read','orders.read','orders.create','prescription.read','prescription.write'],
   INVENTORY_MANAGER:['inventory.read','inventory.write','inventory.import'],
   ORDER_MANAGER:['orders.read','orders.create','orders.manage'],
   CUSTOMER:['medicine_requests.read','medicine_requests.create','medicine_requests.decide','orders.read','orders.create','prescription.read','prescription.write'],
   customer:['medicine_requests.read','medicine_requests.create','medicine_requests.decide','orders.read','orders.create','prescription.read','prescription.write']
 };
-const ROLE_SCOPE = { SUPER_ADMIN:'PLATFORM', PLATFORM_SUPER_ADMIN:'PLATFORM', admin:'PLATFORM', TENANT_OWNER:'TENANT', TENANT_ADMIN:'TENANT', PHARMACIST:'TENANT', PHARMACY_STAFF:'TENANT', INVENTORY_MANAGER:'TENANT', ORDER_MANAGER:'TENANT', CUSTOMER:'CUSTOMER', customer:'CUSTOMER' };
+const ROLE_SCOPE = { SUPER_ADMIN:'PLATFORM', PLATFORM_SUPER_ADMIN:'PLATFORM', admin:'PLATFORM', TENANT_OWNER:'TENANT', TENANT_ADMIN:'TENANT', PHARMACIST:'TENANT', PHARMACY_STAFF:'TENANT', pharmacy:'TENANT', INVENTORY_MANAGER:'TENANT', ORDER_MANAGER:'TENANT', CUSTOMER:'CUSTOMER', customer:'CUSTOMER' };
 const memory = {
   rolePermissions: new Map(Object.entries(ROLE_PERMISSIONS))
 };
