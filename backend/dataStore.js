@@ -1352,6 +1352,7 @@ export const dataStore = {
                         _id: orderId,
                         userId: orderData.userId,
                         customerId: orderData.userId,
+                        tenantId: orderData.tenantId || null,
                         customerName: orderData.customerName,
                         orderedByName: orderData.customerName || 'Valued Customer',
                         orderedForName: orderData.orderedForName || orderData.customerName || 'Valued Customer',
