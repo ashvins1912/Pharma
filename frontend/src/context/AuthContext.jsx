@@ -239,6 +239,7 @@ export function AuthProvider({ children }) {
    */
   const loginWithEmail = async (email, password) => runAction(LOADING_ACTIONS.SIGN_IN, async () => {
     setAuthTransitionLoading(true);
+    try {
     // Email/password login is a first-party platform session. Clear any old
     // browser-only Supabase session first so it cannot compete with this login.
     // Remove any stale upstream Google broker session locally. Do not call
@@ -269,6 +270,10 @@ export function AuthProvider({ children }) {
     setProfileCompletionRequired(Boolean(data?.requiresProfileCompletion || data?.code === 'PROFILE_INCOMPLETE'));
     setAuthTransitionLoading(false);
     return { success: true, user: data.user };
+    } catch (error) {
+      setAuthTransitionLoading(false);
+      throw error;
+    }
   });
 
   const loginWithGoogle = async () => {
