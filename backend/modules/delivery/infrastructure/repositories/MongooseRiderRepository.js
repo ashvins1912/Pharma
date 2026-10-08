@@ -85,30 +85,46 @@ export class MongooseRiderRepository extends IRiderRepository {
     }
 
     async findAvailableNearby(coordinates, maxDistanceInMeters = 15000, limit = 5) {
-        // Query MongoDB with 2dsphere near
-        const docs = await RiderModel.find({
-            enabled: { $ne: false },
-            status: Rider.STATUSES.AVAILABLE,
-            currentLocation: {
-                $near: {
-                    $geometry: {
-                        type: 'Point',
-                        coordinates: [Number(coordinates[0]), Number(coordinates[1])]
-                    },
-                    $maxDistance: maxDistanceInMeters
-                }
-            }
-        }).limit(limit);
+        const targetLng = Number(coordinates?.[0]);
+        const targetLat = Number(coordinates?.[1]);
+        const maxDistance = Number(maxDistanceInMeters) || 15000;
+        if (!Number.isFinite(targetLng) || !Number.isFinite(targetLat)) return [];
 
-        return docs.map(doc => {
-            const rider = this._toDomain(doc);
-            const dist = rider.currentLocation.distanceTo({
-                coordinates: [Number(coordinates[0]), Number(coordinates[1])]
-            });
-            return {
-                rider,
-                distanceInMeters: dist
-            };
-        });
+        const buildResults = docs => docs
+            .map(doc => {
+                const rider = this._toDomain(doc);
+                const location = rider.currentLocation;
+                const distanceInMeters = location.distanceTo({ coordinates: [targetLng, targetLat] });
+                return { rider, distanceInMeters };
+            })
+            .filter(item => item.distanceInMeters <= maxDistance)
+            .sort((a, b) => a.distanceInMeters - b.distanceInMeters)
+            .slice(0, limit);
+
+        try {
+            const docs = await RiderModel.find({
+                enabled: { $ne: false },
+                status: { $in: [Rider.STATUSES.AVAILABLE, 'available'] },
+                currentLocation: {
+                    $near: {
+                        $geometry: {
+                            type: 'Point',
+                            coordinates: [targetLng, targetLat]
+                        },
+                        $maxDistance: maxDistance
+                    }
+                }
+            }).limit(limit);
+            return buildResults(docs);
+        } catch (error) {
+            // A missing/stale 2dsphere index must not make auto-assignment fail.
+            // Fall back to an application-side distance calculation.
+            console.warn('[RiderRepository] Geo-near query failed; using distance fallback:', error.message);
+            const docs = await RiderModel.find({
+                enabled: { $ne: false },
+                status: { $in: [Rider.STATUSES.AVAILABLE, 'available'] }
+            }).limit(100).lean();
+            return buildResults(docs);
+        }
     }
 }
