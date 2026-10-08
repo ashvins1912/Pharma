@@ -548,6 +548,30 @@ export function AppProvider({ children }) {
     : 0;
   const finalTotal = Math.max(0, subtotal - discountAmount + deliveryFee);
 
+  // Tenant-assigned customer promotions are selected by the backend and
+  // automatically applied before checkout. Explicit public coupons can still
+  // be entered by the customer afterwards.
+  useEffect(() => {
+    if (!isFullyAuthenticated || !user?.id || subtotal <= 0 || appliedCoupon) return;
+    let active = true;
+    apiClient.get('/api/coupons/my-offer', { params: { orderTotal: subtotal } })
+      .then(({ data }) => {
+        if (!active || !data?.promotion) return;
+        const promotion = data.promotion;
+        setAppliedCoupon({
+          code: promotion.code,
+          discountType: promotion.discountType,
+          discountValue: Number(promotion.discountValue || 0),
+          discountPercentage: Number(promotion.discountPercentage || 0),
+          promotionLabel: promotion.promotionLabel || 'Pharma discount for you',
+          isCustomerPromotion: true
+        });
+        setCouponCode('');
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [isFullyAuthenticated, user?.id, subtotal, appliedCoupon]);
+
   // Coupon logic
   const applyCoupon = async (codeToApply) => {
     const code = (codeToApply || couponCode).trim();
@@ -557,6 +581,8 @@ export function AppProvider({ children }) {
       const result = await applyCouponCode(code, subtotal);
       setAppliedCoupon({
         code: result.coupon.code,
+        promotionLabel: result.coupon.promotionLabel || 'Coupon discount',
+        isCustomerPromotion: false,
         discountType: result.coupon.discountType,
         discountValue: result.coupon.discountValue,
         discountPercentage: result.coupon.discountType === 'percentage' ? result.coupon.discountValue : 0
