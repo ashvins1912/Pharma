@@ -224,6 +224,12 @@ test('gateway returns 401 for protected API requests without a session', async (
     const response = await fetch(gateway.url + '/api/admin/medicine-requests?page=1&pageSize=15');
     assert.equal(response.status, 401);
     assert.equal((await response.json()).error.code, 'SESSION_REQUIRED');
+
+    const refreshable = await fetch(gateway.url + '/api/admin/medicine-requests?page=1&pageSize=15', {
+      headers: { Cookie: 'refresh_token=present' }
+    });
+    assert.equal(refreshable.status, 401);
+    assert.equal(refreshable.headers.get('x-session-refreshable'), 'true');
   } finally {
     await Promise.all([gateway.close(), backend.close()]);
   }
