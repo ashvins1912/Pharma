@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import apiClient from '../../api/apiClient';
+import Pagination from '../common/Pagination';
 
 export default function AdminInventoryTable({ onOpenBulkImport }) {
   const { fetchMedicines } = useApp();
@@ -354,34 +355,16 @@ export default function AdminInventoryTable({ onOpenBulkImport }) {
         )}
       </div>
 
-      {/* Pagination Bar */}
-      {adminTotalPages > 1 && (
-        <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs">
-          <span className="text-slate-500 font-medium text-center sm:text-left">
-            Page {adminPage} of {adminTotalPages} ({adminTotal.toLocaleString()} items)
-          </span>
-
-          <div className="flex items-center gap-1.5 w-full sm:w-auto justify-between sm:justify-end">
-            <button
-              onClick={() => loadAdminInventory(adminPage - 1, searchTerm)}
-              disabled={adminPage <= 1}
-              className="flex-1 sm:flex-initial px-3 py-2 rounded-xl border border-slate-200 text-slate-700 font-bold disabled:opacity-40 cursor-pointer min-h-[44px]"
-            >
-              ‹ Prev
-            </button>
-            <span className="px-3 py-2 font-bold bg-slate-100 rounded-xl text-slate-800 min-h-[44px] flex items-center justify-center">
-              {adminPage}
-            </span>
-            <button
-              onClick={() => loadAdminInventory(adminPage + 1, searchTerm)}
-              disabled={adminPage >= adminTotalPages}
-              className="flex-1 sm:flex-initial px-3 py-2 rounded-xl border border-slate-200 text-slate-700 font-bold disabled:opacity-40 cursor-pointer min-h-[44px]"
-            >
-              Next ›
-            </button>
-          </div>
-        </div>
-      )}
+      <Pagination
+        page={adminPage}
+        totalPages={adminTotalPages}
+        total={adminTotal}
+        pageSize={20}
+        onPageChange={(nextPage) => loadAdminInventory(nextPage, searchTerm)}
+        loading={loading}
+        label="inventory items"
+        className="mt-3"
+      />
 
       {medicineDraft && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
