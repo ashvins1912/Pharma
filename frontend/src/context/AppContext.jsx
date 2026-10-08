@@ -6,6 +6,7 @@ import { getCustomerMedicineRequestsPage } from '../api/medicineRequestService';
 import { useAuth } from './AuthContext';
 import usePersistentState from '../hooks/usePersistentState';
 import { useToast } from './ToastContext';
+import { useActionLoading, LOADING_ACTIONS } from './LoadingContext';
 
 const AppContext = createContext(null);
 
@@ -15,6 +16,7 @@ const CACHE_TTL = 5 * 60 * 1000;
 export function AppProvider({ children }) {
   const { user, isAdmin, isPharmacyOrAdmin, loading: authLoading, isFullyAuthenticated } = useAuth();
   const { addToast } = useToast();
+  const { runAction } = useActionLoading();
 
   // Catalog State
   const [medicines, setMedicines] = useState([]);
@@ -608,7 +610,7 @@ export function AppProvider({ children }) {
   }, [isFullyAuthenticated, ensureCustomerProfile]);
 
   // Save address helper
-  const saveAddress = async (addressData) => {
+  const saveAddress = async (addressData) =>  => runAction(LOADING_ACTIONS.SAVE_ADDRESS, async () => {
     try {
       await ensureCustomerProfile({ name: addressData.fullName, phone: addressData.mobile });
       const res = await apiClient.post('/api/user/addresses', addressData);
@@ -627,9 +629,9 @@ export function AppProvider({ children }) {
       addToast('Unable to save this address right now. Please try again later.', 'error');
       return false;
     }
-  };
+  })
 
-  const updateAddress = async (addressId, addressData) => {
+  const updateAddress = async (addressId, addressData) =>  => runAction(LOADING_ACTIONS.EDIT_ADDRESS, async () => {
     try {
       await ensureCustomerProfile({ name: addressData.fullName, phone: addressData.mobile });
       const res = await apiClient.patch(`/api/user/addresses/${encodeURIComponent(addressId)}`, addressData);
@@ -648,9 +650,9 @@ export function AppProvider({ children }) {
       addToast('Unable to update this address right now. Please try again later.', 'error');
       return false;
     }
-  };
+  })
 
-  const deleteAddress = async (addressId) => {
+  const deleteAddress = async (addressId) =>  => runAction(LOADING_ACTIONS.REMOVE_ADDRESS, async () => {
     try {
       await apiClient.delete(`/api/user/addresses/${encodeURIComponent(addressId)}`);
       const remaining = addresses.filter(address => address._id !== addressId);
@@ -674,7 +676,7 @@ export function AppProvider({ children }) {
       addToast('Unable to delete this address right now. Please try again later.', 'error');
       return false;
     }
-  };
+  })
 
   return (
     <AppContext.Provider
