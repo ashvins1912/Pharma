@@ -24,7 +24,7 @@ import { authorize } from '../../middleware/authorization.js';
 import { authLimiter } from '../../middleware/rateLimiter.js';
 import { sendSuccess, sendError } from '../../shared/responses.js';
 import { setSessionCookies, clearSessionCookies, generateCsrfToken } from '../../security/sessionCookie.js';
-import { verifySupabaseExchangeToken } from '../../security/pharmaToken.js';
+import { verifySupabaseExchangeToken, verifyPharmaRefreshToken } from '../../security/pharmaToken.js';
 import { env } from '../../config/env.js';
 
 const router = express.Router();
@@ -213,7 +213,7 @@ router.post('/login', authLimiter, async (req, res) => {
 
         if (result.requiresProfileCompletion || result.code === 'PROFILE_INCOMPLETE') {
             if (result.accessToken) {
-                setSessionCookies(res, { accessToken: result.accessToken });
+                setSessionCookies(res, { accessToken: result.accessToken, refreshToken: await authService.createRefreshToken(result.user || { id: req.user?.id || req.user?.sub }, result.aal || 'aal1') });
             }
             return sendSuccess(res, {
                 data: result,
@@ -224,7 +224,7 @@ router.post('/login', authLimiter, async (req, res) => {
         }
 
         if (result.accessToken) {
-            setSessionCookies(res, { accessToken: result.accessToken });
+            setSessionCookies(res, { accessToken: result.accessToken, refreshToken: await authService.createRefreshToken(result.user || { id: req.user?.id || req.user?.sub }, result.aal || 'aal1') });
         }
 
         return sendSuccess(res, {
@@ -354,7 +354,7 @@ router.post('/google', authLimiter, async (req, res) => {
         const result = await authService.authenticateGoogle(identity);
 
         if (result.accessToken) {
-            setSessionCookies(res, { accessToken: result.accessToken });
+            setSessionCookies(res, { accessToken: result.accessToken, refreshToken: await authService.createRefreshToken(result.user || { id: req.user?.id || req.user?.sub }, result.aal || 'aal1') });
         }
 
         return sendSuccess(res, {
@@ -439,7 +439,7 @@ const handleProfileCompletion = async (req, res) => {
         });
 
         if (result.accessToken) {
-            setSessionCookies(res, { accessToken: result.accessToken });
+            setSessionCookies(res, { accessToken: result.accessToken, refreshToken: await authService.createRefreshToken(result.user || { id: req.user?.id || req.user?.sub }, result.aal || 'aal1') });
         }
 
         return sendSuccess(res, {
@@ -589,6 +589,39 @@ router.get('/me', authenticateUser, async (req, res) => {
             code: 'INTERNAL_SERVER_ERROR',
             message: err.message,
             statusCode: 500,
+            req
+        });
+    }
+});
+
+/**
+ * POST /auth/refresh
+ * Rotates the short-lived access token from the HttpOnly refresh cookie.
+ * No refresh token is exposed to JavaScript.
+ */
+router.post('/refresh', async (req, res) => {
+    const refreshToken = req.cookies?.['refresh_token'];
+    if (!refreshToken) {
+        return sendError(res, { code: 'REFRESH_SESSION_REQUIRED', message: 'Refresh session required.', statusCode: 401, req });
+    }
+    try {
+        const { payload } = await verifyPharmaRefreshToken(refreshToken);
+        if (payload.token_type !== 'pharma_refresh' || typeof payload.sub !== 'string' || !payload.sub) {
+            throw new Error('Invalid refresh token.');
+        }
+        const result = await authService.refreshAccessToken(payload.sub, payload.aal || 'aal1');
+        setSessionCookies(res, { accessToken: result.accessToken, refreshToken: result.refreshToken });
+        return sendSuccess(res, {
+            data: { user: result.user },
+            message: 'Session refreshed.',
+            statusCode: 200,
+            req
+        });
+    } catch (err) {
+        return sendError(res, {
+            code: err.code || 'REFRESH_SESSION_INVALID',
+            message: 'Your session could not be refreshed. Please sign in again.',
+            statusCode: 401,
             req
         });
     }
