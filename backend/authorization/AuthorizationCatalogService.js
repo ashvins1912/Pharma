@@ -12,7 +12,7 @@ const PERMISSIONS = [
   ['prescription','read'],['prescription','write'],['prescription','review'],
   ['billing','read'],['billing','write'],['referrals','read'],['referrals','manage'],
   ['tenants','read'],['tenants','manage'],['users','read'],['users','manage'],
-  ['medicine_requests','read'],['medicine_requests','pending_count'],['medicine_requests','create'],['medicine_requests','proposal'],['medicine_requests','manage'],
+  ['medicine_requests','read'],['medicine_requests','pending_count'],['medicine_requests','create'],['medicine_requests','decide'],['medicine_requests','proposal'],['medicine_requests','manage'],
   ['platform','*']
 ];
 const ROLE_PERMISSIONS = {
@@ -23,8 +23,8 @@ const ROLE_PERMISSIONS = {
   PHARMACY_STAFF:['medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','inventory.read','orders.read','orders.create','prescription.read','prescription.write'],
   INVENTORY_MANAGER:['inventory.read','inventory.write','inventory.import'],
   ORDER_MANAGER:['orders.read','orders.create','orders.manage'],
-  CUSTOMER:['orders.read','orders.create','prescription.read','prescription.write'],
-  customer:['orders.read','orders.create','prescription.read','prescription.write']
+  CUSTOMER:['medicine_requests.read','medicine_requests.create','medicine_requests.decide','orders.read','orders.create','prescription.read','prescription.write'],
+  customer:['medicine_requests.read','medicine_requests.create','medicine_requests.decide','orders.read','orders.create','prescription.read','prescription.write']
 };
 const ROLE_SCOPE = { SUPER_ADMIN:'PLATFORM', PLATFORM_SUPER_ADMIN:'PLATFORM', admin:'PLATFORM', TENANT_OWNER:'TENANT', TENANT_ADMIN:'TENANT', PHARMACIST:'TENANT', PHARMACY_STAFF:'TENANT', INVENTORY_MANAGER:'TENANT', ORDER_MANAGER:'TENANT', CUSTOMER:'CUSTOMER', customer:'CUSTOMER' };
 const memory = {
