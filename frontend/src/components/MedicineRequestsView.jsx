@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
 import MedicineRequestModal from './MedicineRequestModal';
+import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
 
 export default function MedicineRequestsView({ onOrderCreated }) {
   const { addToast } = useToast();
+  const { runAction, isActionLoading } = useActionLoading();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [actionLoadingId, setActionLoadingId] = useState(null);
   const [newRequestModalOpen, setNewRequestModalOpen] = useState(false);
 
   const loadRequests = async () => {
@@ -27,21 +28,17 @@ export default function MedicineRequestsView({ onOrderCreated }) {
   }, []);
 
   const handleDecision = async (requestId, decision) => {
-    setActionLoadingId(requestId);
-    try {
-      const res = await apiClient.post(`/api/medicine-requests/${requestId}/proposal/decision`, {
-        decision
-      });
-      addToast(res.data.message || `Proposal ${decision}d.`, decision === 'approve' ? 'success' : 'info');
-      await loadRequests();
-      if (decision === 'approve' && onOrderCreated) {
-        onOrderCreated();
+    const action = decision === 'approve' ? LOADING_ACTIONS.APPROVE_MEDICINE : LOADING_ACTIONS.REJECT_MEDICINE;
+    await runAction(action, async () => {
+      try {
+        const res = await apiClient.post(`/api/medicine-requests/${requestId}/proposal/decision`, { decision });
+        addToast(res.data.message || `Proposal ${decision}d.`, decision === 'approve' ? 'success' : 'info');
+        await loadRequests();
+        if (decision === 'approve' && onOrderCreated) onOrderCreated();
+      } catch (err) {
+        addToast(err.message || `Failed to ${decision} proposal.`, 'error');
       }
-    } catch (err) {
-      addToast(err.message || `Failed to ${decision} proposal.`, 'error');
-    } finally {
-      setActionLoadingId(null);
-    }
+    });
   };
 
   const getStatusBadge = (status) => {
@@ -229,17 +226,17 @@ export default function MedicineRequestsView({ onOrderCreated }) {
                       <div className="pt-2 flex flex-col sm:flex-row items-center gap-2">
                         <button
                           onClick={() => handleDecision(req._id, 'approve')}
-                          disabled={isProcessing}
+                          disabled={isActionLoading(LOADING_ACTIONS.APPROVE_MEDICINE) || isActionLoading(LOADING_ACTIONS.REJECT_MEDICINE)}
                           className="w-full sm:flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-md shadow-emerald-600/20 transition cursor-pointer flex items-center justify-center gap-1.5 min-h-[44px]"
                         >
-                          <span>✓ Approve & Confirm Order</span>
+                          {isActionLoading(LOADING_ACTIONS.APPROVE_MEDICINE) && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}<span>{isActionLoading(LOADING_ACTIONS.APPROVE_MEDICINE) ? 'Approving...' : '✓ Approve & Confirm Order'}</span>
                         </button>
                         <button
                           onClick={() => handleDecision(req._id, 'reject')}
                           disabled={isProcessing}
                           className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 px-4 rounded-xl transition cursor-pointer min-h-[44px]"
                         >
-                          ✕ Reject Proposal
+                          {isActionLoading(LOADING_ACTIONS.REJECT_MEDICINE) ? 'Rejecting...' : '✕ Reject Proposal'}
                         </button>
                       </div>
                     )}
