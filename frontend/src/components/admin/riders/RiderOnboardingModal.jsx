@@ -62,7 +62,7 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
                 {/* Header */}
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-purple-600 text-white flex items-center justify-center text-xl shadow-md shadow-purple-500/25">
+                        <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-xl shadow-md shadow-blue-500/25">
                             🛵
                         </div>
                         <div>
@@ -136,7 +136,7 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
                                 onChange={handleInputChange}
                                 placeholder="e.g. Vikram Sharma"
                                 className={`w-full px-3.5 py-2.5 text-xs bg-slate-50 border rounded-xl outline-none transition focus:bg-white ${
-                                    formErrors.name ? 'border-rose-400' : 'border-slate-200 focus:border-purple-500'
+                                    formErrors.name ? 'border-rose-400' : 'border-slate-200 focus:border-blue-500'
                                 }`}
                                 required
                             />
@@ -154,7 +154,7 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
                                 onChange={handleInputChange}
                                 placeholder="e.g. +91 98765 43210"
                                 className={`w-full px-3.5 py-2.5 text-xs bg-slate-50 border rounded-xl outline-none transition focus:bg-white ${
-                                    formErrors.mobile ? 'border-rose-400' : 'border-slate-200 focus:border-purple-500'
+                                    formErrors.mobile ? 'border-rose-400' : 'border-slate-200 focus:border-blue-500'
                                 }`}
                                 required
                             />
@@ -171,7 +171,7 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
                             name="vehicleType"
                             value={values.vehicleType}
                             onChange={handleInputChange}
-                            className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:bg-white transition"
+                            className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
                         >
                             <option value="EV Bike">⚡ EV Bike (Eco-delivery)</option>
                             <option value="Bike">🏍️ Motorbike</option>
@@ -190,7 +190,7 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
                                 type="button"
                                 onClick={useCurrentLocation}
                                 disabled={locating}
-                                className="text-[10px] bg-purple-50 hover:bg-purple-100 text-purple-700 px-2.5 py-1.5 rounded-lg font-bold transition disabled:opacity-50"
+                                className="text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1.5 rounded-lg font-bold transition disabled:opacity-50"
                             >
                                 {locating ? 'Getting location...' : 'Use my current location'}
                             </button>
@@ -207,7 +207,7 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
                                     value={values.latitude}
                                     onChange={handleInputChange}
                                     placeholder="Latitude"
-                                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:bg-white transition"
+                                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
                                 />
                                 {formErrors.latitude && <p className="text-[10px] text-rose-500">{formErrors.latitude}</p>}
                             </div>
@@ -218,7 +218,7 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
                                     value={values.longitude}
                                     onChange={handleInputChange}
                                     placeholder="Longitude"
-                                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:bg-white transition"
+                                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
                                 />
                                 {formErrors.longitude && <p className="text-[10px] text-rose-500">{formErrors.longitude}</p>}
                             </div>
@@ -240,7 +240,7 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
                         <button
                             type="submit"
                             disabled={isSubmitting}
-                            className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white font-black text-xs px-5 py-2.5 rounded-xl shadow-md shadow-purple-500/20 transition cursor-pointer flex items-center gap-1.5"
+                            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-black text-xs px-5 py-2.5 rounded-xl shadow-md shadow-blue-500/20 transition cursor-pointer flex items-center gap-1.5"
                         >
                             {isSubmitting ? (
                                 <>
