@@ -14,7 +14,7 @@ const CUSTOMER_CACHE_PREFIX = 'pharma_customer_cache_v1:';
 const CACHE_TTL = 5 * 60 * 1000;
 
 export function AppProvider({ children }) {
-  const { user, isAdmin, isPharmacyOrAdmin, loading: authLoading, isFullyAuthenticated } = useAuth();
+  const { user, isAdmin, isSuperAdmin, isPharmacyOrAdmin, loading: authLoading, isFullyAuthenticated } = useAuth();
   const { addToast } = useToast();
   const { runAction } = useActionLoading();
 
@@ -312,14 +312,14 @@ export function AppProvider({ children }) {
   }, [user?.id]);
 
   useEffect(() => {
-    if (isFullyAuthenticated) {
+    if (isFullyAuthenticated && !isSuperAdmin) {
       loadAddresses();
     } else {
       setAddresses([]);
       setAddressesError('');
       setSelectedAddressId('');
     }
-  }, [isFullyAuthenticated, loadAddresses]);
+  }, [isFullyAuthenticated, isSuperAdmin, loadAddresses]);
 
   // Fetch Orders
   const loadUserOrders = useCallback(async ({ silent = false } = {}) => {
@@ -585,7 +585,7 @@ export function AppProvider({ children }) {
 
   // Synchronize canonical customer/PUID data. This is idempotent.
   const ensureCustomerProfile = useCallback(async (profile = {}) => {
-    if (!isFullyAuthenticated || !user?.id) return null;
+    if (!isFullyAuthenticated || isSuperAdmin || !user?.id) return null;
     if (!profile.name && !profile.email && !profile.phone) {
       if (customerProfileCache) return customerProfileCache;
     }
@@ -605,9 +605,9 @@ export function AppProvider({ children }) {
   }, [isFullyAuthenticated, user?.id, user?.email, user?.user_metadata?.name, user?.user_metadata?.mobile, user?.name, user?.mobile]);
 
   useEffect(() => {
-    if (!isFullyAuthenticated) return;
+    if (!isFullyAuthenticated || isSuperAdmin) return;
     void ensureCustomerProfile();
-  }, [isFullyAuthenticated, ensureCustomerProfile]);
+  }, [isFullyAuthenticated, isSuperAdmin, ensureCustomerProfile]);
 
   // Save address helper
   const saveAddress = async (addressData) => runAction(LOADING_ACTIONS.SAVE_ADDRESS, async () => {
