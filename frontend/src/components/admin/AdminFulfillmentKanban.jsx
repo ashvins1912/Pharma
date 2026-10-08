@@ -3,6 +3,7 @@ import apiClient from '../../api/apiClient';
 import { useActionLoading, LOADING_ACTIONS } from '../../context/LoadingContext';
 import { useToast } from '../../context/ToastContext';
 import { normalizePrescriptionBlob } from '../../utils/prescriptionFile';
+import Pagination from '../common/Pagination';
 
 const getDistanceToPickup = (rider, order) => {
   const riderCoordinates = rider.currentLocation?.coordinates;
@@ -65,7 +66,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const [viewingPrescriptionOrderId, setViewingPrescriptionOrderId] = useState(null);
   const [deliveredPage, setDeliveredPage] = useState(1);
   const [deliveredOrders, setDeliveredOrders] = useState([]);
-  const [deliveredPagination, setDeliveredPagination] = useState({ page: 1, limit: 5, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+  const [deliveredPagination, setDeliveredPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
   const [deliveredLoading, setDeliveredLoading] = useState(true);
   const [deliveredError, setDeliveredError] = useState('');
   const [deliveredRetryKey, setDeliveredRetryKey] = useState(0);
@@ -73,7 +74,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [searchOrders, setSearchOrders] = useState([]);
-  const [searchPagination, setSearchPagination] = useState({ page: 1, limit: 5, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+  const [searchPagination, setSearchPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [searchRetryKey, setSearchRetryKey] = useState(0);
@@ -91,12 +92,12 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     setDeliveredLoading(true);
     setDeliveredError('');
     apiClient.get('/api/orders/admin/all', {
-      params: { status: 'Delivered', page: deliveredPage, limit: 5 }
+      params: { status: 'Delivered', page: deliveredPage, limit: 10 }
     }).then(response => {
       if (!isCurrentRequest) return;
       const data = response.data || {};
       setDeliveredOrders(Array.isArray(data.items) ? data.items : []);
-      setDeliveredPagination(data.pagination || { page: deliveredPage, limit: 5, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+      setDeliveredPagination(data.pagination || { page: deliveredPage, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
     }).catch(error => {
       if (isCurrentRequest) setDeliveredError(error.message || 'Unable to load delivered orders. Please try again.');
     }).finally(() => {
@@ -111,12 +112,12 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     setSearchLoading(true);
     setSearchError('');
     apiClient.get('/api/orders/admin/all', {
-      params: { search: appliedSearch, page: searchPagination.page, limit: 5 }
+      params: { search: appliedSearch, page: searchPagination.page, limit: 10 }
     }).then(response => {
       if (!isCurrentRequest) return;
       const data = response.data || {};
       setSearchOrders(Array.isArray(data.items) ? data.items : []);
-      setSearchPagination(data.pagination || { page: 1, limit: 5, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+      setSearchPagination(data.pagination || { page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
     }).catch(error => {
       if (isCurrentRequest) {
         setSearchOrders([]);
@@ -148,7 +149,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       return;
     }
     setSearchOrders([]);
-    setSearchPagination({ page: 1, limit: 5, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+    setSearchPagination({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
     setSearchError('');
     setSearchLoading(true);
     setSearchPagination(current => ({ ...current, page: 1 }));
@@ -161,7 +162,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     setAppliedSearch('');
     setSearchOrders([]);
     setSearchError('');
-    setSearchPagination({ page: 1, limit: 5, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+    setSearchPagination({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
   };
 
   const changeSearchPage = (page) => {
@@ -405,11 +406,15 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         {appliedSearch && !searchLoading && !searchError && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
             <span>{searchPagination.total === 0 ? 'No orders found.' : `${searchPagination.total} orders found for “${appliedSearch}”.`}</span>
-            {searchPagination.totalPages > 1 && <nav aria-label="Order search pages" className="flex items-center gap-2">
-              <button type="button" onClick={() => changeSearchPage(searchPagination.page - 1)} disabled={!searchPagination.hasPreviousPage} className="min-h-9 rounded-lg border px-3 font-bold disabled:opacity-40">Previous</button>
-              <span aria-current="page">Page {searchPagination.page} of {searchPagination.totalPages}</span>
-              <button type="button" onClick={() => changeSearchPage(searchPagination.page + 1)} disabled={!searchPagination.hasNextPage} className="min-h-9 rounded-lg border px-3 font-bold disabled:opacity-40">Next</button>
-            </nav>}
+            <Pagination
+              page={searchPagination.page}
+              totalPages={searchPagination.totalPages}
+              total={searchPagination.total}
+              pageSize={10}
+              onPageChange={changeSearchPage}
+              loading={searchLoading}
+              label="matching orders"
+            />
           </div>
         )}
         {searchLoading && <p className="mt-3 text-xs text-slate-500" role="status">Searching orders…</p>}
@@ -742,14 +747,16 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                 )}
               </div>
 
-              {col.id === 'Delivered' && !searchMode && !deliveredLoading && !deliveredError && deliveredPagination.totalPages > 0 && (
-                <nav aria-label="Delivered order pages" className="mt-4 flex flex-wrap items-center justify-center gap-1.5 border-t border-slate-200 pt-3">
-                  <button type="button" onClick={() => changeDeliveredPage(deliveredPage - 1)} disabled={!deliveredPagination.hasPreviousPage} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
-                  {getPageWindow(deliveredPage, deliveredPagination.totalPages).map(page => (
-                    <button key={page} type="button" onClick={() => changeDeliveredPage(page)} aria-current={page === deliveredPage ? 'page' : undefined} className={`min-h-9 min-w-9 rounded-lg border px-2 text-xs font-bold ${page === deliveredPage ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}>{page}</button>
-                  ))}
-                  <button type="button" onClick={() => changeDeliveredPage(deliveredPage + 1)} disabled={!deliveredPagination.hasNextPage} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
-                </nav>
+              {col.id === 'Delivered' && !searchMode && !deliveredLoading && !deliveredError && (
+                <Pagination
+                  page={deliveredPagination.page || deliveredPage}
+                  totalPages={deliveredPagination.totalPages}
+                  total={deliveredPagination.total}
+                  pageSize={10}
+                  onPageChange={(page) => changeDeliveredPage(page)}
+                  loading={deliveredLoading}
+                  label="delivered orders"
+                />
               )}
 
             </div>
