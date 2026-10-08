@@ -22,6 +22,11 @@ export const API_CAPABILITIES = [
   },
   {
     method: 'GET',
+    pattern: /^\/api\/medicine-requests\/admin\/all(?:\/|$)/,
+    permission: 'medicine_requests.read'
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/medicine-requests\/metrics(?:\/|$)/,
     permission: 'medicine_requests.read'
   },
@@ -34,6 +39,21 @@ export const API_CAPABILITIES = [
     method: 'GET',
     pattern: /^\/api\/medicine-requests\/my(?:\/|$)/,
     permission: 'medicine_requests.read'
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/admin\/medicine-requests\/[^/]+\/review(?:\/|$)/,
+    permission: 'medicine_requests.manage'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/admin\/medicine-requests\/[^/]+\/proposal(?:\/|$)/,
+    permission: 'medicine_requests.proposal'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/admin\/medicine-requests\/[^/]+\/reject-request(?:\/|$)/,
+    permission: 'medicine_requests.manage'
   },
   {
     method: 'POST',
