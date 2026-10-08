@@ -7,6 +7,7 @@ import { config } from './config.js';
 import { proxyRequest } from './proxy.js';
 import { createServiceRouters } from './serviceRoutes.js';
 import { createTrustedBackendRequestToken } from './serviceAuth.js';
+import { isGatewayPublicPath, resolveGatewayCapability, isGatewayPermissionAllowed } from './apiCapabilityRegistry.js';
 import { authenticateUser, requireAdmin } from './authenticateUser.js';
 import { createHealthMonitor } from './healthMonitor.js';
 
@@ -112,22 +113,30 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
   app.use('/api/v1/orders', orderRouter);
   app.use('/api/v1/prescriptions', prescriptionRouter);
   app.use('/api/orders', legacyPrescriptionRouter);
-  const publicApiPath = path => (
-    path.startsWith('/api/v1/auth/')
-    || path === '/api/v1/auth'
-    || path.startsWith('/api/public/')
-    || path.startsWith('/api/vendors/')
-    || path.startsWith('/api/vendor/')
-  );
+  const publicApiPath = path => isGatewayPublicPath(path);
 
   app.use('/api', async (req, res, next) => {
     if (publicApiPath(req.originalUrl || req.url || '')) return next();
     return authenticateUser(req, res, async () => {
+      const permission = resolveGatewayCapability(req.method, req.originalUrl || req.url || '');
+      if (!permission || !isGatewayPermissionAllowed(req.user, permission)) {
+        console.warn(JSON.stringify({
+          serviceName: 'api-gateway',
+          event: 'rbac_denied',
+          requestId: req.requestId,
+          correlationId: req.correlationId,
+          method: req.method,
+          path: req.path,
+          permission: permission || 'UNREGISTERED_API_CAPABILITY'
+        }));
+        return res.status(403).json({ success: false, error: { code: permission ? 'FORBIDDEN' : 'API_CAPABILITY_NOT_REGISTERED', message: permission ? 'Access is denied.' : 'This API is not registered with the gateway authorization policy.' }, requestId: req.requestId });
+      }
       try {
         const trustedToken = createTrustedBackendRequestToken({
           user: req.user,
           method: req.method,
           path: req.originalUrl || req.url || '',
+          permission,
           requestId: req.requestId
         }, gatewayConfig);
         return proxyRequest(
