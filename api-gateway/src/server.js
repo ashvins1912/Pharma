@@ -137,7 +137,19 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
   const publicApiPath = (method, path) => isGatewayPublicPath(method, path);
 
   app.use('/api', async (req, res, next) => {
-    if (publicApiPath(req.method, req.originalUrl || req.url || '')) return next();
+    if (publicApiPath(req.method, req.originalUrl || req.url || '')) {
+      // Public catalog endpoints are intentionally unauthenticated, but they
+      // still belong to the backend application. Do not fall through to the
+      // gateway 404 handler.
+      return proxyRequest(
+        req,
+        res,
+        gatewayConfig.backendApiUrl,
+        null,
+        gatewayConfig,
+        'Backend'
+      );
+    }
     return authenticateUser(req, res, async () => {
       const permission = resolveGatewayCapability(req.method, req.originalUrl || req.url || '');
       if (!permission || !isGatewayPermissionAllowed(req.user, permission)) {
