@@ -72,7 +72,8 @@ export const authenticateUser = async (req, res, next) => {
             app_metadata: {
                 role: payload.role || 'customer',
                 tenantId: payload.tenantId || null,
-                permissions: Array.isArray(payload.permissions) ? payload.permissions : []
+                permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
+                revokedPermissions: Array.isArray(payload.revokedPermissions) ? payload.revokedPermissions : []
             },
             user_metadata: {
                 name: payload.name || '',
@@ -96,18 +97,26 @@ export const authenticateUser = async (req, res, next) => {
     return res.status(401).json({ message: 'Invalid or expired authentication token.', code: 'INVALID_PHARMA_TOKEN' });
 };
 
-export const requireSuperAdmin = (req, res, next) => {
+export const requirePlatformSuperAdmin = (req, res, next) => {
     const role = req.user?.app_metadata?.role || req.user?.role || req.context?.role;
-    if (role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN' || role === 'admin') {
-        return next();
-    }
+    if (role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN') return next();
     return res.status(403).json({
         success: false,
         error: {
             code: 'FORBIDDEN',
-            message: 'Access denied. Platform Super Administrator privileges required.',
+            message: 'Platform Super Administrator privileges required.',
             requestId: req.context?.requestId
         }
+    });
+};
+
+// Backward-compatible middleware for existing admin routes.
+export const requireSuperAdmin = (req, res, next) => {
+    const role = req.user?.app_metadata?.role || req.user?.role || req.context?.role;
+    if (role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN' || role === 'admin') return next();
+    return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Platform administrator privileges required.', requestId: req.context?.requestId }
     });
 };
 
