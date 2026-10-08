@@ -226,11 +226,27 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             return res.status(400).json({ message: 'Prescription URL must refer to a private uploaded prescription.' });
         }
         let uploadedPrescriptionId = null;
-        if (req.body.patientPuid) {
+        let orderedForPerson = null;
+        const requestedPatientPuid = String(req.body.patientPuid || '').trim();
+        if (requestedPatientPuid) {
             try {
-                await customerService.assertUserCanAccessPuid(req.user.sub, String(req.body.patientPuid));
+                orderedForPerson = await customerService.getManagedPerson(req.user.sub, requestedPatientPuid);
             } catch (error) {
-                return res.status(error.statusCode || 403).json({ message: 'The selected patient profile is not managed by this account.' });
+                return res.status(error.statusCode || 403).json({
+                    message: 'The selected customer or relative profile is not managed by this account.'
+                });
+            }
+        } else {
+            try {
+                const customer = await customerService.ensureCustomerForUser(req.user.sub, {
+                    name: customerName,
+                    email: req.user.email || ''
+                });
+                orderedForPerson = await customerService.getManagedPerson(req.user.sub, customer.selfPuid);
+            } catch (error) {
+                return res.status(error.statusCode || 403).json({
+                    message: 'Your customer profile could not be resolved for this order.'
+                });
             }
         }
         if (req.file) {
@@ -276,8 +292,9 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             couponCode,
             prescriptionUrl: uploadedPrescriptionUrl,
             prescriptionId: uploadedPrescriptionId,
-            patientPuid: req.body.patientPuid || null,
-            orderedForName: req.body.orderedForName || customerName,
+            patientPuid: orderedForPerson.puid,
+            orderedForName: orderedForPerson.displayName,
+            orderedForRelationship: orderedForPerson.relationshipToOwner || 'SELF',
             deliveryAddress: chosenAddressLine,
             addressDetails: addressSnapshot ? {
                 label: addressSnapshot.label,
