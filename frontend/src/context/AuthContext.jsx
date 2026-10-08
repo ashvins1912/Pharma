@@ -11,6 +11,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
   const [role, setRole] = useState('customer');
+  const [permissions, setPermissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [authTransitionLoading, setAuthTransitionLoading] = useState(false);
   const [passwordRecoveryRequired, setPasswordRecoveryRequired] = useState(false);
@@ -49,9 +50,11 @@ export function AuthProvider({ children }) {
         resolvedUser.role ||
         'customer';
       setRole(userRole);
+      setPermissions(Array.isArray(resolvedUser.permissions) ? resolvedUser.permissions : []);
     } else {
       setUser(null);
       setRole('customer');
+      setPermissions([]);
       setMfaEnabled(false);
       setAal('aal1');
     }
@@ -557,12 +560,24 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const isSuperAdminRole = (value) => value === 'SUPER_ADMIN' || value === 'PLATFORM_SUPER_ADMIN' || value === 'admin';
+
+  const hasPermission = (permission) => {
+    if (!permission || !user?.id) return false;
+    if (isSuperAdminRole(role)) return true;
+    const granted = Array.isArray(permissions) ? permissions : [];
+    if (granted.includes('*') || granted.includes(permission)) return true;
+    return granted.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)));
+  };
+
   return (
     <AuthContext.Provider
       value={{
         user,
         session,
         role,
+        permissions,
+        hasPermission,
         isAdmin: role === 'SUPER_ADMIN' || role === 'admin' || role === 'PLATFORM_SUPER_ADMIN' || role === 'TENANT_ADMIN' || role === 'TENANT_OWNER',
         isSuperAdmin: role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN',
         isPlatformSuperAdmin: role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN',
