@@ -49,7 +49,8 @@ async function revalidateAuthorization() {
         baseURL: apiBaseUrl,
         withCredentials: true,
         __skipAuthorizationRevalidation: true,
-        __skipRuntimeAuth: false
+        __skipRuntimeAuth: true,
+        headers: runtimeAccessToken ? { Authorization: `Bearer ${runtimeAccessToken}` } : undefined
     }).then(response => {
         const data = response.data?.data || response.data || {};
         const refreshedUser = data.user || data;
