@@ -753,6 +753,26 @@ class PrescriptionServiceEngine:
             raise ValueError("Rejection reason is mandatory")
         return await self._complete_review(prescription_id, reviewer_id, expected_version, approve=False, reason=reason, idempotency_key=idempotency_key)
 
+    async def convert_to_order(self, prescription_id: str, order_id: str, actor_id: str) -> Dict[str, Any]:
+        db = get_db()
+        rx = await db.prescriptions.find_one({"prescriptionId": prescription_id})
+        if not rx:
+            raise LookupError("Prescription not found")
+        if rx.get("status") == PrescriptionState.CONVERTED_TO_ORDER.value:
+            return {"prescriptionId": prescription_id, "status": PrescriptionState.CONVERTED_TO_ORDER.value, "orderId": rx.get("orderId"), "replayed": True}
+        if not can_transition(rx.get("status"), PrescriptionState.CONVERTED_TO_ORDER.value):
+            raise RuntimeError("INVALID_TRANSITION")
+        now = _now()
+        updated = await db.prescriptions.find_one_and_update(
+            {"prescriptionId": prescription_id, "version": rx.get("version", 1)},
+            {"$set": {"status": PrescriptionState.CONVERTED_TO_ORDER.value, "orderId": order_id, "updatedAt": now, "updatedBy": actor_id},
+             "$inc": {"version": 1}},
+            return_document=True,
+        )
+        if not updated:
+            raise RuntimeError("VERSION_CONFLICT")
+        return {"prescriptionId": prescription_id, "status": PrescriptionState.CONVERTED_TO_ORDER.value, "orderId": order_id, "version": updated.get("version")}
+
     async def wait_review(self, prescription_id: str, reviewer_id: str) -> Dict[str, Any]:
         db = get_db()
         now = _now()
