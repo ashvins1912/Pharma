@@ -193,6 +193,39 @@ apiClient.interceptors.response.use(
         // Keep the HTTP semantics (401) for security and observability while
         // preventing console noise and authentication side effects.
         if (status === 401 && error.config?.__allowAnonymousProbe) {
+            // First-page hydration starts unauthenticated, but an existing access
+            // cookie may have expired while the HttpOnly refresh cookie is still
+            // valid. The gateway explicitly signals that case so we can recover
+            // the session without blindly refreshing every anonymous visitor.
+            const refreshable = String(error.response?.headers?.['x-session-refreshable'] || '').toLowerCase() === 'true';
+            if (refreshable && !error.config?.__pharmaSessionBootstrapRetry && typeof window !== 'undefined') {
+                try {
+                    if (!sessionRefreshPromise) {
+                        sessionRefreshPromise = apiClient.post('/api/v1/auth/refresh', null, {
+                            __pharmaRefreshRequest: true,
+                            __pharmaAuthRetry: true,
+                            __skipRuntimeAuth: true
+                        }).finally(() => {
+                            sessionRefreshPromise = null;
+                        });
+                    }
+                    await sessionRefreshPromise;
+                    clearRuntimeAccessToken();
+                    const retryConfig = {
+                        ...error.config,
+                        __allowAnonymousProbe: false,
+                        __pharmaSessionBootstrapRetry: true,
+                        __pharmaAuthRetry: true,
+                        __skipRuntimeAuth: true,
+                        headers: { ...(error.config?.headers || {}) }
+                    };
+                    delete retryConfig.headers.Authorization;
+                    delete retryConfig.headers.authorization;
+                    return apiClient(retryConfig);
+                } catch {
+                    // No usable refresh session; continue as an anonymous visitor.
+                }
+            }
             clearRuntimeAccessToken();
             return {
                 data: null,
