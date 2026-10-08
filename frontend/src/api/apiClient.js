@@ -70,17 +70,36 @@ apiClient.interceptors.response.use(
         if (/\/api\/(?:v1\/auth|auth)\/logout(\/|$)/.test(url)) clearRuntimeAccessToken();
         return response;
     },
-    (error) => {
+    async (error) => {
         if (typeof window !== 'undefined' && error.config?.__pharmaLoader) {
             window.dispatchEvent(new CustomEvent('pharma:request-stop', { detail: error.config.__pharmaLoader }));
         }
-        const normalized = normalizeApiError(error);
-        const url = String(error.config?.url || '');
-        if (normalized.status === 401) clearRuntimeAccessToken();
 
+        const url = String(error.config?.url || '');
+        const status = error.response?.status;
+        const isRefreshRequest = /\/api\/(?:v1\/auth|auth)\/refresh(\/|$)/.test(url);
         const isCredentialSubmission = /\/api\/(?:v1\/auth|auth)\/(login|signup|google|verify-email-code|resend-verification|complete-profile|onboarding|password\/forgot|password\/reset|mfa\/verify)(\/|$)/.test(url);
         const isSessionProbe = /\/api\/(?:v1\/auth|auth)\/(session|me|logout|csrf)(\/|$)/.test(url);
-        if (normalized.status === 401 && !isCredentialSubmission && !isSessionProbe && typeof window !== 'undefined') {
+
+        // Recover transparently from an expired access JWT using the HttpOnly
+        // refresh cookie. Retry the original request exactly once.
+        if (status === 401 && !isRefreshRequest && !isCredentialSubmission && !isSessionProbe
+            && typeof window !== 'undefined' && !error.config?.__pharmaAuthRetry) {
+            try {
+                await apiClient.post('/api/v1/auth/refresh', null, {
+                    __pharmaRefreshRequest: true,
+                    __pharmaAuthRetry: true
+                });
+                return apiClient({ ...error.config, __pharmaAuthRetry: true });
+            } catch {
+                // The refresh cookie is also expired/revoked; continue normally.
+            }
+        }
+
+        const normalized = normalizeApiError(error);
+        if (normalized.status === 401) clearRuntimeAccessToken();
+
+        if (normalized.status === 401 && !isCredentialSubmission && !isSessionProbe && !isRefreshRequest && typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('ashvin:authentication-required', {
                 detail: { requestId: normalized.requestId }
             }));
@@ -98,4 +117,3 @@ apiClient.interceptors.response.use(
     }
 );
 
-export default apiClient;
