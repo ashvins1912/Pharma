@@ -23,7 +23,8 @@ export default function AdminMedicineRequestsView() {
     try {
       setLoading(true);
       const res = await apiClient.get('/api/medicine-requests/admin/all');
-      setRequests(res.data || []);
+      // Admin API returns a paginated envelope; keep the component state array-shaped.
+      setRequests(Array.isArray(res.data) ? res.data : (res.data?.requests || res.data?.items || []));
     } catch (err) {
       addToast(err.message || 'Could not load requests queue.', 'error');
     } finally {
