@@ -70,9 +70,10 @@ export function AuthProvider({ children }) {
 
     async function initAuth() {
       try {
-        // Initialize anti-CSRF token
-        await getCsrf().catch(() => {});
-
+        // Do not make CSRF bootstrap part of anonymous landing. Login,
+        // Google exchange, refresh and other session-establishing responses set
+        // the XSRF-TOKEN cookie themselves. This keeps initial page hydration
+        // independent of a backend CSRF request.
         // Do not probe /auth/me while an upstream Google OAuth session is
         // waiting to be exchanged or while the account is in PROFILE_INCOMPLETE.
         // The Google exchange returns the Pharma user and establishes the
