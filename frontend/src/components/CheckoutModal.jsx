@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
 import apiClient from '../api/apiClient';
 import AddressManager from './AddressManager';
 
@@ -9,9 +10,10 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const { user } = useAuth();
   const { cart, subtotal, discountAmount, deliveryFee, finalTotal, appliedCoupon, selectedAddressId, addresses, clearCart, addToCart } = useApp();
   const { addToast } = useToast();
+  const { runAction, isActionLoading } = useActionLoading();
+  const loading = isActionLoading(LOADING_ACTIONS.CREATE_ORDER);
   const prescriptionRequired = cart.some(item => item.isPrescriptionRequired || item.requiresPrescription);
 
-  const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [prescriptionFile, setPrescriptionFile] = useState(null);
   const [prescriptionError, setPrescriptionError] = useState('');
@@ -112,10 +114,10 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       return;
     }
 
-    setLoading(true);
     setErrorMsg('');
 
-    try {
+    const result = await runAction(LOADING_ACTIONS.CREATE_ORDER, async () => {
+      try {
       const checkoutData = {
         items: JSON.stringify(cart.map(item => ({
           medicineId: item._id,
@@ -147,13 +149,15 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       setPrescriptionFile(null);
       onClose();
       if (onOrderPlaced) onOrderPlaced(res.data.order || { _id: res.data.orderId, finalTotal });
-    } catch (err) {
-      setErrorMsg(err.message || "Checkout failed. Please verify cart items.");
-      addToast(err.message || "Checkout failed", "error");
-    } finally {
-      setLoading(false);
-    }
+      } catch (err) {
+        setErrorMsg(err.message || "Checkout failed. Please verify cart items.");
+        addToast(err.message || "Checkout failed", "error");
+        return null;
+      }
+    });
+    return result;
   };
+
 
   const addRestockItem = item => {
     if (!item.price || !item.stock) {
