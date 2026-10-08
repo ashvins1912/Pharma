@@ -610,7 +610,7 @@ export function AppProvider({ children }) {
   }, [isFullyAuthenticated, ensureCustomerProfile]);
 
   // Save address helper
-  const saveAddress = async (addressData) =>  => runAction(LOADING_ACTIONS.SAVE_ADDRESS, async () => {
+  const saveAddress = async (addressData) => runAction(LOADING_ACTIONS.SAVE_ADDRESS, async () => {
     try {
       await ensureCustomerProfile({ name: addressData.fullName, phone: addressData.mobile });
       const res = await apiClient.post('/api/user/addresses', addressData);
@@ -629,9 +629,9 @@ export function AppProvider({ children }) {
       addToast('Unable to save this address right now. Please try again later.', 'error');
       return false;
     }
-  })
+  });
 
-  const updateAddress = async (addressId, addressData) =>  => runAction(LOADING_ACTIONS.EDIT_ADDRESS, async () => {
+  const updateAddress = async (addressId, addressData) => runAction(LOADING_ACTIONS.EDIT_ADDRESS, async () => {
     try {
       await ensureCustomerProfile({ name: addressData.fullName, phone: addressData.mobile });
       const res = await apiClient.patch(`/api/user/addresses/${encodeURIComponent(addressId)}`, addressData);
@@ -650,9 +650,9 @@ export function AppProvider({ children }) {
       addToast('Unable to update this address right now. Please try again later.', 'error');
       return false;
     }
-  })
+  });
 
-  const deleteAddress = async (addressId) =>  => runAction(LOADING_ACTIONS.REMOVE_ADDRESS, async () => {
+  const deleteAddress = async (addressId) => runAction(LOADING_ACTIONS.REMOVE_ADDRESS, async () => {
     try {
       await apiClient.delete(`/api/user/addresses/${encodeURIComponent(addressId)}`);
       const remaining = addresses.filter(address => address._id !== addressId);
@@ -676,7 +676,7 @@ export function AppProvider({ children }) {
       addToast('Unable to delete this address right now. Please try again later.', 'error');
       return false;
     }
-  })
+  });
 
   return (
     <AppContext.Provider
