@@ -190,14 +190,11 @@ export function AppProvider({ children }) {
       if (selectedCategory && selectedCategory !== 'All') params.category = selectedCategory;
       if (sortOption !== 'default') params.sort = sortOption;
 
-      let res;
-      try {
-        res = await apiClient.get('/api/medicines', { params });
-      } catch (firstErr) {
-        // If initial attempt fails due to temporary connection or startup hiccup, retry once after 800ms
-        await new Promise(resolve => setTimeout(resolve, 800));
-        res = await apiClient.get('/api/medicines', { params });
-      }
+      // Do not automatically replay catalog requests. A 502/503 is an
+      // infrastructure signal and a 401/403/404 is an authorization/routing
+      // signal; replaying either obscures the real failure and creates duplicate
+      // browser traffic. Gateway readiness now protects normal production flow.
+      const res = await apiClient.get('/api/medicines', { params });
 
       if (res.data && res.data.medicines) {
         setMedicines(res.data.medicines || []);
