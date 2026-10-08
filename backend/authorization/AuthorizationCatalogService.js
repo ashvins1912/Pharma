@@ -4,7 +4,7 @@ import Role from '../models/Role.js';
 import RolePermission from '../models/RolePermission.js';
 import { getIsConnected } from '../config/db.js';
 
-const FEATURES = ['profile','mfa','inventory','orders','prescription','billing','referrals','tenants','users','platform','medicine_requests','csquare','promotions'];
+const FEATURES = ['profile','mfa','inventory','orders','prescription','billing','referrals','tenants','users','platform','medicine_requests','csquare','promotions','whatsapp'];
 const PERMISSIONS = [
   ['profile','view'],['profile','complete'],['mfa','verify'],['mfa','manage'],
   ['inventory','read'],['inventory','write'],['inventory','import'],
@@ -13,12 +13,12 @@ const PERMISSIONS = [
   ['billing','read'],['billing','write'],['referrals','read'],['referrals','manage'],
   ['tenants','read'],['tenants','manage'],['users','read'],['users','manage'],
   ['medicine_requests','read'],['medicine_requests','pending_count'],['medicine_requests','create'],['medicine_requests','decide'],['medicine_requests','proposal'],['medicine_requests','manage'],['csquare','read'],['csquare','manage'],['csquare','sync'],
-  ['platform','*']
+  ['platform','*'],['whatsapp','read'],['whatsapp','manage']
 ];
 const ROLE_PERMISSIONS = {
   SUPER_ADMIN:['platform.*'], PLATFORM_SUPER_ADMIN:['platform.*'], admin:['platform.*'],
-  TENANT_OWNER:['csquare.read','csquare.manage','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','medicine_requests.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','promotions.read','promotions.manage','tenants.read','tenants.manage','users.read','users.manage'],
-  TENANT_ADMIN:['csquare.read','csquare.manage','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','medicine_requests.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','promotions.read','promotions.manage','users.read'],
+  TENANT_OWNER:['whatsapp.read','whatsapp.manage','csquare.read','csquare.manage','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','medicine_requests.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','promotions.read','promotions.manage','tenants.read','tenants.manage','users.read','users.manage'],
+  TENANT_ADMIN:['whatsapp.read','whatsapp.manage','csquare.read','csquare.manage','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','medicine_requests.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','promotions.read','promotions.manage','users.read'],
   PHARMACIST:['csquare.read','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','promotions.read','promotions.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review'],
   PHARMACY_STAFF:['csquare.read','promotions.read','promotions.manage','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','inventory.read','orders.read','orders.create','prescription.read','prescription.write'],
   // Legacy pharmacy accounts are tenant pharmacy staff and must retain the same
