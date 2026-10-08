@@ -199,7 +199,7 @@ export default function AdminMedicineRequestsView() {
                     <td className="py-3.5 px-3 text-right">
                       <button
                         onClick={() => openProposalModal(req)}
-                        className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-xl transition cursor-pointer shadow-xs min-h-[36px]"
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-xl transition cursor-pointer shadow-xs min-h-[36px]"
                       >
                         {req.proposal ? '✏️ Edit Proposal' : '➕ Create Proposal'}
                       </button>
@@ -252,7 +252,7 @@ export default function AdminMedicineRequestsView() {
                 <div className="pt-2 border-t border-slate-200 flex justify-end">
                   <button
                     onClick={() => openProposalModal(req)}
-                    className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 min-h-[44px]"
+                    className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 min-h-[44px]"
                   >
                     <span>{req.proposal ? '✏️ Modify Proposal' : '➕ Formulate Delivery Proposal'}</span>
                   </button>
@@ -416,7 +416,7 @@ export default function AdminMedicineRequestsView() {
                 <button
                   type="submit"
                   disabled={submittingProposal}
-                  className="w-full sm:w-2/3 bg-purple-600 hover:bg-purple-700 text-white font-extrabold py-2.5 rounded-xl text-xs shadow-md shadow-purple-600/20 flex items-center justify-center gap-1.5 min-h-[44px]"
+                  className="w-full sm:w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2.5 rounded-xl text-xs shadow-md shadow-blue-600/20 flex items-center justify-center gap-1.5 min-h-[44px]"
                 >
                   <span>{submittingProposal ? 'Dispatching...' : 'Send Proposal to Patient'}</span>
                   <span>↗</span>
