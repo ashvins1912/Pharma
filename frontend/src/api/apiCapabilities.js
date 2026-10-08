@@ -7,6 +7,17 @@
 export const API_CAPABILITIES = [
   {
     method: 'GET',
+    pattern: /^\/api\/admin\/whatsapp\/(?:status|logs)(?:\/|$)/,
+    permission: 'whatsapp.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/admin\/whatsapp\/(?:generate-qr|disconnect)(?:\/|$)/,
+    permission: 'whatsapp.manage'
+  },
+
+  {
+    method: 'GET',
     pattern: /^\/api\/coupons\/my-offer(?:\/|$)/,
     permission: 'orders.read'
   },
