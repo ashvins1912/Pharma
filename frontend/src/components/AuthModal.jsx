@@ -388,8 +388,8 @@ export default function AuthModal({ isOpen, onClose }) {
         ) : mfaRequired ? (
         /* STEP 2: TOTP MULTI-FACTOR AUTHENTICATION CHALLENGE SCREEN */
           <form onSubmit={handleTotpVerify} className="space-y-4 animate-fade-in">
-            <div className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-3.5 text-center space-y-1">
-              <span className="text-[11px] font-black uppercase text-indigo-700 tracking-wider">
+            <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-3.5 text-center space-y-1">
+              <span className="text-[11px] font-black uppercase text-blue-700 tracking-wider">
                 Zero-Cost Authenticator App
               </span>
               <p className="text-xs text-slate-600 leading-relaxed">
@@ -418,7 +418,7 @@ export default function AuthModal({ isOpen, onClose }) {
                   }
                 }}
                 placeholder="000 000"
-                className="w-full text-center tracking-[0.35em] font-mono font-black text-2xl py-3 bg-slate-50 border border-slate-200 focus:border-indigo-600 focus:bg-white rounded-xl outline-none transition"
+                className="w-full text-center tracking-[0.35em] font-mono font-black text-2xl py-3 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl outline-none transition"
                 autoFocus
                 required
               />
@@ -427,7 +427,7 @@ export default function AuthModal({ isOpen, onClose }) {
             <button
               type="submit"
               disabled={loading || totpCode.length !== 6}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold py-2.5 rounded-xl text-xs shadow-md shadow-indigo-600/20 cursor-pointer transition flex items-center justify-center gap-2"
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold py-2.5 rounded-xl text-xs shadow-md shadow-blue-600/20 cursor-pointer transition flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -459,7 +459,7 @@ export default function AuthModal({ isOpen, onClose }) {
             {!resetEmailSent && (
               <form onSubmit={isForgotPassword ? handleSendPasswordReset : handleSubmit} className="space-y-3.5">
                 {(import.meta.env.DEV || import.meta.env.VITE_DEMO_ADMIN_ENABLED === 'true') && import.meta.env.VITE_DEMO_ADMIN_ENABLED !== 'false' && !isSignUp && !isForgotPassword && !passwordRecoveryRequired && (
-                  <div className="rounded-xl border border-purple-200 bg-purple-50 p-3 text-[11px] text-purple-800">
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-[11px] text-blue-800">
                     Local demo admin credentials are configured in the backend environment, or click <span className="font-bold">🛡️ Demo Admin</span> below.
                   </div>
                 )}
@@ -688,7 +688,7 @@ export default function AuthModal({ isOpen, onClose }) {
                     <button
                       onClick={handleDemoAdmin}
                       disabled={loading}
-                      className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold py-1.5 px-2 rounded-xl text-[11px] cursor-pointer transition text-center disabled:opacity-50"
+                      className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold py-1.5 px-2 rounded-xl text-[11px] cursor-pointer transition text-center disabled:opacity-50"
                     >
                       🛡️ Demo Admin
                     </button>
