@@ -81,7 +81,7 @@ export default function MFAEnrollmentModal({ isOpen, onClose }) {
                 {/* Header */}
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-xl shadow-md shadow-indigo-500/25">
+                        <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-xl shadow-md shadow-blue-500/25">
                             🛡️
                         </div>
                         <div>
@@ -99,7 +99,7 @@ export default function MFAEnrollmentModal({ isOpen, onClose }) {
 
                 {loading ? (
                     <div className="py-12 text-center text-xs text-slate-400 font-semibold space-y-2">
-                        <span className="inline-block w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></span>
+                        <span className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></span>
                         <p>Generating cryptographically secure TOTP secret...</p>
                     </div>
                 ) : errorMsg && !enrollData ? (
@@ -116,7 +116,7 @@ export default function MFAEnrollmentModal({ isOpen, onClose }) {
                     <div className="mt-5 space-y-5">
                         {/* Step 1 Instructions */}
                         <div className="space-y-1">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
                                 Step 1 of 2
                             </span>
                             <h4 className="text-xs font-bold text-slate-800">Scan QR Code with Authenticator App</h4>
@@ -168,7 +168,7 @@ export default function MFAEnrollmentModal({ isOpen, onClose }) {
                                     <label className="text-[11px] font-bold text-slate-700">
                                         Enter 6-digit Code from Authenticator
                                     </label>
-                                    <span className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                                    <span className="text-[10px] font-black uppercase text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
                                         Step 2
                                     </span>
                                 </div>
@@ -183,7 +183,7 @@ export default function MFAEnrollmentModal({ isOpen, onClose }) {
                                         setVerificationCode(clean);
                                     }}
                                     placeholder="000 000"
-                                    className="w-full text-center tracking-[0.3em] font-mono font-black text-xl py-2.5 bg-slate-50 border border-slate-200 focus:border-indigo-600 focus:bg-white rounded-xl outline-none transition"
+                                    className="w-full text-center tracking-[0.3em] font-mono font-black text-xl py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl outline-none transition"
                                     autoFocus
                                     required
                                 />
@@ -206,7 +206,7 @@ export default function MFAEnrollmentModal({ isOpen, onClose }) {
                                 <button
                                     type="submit"
                                     disabled={submitting || verificationCode.length !== 6}
-                                    className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white text-xs font-black px-5 py-2.5 rounded-xl shadow-md shadow-indigo-600/20 transition cursor-pointer flex items-center gap-1.5"
+                                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white text-xs font-black px-5 py-2.5 rounded-xl shadow-md shadow-blue-600/20 transition cursor-pointer flex items-center gap-1.5"
                                 >
                                     {submitting ? 'Verifying...' : 'Activate 2FA'}
                                 </button>
