@@ -1,0 +1,66 @@
+/**
+ * Frontend API capability registry.
+ *
+ * This is the UX/preflight layer. The backend remains authoritative.
+ * Add every protected API pattern here with its required permission.
+ */
+export const API_CAPABILITIES = [
+  {
+    method: 'GET',
+    pattern: /^\/api\/admin\/medicine-requests\/pending-count(?:\/|$)/,
+    permission: 'medicine_requests.pending_count'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/admin\/medicine-requests(?:\/|$)/,
+    permission: 'medicine_requests.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/medicine-requests\/admin\/all(?:\/|$)/,
+    permission: 'medicine_requests.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/medicine-requests\/metrics(?:\/|$)/,
+    permission: 'medicine_requests.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/medicine-requests\/[^/]+\/scan-prescription(?:\/|$)/,
+    permission: 'medicine_requests.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/medicine-requests\/my(?:\/|$)/,
+    permission: 'medicine_requests.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/medicine-requests\/[^/]+\/proposal\/decision(?:\/|$)/,
+    permission: 'medicine_requests.proposal'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/medicine-requests\/admin\/[^/]+\/proposal(?:\/|$)/,
+    permission: 'medicine_requests.proposal'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/medicine-requests(?:\/|$)/,
+    permission: 'medicine_requests.create'
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/medicine-requests\/[^/]+\/prescription(?:\/|$)/,
+    permission: 'medicine_requests.create'
+  }
+];
+
+export function resolveApiCapability(method, url) {
+  const normalizedMethod = String(method || 'GET').toUpperCase();
+  const path = String(url || '').split('?')[0];
+  return API_CAPABILITIES.find(
+    entry => entry.method === normalizedMethod && entry.pattern.test(path)
+  ) || null;
+}
