@@ -5,11 +5,12 @@ import express from 'express';
 import { pharmacyIntegrationService } from '../../services/pharmacy-integration-service/PharmacyIntegrationService.js';
 import { authenticateUser } from '../../middleware/auth.js';
 import { requireTenantScope, requireTenantStaff } from '../../middleware/context.js';
+import { requirePermission } from '../../middleware/auth.js';
 
 const router = express.Router();
 
 // Get branch integration configuration & status
-router.get('/', authenticateUser, requireTenantScope, requireTenantStaff, async (req, res, next) => {
+router.get('/', authenticateUser, requirePermission('csquare.read'), requireTenantScope, requireTenantStaff, async (req, res, next) => {
     try {
         const branchId = req.query.branchId || req.context.branchId || 'branch-indore-central';
         const integration = await pharmacyIntegrationService.getBranchIntegration(
@@ -23,7 +24,7 @@ router.get('/', authenticateUser, requireTenantScope, requireTenantStaff, async 
 });
 
 // Update branch integration settings & credentials
-router.put('/', authenticateUser, requireTenantScope, requireTenantStaff, async (req, res, next) => {
+router.put('/', authenticateUser, requirePermission('csquare.manage'), requireTenantScope, requireTenantStaff, async (req, res, next) => {
     try {
         const branchId = req.body.branchId || req.context.branchId || 'branch-indore-central';
         const updated = await pharmacyIntegrationService.updateBranchIntegration(
@@ -39,7 +40,7 @@ router.put('/', authenticateUser, requireTenantScope, requireTenantStaff, async 
 });
 
 // Test connection to external POS / C-Square
-router.post('/test-connection', authenticateUser, requireTenantScope, requireTenantStaff, async (req, res, next) => {
+router.post('/test-connection', authenticateUser, requirePermission('csquare.manage'), requireTenantScope, requireTenantStaff, async (req, res, next) => {
     try {
         const branchId = req.body.branchId || req.context.branchId || 'branch-indore-central';
         const result = await pharmacyIntegrationService.testConnection(
@@ -53,7 +54,7 @@ router.post('/test-connection', authenticateUser, requireTenantScope, requireTen
 });
 
 // Trigger manual sync
-router.post('/sync', authenticateUser, requireTenantScope, requireTenantStaff, async (req, res, next) => {
+router.post('/sync', authenticateUser, requirePermission('csquare.sync'), requireTenantScope, requireTenantStaff, async (req, res, next) => {
     try {
         const branchId = req.body.branchId || req.context.branchId || 'branch-indore-central';
         const result = await pharmacyIntegrationService.triggerSync(
