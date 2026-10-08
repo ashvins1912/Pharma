@@ -1,4 +1,4 @@
-import { createBackendAuthToken } from './serviceAuth.js';
+import jwt from 'jsonwebtoken';
 import { config } from './config.js';
 
 function getUserToken(req) {
@@ -7,87 +7,105 @@ function getUserToken(req) {
   const accessCookie = (req.get('cookie') || '').split(';').map(value => value.trim())
     .find(value => value.startsWith('access_token='));
   if (!accessCookie) return '';
-  try {
-    return decodeURIComponent(accessCookie.slice('access_token='.length));
-  } catch {
-    return '';
-  }
+  try { return decodeURIComponent(accessCookie.slice('access_token='.length)); } catch { return ''; }
+}
+
+function normalizeUser(payload) {
+  const rawRole = payload.role
+    || (Array.isArray(payload.roles) ? payload.roles.find(value => ['SUPER_ADMIN','PLATFORM_SUPER_ADMIN','admin','TENANT_ADMIN','TENANT_OWNER','pharmacy','PHARMACIST','PHARMACY_STAFF','ORDER_MANAGER'].includes(value)) : null)
+    || 'customer';
+  const role = ['SUPER_ADMIN','PLATFORM_SUPER_ADMIN','admin'].includes(rawRole) ? 'SUPER_ADMIN' : rawRole;
+  const roles = Array.isArray(payload.roles) && payload.roles.length
+    ? payload.roles.map(value => ['SUPER_ADMIN','PLATFORM_SUPER_ADMIN','admin'].includes(value) ? 'SUPER_ADMIN' : value)
+    : [role];
+  const permissions = ['SUPER_ADMIN','PLATFORM_SUPER_ADMIN','admin'].includes(rawRole)
+    ? ['*']
+    : (Array.isArray(payload.permissions) ? payload.permissions : []);
+  return {
+    sub: payload.sub,
+    id: payload.sub,
+    email: payload.email || '',
+    name: payload.name || '',
+    firstName: payload.firstName || '',
+    lastName: payload.lastName || '',
+    role,
+    roles,
+    permissions,
+    revokedPermissions: Array.isArray(payload.revokedPermissions) ? payload.revokedPermissions : [],
+    permissionVersion: Number(payload.permissionVersion || 1),
+    tenantId: payload.tenantId || null,
+    branchId: payload.branchId || null,
+    scope: payload.scope || 'CUSTOMER',
+    app_metadata: {
+      role,
+      tenantId: payload.tenantId || null,
+      permissions,
+      revokedPermissions: Array.isArray(payload.revokedPermissions) ? payload.revokedPermissions : []
+    },
+    user_metadata: {
+      name: payload.name || '',
+      mobile: payload.mobile || '',
+      dateOfBirth: payload.dateOfBirth || null,
+      gender: payload.gender || null
+    },
+    aal: payload.aal || 'aal1',
+    sessionId: payload.sessionId || null,
+    tokenType: payload.token_type,
+    accountStatus: payload.accountStatus || 'ACTIVE'
+  };
 }
 
 export async function authenticateUser(req, res, next, gatewayConfig = config) {
   const userToken = getUserToken(req);
   if (!userToken || userToken === 'undefined' || userToken === 'null') {
-    return res.status(401).json({
-      success: false,
-      error: { code: 'SESSION_REQUIRED', message: 'Authentication session required.' },
-      requestId: req.requestId
-    });
-  }
-
-  let response;
-  try {
-    const assertion = createBackendAuthToken(gatewayConfig);
-    response = await fetch(`${gatewayConfig.backendApiUrl}/internal/gateway/authenticate`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${userToken}`,
-        'X-Gateway-Authorization': `Bearer ${assertion}`,
-        'X-Request-ID': req.requestId,
-        'X-Correlation-ID': req.correlationId,
-        Accept: 'application/json'
-      },
-      signal: AbortSignal.timeout(gatewayConfig.authTimeoutMs)
-    });
-  } catch (error) {
-    const timedOut = error.name === 'TimeoutError' || error.name === 'AbortError';
-    console.error('Gateway user authentication could not reach the backend:', {
-      requestId: req.requestId,
-      code: error.code || error.name
-    });
-    return res.status(timedOut ? 504 : 503).json({
-      success: false,
-      error: {
-        code: timedOut ? 'AUTHENTICATION_TIMEOUT' : 'AUTHENTICATION_UNAVAILABLE',
-        message: timedOut ? 'Authentication request timed out.' : 'Authentication service is unavailable.'
-      },
-      requestId: req.requestId
-    });
-  }
-
-  if (!response.ok) {
-    const status = response.status === 403 ? 403 : response.status === 401 ? 401 : 503;
-    const code = status === 403 ? 'FORBIDDEN'
-      : status === 401 ? 'INVALID_AUTHENTICATION'
-        : 'AUTHENTICATION_UNAVAILABLE';
-    return res.status(status).json({
-      success: false,
-      error: {
-        code,
-        message: status === 403 ? 'Access is denied.' : status === 401
-          ? 'Authentication token is invalid or expired.'
-          : 'Authentication service is unavailable.'
-      },
-      requestId: req.requestId
-    });
+    return res.status(401).json({ success: false, error: { code: 'SESSION_REQUIRED', message: 'Authentication session required.' }, requestId: req.requestId });
   }
 
   try {
-    const result = await response.json();
-    if (!result.user || typeof result.user.sub !== 'string') {
-      throw new Error('Authentication response is missing a user identity.');
+    if (!gatewayConfig.pharmaJwtPublicKey) throw Object.assign(new Error('PHARMA_JWT_PUBLIC_KEY is not configured.'), { code: 'GATEWAY_JWT_KEY_MISSING' });
+    const payload = jwt.verify(userToken, gatewayConfig.pharmaJwtPublicKey, {
+      algorithms: ['RS256'],
+      issuer: gatewayConfig.pharmaJwtIssuer,
+      audience: gatewayConfig.pharmaJwtAudience
+    });
+
+    if (!['pharma_access', 'pharma_onboarding', 'pharma_mfa_challenge'].includes(payload.token_type)
+      || typeof payload.sub !== 'string' || !payload.sub) {
+      throw Object.assign(new Error('Invalid Pharma token claims.'), { code: 'INVALID_PHARMA_TOKEN' });
     }
-    req.user = result.user;
+    const url = req.originalUrl || req.url || '';
+    if (payload.token_type === 'pharma_onboarding'
+      && !url.includes('/api/v1/auth/complete-profile')
+      && !url.includes('/api/v1/auth/onboarding')
+      && !url.includes('/api/v1/auth/logout')) {
+      return res.status(403).json({ success: false, error: { code: 'ONBOARDING_SESSION_RESTRICTED', message: 'Onboarding session is restricted to profile completion.' }, requestId: req.requestId });
+    }
+    if (payload.token_type === 'pharma_mfa_challenge' && !url.includes('/api/v1/auth/mfa/verify')) {
+      return res.status(403).json({ success: false, error: { code: 'MFA_SESSION_RESTRICTED', message: 'MFA challenge session is restricted to MFA verification.' }, requestId: req.requestId });
+    }
+    if (payload.token_type === 'pharma_access' && (payload.accountStatus || 'ACTIVE') !== 'ACTIVE') {
+      throw Object.assign(new Error('Inactive account session.'), { code: 'INACTIVE_ACCOUNT' });
+    }
+
+    req.user = normalizeUser(payload);
     req.gatewayAuthenticated = true;
     req.gatewayAuthRequestId = req.requestId;
     return next();
   } catch (error) {
-    console.error('Gateway received an invalid authentication response:', {
+    const status = error.code === 'GATEWAY_JWT_KEY_MISSING' ? 503 : 401;
+    console.warn(JSON.stringify({
+      serviceName: 'api-gateway',
+      event: 'authentication_failed',
       requestId: req.requestId,
+      correlationId: req.correlationId,
       code: error.code || error.name
-    });
-    return res.status(502).json({
+    }));
+    return res.status(status).json({
       success: false,
-      error: { code: 'INVALID_AUTHENTICATION_RESPONSE', message: 'Authentication service returned an invalid response.' },
+      error: {
+        code: status === 503 ? 'AUTHENTICATION_UNAVAILABLE' : 'INVALID_AUTHENTICATION',
+        message: status === 503 ? 'Gateway authentication is not configured.' : 'Authentication token is invalid or expired.'
+      },
       requestId: req.requestId
     });
   }
@@ -96,11 +114,7 @@ export async function authenticateUser(req, res, next, gatewayConfig = config) {
 export function requireSuperAdmin(req, res, next) {
   const role = req.user?.app_metadata?.role || req.user?.role;
   if (role !== 'SUPER_ADMIN' && role !== 'PLATFORM_SUPER_ADMIN' && role !== 'admin') {
-    return res.status(403).json({
-      success: false,
-      error: { code: 'FORBIDDEN', message: 'Platform Super Administrator access is required.' },
-      requestId: req.requestId
-    });
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Platform Super Administrator access is required.' }, requestId: req.requestId });
   }
   return next();
 }
@@ -109,11 +123,7 @@ export function requireAdmin(req, res, next) {
   const role = req.user?.app_metadata?.role || req.user?.role;
   const allowed = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_OWNER'];
   if (!allowed.includes(role)) {
-    return res.status(403).json({
-      success: false,
-      error: { code: 'ADMIN_REQUIRED', message: 'Administrator access is required.' },
-      requestId: req.requestId
-    });
+    return res.status(403).json({ success: false, error: { code: 'ADMIN_REQUIRED', message: 'Administrator access is required.' }, requestId: req.requestId });
   }
   return next();
 }
@@ -122,12 +132,6 @@ export function requireInventoryImportPermission(req, res, next) {
   const role = req.user?.app_metadata?.role || req.user?.role;
   const permissions = req.user?.app_metadata?.permissions || req.user?.permissions || [];
   const allowedRoles = ['admin', 'PLATFORM_SUPER_ADMIN', 'TENANT_OWNER', 'TENANT_ADMIN', 'INVENTORY_MANAGER', 'PHARMACIST', 'PHARMACY_STAFF'];
-  if (allowedRoles.includes(role) || permissions.includes('inventory.import')) {
-    return next();
-  }
-  return res.status(403).json({
-    success: false,
-    error: { code: 'FORBIDDEN', message: 'Inventory import permission required.' },
-    requestId: req.requestId
-  });
+  if (allowedRoles.includes(role) || permissions.includes('inventory.import')) return next();
+  return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Inventory import permission required.' }, requestId: req.requestId });
 }
