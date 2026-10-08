@@ -12,7 +12,7 @@ import AdminCSquareTab from './AdminCSquareTab';
 import CustomerPromotionsView from './CustomerPromotionsView';
 import PlatformTenantsView from './PlatformTenantsView';
 import PlatformAccessControl from './PlatformAccessControl';
-import { getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
+import { getAdminMedicineRequests, getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import Pagination from '../common/Pagination';
@@ -52,6 +52,7 @@ export default function AdminDashboardView() {
   const [totalOrders, setTotalOrders] = useState(0);
   const [deliveredCount, setDeliveredCount] = useState(0);
   const [pendingMedicineRequestCount, setPendingMedicineRequestCount] = useState(0);
+  const [initialMedicineRequests, setInitialMedicineRequests] = useState(null);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [ordersError, setOrdersError] = useState('');
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -59,6 +60,21 @@ export default function AdminDashboardView() {
   const [auditPagination, setAuditPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
   const [activeOrdersPage, setActiveOrdersPage] = useState(1);
   const [snapshotPagination, setSnapshotPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+
+  // Preload the medicine-request first page as soon as the authenticated dashboard lands.
+  // The tab consumes this snapshot so opening the tab does not issue a second list request.
+  useEffect(() => {
+    if (authLoading || !isPharmacyOrAdmin || !hasPermission('medicine_requests.read')) return;
+    let cancelled = false;
+    getAdminMedicineRequests({ page: 1, pageSize: 15, status: undefined, search: undefined })
+      .then((data) => {
+        if (!cancelled) setInitialMedicineRequests(data);
+      })
+      .catch((error) => {
+        console.error('Failed to preload medicine requests:', error);
+      });
+    return () => { cancelled = true; };
+  }, [authLoading, isPharmacyOrAdmin, hasPermission]);
 
   const loadPendingMedicineRequestCount = async () => {
     if (authLoading || !isPharmacyOrAdmin || !hasPermission('medicine_requests.pending_count')) return;
@@ -152,7 +168,7 @@ export default function AdminDashboardView() {
           onOpen={() => document.getElementById('admin-medicine-requests')?.scrollIntoView({ behavior: 'smooth' })}
         />
         <div id="admin-medicine-requests">
-          <AdminMedicineRequestsTab onPendingCountRefresh={loadPendingMedicineRequestCount} />
+          <AdminMedicineRequestsTab initialData={initialMedicineRequests} onPendingCountRefresh={loadPendingMedicineRequestCount} />
         </div>
       </div>
     );
@@ -467,7 +483,7 @@ export default function AdminDashboardView() {
 
       {adminTab === 'requests' && (
         hasPermission('medicine_requests.read') ? (
-          <AdminMedicineRequestsTab onPendingCountRefresh={loadPendingMedicineRequestCount} />
+          <AdminMedicineRequestsTab initialData={initialMedicineRequests} onPendingCountRefresh={loadPendingMedicineRequestCount} />
         ) : (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
             <div className="text-sm font-black text-amber-900">Access restricted</div>
