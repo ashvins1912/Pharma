@@ -609,7 +609,9 @@ router.post('/refresh', async (req, res) => {
         if (payload.token_type !== 'pharma_refresh' || typeof payload.sub !== 'string' || !payload.sub) {
             throw new Error('Invalid refresh token.');
         }
-        const result = await authService.refreshAccessToken(payload.sub, payload.aal || 'aal1');
+        await authService.consumeRefreshToken(refreshToken, payload);
+        const maxRefreshExpiresAt = Number(payload.exp) > 0 ? new Date(Number(payload.exp) * 1000) : null;
+        const result = await authService.refreshAccessToken(payload.sub, payload.aal || 'aal1', maxRefreshExpiresAt);
         setSessionCookies(res, { accessToken: result.accessToken, refreshToken: result.refreshToken });
         return sendSuccess(res, {
             data: { user: result.user },
@@ -630,7 +632,9 @@ router.post('/refresh', async (req, res) => {
 /**
  * POST /auth/logout
  */
-router.post('/logout', (req, res) => {
+router.post('/logout', async (req, res) => {
+    const refreshToken = req.cookies?.['refresh_token'];
+    await authService.revokeRefreshToken(refreshToken);
     clearSessionCookies(res);
     return sendSuccess(res, {
         data: {},
