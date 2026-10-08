@@ -48,13 +48,13 @@ export default function AdminOrderFinancials({ order, currency = 'INR' }) {
         </dl>
       </section>
 
-      <section aria-label="Customer loyalty impact" className="rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-2.5">
-        <h4 className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-800">
+      <section aria-label="Customer loyalty impact" className="rounded-xl border border-blue-100 bg-blue-50/70 px-3 py-2.5">
+        <h4 className="text-[10px] font-extrabold uppercase tracking-wider text-blue-800">
           Customer loyalty impact
         </h4>
         <p className="mt-1 text-xs font-bold text-indigo-950">
           +{financials.pointsEarned} points earned
-          <span className="mx-1.5 text-indigo-300">/</span>
+          <span className="mx-1.5 text-blue-300">/</span>
           −{financials.pointsRedeemed} points used
         </p>
       </section>
