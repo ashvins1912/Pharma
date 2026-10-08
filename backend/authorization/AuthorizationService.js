@@ -74,9 +74,7 @@ export class AuthorizationService {
     if (!membership) for (const permission of user?.permissions || []) permissions.add(permission);
 
     let userProfile = null;
-    try {
-      userProfile = await UserProfile.findOne({ $or: [{ supabase_user_id: userId }, { supabaseId: userId }, { userId }] }).select('permissions accessGrants accessRevokes permissionVersion').lean();
-    } catch { userProfile = null; }
+    userProfile = await UserProfile.findOne({ $or: [{ supabase_user_id: userId }, { supabaseId: userId }, { userId }] }).select('permissions accessGrants accessRevokes permissionVersion').lean();
     for (const permission of userProfile?.permissions || []) permissions.add(permission);
     for (const permission of userProfile?.accessGrants || []) permissions.add(permission);
     for (const permission of userProfile?.accessRevokes || []) { permissions.delete(permission); revokedPermissions.add(permission); }
@@ -97,6 +95,7 @@ export class AuthorizationService {
   }
 
   isAllowed(context, permission) {
+    if (context?.role === 'SUPER_ADMIN' || context?.role === 'PLATFORM_SUPER_ADMIN') return true;
     return hasPermission(context?.permissions || [], permission, context?.revokedPermissions || []);
   }
 }
