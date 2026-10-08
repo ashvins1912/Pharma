@@ -2789,12 +2789,11 @@ export const dataStore = {
     },
 
     async getMedicineRequests(filter = {}, user = null) {
-        const isStaff = user && (
-            user.app_metadata?.role === 'admin'
-            || user.app_metadata?.role === 'pharmacy'
-            || user.role === 'admin'
-            || user.role === 'pharmacy'
-        );
+        const role = user?.app_metadata?.role || user?.role;
+        const isStaff = user && [
+            'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
+            'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF'
+        ].includes(role);
 
         if (getIsConnected()) {
             const now = new Date();
@@ -2885,12 +2884,11 @@ export const dataStore = {
     async getMedicineRequestsPage(filter = {}, user = null, page = 1, limit = 8) {
         const safePage = Math.max(1, Number.parseInt(page, 10) || 1);
         const safeLimit = Math.min(50, Math.max(1, Number.parseInt(limit, 10) || 8));
-        const isStaff = user && (
-            user.app_metadata?.role === 'admin'
-            || user.app_metadata?.role === 'pharmacy'
-            || user.role === 'admin'
-            || user.role === 'pharmacy'
-        );
+        const role = user?.app_metadata?.role || user?.role;
+        const isStaff = user && [
+            'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
+            'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF'
+        ].includes(role);
 
         if (getIsConnected()) {
             const query = {};
