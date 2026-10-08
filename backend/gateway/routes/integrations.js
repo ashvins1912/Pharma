@@ -3,9 +3,8 @@
  */
 import express from 'express';
 import { pharmacyIntegrationService } from '../../services/pharmacy-integration-service/PharmacyIntegrationService.js';
-import { authenticateUser } from '../../middleware/auth.js';
+import { authenticateUser, requirePermission } from '../../middleware/auth.js';
 import { requireTenantScope, requireTenantStaff } from '../../middleware/context.js';
-import { requirePermission } from '../../middleware/auth.js';
 
 const router = express.Router();
 
