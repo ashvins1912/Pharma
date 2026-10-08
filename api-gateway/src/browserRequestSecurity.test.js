@@ -122,3 +122,14 @@ test('cross-site forged request cannot use the browser marker from a simple form
   assert.equal(outcome.result.status, 403);
   assert.equal(outcome.result.body.error.code, 'CSRF_CROSS_SITE_BLOCKED');
 });
+
+test('browser marker never bypasses CSRF for an existing authenticated session', () => {
+  const outcome = run({
+    'sec-fetch-site': 'cross-site',
+    'x-pharma-client': 'web',
+    cookie: 'access_token=opaque-session; XSRF-TOKEN=csrf-123'
+  });
+  assert.equal(outcome.nextCalled, false);
+  assert.equal(outcome.result.status, 403);
+  assert.equal(outcome.result.body.error.code, 'CSRF_INVALID');
+});
