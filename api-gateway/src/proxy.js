@@ -14,7 +14,8 @@ const hopByHopHeaders = new Set([
   'upgrade',
   'host',
   'origin',
-  'x-gateway-authorization'
+  'x-gateway-authorization',
+  'x-gateway-trusted-authorization'
 ]);
 
 export function proxyRequest(
@@ -38,6 +39,7 @@ export function proxyRequest(
     delete headers['x-xsrf-token'];
     delete headers['x-csrf-token'];
     headers.authorization = serviceAuthorization;
+    if (req.gatewayAuthenticated) headers['x-gateway-trusted-authorization'] = serviceAuthorization;
     // Internal services receive the already-authenticated identity context.
     // These headers are set only after gateway authentication and are never
     // accepted from the browser as a source of trust.
