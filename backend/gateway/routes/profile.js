@@ -2,7 +2,7 @@
  */
 import express from 'express';
 import { authService, calculateAge, isValidDOB, isValidMobile } from '../../services/identity-service/AuthService.js';
-import { authenticateUser, requireSuperAdmin } from '../../middleware/auth.js';
+import { authenticateUser, requirePlatformSuperAdmin } from '../../middleware/auth.js';
 import UserProfile from '../../models/UserProfile.js';
 import { isPlatformSuperAdmin } from '../../shared/contracts/index.js';
 import { sendSuccess, sendError } from '../../shared/responses.js';
@@ -116,12 +116,13 @@ router.put('/onboarding', authenticateUser, async (req, res) => {
     }
 });
 
-router.get('/access/users', authenticateUser, requireSuperAdmin, async (req, res) => {
+router.get('/access/users', authenticateUser, requirePlatformSuperAdmin, async (req, res) => {
   try {
     const search = String(req.query.search || '').trim();
-    const filter = { role: { $nin: ['customer', 'CUSTOMER'] }, accountStatus: { $nin: ['DELETED'] } };
+    const filter = { role: { $nin: ['customer', 'CUSTOMER'] }, accountStatus: { $nin: ['DELETED', 'SUSPENDED', 'DISABLED'] } };
     if (search) {
-      const rx = new RegExp(search, 'i');
+      const escaped = search.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\      const rx = new RegExp(search, 'i');');
+      const rx = new RegExp(escaped, 'i');
       filter.$or = [{ name: rx }, { email: rx }, { normalizedEmail: rx }, { userId: rx }, { supabase_user_id: rx }, { role: rx }];
     }
     const users = await UserProfile.find(filter).select('userId supabase_user_id supabaseId name firstName lastName email role roles tenantId branchId permissions accessGrants accessRevokes permissionVersion accountStatus').sort({ updatedAt: -1 }).limit(50).lean();
