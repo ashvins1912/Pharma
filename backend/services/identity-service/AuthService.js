@@ -17,7 +17,7 @@ import { tenantService } from '../tenant-service/TenantService.js';
 import { identityService } from './IdentityService.js';
 import { isPlatformSuperAdmin } from '../../shared/contracts/index.js';
 import { logger } from '../../shared/observability/logger.js';
-import { issuePharmaAccessToken, verifyPharmaAccessToken } from '../../security/pharmaToken.js';
+import { issuePharmaAccessToken, issuePharmaRefreshToken, verifyPharmaAccessToken } from '../../security/pharmaToken.js';
 import { authorizationService } from '../../authorization/AuthorizationService.js';
 import { generateTotpSecret, verifyTotpCode, buildOtpauthUri, generateQrCodeDataUrl } from '../../security/totp.js';
 import { encryptPII, decryptPII } from '../../security/cryptoVault.js';
@@ -284,6 +284,26 @@ export class AuthService {
             aal
         });
     }
+    async createRefreshToken(user, aal = 'aal1') {
+        const userId = user.id || user.userId || user.supabase_user_id;
+        if (!userId) throw new Error('Refresh token subject is required.');
+        return issuePharmaRefreshToken({ sub: userId, aal });
+    }
+
+    async refreshAccessToken(userId, aal = 'aal1') {
+        const user = await this.findUser({ userId });
+        if (!user) {
+            const err = new Error('Authentication session is no longer valid.');
+            err.code = 'SESSION_INVALID';
+            err.status = 401;
+            throw err;
+        }
+        this.assertAccountState(user);
+        const accessToken = await this.createAuthToken(user, aal);
+        const refreshToken = await this.createRefreshToken(user, aal);
+        return { accessToken, refreshToken, user };
+    }
+
     /**
      * User Registration with single-use verification token & persistent User model
      */
