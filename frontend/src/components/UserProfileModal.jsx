@@ -2,15 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import MFAEnrollmentModal from './auth/MFAEnrollmentModal';
+import RelativeProfiles from './RelativeProfiles';
+import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
 
 export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
   const { user, role, isAdmin, mfaEnabled, aal, disableMfa, logout, updateProfile } = useAuth();
   const { addToast } = useToast();
+  const { runAction, isActionLoading } = useActionLoading();
   const [enrollModalOpen, setEnrollModalOpen] = useState(false);
   const [disablingMfa, setDisablingMfa] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  const [savingProfile, setSavingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ firstName: '', lastName: '', gender: '', mobileNumber: '', dateOfBirth: '' });
 
   useEffect(() => {
@@ -28,18 +29,19 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
   const emailVerified = Boolean(user?.emailVerified);
   const mobileVerified = Boolean(user?.mobileVerified);
 
+  const savingProfile = isActionLoading(LOADING_ACTIONS.SAVE_PERSONAL_DETAILS);
+
   const handleSaveProfile = async (event) => {
     event.preventDefault();
-    setSavingProfile(true);
-    try {
-      await updateProfile(profileForm);
-      addToast('Profile details updated successfully.', 'success');
-      setEditMode(false);
-    } catch (err) {
-      addToast(err.message || 'Could not update profile.', 'error');
-    } finally {
-      setSavingProfile(false);
-    }
+    await runAction(LOADING_ACTIONS.SAVE_PERSONAL_DETAILS, async () => {
+      try {
+        await updateProfile(profileForm);
+        addToast('Profile details updated successfully.', 'success');
+        setEditMode(false);
+      } catch (err) {
+        addToast(err.message || 'Could not update profile.', 'error');
+      }
+    });
   };
 
   if (!isOpen || !user) return null;
@@ -61,8 +63,10 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
     }
   };
 
+  const signingOut = isActionLoading(LOADING_ACTIONS.SIGN_OUT);
+
   const handleSignOut = async () => {
-    setSigningOut(true);
+    if (signingOut) return;
     await logout();
     addToast('Signed out successfully', 'info');
     onClose();
@@ -86,6 +90,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
             </div>
             <h3 className="font-black text-slate-900 text-base">{displayName}</h3>
             <p className="text-xs text-slate-500 font-medium">{user.email}</p>
+            <p className="mt-1 text-[10px] font-black text-blue-700">PUID: {user.puid || user.userPuid || 'Loading from patient profile...'}</p>
             <div className="mt-2 flex items-center justify-center gap-2">
               <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
                 isAdmin ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
@@ -139,12 +144,14 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
                 <div className="flex gap-2 pt-1">
                   <button type="button" onClick={() => setEditMode(false)} className="flex-1 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer">Cancel</button>
                   <button type="submit" disabled={savingProfile} className="flex-1 py-2 rounded-xl bg-blue-600 text-white text-xs font-black disabled:opacity-60 cursor-pointer">
-                    {savingProfile ? 'Saving...' : 'Save Changes'}
+                    {savingProfile ? <><span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" /> Saving...</> : 'Save Changes'}
                   </button>
                 </div>
               </form>
             )}
           </div>
+          <RelativeProfiles user={user} />
+
           {/* Security & Multi-Factor Authentication Card */}
           <div className="my-3.5 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
             <div className="flex items-center justify-between">
