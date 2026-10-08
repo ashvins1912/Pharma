@@ -104,3 +104,21 @@ test('safe catalog reads do not require browser CSRF metadata', () => {
   assert.equal(outcome.nextCalled, true);
   assert.equal(outcome.result, null);
 });
+
+test('privacy-stripped first-party browser login is accepted with the explicit web marker', () => {
+  const outcome = run({
+    'sec-fetch-site': 'cross-site',
+    'x-pharma-client': 'web'
+  });
+  assert.equal(outcome.nextCalled, true);
+  assert.equal(outcome.result, null);
+});
+
+test('cross-site forged request cannot use the browser marker from a simple form', () => {
+  const outcome = run({
+    'sec-fetch-site': 'cross-site'
+  });
+  assert.equal(outcome.nextCalled, false);
+  assert.equal(outcome.result.status, 403);
+  assert.equal(outcome.result.body.error.code, 'CSRF_CROSS_SITE_BLOCKED');
+});
