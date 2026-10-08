@@ -8,7 +8,7 @@ import apiClient from '../../../api/apiClient';
 import { normalizePrescriptionBlob } from '../../../utils/prescriptionFile';
 import Pagination from '../../common/Pagination';
 
-export default function AdminMedicineRequestsTab({ initialData = null, onPendingCountRefresh }) {
+export default function AdminMedicineRequestsTab({ initialData = null, initialLoading = false, onPendingCountRefresh }) {
   const [requests, setRequests] = useState(initialData?.requests || []);
   const [metrics, setMetrics] = useState({
     totalRequests: 0,
@@ -53,9 +53,12 @@ export default function AdminMedicineRequestsTab({ initialData = null, onPending
   };
 
   useEffect(() => {
+    // Dashboard owns the initial ALL/15 request. Wait for it rather than racing
+    // with a second identical request when the pharmacy dashboard mounts.
+    if (selectedStatus === 'ALL' && !searchQuery.trim() && initialLoading) return;
     if (selectedStatus === 'ALL' && !searchQuery.trim() && initialData) return;
     loadRequests(1);
-  }, [selectedStatus]);
+  }, [selectedStatus, initialLoading, initialData]);
 
   useEffect(() => {
     if (!initialData) return;
