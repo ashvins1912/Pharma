@@ -18,6 +18,8 @@ import { identityService } from './IdentityService.js';
 import { isPlatformSuperAdmin } from '../../shared/contracts/index.js';
 import { logger } from '../../shared/observability/logger.js';
 import { issuePharmaAccessToken, issuePharmaRefreshToken, verifyPharmaAccessToken } from '../../security/pharmaToken.js';
+import { decodeJwt } from 'jose';
+import RefreshSession from '../../models/RefreshSession.js';
 import { authorizationService } from '../../authorization/AuthorizationService.js';
 import { generateTotpSecret, verifyTotpCode, buildOtpauthUri, generateQrCodeDataUrl } from '../../security/totp.js';
 import { encryptPII, decryptPII } from '../../security/cryptoVault.js';
@@ -105,6 +107,7 @@ export function maskEmail(email) {
 export const inMemoryUsers = new Map();
 export const inMemoryIdentities = new Map();
 export const inMemoryTokens = new Map();
+export const inMemoryRefreshSessions = new Map();
 
 // Rate limiter for verification resend (key -> timestamps array)
 const resendRateLimitMap = new Map();
@@ -284,13 +287,126 @@ export class AuthService {
             aal
         });
     }
-    async createRefreshToken(user, aal = 'aal1') {
-        const userId = user.id || user.userId || user.supabase_user_id;
-        if (!userId) throw new Error('Refresh token subject is required.');
-        return issuePharmaRefreshToken({ sub: userId, aal });
+    hashRefreshJti(jti) {
+        return crypto.createHash('sha256').update(String(jti || '')).digest('hex');
     }
 
-    async refreshAccessToken(userId, aal = 'aal1') {
+    async createRefreshToken(user, aal = 'aal1', maxExpiresAt = null) {
+        const userId = user.id || user.userId || user.supabase_user_id;
+        if (!userId) throw new Error('Refresh token subject is required.');
+
+        let expiresIn;
+        if (maxExpiresAt) {
+            const remainingSeconds = Math.floor((new Date(maxExpiresAt).getTime() - Date.now()) / 1000);
+            if (remainingSeconds <= 0) {
+                const err = new Error('Refresh session has expired.');
+                err.code = 'REFRESH_SESSION_EXPIRED';
+                err.status = 401;
+                throw err;
+            }
+            expiresIn = `${remainingSeconds}s`;
+        }
+
+        const token = await issuePharmaRefreshToken({ sub: userId, aal, ...(expiresIn ? { expiresIn } : {}) });
+        const payload = decodeJwt(token);
+        const record = {
+            userId,
+            jtiHash: this.hashRefreshJti(payload.jti),
+            aal,
+            expiresAt: new Date(Number(payload.exp) * 1000),
+            revokedAt: null,
+            replacedByJtiHash: null
+        };
+
+        if (getIsConnected()) {
+            try {
+                await RefreshSession.create(record);
+            } catch (error) {
+                logger.error('Failed persisting refresh session state:', { error: error.message });
+                throw Object.assign(new Error('Authentication session could not be established.'), { code: 'SESSION_STATE_UNAVAILABLE', status: 503 });
+            }
+        } else {
+            inMemoryRefreshSessions.set(record.jtiHash, record);
+        }
+        return token;
+    }
+
+    async consumeRefreshToken(token, payload) {
+        const jtiHash = this.hashRefreshJti(payload?.jti);
+        if (!payload?.jti || !payload?.sub) {
+            throw Object.assign(new Error('Refresh token is missing session identity.'), { code: 'REFRESH_TOKEN_INVALID', status: 401 });
+        }
+
+        if (getIsConnected()) {
+            let existing = await RefreshSession.findOne({ jtiHash }).lean().exec();
+            // Tokens issued before persistent refresh-session state was introduced
+            // are bootstrapped on their first legitimate refresh, then rotated.
+            if (!existing) {
+                await this.createRefreshSessionRecord({
+                    userId: payload.sub,
+                    jtiHash,
+                    aal: payload.aal || 'aal1',
+                    expiresAt: new Date(Number(payload.exp) * 1000)
+                });
+                return;
+            }
+            const result = await RefreshSession.updateOne(
+                { jtiHash, revokedAt: null },
+                { $set: { revokedAt: new Date() } }
+            ).exec();
+            if (result.modifiedCount !== 1) {
+                throw Object.assign(new Error('Refresh token replay detected.'), { code: 'REFRESH_TOKEN_REPLAY', status: 401 });
+            }
+            return;
+        }
+
+        const existing = inMemoryRefreshSessions.get(jtiHash);
+        if (!existing) {
+            inMemoryRefreshSessions.set(jtiHash, {
+                userId: payload.sub,
+                jtiHash,
+                aal: payload.aal || 'aal1',
+                expiresAt: new Date(Number(payload.exp) * 1000),
+                revokedAt: null,
+                replacedByJtiHash: null
+            });
+            return;
+        }
+        if (existing.revokedAt) {
+            throw Object.assign(new Error('Refresh token replay detected.'), { code: 'REFRESH_TOKEN_REPLAY', status: 401 });
+        }
+        existing.revokedAt = new Date();
+    }
+
+    async createRefreshSessionRecord(record) {
+        if (getIsConnected()) {
+            await RefreshSession.create({
+                ...record,
+                revokedAt: record.revokedAt || null,
+                replacedByJtiHash: record.replacedByJtiHash || null
+            });
+        } else {
+            inMemoryRefreshSessions.set(record.jtiHash, record);
+        }
+    }
+
+    async revokeRefreshToken(token) {
+        if (!token) return;
+        try {
+            const payload = decodeJwt(token);
+            const jtiHash = this.hashRefreshJti(payload.jti);
+            if (getIsConnected()) {
+                await RefreshSession.updateOne({ jtiHash, revokedAt: null }, { $set: { revokedAt: new Date() } }).exec();
+            } else {
+                const record = inMemoryRefreshSessions.get(jtiHash);
+                if (record) record.revokedAt = new Date();
+            }
+        } catch (error) {
+            logger.warn('Refresh token revocation skipped:', { error: error.message });
+        }
+    }
+
+    async refreshAccessToken(userId, aal = 'aal1', maxRefreshExpiresAt = null) {
         const user = await this.findUser({ userId });
         if (!user) {
             const err = new Error('Authentication session is no longer valid.');
@@ -301,7 +417,7 @@ export class AuthService {
         this.assertAccountState(user);
         const authorization = await authorizationService.resolve(user);
         const accessToken = await this.createAuthToken(user, aal);
-        const refreshToken = await this.createRefreshToken(user, aal);
+        const refreshToken = await this.createRefreshToken(user, aal, maxRefreshExpiresAt);
         const refreshedUser = {
             ...user,
             id: user.userId || user.id,
