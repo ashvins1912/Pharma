@@ -59,6 +59,19 @@ app.use(express.json({ verify: (req, _res, buffer) => { req.rawBody = Buffer.fro
 app.use(cookieParser());
 app.use(csrfProtection);
 
+// Render/private-network readiness endpoint. The API Gateway uses this endpoint
+// to decide whether the private backend can receive proxied traffic. Keep it
+// independent of authentication and business routes so a session failure can
+// never make the upstream itself appear unavailable.
+app.get('/ready', (_req, res) => {
+    res.status(200).json({
+        status: 'ready',
+        service: 'backend-api',
+        database: getIsConnected() ? 'connected' : 'fallback',
+        timestamp: new Date().toISOString()
+    });
+});
+
 const hasValidCoordinates = (coordinates) => {
     if (coordinates?.lat == null || coordinates?.lng == null
         || String(coordinates.lat).trim() === '' || String(coordinates.lng).trim() === '') return false;
