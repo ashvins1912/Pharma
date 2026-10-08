@@ -245,7 +245,7 @@ function MainApp() {
           <div className="space-y-6">
             
             {/* Friendly Hero Banner */}
-            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl sm:rounded-3xl p-4 sm:p-8 text-white shadow-lg shadow-blue-600/15 relative overflow-hidden">
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl sm:rounded-3xl p-4 sm:p-8 text-white shadow-lg shadow-blue-600/15 relative overflow-hidden">
               <div className="relative z-10 max-w-xl space-y-1.5 sm:space-y-2">
                 <span className="inline-block bg-white/20 backdrop-blur-md text-white text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                   Express 30-Min Prescription Delivery
