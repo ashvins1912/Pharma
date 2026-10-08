@@ -51,7 +51,7 @@ function reject(res, requestId, code, message) {
  *
  * Policy:
  * - Safe methods are never blocked by this middleware.
- * - Cross-site Fetch Metadata is rejected for every state-changing request.
+ * - Cross-site Fetch Metadata is accepted only when an independently verified Origin/Referer is a configured browser origin.
  * - An explicit Origin/Referer must be a configured browser origin when sent.
  * - Requests carrying an application session cookie must present the
  *   double-submit XSRF-TOKEN in X-XSRF-TOKEN/X-CSRF-TOKEN.
