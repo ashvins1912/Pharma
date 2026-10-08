@@ -8,8 +8,8 @@ import apiClient from '../../../api/apiClient';
 import { normalizePrescriptionBlob } from '../../../utils/prescriptionFile';
 import Pagination from '../../common/Pagination';
 
-export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
-  const [requests, setRequests] = useState([]);
+export default function AdminMedicineRequestsTab({ initialData = null, onPendingCountRefresh }) {
+  const [requests, setRequests] = useState(initialData?.requests || []);
   const [metrics, setMetrics] = useState({
     totalRequests: 0,
     pendingReviewCount: 0,
@@ -27,7 +27,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeRequest, setActiveRequest] = useState(null);
   const [proposalModalOpen, setProposalModalOpen] = useState(false);
-  const [pagination, setPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false });
+  const [pagination, setPagination] = useState(initialData?.pagination || { page: 1, pageSize: 15, total: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false });
 
   const loadRequests = async (targetPage = 1) => {
     try {
@@ -35,7 +35,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
       const [list, m] = await Promise.all([
         getAdminMedicineRequests({
           page: targetPage,
-          pageSize: 10,
+          pageSize: 15,
           status: selectedStatus !== 'ALL' ? selectedStatus : undefined,
           search: searchQuery.trim() || undefined
         }),
@@ -53,8 +53,15 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
   };
 
   useEffect(() => {
+    if (selectedStatus === 'ALL' && !searchQuery.trim() && initialData) return;
     loadRequests(1);
   }, [selectedStatus]);
+
+  useEffect(() => {
+    if (!initialData) return;
+    setRequests(initialData.requests || []);
+    setPagination(initialData.pagination || pagination);
+  }, [initialData]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -524,7 +531,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
             page={pagination.page}
             totalPages={pagination.totalPages}
             total={pagination.total}
-            pageSize={10}
+            pageSize={15}
             onPageChange={loadRequests}
             loading={loading}
             label="medicine requests"
