@@ -1345,8 +1345,8 @@ export const dataStore = {
                         Math.round((totalAmount - discountApplied - pointsDiscount) * 10) / 10
                     );
 
-                    if (orderData.couponCode) {
-                        await consumeCouponUsage(orderData.couponCode, session);
+                    if (coupon.code) {
+                        await consumeCouponUsage(coupon.code, session);
                     }
                     const [order] = await Order.create([{
                         _id: orderId,
@@ -1481,9 +1481,9 @@ export const dataStore = {
                 createdAt: now,
                 updatedAt: now
             };
-            if (orderData.couponCode) {
+            if (coupon.code) {
                 const couponRecord = inMemoryCoupons.find(coupon =>
-                    coupon.code === String(orderData.couponCode).trim().toUpperCase() && coupon.isActive
+                    coupon.code === String(coupon.code).trim().toUpperCase() && coupon.isActive
                 );
                 if (couponRecord?.usageLimit != null
                     && Number(couponRecord.usageCount || 0) >= Number(couponRecord.usageLimit)) {
