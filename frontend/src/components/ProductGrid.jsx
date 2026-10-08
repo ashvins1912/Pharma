@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import ProductCard from './ProductCard';
 import { useApp } from '../context/AppContext';
+import Pagination from './common/Pagination';
 
 export default function ProductGrid() {
   const {
@@ -32,24 +33,7 @@ export default function ProductGrid() {
     }
   };
 
-  // Generate page numbers with ellipses
-  const getPageNumbers = () => {
-    const pages = [];
-    if (totalPages <= 5) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      pages.push(1);
-      if (page > 3) pages.push('...');
-      const start = Math.max(2, page - 1);
-      const end = Math.min(totalPages - 1, page + 1);
-      for (let i = start; i <= end; i++) {
-        if (!pages.includes(i)) pages.push(i);
-      }
-      if (page < totalPages - 2) pages.push('...');
-      if (!pages.includes(totalPages)) pages.push(totalPages);
-    }
-    return pages;
-  };
+
 
   if (loadingMedicines) {
     return (
@@ -173,65 +157,16 @@ export default function ProductGrid() {
         ))}
       </div>
 
-      {/* Pagination Controller */}
-      {totalPages > 1 && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 mt-6 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-          
-          <div className="text-xs text-slate-500 font-medium">
-            Page <strong className="text-slate-900">{page}</strong> of <strong className="text-slate-900">{totalPages}</strong> ({totalMedicines.toLocaleString()} total items)
-          </div>
-
-          <div className="flex items-center gap-1 sm:gap-1.5">
-            {/* Previous Page Button */}
-            <button
-              onClick={() => handlePageChange(page - 1)}
-              disabled={page <= 1}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer flex items-center gap-1"
-              aria-label="Previous Page"
-            >
-              <span>‹</span>
-              <span className="hidden sm:inline">Prev</span>
-            </button>
-
-            {/* Page Number Buttons */}
-            {getPageNumbers().map((pNum, idx) => {
-              if (pNum === '...') {
-                return (
-                  <span key={`dots-${idx}`} className="px-1.5 py-1 text-slate-400 text-xs font-bold select-none">
-                    ...
-                  </span>
-                );
-              }
-
-              const isCurrent = pNum === page;
-              return (
-                <button
-                  key={pNum}
-                  onClick={() => handlePageChange(pNum)}
-                  className={`w-8 h-8 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center justify-center ${
-                    isCurrent
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  {pNum}
-                </button>
-              );
-            })}
-
-            {/* Next Page Button */}
-            <button
-              onClick={() => handlePageChange(page + 1)}
-              disabled={page >= totalPages}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer flex items-center gap-1"
-              aria-label="Next Page"
-            >
-              <span className="hidden sm:inline">Next</span>
-              <span>›</span>
-            </button>
-          </div>
-        </div>
-      )}
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        total={totalMedicines}
+        pageSize={limit}
+        onPageChange={handlePageChange}
+        loading={loadingMedicines}
+        label="medicines"
+        className="mt-6 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs"
+      />
 
       {/* Can't find medicine inquiry banner */}
       <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shadow-xs">
