@@ -71,7 +71,7 @@ export default function RiderFleetView() {
                         onClick={() => setActiveSubTab('fleet')}
                         className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
                             activeSubTab === 'fleet'
-                                ? 'bg-purple-600 text-white shadow-sm'
+                                ? 'bg-blue-600 text-white shadow-sm'
                                 : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                         }`}
                     >
@@ -81,7 +81,7 @@ export default function RiderFleetView() {
                         onClick={() => setActiveSubTab('engine')}
                         className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
                             activeSubTab === 'engine'
-                                ? 'bg-purple-600 text-white shadow-sm'
+                                ? 'bg-blue-600 text-white shadow-sm'
                                 : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                         }`}
                     >
@@ -92,7 +92,7 @@ export default function RiderFleetView() {
 
                 <button
                     onClick={() => setOnboardingOpen(true)}
-                    className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md shadow-purple-500/20 transition cursor-pointer flex items-center gap-1.5"
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md shadow-blue-500/20 transition cursor-pointer flex items-center gap-1.5"
                 >
                     <span>➕</span>
                     <span>Onboard New Rider</span>
@@ -120,7 +120,7 @@ export default function RiderFleetView() {
                 <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm">
                     <span className="text-[10px] font-black uppercase text-slate-400">En Route Orders</span>
                     <div className="flex items-baseline gap-2 mt-1">
-                        <span className="text-2xl font-black text-purple-600">{stats.totalActiveDeliveries}</span>
+                        <span className="text-2xl font-black text-blue-600">{stats.totalActiveDeliveries}</span>
                         <span className="text-[11px] text-slate-400">active packages</span>
                     </div>
                 </div>
@@ -153,7 +153,7 @@ export default function RiderFleetView() {
                                 placeholder="Search rider name or mobile..."
                                 value={searchFilter}
                                 onChange={(e) => setSearchFilter(e.target.value)}
-                                className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-purple-500 focus:bg-white transition"
+                                className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
                             />
                         </div>
 
@@ -200,7 +200,7 @@ export default function RiderFleetView() {
                             <p className="text-sm font-bold text-slate-600">No riders match the current filter.</p>
                             <button
                                 onClick={() => setOnboardingOpen(true)}
-                                className="mt-3 text-xs text-purple-600 font-extrabold hover:underline"
+                                className="mt-3 text-xs text-blue-600 font-extrabold hover:underline"
                             >
                                 Onboard the first courier rider
                             </button>
