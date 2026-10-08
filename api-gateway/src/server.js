@@ -6,6 +6,7 @@ import express from 'express';
 import { config } from './config.js';
 import { proxyRequest } from './proxy.js';
 import { createServiceRouters } from './serviceRoutes.js';
+import { createTrustedBackendRequestToken } from './serviceAuth.js';
 import { authenticateUser, requireAdmin } from './authenticateUser.js';
 import { createHealthMonitor } from './healthMonitor.js';
 
@@ -111,13 +112,45 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
   app.use('/api/v1/orders', orderRouter);
   app.use('/api/v1/prescriptions', prescriptionRouter);
   app.use('/api/orders', legacyPrescriptionRouter);
-  app.use('/api', (req, res) => proxyRequest(
-    req,
-    res,
-    gatewayConfig.backendApiUrl,
-    null,
-    gatewayConfig
-  ));
+  const publicApiPath = path => (
+    path.startsWith('/api/v1/auth/')
+    || path === '/api/v1/auth'
+    || path.startsWith('/api/public/')
+    || path.startsWith('/api/vendors/')
+    || path.startsWith('/api/vendor/')
+  );
+
+  app.use('/api', async (req, res, next) => {
+    if (publicApiPath(req.originalUrl || req.url || '')) return next();
+    return authenticateUser(req, res, async () => {
+      try {
+        const trustedToken = createTrustedBackendRequestToken({
+          user: req.user,
+          method: req.method,
+          path: req.originalUrl || req.url || '',
+          requestId: req.requestId
+        }, gatewayConfig);
+        return proxyRequest(
+          req,
+          res,
+          gatewayConfig.backendApiUrl,
+          `Bearer ${trustedToken}`,
+          gatewayConfig,
+          'Backend'
+        );
+      } catch (error) {
+        console.error('API Gateway could not create trusted backend credential:', {
+          requestId: req.requestId,
+          code: error.code || error.name
+        });
+        return res.status(503).json({
+          success: false,
+          error: { code: 'TRUSTED_REQUEST_UNAVAILABLE', message: 'Trusted API request authorization is unavailable.' },
+          requestId: req.requestId
+        });
+      }
+    });
+  });
   app.use((req, res) => res.status(404).json({
     success: false,
     error: { code: 'NOT_FOUND', message: 'Route was not found.' },
