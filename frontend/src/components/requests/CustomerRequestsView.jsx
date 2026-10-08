@@ -4,8 +4,9 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { replaceMedicineRequestPrescription } from '../../api/medicineRequestService';
 import { useActionLoading, LOADING_ACTIONS } from '../../context/LoadingContext';
+import Pagination from '../common/Pagination';
 
-const DEFAULT_PAGINATION = { page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false };
+const DEFAULT_PAGINATION = { page: 1, pageSize: 10, limit: 10, total: 0, totalPages: 0, hasNextPage: false };
 
 export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
   const { user } = useAuth();
@@ -414,19 +415,15 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
       )}
 
       {pagination.total > 0 && (
-        <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-slate-500" aria-live="polite">
-            Showing {medicineRequests.length} of {pagination.total} requests
-          </p>
-          {pagination.hasNextPage && <button
-              type="button"
-              onClick={() => loadUserMedicineRequests({ page: pagination.page + 1, append: true })}
-              disabled={loadingMedicineRequests}
-              className="min-h-9 rounded-lg bg-slate-100 px-4 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loadingMedicineRequests ? 'Loading medicine requests...' : 'Load More'}
-            </button>}
-        </div>
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          total={pagination.total}
+          pageSize={10}
+          onPageChange={(nextPage) => loadUserMedicineRequests({ page: nextPage, statusGroup: statusFilter })}
+          loading={loadingMedicineRequests}
+          label="medicine requests"
+        />
       )}
 
     </div>
