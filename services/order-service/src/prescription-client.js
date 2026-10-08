@@ -78,7 +78,7 @@ const compareItem = (orderItem, prescriptionMedicine) => {
   };
 };
 
-const serviceToken = ({ userId, role = 'customer', isAdmin = false }) => {
+const serviceToken = ({ userId, role = 'customer', isAdmin = false, permissions = ['prescription.read'] }) => {
   if (!config.prescriptionServiceUrl) {
     const error = new Error('Prescription Service is not configured.');
     error.statusCode = 503;
@@ -95,8 +95,8 @@ const serviceToken = ({ userId, role = 'customer', isAdmin = false }) => {
     userId,
     role,
     roles: [role],
-    permissions: ['prescription.read'],
-    scope: 'prescription.read',
+    permissions,
+    scope: permissions.join(' '),
     isAdmin
   }, config.serviceAuthSecret, {
     algorithm: 'HS256',
@@ -276,3 +276,44 @@ export async function verifyPrescriptionAgainstItems({
 }
 
 export default verifyPrescriptionAgainstItems;
+
+
+async function postPrescriptionAction({ prescriptionId, orderId, path, userId, role = 'customer' }) {
+  const token = serviceToken({
+    userId,
+    role,
+    isAdmin: role === 'admin' || role === 'super_admin',
+    permissions: ['prescription.read', 'prescription.write']
+  });
+  const response = await axios.post(
+    `${config.prescriptionServiceUrl}/api/v1/prescriptions/${encodeURIComponent(prescriptionId)}/${path}`,
+    new URLSearchParams({ order_id: String(orderId) }),
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      timeout: 10_000
+    }
+  );
+  return response.data?.data || response.data;
+}
+
+export const prescriptionClient = {
+  async linkOrder(prescriptionId, orderId, context = {}) {
+    try {
+      return await postPrescriptionAction({ prescriptionId, orderId, path: 'link-order', ...context });
+    } catch (error) {
+      const detail = error.response?.data?.detail || error.message || 'Prescription order association failed.';
+      throw Object.assign(new Error(detail), { statusCode: error.response?.status || 502 });
+    }
+  },
+  async convertToOrder(prescriptionId, orderId, context = {}) {
+    try {
+      return await postPrescriptionAction({ prescriptionId, orderId, path: 'convert-to-order', ...context });
+    } catch (error) {
+      const detail = error.response?.data?.detail || error.message || 'Prescription conversion failed.';
+      throw Object.assign(new Error(detail), { statusCode: error.response?.status || 502 });
+    }
+  }
+};
