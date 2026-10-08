@@ -28,6 +28,8 @@ const serializeOrder = order => ({
   orderId: order.orderNumber,
   source: order.source,
   externalReference: order.externalReference,
+  orderedByName: order.orderedByName || order.customerName || 'Valued Customer',
+  orderedForName: order.orderedForName || order.customerName || 'Valued Customer',
   status: order.orderStatus,
   displayStatus: order.orderStatus === 'Approved' && order.fulfillmentGate?.prescription === 'PENDING_REVIEW'
     ? 'Order Confirmed — Prescription Verification Pending'
