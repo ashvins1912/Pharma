@@ -92,7 +92,7 @@ export default function Header({
               💊 Store
             </button>
 
-            {user && !isPharmacyOrAdmin && (
+            {user && (!isPharmacyOrAdmin || isSuperAdmin) && (
               <>
                 <button
                   onClick={() => setActiveTab('orders')}
@@ -104,7 +104,7 @@ export default function Header({
                 >
                   📦 Orders
                 </button>
-                {!isPharmacyOrAdmin && (
+                {(!isPharmacyOrAdmin || isSuperAdmin) && (
                   <button
                     onClick={() => setActiveTab('requests')}
                     className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer relative ${
@@ -139,8 +139,8 @@ export default function Header({
                 onClick={() => setActiveTab('admin')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   activeTab === 'admin'
-                    ? 'bg-purple-600 text-white shadow-sm font-extrabold'
-                    : 'text-purple-700 bg-purple-50 hover:bg-purple-100'
+                    ? 'bg-blue-600 text-white shadow-sm font-extrabold'
+                    : 'text-blue-700 bg-blue-50 hover:bg-blue-100'
                 }`}
               >
                 ⚙️ Admin Operations
@@ -152,7 +152,7 @@ export default function Header({
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             
             {/* Customer actions render only after authenticated state has hydrated. */}
-            {user && !isPharmacyOrAdmin && (
+            {user && (!isPharmacyOrAdmin || isSuperAdmin) && (
               <>
                 <NotificationBell
                   onOpenOrders={user ? () => setActiveTab('orders') : null}
@@ -252,7 +252,7 @@ export default function Header({
               <span className="text-slate-400">→</span>
             </button>
 
-            {!isPharmacyOrAdmin && (
+            {(!isPharmacyOrAdmin || isSuperAdmin) && (
               <button
                 onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
                 className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
@@ -285,7 +285,7 @@ export default function Header({
               <button
                 onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
                 className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
-                  activeTab === 'admin' ? 'bg-purple-600 text-white font-extrabold' : 'text-purple-700 bg-purple-50 hover:bg-purple-100'
+                  activeTab === 'admin' ? 'bg-blue-600 text-white font-extrabold' : 'text-blue-700 bg-blue-50 hover:bg-blue-100'
                 }`}
               >
                 <span>⚙️ {isAdmin ? 'Admin' : 'Pharmacy'} Operations Dashboard</span>
