@@ -136,6 +136,7 @@ async def get_prescription(
         "REJECTED": ("REJECTED", 100),
         "FAILED": ("FAILED", 100),
         "INACTIVE": ("INACTIVE", 100),
+        "CONVERTED_TO_ORDER": ("CONVERTED_TO_ORDER", 100),
     }
     stage, percent = progress_map.get(record.get("status"), (record.get("status"), 0))
     data = PrescriptionStatusData(
