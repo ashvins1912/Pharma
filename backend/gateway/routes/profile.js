@@ -136,7 +136,7 @@ router.get('/access/users', authenticateUser, requirePlatformSuperAdmin, async (
 router.patch('/access/users/:userId', authenticateUser, requirePlatformSuperAdmin, async (req, res) => {
   try {
     const targetId = String(req.params.userId || '').trim();
-    const clean = value => [...new Set((Array.isArray(value) ? value : []).map(v => String(v).trim()).filter(v => isKnownPermission(v)))];
+    const clean = value => [...new Set((Array.isArray(value) ? value : []).map(v => String(v).trim()).filter(v => isKnownPermission(v) && !v.includes('*')))];
     const target = await UserProfile.findOne({ $or: [{ userId: targetId }, { supabase_user_id: targetId }, { supabaseId: targetId }] });
     if (!target) return sendError(res, { code: 'USER_NOT_FOUND', message: 'Platform user was not found.', statusCode: 404, req });
     if (isPlatformSuperAdmin(target.role)) return sendError(res, { code: 'SUPER_ADMIN_LOCKED', message: 'Super Admin has complete access and cannot have permissions restricted.', statusCode: 409, req });
