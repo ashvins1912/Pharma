@@ -1,80 +1,77 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
 const LoadingContext = createContext(null);
 
+export const LOADING_ACTIONS = Object.freeze({
+  SIGN_IN: 'SIGN_IN',
+  SIGN_OUT: 'SIGN_OUT',
+  CREATE_ORDER: 'CREATE_ORDER',
+  CANCEL_ORDER: 'CANCEL_ORDER',
+  TRACK_ORDER: 'TRACK_ORDER',
+  CREATE_MEDICINE: 'CREATE_MEDICINE',
+  APPROVE_MEDICINE: 'APPROVE_MEDICINE',
+  REJECT_MEDICINE: 'REJECT_MEDICINE',
+  CONVERT_MEDICINE_TO_ORDER: 'CONVERT_MEDICINE_TO_ORDER',
+  SAVE_ADDRESS: 'SAVE_ADDRESS',
+  EDIT_ADDRESS: 'EDIT_ADDRESS',
+  REMOVE_ADDRESS: 'REMOVE_ADDRESS',
+  UPLOAD_PRESCRIPTION: 'UPLOAD_PRESCRIPTION',
+  VIEW_PRESCRIPTION: 'VIEW_PRESCRIPTION',
+  APPROVE_PRESCRIPTION: 'APPROVE_PRESCRIPTION',
+  REJECT_PRESCRIPTION: 'REJECT_PRESCRIPTION',
+  SAVE_PERSONAL_DETAILS: 'SAVE_PERSONAL_DETAILS'
+});
+
 export function LoadingProvider({ children }) {
-  const [activeRequests, setActiveRequests] = useState(0);
-  const [blockingRequests, setBlockingRequests] = useState(0);
+  const [loadingAction, setLoadingAction] = useState(null);
 
-  useEffect(() => {
-    const handleStart = (event) => {
-      setActiveRequests((count) => count + 1);
-      if (event.detail?.blocking) setBlockingRequests((count) => count + 1);
-    };
-
-    const handleStop = (event) => {
-      setActiveRequests((count) => Math.max(0, count - 1));
-      if (event.detail?.blocking) setBlockingRequests((count) => Math.max(0, count - 1));
-    };
-
-    window.addEventListener('pharma:request-start', handleStart);
-    window.addEventListener('pharma:request-stop', handleStop);
-
-    return () => {
-      window.removeEventListener('pharma:request-start', handleStart);
-      window.removeEventListener('pharma:request-stop', handleStop);
-    };
+  const startAction = useCallback((action) => {
+    if (!action) return false;
+    let started = false;
+    setLoadingAction((current) => {
+      if (current) return current;
+      started = true;
+      return action;
+    });
+    return started;
   }, []);
 
-  const value = useMemo(() => ({
-    isLoading: activeRequests > 0,
-    isBlocking: blockingRequests > 0
-  }), [activeRequests, blockingRequests]);
+  const stopAction = useCallback((action) => {
+    setLoadingAction((current) => (!action || current === action ? null : current));
+  }, []);
 
-  return (
-    <LoadingContext.Provider value={value}>
-      {children}
-    </LoadingContext.Provider>
-  );
+  const runAction = useCallback(async (action, operation) => {
+    if (!startAction(action)) return { skipped: true };
+    try {
+      return await operation();
+    } finally {
+      stopAction(action);
+    }
+  }, [startAction, stopAction]);
+
+  const value = useMemo(() => ({
+    loadingAction,
+    isActionLoading: (action) => loadingAction === action,
+    startAction,
+    stopAction,
+    runAction,
+    // Backward-compatible flags for callers that only need to know whether
+    // a targeted action is running. These no longer drive a global spinner.
+    isLoading: Boolean(loadingAction),
+    isBlocking: false
+  }), [loadingAction, startAction, stopAction, runAction]);
+
+  return <LoadingContext.Provider value={value}>{children}</LoadingContext.Provider>;
 }
 
-export function useGlobalLoading() {
+export function useActionLoading() {
   const context = useContext(LoadingContext);
-  if (!context) {
-    throw new Error('useGlobalLoading must be used within a LoadingProvider.');
-  }
+  if (!context) throw new Error('useActionLoading must be used within a LoadingProvider.');
   return context;
 }
 
+// Intentionally no global spinner. Visible loading is rendered by the exact
+// button/control that owns the action, while all other API calls remain silent.
 export function GlobalLoadingIndicator() {
-  const { isLoading, isBlocking } = useGlobalLoading();
-
-  if (!isLoading) return null;
-
-  return (
-    <>
-      <div
-        className="fixed top-0 left-0 right-0 z-[9999] h-0.5 overflow-hidden bg-blue-100"
-        role="progressbar"
-        aria-label="Loading"
-        aria-busy="true"
-      >
-        <div className="h-full w-1/3 bg-blue-600 animate-[loading-slide_1.1s_ease-in-out_infinite]" />
-      </div>
-
-      {isBlocking && (
-        <div
-          className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950/10 backdrop-blur-[1px]"
-          role="status"
-          aria-live="polite"
-          aria-label="Please wait"
-        >
-          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-3 shadow-xl">
-            <span className="h-5 w-5 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
-            <span className="text-sm font-bold text-slate-700">Please wait...</span>
-          </div>
-        </div>
-      )}
-    </>
-  );
+  return null;
 }
