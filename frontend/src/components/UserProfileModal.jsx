@@ -39,7 +39,8 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
 
   if (!isOpen || !user) return null;
 
-  const displayName = user.name || [user.firstName,user.lastName].filter(Boolean).join(' ') || user.user_metadata?.name || user.email?.split('@')[0] || 'User';
+  const email = user.email || user.user_metadata?.email || user.emailAddress || user.normalizedEmail || 'Email not available';
+  const displayName = user.name || [user.firstName,user.lastName].filter(Boolean).join(' ') || user.user_metadata?.name || email.split('@')[0] || 'User';
   const mobile = user.mobileNumber || user.mobile || user.user_metadata?.mobile || 'Mobile not added';
   const emailVerified = Boolean(user.emailVerified);
   const mobileVerified = Boolean(user.mobileVerified);
@@ -66,7 +67,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
             <div className="h-14 w-14 shrink-0 rounded-2xl bg-white/15 ring-1 ring-white/20 flex items-center justify-center text-xl font-black">{displayName.charAt(0).toUpperCase()}</div>
             <div className="min-w-0">
               <h2 className="truncate text-base font-black">{displayName}</h2>
-              <p className="truncate text-xs text-slate-300">{user.email}</p>
+              <p className="truncate text-xs text-slate-300">{email}</p>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <span className="rounded-full bg-blue-400/20 px-2 py-1 text-[9px] font-black uppercase text-blue-200">{role}</span>
                 {isSuperAdmin ? <span className="rounded-full bg-emerald-400/15 px-2 py-1 text-[9px] font-black text-emerald-300">FULL ACCESS</span> : !isSuperAdmin && selfPuid ? <span className="rounded-full bg-white/10 px-2 py-1 text-[9px] font-mono text-slate-300">PUID {selfPuid}</span> : null}
@@ -84,7 +85,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
         <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
           {tab==='overview' && <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-2xl bg-slate-50 p-3"><p className="text-[10px] font-bold text-slate-400">Email</p><p className="mt-1 truncate text-xs font-black text-slate-800">{emailVerified?'✓ Verified':'Not verified'}</p></div>
+              <div className="rounded-2xl bg-slate-50 p-3"><p className="text-[10px] font-bold text-slate-400">Email</p><p className="mt-1 truncate text-xs font-black text-slate-800" title={email}>{email}</p><p className={`mt-1 text-[9px] font-bold ${emailVerified?'text-emerald-600':'text-amber-600'}`}>{emailVerified?'✓ Verified':'Not verified'}</p></div>
               <div className="rounded-2xl bg-slate-50 p-3"><p className="text-[10px] font-bold text-slate-400">Mobile</p><p className="mt-1 truncate text-xs font-black text-slate-800">{mobileVerified?'✓ Verified':mobile}</p></div>
             </div>
             <div className="rounded-2xl border border-slate-200 p-4">
