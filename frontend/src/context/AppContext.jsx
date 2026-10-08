@@ -547,12 +547,14 @@ export function AppProvider({ children }) {
       : (subtotal * appliedCoupon.discountPercentage) / 100
     : 0;
   const finalTotal = Math.max(0, subtotal - discountAmount + deliveryFee);
+  const appliedCouponRef = useRef(appliedCoupon);
+  useEffect(() => { appliedCouponRef.current = appliedCoupon; }, [appliedCoupon]);
 
   // Tenant-assigned customer promotions are selected by the backend and
   // automatically applied before checkout. Explicit public coupons can still
   // be entered by the customer afterwards.
   useEffect(() => {
-    if (!isFullyAuthenticated || !user?.id || subtotal <= 0 || appliedCoupon) return;
+    if (!isFullyAuthenticated || !user?.id || subtotal <= 0 || appliedCouponRef.current) return;
     let active = true;
     apiClient.get('/api/coupons/my-offer', { params: { orderTotal: subtotal } })
       .then(({ data }) => {
@@ -570,7 +572,7 @@ export function AppProvider({ children }) {
       })
       .catch(() => {});
     return () => { active = false; };
-  }, [isFullyAuthenticated, user?.id, subtotal, appliedCoupon]);
+  }, [isFullyAuthenticated, user?.id, subtotal]);
 
   // Coupon logic
   const applyCoupon = async (codeToApply) => {
