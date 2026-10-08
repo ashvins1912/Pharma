@@ -245,7 +245,7 @@ one refresh request -> rotated HttpOnly session cookies
 original request retried once with the fresh cookie
 ~~~
 
-State-changing browser requests are protected at the Gateway with exact-origin/Fetch-Metadata checks and a double-submit `XSRF-TOKEN` header. The backend retains its own CSRF middleware for direct/internal compatibility. Production session cookies use `Secure; HttpOnly; SameSite=Lax; Path=/`.
+State-changing browser requests are protected at the Gateway with exact-origin/Fetch-Metadata checks and a double-submit `XSRF-TOKEN` header. The backend retains its own CSRF middleware for direct/internal compatibility. Production session cookies use `Secure; HttpOnly; SameSite=Lax; Path=/`. Refresh sessions are persisted server-side, rotated on every refresh, revoked on logout, and replacement lifetime is bounded by the original refresh session expiry. Legacy refresh tokens are bootstrapped on first use and then rotated.
 
 Do not reintroduce automatic CSRF bootstrap, automatic retries for catalog failures, or browser access to the private backend. The expected anonymous `/auth/me` 401 is not an outage.
 
