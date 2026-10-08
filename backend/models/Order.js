@@ -30,6 +30,8 @@ const orderSchema = new mongoose.Schema({
     riderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Rider', default: null, index: true },
     userId: { type: String, required: true, index: true },
     customerName: { type: String, default: "Valued Customer" },
+    orderedByName: { type: String, default: "Valued Customer" },
+    orderedForName: { type: String, default: null },
     customerMobile: { type: String, default: "", index: true },
     customerMobileNormalized: { type: String, default: '', index: true },
     medicineItems: { type: [medicineItemSchema], default: [] },
