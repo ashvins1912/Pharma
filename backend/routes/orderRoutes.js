@@ -1088,7 +1088,7 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
             const parsedPage = Number.parseInt(req.query.page, 10);
             const parsedLimit = Number.parseInt(req.query.limit, 10);
             const requestedPage = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
-            const limit = Number.isSafeInteger(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 50) : 5;
+            const limit = Number.isSafeInteger(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 50) : 10;
             const result = await dataStore.searchOrders({ type, value, page: requestedPage, limit });
             const page = result.page || 1;
             return res.json({ ...paginationResult(result.items, result.total, page, limit), searchType: type });
