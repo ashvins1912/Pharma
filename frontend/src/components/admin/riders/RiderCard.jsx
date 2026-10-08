@@ -108,7 +108,7 @@ export default function RiderCard({ rider, onStatusChange, onEnabledChange }) {
                     <span className="text-slate-400">Load:</span>
                     <span className={`font-black px-1.5 py-0.2 rounded-md text-[10px] ${
                         (rider.activeOrderIds?.length || 0) > 0
-                            ? 'bg-purple-100 text-purple-800'
+                            ? 'bg-blue-100 text-blue-800'
                             : 'bg-slate-200 text-slate-700'
                     }`}>
                         {rider.activeOrderIds?.length || 0} orders
