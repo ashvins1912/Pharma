@@ -53,6 +53,7 @@ const COLUMNS = [
 export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
+  const isProcessing = Boolean(updatingId || viewingPrescriptionOrderId) || Boolean(isActionLoading(LOADING_ACTIONS.APPROVE_PRESCRIPTION) || isActionLoading(LOADING_ACTIONS.REJECT_PRESCRIPTION));
   const [updatingId, setUpdatingId] = useState(null);
   const [assignRiderModal, setAssignRiderModal] = useState(null);
   const [availableRiders, setAvailableRiders] = useState([]);
