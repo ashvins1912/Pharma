@@ -70,6 +70,7 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
       'Idempotency-Key',
       'X-Request-ID',
       'X-Correlation-ID',
+      'X-Pharma-Client',
       'X-XSRF-TOKEN',
       'X-CSRF-TOKEN'
     ],
