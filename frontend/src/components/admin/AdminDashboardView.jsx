@@ -13,6 +13,7 @@ import PlatformAccessControl from './PlatformAccessControl';
 import { getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import Pagination from '../common/Pagination';
 
 function PendingMedicineRequestsNotice({ count, onOpen }) {
   if (count < 1) return null;
@@ -52,6 +53,9 @@ export default function AdminDashboardView() {
   const [ordersError, setOrdersError] = useState('');
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [auditPagination, setAuditPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+  const [activeOrdersPage, setActiveOrdersPage] = useState(1);
+  const [snapshotPagination, setSnapshotPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
 
   const loadPendingMedicineRequestCount = async () => {
     if (authLoading || !isPharmacyOrAdmin) return;
@@ -68,11 +72,13 @@ export default function AdminDashboardView() {
     try {
       setLoadingOrders(true);
       setOrdersError('');
-      const res = await apiClient.get('/api/orders/admin/all?fulfillmentSnapshot=true');
+      const res = await apiClient.get('/api/orders/admin/all', { params: { fulfillmentSnapshot: 'true', page: activeOrdersPage, limit: 10 } });
       const snapshot = res.data || {};
       setOrders(Array.isArray(snapshot.items) ? snapshot.items : []);
       setRecentOrders(Array.isArray(snapshot.recentOrders) ? snapshot.recentOrders : []);
       setTotalOrders(Number(snapshot.total) || 0);
+      setActiveOrdersPage(Number(snapshot.pagination?.page) || activeOrdersPage);
+      setSnapshotPagination(snapshot.pagination || { page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
       setDeliveredCount(Number(snapshot.deliveredCount) || 0);
     } catch (err) {
       setOrdersError(err.message || 'Could not load the order queue.');
@@ -84,8 +90,10 @@ export default function AdminDashboardView() {
   const loadAuditLogs = async () => {
     if (authLoading || !isAdmin) return;
     try {
-      const res = await apiClient.get('/api/medicines/audits');
-      setAuditLogs(res.data || []);
+      const res = await apiClient.get('/api/medicines/audits', { params: { page: auditPagination.page, limit: 10 } });
+      const data = res.data || {};
+      setAuditLogs(Array.isArray(data.items) ? data.items : []);
+      setAuditPagination(data.pagination || { page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
     } catch {
       // ignore
     }
@@ -103,7 +111,7 @@ export default function AdminDashboardView() {
     loadAllOrders();
     loadInventoryAlerts();
     if (adminTab === 'audits') loadAuditLogs();
-  }, [adminTab, authLoading, isAdmin, loadInventoryAlerts]);
+  }, [adminTab, authLoading, isAdmin, loadInventoryAlerts, activeOrdersPage, auditPagination.page]);
 
   // Derived Metrics
   const processingCount = orders.filter(o => o.orderStatus === 'Processing Order').length;
@@ -383,6 +391,17 @@ export default function AdminDashboardView() {
             </div>
           ) : (
             <AdminFulfillmentKanban orders={orders} onRefresh={loadAllOrders} />
+          {!loadingOrders && !ordersError && (
+            <Pagination
+              page={activeOrdersPage}
+              totalPages={Number(snapshotPagination?.totalPages || 0)}
+              total={Number(snapshotPagination?.total || 0)}
+              pageSize={10}
+              onPageChange={setActiveOrdersPage}
+              loading={loadingOrders}
+              label="active orders"
+            />
+          )}
           )}
           {!loadingOrders && recentOrders.length > 0 && (
             <section aria-labelledby="admin-financial-insights" className="space-y-3 pt-3">
@@ -437,7 +456,7 @@ export default function AdminDashboardView() {
               <p className="text-xs text-slate-500">Bulk inventory changes and delivered order stock deductions.</p>
             </div>
             <button
-              onClick={loadAuditLogs}
+              onClick={() => { setAuditPagination(p => ({ ...p, page: 1 })); void loadAuditLogs(); }}
               className="text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl cursor-pointer"
             >
               🔄 Refresh
@@ -502,6 +521,15 @@ export default function AdminDashboardView() {
               </table>
             </div>
           )}
+          <Pagination
+            page={auditPagination.page}
+            totalPages={auditPagination.totalPages}
+            total={auditPagination.total}
+            pageSize={10}
+            onPageChange={(page) => setAuditPagination(current => ({ ...current, page }))}
+            loading={loadingOrders}
+            label="audit records"
+          />
         </div>
       )}
 
