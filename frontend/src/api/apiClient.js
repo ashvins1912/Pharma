@@ -145,7 +145,7 @@ apiClient.interceptors.response.use(
         }
         const url = String(response.config?.url || '');
         const result = response.data?.data || response.data;
-        if (/\/api\/(?:v1\/auth|auth)\/(login|signup|google|mfa\/verify|complete-profile|onboarding|refresh)(\/|$)/.test(url)
+        if (/\/api\/(?:v1\/auth|auth)\/(login|signup|google|mfa\/verify|complete-profile|onboarding)(\/|$)/.test(url)
             && result?.accessToken) {
             setRuntimeAccessToken(result.accessToken);
         }
@@ -178,7 +178,19 @@ apiClient.interceptors.response.use(
                     });
                 }
                 await sessionRefreshPromise;
-                return apiClient({ ...error.config, __pharmaAuthRetry: true });
+                // Refresh rotates the HttpOnly cookie; the refresh endpoint deliberately
+                // does not expose the new access token to JavaScript. Drop the stale
+                // in-memory bearer and retry with the fresh cookie instead.
+                clearRuntimeAccessToken();
+                const retryConfig = {
+                    ...error.config,
+                    __pharmaAuthRetry: true,
+                    __skipRuntimeAuth: true,
+                    headers: { ...(error.config?.headers || {}) }
+                };
+                delete retryConfig.headers.Authorization;
+                delete retryConfig.headers.authorization;
+                return apiClient(retryConfig);
             } catch {
                 // The refresh cookie is also expired/revoked; continue normally.
             }
