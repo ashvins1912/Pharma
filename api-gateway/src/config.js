@@ -148,16 +148,4 @@ export function loadConfig(environment = process.env) {
   };
 }
 
-export const config = (() => {
-  try {
-    return loadConfig();
-  } catch {
-    return loadConfig({
-      NODE_ENV: 'test',
-      BACKEND_API_URL: 'http://localhost:8090',
-      SERVICE_AUTH_SECRET: 'test-service-secret-that-is-longer-than-thirty-two-characters',
-      GATEWAY_AUTH_SECRET: 'test-gateway-secret-that-is-longer-than-thirty-two-characters',
-      CORS_ALLOWED_ORIGINS: 'http://localhost:3000'
-    });
-  }
-})();
+export const config = loadConfig();
