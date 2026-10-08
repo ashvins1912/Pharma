@@ -16,14 +16,14 @@ export const COOKIE_CONFIG = {
         secure: isProduction,
         // The browser app and API gateway may be on different sites in production.
         // Cross-site fetches with credentials require SameSite=None and Secure.
-        sameSite: isProduction ? 'none' : 'lax',
+        sameSite: 'lax',
         path: '/',
         maxAge: 60 * 60 * 1000 // 1 hour
     },
     REFRESH_TOKEN: {
         httpOnly: true,
         secure: isProduction,
-        sameSite: isProduction ? 'none' : 'lax',
+        sameSite: 'lax',
         // The browser reaches the API through /api and may use both /api/v1/auth/*
         // and gateway-routed API paths. Keep the refresh credential available
         // to the entire same-origin API surface; it remains HttpOnly + Secure.
@@ -33,7 +33,7 @@ export const COOKIE_CONFIG = {
     CSRF_TOKEN: {
         httpOnly: false, // Client JavaScript reads this cookie and sends it back in X-XSRF-TOKEN header
         secure: isProduction,
-        sameSite: isProduction ? 'none' : 'lax',
+        sameSite: 'lax',
         path: '/',
         maxAge: 7 * 24 * 60 * 60 * 1000
     }
