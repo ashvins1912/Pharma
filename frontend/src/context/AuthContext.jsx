@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { isSupabaseConfigured, supabase } from '../supabaseClient';
 import { env } from '../config/env.ts';
-import apiClient from '../api/apiClient';
+import apiClient, { setAuthorizationCapabilities, clearAuthorizationCapabilities } from '../api/apiClient';
 import GoogleProfileOnboarding from '../components/auth/GoogleProfileOnboarding';
 import { useActionLoading, LOADING_ACTIONS } from './LoadingContext';
 
@@ -50,11 +50,14 @@ export function AuthProvider({ children }) {
         resolvedUser.role ||
         'customer';
       setRole(userRole);
-      setPermissions(Array.isArray(resolvedUser.permissions) ? resolvedUser.permissions : []);
+      const resolvedPermissions = Array.isArray(resolvedUser.permissions) ? resolvedUser.permissions : [];
+      setPermissions(resolvedPermissions);
+      setAuthorizationCapabilities({ userId: resolvedUser.id, role: userRole, permissions: resolvedPermissions });
     } else {
       setUser(null);
       setRole('customer');
       setPermissions([]);
+      clearAuthorizationCapabilities();
       setMfaEnabled(false);
       setAal('aal1');
     }
