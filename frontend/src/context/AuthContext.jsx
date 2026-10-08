@@ -168,6 +168,52 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  // Keep long-lived admin/tenant workspaces alive without weakening access control.
+  // The access JWT is short-lived; the HttpOnly refresh cookie is rotated silently
+  // while the authenticated app is open or when a backgrounded tab becomes visible.
+  useEffect(() => {
+    if (!isFullyAuthenticated) return undefined;
+
+    let stopped = false;
+    let refreshInFlight = null;
+
+    const refreshSession = async () => {
+      if (stopped || refreshInFlight) return refreshInFlight;
+      refreshInFlight = apiClient.post('/api/v1/auth/refresh')
+        .then(({ data }) => {
+          if (stopped) return;
+          const refreshedUser = data?.data?.user || data?.user;
+          if (refreshedUser?.id) {
+            setUser(previous => previous?.id === refreshedUser.id ? { ...previous, ...refreshedUser } : refreshedUser);
+            setRole(refreshedUser.app_metadata?.role || refreshedUser.role || role);
+          }
+        })
+        .catch(() => {
+          // Do not force logout from a background refresh failure. The next
+          // protected request will perform the same single retry path.
+        })
+        .finally(() => {
+          refreshInFlight = null;
+        });
+      return refreshInFlight;
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') void refreshSession();
+    };
+
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshSession();
+    }, 10 * 60 * 1000);
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isFullyAuthenticated, role]);
+
   useEffect(() => {
     const handleAuthenticationRequired = () => {
       localStorage.removeItem('demo_session');
