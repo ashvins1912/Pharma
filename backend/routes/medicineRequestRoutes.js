@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
-import { authenticateUser, isPharmacyOrAdmin } from '../middleware/auth.js';
+import { authenticateUser, isPharmacyOrAdmin, requirePermission } from '../middleware/auth.js';
 import { getPrescription, savePrescription } from '../config/prescriptionStorage.js';
 import { getIsConnected } from '../config/db.js';
 import MedicineRequest from '../models/MedicineRequest.js';
@@ -572,7 +572,7 @@ router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
 });
 
 // Admin/pharmacy pending-work count; count is always queried from persisted request statuses.
-router.get('/pending-count', authenticateUser, isPharmacyOrAdmin, async (req, res) => {
+router.get('/pending-count', authenticateUser, requirePermission('medicine_requests.pending_count'), async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const count = await dataStore.getPendingMedicineRequestCount();
