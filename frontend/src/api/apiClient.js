@@ -1,8 +1,10 @@
 import axios from 'axios';
 import { normalizeApiError } from './apiErrors';
+import { resolveApiCapability } from './apiCapabilities';
 
 let runtimeAccessToken = null;
 let sessionRefreshPromise = null;
+let authorizationCapabilities = { userId: null, role: null, permissions: [] };
 
 export function setRuntimeAccessToken(token) {
     runtimeAccessToken = typeof token === 'string' && token.trim() ? token.trim() : null;
@@ -11,6 +13,30 @@ export function setRuntimeAccessToken(token) {
 export function clearRuntimeAccessToken() {
     runtimeAccessToken = null;
 }
+
+export function setAuthorizationCapabilities({ userId = null, role = null, permissions = [] } = {}) {
+    authorizationCapabilities = {
+        userId,
+        role,
+        permissions: Array.isArray(permissions) ? [...permissions] : []
+    };
+}
+
+export function clearAuthorizationCapabilities() {
+    authorizationCapabilities = { userId: null, role: null, permissions: [] };
+}
+
+function hasCapability(permission) {
+    if (!permission || !authorizationCapabilities.userId) return false;
+    if (authorizationCapabilities.role === 'SUPER_ADMIN'
+        || authorizationCapabilities.role === 'PLATFORM_SUPER_ADMIN'
+        || authorizationCapabilities.role === 'admin') return true;
+    const granted = authorizationCapabilities.permissions;
+    return granted.includes('*')
+        || granted.includes(permission)
+        || granted.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)));
+}
+
 
 const configuredApiBaseUrl = String(import.meta.env.VITE_API_URL || '/api').trim();
 const rawApiBaseUrl = import.meta.env.PROD
@@ -37,6 +63,17 @@ function getCsrfCookie() {
 }
 
 apiClient.interceptors.request.use(async (config) => {
+    const capability = config.permission
+        ? { permission: config.permission }
+        : resolveApiCapability(config.method, config.url);
+    if (capability?.permission && !hasCapability(capability.permission)) {
+        const denied = new Error('API request blocked by frontend RBAC policy.');
+        denied.code = 'FRONTEND_PERMISSION_DENIED';
+        denied.status = 403;
+        denied.permission = capability.permission;
+        return Promise.reject(denied);
+    }
+
     if (typeof window !== 'undefined' && config.loadingAction) {
         window.dispatchEvent(new CustomEvent('pharma:request-start', {
             detail: { action: config.loadingAction }
