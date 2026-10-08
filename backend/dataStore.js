@@ -1467,7 +1467,8 @@ export const dataStore = {
                 items: itemSnapshots,
                 prescriptionUrl: orderData.prescriptionUrl || null,
                 prescriptionRequired,
-                couponCode: orderData.couponCode || null,
+                couponCode: coupon.code || orderData.couponCode || null,
+                tenantId: orderData.tenantId || null,
                 subtotal: totalAmount,
                 discountApplied,
                 totalAmount: finalTotal,
@@ -1482,8 +1483,8 @@ export const dataStore = {
                 updatedAt: now
             };
             if (coupon.code) {
-                const couponRecord = inMemoryCoupons.find(coupon =>
-                    coupon.code === String(coupon.code).trim().toUpperCase() && coupon.isActive
+                const couponRecord = inMemoryCoupons.find(record =>
+                    record.code === String(coupon.code).trim().toUpperCase() && record.isActive
                 );
                 if (couponRecord?.usageLimit != null
                     && Number(couponRecord.usageCount || 0) >= Number(couponRecord.usageLimit)) {
