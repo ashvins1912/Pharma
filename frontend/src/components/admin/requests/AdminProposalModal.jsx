@@ -377,7 +377,7 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
               </span>
             </div>
             {request.status === 'PROPOSAL_SENT' && (
-              <div className="mt-2 rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-bold text-purple-900">
+              <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-900">
                 Proposal sent — waiting for customer approval. Pharmacy cannot approve or reject on the customer’s behalf.
               </div>
             )}
@@ -447,7 +447,7 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
                 href={request.productImageUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-[11px] font-extrabold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200 transition"
+                className="inline-flex items-center gap-1.5 text-[11px] font-extrabold bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-1.5 rounded-xl border border-blue-200 transition"
               >
                 <span>📷</span>
                 <span>View Reference Product Photo</span>
