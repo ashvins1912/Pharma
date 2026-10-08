@@ -5,7 +5,7 @@ import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
 
 const emptyForm = { displayName: '', relationship: '', dateOfBirth: '', gender: '' };
 
-export default function RelativeProfiles({ user }) {
+export default function RelativeProfiles({ user, onSelfPuid }) {
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
   const [people, setPeople] = useState([]);
@@ -25,7 +25,7 @@ export default function RelativeProfiles({ user }) {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, addToast]);
+  }, [user?.id, addToast, onSelfPuid]);
 
   useEffect(() => { void loadPeople(); }, [loadPeople]);
 
