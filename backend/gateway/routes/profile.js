@@ -121,7 +121,7 @@ router.get('/access/users', authenticateUser, requirePlatformSuperAdmin, async (
     const search = String(req.query.search || '').trim();
     const filter = { role: { $nin: ['customer', 'CUSTOMER'] }, accountStatus: { $nin: ['DELETED', 'SUSPENDED', 'DISABLED'] } };
     if (search) {
-      const escaped = search.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\      const rx = new RegExp(search, 'i');');
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\      const escaped = search.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\      const rx = new RegExp(search, 'i');');');
       const rx = new RegExp(escaped, 'i');
       filter.$or = [{ name: rx }, { email: rx }, { normalizedEmail: rx }, { userId: rx }, { supabase_user_id: rx }, { role: rx }];
     }
@@ -132,7 +132,7 @@ router.get('/access/users', authenticateUser, requirePlatformSuperAdmin, async (
   }
 });
 
-router.patch('/access/users/:userId', authenticateUser, requireSuperAdmin, async (req, res) => {
+router.patch('/access/users/:userId', authenticateUser, requirePlatformSuperAdmin, async (req, res) => {
   try {
     const targetId = String(req.params.userId || '').trim();
     const clean = value => [...new Set((Array.isArray(value) ? value : []).map(v => String(v).trim()).filter(Boolean))];
