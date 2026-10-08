@@ -4,7 +4,6 @@ import express from 'express';
 import { authService, calculateAge, isValidDOB, isValidMobile } from '../../services/identity-service/AuthService.js';
 import { authenticateUser, requirePlatformSuperAdmin } from '../../middleware/auth.js';
 import UserProfile from '../../models/UserProfile.js';
-import { isPlatformSuperAdmin } from '../../shared/contracts/index.js';
 import { isKnownPermission } from '../../authorization/AuthorizationCatalogService.js';
 import { sendSuccess, sendError } from '../../shared/responses.js';
 import { setSessionCookies } from '../../security/sessionCookie.js';
