@@ -56,6 +56,7 @@ export default function OrderConfirmation({ order, onTrackOrder, onContinueShopp
             <span>Payment Mode:</span>
             <span className="font-bold text-emerald-600">Cash on Delivery</span>
           </div>
+          <div className="border-t border-slate-200 pt-2 text-[11px] text-slate-600"><strong>Ordered by:</strong> {order.orderedByName || userName}<br /><strong>Ordered for:</strong> {order.orderedForName || userName}</div>
           {order.deliveryAddress && (
             <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-500">
               <span>📍 Delivery to: {order.deliveryAddress}</span>
