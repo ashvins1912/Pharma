@@ -31,6 +31,7 @@ app.use((req, res, next) => {
     return res.sendStatus(origin && config.corsOrigin === origin ? 204 : 403);
   }
   res.on('finish', () => {
+    if (process.env.LOGGING_ENABLED === 'false') return;
     console.info(JSON.stringify({
       serviceName: 'inventory-service',
       requestId: req.requestId,
