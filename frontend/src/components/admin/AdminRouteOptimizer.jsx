@@ -129,8 +129,10 @@ export default function AdminRouteOptimizer({ onRefresh }) {
               </option>
             ))}
           </select>
-          {loadingRiders && <p className="mt-1 text-[11px] text-slate-500">Loading riders...</p>}
-          {ridersError && <p role="alert" className="mt-1 text-[11px] text-rose-600">{ridersError}</p>}
+          <div className="mt-1 min-h-4" aria-live="polite">
+            {loadingRiders && <p className="text-[11px] text-slate-500">Loading riders…</p>}
+            {!loadingRiders && ridersError && <p role="alert" className="text-[11px] text-rose-600">{ridersError}</p>}
+          </div>
           {!loadingRiders && !ridersError && riders.length === 0 && (
             <p className="mt-1 text-[11px] text-amber-700">No available onboarded riders found.</p>
           )}
