@@ -38,6 +38,11 @@ export const API_CAPABILITIES = [
   { method: 'PUT', pattern: /^\/api\/(?:v1\/)?prescriptions(?:\/|$)/, permission: 'prescription.write' },
   { method: 'PATCH', pattern: /^\/api\/(?:v1\/)?prescriptions(?:\/|$)/, permission: 'prescription.write' },
 
+  { method: 'GET', pattern: /^\/api\/v1\/integrations(?:\/|$)/, permission: 'csquare.read' },
+  { method: 'PUT', pattern: /^\/api\/v1\/integrations(?:\/|$)/, permission: 'csquare.manage' },
+  { method: 'POST', pattern: /^\/api\/v1\/integrations\/test-connection(?:\/|$)/, permission: 'csquare.manage' },
+  { method: 'POST', pattern: /^\/api\/v1\/integrations\/sync(?:\/|$)/, permission: 'csquare.sync' },
+
   { method: 'GET', pattern: /^\/api\/v1\/billing(?:\/|$)/, permission: 'billing.read' },
   { method: 'POST', pattern: /^\/api\/v1\/billing(?:\/|$)/, permission: 'billing.write' },
   { method: 'PUT', pattern: /^\/api\/v1\/billing(?:\/|$)/, permission: 'billing.write' },
