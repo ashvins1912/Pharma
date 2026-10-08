@@ -1,6 +1,7 @@
 import { tenantService } from '../services/tenant-service/TenantService.js';
 import { isPlatformSuperAdmin } from '../shared/contracts/index.js';
 import { getRolePermissions, getRoleScope } from './AuthorizationCatalogService.js';
+import UserProfile from '../models/UserProfile.js';
 
 function hasPermission(granted, required) {
   if (!required) return true;
@@ -70,6 +71,15 @@ export class AuthorizationService {
     // Platform/customer explicit permission overrides may be supplied by the user record.
     if (!membership) for (const permission of user?.permissions || []) permissions.add(permission);
 
+    let userProfile = null;
+    try {
+      userProfile = await UserProfile.findOne({ $or: [{ supabase_user_id: userId }, { supabaseId: userId }, { userId }] }).select('permissions accessGrants accessRevokes permissionVersion').lean();
+    } catch { userProfile = null; }
+    for (const permission of userProfile?.permissions || []) permissions.add(permission);
+    for (const permission of userProfile?.accessGrants || []) permissions.add(permission);
+    for (const permission of userProfile?.accessRevokes || []) permissions.delete(permission);
+    if (role === 'SUPER_ADMIN') { permissions.clear(); permissions.add('*'); }
+
     return {
       sub: userId,
       role,
@@ -78,7 +88,7 @@ export class AuthorizationService {
       branchId: role === 'SUPER_ADMIN' ? null : branchId,
       scope: role === 'SUPER_ADMIN' ? 'PLATFORM' : (requestedTenantId ? 'TENANT' : getRoleScope(role)),
       permissions: [...permissions],
-      permissionVersion: Number(user?.permissionVersion || user?.permissionsVersion || user?.version || 1),
+      permissionVersion: Number(userProfile?.permissionVersion || user?.permissionVersion || user?.permissionsVersion || user?.version || 1),
       membershipId: membership?.id || membership?._id?.toString() || null
     };
   }
