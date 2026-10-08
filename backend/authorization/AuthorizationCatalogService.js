@@ -54,4 +54,7 @@ export async function getRolePermissions(roleCode) {
 }
 
 export function getRoleScope(roleCode) { return ROLE_SCOPE[roleCode] || 'CUSTOMER'; }
+export function isKnownPermission(permissionCode) {
+  return PERMISSIONS.some(([feature, action]) => feature + '.' + action === permissionCode);
+}
 export const authorizationCatalog = { ensureAuthorizationCatalog, getRolePermissions, getRoleScope };
