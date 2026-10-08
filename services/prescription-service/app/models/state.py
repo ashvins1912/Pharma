@@ -65,3 +65,19 @@ def is_inactive(state: str) -> bool:
 
 def is_queryable(state: str) -> bool:
     return state != PrescriptionState.INACTIVE.value
+
+
+PUBLIC_STATUS_MAP = {
+    PrescriptionState.UPLOADED.value: "UPLOADED",
+    PrescriptionState.QUEUED.value: "UPLOADED",
+    PrescriptionState.PROCESSING.value: "UNDER_REVIEW",
+    PrescriptionState.REVIEW_REQUIRED.value: "UNDER_REVIEW",
+    PrescriptionState.AUTO_APPROVED.value: "APPROVED",
+    PrescriptionState.APPROVED.value: "APPROVED",
+    PrescriptionState.REJECTED.value: "REJECTED",
+    PrescriptionState.INACTIVE.value: "REJECTED",
+    PrescriptionState.FAILED.value: "UPLOADED",
+}
+
+def public_status(state: str) -> str:
+    return PUBLIC_STATUS_MAP.get(str(state), str(state))
