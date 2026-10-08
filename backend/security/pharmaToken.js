@@ -189,3 +189,16 @@ export async function verifySupabaseExchangeToken(token) {
     };
   }
 }
+
+
+export async function verifyGatewayTrustedRequestToken(token) {
+  const secret = env.GATEWAY_AUTH_SECRET;
+  if (!secret || secret.length < 32) throw new Error('Gateway trust secret is not configured.');
+  const secretKey = new TextEncoder().encode(secret);
+  return jwtVerify(token, secretKey, {
+    algorithms: ['HS256'],
+    issuer: process.env.SERVICE_JWT_ISSUER || 'ashvin-pharmacy',
+    audience: 'pharma-backend-trusted',
+    subject: 'api-gateway'
+  });
+}
