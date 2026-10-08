@@ -309,11 +309,11 @@ export default function PlatformTenantsView() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in text-slate-800">
+    <div className="w-full min-w-0 max-w-full space-y-6 animate-fade-in text-slate-800 overflow-x-hidden">
       
       {/* Platform Control Header Card */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 shadow-md space-y-4">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-4 sm:p-6 shadow-md space-y-4 overflow-hidden">
+        <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 min-w-0">
           <div>
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-blue-400">
               <span>Ashvin Platform Foundation</span>
@@ -328,7 +328,7 @@ export default function PlatformTenantsView() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             <button
               type="button"
               onClick={() => {
@@ -434,7 +434,7 @@ export default function PlatformTenantsView() {
       )}
 
       {/* Main Tab Navigation between Tenants Directory & Vendor Onboarding Invitations */}
-      <div className="flex border-b border-slate-200 gap-4">
+      <div className="flex border-b border-slate-200 gap-2 sm:gap-4 overflow-x-auto no-scrollbar max-w-full">
         <button
           type="button"
           onClick={() => setPlatformTab('tenants')}
@@ -465,9 +465,9 @@ export default function PlatformTenantsView() {
       {platformTab === 'tenants' ? (
         <>
           {/* Filter and Search Bar */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm min-w-0 overflow-hidden">
         {/* Interactive Segmented Control Buttons (No static pills) */}
-        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-full sm:w-auto overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-full lg:w-auto max-w-full overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => setStatusFilter('ALL')}
@@ -515,8 +515,8 @@ export default function PlatformTenantsView() {
         </div>
 
         {/* Search input & Refresh */}
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-64">
+        <div className="flex items-center gap-2 w-full lg:w-auto min-w-0">
+          <div className="relative flex-1 min-w-0 lg:w-64">
             <input
               type="text"
               placeholder="Search by name, slug, code..."
