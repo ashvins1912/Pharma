@@ -364,7 +364,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
               </div>
               {appliedCoupon && (
                 <div className="flex justify-between text-emerald-600 font-bold">
-                  <span>Discount Coupon ({appliedCoupon.code})</span>
+                  <span>{appliedCoupon.promotionLabel || `Discount Coupon (${appliedCoupon.code})`}</span>
                   <span>−₹{discountAmount.toFixed(1)}</span>
                 </div>
               )}
