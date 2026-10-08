@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { verifyPharmaAccessToken } from '../security/pharmaToken.js';
 import { authorizationService } from '../authorization/AuthorizationService.js';
+import { resolveApiCapability } from '../authorization/ApiCapabilityRegistry.js';
 
 
 /**
@@ -88,6 +89,20 @@ export const authenticateUser = async (req, res, next) => {
             tokenType,
             accountStatus
         };
+
+        // Central API capability enforcement. Individual routes can add
+        // resource/ownership checks, but developers cannot accidentally omit
+        // the permission gate for an endpoint registered as protected.
+        const capability = resolveApiCapability(req.method, req.originalUrl || req.url || '');
+        if (capability && !authorizationService.isAllowed(req.user, capability.permission)) {
+            return res.status(403).json({
+                success: false,
+                code: 'FORBIDDEN',
+                message: 'You do not have permission to access this API.',
+                permission: capability.permission
+            });
+        }
+
         return next();
     } catch {
         // Invalid signature, issuer, audience, or expiry.
