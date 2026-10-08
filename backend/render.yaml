@@ -23,6 +23,8 @@ services:
         sync: false
       - key: PHARMA_ACCESS_TOKEN_TTL
         value: "1h"
+      - key: PHARMA_REFRESH_TOKEN_TTL
+        value: "7d"
       - key: CORS_ALLOWED_ORIGINS
         sync: false
       - key: GATEWAY_AUTH_SECRET
