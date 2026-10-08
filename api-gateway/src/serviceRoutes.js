@@ -174,6 +174,7 @@ export function createServiceRouters(gatewayConfig = config) {
   prescriptionRouter.post('/:prescriptionId/review/approve', prescriptionReview, prescription('prescription.review'));
   prescriptionRouter.post('/:prescriptionId/review/reject', prescriptionReview, prescription('prescription.review'));
   prescriptionRouter.post('/:prescriptionId/review/wait', prescriptionReview, prescription('prescription.review'));
+  prescriptionRouter.post('/:prescriptionId/link-order', prescription('prescription.write'));
   prescriptionRouter.post('/:prescriptionId/convert-to-order', prescription('prescription.write'));
   prescriptionRouter.post('/:prescriptionId/review', prescriptionReview, prescription('prescription.review'));
   prescriptionRouter.post('/:prescriptionId/remove', prescription('prescription.write'));
