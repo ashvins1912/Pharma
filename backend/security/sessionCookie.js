@@ -24,7 +24,10 @@ export const COOKIE_CONFIG = {
         httpOnly: true,
         secure: isProduction,
         sameSite: isProduction ? 'none' : 'lax',
-        path: '/api/v1/auth',
+        // The browser reaches the API through /api and may use both /api/v1/auth/*
+        // and gateway-routed API paths. Keep the refresh credential available
+        // to the entire same-origin API surface; it remains HttpOnly + Secure.
+        path: '/',
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     },
     CSRF_TOKEN: {
@@ -63,6 +66,8 @@ export function setSessionCookies(res, { accessToken, refreshToken = null, csrfT
  */
 export function clearSessionCookies(res) {
     res.clearCookie('access_token', { path: '/' });
+    // Clear both the current root-scoped cookie and the legacy auth-scoped cookie.
+    res.clearCookie('refresh_token', { path: '/' });
     res.clearCookie('refresh_token', { path: '/api/v1/auth' });
     res.clearCookie('XSRF-TOKEN', { path: '/' });
 }
