@@ -3,6 +3,7 @@ import { isSupabaseConfigured, supabase } from '../supabaseClient';
 import { env } from '../config/env.ts';
 import apiClient from '../api/apiClient';
 import GoogleProfileOnboarding from '../components/auth/GoogleProfileOnboarding';
+import { useActionLoading, LOADING_ACTIONS } from './LoadingContext';
 
 const AuthContext = createContext(null);
 
@@ -19,6 +20,7 @@ export function AuthProvider({ children }) {
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [aal, setAal] = useState('aal1'); // 'aal1' (Single Factor) | 'aal2' (MFA Verified)
   const logoutInProgress = useRef(false);
+  const { runAction } = useActionLoading();
 
   // A user object alone is not enough to authorize application API calls.
   // Google first-time users receive a restricted PROFILE_INCOMPLETE token.
@@ -184,7 +186,7 @@ export function AuthProvider({ children }) {
    * Step 1: Login with Email & Password
    * Detects if Zero-Cost TOTP MFA is enrolled.
    */
-  const loginWithEmail = async (email, password) => {
+  const loginWithEmail = async (email, password) => runAction(LOADING_ACTIONS.SIGN_IN, async () => {
     // Email/password login is a first-party platform session. Clear any old
     // browser-only Supabase session first so it cannot compete with this login.
     // Remove any stale upstream Google broker session locally. Do not call
@@ -213,7 +215,7 @@ export function AuthProvider({ children }) {
     setMfaChallenge(null);
     setProfileCompletionRequired(Boolean(data?.requiresProfileCompletion || data?.code === 'PROFILE_INCOMPLETE'));
     return { success: true, user: data.user };
-  };
+  });
 
   const loginWithGoogle = async () => {
     if (!isSupabaseConfigured || !supabase) {
@@ -357,19 +359,21 @@ export function AuthProvider({ children }) {
     if (logoutInProgress.current) return;
     logoutInProgress.current = true;
     try {
-    localStorage.removeItem('demo_session');
-    localStorage.removeItem('demo_auth_token');
-    syncSession(null);
-    setProfileCompletionRequired(false);
-    setMfaRequired(false);
-    setMfaChallenge(null);
-    window.dispatchEvent(new CustomEvent('ashvin:logout-complete'));
-    try {
-      await apiClient.post('/api/v1/auth/logout');
-    } catch (error) {
-      console.warn('Server logout request failed; local logout was completed.', { code: error.code, status: error.status, requestId: error.requestId });
-    }
-    clearSupabaseLocalSession();
+      await runAction(LOADING_ACTIONS.SIGN_OUT, async () => {
+        localStorage.removeItem('demo_session');
+        localStorage.removeItem('demo_auth_token');
+        syncSession(null);
+        setProfileCompletionRequired(false);
+        setMfaRequired(false);
+        setMfaChallenge(null);
+        window.dispatchEvent(new CustomEvent('ashvin:logout-complete'));
+        try {
+          await apiClient.post('/api/v1/auth/logout');
+        } catch (error) {
+          console.warn('Server logout request failed; local logout was completed.', { code: error.code, status: error.status, requestId: error.requestId });
+        }
+        clearSupabaseLocalSession();
+      });
     } finally {
       logoutInProgress.current = false;
     }
