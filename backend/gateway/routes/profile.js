@@ -127,7 +127,7 @@ router.get('/access/users', authenticateUser, requirePlatformSuperAdmin, async (
       filter.$or = [{ name: rx }, { email: rx }, { normalizedEmail: rx }, { userId: rx }, { supabase_user_id: rx }, { role: rx }];
     }
     const users = await UserProfile.find(filter).select('userId supabase_user_id supabaseId name firstName lastName email role roles tenantId branchId permissions accessGrants accessRevokes permissionVersion accountStatus').sort({ updatedAt: -1 }).limit(50).lean();
-    return sendSuccess(res, { data: users.map(u => ({ ...u, id: u.userId || u.supabase_user_id || u.supabaseId, effectiveSuperAdmin: isPlatformSuperAdmin(u.role) })), message: 'Platform users retrieved.', statusCode: 200, req });
+    return sendSuccess(res, { data: users.map(u => ({ ...u, id: u.userId || u.supabase_user_id || u.supabaseId, effectiveSuperAdmin: u.role === 'SUPER_ADMIN' || u.role === 'PLATFORM_SUPER_ADMIN' })), message: 'Platform users retrieved.', statusCode: 200, req });
   } catch (err) {
     return sendError(res, { code: 'ACCESS_USERS_FAILED', message: err.message || 'Could not load platform users.', statusCode: 500, req });
   }
@@ -139,7 +139,7 @@ router.patch('/access/users/:userId', authenticateUser, requirePlatformSuperAdmi
     const clean = value => [...new Set((Array.isArray(value) ? value : []).map(v => String(v).trim()).filter(v => isKnownPermission(v) && !v.includes('*')))];
     const target = await UserProfile.findOne({ $or: [{ userId: targetId }, { supabase_user_id: targetId }, { supabaseId: targetId }] });
     if (!target) return sendError(res, { code: 'USER_NOT_FOUND', message: 'Platform user was not found.', statusCode: 404, req });
-    if (isPlatformSuperAdmin(target.role)) return sendError(res, { code: 'SUPER_ADMIN_LOCKED', message: 'Super Admin has complete access and cannot have permissions restricted.', statusCode: 409, req });
+    if (target.role === 'SUPER_ADMIN' || target.role === 'PLATFORM_SUPER_ADMIN') return sendError(res, { code: 'SUPER_ADMIN_LOCKED', message: 'Super Admin has complete access and cannot have permissions restricted.', statusCode: 409, req });
     target.accessGrants = clean(req.body?.grants);
     target.accessRevokes = clean(req.body?.revokes);
     target.permissionVersion = Number(target.permissionVersion || 1) + 1;
