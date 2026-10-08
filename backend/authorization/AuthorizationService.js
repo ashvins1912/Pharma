@@ -3,8 +3,9 @@ import { isPlatformSuperAdmin } from '../shared/contracts/index.js';
 import { getRolePermissions, getRoleScope } from './AuthorizationCatalogService.js';
 import UserProfile from '../models/UserProfile.js';
 
-function hasPermission(granted, required) {
+function hasPermission(granted, required, revoked = []) {
   if (!required) return true;
+  if (revoked.includes(required) || revoked.some(item => item.endsWith('.*') && required.startsWith(item.slice(0, -1)))) return false;
   return granted.includes('*') || granted.includes(required) || granted.some(item => item.endsWith('.*') && required.startsWith(item.slice(0, -1)));
 }
 
@@ -65,6 +66,7 @@ export class AuthorizationService {
     }
     const rolePermissions = await getRolePermissions(role);
     const permissions = new Set(rolePermissions);
+    const revokedPermissions = new Set();
 
     // Membership permissions are explicit tenant-level grants/overrides.
     for (const permission of membership?.permissions || []) permissions.add(permission);
@@ -77,7 +79,7 @@ export class AuthorizationService {
     } catch { userProfile = null; }
     for (const permission of userProfile?.permissions || []) permissions.add(permission);
     for (const permission of userProfile?.accessGrants || []) permissions.add(permission);
-    for (const permission of userProfile?.accessRevokes || []) permissions.delete(permission);
+    for (const permission of userProfile?.accessRevokes || []) { permissions.delete(permission); revokedPermissions.add(permission); }
     if (role === 'SUPER_ADMIN') { permissions.clear(); permissions.add('*'); }
 
     return {
@@ -88,13 +90,14 @@ export class AuthorizationService {
       branchId: role === 'SUPER_ADMIN' ? null : branchId,
       scope: role === 'SUPER_ADMIN' ? 'PLATFORM' : (requestedTenantId ? 'TENANT' : getRoleScope(role)),
       permissions: [...permissions],
+      revokedPermissions: [...revokedPermissions],
       permissionVersion: Number(userProfile?.permissionVersion || user?.permissionVersion || user?.permissionsVersion || user?.version || 1),
       membershipId: membership?.id || membership?._id?.toString() || null
     };
   }
 
   isAllowed(context, permission) {
-    return hasPermission(context?.permissions || [], permission);
+    return hasPermission(context?.permissions || [], permission, context?.revokedPermissions || []);
   }
 }
 
