@@ -487,14 +487,19 @@ export function AuthProvider({ children }) {
     if (googleExchangePromiseRef.current) return googleExchangePromiseRef.current;
 
     googleExchangePromiseRef.current = (async () => {
-      const { data } = await apiClient.post('/api/v1/auth/google', {
-        supabaseAccessToken: supaSession.access_token
-      });
-      const result = data?.data || data;
-      syncSession({ user: result?.user }, result?.user);
-      setProfileCompletionRequired(Boolean(result?.requiresProfileCompletion || result?.code === 'PROFILE_INCOMPLETE'));
-      setAuthTransitionLoading(false);
-      return result;
+      try {
+        const { data } = await apiClient.post('/api/v1/auth/google', {
+          supabaseAccessToken: supaSession.access_token
+        });
+        const result = data?.data || data;
+        syncSession({ user: result?.user }, result?.user);
+        setProfileCompletionRequired(Boolean(result?.requiresProfileCompletion || result?.code === 'PROFILE_INCOMPLETE'));
+        setAuthTransitionLoading(false);
+        return result;
+      } catch (error) {
+        setAuthTransitionLoading(false);
+        throw error;
+      }
     })().finally(() => {
       googleExchangePromiseRef.current = null;
     });
