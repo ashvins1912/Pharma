@@ -107,11 +107,19 @@ export default function AdminDashboardView() {
   }, [authLoading, isPharmacyOrAdmin]);
 
   useEffect(() => {
-    if (authLoading || !isAdmin) return;
+    if (authLoading || !isAdmin || adminTab !== 'fulfillment') return;
     loadAllOrders();
+  }, [adminTab, authLoading, isAdmin, activeOrdersPage]);
+
+  useEffect(() => {
+    if (authLoading || !isAdmin) return;
     loadInventoryAlerts();
-    if (adminTab === 'audits') loadAuditLogs();
-  }, [adminTab, authLoading, isAdmin, loadInventoryAlerts, activeOrdersPage, auditPagination.page]);
+  }, [authLoading, isAdmin, loadInventoryAlerts]);
+
+  useEffect(() => {
+    if (authLoading || !isAdmin || adminTab !== 'audits') return;
+    loadAuditLogs();
+  }, [adminTab, authLoading, isAdmin, auditPagination.page]);
 
   // Derived Metrics
   const processingCount = orders.filter(o => o.orderStatus === 'Processing Order').length;
@@ -280,11 +288,12 @@ export default function AdminDashboardView() {
         >
           <span>📋</span>
           <span>Medicine Requests & Proposals</span>
-          {pendingMedicineRequestCount > 0 && (
-            <span className="inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[10px] font-black leading-none text-white">
-              {pendingMedicineRequestCount}
-            </span>
-          )}
+          <span
+            aria-hidden={pendingMedicineRequestCount === 0}
+            className={`inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[10px] font-black leading-none text-white ${pendingMedicineRequestCount === 0 ? 'invisible' : ''}`}
+          >
+            {pendingMedicineRequestCount || 0}
+          </span>
         </button>
 
         <button
