@@ -80,7 +80,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
         <div className="flex items-start justify-between border-b border-slate-100 pb-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">
+              <span className="text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
                 Pharmacy Proposal
               </span>
               <span className="text-xs font-mono font-bold text-slate-500">
@@ -200,7 +200,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
           </div>
 
           {/* Delivery Slot Box */}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-3.5 space-y-1">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-50 border border-blue-200 rounded-2xl p-3.5 space-y-1">
             <span className="text-[10px] font-black uppercase tracking-wider text-blue-800 block">
               Proposed Delivery Window
             </span>
