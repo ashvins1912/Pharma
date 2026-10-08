@@ -18,9 +18,10 @@ const requireDatabase = (res) => {
     return false;
 };
 
-const isStaff = (user) => ['admin', 'pharmacy'].includes(
-    user?.app_metadata?.role || user?.role
-);
+const isStaff = (user) => [
+    'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
+    'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF'
+].includes(user?.app_metadata?.role || user?.role);
 
 const requireCustomer = (req, res, next) => {
     const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
