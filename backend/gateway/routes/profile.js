@@ -4,7 +4,7 @@ import express from 'express';
 import { authService, calculateAge, isValidDOB, isValidMobile } from '../../services/identity-service/AuthService.js';
 import { authenticateUser, requirePlatformSuperAdmin } from '../../middleware/auth.js';
 import UserProfile from '../../models/UserProfile.js';
-import { isKnownPermission } from '../../authorization/AuthorizationCatalogService.js';
+import { getRolePermissions, isKnownPermission } from '../../authorization/AuthorizationCatalogService.js';
 import { sendSuccess, sendError } from '../../shared/responses.js';
 import { setSessionCookies } from '../../security/sessionCookie.js';
 
@@ -126,7 +126,10 @@ router.get('/access/users', authenticateUser, requirePlatformSuperAdmin, async (
       filter.$or = [{ name: rx }, { email: rx }, { normalizedEmail: rx }, { userId: rx }, { supabase_user_id: rx }, { role: rx }];
     }
     const users = await UserProfile.find(filter).select('userId supabase_user_id supabaseId name firstName lastName email role roles tenantId branchId permissions accessGrants accessRevokes permissionVersion accountStatus').sort({ updatedAt: -1 }).limit(50).lean();
-    return sendSuccess(res, { data: users.map(u => ({ ...u, id: u.userId || u.supabase_user_id || u.supabaseId, effectiveSuperAdmin: u.role === 'SUPER_ADMIN' || u.role === 'PLATFORM_SUPER_ADMIN' })), message: 'Platform users retrieved.', statusCode: 200, req });
+    const roleCodes = [...new Set(users.map(u => u.role).filter(Boolean))];
+    const rolePermissionEntries = await Promise.all(roleCodes.map(async role => [role, await getRolePermissions(role)]));
+    const rolePermissions = Object.fromEntries(rolePermissionEntries);
+    return sendSuccess(res, { data: users.map(u => ({ ...u, id: u.userId || u.supabase_user_id || u.supabaseId, rolePermissions: rolePermissions[u.role] || [], effectiveSuperAdmin: u.role === 'SUPER_ADMIN' || u.role === 'PLATFORM_SUPER_ADMIN' })), message: 'Platform users retrieved.', statusCode: 200, req });
   } catch (err) {
     return sendError(res, { code: 'ACCESS_USERS_FAILED', message: err.message || 'Could not load platform users.', statusCode: 500, req });
   }
