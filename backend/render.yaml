@@ -29,6 +29,8 @@ services:
         sync: false
       - key: LOGGING_ENABLED
         value: "true"
+      - key: REQUIRE_GATEWAY_TRUST
+        value: "true"
       - key: GATEWAY_AUTH_SECRET
         sync: false
       - key: SERVICE_AUTH_SECRET
