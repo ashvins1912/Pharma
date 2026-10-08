@@ -69,7 +69,7 @@ export class DynamicOrderService {
         ]).exec();
     }
 
-    async evaluateCheckout(cartItems, customerId, requestedPoints = 0, { session, couponCode } = {}) {
+    async evaluateCheckout(cartItems, customerId, requestedPoints = 0, { session, couponCode, tenantId } = {}) {
         if (typeof customerId !== 'string' || !customerId.trim()) {
             throw new TypeError('Authenticated customer ID is required.');
         }
@@ -110,9 +110,7 @@ export class DynamicOrderService {
         });
 
         const subtotal = pricedItems.reduce((total, item) => total + item.currentPrice * item.quantity, 0);
-        const coupon = couponCode
-            ? await this.couponValidator(couponCode, subtotal)
-            : { valid: true, discountPercentage: 0 };
+        const coupon = await this.couponValidator(couponCode || '', subtotal, { customerId, tenantId });
         if (!coupon.valid) throw new Error(coupon.message || 'Coupon is invalid.');
         const couponRate = Number(coupon.discountPercentage || 0) / 100;
         const rewardItems = pricedItems.map(item => ({
@@ -143,6 +141,8 @@ export class DynamicOrderService {
             cost: earning.totalCostPrice,
             netProfit: earning.netProfit,
             netMarginPercentage: earning.netMarginPercentage,
+            couponCode: coupon.code || couponCode || null,
+            couponLabel: coupon.promotionLabel || null,
             couponDiscount: subtotal - earning.totalRevenue,
             redemptionEligible: redemption.eligible && availablePoints > 0,
             redemptionBlockedReason: redemption.eligible ? null : redemption.reason,
