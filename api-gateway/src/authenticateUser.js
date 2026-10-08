@@ -77,6 +77,8 @@ export async function authenticateUser(req, res, next, gatewayConfig = config) {
       throw new Error('Authentication response is missing a user identity.');
     }
     req.user = result.user;
+    req.gatewayAuthenticated = true;
+    req.gatewayAuthRequestId = req.requestId;
     return next();
   } catch (error) {
     console.error('Gateway received an invalid authentication response:', {
