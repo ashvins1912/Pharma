@@ -1356,6 +1356,7 @@ export const dataStore = {
                         customerName: orderData.customerName,
                         orderedByName: orderData.customerName || 'Valued Customer',
                         orderedForName: orderData.orderedForName || orderData.customerName || 'Valued Customer',
+                        orderedForRelationship: orderData.orderedForRelationship || 'SELF',
                         patientPuid: orderData.patientPuid || null,
                         customerMobile: orderData.customerMobile || '',
                         medicineItems,
