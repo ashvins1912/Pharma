@@ -141,6 +141,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading || googleLoading) return;
     if (isSignUp && !passwordRecoveryRequired && !validateSignup()) return;
     setErrorMsg('');
     setLoading(true);
@@ -255,6 +256,7 @@ export default function AuthModal({ isOpen, onClose }) {
   };
 
   const handleGoogleLogin = async () => {
+    if (loading || googleLoading) return;
     setErrorMsg('');
     setLoading(true);
     setGoogleLoading(true);
@@ -303,6 +305,7 @@ export default function AuthModal({ isOpen, onClose }) {
         {/* Close Button */}
         <button
           onClick={handleClose}
+          disabled={loading || googleLoading}
           className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition cursor-pointer"
         >
           ✕
@@ -646,7 +649,7 @@ export default function AuthModal({ isOpen, onClose }) {
               isSupabaseConfigured ? (
                 <button
                   onClick={handleGoogleLogin}
-                  disabled={loading}
+                  disabled={loading || googleLoading}
                   aria-busy={googleLoading}
                   className="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-2.5 rounded-xl text-xs shadow-sm cursor-pointer transition mb-4"
                 >
