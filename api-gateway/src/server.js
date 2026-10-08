@@ -155,6 +155,7 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
           permission,
           requestId: req.requestId
         }, gatewayConfig);
+        req.gatewayTrusted = true;
         return proxyRequest(
           req,
           res,
