@@ -27,6 +27,23 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const [rewardQuote, setRewardQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState('');
+  const [people, setPeople] = useState([]);
+  const [patientPuid, setPatientPuid] = useState('');
+  useEffect(() => {
+    if (!isOpen || !user?.id) return;
+    let cancelled = false;
+    apiClient.get('/api/v1/customers/persons')
+      .then(({ data }) => {
+        if (cancelled) return;
+        const list = data?.data || data || [];
+        setPeople(Array.isArray(list) ? list : []);
+        const self = Array.isArray(list) ? list.find((p) => String(p.relationshipToOwner).toUpperCase() === 'SELF') : null;
+        if (self) setPatientPuid((current) => current || self.puid);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isOpen, user?.id]);
+
   const quoteRequestId = useRef(0);
   const cartForQuote = JSON.stringify(cart.map(item => ({
     medicineId: item._id,
@@ -128,7 +145,9 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         mobile: selectedAddress.mobile || user?.user_metadata?.mobile || '',
         couponCode: appliedCoupon?.code || '',
         pointsToRedeem: usePoints ? String(Number(pointsRequested) || 0) : '0',
-        paymentMethod: "Cash on Delivery (COD)"
+        paymentMethod: "Cash on Delivery (COD)",
+        patientPuid: patientPuid || '',
+        orderedForName: (people.find((p) => p.puid === patientPuid)?.displayName) || user?.name || user?.email || 'Customer'
       };
       const formData = new FormData();
       Object.entries(checkoutData).forEach(([key, value]) => formData.append(key, value));
