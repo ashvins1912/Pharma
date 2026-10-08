@@ -271,6 +271,20 @@ async def reject_review(
             raise HTTPException(status_code=409, detail="This prescription was already updated by another reviewer.")
         raise HTTPException(status_code=409, detail=str(exc))
 
+@router.post("/{prescription_id}/link-order")
+async def link_order(
+    prescription_id: str,
+    order_id: str = Form(...),
+    context: ServiceUserContext = Depends(get_current_service_context),
+):
+    _require_write_permission(context)
+    await _authorized_prescription(prescription_id, context)
+    try:
+        result = await prescription_engine.link_order(prescription_id, order_id, context.user_id)
+        return {"success": True, "data": result}
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+
 @router.post("/{prescription_id}/convert-to-order")
 async def convert_to_order(
     prescription_id: str,
