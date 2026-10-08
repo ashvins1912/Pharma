@@ -8,25 +8,24 @@ import './index.css';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { AppProvider } from './context/AppContext';
-import { LoadingProvider, GlobalLoadingIndicator } from './context/LoadingContext';
+import { LoadingProvider } from './context/LoadingContext';
 import ModalInteractionGuard from './components/ModalInteractionGuard';
 import CustomerErrorBoundary from './components/CustomerErrorBoundary';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <AuthProvider>
-      <ToastProvider>
-        <AppProvider>
-          <LoadingProvider>
-            <GlobalLoadingIndicator />
-      <ModalInteractionGuard />
+    <LoadingProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <AppProvider>
+            <ModalInteractionGuard />
             <CustomerErrorBoundary>
-            <App />
+              <App />
             </CustomerErrorBoundary>
-          </LoadingProvider>
-          <SpeedInsights />
-        </AppProvider>
-      </ToastProvider>
-    </AuthProvider>
+            <SpeedInsights />
+          </AppProvider>
+        </ToastProvider>
+      </AuthProvider>
+    </LoadingProvider>
   </React.StrictMode>
 );
