@@ -138,6 +138,7 @@ router.patch('/access/users/:userId', authenticateUser, requirePlatformSuperAdmi
     const clean = value => [...new Set((Array.isArray(value) ? value : []).map(v => String(v).trim()).filter(v => isKnownPermission(v) && !v.includes('*')))];
     const target = await UserProfile.findOne({ $or: [{ userId: targetId }, { supabase_user_id: targetId }, { supabaseId: targetId }] });
     if (!target) return sendError(res, { code: 'USER_NOT_FOUND', message: 'Platform user was not found.', statusCode: 404, req });
+    if (target.role === 'customer' || target.role === 'CUSTOMER') return sendError(res, { code: 'CUSTOMER_ACCESS_ASSIGNMENT_BLOCKED', message: 'Customer accounts cannot receive platform access assignments.', statusCode: 403, req });
     if (target.role === 'SUPER_ADMIN' || target.role === 'PLATFORM_SUPER_ADMIN') return sendError(res, { code: 'SUPER_ADMIN_LOCKED', message: 'Super Admin has complete access and cannot have permissions restricted.', statusCode: 409, req });
     target.accessGrants = clean(req.body?.grants);
     target.accessRevokes = clean(req.body?.revokes);
