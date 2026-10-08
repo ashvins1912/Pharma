@@ -601,17 +601,33 @@ export default function AuthModal({ isOpen, onClose }) {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold py-2.5 rounded-xl text-xs shadow-md shadow-blue-600/20 cursor-pointer transition"
+                  aria-busy={loading}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold py-2.5 rounded-xl text-xs shadow-md shadow-blue-600/20 cursor-pointer transition flex items-center justify-center gap-2"
                 >
-                  {loading
-                    ? 'Please wait...'
-                    : passwordRecoveryRequired
-                    ? 'Update Password'
-                    : isForgotPassword
-                    ? 'Send Password Reset Link'
-                    : isSignUp
-                    ? 'Create Free Account'
-                    : 'Login to Pharmacy'}
+                  {loading ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white/70 border-t-transparent rounded-full animate-spin" aria-hidden="true"></span>
+                      <span>
+                        {passwordRecoveryRequired
+                          ? 'Updating Password...'
+                          : isForgotPassword
+                          ? 'Sending Reset Link...'
+                          : isSignUp
+                          ? 'Creating Account...'
+                          : 'Signing In...'}
+                      </span>
+                    </>
+                  ) : (
+                    <span>
+                      {passwordRecoveryRequired
+                        ? 'Update Password'
+                        : isForgotPassword
+                        ? 'Send Password Reset Link'
+                        : isSignUp
+                        ? 'Create Free Account'
+                        : 'Login to Pharmacy'}
+                    </span>
+                  )}
                 </button>
               </form>
             )}
