@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { env } from './config/env.js';
-import connectDB from './config/db.js';
+import connectDB, { getIsConnected } from './config/db.js';
 import { corsErrorHandler, createCorsMiddleware } from './security/corsPolicy.js';
 import { requestContext } from './security/requestContext.js';
 import medicineRoutes from './routes/medicineRoutes.js';
