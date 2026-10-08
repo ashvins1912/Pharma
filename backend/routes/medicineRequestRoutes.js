@@ -39,7 +39,7 @@ const authorizeCustomerAction = (req, res, next) => {
 
 const authorizeRequestList = (req, res, next) => {
     if (req.baseUrl.startsWith('/api/admin/')) {
-        return isPharmacyOrAdmin(req, res, next);
+        return requirePermission('medicine_requests.read')(req, res, next);
     }
     return requireCustomer(req, res, next);
 };
@@ -215,7 +215,7 @@ const handleAttachments = (req, res, next) => {
 // -------------------------------------------------------------
 
 // Replace/re-upload the prescription for an existing customer medicine request.
-router.put('/:id/prescription', authenticateUser, authorizeCustomerAction, handleAttachments, async (req, res) => {
+router.put('/:id/prescription', authenticateUser, requirePermission('medicine_requests.create'), authorizeCustomerAction, handleAttachments, async (req, res) => {
     try {
         if (!requireDatabase(res)) return;
         const customerId = req.user.sub;
@@ -302,7 +302,7 @@ router.put('/:id/prescription', authenticateUser, authorizeCustomerAction, handl
 });
 
 // Create a new medicine request
-router.post('/', authenticateUser, authorizeCustomerAction, handleAttachments, async (req, res) => {
+router.post('/', authenticateUser, requirePermission('medicine_requests.create'), authorizeCustomerAction, handleAttachments, async (req, res) => {
     try {
         if (!requireDatabase(res)) return;
 
@@ -680,7 +680,7 @@ router.get('/:id/scan-prescription', authenticateUser, authorizeRequestDetails, 
 
 
 // Customer approves proposal -> triggers idempotent order conversion
-router.post('/:id/approve', authenticateUser, authorizeCustomerAction, async (req, res) => {
+router.post('/:id/approve', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const result = await dataStore.approveMedicineProposalAndConvertToOrder(
@@ -696,7 +696,7 @@ router.post('/:id/approve', authenticateUser, authorizeCustomerAction, async (re
 });
 
 // Customer rejects proposal
-router.post('/:id/reject', authenticateUser, authorizeCustomerAction, async (req, res) => {
+router.post('/:id/reject', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const request = await dataStore.rejectMedicineProposalByCustomer(
@@ -712,7 +712,7 @@ router.post('/:id/reject', authenticateUser, authorizeCustomerAction, async (req
 });
 
 // Customer cancels medicine request
-router.post('/:id/cancel', authenticateUser, authorizeCustomerAction, async (req, res) => {
+router.post('/:id/cancel', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const request = await dataStore.cancelMedicineRequestByCustomer(
@@ -727,7 +727,7 @@ router.post('/:id/cancel', authenticateUser, authorizeCustomerAction, async (req
     }
 });
 
-router.delete('/:id', authenticateUser, authorizeCustomerAction, async (req, res) => {
+router.delete('/:id', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const request = await dataStore.cancelMedicineRequestByCustomer(
@@ -747,7 +747,7 @@ router.delete('/:id', authenticateUser, authorizeCustomerAction, async (req, res
 // -------------------------------------------------------------
 
 // Metrics
-router.get('/metrics/overview', authenticateUser, isPharmacyOrAdmin, async (req, res) => {
+router.get('/metrics/overview', authenticateUser, requirePermission('medicine_requests.read'), async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const metrics = await dataStore.getMedicineRequestMetrics();
@@ -759,7 +759,7 @@ router.get('/metrics/overview', authenticateUser, isPharmacyOrAdmin, async (req,
 });
 
 // Review request
-router.put('/:id/review', authenticateUser, isPharmacyOrAdmin, async (req, res) => {
+router.put('/:id/review', authenticateUser, requirePermission('medicine_requests.manage'), async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
@@ -772,7 +772,7 @@ router.put('/:id/review', authenticateUser, isPharmacyOrAdmin, async (req, res) 
 });
 
 // Create/Send proposal
-router.post('/:id/proposal', authenticateUser, isPharmacyOrAdmin, async (req, res) => {
+router.post('/:id/proposal', authenticateUser, requirePermission('medicine_requests.proposal'), async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
@@ -786,7 +786,7 @@ router.post('/:id/proposal', authenticateUser, isPharmacyOrAdmin, async (req, re
 });
 
 // Update proposal
-router.put('/:id/proposal', authenticateUser, isPharmacyOrAdmin, async (req, res) => {
+router.put('/:id/proposal', authenticateUser, requirePermission('medicine_requests.proposal'), async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
@@ -800,7 +800,7 @@ router.put('/:id/proposal', authenticateUser, isPharmacyOrAdmin, async (req, res
 });
 
 // Pharmacy rejects request
-router.post('/:id/reject-request', authenticateUser, isPharmacyOrAdmin, async (req, res) => {
+router.post('/:id/reject-request', authenticateUser, requirePermission('medicine_requests.manage'), async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
