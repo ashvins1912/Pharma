@@ -10,6 +10,7 @@ import { createTrustedBackendRequestToken } from './serviceAuth.js';
 import { isGatewayPublicPath, resolveGatewayCapability, isGatewayPermissionAllowed } from './apiCapabilityRegistry.js';
 import { authenticateUser, requireAdmin } from './authenticateUser.js';
 import { createHealthMonitor } from './healthMonitor.js';
+import { enforceBrowserRequestSecurity } from './browserRequestSecurity.js';
 
 export function createGatewayApp(gatewayConfig = config, healthMonitor = createHealthMonitor({
   services: gatewayConfig.healthServices || [],
@@ -136,6 +137,12 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
   app.use('/api/orders', legacyPrescriptionRouter);
   const publicApiPath = (method, path) => isGatewayPublicPath(method, path);
 
+  app.use('/api', (req, res, next) => {
+    // Browser CSRF/origin policy must run at the gateway before public auth
+    // endpoints are proxied and before authenticated cookies are stripped.
+    // The backend remains a second trust boundary for direct/internal calls.
+    return enforceBrowserRequestSecurity(req, res, next, gatewayConfig);
+  });
   app.use('/api', async (req, res, next) => {
     if (publicApiPath(req.method, req.originalUrl || req.url || '')) {
       // Public catalog endpoints are intentionally unauthenticated, but they
