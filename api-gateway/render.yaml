@@ -10,8 +10,9 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Backend is a Render private service; use the private-network DNS name.
       - key: BACKEND_API_URL
-        sync: false
+        value: http://ashvin-pharmacy-platform:10000
       - key: PHARMA_JWT_PUBLIC_KEY
         sync: false
       - key: PHARMA_JWT_ISSUER
