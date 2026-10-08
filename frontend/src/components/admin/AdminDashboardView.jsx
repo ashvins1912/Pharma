@@ -8,6 +8,7 @@ import RiderFleetView from './riders/RiderFleetView';
 import AdminOrderFinancials from './AdminOrderFinancials';
 import AdminMedicineRequestsTab from './requests/AdminMedicineRequestsTab';
 import AdminPaymentReminders from './AdminPaymentReminders';
+import AdminCSquareTab from './AdminCSquareTab';
 import PlatformTenantsView from './PlatformTenantsView';
 import PlatformAccessControl from './PlatformAccessControl';
 import { getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
@@ -43,7 +44,8 @@ function PendingMedicineRequestsNotice({ count, onOpen }) {
 export default function AdminDashboardView() {
   const { isAdmin, isSuperAdmin, isPharmacyOrAdmin, hasPermission, role, loading: authLoading } = useAuth();
   const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen } = useApp();
-  const [adminTab, setAdminTab] = useState('fulfillment'); // 'fulfillment' | 'inventory' | 'routes' | 'audits'
+  const [adminTab, setAdminTab] = useState('fulfillment');
+  const canViewFulfillment = hasPermission('orders.read'); // 'fulfillment' | 'inventory' | 'routes' | 'audits'
   const [orders, setOrders] = useState([]);
   const [recentOrders, setRecentOrders] = useState([]);
   const [totalOrders, setTotalOrders] = useState(0);
@@ -68,7 +70,7 @@ export default function AdminDashboardView() {
   };
 
   const loadAllOrders = async () => {
-    if (authLoading || !isAdmin) return;
+    if (authLoading || !canViewFulfillment) return;
     try {
       setLoadingOrders(true);
       setOrdersError('');
@@ -109,7 +111,7 @@ export default function AdminDashboardView() {
   useEffect(() => {
     if (authLoading || !isAdmin || adminTab !== 'fulfillment') return;
     loadAllOrders();
-  }, [adminTab, authLoading, isAdmin, activeOrdersPage]);
+  }, [adminTab, authLoading, canViewFulfillment, activeOrdersPage]);
 
   useEffect(() => {
     if (authLoading || !isAdmin) return;
@@ -267,7 +269,7 @@ export default function AdminDashboardView() {
 
       {/* Admin Tab Navigation Bar */}
       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar border-b border-slate-200 pb-2">
-        <button
+        {canViewFulfillment && <button
           onClick={() => setAdminTab('fulfillment')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
             adminTab === 'fulfillment'
@@ -276,8 +278,17 @@ export default function AdminDashboardView() {
           }`}
         >
           📦 Fulfillment Queue ({orders.length})
-        </button>
+        </button>}
 
+
+        {hasPermission('csquare.read') && (
+          <button
+            onClick={() => setAdminTab('csquare')}
+            className={'px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ' + (adminTab === 'csquare' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200')}
+          >
+            <span>🔗</span><span>C-Square</span>
+          </button>
+        )}
         {hasPermission('medicine_requests.read') && (
           <button
             onClick={() => setAdminTab('requests')}
@@ -381,7 +392,9 @@ export default function AdminDashboardView() {
       {adminTab === 'access' && isSuperAdmin && (
         <PlatformAccessControl />
       )}
-      {adminTab === 'fulfillment' && (
+      {adminTab === 'csquare' && hasPermission('csquare.read') && <AdminCSquareTab />}
+
+      {adminTab === 'fulfillment' && canViewFulfillment && (
         <div className="space-y-3">
           {ordersError && (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
