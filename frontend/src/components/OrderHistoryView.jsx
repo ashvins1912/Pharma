@@ -110,8 +110,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                           <button
                             onClick={() => cancelOrder(order)}
                             disabled={isActionLoading(LOADING_ACTIONS.CANCEL_ORDER)}
-                            className="mr-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition"
-                           disabled={isActionLoading(LOADING_ACTIONS.CANCEL_ORDER)} >
+                            className="mr-2 bg-rose-50 hover:bg-rose-100 disabled:opacity-60 disabled:cursor-wait text-rose-700 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition" >
                             {isActionLoading(LOADING_ACTIONS.CANCEL_ORDER) ? 'Cancelling...' : 'Cancel'}
                           </button>
                         )}
