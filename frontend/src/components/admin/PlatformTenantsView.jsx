@@ -315,7 +315,7 @@ export default function PlatformTenantsView() {
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 shadow-md space-y-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-indigo-400">
+            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-blue-400">
               <span>Ashvin Platform Foundation</span>
               <span aria-hidden="true">·</span>
               <span className="text-emerald-400">Platform Scope</span>
@@ -348,7 +348,7 @@ export default function PlatformTenantsView() {
                 setOnboardError('');
                 setOnboardModalOpen(true);
               }}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-sm shrink-0"
+              className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-sm shrink-0"
             >
               <span>➕</span>
               <span>Onboard Pharmacy Tenant</span>
@@ -440,7 +440,7 @@ export default function PlatformTenantsView() {
           onClick={() => setPlatformTab('tenants')}
           className={`pb-3 text-xs font-black transition cursor-pointer flex items-center gap-2 border-b-2 ${
             platformTab === 'tenants'
-              ? 'border-indigo-600 text-indigo-700'
+              ? 'border-blue-600 text-blue-700'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -522,7 +522,7 @@ export default function PlatformTenantsView() {
               placeholder="Search by name, slug, code..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
             />
             {searchQuery && (
               <button
@@ -565,7 +565,7 @@ export default function PlatformTenantsView() {
           <button
             type="button"
             onClick={() => setOnboardModalOpen(true)}
-            className="bg-indigo-600 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-indigo-500 transition cursor-pointer"
+            className="bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-blue-500 transition cursor-pointer"
           >
             Onboard New Tenant
           </button>
@@ -601,7 +601,7 @@ export default function PlatformTenantsView() {
 
                       {/* Identifiers */}
                       <td className="py-3.5 px-4 font-mono text-[11px]">
-                        <div className="text-indigo-600 font-semibold">{t.id}</div>
+                        <div className="text-blue-600 font-semibold">{t.id}</div>
                         <div className="text-slate-400 text-[10px]">slug: {t.slug || '—'}</div>
                       </td>
 
@@ -653,7 +653,7 @@ export default function PlatformTenantsView() {
                           <button
                             type="button"
                             onClick={() => openInviteModal(t)}
-                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer"
+                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer"
                             title="Invite a Tenant Administrator"
                           >
                             👤 Invite Admin
@@ -820,7 +820,7 @@ export default function PlatformTenantsView() {
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-scale-up border border-slate-100">
             <div className="flex justify-between items-start">
               <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 block">
+                <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 block">
                   Platform Provisioning
                 </span>
                 <h3 className="text-lg font-black text-slate-900">
@@ -861,7 +861,7 @@ export default function PlatformTenantsView() {
                       slug: prev.slug === '' || prev.slug === autoSlug.slice(0, -1) ? autoSlug : prev.slug
                     }));
                   }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                 />
               </div>
 
@@ -875,7 +875,7 @@ export default function PlatformTenantsView() {
                     placeholder="e.g. apollo-life-care"
                     value={onboardForm.slug}
                     onChange={(e) => setOnboardForm(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-[11px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-[11px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                   />
                 </div>
 
@@ -888,7 +888,7 @@ export default function PlatformTenantsView() {
                     placeholder="e.g. Apollo Healthcare LLP"
                     value={onboardForm.legalName}
                     onChange={(e) => setOnboardForm(prev => ({ ...prev, legalName: e.target.value }))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                   />
                 </div>
               </div>
@@ -903,7 +903,7 @@ export default function PlatformTenantsView() {
                     placeholder="care@tenant.example.com"
                     value={onboardForm.contactEmail}
                     onChange={(e) => setOnboardForm(prev => ({ ...prev, contactEmail: e.target.value }))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                   />
                 </div>
 
@@ -916,7 +916,7 @@ export default function PlatformTenantsView() {
                     placeholder="+91 98260 12345"
                     value={onboardForm.contactPhone}
                     onChange={(e) => setOnboardForm(prev => ({ ...prev, contactPhone: e.target.value }))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                   />
                 </div>
               </div>
@@ -930,7 +930,7 @@ export default function PlatformTenantsView() {
                   placeholder="owner@tenant.example.com"
                   value={onboardForm.initialAdminEmail}
                   onChange={(e) => setOnboardForm(prev => ({ ...prev, initialAdminEmail: e.target.value }))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                 />
                 <span className="text-[10px] text-slate-500 mt-1 block">
                   If provided, an invitation token and Tenant Admin membership will be provisioned immediately.
@@ -948,7 +948,7 @@ export default function PlatformTenantsView() {
                 <button
                   type="submit"
                   disabled={submittingOnboard}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded-xl transition cursor-pointer disabled:opacity-50 shadow-sm"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-xl transition cursor-pointer disabled:opacity-50 shadow-sm"
                 >
                   {submittingOnboard ? 'Provisioning...' : 'Provision Tenant'}
                 </button>
@@ -966,7 +966,7 @@ export default function PlatformTenantsView() {
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-scale-up border border-slate-100">
             <div className="flex justify-between items-start">
               <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 block">
+                <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 block">
                   Identity Delegation
                 </span>
                 <h3 className="text-lg font-black text-slate-900">
@@ -1023,7 +1023,7 @@ export default function PlatformTenantsView() {
                     placeholder="e.g. manager@pharmacy.in"
                     value={inviteForm.email}
                     onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                   />
                 </div>
 
@@ -1036,7 +1036,7 @@ export default function PlatformTenantsView() {
                     placeholder="e.g. Rajesh Kumar"
                     value={inviteForm.name}
                     onChange={(e) => setInviteForm(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                   />
                 </div>
 
@@ -1058,7 +1058,7 @@ export default function PlatformTenantsView() {
                   <button
                     type="submit"
                     disabled={submittingInvite}
-                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded-xl transition cursor-pointer disabled:opacity-50 shadow-sm"
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-xl transition cursor-pointer disabled:opacity-50 shadow-sm"
                   >
                     {submittingInvite ? 'Issuing...' : 'Issue Invitation'}
                   </button>
@@ -1077,7 +1077,7 @@ export default function PlatformTenantsView() {
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 animate-scale-up border border-slate-100 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start">
               <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 block">
+                <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 block">
                   Tenant Diagnostics & Memberships
                 </span>
                 <h3 className="text-lg font-black text-slate-900">
@@ -1142,7 +1142,7 @@ export default function PlatformTenantsView() {
                         <div key={m.id || idx} className="bg-white p-3 rounded-xl border border-slate-200 flex justify-between items-center">
                           <div>
                             <div className="font-bold text-slate-900">{m.email || m.userId}</div>
-                            <div className="text-[11px] text-indigo-600 font-semibold">{m.role}</div>
+                            <div className="text-[11px] text-blue-600 font-semibold">{m.role}</div>
                           </div>
                           <div className="text-right text-[11px]">
                             <span className={`font-bold ${m.status === 'ACTIVE' ? 'text-emerald-600' : 'text-amber-600'}`}>
