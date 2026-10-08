@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { verifyPharmaAccessToken } from '../security/pharmaToken.js';
+import { verifyPharmaAccessToken, verifyGatewayTrustedRequestToken } from '../security/pharmaToken.js';
 import { authorizationService } from '../authorization/AuthorizationService.js';
 import { resolveApiCapability } from '../authorization/ApiCapabilityRegistry.js';
 
@@ -12,6 +12,59 @@ import { resolveApiCapability } from '../authorization/ApiCapabilityRegistry.js'
  * 4. Attaches sanitized user context to req.user.
  */
 export const authenticateUser = async (req, res, next) => {
+    // Requests forwarded by the API Gateway carry a short-lived, signed trust
+    // credential. The gateway has already verified the user's session token and
+    // RBAC before forwarding. The backend still verifies the gateway signature,
+    // request binding, expiry and audience; it does not trust browser-supplied
+    // identity headers.
+    const trustedHeader = req.headers['x-gateway-trusted-authorization'];
+    if (typeof trustedHeader === 'string' && trustedHeader.startsWith('Bearer ')) {
+        try {
+            const { payload } = await verifyGatewayTrustedRequestToken(trustedHeader.slice(7).trim());
+            const method = String(req.method || 'GET').toUpperCase();
+            const path = String(req.originalUrl || req.url || '').split('?')[0];
+            if (payload.requestMethod !== method || payload.requestPath !== path) {
+                return res.status(401).json({ success: false, code: 'INVALID_GATEWAY_REQUEST_BINDING', message: 'Trusted request binding is invalid.' });
+            }
+            req.user = {
+                sub: payload.sub,
+                id: payload.sub,
+                email: payload.email || '',
+                name: payload.name || '',
+                firstName: payload.firstName || '',
+                lastName: payload.lastName || '',
+                role: payload.role || 'customer',
+                roles: Array.isArray(payload.roles) ? payload.roles : [payload.role || 'customer'],
+                permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
+                revokedPermissions: Array.isArray(payload.revokedPermissions) ? payload.revokedPermissions : [],
+                permissionVersion: Number(payload.permissionVersion || 1),
+                tenantId: payload.tenantId || null,
+                branchId: payload.branchId || null,
+                scope: payload.scope || 'CUSTOMER',
+                app_metadata: {
+                    role: payload.role || 'customer',
+                    tenantId: payload.tenantId || null,
+                    permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
+                    revokedPermissions: Array.isArray(payload.revokedPermissions) ? payload.revokedPermissions : []
+                },
+                user_metadata: {
+                    name: payload.name || '',
+                    mobile: '',
+                    dateOfBirth: null,
+                    gender: null
+                },
+                aal: payload.aal || 'aal1',
+                sessionId: null,
+                tokenType: 'gateway_trusted_request',
+                accountStatus: 'ACTIVE'
+            };
+            req.gatewayTrusted = true;
+            req.gatewayRequestId = payload.requestId || req.get('x-request-id') || null;
+            return next();
+        } catch {
+            return res.status(401).json({ success: false, code: 'INVALID_GATEWAY_TRUST', message: 'Gateway trust credential is invalid or expired.' });
+        }
+    }
     // 1. Check HttpOnly cookie first (XSS Hardened)
     let token = req.cookies?.['access_token'];
 
