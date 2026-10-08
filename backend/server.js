@@ -34,6 +34,25 @@ const corsAllowedOrigins = env.CORS_ALLOWED_ORIGINS
     ? env.CORS_ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
     : ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173'];
 app.use(requestContext);
+const requestLoggingEnabled = process.env.LOGGING_ENABLED !== 'false';
+app.use((req, res, next) => {
+    const startedAt = Date.now();
+    res.on('finish', () => {
+        if (!requestLoggingEnabled) return;
+        console.info(JSON.stringify({
+            serviceName: 'backend-api',
+            event: 'request_completed',
+            requestId: req.requestId || req.context?.requestId || null,
+            correlationId: req.correlationId || req.context?.correlationId || null,
+            method: req.method,
+            path: req.path,
+            statusCode: res.statusCode,
+            durationMs: Date.now() - startedAt,
+            gatewayTrusted: Boolean(req.gatewayTrusted)
+        }));
+    });
+    next();
+});
 app.use(createCorsMiddleware(corsAllowedOrigins));
 app.use(corsErrorHandler);
 app.use(express.json({ verify: (req, _res, buffer) => { req.rawBody = Buffer.from(buffer); } }));
