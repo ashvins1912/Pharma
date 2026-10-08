@@ -204,6 +204,13 @@ export class CustomerService {
     return true;
   }
 
+  async getManagedPerson(userId, puid) {
+    await this.assertUserCanAccessPuid(userId, puid);
+    const person = await Person.findOne({ puid, status: 'ACTIVE' }).lean();
+    if (!person) throw Object.assign(new Error('Customer or relative profile not found'), { statusCode: 404 });
+    return this._serializePerson(person);
+  }
+
   async createInvitation(userId, { inviteeEmail, personPuid, relationship, ttlHours = 72 }) {
     await this.assertUserCanAccessPuid(userId, personPuid);
     const invitation = await FamilyInvitation.create({
