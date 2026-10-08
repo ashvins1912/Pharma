@@ -22,11 +22,6 @@ export const API_CAPABILITIES = [
   },
   {
     method: 'GET',
-    pattern: /^\/api\/medicine-requests\/admin\/all(?:\/|$)/,
-    permission: 'medicine_requests.read'
-  },
-  {
-    method: 'GET',
     pattern: /^\/api\/medicine-requests\/metrics(?:\/|$)/,
     permission: 'medicine_requests.read'
   },
