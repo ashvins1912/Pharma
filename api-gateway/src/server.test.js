@@ -213,6 +213,22 @@ test('gateway authenticates the user and issues a scoped Order Service token', a
   }
 });
 
+test('gateway returns 401 for protected API requests without a session', async () => {
+  const backend = await startMockServer((_req, res) => {
+    res.writeHead(500).end();
+  });
+  const app = createGatewayApp(authorizedConfig(backend.url, backend.url));
+  const gateway = await start(app);
+
+  try {
+    const response = await fetch(gateway.url + '/api/admin/medicine-requests?page=1&pageSize=15');
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error.code, 'SESSION_REQUIRED');
+  } finally {
+    await Promise.all([gateway.close(), backend.close()]);
+  }
+});
+
 test('gateway rejects invalid user credentials before contacting a service', async () => {
   let serviceCalled = false;
   const backend = await startMockServer((_req, res) => {
