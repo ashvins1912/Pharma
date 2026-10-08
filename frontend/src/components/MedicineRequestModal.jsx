@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
 import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
+import { useApp } from '../context/AppContext';
 
 export default function MedicineRequestModal({ isOpen, onClose, initialMedicineName = '', onRequestSubmitted }) {
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
+  const { addresses, selectedAddressId, setSelectedAddressId, loadAddresses } = useApp();
   const submitting = isActionLoading(LOADING_ACTIONS.CREATE_MEDICINE);
 
   const [medicineName, setMedicineName] = useState(initialMedicineName);
@@ -13,8 +15,21 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
   const [quantity, setQuantity] = useState(1);
   const [urgency, setUrgency] = useState('Normal');
   const [customerNote, setCustomerNote] = useState('');
+  const [prescriptionFile, setPrescriptionFile] = useState(null);
+  const [addressError, setAddressError] = useState('');
 
   // Sync initial medicine name when modal opens
+  useEffect(() => {
+    if (isOpen) void loadAddresses();
+  }, [isOpen, loadAddresses]);
+
+  useEffect(() => {
+    if (isOpen && addresses.length && !selectedAddressId) {
+      const defaultAddress = addresses.find(address => address.isDefault) || addresses[0];
+      setSelectedAddressId(defaultAddress?._id || '');
+    }
+  }, [isOpen, addresses, selectedAddressId, setSelectedAddressId]);
+
   useEffect(() => {
     if (initialMedicineName) {
       setMedicineName(initialMedicineName);
@@ -31,13 +46,25 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
     }
 
     await runAction(LOADING_ACTIONS.CREATE_MEDICINE, async () => {
+      if (!selectedAddressId) {
+        setAddressError('Select a saved delivery address before submitting the request.');
+        return;
+      }
+      setAddressError('');
       try {
-      const res = await apiClient.post('/api/medicine-requests', {
-        medicineName: medicineName.trim(),
-        saltComposition: saltComposition.trim(),
+      const form = new FormData();
+      form.append('requestedItems', JSON.stringify([{
+        requestedName: medicineName.trim(),
+        composition: saltComposition.trim(),
         quantity: Math.max(1, Number(quantity) || 1),
-        urgency,
-        customerNote: customerNote.trim()
+        originalAvailabilityStatus: 'NOT_IN_CATALOG'
+      }]));
+      form.append('addressId', selectedAddressId);
+      form.append('preferredDeliveryPreference', urgency === 'Urgent (Same Day)' ? 'Morning' : urgency === 'Critical / Life-Saving' ? 'Morning' : 'Flexible');
+      form.append('customerNote', customerNote.trim());
+      if (prescriptionFile) form.append('prescription', prescriptionFile);
+      const res = await apiClient.post('/api/medicine-requests', form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
 
       addToast(res.data.message || 'Medicine request submitted to pharmacy!', 'success');
@@ -49,6 +76,8 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
       setQuantity(1);
       setUrgency('Normal');
       setCustomerNote('');
+      setPrescriptionFile(null);
+      setAddressError('');
       } catch (err) {
         addToast(err.message || 'Could not submit medicine request.', 'error');
       }
@@ -141,6 +170,41 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
                 <option value="Critical / Life-Saving">🔴 Critical / Life-Saving</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              Delivery Address *
+            </label>
+            <select
+              value={selectedAddressId}
+              onChange={e => { setSelectedAddressId(e.target.value); setAddressError(''); }}
+              className="w-full px-3 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white"
+            >
+              <option value="">Select saved address</option>
+              {addresses.map(address => (
+                <option key={address._id} value={address._id}>
+                  {address.label || 'Address'} — {[address.addressLine1, address.city, address.pincode].filter(Boolean).join(', ')}
+                </option>
+              ))}
+            </select>
+            {addressError && <p className="mt-1 text-[11px] font-bold text-rose-600">{addressError}</p>}
+            {!addresses.length && <p className="mt-1 text-[11px] text-amber-700">Please save a delivery address in your profile first.</p>}
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              Prescription (Optional)
+            </label>
+            <input
+              type="file"
+              accept=".pdf,image/jpeg,image/png,image/webp"
+              onChange={e => setPrescriptionFile(e.target.files?.[0] || null)}
+              className="w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-xs file:font-bold file:text-blue-700"
+            />
+            <p className="mt-1 text-[10px] text-slate-500">
+              Attach a prescription when the pharmacist needs it. Requests without a prescription are also supported.
+            </p>
           </div>
 
           <div>
