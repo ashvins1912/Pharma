@@ -47,7 +47,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
       case 'Dispatched':
         return <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full">Out for Delivery</span>;
       case 'Ready to Dispatch':
-        return <span className="bg-indigo-100 text-indigo-800 text-[10px] font-black px-2 py-0.5 rounded-full">Ready to Dispatch</span>;
+        return <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full">Ready to Dispatch</span>;
       default:
         return <span className="bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-full">Processing</span>;
     }
