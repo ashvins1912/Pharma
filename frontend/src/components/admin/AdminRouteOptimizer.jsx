@@ -132,14 +132,10 @@ export default function AdminRouteOptimizer({ onRefresh }) {
           <div className="mt-1 min-h-4" aria-live="polite">
             {loadingRiders && <p className="text-[11px] text-slate-500">Loading riders…</p>}
             {!loadingRiders && ridersError && <p role="alert" className="text-[11px] text-rose-600">{ridersError}</p>}
+            {!loadingRiders && !ridersError && riders.length === 0 && <p className="text-[11px] text-amber-700">No available onboarded riders found.</p>}
+            {!loadingRiders && !ridersError && riders.length > 0 && filteredRiders.length === 0 && <p className="text-[11px] text-slate-500">No riders match that search.</p>}
+            {!loadingRiders && !ridersError && selectedRider && <p className="text-[11px] text-slate-500">Selected: {selectedRider.name}</p>}
           </div>
-          {!loadingRiders && !ridersError && riders.length === 0 && (
-            <p className="mt-1 text-[11px] text-amber-700">No available onboarded riders found.</p>
-          )}
-          {!loadingRiders && !ridersError && riders.length > 0 && filteredRiders.length === 0 && (
-            <p className="mt-1 text-[11px] text-slate-500">No riders match that search.</p>
-          )}
-          {selectedRider && <p className="mt-1 text-[11px] text-slate-500">Selected: {selectedRider.name}</p>}
         </div>
 
         <div>
@@ -261,7 +257,7 @@ export default function AdminRouteOptimizer({ onRefresh }) {
                 <button
                   onClick={handleDispatchBatch}
                   disabled={dispatching}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-extrabold text-xs px-6 py-3 rounded-2xl shadow-lg shadow-blue-600/25 transition cursor-pointer flex items-center gap-2"
+                  className="min-w-[260px] bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-extrabold text-xs px-6 py-3 rounded-2xl shadow-lg shadow-blue-600/25 transition cursor-pointer flex items-center gap-2"
                 >
                   <span>{dispatching ? 'Assigning Courier...' : `Create Delivery Route & Dispatch (${routeResult.orders.length} Orders)`}</span>
                   <span>🚀</span>
