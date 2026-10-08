@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
-import { authenticateUser, requirePermission } from '../middleware/auth.js';
+import { authenticateUser, requirePermission, isPharmacyOrAdmin } from '../middleware/auth.js';
 import { getPrescription, savePrescription } from '../config/prescriptionStorage.js';
 import { getIsConnected } from '../config/db.js';
 import MedicineRequest from '../models/MedicineRequest.js';
@@ -498,6 +498,28 @@ router.get('/active', authenticateUser, authorizeRequestList, async (req, res) =
     }
 });
 
+// Admin request queue. This explicit route is kept separate from the customer GET / route
+// so /api/medicine-requests/admin/all can never be interpreted as a customer request.
+const getAdminMedicineRequests = async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+        const pageSize = Math.min(50, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 8));
+        const result = await dataStore.getMedicineRequestsPage(req.query, req.user, page, pageSize);
+        let requests = result.requests || [];
+        if (prescriptionClient.isConfigured()) {
+            requests = await Promise.all(requests.map(request => syncPrescriptionVerification(request)));
+        }
+        return res.json({ requests, items: requests, pagination: result.pagination });
+    } catch (err) {
+        console.error('Failed to fetch admin medicine requests:', err);
+        return res.status(err.statusCode || 500).json({ message: err.message || 'Failed to fetch medicine requests.' });
+    }
+};
+
+// Legacy/admin UI contract. Must remain before /:id.
+router.get('/admin/all', authenticateUser, requirePermission('medicine_requests.read'), getAdminMedicineRequests);
+
 // Get customer's medicine requests
 router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
     if (!requireDatabase(res)) return;
@@ -513,14 +535,7 @@ router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
             { $set: { status: 'EXPIRED' } }
         );
         if (req.baseUrl.startsWith('/api/admin/')) {
-            const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
-            const pageSize = Math.min(50, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 8));
-            const result = await dataStore.getMedicineRequestsPage(req.query, req.user, page, pageSize);
-            let requests = result.requests || [];
-            if (prescriptionClient.isConfigured()) {
-                requests = await Promise.all(requests.map(request => syncPrescriptionVerification(request)));
-            }
-            return res.json({ requests, items: requests, pagination: result.pagination });
+            return getAdminMedicineRequests(req, res);
         }
         const query = { customerId: req.user.sub };
 
