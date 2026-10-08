@@ -187,7 +187,7 @@ PHARMA_JWT_PRIVATE_KEY
 PHARMA_JWT_PUBLIC_KEY
 PHARMA_JWT_ISSUER=pharma-auth
 PHARMA_JWT_AUDIENCE=pharma-api
-PHARMA_ACCESS_TOKEN_TTL=10m
+PHARMA_ACCESS_TOKEN_TTL=1h
 ~~~
 
 Generate:
@@ -220,6 +220,34 @@ For a custom domain, use that exact origin.
 
 Never use *.
 Do not include paths in allowed origins. Preflight OPTIONS must work.
+
+
+## 11A. Browser authentication security contract
+The browser talks to the API Gateway through the frontend's same-origin `/api/*` rewrite. The Gateway is therefore the browser trust boundary.
+
+Anonymous startup:
+~~~text
+GET /api/v1/auth/me -> 401 (expected anonymous state; no refresh is triggered)
+GET /api/medicines?page=1&limit=16 -> 200
+~~~
+
+Authenticated startup:
+~~~text
+POST /api/v1/auth/login -> HttpOnly access/refresh cookies + XSRF-TOKEN
+GET /api/v1/auth/me -> 200
+protected APIs -> Gateway JWT verification -> RBAC -> trusted backend credential -> backend
+~~~
+
+Session recovery:
+~~~text
+protected request -> 401
+one refresh request -> rotated HttpOnly session cookies
+original request retried once with the fresh cookie
+~~~
+
+State-changing browser requests are protected at the Gateway with exact-origin/Fetch-Metadata checks and a double-submit `XSRF-TOKEN` header. The backend retains its own CSRF middleware for direct/internal compatibility. Production session cookies use `Secure; HttpOnly; SameSite=Lax; Path=/`.
+
+Do not reintroduce automatic CSRF bootstrap, automatic retries for catalog failures, or browser access to the private backend. The expected anonymous `/auth/me` 401 is not an outage.
 
 ## 12. Health checks
 ~~~text
