@@ -435,7 +435,8 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             disabled={loading || !selectedAddress || cart.length === 0}
             className="w-full sm:w-2/3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold py-3 rounded-2xl text-xs shadow-lg shadow-emerald-600/25 transition cursor-pointer flex items-center justify-center gap-2"
           >
-            <span>{loading ? 'Submitting Order...' : 'Confirm & Place COD Order'}</span>
+            {loading && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+            <span>{loading ? 'Creating Order...' : 'Confirm & Place COD Order'}</span>
             <span>✓</span>
           </button>
         </div>
