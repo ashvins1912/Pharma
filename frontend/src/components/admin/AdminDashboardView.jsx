@@ -9,6 +9,7 @@ import AdminOrderFinancials from './AdminOrderFinancials';
 import AdminMedicineRequestsTab from './requests/AdminMedicineRequestsTab';
 import AdminPaymentReminders from './AdminPaymentReminders';
 import AdminCSquareTab from './AdminCSquareTab';
+import CustomerPromotionsView from './CustomerPromotionsView';
 import PlatformTenantsView from './PlatformTenantsView';
 import PlatformAccessControl from './PlatformAccessControl';
 import { getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
@@ -321,6 +322,15 @@ export default function AdminDashboardView() {
           <span>Rider Fleet & Auto-Assignment</span>
         </button>
 
+        {hasPermission('promotions.read') && (
+          <button
+            onClick={() => setAdminTab('promotions')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${adminTab === 'promotions' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+          >
+            <span>🏷️</span><span>Customer Offers</span>
+          </button>
+        )}
+
         <button
           onClick={() => setAdminTab('payments')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
@@ -393,6 +403,7 @@ export default function AdminDashboardView() {
         <PlatformAccessControl />
       )}
       {adminTab === 'csquare' && hasPermission('csquare.read') && <AdminCSquareTab />}
+      {adminTab === 'promotions' && hasPermission('promotions.read') && <CustomerPromotionsView />}
 
       {adminTab === 'fulfillment' && canViewFulfillment && (
         <div className="space-y-3">
