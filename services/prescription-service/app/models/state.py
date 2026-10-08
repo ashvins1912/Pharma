@@ -9,6 +9,7 @@ class PrescriptionState(str, Enum):
     AUTO_APPROVED = "AUTO_APPROVED"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
+    CONVERTED_TO_ORDER = "CONVERTED_TO_ORDER"
     FAILED = "FAILED"
     INACTIVE = "INACTIVE"
 
@@ -39,6 +40,7 @@ VALID_TRANSITIONS: Dict[PrescriptionState, Set[PrescriptionState]] = {
         PrescriptionState.INACTIVE,
     },
     PrescriptionState.APPROVED: {
+        PrescriptionState.CONVERTED_TO_ORDER,
         PrescriptionState.INACTIVE,
     },
     PrescriptionState.REJECTED: {
@@ -75,6 +77,7 @@ PUBLIC_STATUS_MAP = {
     PrescriptionState.AUTO_APPROVED.value: "APPROVED",
     PrescriptionState.APPROVED.value: "APPROVED",
     PrescriptionState.REJECTED.value: "REJECTED",
+    PrescriptionState.CONVERTED_TO_ORDER.value: "CONVERTED_TO_ORDER",
     PrescriptionState.INACTIVE.value: "REJECTED",
     PrescriptionState.FAILED.value: "UPLOADED",
 }
