@@ -6,9 +6,11 @@ import { createServiceToken } from './serviceAuth.js';
 
 function hasScopePermission(user, scope) {
   const role = user?.app_metadata?.role || user?.role || 'customer';
-  if (['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_OWNER', 'TENANT_ADMIN'].includes(role)) return true;
+  if (['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return true;
   if (role === 'customer' && scope.startsWith('customer.profile.')) return true;
   const permissions = Array.isArray(user?.permissions) ? user.permissions : (user?.app_metadata?.permissions || []);
+  const revoked = Array.isArray(user?.revokedPermissions) ? user.revokedPermissions : (user?.app_metadata?.revokedPermissions || []);
+  if (revoked.includes(scope) || revoked.some(item => item.endsWith('.*') && scope.startsWith(item.slice(0, -1)))) return false;
   if (permissions.includes('*') || permissions.includes(scope)) return true;
   const aliases = {
     'inventory.read': ['inventory.view'],
