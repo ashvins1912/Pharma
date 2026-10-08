@@ -67,6 +67,7 @@ export function enforceBrowserRequestSecurity(req, res, next, gatewayConfig) {
   const origin = req.get('origin') || '';
   const referer = req.get('referer') || '';
   const fetchSite = String(req.get('sec-fetch-site') || '').toLowerCase();
+  const browserClient = String(req.get('x-pharma-client') || '').toLowerCase() === 'web';
   const allowedOrigins = new Set(gatewayConfig.allowedOrigins || []);
 
   // Fetch Metadata describes the relationship between the browser page and
@@ -83,15 +84,18 @@ export function enforceBrowserRequestSecurity(req, res, next, gatewayConfig) {
     if (!refererOrigin || !allowedOrigins.has(refererOrigin)) {
       return reject(res, requestId, 'CSRF_REFERER_REJECTED', 'Request referer is not trusted.');
     }
-  } else if (fetchSite === 'cross-site') {
+  } else if (fetchSite === 'cross-site' && !browserClient) {
     // A cross-site request without an independently verifiable browser origin
-    // is not safe to accept. This preserves the CSRF defense for forged forms
-    // and privacy-stripped browser requests.
+    // is not safe to accept. The first-party browser client may use the explicit
+    // X-Pharma-Client proof below when privacy tooling strips Origin/Referer.
     return reject(res, requestId, 'CSRF_CROSS_SITE_BLOCKED', 'Cross-site state-changing requests require a trusted origin.');
   }
 
   const cookies = parseCookies(req.get('cookie') || '');
   const hasAccessCookie = Boolean(cookies.access_token);
+  // This header is intentionally NOT treated as a secret. It is only a browser
+  // fetch marker. CORS does not permit untrusted origins to send it, and an
+  // authenticated request still requires the double-submit CSRF proof below.
   const csrfCookie = cookies['XSRF-TOKEN'];
   const csrfHeader = req.get('x-xsrf-token') || req.get('x-csrf-token') || '';
 
