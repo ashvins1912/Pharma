@@ -11,6 +11,7 @@
 
 html {
   box-sizing: border-box;
+  scrollbar-gutter: stable;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -20,6 +21,7 @@ html {
 
 body {
   margin: 0;
+  overflow-anchor: none;
   padding: 0;
   min-width: 320px;
   background-color: #f8fafc;
@@ -86,3 +88,14 @@ button, a, input, select, textarea {
 
 
 body.modal-open { overscroll-behavior: none; }
+
+
+/* Prevent global width/layout jumps when dialogs or async content toggle scrollbars. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
