@@ -5,6 +5,7 @@ import { resolveApiCapability } from './apiCapabilities';
 let runtimeAccessToken = null;
 let sessionRefreshPromise = null;
 let authorizationRevalidationPromise = null;
+let applicationSessionAuthenticated = false;
 let authorizationCapabilities = { userId: null, role: null, permissions: [] };
 
 export function setRuntimeAccessToken(token) {
@@ -13,6 +14,13 @@ export function setRuntimeAccessToken(token) {
 
 export function clearRuntimeAccessToken() {
     runtimeAccessToken = null;
+}
+
+// HttpOnly session cookies cannot be inspected from JavaScript. AuthContext
+// explicitly mirrors the authenticated state here so a public 401 can never
+// cause the refresh interceptor to probe/rotate a session that does not exist.
+export function setApplicationSessionAuthenticated(authenticated) {
+    applicationSessionAuthenticated = Boolean(authenticated);
 }
 
 export function setAuthorizationCapabilities({ userId = null, role = null, permissions = [] } = {}) {
@@ -161,11 +169,11 @@ apiClient.interceptors.response.use(
         const status = error.response?.status;
         const isRefreshRequest = /\/api\/(?:v1\/auth|auth)\/refresh(\/|$)/.test(url);
         const isCredentialSubmission = /\/api\/(?:v1\/auth|auth)\/(login|signup|google|verify-email-code|resend-verification|complete-profile|onboarding|password\/forgot|password\/reset|mfa\/verify)(\/|$)/.test(url);
-        const isSessionProbe = /\/api\/(?:v1\/auth|auth)\/(session|logout|csrf)(\/|$)/.test(url);
+        const isSessionProbe = /\/api\/(?:v1\/auth|auth)\/(session|me|logout|csrf)(\/|$)/.test(url);
 
         // Recover transparently from an expired access JWT using the HttpOnly
         // refresh cookie. Retry the original request exactly once.
-        if (status === 401 && !isRefreshRequest && !isCredentialSubmission && !isSessionProbe
+        if (status === 401 && applicationSessionAuthenticated && !isRefreshRequest && !isCredentialSubmission && !isSessionProbe
             && typeof window !== 'undefined' && !error.config?.__pharmaAuthRetry) {
             try {
                 if (!sessionRefreshPromise) {
