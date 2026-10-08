@@ -190,6 +190,13 @@ PHARMA_JWT_AUDIENCE=pharma-api
 PHARMA_ACCESS_TOKEN_TTL=1h
 ~~~
 
+The **same RSA key pair** must be configured on both services:
+- Backend: `PHARMA_JWT_PRIVATE_KEY` + `PHARMA_JWT_PUBLIC_KEY`
+- API Gateway: `PHARMA_JWT_PUBLIC_KEY` only
+
+The Backend signs Pharma access/refresh JWTs with the private key. The Gateway verifies access JWTs with the matching public key. **Never configure the private key on the Gateway or frontend.** If the Gateway public key is missing, protected APIs must not be considered operational.
+
+
 Generate:
 ~~~bash
 openssl genrsa -out pharma-private.pem 3072
