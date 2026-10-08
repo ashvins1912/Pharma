@@ -70,7 +70,7 @@ export async function issuePharmaRefreshToken(claims = {}) {
     .setSubject(sub)
     .setJti(crypto.randomUUID())
     .setIssuedAt()
-    .setExpirationTime(REFRESH_TTL)
+    .setExpirationTime(claims.expiresIn || REFRESH_TTL)
     .sign(privateKey);
 }
 
