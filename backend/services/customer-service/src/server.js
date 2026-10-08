@@ -61,6 +61,26 @@ app.post('/api/v1/persons', async (req, res) => {
   }
 });
 
+app.patch('/api/v1/persons/:puid', async (req, res) => {
+  try {
+    if (!req.userId) return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED' } });
+    const person = await customerService.updateFamilyPerson(req.userId, req.params.puid, req.body || {});
+    res.json({ success: true, data: person });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, error: { message: error.message } });
+  }
+});
+
+app.delete('/api/v1/persons/:puid', async (req, res) => {
+  try {
+    if (!req.userId) return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED' } });
+    const result = await customerService.removeFamilyPerson(req.userId, req.params.puid);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, error: { message: error.message } });
+  }
+});
+
 app.post('/api/v1/family-invitations', async (req, res) => {
   try {
     if (!req.userId) return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED' } });
