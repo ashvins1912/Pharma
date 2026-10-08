@@ -33,6 +33,7 @@ const orderSchema = new mongoose.Schema({
     customerName: { type: String, default: "Valued Customer" },
     orderedByName: { type: String, default: "Valued Customer" },
     orderedForName: { type: String, default: null },
+    orderedForRelationship: { type: String, default: 'SELF', index: true },
     customerMobile: { type: String, default: "", index: true },
     customerMobileNormalized: { type: String, default: '', index: true },
     medicineItems: { type: [medicineItemSchema], default: [] },
