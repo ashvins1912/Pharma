@@ -149,6 +149,10 @@ apiClient.interceptors.request.use(async (config) => {
         }));
         config.__pharmaLoader = { action: config.loadingAction };
     }
+    // Explicit first-party browser marker. It is not a credential; it allows the
+    // Gateway to distinguish our SPA fetches when privacy tooling strips Origin.
+    config.headers['X-Pharma-Client'] = 'web';
+
     if (!config.headers['X-Request-ID']) {
         config.headers['X-Request-ID'] = globalThis.crypto?.randomUUID?.()
             || `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
