@@ -1,15 +1,30 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import OrderSummaryCard from './OrderSummaryCard';
+import apiClient from '../api/apiClient';
+import { useToast } from '../context/ToastContext';
+import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
 
 export default function OrderConfirmation({ order, onTrackOrder, onContinueShopping }) {
   const { user } = useAuth();
+  const { addToast } = useToast();
+  const { runAction, isActionLoading } = useActionLoading();
   const userName = user?.user_metadata?.name
     || [user?.firstName, user?.lastName].filter(Boolean).join(' ')
     || user?.name
     || user?.email?.split('@')[0]
     || "Valued Patient";
   const orderId = (order?._id || '').slice(-6).toUpperCase();
+  const trackOrder = async () => {
+    await runAction(LOADING_ACTIONS.TRACK_ORDER, async () => {
+      try {
+        const res = await apiClient.get(`/api/orders/${encodeURIComponent(order._id)}`);
+        onTrackOrder(res.data?.order || res.data?.data || res.data || order);
+      } catch (error) {
+        addToast(error.message || 'Could not load the latest tracking status.', 'error');
+      }
+    });
+  };
 
   return (
     <div className="max-w-md mx-auto my-12 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm space-y-6 animate-fade-in">
@@ -54,10 +69,11 @@ export default function OrderConfirmation({ order, onTrackOrder, onContinueShopp
       <div className="space-y-2.5 pt-2">
         {order?.orderStatus !== 'Delivered' && (
           <button
-            onClick={onTrackOrder}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3 rounded-2xl text-xs shadow-md shadow-blue-600/25 transition cursor-pointer"
+            onClick={trackOrder}
+            disabled={isActionLoading(LOADING_ACTIONS.TRACK_ORDER)}
+            className="w-full disabled:opacity-60 disabled:cursor-wait bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3 rounded-2xl text-xs shadow-md shadow-blue-600/25 transition cursor-pointer"
           >
-            📦 Track Order Status
+            {isActionLoading(LOADING_ACTIONS.TRACK_ORDER) ? 'Loading tracking...' : '📦 Track Order Status'}
           </button>
         )}
         <button
