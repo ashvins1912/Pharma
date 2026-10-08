@@ -80,7 +80,7 @@ apiClient.interceptors.response.use(
         const status = error.response?.status;
         const isRefreshRequest = /\/api\/(?:v1\/auth|auth)\/refresh(\/|$)/.test(url);
         const isCredentialSubmission = /\/api\/(?:v1\/auth|auth)\/(login|signup|google|verify-email-code|resend-verification|complete-profile|onboarding|password\/forgot|password\/reset|mfa\/verify)(\/|$)/.test(url);
-        const isSessionProbe = /\/api\/(?:v1\/auth|auth)\/(session|me|logout|csrf)(\/|$)/.test(url);
+        const isSessionProbe = /\/api\/(?:v1\/auth|auth)\/(session|logout|csrf)(\/|$)/.test(url);
 
         // Recover transparently from an expired access JWT using the HttpOnly
         // refresh cookie. Retry the original request exactly once.
