@@ -2,6 +2,7 @@ import axios from 'axios';
 import { normalizeApiError } from './apiErrors';
 
 let runtimeAccessToken = null;
+let sessionRefreshPromise = null;
 
 export function setRuntimeAccessToken(token) {
     runtimeAccessToken = typeof token === 'string' && token.trim() ? token.trim() : null;
@@ -50,7 +51,7 @@ apiClient.interceptors.request.use(async (config) => {
     const csrfToken = getCsrfCookie();
     if (csrfToken) config.headers['X-XSRF-TOKEN'] = csrfToken;
 
-    if (runtimeAccessToken && !config.headers.Authorization) {
+    if (runtimeAccessToken && !config.__skipRuntimeAuth && !config.headers.Authorization) {
         config.headers.Authorization = `Bearer ${runtimeAccessToken}`;
     }
     return config;
@@ -86,10 +87,16 @@ apiClient.interceptors.response.use(
         if (status === 401 && !isRefreshRequest && !isCredentialSubmission && !isSessionProbe
             && typeof window !== 'undefined' && !error.config?.__pharmaAuthRetry) {
             try {
-                await apiClient.post('/api/v1/auth/refresh', null, {
-                    __pharmaRefreshRequest: true,
-                    __pharmaAuthRetry: true
-                });
+                if (!sessionRefreshPromise) {
+                    sessionRefreshPromise = apiClient.post('/api/v1/auth/refresh', null, {
+                        __pharmaRefreshRequest: true,
+                        __pharmaAuthRetry: true,
+                        __skipRuntimeAuth: true
+                    }).finally(() => {
+                        sessionRefreshPromise = null;
+                    });
+                }
+                await sessionRefreshPromise;
                 return apiClient({ ...error.config, __pharmaAuthRetry: true });
             } catch {
                 // The refresh cookie is also expired/revoked; continue normally.
