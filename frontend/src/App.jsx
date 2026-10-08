@@ -24,8 +24,32 @@ import CustomerProposalModal from './components/requests/CustomerProposalModal';
 import VerifyEmailView from './components/auth/VerifyEmailView';
 import VendorOnboardingView from './components/auth/VendorOnboardingView';
 
+function AuthTransitionScreen({ initialLoad = false }) {
+  return (
+    <div
+      className="fixed inset-0 z-[10000] flex min-h-screen items-center justify-center bg-slate-50 px-6"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div className="flex w-full max-w-sm flex-col items-center rounded-3xl border border-slate-200 bg-white px-8 py-10 text-center shadow-xl shadow-slate-900/5">
+        <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-2xl text-white shadow-lg shadow-blue-600/20">
+          ⚕️
+        </div>
+        <span className="mb-4 h-7 w-7 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" aria-hidden="true" />
+        <h2 className="text-lg font-black tracking-tight text-slate-900">
+          {initialLoad ? 'Checking your session…' : 'Loading your dashboard…'}
+        </h2>
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          {initialLoad ? 'Please wait while we securely restore your account.' : 'Your sign-in is complete. Preparing your account and dashboard.'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function MainApp() {
-  const { user, isAdmin, isPharmacyOrAdmin, passwordRecoveryRequired, isFullyAuthenticated } = useAuth();
+  const { user, isAdmin, isPharmacyOrAdmin, passwordRecoveryRequired, isFullyAuthenticated, loading: authLoading, authTransitionLoading } = useAuth();
   const {
     cart,
     orders,
@@ -46,6 +70,13 @@ function MainApp() {
     openProposalModal
   } = useApp();
   const { addToast } = useToast();
+
+  // Never render the application shell while authentication is being restored
+  // or while a successful sign-in is handing off to the authenticated app.
+  // This prevents dashboard flashes and makes failed auth transitions recoverable.
+  if (authLoading || authTransitionLoading) {
+    return <AuthTransitionScreen initialLoad={authLoading} />;
+  }
 
   // Tab State: 'store' | 'orders' | 'requests' | 'addresses' | 'admin'
   const [activeTab, setActiveTab] = useState('store');
