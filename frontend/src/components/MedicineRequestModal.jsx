@@ -178,7 +178,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
               disabled={submitting || !medicineName.trim()}
               className="w-full sm:w-2/3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-extrabold py-2.5 rounded-xl text-xs shadow-md shadow-blue-600/20 transition cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
             >
-              <span>{submitting ? 'Submitting Request...' : 'Send Request to Pharmacist'}</span>
+              {submitting && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}<span>{submitting ? 'Creating Medicine Request...' : 'Send Request to Pharmacist'}</span>
               <span>→</span>
             </button>
           </div>
