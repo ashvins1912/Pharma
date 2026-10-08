@@ -35,6 +35,8 @@ const CAPABILITIES = [
   ['POST', /^\/api\/admin\/assignment(?:\/|$)/, 'delivery.manage'],
   ['PATCH', /^\/api\/admin\/assignment(?:\/|$)/, 'delivery.manage'],
   ['GET', /^\/api\/admin\/audit-logs(?:\/|$)/, 'users.read'],
+  ['GET', /^\/api\/admin\/whatsapp\/(?:status|logs)(?:\/|$)/, 'whatsapp.read'],
+  ['POST', /^\/api\/admin\/whatsapp\/(?:generate-qr|disconnect)(?:\/|$)/, 'whatsapp.manage'],
   ['GET', /^\/api\/v1\/auth\/me$/, 'profile.read'],
   ['POST', /^\/api\/v1\/auth\/logout$/, 'profile.write'],
   ['PUT', /^\/api\/v1\/auth\/(?:onboarding|complete-profile)$/, 'profile.complete'],
