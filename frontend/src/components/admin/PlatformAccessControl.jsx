@@ -9,6 +9,8 @@ const GROUPS = [
   ['Referrals',['referrals.read','referrals.manage']],
   ['Tenants',['tenants.read','tenants.manage']],
   ['Users',['users.read','users.manage']],
+  ['Fulfillment',['orders.read','orders.manage']],
+  ['C-Square',['csquare.read','csquare.manage','csquare.sync']],
   ['Platform',['platform.read','platform.manage']]
 ];
 const title = s => s.split('.').map(x => x.charAt(0).toUpperCase()+x.slice(1)).join(' ');
