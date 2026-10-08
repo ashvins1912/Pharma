@@ -73,7 +73,7 @@ async def upload_prescription(
         raise HTTPException(status_code=400, detail=str(exc))
     return ApiResponse(
         success=True,
-        data=PrescriptionUploadData(**result),
+        data=PrescriptionUploadData(**{**result, 'status': public_status(result.get('status'))}),
         message="Prescription uploaded successfully"
     )
 
@@ -140,7 +140,7 @@ async def get_prescription(
     stage, percent = progress_map.get(record.get("status"), (record.get("status"), 0))
     data = PrescriptionStatusData(
         prescriptionId=record["prescriptionId"],
-        status=record["status"],
+        status=public_status(record["status"]),
         progress=ProcessingProgress(stage=stage, percent=percent),
         patient=PatientExtraction(name=extraction.get("patientName"), confidence=extraction.get("overallConfidence") or 0),
         medicines=[MedicineItem(**m) if isinstance(m, dict) else m for m in (extraction.get("medicines") or [])],
