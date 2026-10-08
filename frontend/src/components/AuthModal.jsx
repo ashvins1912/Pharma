@@ -616,8 +616,6 @@ export default function AuthModal({ isOpen, onClose }) {
               </form>
             )}
 
-        )}
-
             {/* Divider */}
             {!isForgotPassword && !passwordRecoveryRequired && (
               <div className="relative my-4 flex items-center">
