@@ -5,7 +5,8 @@ import { createClient } from '@supabase/supabase-js';
 
 const ISSUER = env.PHARMA_JWT_ISSUER;
 const AUDIENCE = env.PHARMA_JWT_AUDIENCE;
-const ACCESS_TTL = env.PHARMA_ACCESS_TOKEN_TTL || '10m';
+const ACCESS_TTL = env.PHARMA_ACCESS_TOKEN_TTL || '1h';
+const REFRESH_TTL = env.PHARMA_REFRESH_TOKEN_TTL || '7d';
 
 let privateKeyPromise;
 let publicKeyPromise;
@@ -53,6 +54,33 @@ export async function issuePharmaAccessToken(claims = {}) {
     .setIssuedAt()
     .setExpirationTime(expiresIn || ACCESS_TTL)
     .sign(privateKey);
+}
+
+export async function issuePharmaRefreshToken(claims = {}) {
+  const { privateKey } = await getKeys();
+  const sub = String(claims.sub || '');
+  if (!sub) throw new Error('Refresh token subject is required.');
+  return new SignJWT({
+    token_type: 'pharma_refresh',
+    aal: claims.aal || 'aal1'
+  })
+    .setProtectedHeader({ alg: 'RS256', typ: 'JWT' })
+    .setIssuer(ISSUER)
+    .setAudience(AUDIENCE)
+    .setSubject(sub)
+    .setJti(crypto.randomUUID())
+    .setIssuedAt()
+    .setExpirationTime(REFRESH_TTL)
+    .sign(privateKey);
+}
+
+export async function verifyPharmaRefreshToken(token) {
+  const { publicKey } = await getKeys();
+  return jwtVerify(token, publicKey, {
+    algorithms: ['RS256'],
+    issuer: ISSUER,
+    audience: AUDIENCE
+  });
 }
 
 export async function verifyPharmaAccessToken(token) {
