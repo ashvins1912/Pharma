@@ -45,7 +45,7 @@ auth timeout: 15000 ms
 
 Required/configured environment:
 ~~~text
-BACKEND_API_URL
+BACKEND_API_URL=http://ashvin-pharmacy-platform:10000
 GATEWAY_AUTH_SECRET
 SERVICE_AUTH_SECRET
 INVENTORY_SERVICE_URL
@@ -228,6 +228,8 @@ Inventory     /ready
 Order         /ready
 Prescription  /health
 ~~~
+
+For the current Render topology, `ashvin-pharmacy-platform` is a private service. The Gateway must reach it over Render's private network; do not point `BACKEND_API_URL` at the frontend or an obsolete public API hostname.
 
 After deployment verify:
 1. process is running
