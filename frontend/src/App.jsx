@@ -71,13 +71,6 @@ function MainApp() {
   } = useApp();
   const { addToast } = useToast();
 
-  // Never render the application shell while authentication is being restored
-  // or while a successful sign-in is handing off to the authenticated app.
-  // This prevents dashboard flashes and makes failed auth transitions recoverable.
-  if (authLoading || authTransitionLoading) {
-    return <AuthTransitionScreen initialLoad={authLoading} />;
-  }
-
   // Tab State: 'store' | 'orders' | 'requests' | 'addresses' | 'admin'
   const [activeTab, setActiveTab] = useState('store');
 
@@ -245,6 +238,12 @@ function MainApp() {
       window.scrollTo({ top: 0, behavior: 'instant' });
     }
   }, [activeTab]);
+
+  // Keep the loader after every hook has been evaluated so React hook order
+  // remains stable across authentication state transitions.
+  if (authLoading || authTransitionLoading) {
+    return <AuthTransitionScreen initialLoad={authLoading} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800 antialiased selection:bg-blue-100 selection:text-blue-900">
