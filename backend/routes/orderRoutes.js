@@ -13,6 +13,7 @@ import deliveryContainer from '../modules/delivery/container.js';
 import { classifyOrderSearch, paginationResult } from '../services/orderSearch.js';
 import { verifyPrescriptionAgainstItems } from '../services/prescription-verification/PrescriptionVerificationService.js';
 import { reinitiatePrescriptionProcessing } from '../../services/order-service/src/prescription-client.js';
+import { customerService } from '../services/customer-service/CustomerService.js';
 
 const router = express.Router();
 const dynamicOrderService = new DynamicOrderService({
@@ -225,6 +226,13 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             return res.status(400).json({ message: 'Prescription URL must refer to a private uploaded prescription.' });
         }
         let uploadedPrescriptionId = null;
+        if (req.body.patientPuid) {
+            try {
+                await customerService.assertUserCanAccessPuid(req.user.sub, String(req.body.patientPuid));
+            } catch (error) {
+                return res.status(error.statusCode || 403).json({ message: 'The selected patient profile is not managed by this account.' });
+            }
+        }
         if (req.file) {
             if (!prescriptionClient.isConfigured()) {
                 return res.status(503).json({
