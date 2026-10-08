@@ -12,6 +12,12 @@ services:
         value: production
       - key: BACKEND_API_URL
         sync: false
+      - key: PHARMA_JWT_PUBLIC_KEY
+        sync: false
+      - key: PHARMA_JWT_ISSUER
+        value: pharma-auth
+      - key: PHARMA_JWT_AUDIENCE
+        value: pharma-api
       - key: GATEWAY_AUTH_SECRET
         sync: false
       - key: SERVICE_AUTH_SECRET
