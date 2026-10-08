@@ -46,7 +46,7 @@ const COLUMNS = [
   { id: 'Approved', title: 'Approved', color: 'border-teal-500 text-teal-800 bg-teal-50' },
   { id: 'Rejected', title: 'Rejected', color: 'border-rose-500 text-rose-800 bg-rose-50' },
   { id: 'Processing Order', title: 'Processing Order', color: 'border-amber-500 text-amber-800 bg-amber-50' },
-  { id: 'Ready to Dispatch', title: 'Ready to Dispatch', color: 'border-indigo-500 text-indigo-800 bg-indigo-50' },
+  { id: 'Ready to Dispatch', title: 'Ready to Dispatch', color: 'border-blue-500 text-blue-800 bg-blue-50' },
   { id: 'Dispatched', title: 'Out for Delivery', color: 'border-blue-500 text-blue-800 bg-blue-50' },
   { id: 'Delivered', title: 'Delivered', color: 'border-emerald-500 text-emerald-800 bg-emerald-50' }
 ];
@@ -691,7 +691,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                             <button
                               onClick={() => handleTransition(order._id, 'Ready to Dispatch')}
                               disabled={isProcessing}
-                              className="min-h-11 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-2 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-indigo-600/20"
+                              className="min-h-11 w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-2 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-600/20"
                             >
                               {isProcessing ? 'Verifying...' : '🔬 Verify & Pack → Ready'}
                             </button>
