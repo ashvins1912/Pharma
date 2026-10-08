@@ -753,6 +753,17 @@ class PrescriptionServiceEngine:
             raise ValueError("Rejection reason is mandatory")
         return await self._complete_review(prescription_id, reviewer_id, expected_version, approve=False, reason=reason, idempotency_key=idempotency_key)
 
+    async def link_order(self, prescription_id: str, order_id: str, actor_id: str) -> Dict[str, Any]:
+        db = get_db()
+        rx = await db.prescriptions.find_one({"prescriptionId": prescription_id})
+        if not rx:
+            raise LookupError("Prescription not found")
+        await db.prescriptions.update_one(
+            {"prescriptionId": prescription_id},
+            {"$set": {"orderId": order_id, "updatedAt": _now(), "updatedBy": actor_id}},
+        )
+        return {"prescriptionId": prescription_id, "orderId": order_id, "status": public_status(rx.get("status"))}
+
     async def convert_to_order(self, prescription_id: str, order_id: str, actor_id: str) -> Dict[str, Any]:
         db = get_db()
         rx = await db.prescriptions.find_one({"prescriptionId": prescription_id})
