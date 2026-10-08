@@ -51,9 +51,14 @@ export async function getRolePermissions(roleCode) {
   if (!roleCode) return [];
   if (getIsConnected()) {
     const role = await Role.findOne({ code: roleCode, status: 'ACTIVE' }).lean();
-    if (!role) return [];
+    if (!role) return [...(memory.rolePermissions.get(roleCode) || [])];
     const rows = await RolePermission.find({ roleCode, status: 'ACTIVE' }).lean();
-    return rows.map(row => row.permissionCode);
+    // During startup, catalog seeding can lag the first authenticated request.
+    // Keep the code-defined policy as a safe deterministic fallback rather than
+    // turning a valid role into an unexplained empty-permission session.
+    return rows.length
+      ? rows.map(row => row.permissionCode)
+      : [...(memory.rolePermissions.get(roleCode) || [])];
   }
   return [...(memory.rolePermissions.get(roleCode) || [])];
 }
