@@ -73,7 +73,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
         );
       case 'PROPOSAL_SENT':
         return (
-          <span className="bg-purple-100 text-purple-900 text-[10px] font-black px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 shadow-xs animate-pulse">
+          <span className="bg-blue-100 text-blue-900 text-[10px] font-black px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 shadow-xs animate-pulse">
             <span>💊</span> Proposal Ready
           </span>
         );
@@ -369,18 +369,18 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
 
                 {/* Proposal Callout Card / Action Bar */}
                 {isOwner && req.status === 'PROPOSAL_SENT' && (
-                  <div className="bg-purple-50/80 border border-purple-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                  <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
                     <div className="space-y-0.5">
                       <p className="font-extrabold text-purple-950">
                         🎉 Ashvin Pharmacy sent a proposal for #{req.requestNumber}!
                       </p>
-                      <p className="text-[11px] text-purple-800">
+                      <p className="text-[11px] text-blue-800">
                         {proposal?.deliverySlot?.label || 'Scheduled delivery slot available'}. Review pricing and medicine formulation.
                       </p>
                     </div>
                     <button
                       onClick={() => onOpenProposal(req)}
-                      className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl shadow-xs transition cursor-pointer flex-shrink-0"
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl shadow-xs transition cursor-pointer flex-shrink-0"
                     >
                       View & Confirm Proposal →
                     </button>
