@@ -168,9 +168,20 @@ export default function AdminRouteOptimizer({ onRefresh }) {
         </button>
       </form>
 
-      {/* Route Clustering Results */}
+      {/* Stable result region prevents the page from jumping when route data is fetched. */}
+      {!routeResult && !searching && (
+        <div className="min-h-[320px] flex items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-6 text-center">
+          <div><div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-white text-lg shadow-sm">🗺️</div><p className="text-xs font-bold text-slate-600">Choose a rider and find nearby orders</p><p className="mt-1 text-[11px] text-slate-400">Route results stay in this area so the controls above do not move.</p></div>
+        </div>
+      )}
+      {searching && !routeResult && (
+        <div className="min-h-[320px] rounded-2xl border border-slate-200 bg-slate-50/70 p-4" role="status">
+          <div className="mb-4 flex items-center justify-between"><div className="h-4 w-48 animate-pulse rounded bg-slate-200" /><div className="h-8 w-28 animate-pulse rounded-lg bg-slate-200" /></div>
+          <div className="space-y-2">{[1,2,3,4].map(i => <div key={i} className="h-12 animate-pulse rounded-xl border border-slate-200 bg-white" />)}</div>
+        </div>
+      )}
       {routeResult && (
-        <div className="space-y-4 animate-fade-in border-t border-slate-100 pt-4">
+        <div className="min-h-[320px] space-y-4 animate-fade-in border-t border-slate-100 pt-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-blue-50/70 border border-blue-200 p-4 rounded-2xl">
             <div>
               <div className="flex items-center gap-2">
