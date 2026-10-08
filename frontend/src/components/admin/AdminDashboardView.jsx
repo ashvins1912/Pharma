@@ -53,6 +53,7 @@ export default function AdminDashboardView() {
   const [deliveredCount, setDeliveredCount] = useState(0);
   const [pendingMedicineRequestCount, setPendingMedicineRequestCount] = useState(0);
   const [initialMedicineRequests, setInitialMedicineRequests] = useState(null);
+  const [medicinePreloadLoading, setMedicinePreloadLoading] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [ordersError, setOrdersError] = useState('');
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -66,12 +67,16 @@ export default function AdminDashboardView() {
   useEffect(() => {
     if (authLoading || !isPharmacyOrAdmin || !hasPermission('medicine_requests.read')) return;
     let cancelled = false;
+    setMedicinePreloadLoading(true);
     getAdminMedicineRequests({ page: 1, pageSize: 15, status: undefined, search: undefined })
       .then((data) => {
         if (!cancelled) setInitialMedicineRequests(data);
       })
       .catch((error) => {
         console.error('Failed to preload medicine requests:', error);
+      })
+      .finally(() => {
+        if (!cancelled) setMedicinePreloadLoading(false);
       });
     return () => { cancelled = true; };
   }, [authLoading, isPharmacyOrAdmin, hasPermission]);
@@ -168,7 +173,7 @@ export default function AdminDashboardView() {
           onOpen={() => document.getElementById('admin-medicine-requests')?.scrollIntoView({ behavior: 'smooth' })}
         />
         <div id="admin-medicine-requests">
-          <AdminMedicineRequestsTab initialData={initialMedicineRequests} onPendingCountRefresh={loadPendingMedicineRequestCount} />
+          <AdminMedicineRequestsTab initialData={initialMedicineRequests} initialLoading={medicinePreloadLoading} onPendingCountRefresh={loadPendingMedicineRequestCount} />
         </div>
       </div>
     );
