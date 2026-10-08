@@ -83,7 +83,7 @@ export default function ProductGrid() {
         </div>
 
         {/* Case 1: Can't find medicine -> Request Medicine */}
-        <div className="max-w-md mx-auto bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-4 sm:p-5 text-left space-y-2.5 shadow-xs">
+        <div className="max-w-md mx-auto bg-gradient-to-br from-blue-50 to-blue-50 border border-blue-200 rounded-2xl p-4 sm:p-5 text-left space-y-2.5 shadow-xs">
           <div className="flex items-center gap-2">
             <span className="text-xl">📋</span>
             <h4 className="font-black text-xs sm:text-sm text-blue-950">
@@ -169,7 +169,7 @@ export default function ProductGrid() {
       />
 
       {/* Can't find medicine inquiry banner */}
-      <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shadow-xs">
+      <div className="bg-gradient-to-r from-blue-50 via-blue-50 to-blue-50 border border-blue-200/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shadow-xs">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-xl flex-shrink-0">
             📋
