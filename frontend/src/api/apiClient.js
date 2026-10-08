@@ -145,7 +145,7 @@ apiClient.interceptors.response.use(
         }
         const url = String(response.config?.url || '');
         const result = response.data?.data || response.data;
-        if (/\/api\/(?:v1\/auth|auth)\/(login|signup|google|mfa\/verify|complete-profile|onboarding)(\/|$)/.test(url)
+        if (/\/api\/(?:v1\/auth|auth)\/(login|signup|google|mfa\/verify|complete-profile|onboarding|refresh)(\/|$)/.test(url)
             && result?.accessToken) {
             setRuntimeAccessToken(result.accessToken);
         }
