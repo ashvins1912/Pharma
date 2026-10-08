@@ -98,7 +98,8 @@ export function AuthProvider({ children }) {
             setAal(result?.aal || 'aal1');
           }
         } else {
-          const { data } = await getAuthMe();
+          const probe = await getAuthMe({ allowAnonymous: true });
+          const data = probe?.data || null;
           const sessionUser = data?.user || (data?.id ? data : null);
           if (mounted && sessionUser && sessionUser.profileCompleted !== false
               && String(sessionUser.accountStatus || 'ACTIVE').toUpperCase() === 'ACTIVE') {
