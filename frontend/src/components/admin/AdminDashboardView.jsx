@@ -278,23 +278,25 @@ export default function AdminDashboardView() {
           📦 Fulfillment Queue ({orders.length})
         </button>
 
-        <button
-          onClick={() => setAdminTab('requests')}
-          className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-            adminTab === 'requests'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          <span>📋</span>
-          <span>Medicine Requests & Proposals</span>
-          <span
-            aria-hidden={pendingMedicineRequestCount === 0}
-            className={`inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[10px] font-black leading-none text-white ${pendingMedicineRequestCount === 0 ? 'invisible' : ''}`}
+        {hasPermission('medicine_requests.read') && (
+          <button
+            onClick={() => setAdminTab('requests')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              adminTab === 'requests'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+            }`}
           >
-            {pendingMedicineRequestCount || 0}
-          </span>
-        </button>
+            <span>📋</span>
+            <span>Medicine Requests & Proposals</span>
+            <span
+              aria-hidden={pendingMedicineRequestCount === 0}
+              className={`inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[10px] font-black leading-none text-white ${pendingMedicineRequestCount === 0 ? 'invisible' : ''}`}
+            >
+              {pendingMedicineRequestCount || 0}
+            </span>
+          </button>
+        )}
 
         <button
           onClick={() => setAdminTab('riders')}
