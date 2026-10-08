@@ -7,6 +7,27 @@
 export const API_CAPABILITIES = [
   {
     method: 'GET',
+    pattern: /^\/api\/coupons\/my-offer(?:\/|$)/,
+    permission: 'orders.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/coupons\/admin\/(?:customers|customer-promotions)(?:\/|$)/,
+    permission: 'promotions.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/coupons\/admin\/customer-promotions(?:\/|$)/,
+    permission: 'promotions.manage'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/coupons\/admin\/customer-promotions\/[^/]+(?:\/|$)/,
+    permission: 'promotions.manage'
+  },
+
+  {
+    method: 'GET',
     pattern: /^\/api\/admin\/medicine-requests\/pending-count(?:\/|$)/,
     permission: 'medicine_requests.pending_count'
   },
