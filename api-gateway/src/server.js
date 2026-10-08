@@ -34,6 +34,22 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
     res.set('X-Correlation-Id', req.correlationId);
     res.set('X-Content-Type-Options', 'nosniff');
     res.set('Cache-Control', 'no-store');
+    const startedAt = Date.now();
+    res.on('finish', () => {
+      if (!gatewayConfig.loggingEnabled) return;
+      console.info(JSON.stringify({
+        serviceName: 'api-gateway',
+        event: 'request_completed',
+        requestId: req.requestId,
+        correlationId: req.correlationId,
+        method: req.method,
+        path: req.path,
+        statusCode: res.statusCode,
+        durationMs: Date.now() - startedAt,
+        gatewayAuthenticated: Boolean(req.gatewayAuthenticated),
+        trustedForwarded: Boolean(req.gatewayTrusted)
+      }));
+    });
     next();
   });
 
