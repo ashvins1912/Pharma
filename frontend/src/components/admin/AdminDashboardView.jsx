@@ -255,7 +255,7 @@ export default function AdminDashboardView() {
           onClick={() => setAdminTab('fulfillment')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
             adminTab === 'fulfillment'
-              ? 'bg-purple-600 text-white shadow-sm'
+              ? 'bg-blue-600 text-white shadow-sm'
               : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
@@ -266,7 +266,7 @@ export default function AdminDashboardView() {
           onClick={() => setAdminTab('requests')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
             adminTab === 'requests'
-              ? 'bg-purple-600 text-white shadow-sm'
+              ? 'bg-blue-600 text-white shadow-sm'
               : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
@@ -283,7 +283,7 @@ export default function AdminDashboardView() {
           onClick={() => setAdminTab('riders')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
             adminTab === 'riders'
-              ? 'bg-purple-600 text-white shadow-sm'
+              ? 'bg-blue-600 text-white shadow-sm'
               : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
@@ -295,7 +295,7 @@ export default function AdminDashboardView() {
           onClick={() => setAdminTab('payments')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
             adminTab === 'payments'
-              ? 'bg-purple-600 text-white shadow-sm'
+              ? 'bg-blue-600 text-white shadow-sm'
               : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
@@ -306,7 +306,7 @@ export default function AdminDashboardView() {
           onClick={() => setAdminTab('inventory')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
             adminTab === 'inventory'
-              ? 'bg-purple-600 text-white shadow-sm'
+              ? 'bg-blue-600 text-white shadow-sm'
               : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
@@ -317,7 +317,7 @@ export default function AdminDashboardView() {
           onClick={() => setAdminTab('routes')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
             adminTab === 'routes'
-              ? 'bg-purple-600 text-white shadow-sm'
+              ? 'bg-blue-600 text-white shadow-sm'
               : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
@@ -328,7 +328,7 @@ export default function AdminDashboardView() {
           onClick={() => setAdminTab('audits')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
             adminTab === 'audits'
-              ? 'bg-purple-600 text-white shadow-sm'
+              ? 'bg-blue-600 text-white shadow-sm'
               : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
@@ -340,8 +340,8 @@ export default function AdminDashboardView() {
             onClick={() => setAdminTab('tenants')}
             className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
               adminTab === 'tenants'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-200'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white text-blue-700 hover:bg-blue-50 border border-blue-200'
             }`}
           >
             <span>🌐</span>
@@ -349,7 +349,7 @@ export default function AdminDashboardView() {
           </button>
         )}
         {isSuperAdmin && (
-          <button onClick={() => setAdminTab('access')} className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${adminTab === 'access' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white text-emerald-700 hover:bg-emerald-50 border border-emerald-200'}`}>
+          <button onClick={() => setAdminTab('access')} className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${adminTab === 'access' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-blue-700 hover:bg-blue-50 border border-blue-200'}`}>
             <span>🛡️</span><span>Security Access</span>
           </button>
         )}
