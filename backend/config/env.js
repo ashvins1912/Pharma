@@ -65,6 +65,7 @@ export const envSchema = z.object({
     PHARMA_ACCESS_TOKEN_TTL: z.string().trim().default('1h'),
     PHARMA_REFRESH_TOKEN_TTL: z.string().trim().default('7d'),
     GATEWAY_AUTH_SECRET: isProduction ? z.string().trim().min(32) : optionalString(z.string().trim().min(32)),
+    REQUIRE_GATEWAY_TRUST: z.enum(['true', 'false']).default(isProduction ? 'true' : 'false'),
     SERVICE_AUTH_SECRET: isProduction ? z.string().trim().min(32) : optionalString(z.string().trim().min(32)),
     SERVICE_JWT_ISSUER: z.string().trim().default('ashvin-pharmacy'),
     INVENTORY_SERVICE_URL: optionalString(z.string().trim().url()),
