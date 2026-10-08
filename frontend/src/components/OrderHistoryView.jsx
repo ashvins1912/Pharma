@@ -3,22 +3,26 @@ import { useApp } from '../context/AppContext';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
 import OrderHistory from './OrderHistory';
+import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
 
 export default function OrderHistoryView({ onTrackOrder }) {
   const { orders, ordersError, loadingOrders, loadUserOrders } = useApp();
   const { addToast } = useToast();
+  const { runAction, isActionLoading } = useActionLoading();
   const editableStatuses = ['Pending_Review', 'Approved', 'Processing Order', 'Ready to Dispatch'];
   const activeOrders = orders.filter(order => !['Delivered', 'Cancelled', 'Rejected', 'Completed', 'delivered', 'cancelled', 'rejected', 'completed'].includes(order.orderStatus || order.status));
 
   const cancelOrder = async (order) => {
     if (!window.confirm('Cancel this order? Reserved stock will be released.')) return;
-    try {
-      await apiClient.put(`/api/orders/${order._id}/cancel`);
-      addToast('Order cancelled and stock released.', 'success');
-      await loadUserOrders();
-    } catch (error) {
-      addToast(error.message || 'Could not cancel this order.', 'error');
-    }
+    await runAction(LOADING_ACTIONS.CANCEL_ORDER, async () => {
+      try {
+        await apiClient.put(`/api/orders/${order._id}/cancel`);
+        addToast('Order cancelled and stock released.', 'success');
+        await loadUserOrders({ silent: true });
+      } catch (error) {
+        addToast(error.message || 'Could not cancel this order.', 'error');
+      }
+    });
   };
 
   const getStatusBadge = (status) => {
@@ -105,9 +109,10 @@ export default function OrderHistoryView({ onTrackOrder }) {
                         {editableStatuses.includes(order.orderStatus) && (
                           <button
                             onClick={() => cancelOrder(order)}
+                            disabled={isActionLoading(LOADING_ACTIONS.CANCEL_ORDER)}
                             className="mr-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition"
-                          >
-                            Cancel
+                           disabled={isActionLoading(LOADING_ACTIONS.CANCEL_ORDER)} >
+                            {isActionLoading(LOADING_ACTIONS.CANCEL_ORDER) ? 'Cancelling...' : 'Cancel'}
                           </button>
                         )}
                         {!['Delivered', 'Cancelled', 'Rejected'].includes(order.orderStatus) && (
