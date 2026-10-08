@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
  * Session Hardening & Anti-CSRF Token Security
  * 
  * 1. Mitigates XSS by delivering JWT access tokens inside HttpOnly, Secure, SameSite cookies.
- * 2. Mitigates CSRF via cryptographically signed Double Submit Cookie pattern (XSRF-TOKEN + X-XSRF-TOKEN).
+ * 2. Mitigates CSRF via a cryptographically random Double Submit Cookie pattern (XSRF-TOKEN + X-XSRF-TOKEN).
  */
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -14,9 +14,8 @@ export const COOKIE_CONFIG = {
     ACCESS_TOKEN: {
         httpOnly: true,
         secure: isProduction,
-        // The browser app and API gateway may be on different sites in production.
-        // Cross-site fetches with credentials require SameSite=None and Secure.
-        sameSite: 'lax',
+        // Production browser traffic is same-origin through the frontend /api rewrite.
+        // Lax is the stronger compatible posture for this deployment.
         path: '/',
         maxAge: 60 * 60 * 1000 // 1 hour
     },
