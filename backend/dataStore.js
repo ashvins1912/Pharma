@@ -2986,12 +2986,12 @@ export const dataStore = {
 
         if (!request) return null;
 
-        const isStaff = user && (
-            user.app_metadata?.role === 'admin'
-            || user.app_metadata?.role === 'pharmacy'
-            || user.role === 'admin'
-            || user.role === 'pharmacy'
-        );
+        const role = user?.app_metadata?.role || user?.role;
+        const isStaff = user && [
+            'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
+            'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST',
+            'PHARMACY_STAFF', 'ORDER_MANAGER'
+        ].includes(role);
 
         if (user && !isStaff && request.customerId !== (user.sub || user.id)) {
             return null;
