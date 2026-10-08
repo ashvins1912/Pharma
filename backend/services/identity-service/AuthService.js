@@ -299,9 +299,23 @@ export class AuthService {
             throw err;
         }
         this.assertAccountState(user);
+        const authorization = await authorizationService.resolve(user);
         const accessToken = await this.createAuthToken(user, aal);
         const refreshToken = await this.createRefreshToken(user, aal);
-        return { accessToken, refreshToken, user };
+        const refreshedUser = {
+            ...user,
+            id: user.userId || user.id,
+            userId: user.userId || user.id,
+            role: authorization.role,
+            roles: authorization.roles,
+            scope: authorization.scope,
+            tenantId: authorization.tenantId,
+            branchId: authorization.branchId,
+            permissions: authorization.permissions,
+            revokedPermissions: authorization.revokedPermissions,
+            permissionVersion: authorization.permissionVersion
+        };
+        return { accessToken, refreshToken, user: refreshedUser };
     }
 
     /**
