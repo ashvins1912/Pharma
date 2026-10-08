@@ -55,7 +55,7 @@ router.post('/authenticate', (req, res, next) => {
                 aal: user.aal || 'aal1'
             }
         });
-    })).catch(next);
+    }, { allowDirect: true })).catch(next);
 });
 
 export default router;
