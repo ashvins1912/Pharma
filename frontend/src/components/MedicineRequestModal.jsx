@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
+import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
 
 export default function MedicineRequestModal({ isOpen, onClose, initialMedicineName = '', onRequestSubmitted }) {
   const { addToast } = useToast();
+  const { runAction, isActionLoading } = useActionLoading();
+  const submitting = isActionLoading(LOADING_ACTIONS.CREATE_MEDICINE);
 
   const [medicineName, setMedicineName] = useState(initialMedicineName);
   const [saltComposition, setSaltComposition] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [urgency, setUrgency] = useState('Normal');
   const [customerNote, setCustomerNote] = useState('');
-  const [submitting, setSubmitting] = useState(false);
 
   // Sync initial medicine name when modal opens
   useEffect(() => {
@@ -28,8 +30,8 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
       return;
     }
 
-    setSubmitting(true);
-    try {
+    await runAction(LOADING_ACTIONS.CREATE_MEDICINE, async () => {
+      try {
       const res = await apiClient.post('/api/medicine-requests', {
         medicineName: medicineName.trim(),
         saltComposition: saltComposition.trim(),
@@ -47,11 +49,10 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
       setQuantity(1);
       setUrgency('Normal');
       setCustomerNote('');
-    } catch (err) {
-      addToast(err.message || 'Could not submit medicine request.', 'error');
-    } finally {
-      setSubmitting(false);
-    }
+      } catch (err) {
+        addToast(err.message || 'Could not submit medicine request.', 'error');
+      }
+    });
   };
 
   return (
