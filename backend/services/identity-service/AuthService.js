@@ -275,6 +275,7 @@ export class AuthService {
             role: authorization.role,
             roles: authorization.roles,
             permissions: authorization.permissions,
+            revokedPermissions: authorization.revokedPermissions || [],
             permissionVersion: authorization.permissionVersion,
             tenantId: authorization.tenantId,
             branchId: authorization.branchId,
