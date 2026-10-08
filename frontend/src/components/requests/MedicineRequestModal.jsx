@@ -300,7 +300,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
           </div>
 
           {/* Notice Banner */}
-          <div className="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-3 text-xs text-indigo-900 flex items-start gap-2.5">
+          <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-3 text-xs text-blue-900 flex items-start gap-2.5">
             <span className="text-base">ℹ️</span>
             <div className="text-[11px] leading-relaxed">
               <strong>No immediate charge or normal order is created.</strong> Our pharmacy team checks stock and creates a personalized <strong>Proposal</strong> with approximate/final pricing and delivery timing for your review and approval.
@@ -487,7 +487,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
                       type="file"
                       accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
                       onChange={handleProductImageChange}
-                      className="text-xs file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 cursor-pointer w-full text-slate-500"
+                      className="text-xs file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer w-full text-slate-500"
                   />
                   {imagePreview && (
                       <div className="mt-2 w-16 h-16 rounded-lg overflow-hidden border border-slate-200">
