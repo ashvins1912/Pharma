@@ -138,6 +138,49 @@ router.post('/', authenticateUser, (req, res, next) => {
     }
 });
 
+router.get('/validate/:code', async (req, res) => {
+    try {
+        if (!getIsConnected() || mongoose.connection.readyState !== 1) {
+            return res.status(503).json({ valid: false, message: 'MongoDB is unavailable. Coupon validation cannot be completed.' });
+        }
+        const code = String(req.params.code || '').trim().toUpperCase();
+        const orderTotal = Number(req.query.orderTotal ?? 0);
+        if (!Number.isFinite(orderTotal) || orderTotal < 0) {
+            return res.status(400).json({ valid: false, message: 'Order total must be a non-negative number.' });
+        }
+        const coupon = await Coupon.findOne({ code }).lean();
+        if (!coupon || !coupon.isActive
+            || (coupon.expiryDate && new Date(coupon.expiryDate) <= new Date())
+            || (coupon.usageLimit != null && Number(coupon.usageCount || 0) >= coupon.usageLimit)) {
+            return res.status(404).json({ valid: false, message: 'Invalid or expired promo code.' });
+        }
+        const minimum = Number(coupon.minOrderAmount ?? coupon.minOrderValue ?? 0);
+        if (orderTotal < minimum) {
+            return res.status(400).json({
+                valid: false,
+                message: `Minimum order amount of ₹${minimum} required for this coupon.`
+            });
+        }
+        const discountType = coupon.discountType || 'percentage';
+        const discountValue = Number(coupon.discountValue ?? coupon.discountPercentage ?? 0);
+        const discountAmount = discountType === 'fixed'
+            ? Math.min(discountValue, orderTotal)
+            : Math.round((orderTotal * discountValue / 100 + Number.EPSILON) * 100) / 100;
+        return res.status(200).json({
+            valid: true,
+            code: coupon.code,
+            discountPercentage: discountType === 'percentage' ? discountValue : 0,
+            discountType,
+            discountValue,
+            discountAmount,
+            finalTotal: Math.max(0, orderTotal - discountAmount)
+        });
+    } catch (err) {
+        console.error('Error validating coupon:', err);
+        return res.status(500).json({ valid: false, message: 'Coupon validation failed.' });
+    }
+});
+
 router.get('/:code', async (req, res) => {
     if (!getIsConnected() || mongoose.connection.readyState !== 1) {
         return res.status(503).json({ success: false, error: 'MongoDB is unavailable. Coupon validation cannot be completed.' });
@@ -191,49 +234,6 @@ router.get('/:code', async (req, res) => {
     } catch (error) {
         console.error('Error validating coupon:', error);
         return res.status(500).json({ success: false, error: 'Could not validate coupon.' });
-    }
-});
-
-router.get('/validate/:code', async (req, res) => {
-    try {
-        if (!getIsConnected() || mongoose.connection.readyState !== 1) {
-            return res.status(503).json({ valid: false, message: 'MongoDB is unavailable. Coupon validation cannot be completed.' });
-        }
-        const code = String(req.params.code || '').trim().toUpperCase();
-        const orderTotal = Number(req.query.orderTotal ?? 0);
-        if (!Number.isFinite(orderTotal) || orderTotal < 0) {
-            return res.status(400).json({ valid: false, message: 'Order total must be a non-negative number.' });
-        }
-        const coupon = await Coupon.findOne({ code }).lean();
-        if (!coupon || !coupon.isActive
-            || (coupon.expiryDate && new Date(coupon.expiryDate) <= new Date())
-            || (coupon.usageLimit != null && Number(coupon.usageCount || 0) >= coupon.usageLimit)) {
-            return res.status(404).json({ valid: false, message: 'Invalid or expired promo code.' });
-        }
-        const minimum = Number(coupon.minOrderAmount ?? coupon.minOrderValue ?? 0);
-        if (orderTotal < minimum) {
-            return res.status(400).json({
-                valid: false,
-                message: `Minimum order amount of ₹${minimum} required for this coupon.`
-            });
-        }
-        const discountType = coupon.discountType || 'percentage';
-        const discountValue = Number(coupon.discountValue ?? coupon.discountPercentage ?? 0);
-        const discountAmount = discountType === 'fixed'
-            ? Math.min(discountValue, orderTotal)
-            : Math.round((orderTotal * discountValue / 100 + Number.EPSILON) * 100) / 100;
-        return res.status(200).json({
-            valid: true,
-            code: coupon.code,
-            discountPercentage: discountType === 'percentage' ? discountValue : 0,
-            discountType,
-            discountValue,
-            discountAmount,
-            finalTotal: Math.max(0, orderTotal - discountAmount)
-        });
-    } catch (err) {
-        console.error('Error validating coupon:', err);
-        return res.status(500).json({ valid: false, message: 'Coupon validation failed.' });
     }
 });
 
