@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
+import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
 import { useToast } from '../context/ToastContext';
 
 const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -64,6 +65,9 @@ export default function AddressManager({
   } = useApp();
   const { addToast } = useToast();
   const { user } = useAuth();
+  const { isActionLoading } = useActionLoading();
+  const savingAddress = isActionLoading(LOADING_ACTIONS.SAVE_ADDRESS) || isActionLoading(LOADING_ACTIONS.EDIT_ADDRESS);
+  const deletingAddressId = isActionLoading(LOADING_ACTIONS.REMOVE_ADDRESS) ? (deleteTarget?._id || 'busy') : null;
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingAddress, setEditingAddress] = useState(null);
@@ -81,9 +85,7 @@ export default function AddressManager({
   const deleteInProgressRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [pinConfirmed, setPinConfirmed] = useState(false);
-  const [savingAddress, setSavingAddress] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deletingAddressId, setDeletingAddressId] = useState(null);
 
   useEffect(() => {
     if (!deleteTarget) return undefined;
@@ -337,10 +339,9 @@ export default function AddressManager({
   };
 
   const confirmDeleteAddress = async () => {
-    if (!deleteTarget?._id || deleteInProgressRef.current) return;
+    if (!deleteTarget?._id || deleteInProgressRef.current || deletingAddressId) return;
     const address = deleteTarget;
     deleteInProgressRef.current = true;
-    setDeletingAddressId(address._id);
     try {
       const success = await deleteAddress(address._id);
       if (success) setDeleteTarget(null);
@@ -350,7 +351,6 @@ export default function AddressManager({
       }
     } finally {
       deleteInProgressRef.current = false;
-      setDeletingAddressId(null);
     }
   };
 
@@ -434,7 +434,6 @@ export default function AddressManager({
     };
 
     addressSubmitInProgressRef.current = true;
-    setSavingAddress(true);
     try {
       const savedAddress = editingAddress
         ? await updateAddress(editingAddress._id, newAddress)
@@ -446,7 +445,6 @@ export default function AddressManager({
       }
     } finally {
       addressSubmitInProgressRef.current = false;
-      setSavingAddress(false);
     }
   };
 
