@@ -1147,7 +1147,10 @@ export class AuthService {
                 role,
                 scope,
                 tenantId: isPlatform ? null : tenantId,
-                tenant: tenant || null
+                tenant: tenant || null,
+                permissions: authorization.permissions,
+                revokedPermissions: authorization.revokedPermissions || [],
+                permissionVersion: authorization.permissionVersion
             },
             tenant,
             membership,
@@ -1683,6 +1686,10 @@ export class AuthService {
 
         const scope = isPlatform ? 'PLATFORM' : (tenantId ? 'TENANT' : 'CUSTOMER');
         const effectiveRole = isPlatform ? 'SUPER_ADMIN' : (role === 'TENANT_ADMIN' ? 'TENANT_ADMIN' : (role.toLowerCase() === 'customer' ? 'customer' : role));
+        // /auth/me is the frontend capability contract. Resolve from the same
+        // authorization service used to mint Pharma access tokens so UI gates
+        // and API enforcement always use the same effective permissions.
+        const authorization = await authorizationService.resolve(user);
 
         const age = calculateAge(user.dateOfBirth);
 
