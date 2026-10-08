@@ -40,6 +40,8 @@ services:
         value: 120000
       - key: AUTH_TIMEOUT_MS
         value: 15000
+      - key: LOGGING_ENABLED
+        value: "true"
       - key: HEALTH_CHECK_ENABLED
         value: "true"
       - key: HEALTH_CHECK_INTERVAL_MINUTES
