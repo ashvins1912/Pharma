@@ -134,6 +134,8 @@ export default function OrderTrackingModal({ order, onClose }) {
           </div>
         )}
 
+        <div className="mb-3 rounded-2xl border border-blue-100 bg-blue-50 p-3 text-[11px] text-blue-900"><strong>Ordered by:</strong> {order.orderedByName || 'Customer'}<br /><strong>Ordered for:</strong> {order.orderedForName || 'Customer'}</div>
+
         {/* Order Details Summary */}
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2 text-xs">
           <div className="flex justify-between text-slate-600">
