@@ -25,6 +25,17 @@ export default function OrderHistoryView({ onTrackOrder }) {
     });
   };
 
+  const trackOrder = async (order) => {
+    await runAction(LOADING_ACTIONS.TRACK_ORDER, async () => {
+      try {
+        const res = await apiClient.get(`/api/orders/${encodeURIComponent(order._id)}`);
+        onTrackOrder(res.data?.order || res.data?.data || res.data || order);
+      } catch (error) {
+        addToast(error.message || 'Could not load the latest order tracking status.', 'error');
+      }
+    });
+  };
+
   const getStatusBadge = (status) => {
     switch (status) {
       case 'Delivered':
@@ -116,8 +127,8 @@ export default function OrderHistoryView({ onTrackOrder }) {
                         )}
                         {!['Delivered', 'Cancelled', 'Rejected'].includes(order.orderStatus) && (
                           <button
-                            onClick={() => onTrackOrder(order)}
-                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition"
+                            onClick={() => trackOrder(order)}
+                            disabled={isActionLoading(LOADING_ACTIONS.TRACK_ORDER)} className="bg-blue-50 hover:bg-blue-100 disabled:opacity-60 disabled:cursor-wait text-blue-700 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition"
                           >
                             Track
                           </button>
@@ -168,7 +179,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                       )}
                       {!['Delivered', 'Cancelled', 'Rejected'].includes(order.orderStatus) && (
                         <button
-                          onClick={() => onTrackOrder(order)}
+                          onClick={() => trackOrder(order)}
                           className="bg-blue-600 text-white font-extrabold text-xs px-4 py-1.5 rounded-xl cursor-pointer"
                         >
                           Track
