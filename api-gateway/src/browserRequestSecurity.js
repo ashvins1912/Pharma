@@ -69,10 +69,11 @@ export function enforceBrowserRequestSecurity(req, res, next, gatewayConfig) {
   const fetchSite = String(req.get('sec-fetch-site') || '').toLowerCase();
   const allowedOrigins = new Set(gatewayConfig.allowedOrigins || []);
 
-  if (fetchSite === 'cross-site') {
-    return reject(res, requestId, 'CSRF_CROSS_SITE_BLOCKED', 'Cross-site state-changing requests are not allowed.');
-  }
-
+  // Fetch Metadata describes the relationship between the browser page and
+  // the API origin. A cross-site value is not automatically malicious: a
+  // legitimate SPA may be hosted on one origin and call the API Gateway on
+  // another origin during Google/Supabase authentication. The security decision
+  // therefore comes from the explicit trusted Origin/Referer below.
   if (origin) {
     if (origin === 'null' || !allowedOrigins.has(origin)) {
       return reject(res, requestId, 'CSRF_ORIGIN_REJECTED', 'Request origin is not trusted.');
@@ -82,6 +83,11 @@ export function enforceBrowserRequestSecurity(req, res, next, gatewayConfig) {
     if (!refererOrigin || !allowedOrigins.has(refererOrigin)) {
       return reject(res, requestId, 'CSRF_REFERER_REJECTED', 'Request referer is not trusted.');
     }
+  } else if (fetchSite === 'cross-site') {
+    // A cross-site request without an independently verifiable browser origin
+    // is not safe to accept. This preserves the CSRF defense for forged forms
+    // and privacy-stripped browser requests.
+    return reject(res, requestId, 'CSRF_CROSS_SITE_BLOCKED', 'Cross-site state-changing requests require a trusted origin.');
   }
 
   const cookies = parseCookies(req.get('cookie') || '');
