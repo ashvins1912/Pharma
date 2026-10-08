@@ -245,7 +245,27 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             <AddressManager isSelectOnly={true} />
           </div>
 
-          {/* Section 2: Order Items Summary */}
+          {/* Section 2: Order Recipient */}
+          <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+            <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider mb-2">2. Order For</h3>
+            <p className="text-[11px] text-indigo-800 mb-3">You can place this order for yourself or for a relative you manage.</p>
+            <label htmlFor="order-recipient" className="sr-only">Order for</label>
+            <select
+              id="order-recipient"
+              value={patientPuid}
+              onChange={(event) => setPatientPuid(event.target.value)}
+              className="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200"
+            >
+              {people.length === 0 && <option value="">Myself</option>}
+              {people.map((person) => (
+                <option key={person.puid} value={person.puid}>
+                  {person.displayName} · {person.relationshipToOwner || 'SELF'}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Section 3: Order Items Summary */}
           <div>
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2.5">
               2. Prescription & Medicine Items ({cart.length})
