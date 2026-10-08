@@ -63,9 +63,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
       form.append('preferredDeliveryPreference', urgency === 'Urgent (Same Day)' ? 'Morning' : urgency === 'Critical / Life-Saving' ? 'Morning' : 'Flexible');
       form.append('customerNote', customerNote.trim());
       if (prescriptionFile) form.append('prescription', prescriptionFile);
-      const res = await apiClient.post('/api/medicine-requests', form, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await apiClient.post('/api/medicine-requests', form);
 
       addToast(res.data.message || 'Medicine request submitted to pharmacy!', 'success');
       if (onRequestSubmitted) onRequestSubmitted(res.data.request);
