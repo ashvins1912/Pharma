@@ -4,6 +4,8 @@ import { resolveApiCapability } from './apiCapabilities';
 
 let runtimeAccessToken = null;
 let sessionRefreshPromise = null;
+let sessionProbePromise = null;
+let csrfBootstrapPromise = null;
 let authorizationRevalidationPromise = null;
 let applicationSessionAuthenticated = false;
 let authorizationCapabilities = { userId: null, role: null, permissions: [] };
@@ -35,6 +37,26 @@ export function clearAuthorizationCapabilities() {
     authorizationCapabilities = { userId: null, role: null, permissions: [] };
 }
 
+export function getAuthMe() {
+    if (sessionProbePromise) return sessionProbePromise;
+    sessionProbePromise = apiClient.get('/api/v1/auth/me', {
+        __skipAuthorizationRevalidation: true
+    }).finally(() => {
+        sessionProbePromise = null;
+    });
+    return sessionProbePromise;
+}
+
+export function getCsrf() {
+    if (csrfBootstrapPromise) return csrfBootstrapPromise;
+    csrfBootstrapPromise = apiClient.get('/api/v1/auth/csrf', {
+        __skipAuthorizationRevalidation: true
+    }).finally(() => {
+        csrfBootstrapPromise = null;
+    });
+    return csrfBootstrapPromise;
+}
+
 function hasCapability(permission) {
     if (!permission || !authorizationCapabilities.userId) return false;
     if (authorizationCapabilities.role === 'SUPER_ADMIN'
@@ -53,13 +75,7 @@ function hasCapability(permission) {
 // preflight to avoid recursive revalidation.
 async function revalidateAuthorization() {
     if (authorizationRevalidationPromise) return authorizationRevalidationPromise;
-    authorizationRevalidationPromise = axios.get('/api/v1/auth/me', {
-        baseURL: apiBaseUrl,
-        withCredentials: true,
-        __skipAuthorizationRevalidation: true,
-        __skipRuntimeAuth: true,
-        headers: runtimeAccessToken ? { Authorization: `Bearer ${runtimeAccessToken}` } : undefined
-    }).then(response => {
+    authorizationRevalidationPromise = getAuthMe().then(response => {
         const data = response.data?.data || response.data || {};
         const refreshedUser = data.user || data;
         if (refreshedUser?.id) {
