@@ -64,6 +64,43 @@ test('gateway responds to health without an Origin header', async () => {
   }
 });
 
+test('gateway proxies public catalog and csrf routes without authentication', async () => {
+  const seen = [];
+  const backend = await startMockServer((req, res) => {
+    seen.push(req.url);
+    if (req.url.startsWith('/api/medicines')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ medicines: [{ _id: 'med-1', name: 'Test Medicine' }], total: 1 }));
+      return;
+    }
+    if (req.url === '/api/v1/auth/csrf') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ csrfToken: 'test-csrf' }));
+      return;
+    }
+    res.writeHead(404).end();
+  });
+  const app = createGatewayApp(loadConfig({
+    NODE_ENV: 'test',
+    BACKEND_API_URL: backend.url,
+    CORS_ALLOWED_ORIGINS: 'http://localhost:3000'
+  }));
+  const gateway = await start(app);
+
+  try {
+    const catalog = await fetch(gateway.url + '/api/medicines?page=1&limit=16');
+    assert.equal(catalog.status, 200);
+    assert.equal((await catalog.json()).medicines[0].name, 'Test Medicine');
+
+    const csrf = await fetch(gateway.url + '/api/v1/auth/csrf');
+    assert.equal(csrf.status, 200);
+    assert.equal((await csrf.json()).csrfToken, 'test-csrf');
+    assert.deepEqual(seen, ['/api/medicines?page=1&limit=16', '/api/v1/auth/csrf']);
+  } finally {
+    await Promise.all([gateway.close(), backend.close()]);
+  }
+});
+
 test('gateway handles preflight before proxying to the backend', async () => {
   const app = createGatewayApp(loadConfig({
     NODE_ENV: 'test',
