@@ -23,6 +23,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Request logging is intentionally registered only after the FastAPI app exists.
+
 @app.middleware("http")
 async def request_logging_middleware(request: Request, call_next):
     request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
