@@ -196,8 +196,16 @@ export function AuthProvider({ children }) {
           if (stopped) return;
           const refreshedUser = data?.data?.user || data?.user;
           if (refreshedUser?.id) {
+            const refreshedRole = refreshedUser.app_metadata?.role || refreshedUser.role || role;
+            const refreshedPermissions = Array.isArray(refreshedUser.permissions) ? refreshedUser.permissions : [];
             setUser(previous => previous?.id === refreshedUser.id ? { ...previous, ...refreshedUser } : refreshedUser);
-            setRole(refreshedUser.app_metadata?.role || refreshedUser.role || role);
+            setRole(refreshedRole);
+            setPermissions(refreshedPermissions);
+            setAuthorizationCapabilities({
+              userId: refreshedUser.id,
+              role: refreshedRole,
+              permissions: refreshedPermissions
+            });
           }
         })
         .catch(() => {
