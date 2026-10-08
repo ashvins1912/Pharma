@@ -267,6 +267,8 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             couponCode,
             prescriptionUrl: uploadedPrescriptionUrl,
             prescriptionId: uploadedPrescriptionId,
+            patientPuid: req.body.patientPuid || null,
+            orderedForName: req.body.orderedForName || customerName,
             deliveryAddress: chosenAddressLine,
             addressDetails: addressSnapshot ? {
                 label: addressSnapshot.label,
