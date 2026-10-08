@@ -2,7 +2,9 @@
  */
 import express from 'express';
 import { authService, calculateAge, isValidDOB, isValidMobile } from '../../services/identity-service/AuthService.js';
-import { authenticateUser } from '../../middleware/auth.js';
+import { authenticateUser, requireSuperAdmin } from '../../middleware/auth.js';
+import UserProfile from '../../models/UserProfile.js';
+import { isPlatformSuperAdmin } from '../../shared/contracts/index.js';
 import { sendSuccess, sendError } from '../../shared/responses.js';
 import { setSessionCookies } from '../../security/sessionCookie.js';
 
@@ -112,6 +114,38 @@ router.put('/onboarding', authenticateUser, async (req, res) => {
             req
         });
     }
+});
+
+router.get('/access/users', authenticateUser, requireSuperAdmin, async (req, res) => {
+  try {
+    const search = String(req.query.search || '').trim();
+    const filter = { role: { $nin: ['customer', 'CUSTOMER'] }, accountStatus: { $nin: ['DELETED'] } };
+    if (search) {
+      const rx = new RegExp(search, 'i');
+      filter.$or = [{ name: rx }, { email: rx }, { normalizedEmail: rx }, { userId: rx }, { supabase_user_id: rx }, { role: rx }];
+    }
+    const users = await UserProfile.find(filter).select('userId supabase_user_id supabaseId name firstName lastName email role roles tenantId branchId permissions accessGrants accessRevokes permissionVersion accountStatus').sort({ updatedAt: -1 }).limit(50).lean();
+    return sendSuccess(res, { data: users.map(u => ({ ...u, id: u.userId || u.supabase_user_id || u.supabaseId, effectiveSuperAdmin: isPlatformSuperAdmin(u.role) })), message: 'Platform users retrieved.', statusCode: 200, req });
+  } catch (err) {
+    return sendError(res, { code: 'ACCESS_USERS_FAILED', message: err.message || 'Could not load platform users.', statusCode: 500, req });
+  }
+});
+
+router.patch('/access/users/:userId', authenticateUser, requireSuperAdmin, async (req, res) => {
+  try {
+    const targetId = String(req.params.userId || '').trim();
+    const clean = value => [...new Set((Array.isArray(value) ? value : []).map(v => String(v).trim()).filter(Boolean))];
+    const target = await UserProfile.findOne({ $or: [{ userId: targetId }, { supabase_user_id: targetId }, { supabaseId: targetId }] });
+    if (!target) return sendError(res, { code: 'USER_NOT_FOUND', message: 'Platform user was not found.', statusCode: 404, req });
+    if (isPlatformSuperAdmin(target.role)) return sendError(res, { code: 'SUPER_ADMIN_LOCKED', message: 'Super Admin has complete access and cannot have permissions restricted.', statusCode: 409, req });
+    target.accessGrants = clean(req.body?.grants);
+    target.accessRevokes = clean(req.body?.revokes);
+    target.permissionVersion = Number(target.permissionVersion || 1) + 1;
+    await target.save();
+    return sendSuccess(res, { data: { id: target.userId || target.supabase_user_id || target.supabaseId, name: target.name, email: target.email, role: target.role, permissions: target.permissions || [], accessGrants: target.accessGrants || [], accessRevokes: target.accessRevokes || [], permissionVersion: target.permissionVersion }, message: 'Security assignment updated.', statusCode: 200, req });
+  } catch (err) {
+    return sendError(res, { code: 'ACCESS_ASSIGNMENT_FAILED', message: err.message || 'Could not update security assignment.', statusCode: 400, req });
+  }
 });
 
 /**
