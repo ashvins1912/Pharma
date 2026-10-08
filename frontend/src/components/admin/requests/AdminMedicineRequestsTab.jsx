@@ -121,7 +121,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
         );
       case 'PROPOSAL_SENT':
         return (
-          <span className="bg-purple-100 text-purple-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+          <span className="bg-blue-100 text-blue-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">
             <span>📤</span> Proposal Sent
           </span>
         );
@@ -184,7 +184,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
             Proposals Sent
           </span>
           <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-2xl font-black text-purple-600">
+            <span className="text-2xl font-black text-blue-600">
               {metrics.proposalsSentCount}
             </span>
             <span className="text-[11px] text-slate-400 font-medium">awaiting customer</span>
@@ -242,7 +242,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
               onClick={() => setSelectedStatus(tab.id)}
               className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer whitespace-nowrap ${
                 selectedStatus === tab.id
-                  ? 'bg-purple-600 text-white shadow-xs'
+                  ? 'bg-blue-600 text-white shadow-xs'
                   : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
               }`}
             >
@@ -258,7 +258,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
             placeholder="Search medicine, customer, #MR..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-3 py-1.5 text-xs bg-slate-100 border border-transparent focus:border-purple-500 focus:bg-white rounded-xl outline-none"
+            className="w-full px-3 py-1.5 text-xs bg-slate-100 border border-transparent focus:border-blue-500 focus:bg-white rounded-xl outline-none"
           />
           <button
             type="submit"
@@ -388,7 +388,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
                               href={req.productImageUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-[10px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-2 py-0.5 rounded border border-indigo-200"
+                              className="text-[10px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200"
                             >
                               📷 Photo
                             </a>
@@ -419,7 +419,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
                       <td className="py-3.5 px-3">
                         {getStatusBadge(req.status)}
                         {req.status === 'PROPOSAL_SENT' && (
-                          <span className="mt-1 block text-[10px] font-bold text-purple-700">
+                          <span className="mt-1 block text-[10px] font-bold text-blue-700">
                             Waiting for Customer Approval
                           </span>
                         )}
@@ -435,7 +435,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
                             ['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(req.status)
                               ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                               : req.status === 'PROPOSAL_SENT'
-                              ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                              ? 'bg-blue-600 hover:bg-blue-700 text-white'
                               : 'bg-blue-600 hover:bg-blue-700 text-white'
                           }`}
                         >
@@ -490,7 +490,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
                     )}
                     {req.productImageUrl && (
                       <a href={req.productImageUrl} target="_blank" rel="noreferrer"
-                        className="min-h-10 rounded-xl border border-indigo-200 bg-indigo-50 px-3 flex items-center text-[11px] font-bold text-indigo-700">
+                        className="min-h-10 rounded-xl border border-blue-200 bg-blue-50 px-3 flex items-center text-[11px] font-bold text-blue-700">
                         📷 Product Photo
                       </a>
                     )}
@@ -504,7 +504,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
                     <p className="text-[11px] text-slate-500 line-clamp-2 break-words">Note: "{req.customerNote}"</p>
                   )}
                   {req.status === 'PROPOSAL_SENT' && (
-                    <p className="text-[10px] font-bold text-purple-700">Waiting for Customer Approval</p>
+                    <p className="text-[10px] font-bold text-blue-700">Waiting for Customer Approval</p>
                   )}
                   <button
                     onClick={() => { setActiveRequest(req); setProposalModalOpen(true); }}
