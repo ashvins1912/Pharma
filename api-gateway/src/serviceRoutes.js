@@ -76,6 +76,8 @@ export function createServiceRouters(gatewayConfig = config) {
   customerRouter.post('/ensure', customer);
   customerRouter.get('/persons', customer);
   customerRouter.post('/persons', customer);
+  customerRouter.patch('/persons/:puid', customer);
+  customerRouter.delete('/persons/:puid', customer);
   customerRouter.post('/family-invitations', customer);
 
   const inventoryRouter = express.Router();
