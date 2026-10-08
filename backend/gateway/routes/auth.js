@@ -496,7 +496,7 @@ router.post('/password/reset', authLimiter, async (req, res) => {
             token: req.body?.token,
             password: req.body?.password
         });
-        if (result.accessToken) setSessionCookies(res, { accessToken: result.accessToken });
+        if (result.accessToken) setSessionCookies(res, { accessToken: result.accessToken, refreshToken: await authService.createRefreshToken(result.user || {}, result.aal || 'aal1') });
         return sendSuccess(res, {
             data: result,
             message: 'Password updated successfully.',
@@ -519,7 +519,7 @@ router.post('/password/reset', authLimiter, async (req, res) => {
 router.post('/mfa/verify', authLimiter, async (req, res) => {
     try {
         const result = await authService.verifyMfaChallenge(req.body?.challengeToken, req.body?.code);
-        setSessionCookies(res, { accessToken: result.accessToken });
+        setSessionCookies(res, { accessToken: result.accessToken, refreshToken: await authService.createRefreshToken(result.user || {}, 'aal2') });
         return sendSuccess(res, {
             data: { user: result.user, accessToken: result.accessToken, aal: 'aal2' },
             message: 'MFA verification successful.',
