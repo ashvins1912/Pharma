@@ -58,6 +58,9 @@ export function loadConfig(environment = process.env) {
   const healthCheckRunOnStartup = environment.HEALTH_CHECK_RUN_ON_STARTUP === 'true';
   const serviceAuthSecret = environment.SERVICE_AUTH_SECRET || '';
   const gatewayAuthSecret = environment.GATEWAY_AUTH_SECRET || '';
+  const pharmaJwtPublicKey = String(environment.PHARMA_JWT_PUBLIC_KEY || '').replace(/\\n/g, '\n').trim();
+  const pharmaJwtIssuer = environment.PHARMA_JWT_ISSUER || 'pharma-auth';
+  const pharmaJwtAudience = environment.PHARMA_JWT_AUDIENCE || 'pharma-api';
   const errors = [];
 
   if (!allowedOrigins.length) errors.push('CORS_ALLOWED_ORIGINS must contain at least one exact origin.');
@@ -86,6 +89,7 @@ export function loadConfig(environment = process.env) {
   if ((inventoryServiceUrl || orderServiceUrl || prescriptionServiceUrl) && gatewayAuthSecret.length < 32) {
     errors.push('GATEWAY_AUTH_SECRET must contain at least 32 characters when a service URL is configured.');
   }
+  if (production && pharmaJwtPublicKey.length < 100) errors.push('PHARMA_JWT_PUBLIC_KEY is required in production.');
   if (production && gatewayAuthSecret.length < 32) {
     errors.push('GATEWAY_AUTH_SECRET must contain at least 32 characters in production.');
   }
@@ -130,6 +134,9 @@ export function loadConfig(environment = process.env) {
     ],
     serviceAuthSecret,
     gatewayAuthSecret,
+    pharmaJwtPublicKey,
+    pharmaJwtIssuer,
+    pharmaJwtAudience,
     serviceJwtIssuer: environment.SERVICE_JWT_ISSUER || 'ashvin-pharmacy',
     inventoryJwtAudience: environment.SERVICE_JWT_AUDIENCE || 'inventory-service',
     orderJwtAudience: environment.ORDER_SERVICE_JWT_AUDIENCE || 'order-service',
