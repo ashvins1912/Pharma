@@ -37,10 +37,11 @@ export function clearAuthorizationCapabilities() {
     authorizationCapabilities = { userId: null, role: null, permissions: [] };
 }
 
-export function getAuthMe() {
+export function getAuthMe({ allowAnonymous = false } = {}) {
     if (sessionProbePromise) return sessionProbePromise;
     sessionProbePromise = apiClient.get('/api/v1/auth/me', {
-        __skipAuthorizationRevalidation: true
+        __skipAuthorizationRevalidation: true,
+        __allowAnonymousProbe: allowAnonymous
     }).finally(() => {
         sessionProbePromise = null;
     });
@@ -186,6 +187,22 @@ apiClient.interceptors.response.use(
         const isRefreshRequest = /\/api\/(?:v1\/auth|auth)\/refresh(\/|$)/.test(url);
         const isCredentialSubmission = /\/api\/(?:v1\/auth|auth)\/(login|signup|google|verify-email-code|resend-verification|complete-profile|onboarding|password\/forgot|password\/reset|mfa\/verify)(\/|$)/.test(url);
         const isSessionProbe = /\/api\/(?:v1\/auth|auth)\/(session|me|logout|csrf)(\/|$)/.test(url);
+
+        // Anonymous application hydration intentionally probes /auth/me. A 401
+        // here is a normal "no session" result, not a failed application request.
+        // Keep the HTTP semantics (401) for security and observability while
+        // preventing console noise and authentication side effects.
+        if (status === 401 && error.config?.__allowAnonymousProbe) {
+            clearRuntimeAccessToken();
+            return {
+                data: null,
+                status: 401,
+                statusText: 'Unauthorized',
+                headers: error.response?.headers || {},
+                config: error.config,
+                request: error.request
+            };
+        }
 
         // Recover transparently from an expired access JWT using the HttpOnly
         // refresh cookie. Retry the original request exactly once.
