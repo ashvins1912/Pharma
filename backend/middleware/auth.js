@@ -64,6 +64,7 @@ export const authenticateUser = async (req, res, next) => {
             role: payload.role || 'customer',
             roles: payload.roles || [payload.role || 'customer'],
             permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
+            revokedPermissions: Array.isArray(payload.revokedPermissions) ? payload.revokedPermissions : [],
             permissionVersion: Number(payload.permissionVersion || 1),
             tenantId: payload.tenantId || null,
             branchId: payload.branchId || null,
