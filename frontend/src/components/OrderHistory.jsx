@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
+import Pagination from './common/Pagination';
 
 const formatDate = (date) => {
   const parsedDate = new Date(date);
@@ -10,7 +11,7 @@ const formatDate = (date) => {
 };
 
 const getItemName = (item) => item.name || item.productName || 'Order item';
-const PAGE_SIZE = 3;
+const PAGE_SIZE = 10;
 
 const normalizeHistoryResponse = (data, requestedPage) => {
   const orderItems = data?.items || data?.orders;
@@ -206,17 +207,15 @@ export default function OrderHistory() {
         </>
       )}
       {!isLoading && !error && pagination.total > 0 && (
-        <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-slate-500" aria-live="polite">
-            Showing {orders.length} of {pagination.total} past orders
-          </p>
-          {pagination.hasNextPage && <button
-            type="button"
-            onClick={() => loadOrderHistory(pagination.page + 1, { append: true })}
-            disabled={isLoading}
-            className="min-h-9 rounded-lg bg-slate-100 px-4 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >{isLoading ? 'Loading previous orders...' : 'Load More'}</button>}
-        </div>
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          total={pagination.total}
+          pageSize={PAGE_SIZE}
+          onPageChange={(nextPage) => loadOrderHistory(nextPage)}
+          loading={isLoading}
+          label="past orders"
+        />
       )}
       {isLoading && orders.length > 0 && <p className="text-center text-xs text-slate-500" role="status">Loading previous orders...</p>}
     </section>
