@@ -794,7 +794,7 @@ export default function AddressManager({
             disabled={savingAddress}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2.5 rounded-xl text-xs shadow-md transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {savingAddress ? 'Saving Address...' : editingAddress ? 'Update Saved Address' : 'Save Address'}
+            {savingAddress ? <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />Saving Address...</> : editingAddress ? 'Update Saved Address' : 'Save Address'}
           </button>
         </form>
       )}
@@ -811,7 +811,7 @@ export default function AddressManager({
             <div className="mt-5 flex justify-end gap-2">
               <button type="button" disabled={Boolean(deletingAddressId)} onClick={() => setDeleteTarget(null)} className="min-h-10 rounded-xl bg-slate-100 px-4 text-sm font-bold text-slate-700 disabled:opacity-50">Cancel</button>
               <button type="button" disabled={Boolean(deletingAddressId)} onClick={confirmDeleteAddress} className="min-h-10 rounded-xl bg-rose-600 px-4 text-sm font-bold text-white disabled:opacity-50">
-                {deletingAddressId ? 'Deleting…' : 'Delete'}
+                {deletingAddressId ? <><span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-400 border-t-slate-800" />Deleting…</> : 'Delete'}
               </button>
             </div>
           </section>
