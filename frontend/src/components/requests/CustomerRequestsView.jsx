@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { replaceMedicineRequestPrescription } from '../../api/medicineRequestService';
+import { useActionLoading, LOADING_ACTIONS } from '../../context/LoadingContext';
 
 const DEFAULT_PAGINATION = { page: 1, pageSize: 3, limit: 3, total: 0, totalPages: 0, hasNextPage: false };
 
@@ -18,6 +19,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
     orders
   } = useApp();
   const { addToast } = useToast();
+  const { runAction, isActionLoading } = useActionLoading();
   const pagination = medicineRequestsPagination || DEFAULT_PAGINATION;
   const [updatingPrescriptionId, setUpdatingPrescriptionId] = useState(null);
 
@@ -40,16 +42,18 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
       addToast('Prescription file size must be under 5 MB.', 'warning');
       return;
     }
-    setUpdatingPrescriptionId(request._id);
-    try {
-      const result = await replaceMedicineRequestPrescription(request._id, file);
-      addToast(result.message || 'Prescription updated and queued for reprocessing.', 'success');
-      await loadUserMedicineRequests({ page: 1, statusGroup: statusFilter });
-    } catch (error) {
-      addToast(error.message || 'Failed to update prescription.', 'error');
-    } finally {
-      setUpdatingPrescriptionId(null);
-    }
+    await runAction(LOADING_ACTIONS.UPLOAD_PRESCRIPTION, async () => {
+      setUpdatingPrescriptionId(request._id);
+      try {
+        const result = await replaceMedicineRequestPrescription(request._id, file);
+        addToast(result.message || 'Prescription updated and queued for reprocessing.', 'success');
+        await loadUserMedicineRequests({ page: 1, statusGroup: statusFilter });
+      } catch (error) {
+        addToast(error.message || 'Failed to update prescription.', 'error');
+      } finally {
+        setUpdatingPrescriptionId(null);
+      }
+    });
   };
 
   const getStatusBadge = (status) => {
@@ -346,7 +350,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                       </p>
                     </div>
                     <label className="cursor-pointer rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-black text-white hover:bg-blue-700">
-                      {updatingPrescriptionId === req._id ? 'Updating…' : 'Update Prescription'}
+                      {isActionLoading(LOADING_ACTIONS.UPLOAD_PRESCRIPTION) && updatingPrescriptionId === req._id ? 'Uploading…' : 'Update Prescription'}
                       <input
                         type="file"
                         accept="application/pdf,image/jpeg,image/png,image/webp"
