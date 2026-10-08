@@ -268,7 +268,8 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
 
         const order = await dataStore.reserveOrder({
             userId: req.user.sub,
-            customerName,
+            tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null,
+            customerName:
             customerMobile: addressSnapshot?.mobile || req.body.mobile || req.user.user_metadata?.mobile || '',
             items: cartItems,
             pointsToRedeem,
@@ -353,7 +354,7 @@ router.post('/checkout/quote', authenticateUser, async (req, res) => {
             items,
             req.user.sub,
             pointsToRedeem,
-            { couponCode: req.body.couponCode || undefined }
+            { couponCode: req.body.couponCode || undefined, tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null }
         );
         return res.json(quote);
     } catch (error) {
@@ -1116,6 +1117,31 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
         if (err.statusCode === 422) return res.status(422).json({ message: err.message });
         if (err.statusCode === 503) return res.status(503).json({ message: 'Order search is temporarily unavailable. Please try again.' });
         res.status(500).json({ message: "Failed to retrieve orders" });
+    }
+});
+
+// Customer/admin order detail used by the tracking UI.
+router.get('/:id', authenticateUser, async (req, res) => {
+    if (!getIsConnected()) return res.status(503).json({ message: 'Order tracking is temporarily unavailable.' });
+    try {
+        if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid order ID.' });
+        const order = await Order.findById(req.params.id).lean();
+        if (!order) return res.status(404).json({ message: 'Order not found.' });
+        const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
+        const staff = ['admin','SUPER_ADMIN','PLATFORM_SUPER_ADMIN','TENANT_OWNER','TENANT_ADMIN','PHARMACIST','PHARMACY_STAFF','ORDER_MANAGER'].includes(role);
+        if (!staff && String(order.userId || order.customerId) !== String(req.user.sub)) {
+            return res.status(403).json({ message: 'You are not authorized to track this order.' });
+        }
+        if (staff && role !== 'admin' && !['SUPER_ADMIN','PLATFORM_SUPER_ADMIN'].includes(role)) {
+            const tenantId = req.user.tenantId || req.user.app_metadata?.tenantId || null;
+            if (tenantId && order.tenantId && String(order.tenantId) !== String(tenantId)) {
+                return res.status(403).json({ message: 'This order belongs to another pharmacy tenant.' });
+            }
+        }
+        return res.json({ success: true, order });
+    } catch (error) {
+        console.error('Order tracking retrieval failed:', error);
+        return res.status(500).json({ message: 'Could not load the latest order tracking status.' });
     }
 });
 
