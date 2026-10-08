@@ -6,6 +6,7 @@ import {
 import AdminProposalModal from './AdminProposalModal';
 import apiClient from '../../../api/apiClient';
 import { normalizePrescriptionBlob } from '../../../utils/prescriptionFile';
+import Pagination from '../../common/Pagination';
 
 export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
   const [requests, setRequests] = useState([]);
@@ -26,7 +27,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeRequest, setActiveRequest] = useState(null);
   const [proposalModalOpen, setProposalModalOpen] = useState(false);
-  const [pagination, setPagination] = useState({ page: 1, pageSize: 8, total: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false });
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false });
 
   const loadRequests = async (targetPage = 1) => {
     try {
@@ -34,7 +35,7 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
       const [list, m] = await Promise.all([
         getAdminMedicineRequests({
           page: targetPage,
-          pageSize: 8,
+          pageSize: 10,
           status: selectedStatus !== 'ALL' ? selectedStatus : undefined,
           search: searchQuery.trim() || undefined
         }),
@@ -519,24 +520,15 @@ export default function AdminMedicineRequestsTab({ onPendingCountRefresh }) {
         )}
 
         {pagination.total > 0 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100 pt-4">
-            <p className="text-[11px] text-slate-500 text-center sm:text-left">
-              Showing <span className="font-bold text-slate-700">{((pagination.page - 1) * pagination.pageSize) + 1}</span>–<span className="font-bold text-slate-700">{Math.min(pagination.page * pagination.pageSize, pagination.total)}</span> of <span className="font-bold text-slate-700">{pagination.total}</span> requests
-            </p>
-            <nav className="flex items-center gap-1.5" aria-label="Medicine request pages">
-              <button type="button" onClick={() => { loadRequests(pagination.page - 1); }} disabled={!pagination.hasPreviousPage || loading}
-                className="min-h-10 min-w-10 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 disabled:opacity-40 hover:bg-slate-50">
-                <span className="hidden sm:inline">← Previous</span><span className="sm:hidden">←</span>
-              </button>
-              <span className="min-h-10 px-3 flex items-center justify-center rounded-xl bg-purple-50 text-purple-700 text-xs font-black whitespace-nowrap">
-                Page {pagination.page} of {pagination.totalPages}
-              </span>
-              <button type="button" onClick={() => { loadRequests(pagination.page + 1); }} disabled={!pagination.hasNextPage || loading}
-                className="min-h-10 min-w-10 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 disabled:opacity-40 hover:bg-slate-50">
-                <span className="hidden sm:inline">Next →</span><span className="sm:hidden">→</span>
-              </button>
-            </nav>
-          </div>
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            pageSize={10}
+            onPageChange={loadRequests}
+            loading={loading}
+            label="medicine requests"
+          />
         )}
 
       </div>
