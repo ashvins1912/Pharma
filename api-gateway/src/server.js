@@ -134,10 +134,10 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
   app.use('/api/v1/orders', orderRouter);
   app.use('/api/v1/prescriptions', prescriptionRouter);
   app.use('/api/orders', legacyPrescriptionRouter);
-  const publicApiPath = path => isGatewayPublicPath(path);
+  const publicApiPath = (method, path) => isGatewayPublicPath(method, path);
 
   app.use('/api', async (req, res, next) => {
-    if (publicApiPath(req.originalUrl || req.url || '')) return next();
+    if (publicApiPath(req.method, req.originalUrl || req.url || '')) return next();
     return authenticateUser(req, res, async () => {
       const permission = resolveGatewayCapability(req.method, req.originalUrl || req.url || '');
       if (!permission || !isGatewayPermissionAllowed(req.user, permission)) {
