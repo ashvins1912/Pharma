@@ -54,6 +54,7 @@ export const authenticateUser = async (req, res, next) => {
         if (accountStatus !== 'ACTIVE' && tokenType === 'pharma_access') {
             throw new Error('Inactive account session.');
         }
+        const role = payload.role || (Array.isArray(payload.roles) ? payload.roles.find(value => ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'admin', 'TENANT_ADMIN', 'TENANT_OWNER', 'pharmacy', 'PHARMACIST', 'PHARMACY_STAFF'].includes(value)) : null) || 'customer';
         req.user = {
             sub: payload.sub,
             id: payload.sub,
@@ -61,8 +62,8 @@ export const authenticateUser = async (req, res, next) => {
             name: payload.name || '',
             firstName: payload.firstName || '',
             lastName: payload.lastName || '',
-            role: payload.role || 'customer',
-            roles: payload.roles || [payload.role || 'customer'],
+            role,
+            roles: Array.isArray(payload.roles) && payload.roles.length ? payload.roles : [role],
             permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
             revokedPermissions: Array.isArray(payload.revokedPermissions) ? payload.revokedPermissions : [],
             permissionVersion: Number(payload.permissionVersion || 1),
@@ -70,7 +71,7 @@ export const authenticateUser = async (req, res, next) => {
             branchId: payload.branchId || null,
             scope: payload.scope || 'CUSTOMER',
             app_metadata: {
-                role: payload.role || 'customer',
+                role,
                 tenantId: payload.tenantId || null,
                 permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
                 revokedPermissions: Array.isArray(payload.revokedPermissions) ? payload.revokedPermissions : []
@@ -133,11 +134,16 @@ export const isAdmin = (req, res, next) => {
 
 export const isPharmacyOrAdmin = (req, res, next) => {
     const role = req.user?.app_metadata?.role || req.user?.role || req.context?.role;
+    const roles = Array.isArray(req.user?.roles) ? req.user.roles : [];
+    const permissions = Array.isArray(req.user?.permissions)
+        ? req.user.permissions
+        : (Array.isArray(req.user?.app_metadata?.permissions) ? req.user.app_metadata.permissions : []);
     const allowed = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_OWNER', 'pharmacy', 'PHARMACIST', 'PHARMACY_STAFF'];
-    if (allowed.includes(role)) {
+    if (allowed.includes(role) || roles.some(value => allowed.includes(value)) || permissions.includes('*')) {
         return next();
     }
     return res.status(403).json({
+        code: 'FORBIDDEN',
         message: 'Access denied. Pharmacist or Administrator privileges required.'
     });
 };
