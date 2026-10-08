@@ -347,7 +347,12 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         }
         const endpoint = decision === 'approve' ? 'approve' : 'reject';
         await apiClient.post(`/api/v1/prescriptions/${encodeURIComponent(order.prescriptionId)}/review/${endpoint}`, form);
-        addToast(decision === 'approve' ? 'Prescription approved.' : 'Prescription rejected.', decision === 'approve' ? 'success' : 'info');
+        if (decision === 'approve' && order._id) {
+          const conversionForm = new FormData();
+          conversionForm.append('order_id', String(order._id));
+          await apiClient.post(`/api/v1/prescriptions/${encodeURIComponent(order.prescriptionId)}/convert-to-order`, conversionForm);
+        }
+        addToast(decision === 'approve' ? 'Prescription approved and converted to order.' : 'Prescription rejected.', decision === 'approve' ? 'success' : 'info');
         await onRefresh();
       } catch (error) {
         addToast(error.message || `Could not ${decision} prescription.`, 'error');
