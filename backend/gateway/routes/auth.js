@@ -211,25 +211,54 @@ router.post('/login', authLimiter, async (req, res) => {
     try {
         const result = await authService.authenticateCredentials({ email, password });
 
-        if (result.requiresProfileCompletion || result.code === 'PROFILE_INCOMPLETE') {
-            if (result.accessToken) {
-                setSessionCookies(res, { accessToken: result.accessToken, refreshToken: await authService.createRefreshToken(result.user || { id: req.user?.id || req.user?.sub }, result.aal || 'aal1') });
+        // MFA is a valid intermediate state, not an authenticated session.
+        // Return it explicitly and never mint cookies until MFA is verified.
+        if (result?.mfaRequired) {
+            if (!result.challengeToken || !result.factorId || !result.user?.id) {
+                return sendError(res, {
+                    code: 'AUTH_RESULT_INCOMPLETE',
+                    message: 'The authentication service returned an incomplete MFA challenge. Please try again.',
+                    statusCode: 502,
+                    req
+                });
             }
             return sendSuccess(res, {
                 data: result,
-                message: 'Profile completion required.',
+                message: 'Additional verification required.',
                 statusCode: 200,
                 req
             });
         }
 
-        if (result.accessToken) {
-            setSessionCookies(res, { accessToken: result.accessToken, refreshToken: await authService.createRefreshToken(result.user || { id: req.user?.id || req.user?.sub }, result.aal || 'aal1') });
+        const isProfileIncomplete = Boolean(
+            result?.requiresProfileCompletion || result?.code === 'PROFILE_INCOMPLETE'
+        );
+
+        // Do not report HTTP 200 for a credential check that failed to produce
+        // the user and token required by the cookie-based application session.
+        // This also makes upstream/backend version mismatches observable instead
+        // of leaving the browser on the sign-in screen with no cookies.
+        if (!result?.user?.id || !result?.accessToken) {
+            console.error('Login authentication result is incomplete.', {
+                requestId: req?.context?.requestId,
+                hasUser: Boolean(result?.user?.id),
+                hasAccessToken: Boolean(result?.accessToken),
+                resultKeys: result && typeof result === 'object' ? Object.keys(result) : []
+            });
+            return sendError(res, {
+                code: 'AUTH_RESULT_INCOMPLETE',
+                message: 'The authentication service did not return a complete login session. Please try again or contact support.',
+                statusCode: 502,
+                req
+            });
         }
+
+        const refreshToken = await authService.createRefreshToken(result.user, result.aal || 'aal1');
+        setSessionCookies(res, { accessToken: result.accessToken, refreshToken });
 
         return sendSuccess(res, {
             data: result,
-            message: 'Login successful',
+            message: isProfileIncomplete ? 'Profile completion required.' : 'Login successful',
             statusCode: 200,
             req
         });
