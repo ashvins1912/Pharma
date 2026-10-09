@@ -8,19 +8,24 @@ function hasScopePermission(user, scope) {
   const role = user?.app_metadata?.role || user?.role || 'customer';
   const permissions = Array.isArray(user?.permissions) ? user.permissions : (user?.app_metadata?.permissions || []);
   const revoked = Array.isArray(user?.revokedPermissions) ? user.revokedPermissions : (user?.app_metadata?.revokedPermissions || []);
-  // Explicit revocations are deny rules, including for wildcard/admin grants.
-  if (revoked.includes(scope) || revoked.some(item => item.endsWith('.*') && scope.startsWith(item.slice(0, -1)))) return false;
-  if (['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return true;
-  if (role === 'customer' && scope.startsWith('customer.profile.')) return true;
-  if (permissions.includes('*') || permissions.includes(scope)) return true;
   const aliases = {
     'inventory.read': ['inventory.view'],
     'inventory.write': ['inventory.update'],
+    'inventory.adjust': ['inventory.write'],
     'orders.read': ['orders.view'],
     'prescription.read': ['prescriptions.view'],
     'prescription.write': ['prescriptions.write'],
     'prescription.review': ['prescriptions.review']
   };
+  // Explicit revocations apply to both canonical and legacy permission names,
+  // and must win over wildcard/admin grants.
+  const permissionNames = [scope, ...(aliases[scope] || [])];
+  if (revoked.some(item => permissionNames.some(name =>
+    item === name || (item.endsWith('.*') && name.startsWith(item.slice(0, -1)))
+  ))) return false;
+  if (['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return true;
+  if (role === 'customer' && scope.startsWith('customer.profile.')) return true;
+  if (permissions.includes('*') || permissions.includes(scope)) return true;
   return (aliases[scope] || []).some(permission => permissions.includes(permission));
 }
 
