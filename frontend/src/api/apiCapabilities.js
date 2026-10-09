@@ -178,6 +178,41 @@ export const API_CAPABILITIES = [
   },
   {
     method: 'GET',
+    pattern: /^\/api\/admin\/riders(?:\/|$)/,
+    permission: 'delivery.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/admin\/riders(?:\/|$)/,
+    permission: 'delivery.manage'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/admin\/riders(?:\/|$)/,
+    permission: 'delivery.manage'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/admin\/assignment\/engine-status$/,
+    permission: 'delivery.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/admin\/assignment(?:\/|$)/,
+    permission: 'delivery.manage'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/admin\/assignment(?:\/|$)/,
+    permission: 'delivery.manage'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/admin\/audit-logs(?:\/|$)/,
+    permission: 'users.read'
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/admin\/whatsapp\/(?:status|logs)(?:\/|$)/,
     permission: 'whatsapp.read'
   },
