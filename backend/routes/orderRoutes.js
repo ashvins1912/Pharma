@@ -1137,6 +1137,18 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
     }
 });
 
+// Keep the static /mine route before /:id so Express does not
+// treat "mine" as an order ID and return INVALID_ORDER_ID.
+router.get('/mine', authenticateUser, async (req, res) => {
+    try {
+        const orders = await dataStore.getUserOrders(req.user.sub);
+        res.json(orders);
+    } catch (err) {
+        console.error('Customer order retrieval failed:', err);
+        res.status(500).json({ message: 'Failed to retrieve orders.' });
+    }
+});
+
 // Customer/admin order detail used by the tracking UI.
 router.get('/:id', authenticateUser, async (req, res) => {
     if (!getIsConnected()) return res.status(503).json({ message: 'Order tracking is temporarily unavailable.' });
@@ -1182,16 +1194,6 @@ router.post('/:id/rating', authenticateUser, async (req, res) => {
     } catch (error) {
         console.error('Customer rating save failed:', error);
         res.status(getErrorStatus(error)).json({ message: error.message || 'Could not save your rating.' });
-    }
-});
-
-router.get('/mine', authenticateUser, async (req, res) => {
-    try {
-        const orders = await dataStore.getUserOrders(req.user.sub);
-        res.json(orders);
-    } catch (err) {
-        console.error('Customer order retrieval failed:', err);
-        res.status(500).json({ message: 'Failed to retrieve orders.' });
     }
 });
 
