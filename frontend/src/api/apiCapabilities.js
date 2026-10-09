@@ -372,6 +372,11 @@ export const API_CAPABILITIES = [
     permission: 'medicine_requests.create'
   },
   {
+    method: 'POST',
+    pattern: /^\/api\/v1\/integrations\/sync(?:\/|$)/,
+    permission: 'csquare.sync'
+  },
+  {
     method: 'GET',
     pattern: /^\/api\/v1\/integrations(?:\/|$)/,
     permission: 'csquare.read'
