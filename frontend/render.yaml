@@ -7,6 +7,8 @@ services:
     envVars:
       - key: VITE_API_URL
         value: /api
+      - key: VITE_API_GATEWAY_URL
+        value: https://pharma-api-gateway.onrender.com
       - key: VITE_SUPABASE_URL
         sync: false
       - key: VITE_SUPABASE_ANON_KEY
