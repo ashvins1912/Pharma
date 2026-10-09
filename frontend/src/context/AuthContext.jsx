@@ -276,7 +276,8 @@ export function AuthProvider({ children }) {
    * Step 1: Login with Email & Password
    * Detects if Zero-Cost TOTP MFA is enrolled.
    */
-  const loginWithEmail = async (email, password) => runAction(LOADING_ACTIONS.SIGN_IN, async () => {
+  const loginWithEmail = async (email, password) => {
+    const actionResult = await runAction(LOADING_ACTIONS.SIGN_IN, async () => {
     setAuthTransitionLoading(true);
     try {
     // Email/password login is a first-party platform session. Clear any old
@@ -302,6 +303,10 @@ export function AuthProvider({ children }) {
     // Backend login establishes the secure HttpOnly platform session cookie.
     // Make that cookie the only API credential for this browser session so a
     // stale Supabase bearer token can never override the newly authenticated user.
+    if (!data?.user?.id) {
+      throw new Error('The login service did not return an authenticated user. Please try again.');
+    }
+
     syncSession({ user: data.user }, data.user);
     setAal(data.aal || 'aal1');
     setMfaRequired(false);
@@ -313,7 +318,12 @@ export function AuthProvider({ children }) {
       setAuthTransitionLoading(false);
       throw error;
     }
-  });
+    });
+    if (actionResult?.skipped) {
+      throw new Error('A sign-in request is already running. Please wait a moment and try again.');
+    }
+    return actionResult;
+  };
 
   const loginWithGoogle = async () => {
     if (googleSignInInProgressRef.current) return { skipped: true };
