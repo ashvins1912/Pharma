@@ -59,13 +59,13 @@ export default function AdminDashboardView() {
   const canViewAdminRequests = hasPermission('medicine_requests.read')
     && hasAnyPermission(['medicine_requests.pending_count', 'medicine_requests.manage', 'medicine_requests.proposal']);
   const canViewCSquare = hasPermission('csquare.read');
-  const canManageRiders = hasPermission('delivery.manage');
+  const canManageRiders = hasPermission('delivery.read') && hasPermission('delivery.manage');
   const canViewPromotions = hasPermission('promotions.read');
   const canViewPayments = hasPermission('billing.read');
   const canManagePayments = hasPermission('billing.write');
   const canViewInventory = hasPermission('inventory.read');
   const canImportInventory = hasPermission('inventory.import');
-  const canManageRoutes = hasPermission('delivery.manage');
+  const canManageRoutes = hasPermission('delivery.manage') && hasPermission('orders.manage');
   const canViewAudits = hasPermission('inventory.read');
   const canViewTenants = isSuperAdmin && hasPermission('tenants.read');
   const canManagePlatformAccess = isSuperAdmin && hasPermission('users.manage');
