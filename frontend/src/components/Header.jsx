@@ -194,7 +194,7 @@ export default function Header({
             )}
 
             {/* Admin notification bell */}
-            {canViewOperations && hasAnyPermission(['inventory.read', 'whatsapp.read']) && (
+            {user && hasAnyPermission(['inventory.read', 'whatsapp.read']) && (
               <AdminAlertBell
                 onOpenAlerts={onOpenAdminAlerts}
                 canViewInventoryAlerts={hasPermission('inventory.read')}
