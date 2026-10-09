@@ -33,7 +33,7 @@ const publicMedicine = medicine => {
 const getErrorStatus = error => error.statusCode
     || (error.name === 'ValidationError' || error.name === 'CastError' ? 400 : 500);
 
-// Full inventory and CRUD are available only to verified administrators.
+// Full inventory and CRUD are protected by inventory.read / inventory.write capabilities.
 router.get('/admin/inventory', authenticateUser, async (req, res) => {
     try {
         const { search, category, sort, page, limit } = req.query;
