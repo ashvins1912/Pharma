@@ -44,7 +44,6 @@ function PendingMedicineRequestsNotice({ count, onOpen }) {
 
 export default function AdminDashboardView() {
   const {
-    isAdmin,
     isSuperAdmin,
     canAccessOperations,
     hasPermission,
@@ -62,7 +61,7 @@ export default function AdminDashboardView() {
   const canViewCSquare = hasPermission('csquare.read');
   const canManageRiders = hasPermission('delivery.manage');
   const canViewPromotions = hasPermission('promotions.read');
-  const canViewPayments = isAdmin && hasPermission('billing.read');
+  const canViewPayments = hasPermission('billing.read');
   const canManagePayments = hasPermission('billing.write');
   const canViewInventory = hasPermission('inventory.read');
   const canImportInventory = hasPermission('inventory.import');
