@@ -14,7 +14,6 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
   const [adminPage, setAdminPage] = useState(1);
   const [adminTotalPages, setAdminTotalPages] = useState(1);
   const [adminTotal, setAdminTotal] = useState(0);
-  const [seeding, setSeeding] = useState(false);
   const [medicineDraft, setMedicineDraft] = useState(null);
   const [savingMedicine, setSavingMedicine] = useState(false);
 
@@ -48,20 +47,6 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
   useEffect(() => {
     loadAdminInventory(1, searchTerm);
   }, [searchTerm]);
-
-  const handleSeed = async () => {
-    try {
-      setSeeding(true);
-      const res = await apiClient.post('/api/test/seed-medicines');
-      addToast(res.data.message || '1,000+ item catalog initialized!', 'success');
-      loadAdminInventory(1, searchTerm);
-      fetchMedicines();
-    } catch (err) {
-      addToast('Failed to seed catalog: ' + err.message, 'error');
-    } finally {
-      setSeeding(false);
-    }
-  };
 
   const openMedicineForm = (medicine = null) => {
     if (!canManage) return;
@@ -159,15 +144,6 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
             >
               <span>📥</span>
               <span>Bulk Excel Import</span>
-            </button>
-          )}
-          {import.meta.env.DEV && canImport && (
-            <button
-              onClick={handleSeed}
-              disabled={seeding}
-              className="flex-1 sm:flex-initial bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer"
-            >
-              {seeding ? 'Reloading 1000+...' : '⚡ Re-seed 1000+'}
             </button>
           )}
         </div>
