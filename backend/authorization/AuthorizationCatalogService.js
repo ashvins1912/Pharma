@@ -4,30 +4,30 @@ import Role from '../models/Role.js';
 import RolePermission from '../models/RolePermission.js';
 import { getIsConnected } from '../config/db.js';
 
-const FEATURES = ['profile','mfa','inventory','orders','prescription','billing','referrals','tenants','users','platform','medicine_requests','csquare','promotions','whatsapp'];
+const FEATURES = ['profile','mfa','inventory','orders','prescription','billing','referrals','tenants','users','platform','medicine_requests','csquare','promotions','whatsapp','delivery'];
 const PERMISSIONS = [
-  ['profile','view'],['profile','complete'],['mfa','verify'],['mfa','manage'],
+  ['profile','view'],['profile','read'],['profile','write'],['profile','complete'],['mfa','verify'],['mfa','manage'],
   ['inventory','read'],['inventory','write'],['inventory','import'],
   ['orders','read'],['orders','create'],['orders','manage'],['promotions','read'],['promotions','manage'],
   ['prescription','read'],['prescription','write'],['prescription','review'],
   ['billing','read'],['billing','write'],['referrals','read'],['referrals','manage'],
   ['tenants','read'],['tenants','manage'],['users','read'],['users','manage'],
   ['medicine_requests','read'],['medicine_requests','pending_count'],['medicine_requests','create'],['medicine_requests','decide'],['medicine_requests','proposal'],['medicine_requests','manage'],['csquare','read'],['csquare','manage'],['csquare','sync'],
-  ['platform','*'],['whatsapp','read'],['whatsapp','manage']
+  ['platform','*'],['whatsapp','read'],['whatsapp','manage'],['delivery','read'],['delivery','manage']
 ];
 const ROLE_PERMISSIONS = {
   SUPER_ADMIN:['platform.*'], PLATFORM_SUPER_ADMIN:['platform.*'], admin:['platform.*'],
-  TENANT_OWNER:['whatsapp.read','whatsapp.manage','csquare.read','csquare.manage','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','medicine_requests.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','promotions.read','promotions.manage','tenants.read','tenants.manage','users.read','users.manage'],
-  TENANT_ADMIN:['whatsapp.read','whatsapp.manage','csquare.read','csquare.manage','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','medicine_requests.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','promotions.read','promotions.manage','users.read'],
-  PHARMACIST:['csquare.read','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','promotions.read','promotions.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review'],
-  PHARMACY_STAFF:['csquare.read','promotions.read','promotions.manage','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','inventory.read','orders.read','orders.create','prescription.read','prescription.write'],
+  TENANT_OWNER:['profile.read','profile.write','delivery.read','delivery.manage','whatsapp.read','whatsapp.manage','csquare.read','csquare.manage','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','medicine_requests.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','promotions.read','promotions.manage','tenants.read','tenants.manage','users.read','users.manage'],
+  TENANT_ADMIN:['profile.read','profile.write','delivery.read','delivery.manage','whatsapp.read','whatsapp.manage','csquare.read','csquare.manage','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','medicine_requests.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','promotions.read','promotions.manage','users.read'],
+  PHARMACIST:['profile.read','profile.write','csquare.read','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','promotions.read','promotions.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review'],
+  PHARMACY_STAFF:['profile.read','profile.write','csquare.read','promotions.read','promotions.manage','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','inventory.read','orders.read','orders.create','prescription.read','prescription.write'],
   // Legacy pharmacy accounts are tenant pharmacy staff and must retain the same
   // medicine-request authority after the gateway/RBAC hardening rollout.
-  pharmacy:['csquare.read','promotions.read','promotions.manage','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','inventory.read','orders.read','orders.create','prescription.read','prescription.write'],
-  INVENTORY_MANAGER:['inventory.read','inventory.write','inventory.import'],
-  ORDER_MANAGER:['orders.read','orders.create','orders.manage'],
-  CUSTOMER:['medicine_requests.read','medicine_requests.create','medicine_requests.decide','orders.read','orders.create','prescription.read','prescription.write'],
-  customer:['medicine_requests.read','medicine_requests.create','medicine_requests.decide','orders.read','orders.create','prescription.read','prescription.write']
+  pharmacy:['profile.read','profile.write','csquare.read','promotions.read','promotions.manage','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','inventory.read','orders.read','orders.create','prescription.read','prescription.write'],
+  INVENTORY_MANAGER:['profile.read','profile.write','inventory.read','inventory.write','inventory.import'],
+  ORDER_MANAGER:['profile.read','profile.write','orders.read','orders.create','orders.manage','delivery.read','delivery.manage'],
+  CUSTOMER:['profile.read','profile.write','medicine_requests.read','medicine_requests.create','medicine_requests.decide','orders.read','orders.create','prescription.read','prescription.write'],
+  customer:['profile.read','profile.write','medicine_requests.read','medicine_requests.create','medicine_requests.decide','orders.read','orders.create','prescription.read','prescription.write']
 };
 const ROLE_SCOPE = { SUPER_ADMIN:'PLATFORM', PLATFORM_SUPER_ADMIN:'PLATFORM', admin:'PLATFORM', TENANT_OWNER:'TENANT', TENANT_ADMIN:'TENANT', PHARMACIST:'TENANT', PHARMACY_STAFF:'TENANT', pharmacy:'TENANT', INVENTORY_MANAGER:'TENANT', ORDER_MANAGER:'TENANT', CUSTOMER:'CUSTOMER', customer:'CUSTOMER' };
 const memory = {
