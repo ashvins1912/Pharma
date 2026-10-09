@@ -9,23 +9,6 @@ const AuthContext = createContext(null);
 
 // These capabilities identify staff workspaces, rather than customer self-service
 // access (for example, customers can read their own orders and medicine requests).
-const OPERATIONS_PERMISSIONS = [
-  'orders.manage',
-  'inventory.read',
-  'inventory.write',
-  'medicine_requests.pending_count',
-  'medicine_requests.manage',
-  'medicine_requests.proposal',
-  'csquare.read',
-  'promotions.read',
-  'promotions.manage',
-  'billing.read',
-  'billing.write',
-  'tenants.read',
-  'tenants.manage',
-  'users.manage',
-  'delivery.manage'
-];
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -638,7 +621,16 @@ export function AuthProvider({ children }) {
     Array.isArray(requiredPermissions) && requiredPermissions.some(hasPermission),
   [hasPermission]);
 
-  const canAccessOperations = Boolean(isFullyAuthenticated && hasAnyPermission(OPERATIONS_PERMISSIONS));
+  // Access to the operations shell requires at least one complete workspace
+  // capability. Individual tab/action permissions are checked separately below.
+  const canAccessOperations = Boolean(isFullyAuthenticated && (
+    hasAnyPermission(['inventory.read', 'csquare.read', 'promotions.read', 'billing.read', 'delivery.manage'])
+    || (hasPermission('orders.read') && hasPermission('orders.manage'))
+    || (hasPermission('medicine_requests.read')
+      && hasAnyPermission(['medicine_requests.pending_count', 'medicine_requests.manage', 'medicine_requests.proposal']))
+    || (['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'admin'].includes(role)
+      && hasAnyPermission(['tenants.read', 'users.manage']))
+  ));
 
   return (
     <AuthContext.Provider
