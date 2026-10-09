@@ -7,6 +7,46 @@
 export const API_CAPABILITIES = [
   {
     method: 'GET',
+    pattern: /^\/api\/medicines\/admin\/inventory$/,
+    permission: 'inventory.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/medicines\/(?:alerts|audits)$/,
+    permission: 'inventory.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/medicines\/imports\/[^/]+\/(?:status|failed-records)$/,
+    permission: 'inventory.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/medicines\/(?:imports|imports\/[^/]+\/retry|validate-import|confirm-import|upload-excel)$/,
+    permission: 'inventory.import'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/medicines\/?$/,
+    permission: 'inventory.write'
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/medicines\/[^/]+$/,
+    permission: 'inventory.write'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/medicines\/[^/]+$/,
+    permission: 'inventory.write'
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/medicines\/[^/]+$/,
+    permission: 'inventory.write'
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/v1\/admin\/payments\/outstanding$/,
     permission: 'billing.read'
   },
