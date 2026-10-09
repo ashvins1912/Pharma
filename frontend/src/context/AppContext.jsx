@@ -14,7 +14,7 @@ const CUSTOMER_CACHE_PREFIX = 'pharma_customer_cache_v1:';
 const CACHE_TTL = 5 * 60 * 1000;
 
 export function AppProvider({ children }) {
-  const { user, isAdmin, isSuperAdmin, isPharmacyOrAdmin, loading: authLoading, isFullyAuthenticated } = useAuth();
+  const { user, isSuperAdmin, isPharmacyOrAdmin, hasPermission, loading: authLoading, isFullyAuthenticated } = useAuth();
   const { addToast } = useToast();
   const { runAction } = useActionLoading();
 
@@ -108,7 +108,7 @@ export function AppProvider({ children }) {
   const [whatsappWarningActive, setWhatsappWarningActive] = useState(false);
 
   useEffect(() => {
-    if (user && isAdmin) return;
+    if (user && hasPermission('whatsapp.read')) return;
     setWhatsappModalOpen(false);
     setWhatsappWarningActive(false);
     setNotifications(prev => prev.filter(notification => !notification.id.startsWith('notif-wa')));
@@ -119,11 +119,11 @@ export function AppProvider({ children }) {
       qrCode: null,
       expiresAt: null
     });
-  }, [user?.id, isAdmin]);
+  }, [user?.id, hasPermission]);
 
   // Load WhatsApp status
   const loadWhatsAppStatus = useCallback(async () => {
-    if (!isFullyAuthenticated || !isAdmin) return null;
+    if (!isFullyAuthenticated || !hasPermission('whatsapp.read')) return null;
     try {
       const res = await apiClient.get('/api/admin/whatsapp/status', { timeout: 45000 });
       if (res.data) {
@@ -138,9 +138,10 @@ export function AppProvider({ children }) {
       console.warn("WhatsApp status fetch skipped:", err?.message);
     }
     return null;
-  }, [isFullyAuthenticated, isAdmin]);
+  }, [isFullyAuthenticated, hasPermission]);
 
   const generateWhatsAppQR = async () => {
+    if (!hasPermission('whatsapp.manage')) return null;
     try {
       const res = await apiClient.post('/api/admin/whatsapp/generate-qr', null, { timeout: 45000 });
       if (res.data) {
@@ -154,6 +155,7 @@ export function AppProvider({ children }) {
   };
 
   const disconnectWhatsApp = async () => {
+    if (!hasPermission('whatsapp.manage')) return null;
     try {
       const res = await apiClient.post('/api/admin/whatsapp/disconnect');
       if (res.data?.status) {
@@ -167,7 +169,7 @@ export function AppProvider({ children }) {
   };
 
   const triggerWhatsAppWarningNotification = () => {
-    if (!user || !isAdmin) return;
+    if (!user || !hasPermission('whatsapp.manage')) return;
     setWhatsappWarningActive(true);
     addToast('⚠️ You may miss delivery updates on mobile! WhatsApp is not connected.', 'warning');
   };
@@ -478,20 +480,20 @@ export function AppProvider({ children }) {
 
   // Fetch Admin Inventory Alerts
   const loadInventoryAlerts = useCallback(async () => {
-    if (authLoading || !isFullyAuthenticated || !isAdmin) return;
+    if (authLoading || !isFullyAuthenticated || !hasPermission('inventory.read')) return;
     try {
       const res = await apiClient.get('/api/medicines/alerts');
       setInventoryAlerts(res.data || {});
     } catch {
       // ignore
     }
-  }, [authLoading, isFullyAuthenticated, isAdmin]);
+  }, [authLoading, isFullyAuthenticated, hasPermission]);
 
   useEffect(() => {
-    if (!authLoading && isFullyAuthenticated && isAdmin) {
+    if (!authLoading && isFullyAuthenticated && hasPermission('inventory.read')) {
       loadInventoryAlerts();
     }
-  }, [authLoading, isFullyAuthenticated, isAdmin, loadInventoryAlerts]);
+  }, [authLoading, isFullyAuthenticated, hasPermission, loadInventoryAlerts]);
 
   // Cart operations
   const addToCart = (med) => {
