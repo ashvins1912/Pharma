@@ -48,6 +48,8 @@ export const API_CAPABILITIES = [
   { method: 'POST', pattern: /^\/api\/v1\/integrations\/test-connection(?:\/|$)/, permission: 'csquare.manage' },
   { method: 'POST', pattern: /^\/api\/v1\/integrations\/sync(?:\/|$)/, permission: 'csquare.sync' },
 
+  { method: 'GET', pattern: /^\/api\/v1\/admin\/payments\/outstanding$/, permission: 'billing.read' },
+  { method: 'POST', pattern: /^\/api\/v1\/admin\/payments\/reminders\/dispatch$/, permission: 'billing.write' },
   { method: 'GET', pattern: /^\/api\/v1\/billing(?:\/|$)/, permission: 'billing.read' },
   { method: 'POST', pattern: /^\/api\/v1\/billing(?:\/|$)/, permission: 'billing.write' },
   { method: 'PUT', pattern: /^\/api\/v1\/billing(?:\/|$)/, permission: 'billing.write' },
