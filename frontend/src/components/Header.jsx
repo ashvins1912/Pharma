@@ -12,13 +12,23 @@ export default function Header({
   onOpenProfile,
   onOpenAdminAlerts
 }) {
-  const { user, isAdmin, isSuperAdmin, isTenantAdmin, isPharmacyOrAdmin, role, logout } = useAuth();
+  const {
+    user, isAdmin, isSuperAdmin, isTenantAdmin, canAccessOperations,
+    hasPermission, hasAnyPermission, role, logout
+  } = useAuth();
   const { cart, whatsappStatus, setWhatsappModalOpen, medicineRequests, openRequestModal } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   const cartItemCount = cart.reduce((total, item) => total + item.quantity, 0);
   const proposalsWaitingCount = (medicineRequests || []).filter(r => r.status === 'PROPOSAL_SENT').length;
+  const canViewCustomerWorkspace = !canAccessOperations || isSuperAdmin;
+  const canViewCustomerOrders = Boolean(user && canViewCustomerWorkspace && hasPermission('orders.read'));
+  const canViewCustomerRequests = Boolean(user && canViewCustomerWorkspace && hasPermission('medicine_requests.read'));
+  const canViewAddresses = Boolean(user && canViewCustomerWorkspace && hasPermission('profile.read'));
+  const canViewOperations = Boolean(user && canAccessOperations);
+  const canReadWhatsApp = hasPermission('whatsapp.read');
+  const canManageWhatsApp = hasPermission('whatsapp.manage');
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -44,17 +54,17 @@ export default function Header({
                 <span className="text-sm sm:text-lg font-black text-slate-900 tracking-tight leading-none truncate block">
                   Ashvin Pharmacy
                 </span>
-                {isPharmacyOrAdmin && (
+                {canViewOperations && (
                   <div className="flex items-center gap-1 shrink-0">
                     <span className="bg-blue-100 text-blue-700 text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider">
                       {isSuperAdmin ? 'Super Admin' : (isTenantAdmin ? 'Tenant Admin' : (role === 'admin' ? 'Admin' : 'Pharmacy'))}
                     </span>
-                    {isAdmin && (
+                    {canReadWhatsApp && (canManageWhatsApp ? (
                       whatsappStatus.isConnected ? (
                         <button
                           onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
                           className="hidden sm:inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer"
-                          title="WhatsApp Dispatch Connected - Click to view"
+                          title="WhatsApp status and controls"
                         >
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                           <span>WA Live</span>
@@ -63,13 +73,17 @@ export default function Header({
                         <button
                           onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
                           className="hidden sm:inline-flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer animate-pulse"
-                          title="WhatsApp Offline - Click to scan QR code"
+                          title="WhatsApp offline; manage connection"
                         >
                           <span>⚠️</span>
                           <span>WA Offline</span>
                         </button>
                       )
-                    )}
+                    ) : (
+                      <span className="hidden sm:inline-flex items-center gap-1 text-[9px] font-black uppercase text-slate-500">
+                        {whatsappStatus.isConnected ? 'WA Live' : 'WA Offline'}
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>
@@ -92,19 +106,21 @@ export default function Header({
               💊 Store
             </button>
 
-            {user && (!isPharmacyOrAdmin || isSuperAdmin) && (
+            {(canViewCustomerOrders || canViewCustomerRequests || canViewAddresses) && (
               <>
+                {canViewCustomerOrders && (
                 <button
-                  onClick={() => setActiveTab('orders')}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-                    activeTab === 'orders'
-                      ? 'bg-blue-50 text-blue-700 font-extrabold'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  📦 Orders
-                </button>
-                {(!isPharmacyOrAdmin || isSuperAdmin) && (
+                    onClick={() => setActiveTab('orders')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      activeTab === 'orders'
+                        ? 'bg-blue-50 text-blue-700 font-extrabold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    📦 Orders
+                  </button>
+                )}
+                {canViewCustomerRequests && (
                   <button
                     onClick={() => setActiveTab('requests')}
                     className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer relative ${
@@ -121,16 +137,18 @@ export default function Header({
                     )}
                   </button>
                 )}
+                {canViewAddresses && (
                 <button
-                  onClick={() => setActiveTab('addresses')}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-                    activeTab === 'addresses'
-                      ? 'bg-blue-50 text-blue-700 font-extrabold'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  🏠 Addresses
-                </button>
+                    onClick={() => setActiveTab('addresses')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      activeTab === 'addresses'
+                        ? 'bg-blue-50 text-blue-700 font-extrabold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    🏠 Addresses
+                  </button>
+                )}
               </>
             )}
 
@@ -151,41 +169,36 @@ export default function Header({
           {/* Right: Actions Bar (Notifications, Cart, User Profile, Mobile Menu) */}
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             
-            {/* Customer actions render only after authenticated state has hydrated. */}
-            {user && (!isPharmacyOrAdmin || isSuperAdmin) && (
-              <>
-                <NotificationBell
-                  onOpenOrders={user ? () => setActiveTab('orders') : null}
-                  onRequireAuth={onOpenAuth}
-                />
-
-                <button
-                  onClick={() => {
-                    if (!user) {
-                      onOpenAuth();
-                      return;
-                    }
-                    onOpenCart();
-                  }}
-                  className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition cursor-pointer flex items-center justify-center flex-shrink-0"
-                  aria-label="View Shopping Cart"
-                >
-                  <svg className="w-5 h-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                  </svg>
-                  {cartItemCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] sm:text-[10px] font-black w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center shadow-md animate-pulse">
-                      {cartItemCount}
-                    </span>
-                  )}
-                </button>
-              </>
+            {/* Customer actions render only when the effective permissions allow them. */}
+            {user && canViewCustomerWorkspace && hasPermission('profile.read') && (
+              <NotificationBell
+                onOpenOrders={canViewCustomerOrders ? () => setActiveTab('orders') : null}
+                onRequireAuth={onOpenAuth}
+              />
+            )}
+            {user && canViewCustomerWorkspace && hasPermission('orders.create') && (
+              <button
+                onClick={onOpenCart}
+                className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition cursor-pointer flex items-center justify-center flex-shrink-0"
+                aria-label="View Shopping Cart"
+              >
+                <svg className="w-5 h-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                </svg>
+                {cartItemCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] sm:text-[10px] font-black w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center shadow-md animate-pulse">
+                    {cartItemCount}
+                  </span>
+                )}
+              </button>
             )}
 
             {/* Admin notification bell */}
-            {isPharmacyOrAdmin && isAdmin && <AdminAlertBell onOpenAlerts={onOpenAdminAlerts} />}
+            {canViewOperations && hasAnyPermission(['inventory.read', 'whatsapp.read']) && (
+              <AdminAlertBell onOpenAlerts={onOpenAdminAlerts} />
+            )}
             {/* User Profile / Auth Button */}
-            {user ? (
+            {user && hasPermission('profile.read') ? (
               <button
                 onClick={onOpenProfile}
                 className="w-9 h-9 sm:w-auto p-0 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition flex items-center justify-center gap-1.5 flex-shrink-0"
@@ -242,15 +255,17 @@ export default function Header({
               <span className="text-slate-400">→</span>
             </button>
 
+            {canViewCustomerOrders && (
             <button
-              onClick={() => { setActiveTab('orders'); setMobileMenuOpen(false); }}
-              className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
-                activeTab === 'orders' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <span>📦 Order History & Tracking</span>
-              <span className="text-slate-400">→</span>
-            </button>
+                onClick={() => { setActiveTab('orders'); setMobileMenuOpen(false); }}
+                className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
+                  activeTab === 'orders' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <span>📦 Order History & Tracking</span>
+                <span className="text-slate-400">→</span>
+              </button>
+            )}
 
             {(!isPharmacyOrAdmin || isSuperAdmin) && (
               <button
@@ -271,15 +286,17 @@ export default function Header({
               </button>
             )}
 
+            {canViewAddresses && (
             <button
-              onClick={() => { setActiveTab('addresses'); setMobileMenuOpen(false); }}
-              className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
-                activeTab === 'addresses' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <span>🏠 Multi-Address Directory</span>
-              <span className="text-slate-400">→</span>
-            </button>
+                onClick={() => { setActiveTab('addresses'); setMobileMenuOpen(false); }}
+                className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
+                  activeTab === 'addresses' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <span>🏠 Multi-Address Directory</span>
+                <span className="text-slate-400">→</span>
+              </button>
+            )}
 
             {isPharmacyOrAdmin && (
               <button
