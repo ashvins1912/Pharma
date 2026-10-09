@@ -7,6 +7,121 @@
 export const API_CAPABILITIES = [
   {
     method: 'GET',
+    pattern: /^\/api\/orders\/[^/]+\/scan-prescription$/,
+    permission: 'prescription.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/orders\/notifications\/logs$/,
+    permission: 'whatsapp.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/orders\/[^/]+\/notify-whatsapp$/,
+    permission: 'whatsapp.manage'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/orders\/[^/]+\/notify-whatsapp$/,
+    permission: 'whatsapp.manage'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/orders\/[^/]+\/rating$/,
+    permission: 'orders.read'
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/orders\/[^/]+\/review$/,
+    permission: 'prescription.review'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/orders\/admin\/[^/]+\/prescription\/(?:reinitiate|manual-approve)$/,
+    permission: 'prescription.review'
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/orders\/[^/]+\/dispatch$/,
+    permission: 'delivery.manage'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/orders\/admin\/(?:optimize-and-club-routes|dispatch-batch)$/,
+    permission: 'delivery.manage'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/orders\/admin(?:\/|$)/,
+    permission: 'orders.manage'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/orders\/checkout(?:\/quote)?$/,
+    permission: 'orders.create'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/orders\/?$/,
+    permission: 'orders.create'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/orders(?:\/|$)/,
+    permission: 'orders.read'
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/orders\/[^/]+(?:\/|$)/,
+    permission: 'orders.manage'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/orders\/[^/]+(?:\/|$)/,
+    permission: 'orders.manage'
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/orders\/[^/]+(?:\/|$)/,
+    permission: 'orders.manage'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/profile(?:\/|$)/,
+    permission: 'profile.write'
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/profile(?:\/|$)/,
+    permission: 'profile.write'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/profile(?:\/|$)/,
+    permission: 'profile.write'
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/profile(?:\/|$)/,
+    permission: 'profile.write'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/riders\/?$/,
+    permission: 'delivery.manage'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/riders(?:\/|$)/,
+    permission: 'delivery.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/coupons\/?$/,
+    permission: 'promotions.manage'
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/medicines\/admin\/inventory$/,
     permission: 'inventory.read'
   },
