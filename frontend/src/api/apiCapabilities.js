@@ -7,6 +7,16 @@
 export const API_CAPABILITIES = [
   {
     method: 'GET',
+    pattern: /^\/api\/v1\/admin\/payments\/outstanding$/,
+    permission: 'billing.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/admin\/payments\/reminders\/dispatch$/,
+    permission: 'billing.write'
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/admin\/whatsapp\/(?:status|logs)(?:\/|$)/,
     permission: 'whatsapp.read'
   },
