@@ -44,14 +44,25 @@ export function createBackendAuthToken(gatewayConfig = config) {
 }
 
 
-export function createTrustedBackendRequestToken({ user, method, path, permission = null, requestId }, gatewayConfig = config) {
-  if (!gatewayConfig.gatewayAuthSecret || gatewayConfig.gatewayAuthSecret.length < 32) {
+export function createTrustedBackendRequestToken(
+    { user, method, path, permission = null, requestId },
+    gatewayConfig = config
+) {
+  if (!gatewayConfig.gatewayAuthSecret ||
+      gatewayConfig.gatewayAuthSecret.length < 32) {
     throw new Error('GATEWAY_AUTH_SECRET is not configured.');
   }
+
+  const userId = String(user?.sub || '');
+  if (!userId) {
+    throw new Error('Authenticated user identity is required.');
+  }
+
   const role = user?.app_metadata?.role || user?.role || 'customer';
+
   return jwt.sign({
     trust: 'gateway-authenticated-request',
-    sub: String(user.sub),
+    userId, // User identity is separate from JWT subject
     email: user.email || '',
     name: user.name || '',
     firstName: user.firstName || '',

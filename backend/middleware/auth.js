@@ -27,8 +27,8 @@ export const authenticateUser = async (req, res, next, options = {}) => {
                 return res.status(401).json({ success: false, code: 'INVALID_GATEWAY_REQUEST_BINDING', message: 'Trusted request binding is invalid.' });
             }
             req.user = {
-                sub: payload.sub,
-                id: payload.sub,
+                sub: payload.userId,
+                id: payload.userId,
                 email: payload.email || '',
                 name: payload.name || '',
                 firstName: payload.firstName || '',
