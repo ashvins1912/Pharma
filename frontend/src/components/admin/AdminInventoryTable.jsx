@@ -4,7 +4,7 @@ import { useToast } from '../../context/ToastContext';
 import apiClient from '../../api/apiClient';
 import Pagination from '../common/Pagination';
 
-export default function AdminInventoryTable({ onOpenBulkImport }) {
+export default function AdminInventoryTable({ onOpenBulkImport, canManage = false, canImport = false }) {
   const { fetchMedicines } = useApp();
   const { addToast } = useToast();
   
@@ -64,6 +64,7 @@ export default function AdminInventoryTable({ onOpenBulkImport }) {
   };
 
   const openMedicineForm = (medicine = null) => {
+    if (!canManage) return;
     setMedicineDraft(medicine ? {
       ...medicine,
       stockQuantity: medicine.stockQuantity ?? medicine.stock ?? medicine.quantity ?? 0,
@@ -83,6 +84,7 @@ export default function AdminInventoryTable({ onOpenBulkImport }) {
 
   const saveMedicine = async (event) => {
     event.preventDefault();
+    if (!canManage) return;
     try {
       setSavingMedicine(true);
       if (medicineDraft._id) {
@@ -102,6 +104,7 @@ export default function AdminInventoryTable({ onOpenBulkImport }) {
   };
 
   const archiveMedicine = async (medicine) => {
+    if (!canManage) return;
     if (!window.confirm(`Archive ${medicine.name} from the customer store?`)) return;
     try {
       await apiClient.delete(`/api/medicines/${encodeURIComponent(medicine._id)}`);
@@ -140,28 +143,33 @@ export default function AdminInventoryTable({ onOpenBulkImport }) {
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => openMedicineForm()}
-            className="flex-1 sm:flex-initial rounded-xl bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white transition hover:bg-emerald-700"
-          >
-            + Add Medicine
-          </button>
-          <button
-            onClick={onOpenBulkImport}
-            className="flex-1 sm:flex-initial bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer shadow-md shadow-blue-600/20 flex items-center justify-center gap-1.5"
-          >
-            <span>📥</span>
-            <span>Bulk Excel Import</span>
-          </button>
-
-          <button
-            onClick={handleSeed}
-            disabled={seeding}
-            className="flex-1 sm:flex-initial bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer"
-          >
-            {seeding ? 'Reloading 1000+...' : '⚡ Re-seed 1000+'}
-          </button>
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => openMedicineForm()}
+              className="flex-1 sm:flex-initial rounded-xl bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white transition hover:bg-emerald-700"
+            >
+              + Add Medicine
+            </button>
+          )}
+          {canImport && (
+            <button
+              onClick={onOpenBulkImport}
+              className="flex-1 sm:flex-initial bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer shadow-md shadow-blue-600/20 flex items-center justify-center gap-1.5"
+            >
+              <span>📥</span>
+              <span>Bulk Excel Import</span>
+            </button>
+          )}
+          {import.meta.env.DEV && canImport && (
+            <button
+              onClick={handleSeed}
+              disabled={seeding}
+              className="flex-1 sm:flex-initial bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer"
+            >
+              {seeding ? 'Reloading 1000+...' : '⚡ Re-seed 1000+'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -260,20 +268,24 @@ export default function AdminInventoryTable({ onOpenBulkImport }) {
                       {getStatusBadge(med)}
                     </td>
                     <td className="py-3 px-3 text-right whitespace-nowrap">
+                      {canManage && (
                       <button
-                        type="button"
-                        onClick={() => openMedicineForm(med)}
-                        className="mr-2 font-bold text-blue-700 hover:underline cursor-pointer"
-                      >
-                        Edit
-                      </button>
+                          type="button"
+                          onClick={() => openMedicineForm(med)}
+                          className="mr-2 font-bold text-blue-700 hover:underline cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {canManage && (
                       <button
-                        type="button"
-                        onClick={() => archiveMedicine(med)}
-                        className="font-bold text-rose-700 hover:underline cursor-pointer"
-                      >
-                        Archive
-                      </button>
+                          type="button"
+                          onClick={() => archiveMedicine(med)}
+                          className="font-bold text-rose-700 hover:underline cursor-pointer"
+                        >
+                          Archive
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -334,20 +346,24 @@ export default function AdminInventoryTable({ onOpenBulkImport }) {
                 </div>
 
                 <div className="pt-2 border-t border-slate-200 flex justify-end gap-2">
+                  {canManage && (
                   <button
-                    type="button"
-                    onClick={() => openMedicineForm(med)}
-                    className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold hover:bg-blue-100 min-h-[36px]"
-                  >
-                    Edit
-                  </button>
+                      type="button"
+                      onClick={() => openMedicineForm(med)}
+                      className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold hover:bg-blue-100 min-h-[36px]"
+                    >
+                      Edit
+                    </button>
+                  )}
+                  {canManage && (
                   <button
-                    type="button"
-                    onClick={() => archiveMedicine(med)}
-                    className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 min-h-[36px]"
-                  >
-                    Archive
-                  </button>
+                      type="button"
+                      onClick={() => archiveMedicine(med)}
+                      className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 min-h-[36px]"
+                    >
+                      Archive
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -366,7 +382,7 @@ export default function AdminInventoryTable({ onOpenBulkImport }) {
         className="mt-3"
       />
 
-      {medicineDraft && (
+      {medicineDraft && canManage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
           <form onSubmit={saveMedicine} className="max-h-[90vh] w-full max-w-xl space-y-4 overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between">
