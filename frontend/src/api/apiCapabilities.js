@@ -168,6 +168,46 @@ export const API_CAPABILITIES = [
   },
   {
     method: 'POST',
+    pattern: /^\/api\/v1\/inventory\/adjust$/,
+    permission: 'inventory.write'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/orders\/[^/]+\/events$/,
+    permission: 'orders.manage'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/v1\/orders\/[^/]+\/status$/,
+    permission: 'orders.manage'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/orders(?:\/|$)/,
+    permission: 'orders.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/orders\/?$/,
+    permission: 'orders.create'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/prescriptions\/reviews\/queue$/,
+    permission: 'prescription.review'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/prescriptions\/[^/]+\/review(?:\/(?:claim|approve|reject|wait))?$/,
+    permission: 'prescription.review'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/prescriptions\/[^/]+\/(?:link-order|convert-to-order|remove|hospitals)$/,
+    permission: 'prescription.write'
+  },
+  {
+    method: 'POST',
     pattern: /^\/api\/v1\/inventory\/imports$/,
     permission: 'inventory.import'
   },
