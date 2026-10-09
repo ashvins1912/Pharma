@@ -95,12 +95,18 @@ export class AuthorizationService {
   }
 
   isAllowed(context, permission) {
-    // Treat all legacy platform-admin aliases as Super Admin at the final
-    // authorization boundary as well. This protects APIs when an older JWT
-    // has not yet been refreshed/reissued with the canonical role.
+    // Explicit revocations are deny rules and must override broad grants,
+    // including the platform administrator wildcard.
+    const revoked = context?.revokedPermissions || context?.app_metadata?.revokedPermissions || [];
+    if (permission && (
+      revoked.includes(permission)
+      || revoked.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)))
+    )) return false;
+
+    // Preserve legacy platform-admin aliases only after checking explicit denies.
     const role = context?.role || context?.app_metadata?.role;
     if (role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN' || role === 'admin') return true;
-    return hasPermission(context?.permissions || [], permission, context?.revokedPermissions || []);
+    return hasPermission(context?.permissions || [], permission, revoked);
   }
 }
 
