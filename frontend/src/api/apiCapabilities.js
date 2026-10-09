@@ -167,6 +167,26 @@ export const API_CAPABILITIES = [
     permission: 'inventory.write'
   },
   {
+    method: 'POST',
+    pattern: /^\/api\/v1\/inventory\/imports$/,
+    permission: 'inventory.import'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/inventory\/imports\/[^/]+(?:\/failures(?:\/download)?)?$/,
+    permission: 'inventory.import'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/inventory\/imports\/[^/]+\/retry$/,
+    permission: 'inventory.import'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/inventory\/adjust$/,
+    permission: 'inventory.write'
+  },
+  {
     method: 'GET',
     pattern: /^\/api\/v1\/admin\/payments\/outstanding$/,
     permission: 'billing.read'
