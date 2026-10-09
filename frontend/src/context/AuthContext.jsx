@@ -327,13 +327,21 @@ export function AuthProvider({ children }) {
 
   const loginWithGoogle = async () => {
     if (googleSignInInProgressRef.current) return { skipped: true };
+
+    // Do not activate the full-screen auth transition for OAuth startup.
+    // If configuration is missing or Supabase rejects the request, that
+    // transition unmounts AuthModal and hides the useful inline error message.
+    // The modal owns its own Google-button loading state; a successful OAuth
+    // call will navigate the browser away automatically.
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error(
+        'Google sign-in is not configured on the deployed frontend. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Render, then redeploy.'
+      );
+    }
+
     googleSignInInProgressRef.current = true;
-    setAuthTransitionLoading(true);
 
     try {
-      if (!isSupabaseConfigured || !supabase) {
-        throw new Error('Google sign-in is unavailable until Supabase is configured.');
-      }
 
       // Clear any stale broker session locally before starting a new OAuth flow.
       clearSupabaseLocalSession();
@@ -362,7 +370,6 @@ export function AuthProvider({ children }) {
       // blocked request, or provider error). Never leave the whole app in its
       // transition screen or lock the Google button after such a failure.
       googleSignInInProgressRef.current = false;
-      setAuthTransitionLoading(false);
       throw error;
     }
   };
