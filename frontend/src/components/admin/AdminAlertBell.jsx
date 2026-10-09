@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 
-export default function AdminAlertBell({ onOpenAlerts }) {
+export default function AdminAlertBell({
+  onOpenAlerts,
+  canViewInventoryAlerts = true,
+  canReadWhatsApp = true,
+  canManageWhatsApp = false
+}) {
   const { inventoryAlerts, whatsappStatus, setWhatsappModalOpen } = useApp();
   const [isOpen, setIsOpen] = useState(false);
 
-  const total = (inventoryAlerts.totalAlerts || 0) + (!whatsappStatus.isConnected ? 1 : 0);
+  const total = (canViewInventoryAlerts ? Number(inventoryAlerts.totalAlerts || 0) : 0)
+    + (canReadWhatsApp && !whatsappStatus.isConnected ? 1 : 0);
 
   return (
     <div className="relative flex-shrink-0">
@@ -15,7 +21,7 @@ export default function AdminAlertBell({ onOpenAlerts }) {
           if (onOpenAlerts) onOpenAlerts();
         }}
         className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 transition cursor-pointer flex items-center justify-center flex-shrink-0"
-        aria-label="Admin Inventory Alerts"
+        aria-label="Authorized Pharmacy Alerts"
       >
         <span className="text-sm sm:text-base select-none">🔔</span>
         {total > 0 && (
@@ -49,6 +55,7 @@ export default function AdminAlertBell({ onOpenAlerts }) {
 
             <div className="space-y-3 max-h-64 sm:max-h-80 overflow-y-auto">
               
+              {canReadWhatsApp && (
               {/* WhatsApp Gateway Status Card */}
               <div className={`p-3 rounded-2xl border transition ${
                 whatsappStatus.isConnected
@@ -74,7 +81,7 @@ export default function AdminAlertBell({ onOpenAlerts }) {
                     ? `Linked to ${whatsappStatus.phone || 'Primary Phone'} for real-time mobile order dispatch updates.`
                     : 'You may miss delivery updates on mobile. Automated SMS/WhatsApp notifications are paused.'}
                 </p>
-                {!whatsappStatus.isConnected && (
+                {!whatsappStatus.isConnected && canManageWhatsApp && (
                   <button
                     onClick={() => {
                       setIsOpen(false);
@@ -87,6 +94,10 @@ export default function AdminAlertBell({ onOpenAlerts }) {
                 )}
               </div>
 
+              )}
+
+              {canViewInventoryAlerts && (
+                <>
               {/* Expired Category */}
               <div className="p-3 bg-red-50 border border-red-200 rounded-2xl space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -158,6 +169,9 @@ export default function AdminAlertBell({ onOpenAlerts }) {
                   </div>
                 )}
               </div>
+                </>
+              )}
+
             </div>
 
             <div className="pt-2 border-t border-slate-100 text-center">
