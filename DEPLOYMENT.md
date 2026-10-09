@@ -230,12 +230,14 @@ Do not include paths in allowed origins. Preflight OPTIONS must work.
 
 
 ## 11A. Browser authentication security contract
-The browser talks to the API Gateway through the frontend's same-origin `/api/*` rewrite. The Gateway is therefore the browser trust boundary.
+The browser talks to the API Gateway through the frontend's same-origin `/api/*` rewrite for session-bound and protected APIs. The sanitized public storefront catalog is the exception: the frontend calls `VITE_API_GATEWAY_URL` directly so a static-site rewrite failure cannot break landing-page medicine loading. This endpoint does not require a session cookie or an inventory permission. The Gateway is the browser trust boundary.
+
+Set `CORS_ALLOWED_ORIGINS` on the Gateway to the exact storefront origin (for example, `https://pharma-ui.onrender.com`).
 
 Anonymous startup:
 ~~~text
 GET /api/v1/auth/me -> 401 (expected anonymous state; no refresh is triggered)
-GET /api/medicines?page=1&limit=16 -> 200
+GET https://pharma-api-gateway.onrender.com/api/medicines?page=1&limit=16 -> 200
 ~~~
 
 Authenticated startup:
