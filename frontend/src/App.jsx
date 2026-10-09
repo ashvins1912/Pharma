@@ -393,7 +393,7 @@ function MainApp() {
                 }}
               />
             </div>
-          ) : (
+          ) : (!user ? (
             <div className="max-w-md mx-auto my-12 bg-white border border-slate-200 rounded-3xl p-8 text-center space-y-4 shadow-sm animate-fade-in">
               <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-2xl mx-auto">
                 🔒
