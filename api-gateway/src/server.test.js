@@ -94,13 +94,16 @@ test('gateway proxies public catalog and csrf routes without authentication', as
   const app = createGatewayApp(loadConfig({
     NODE_ENV: 'test',
     BACKEND_API_URL: backend.url,
-    CORS_ALLOWED_ORIGINS: 'http://localhost:3000'
+    CORS_ALLOWED_ORIGINS: 'http://localhost:3000,https://pharma-ui.onrender.com'
   }));
   const gateway = await start(app);
 
   try {
-    const catalog = await fetch(gateway.url + '/api/medicines?page=1&limit=16');
+    const catalog = await fetch(gateway.url + '/api/medicines?page=1&limit=16', {
+      headers: { Origin: 'https://pharma-ui.onrender.com' }
+    });
     assert.equal(catalog.status, 200);
+    assert.equal(catalog.headers.get('access-control-allow-origin'), 'https://pharma-ui.onrender.com');
     assert.equal((await catalog.json()).medicines[0].name, 'Test Medicine');
 
     const csrf = await fetch(gateway.url + '/api/v1/auth/csrf');
