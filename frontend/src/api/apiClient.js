@@ -8,7 +8,7 @@ let sessionProbePromise = null;
 let csrfBootstrapPromise = null;
 let authorizationRevalidationPromise = null;
 let applicationSessionAuthenticated = false;
-let authorizationCapabilities = { userId: null, role: null, permissions: [] };
+let authorizationCapabilities = { userId: null, role: null, permissions: [], revokedPermissions: [] };
 
 export function setRuntimeAccessToken(token) {
     runtimeAccessToken = typeof token === 'string' && token.trim() ? token.trim() : null;
@@ -25,16 +25,22 @@ export function setApplicationSessionAuthenticated(authenticated) {
     applicationSessionAuthenticated = Boolean(authenticated);
 }
 
-export function setAuthorizationCapabilities({ userId = null, role = null, permissions = [] } = {}) {
+export function setAuthorizationCapabilities({
+    userId = null,
+    role = null,
+    permissions = [],
+    revokedPermissions = []
+} = {}) {
     authorizationCapabilities = {
         userId,
         role,
-        permissions: Array.isArray(permissions) ? [...permissions] : []
+        permissions: Array.isArray(permissions) ? [...permissions] : [],
+        revokedPermissions: Array.isArray(revokedPermissions) ? [...revokedPermissions] : []
     };
 }
 
 export function clearAuthorizationCapabilities() {
-    authorizationCapabilities = { userId: null, role: null, permissions: [] };
+    authorizationCapabilities = { userId: null, role: null, permissions: [], revokedPermissions: [] };
 }
 
 export function getAuthMe({ allowAnonymous = false } = {}) {
@@ -60,9 +66,13 @@ export function getCsrf() {
 
 function hasCapability(permission) {
     if (!permission || !authorizationCapabilities.userId) return false;
-    if (authorizationCapabilities.role === 'SUPER_ADMIN'
-        || authorizationCapabilities.role === 'PLATFORM_SUPER_ADMIN'
-        || authorizationCapabilities.role === 'admin') return true;
+
+    const revoked = authorizationCapabilities.revokedPermissions;
+    if (revoked.includes(permission)
+        || revoked.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)))) {
+        return false;
+    }
+
     const granted = authorizationCapabilities.permissions;
     return granted.includes('*')
         || granted.includes(permission)
@@ -82,10 +92,14 @@ async function revalidateAuthorization() {
         if (refreshedUser?.id) {
             const refreshedRole = refreshedUser.app_metadata?.role || refreshedUser.role || 'customer';
             const refreshedPermissions = Array.isArray(refreshedUser.permissions) ? refreshedUser.permissions : [];
+            const refreshedRevocations = Array.isArray(refreshedUser.revokedPermissions)
+                ? refreshedUser.revokedPermissions
+                : (Array.isArray(refreshedUser.app_metadata?.revokedPermissions) ? refreshedUser.app_metadata.revokedPermissions : []);
             setAuthorizationCapabilities({
                 userId: refreshedUser.id,
                 role: refreshedRole,
-                permissions: refreshedPermissions
+                permissions: refreshedPermissions,
+                revokedPermissions: refreshedRevocations
             });
         } else {
             clearAuthorizationCapabilities();
