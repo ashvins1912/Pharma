@@ -43,10 +43,33 @@ function PendingMedicineRequestsNotice({ count, onOpen }) {
 }
 
 export default function AdminDashboardView() {
-  const { isAdmin, isSuperAdmin, isPharmacyOrAdmin, hasPermission, role, loading: authLoading } = useAuth();
+  const {
+    isSuperAdmin,
+    canAccessOperations,
+    hasPermission,
+    hasAnyPermission,
+    role,
+    loading: authLoading
+  } = useAuth();
   const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen } = useApp();
   const [adminTab, setAdminTab] = useState('fulfillment');
-  const canViewFulfillment = hasPermission('orders.read'); // 'fulfillment' | 'inventory' | 'routes' | 'audits'
+
+  // Navigation visibility and component rendering share these exact permission gates.
+  const canViewFulfillment = hasPermission('orders.read') && hasPermission('orders.manage');
+  const canViewAdminRequests = hasPermission('medicine_requests.read')
+    && hasAnyPermission(['medicine_requests.pending_count', 'medicine_requests.manage', 'medicine_requests.proposal']);
+  const canViewCSquare = hasPermission('csquare.read');
+  const canManageRiders = hasPermission('delivery.manage');
+  const canViewPromotions = hasPermission('promotions.read');
+  const canManagePayments = hasPermission('billing.write');
+  const canViewInventory = hasPermission('inventory.read');
+  const canImportInventory = hasPermission('inventory.import');
+  const canManageRoutes = hasPermission('delivery.manage');
+  const canViewAudits = hasPermission('inventory.read');
+  const canViewTenants = isSuperAdmin && hasPermission('tenants.read');
+  const canManagePlatformAccess = isSuperAdmin && hasPermission('users.manage');
+  const canReadWhatsApp = hasPermission('whatsapp.read');
+  const canManageWhatsApp = hasPermission('whatsapp.manage');
   const [orders, setOrders] = useState([]);
   const [recentOrders, setRecentOrders] = useState([]);
   const [totalOrders, setTotalOrders] = useState(0);
@@ -65,7 +88,7 @@ export default function AdminDashboardView() {
   // Preload the medicine-request first page as soon as the authenticated dashboard lands.
   // The tab consumes this snapshot so opening the tab does not issue a second list request.
   useEffect(() => {
-    if (authLoading || !isPharmacyOrAdmin || !hasPermission('medicine_requests.read')) return;
+    if (authLoading || !canAccessOperations || !canViewAdminRequests) return;
     let cancelled = false;
     setMedicinePreloadLoading(true);
     getAdminMedicineRequests({ page: 1, pageSize: 15, status: undefined, search: undefined })
@@ -79,10 +102,10 @@ export default function AdminDashboardView() {
         if (!cancelled) setMedicinePreloadLoading(false);
       });
     return () => { cancelled = true; };
-  }, [authLoading, isPharmacyOrAdmin, hasPermission]);
+  }, [authLoading, canAccessOperations, canViewAdminRequests]);
 
   const loadPendingMedicineRequestCount = async () => {
-    if (authLoading || !isPharmacyOrAdmin || !hasPermission('medicine_requests.pending_count')) return;
+    if (authLoading || !canAccessOperations || !hasPermission('medicine_requests.pending_count')) return;
     try {
       const count = await getAdminPendingMedicineRequestCount();
       setPendingMedicineRequestCount(Number.isInteger(count) && count > 0 ? count : 0);
@@ -112,7 +135,7 @@ export default function AdminDashboardView() {
   };
 
   const loadAuditLogs = async () => {
-    if (authLoading || !isAdmin) return;
+    if (authLoading || !canViewAudits) return;
     try {
       const res = await apiClient.get('/api/medicines/audits', { params: { page: auditPagination.page, limit: 10 } });
       const data = res.data || {};
@@ -124,26 +147,48 @@ export default function AdminDashboardView() {
   };
 
   useEffect(() => {
-    if (authLoading || !isPharmacyOrAdmin || !hasPermission('medicine_requests.pending_count')) return;
+    if (authLoading || !canAccessOperations || !hasPermission('medicine_requests.pending_count')) return;
     loadPendingMedicineRequestCount();
     const timer = window.setInterval(loadPendingMedicineRequestCount, 15000);
     return () => window.clearInterval(timer);
-  }, [authLoading, isPharmacyOrAdmin, hasPermission]);
+  }, [authLoading, canAccessOperations, hasPermission]);
 
   useEffect(() => {
-    if (authLoading || !isAdmin || adminTab !== 'fulfillment') return;
+    if (authLoading || !canViewFulfillment || adminTab !== 'fulfillment') return;
     loadAllOrders();
   }, [adminTab, authLoading, canViewFulfillment, activeOrdersPage]);
 
   useEffect(() => {
-    if (authLoading || !isAdmin) return;
+    if (authLoading || !hasPermission('inventory.read')) return;
     loadInventoryAlerts();
-  }, [authLoading, isAdmin, loadInventoryAlerts]);
+  }, [authLoading, hasPermission, loadInventoryAlerts]);
 
   useEffect(() => {
-    if (authLoading || !isAdmin || adminTab !== 'audits') return;
+    if (authLoading || !canViewAudits || adminTab !== 'audits') return;
     loadAuditLogs();
-  }, [adminTab, authLoading, isAdmin, auditPagination.page]);
+  }, [adminTab, authLoading, canViewAudits, auditPagination.page]);
+
+  // Keep the active tab valid when the server-side permission snapshot changes.
+  useEffect(() => {
+    const allowedTabs = [
+      canViewFulfillment && 'fulfillment',
+      canViewCSquare && 'csquare',
+      canViewAdminRequests && 'requests',
+      canManageRiders && 'riders',
+      canViewPromotions && 'promotions',
+      canManagePayments && 'payments',
+      canViewInventory && 'inventory',
+      canManageRoutes && 'routes',
+      canViewAudits && 'audits',
+      canViewTenants && 'tenants',
+      canManagePlatformAccess && 'access'
+    ].filter(Boolean);
+    if (!allowedTabs.includes(adminTab)) setAdminTab(allowedTabs[0] || '');
+  }, [
+    adminTab, canViewFulfillment, canViewCSquare, canViewAdminRequests,
+    canManageRiders, canViewPromotions, canManagePayments, canViewInventory,
+    canManageRoutes, canViewAudits, canViewTenants, canManagePlatformAccess
+  ]);
 
   // Derived Metrics
   const processingCount = orders.filter(o => o.orderStatus === 'Processing Order').length;
@@ -154,7 +199,16 @@ export default function AdminDashboardView() {
   const activeCount = processingCount + pendingReviewCount + approvedCount + readyCount + dispatchedCount;
   const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.finalTotal) || 0), 0);
 
-  if (role === 'pharmacy') {
+  if (!authLoading && !canAccessOperations) {
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center" role="status">
+        <div className="text-sm font-black text-amber-900">Access restricted</div>
+        <p className="mt-1 text-xs text-amber-700">Your current permissions do not allow access to the operations dashboard.</p>
+      </div>
+    );
+  }
+
+  if (role === 'pharmacy' && canViewAdminRequests) {
     return (
       <div className="min-w-0 space-y-6 animate-fade-in">
         <div className="bg-slate-950 text-white rounded-3xl p-6 shadow-md">
@@ -195,33 +249,41 @@ export default function AdminDashboardView() {
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            {/* WhatsApp Gateway Status & Quick Action */}
-            <button
-              onClick={() => setWhatsappModalOpen(true)}
-              className={`font-extrabold text-xs px-3.5 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm ${
-                whatsappStatus.isConnected
-                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                  : 'bg-amber-500 hover:bg-amber-400 text-slate-900 animate-pulse'
-              }`}
-              title="Click to view WhatsApp QR pairing"
-            >
-              <span>📲</span>
-              <span>{whatsappStatus.isConnected ? 'WhatsApp: Connected' : 'WhatsApp: Offline'}</span>
-            </button>
+            {/* Each action is shown only when its effective permission is granted. */}
+            {canReadWhatsApp && (canManageWhatsApp ? (
+              <button
+                onClick={() => setWhatsappModalOpen(true)}
+                className={`font-extrabold text-xs px-3.5 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm ${
+                  whatsappStatus.isConnected
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                    : 'bg-amber-500 hover:bg-amber-400 text-slate-900 animate-pulse'
+                }`}
+                title="Manage WhatsApp connection"
+              >
+                <span>📲</span>
+                <span>{whatsappStatus.isConnected ? 'WhatsApp: Connected' : 'WhatsApp: Offline'}</span>
+              </button>
+            ) : (
+              <span className="rounded-xl bg-slate-800 px-3.5 py-2.5 text-xs font-bold text-slate-200">
+                WhatsApp: {whatsappStatus.isConnected ? 'Connected' : 'Offline'}
+              </span>
+            ))}
 
-            <button
-              onClick={() => setImportModalOpen(true)}
-              className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer flex items-center gap-2"
-            >
-              <span>📥</span>
-              <span>Bulk Excel Ingestion</span>
-            </button>
+            {canImportInventory && (
+              <button
+                onClick={() => setImportModalOpen(true)}
+                className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer flex items-center gap-2"
+              >
+                <span>📥</span>
+                <span>Bulk Excel Ingestion</span>
+              </button>
+            )}
           </div>
         </div>
 
         {/* 4 Metric Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-slate-800">
-          <div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
+          {canViewFulfillment && (<div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
             <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
               All Orders
             </span>
@@ -229,9 +291,9 @@ export default function AdminDashboardView() {
               <span className="text-2xl font-black text-slate-900">{totalOrders}</span>
               <span className="text-[11px] font-bold text-amber-600">({activeCount} ongoing)</span>
             </div>
-          </div>
+          </div>)}
 
-          <div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
+          {hasPermission('inventory.read') && (<div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
             <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
               Low Stock Warnings
             </span>
@@ -239,9 +301,9 @@ export default function AdminDashboardView() {
               <span className="text-2xl font-black text-yellow-600">{inventoryAlerts.lowStockCount || 0}</span>
               <span className="text-[11px] text-slate-400">medicines ≤ 3</span>
             </div>
-          </div>
+          </div>)}
 
-          <div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
+          {hasPermission('inventory.read') && (<div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
             <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
               Expiring ≤ 30 Days
             </span>
@@ -249,9 +311,9 @@ export default function AdminDashboardView() {
               <span className="text-2xl font-black text-amber-600">{inventoryAlerts.expiringSoonCount || 0}</span>
               <span className="text-[11px] text-red-500 font-bold">({inventoryAlerts.expiredCount || 0} expired)</span>
             </div>
-          </div>
+          </div>)}
 
-          <div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
+          {canViewFulfillment && (<div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
             <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
               Gross Queue Value
             </span>
@@ -259,7 +321,7 @@ export default function AdminDashboardView() {
               <span className="text-2xl font-black text-emerald-600">₹{totalRevenue.toFixed(0)}</span>
               <span className="text-[11px] text-slate-400">{deliveredCount} delivered</span>
             </div>
-          </div>
+          </div>)}
         </div>
       </div>
 
@@ -279,13 +341,15 @@ export default function AdminDashboardView() {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => setWhatsappModalOpen(true)}
-            className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 flex-shrink-0 shadow-sm"
-          >
-            <span>📲</span>
-            <span>Link WhatsApp QR Code →</span>
-          </button>
+          {canManageWhatsApp && (
+            <button
+              onClick={() => setWhatsappModalOpen(true)}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 flex-shrink-0 shadow-sm"
+            >
+              <span>📲</span>
+              <span>Link WhatsApp QR Code →</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -303,7 +367,7 @@ export default function AdminDashboardView() {
         </button>}
 
 
-        {hasPermission('csquare.read') && (
+        {canViewCSquare && (
           <button
             onClick={() => setAdminTab('csquare')}
             className={'px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ' + (adminTab === 'csquare' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200')}
@@ -311,7 +375,7 @@ export default function AdminDashboardView() {
             <span>🔗</span><span>C-Square</span>
           </button>
         )}
-        {hasPermission('medicine_requests.read') && (
+        {canViewAdminRequests && (
           <button
             onClick={() => setAdminTab('requests')}
             className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
@@ -331,6 +395,7 @@ export default function AdminDashboardView() {
           </button>
         )}
 
+        {canManageRiders && (
         <button
           onClick={() => setAdminTab('riders')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
@@ -342,6 +407,7 @@ export default function AdminDashboardView() {
           <span>🛵</span>
           <span>Rider Fleet & Auto-Assignment</span>
         </button>
+        )}
 
         {hasPermission('promotions.read') && (
           <button
@@ -352,6 +418,7 @@ export default function AdminDashboardView() {
           </button>
         )}
 
+        {canManagePayments && (
         <button
           onClick={() => setAdminTab('payments')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
@@ -362,7 +429,9 @@ export default function AdminDashboardView() {
         >
           💳 Payment reminders
         </button>
+        )}
 
+        {canViewInventory && (
         <button
           onClick={() => setAdminTab('inventory')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
@@ -373,7 +442,9 @@ export default function AdminDashboardView() {
         >
           📊 Inventory & Catalog
         </button>
+        )}
 
+        {canManageRoutes && (
         <button
           onClick={() => setAdminTab('routes')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
@@ -384,7 +455,9 @@ export default function AdminDashboardView() {
         >
           🗺️ Smart Route Clubbing
         </button>
+        )}
 
+        {canViewAudits && (
         <button
           onClick={() => setAdminTab('audits')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
@@ -395,8 +468,9 @@ export default function AdminDashboardView() {
         >
           📜 Inventory Merge Audits
         </button>
+        )}
 
-        {isSuperAdmin && (
+        {canViewTenants && (
           <button
             onClick={() => setAdminTab('tenants')}
             className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
@@ -409,7 +483,7 @@ export default function AdminDashboardView() {
             <span>Platform Tenants</span>
           </button>
         )}
-        {isSuperAdmin && (
+        {canManagePlatformAccess && (
           <button onClick={() => setAdminTab('access')} className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${adminTab === 'access' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-blue-700 hover:bg-blue-50 border border-blue-200'}`}>
             <span>🛡️</span><span>Security Access</span>
           </button>
@@ -417,14 +491,14 @@ export default function AdminDashboardView() {
       </div>
 
       {/* Tab Content Display */}
-      {adminTab === 'tenants' && isSuperAdmin && (
+      {adminTab === 'tenants' && canViewTenants && (
         <PlatformTenantsView />
       )}
-      {adminTab === 'access' && isSuperAdmin && (
+      {adminTab === 'access' && canManagePlatformAccess && (
         <PlatformAccessControl />
       )}
-      {adminTab === 'csquare' && hasPermission('csquare.read') && <AdminCSquareTab />}
-      {adminTab === 'promotions' && hasPermission('promotions.read') && <CustomerPromotionsView />}
+      {adminTab === 'csquare' && canViewCSquare && <AdminCSquareTab />}
+      {adminTab === 'promotions' && canViewPromotions && <CustomerPromotionsView />}
 
       {adminTab === 'fulfillment' && canViewFulfillment && (
         <div className="space-y-3">
@@ -486,34 +560,27 @@ export default function AdminDashboardView() {
         </div>
       )}
 
-      {adminTab === 'requests' && (
-        hasPermission('medicine_requests.read') ? (
-          <AdminMedicineRequestsTab initialData={initialMedicineRequests} onPendingCountRefresh={loadPendingMedicineRequestCount} />
-        ) : (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
-            <div className="text-sm font-black text-amber-900">Access restricted</div>
-            <p className="mt-1 text-xs text-amber-700">Your current role does not have permission to view medicine requests.</p>
-          </div>
-        )
+      {adminTab === 'requests' && canViewAdminRequests && (
+        <AdminMedicineRequestsTab initialData={initialMedicineRequests} onPendingCountRefresh={loadPendingMedicineRequestCount} />
       )}
 
-      {adminTab === 'riders' && (
+      {adminTab === 'riders' && canManageRiders && (
         <RiderFleetView />
       )}
 
-      {adminTab === 'payments' && (
+      {adminTab === 'payments' && canManagePayments && (
         <AdminPaymentReminders />
       )}
 
-      {adminTab === 'inventory' && (
+      {adminTab === 'inventory' && canViewInventory && (
         <AdminInventoryTable onOpenBulkImport={() => setImportModalOpen(true)} />
       )}
 
-      {adminTab === 'routes' && (
+      {adminTab === 'routes' && canManageRoutes && (
         <AdminRouteOptimizer onRefresh={loadAllOrders} />
       )}
 
-      {adminTab === 'audits' && (
+      {adminTab === 'audits' && canViewAudits && (
         <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
           <div className="flex justify-between items-center">
             <div>
@@ -600,7 +667,7 @@ export default function AdminDashboardView() {
 
       {/* Bulk Excel Ingestion Modal */}
       <AdminBulkImportModal
-        isOpen={importModalOpen}
+        isOpen={importModalOpen && canImportInventory}
         onClose={() => setImportModalOpen(false)}
       />
 
