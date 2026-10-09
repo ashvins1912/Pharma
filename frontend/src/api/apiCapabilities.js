@@ -67,6 +67,11 @@ export const API_CAPABILITIES = [
   },
   {
     method: 'GET',
+    pattern: /^\/api\/orders\/admin(?:\/|$)/,
+    permission: 'orders.manage'
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/orders(?:\/|$)/,
     permission: 'orders.read'
   },
