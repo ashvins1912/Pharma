@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
  * Decouples order assignment, review, and fulfillment workflows from presentation components.
  */
 export function useOrderDashboard() {
-    const { isAdmin, loading: authLoading } = useAuth();
+    const { hasPermission, loading: authLoading } = useAuth();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -15,7 +15,7 @@ export function useOrderDashboard() {
     const [lastAssignmentResult, setLastAssignmentResult] = useState(null);
 
     const loadOrders = useCallback(async () => {
-        if (authLoading || !isAdmin) return;
+        if (authLoading || !hasPermission('orders.manage')) return;
         setLoading(true);
         setError(null);
         try {
@@ -26,14 +26,15 @@ export function useOrderDashboard() {
         } finally {
             setLoading(false);
         }
-    }, [authLoading, isAdmin]);
+    }, [authLoading, hasPermission]);
 
     useEffect(() => {
-        if (!authLoading && isAdmin) loadOrders();
+        if (!authLoading && hasPermission('orders.manage')) loadOrders();
     }, [loadOrders]);
 
     // Feature 2: Trigger automated assignment engine pipeline
     const autoAssignOrder = async (orderId) => {
+        if (!hasPermission('delivery.manage')) throw new Error('Your account cannot manage delivery assignments.');
         if (typeof orderId !== 'string' || !/^[a-f\d]{24}$/i.test(orderId)) {
             throw new Error('Unable to assign delivery for this order. Please refresh and try again.');
         }
@@ -53,6 +54,7 @@ export function useOrderDashboard() {
 
     // Manual override assignment
     const manualAssignOrder = async (orderId, riderId, notes = 'Manual dispatch override') => {
+        if (!hasPermission('delivery.manage')) throw new Error('Your account cannot manage delivery assignments.');
         if (typeof orderId !== 'string' || !/^[a-f\d]{24}$/i.test(orderId)) {
             throw new Error('Unable to assign delivery for this order. Please refresh and try again.');
         }
@@ -75,6 +77,7 @@ export function useOrderDashboard() {
 
     // Pharmacist review approval
     const reviewAndApproveOrder = async (orderId) => {
+        if (!hasPermission('prescription.review')) throw new Error('Your account cannot review prescriptions.');
         setAssignmentExecuting(true);
         try {
             const res = await apiClient.put(`/api/orders/${orderId}/review`, {
