@@ -4,7 +4,7 @@ import { useToast } from '../../context/ToastContext';
 
 const money = value => `₹${Number(value || 0).toLocaleString('en-IN')}`;
 
-export default function CustomerPromotionsView() {
+export default function CustomerPromotionsView({ canManage = false }) {
   const { addToast } = useToast();
   const [customers, setCustomers] = useState([]);
   const [promotions, setPromotions] = useState([]);
@@ -127,6 +127,7 @@ export default function CustomerPromotionsView() {
           </div>
         </div>
 
+        {canManage ? (
         <form onSubmit={createPromotion} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
           <div>
             <h4 className="text-sm font-black text-slate-900">Assign an offer</h4>
@@ -150,6 +151,12 @@ export default function CustomerPromotionsView() {
             {saving ? 'Assigning…' : promotionType === 'CUSTOMER_COUPON' ? '🎟️ Issue & Assign Coupon' : '🏷️ Assign Customer Discount'}
           </button>
         </form>
+        ) : (
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
+            <h4 className="text-sm font-black text-slate-900">Offers are read-only</h4>
+            <p className="mt-1 text-xs text-slate-500">Your current permissions allow viewing customer offers, but not creating or changing them.</p>
+          </div>
+        )}
       </div>
 
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -157,7 +164,14 @@ export default function CustomerPromotionsView() {
         <div className="grid gap-2 md:grid-cols-2">
           {promotions.map(promotion => (
             <div key={promotion._id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center justify-between gap-2"><span className="text-xs font-black text-slate-900">{promotion.code}</span><button type="button" onClick={() => togglePromotion(promotion)} className={`rounded-full px-2 py-1 text-[9px] font-black ${promotion.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>{promotion.isActive ? 'Active' : 'Off'}</button></div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-black text-slate-900">{promotion.code}</span>
+                {canManage ? (
+                  <button type="button" onClick={() => togglePromotion(promotion)} className={`rounded-full px-2 py-1 text-[9px] font-black ${promotion.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>{promotion.isActive ? 'Active' : 'Off'}</button>
+                ) : (
+                  <span className={`rounded-full px-2 py-1 text-[9px] font-black ${promotion.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>{promotion.isActive ? 'Active' : 'Off'}</span>
+                )}
+              </div>
               <p className="mt-1 text-[10px] text-slate-500">{promotion.promotionType === 'CUSTOMER_COUPON' ? 'Customer coupon' : 'Direct customer discount'} · {promotion.discountType === 'percentage' ? `${promotion.discountValue}%` : money(promotion.discountValue)} off · min {money(promotion.minOrderAmount)}</p>
               <p className="mt-1 text-[10px] text-slate-400">Customer {promotion.customerId}</p>
             </div>
