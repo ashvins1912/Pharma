@@ -3,6 +3,7 @@
  *
  * This is the UX/preflight layer. The backend remains authoritative.
  * Add every protected API pattern here with its required permission.
+ * GET /api/medicines is intentionally absent: it is the sanitized public storefront catalog.
  */
 export const API_CAPABILITIES = [
   {
