@@ -92,6 +92,41 @@ export const API_CAPABILITIES = [
     permission: 'orders.manage'
   },
   {
+    method: 'GET',
+    pattern: /^\/api\/profile(?:\/|$)/,
+    permission: 'profile.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/user\/profile(?:\/|$)/,
+    permission: 'profile.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/user\/profile(?:\/|$)/,
+    permission: 'profile.write'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/user\/addresses(?:\/|$)/,
+    permission: 'profile.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/user\/addresses(?:\/|$)/,
+    permission: 'profile.write'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/user\/addresses\/[^/]+(?:\/|$)/,
+    permission: 'profile.write'
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/user\/addresses\/[^/]+(?:\/|$)/,
+    permission: 'profile.write'
+  },
+  {
     method: 'POST',
     pattern: /^\/api\/profile(?:\/|$)/,
     permission: 'profile.write'
