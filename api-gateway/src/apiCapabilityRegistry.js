@@ -9,6 +9,7 @@ const CAPABILITIES = [
   ['PUT', /^\/api\/orders\/[^/]+\/dispatch$/, 'delivery.manage'],
   ['POST', /^\/api\/orders\/admin\/(?:optimize-and-club-routes|dispatch-batch)$/, 'delivery.manage'],
   ['POST', /^\/api\/orders\/?$/, 'orders.create'],
+  ['GET', /^\/api\/orders\/admin(?:\/|$)/, 'orders.manage'],
   ['GET', /^\/api\/orders(?:\/|$)/, 'orders.read'],
   ['POST', /^\/api\/orders\/checkout(?:\/|$)/, 'orders.create'],
   ['POST', /^\/api\/orders\/checkout\/quote(?:\/|$)/, 'orders.create'],
