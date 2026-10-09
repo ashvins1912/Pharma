@@ -237,6 +237,186 @@ export const API_CAPABILITIES = [
     permission: 'billing.read'
   },
   {
+    method: 'GET',
+    pattern: /^\/api\/v1\/auth\/me$/,
+    permission: 'profile.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/auth\/logout$/,
+    permission: 'profile.write'
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/v1\/auth\/(?:onboarding|complete-profile)$/,
+    permission: 'profile.complete'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/auth\/mfa\/(?:enroll|confirm-enroll|mfa-disable)$/,
+    permission: 'profile.write'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/profile\/access\/users(?:\/|$)/,
+    permission: 'users.read'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/v1\/profile\/access\/users(?:\/|$)/,
+    permission: 'users.manage'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/admin\/tenants(?:\/|$)/,
+    permission: 'tenants.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/admin\/tenants(?:\/|$)/,
+    permission: 'tenants.manage'
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/v1\/admin\/tenants(?:\/|$)/,
+    permission: 'tenants.manage'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/v1\/admin\/tenants(?:\/|$)/,
+    permission: 'tenants.manage'
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/v1\/admin\/tenants(?:\/|$)/,
+    permission: 'tenants.manage'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/,
+    permission: 'tenants.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/,
+    permission: 'tenants.manage'
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/,
+    permission: 'tenants.manage'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/,
+    permission: 'tenants.manage'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/vendors?(?:\/|$)/,
+    permission: 'tenants.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/vendors?(?:\/|$)/,
+    permission: 'tenants.manage'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/customers(?:\/|$)/,
+    permission: 'profile.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/customers(?:\/|$)/,
+    permission: 'profile.write'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/v1\/customers(?:\/|$)/,
+    permission: 'profile.write'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/catalog(?:\/|$)/,
+    permission: 'inventory.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/pricing(?:\/|$)/,
+    permission: 'orders.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/delivery(?:\/|$)/,
+    permission: 'delivery.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/delivery(?:\/|$)/,
+    permission: 'delivery.manage'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/v1\/delivery(?:\/|$)/,
+    permission: 'delivery.manage'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/medicine-requests(?:\/|$)/,
+    permission: 'medicine_requests.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/medicine-requests(?:\/|$)/,
+    permission: 'medicine_requests.create'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/integrations(?:\/|$)/,
+    permission: 'csquare.read'
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/v1\/integrations(?:\/|$)/,
+    permission: 'csquare.manage'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/integrations(?:\/|$)/,
+    permission: 'csquare.manage'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/notifications(?:\/|$)/,
+    permission: 'profile.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/notifications(?:\/|$)/,
+    permission: 'profile.write'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/profile(?:\/|$)/,
+    permission: 'profile.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/profile(?:\/|$)/,
+    permission: 'profile.write'
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/v1\/profile(?:\/|$)/,
+    permission: 'profile.write'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/v1\/profile(?:\/|$)/,
+    permission: 'profile.write'
+  },
+  {
     method: 'POST',
     pattern: /^\/api\/v1\/admin\/payments\/reminders\/dispatch$/,
     permission: 'billing.write'
