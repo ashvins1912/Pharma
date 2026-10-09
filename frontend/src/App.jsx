@@ -50,7 +50,7 @@ function AuthTransitionScreen({ initialLoad = false }) {
 
 function MainApp() {
   const {
-    user, role, isSuperAdmin, canAccessOperations, hasPermission,
+    user, isSuperAdmin, canAccessOperations, hasPermission,
     passwordRecoveryRequired, isFullyAuthenticated, loading: authLoading, authTransitionLoading
   } = useAuth();
   const {
@@ -309,7 +309,7 @@ function MainApp() {
         onOpenAuth={() => setAuthOpen(true)}
         onOpenProfile={() => setProfileOpen(true)}
         onOpenAdminAlerts={() => {
-          if (isPharmacyOrAdmin) setActiveTab('admin');
+          if (canAccessOperations) setActiveTab('admin');
         }}
       />
 
@@ -369,7 +369,7 @@ function MainApp() {
                 onClick={() => setAuthOpen(true)}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 rounded-xl transition cursor-pointer shadow-sm"
               >
-                {user ? 'Access restricted' : 'Sign In to View Orders'}
+                Sign In to View Orders
               </button>
             </div>
           ) : (
