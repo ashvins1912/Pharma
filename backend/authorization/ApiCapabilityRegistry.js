@@ -41,6 +41,7 @@ export const API_CAPABILITIES = [
   { method: 'POST', pattern: /^\/api\/orders\/admin\/(?:optimize-and-club-routes|dispatch-batch)$/, permission: 'delivery.manage' },
   { method: 'POST', pattern: /^\/api\/orders\/?$/, permission: 'orders.create' },
   { method: 'GET', pattern: /^\/api\/orders\/admin(?:\/|$)/, permission: 'orders.read' },
+  { method: 'GET', pattern: /^\/api\/orders\/admin(?:\/|$)/, permission: 'orders.manage' },
   { method: 'GET', pattern: /^\/api\/orders(?:\/|$)/, permission: 'orders.read' },
   { method: 'POST', pattern: /^\/api\/orders\/checkout(?:\/|$)/, permission: 'orders.create' },
   { method: 'POST', pattern: /^\/api\/orders\/checkout\/quote(?:\/|$)/, permission: 'orders.create' },
