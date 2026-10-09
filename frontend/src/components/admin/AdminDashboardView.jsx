@@ -409,7 +409,7 @@ export default function AdminDashboardView() {
         </button>
         )}
 
-        {hasPermission('promotions.read') && (
+        {canViewPromotions && (
           <button
             onClick={() => setAdminTab('promotions')}
             className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${adminTab === 'promotions' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
