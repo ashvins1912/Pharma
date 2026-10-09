@@ -44,6 +44,7 @@ function PendingMedicineRequestsNotice({ count, onOpen }) {
 
 export default function AdminDashboardView() {
   const {
+    isAdmin,
     isSuperAdmin,
     canAccessOperations,
     hasPermission,
@@ -61,6 +62,7 @@ export default function AdminDashboardView() {
   const canViewCSquare = hasPermission('csquare.read');
   const canManageRiders = hasPermission('delivery.manage');
   const canViewPromotions = hasPermission('promotions.read');
+  const canViewPayments = isAdmin && hasPermission('billing.read');
   const canManagePayments = hasPermission('billing.write');
   const canViewInventory = hasPermission('inventory.read');
   const canImportInventory = hasPermission('inventory.import');
@@ -176,7 +178,7 @@ export default function AdminDashboardView() {
       canViewAdminRequests && 'requests',
       canManageRiders && 'riders',
       canViewPromotions && 'promotions',
-      canManagePayments && 'payments',
+      canViewPayments && 'payments',
       canViewInventory && 'inventory',
       canManageRoutes && 'routes',
       canViewAudits && 'audits',
@@ -186,7 +188,7 @@ export default function AdminDashboardView() {
     if (!allowedTabs.includes(adminTab)) setAdminTab(allowedTabs[0] || '');
   }, [
     adminTab, canViewFulfillment, canViewCSquare, canViewAdminRequests,
-    canManageRiders, canViewPromotions, canManagePayments, canViewInventory,
+    canManageRiders, canViewPromotions, canViewPayments, canViewInventory,
     canManageRoutes, canViewAudits, canViewTenants, canManagePlatformAccess
   ]);
 
@@ -418,7 +420,7 @@ export default function AdminDashboardView() {
           </button>
         )}
 
-        {canManagePayments && (
+        {canViewPayments && (
         <button
           onClick={() => setAdminTab('payments')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
@@ -568,8 +570,8 @@ export default function AdminDashboardView() {
         <RiderFleetView />
       )}
 
-      {adminTab === 'payments' && canManagePayments && (
-        <AdminPaymentReminders />
+      {adminTab === 'payments' && canViewPayments && (
+        <AdminPaymentReminders canManage={canManagePayments} />
       )}
 
       {adminTab === 'inventory' && canViewInventory && (
