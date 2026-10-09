@@ -211,6 +211,24 @@ export const requireSuperAdmin = (req, res, next) => {
 };
 
 export const isAdmin = (req, res, next) => {
+    // Prefer the effective API capability over role names. This middleware is
+    // retained for legacy routes, but when a route is registered the specific
+    // grant (and explicit revocations) decides access.
+    const capability = resolveApiCapability(req.method, req.originalUrl || req.url || '');
+    if (capability) {
+        if (authorizationService.isAllowed(req.user, capability.permission)) return next();
+        return res.status(403).json({
+            success: false,
+            code: 'FORBIDDEN',
+            message: 'You do not have permission to access this API.',
+            permission: capability.permission,
+            requestId: req.requestId || null
+        });
+    }
+
+    // Compatibility for legacy internal routes that have not yet moved into
+    // the capability registry. The API Gateway still fails closed for any
+    // browser route without a registered capability.
     const role = req.user?.app_metadata?.role || req.user?.role || req.context?.role;
     const allowed = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_OWNER'];
     if (!allowed.includes(role)) {
