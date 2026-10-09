@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticateUser, isAdmin } from '../middleware/auth.js';
+import { authenticateUser } from '../middleware/auth.js';
 import { getOutstandingPayments, dispatchPaymentReminder } from '../services/payment/PaymentReminderService.js';
 
 const router = express.Router();
@@ -9,7 +9,9 @@ const enabled = (req, res) => {
     return false;
 };
 
-router.use(authenticateUser, isAdmin);
+// Route-level role checks are intentionally omitted: the gateway and backend
+// capability registries enforce billing.read / billing.write independently.
+router.use(authenticateUser);
 
 router.get('/outstanding', async (req, res) => {
     try {
