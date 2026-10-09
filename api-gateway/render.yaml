@@ -42,7 +42,7 @@ services:
       - key: PRESCRIPTION_SERVICE_JWT_AUDIENCE
         value: prescription-service
       - key: CORS_ALLOWED_ORIGINS
-        sync: false
+        value: https://pharma-ui.onrender.com
       - key: PROXY_TIMEOUT_MS
         value: 120000
       - key: AUTH_TIMEOUT_MS
