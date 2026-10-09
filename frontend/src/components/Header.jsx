@@ -152,7 +152,7 @@ export default function Header({
               </>
             )}
 
-            {isPharmacyOrAdmin && (
+            {canViewOperations && (
               <button
                 onClick={() => setActiveTab('admin')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
@@ -267,7 +267,7 @@ export default function Header({
               </button>
             )}
 
-            {(!isPharmacyOrAdmin || isSuperAdmin) && (
+            {canViewCustomerRequests && (
               <button
                 onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
                 className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
@@ -298,7 +298,7 @@ export default function Header({
               </button>
             )}
 
-            {isPharmacyOrAdmin && (
+            {canViewOperations && (
               <button
                 onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
                 className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
