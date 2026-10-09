@@ -5,13 +5,23 @@ const optionalUrl = z.preprocess(
   z.string().trim().url().optional()
 );
 
+// API base URLs may intentionally be relative (Render serves the UI and proxies
+// /api/* to the gateway). Other URL settings must remain absolute URLs.
+const optionalApiBase = z.preprocess(
+  value => typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z.union([
+    z.string().trim().url(),
+    z.string().trim().regex(/^\/(?!\/).*/, 'Use an absolute URL or a single-slash relative path.')
+  ]).optional()
+);
+
 const optionalString = z.preprocess(
   value => typeof value === 'string' && value.trim() === '' ? undefined : value,
   z.string().trim().min(1).optional()
 );
 
 const frontendEnvSchema = z.object({
-  VITE_API_URL: optionalUrl,
+  VITE_API_URL: optionalApiBase,
   VITE_DEV_API_PROXY: optionalUrl,
   VITE_FRONTEND_URL: optionalUrl,
   VITE_SUPABASE_URL: optionalUrl,
