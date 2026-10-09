@@ -291,7 +291,8 @@ API behavior:
 - Pharma auth is the HttpOnly cookie
 - browser JS does not manage Pharma bearer tokens
 - CSRF header is sent when available
-- API origin is environment-controlled through VITE_API_URL
+- Production browser API calls must stay on the frontend origin (`/api/*`) and use the Render rewrite to the API Gateway so HttpOnly refresh cookies remain first-party.
+- VITE_API_URL is used for local/development routing; production apiClient intentionally uses same-origin relative URLs.
 
 Scripts:
 ~~~text
