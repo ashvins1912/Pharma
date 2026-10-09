@@ -10,6 +10,16 @@ export const API_CAPABILITIES = [
   { method: 'POST', pattern: /^\/api\/coupons\/admin\/customer-promotions(?:\/|$)/, permission: 'promotions.manage' },
   { method: 'PATCH', pattern: /^\/api\/coupons\/admin\/customer-promotions\/[^/]+(?:\/|$)/, permission: 'promotions.manage' },
 
+  { method: 'GET', pattern: /^\/api\/medicines\/admin\/inventory$/, permission: 'inventory.read' },
+  { method: 'GET', pattern: /^\/api\/medicines\/alerts$/, permission: 'inventory.read' },
+  { method: 'GET', pattern: /^\/api\/medicines\/audits$/, permission: 'inventory.read' },
+  { method: 'GET', pattern: /^\/api\/medicines\/imports\/[^/]+\/(?:status|failed-records)$/, permission: 'inventory.read' },
+  { method: 'POST', pattern: /^\/api\/medicines\/(?:imports|imports\/[^/]+\/retry|validate-import|confirm-import|upload-excel)$/, permission: 'inventory.import' },
+  { method: 'POST', pattern: /^\/api\/medicines(?:\/|$)/, permission: 'inventory.write' },
+  { method: 'PUT', pattern: /^\/api\/medicines\/[^/]+$/, permission: 'inventory.write' },
+  { method: 'PATCH', pattern: /^\/api\/medicines\/[^/]+$/, permission: 'inventory.write' },
+  { method: 'DELETE', pattern: /^\/api\/medicines\/[^/]+$/, permission: 'inventory.write' },
+
   { method: 'GET', pattern: /^\/api\/admin\/medicine-requests\/pending-count(?:\/|$)/, permission: 'medicine_requests.pending_count' },
   { method: 'GET', pattern: /^\/api\/admin\/medicine-requests(?:\/|$)/, permission: 'medicine_requests.read' },
   { method: 'GET', pattern: /^\/api\/medicine-requests\/admin\/all(?:\/|$)/, permission: 'medicine_requests.read' },
