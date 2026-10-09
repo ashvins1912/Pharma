@@ -26,7 +26,9 @@ function hasScopePermission(user, scope) {
   if (['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return true;
   if (role === 'customer' && scope.startsWith('customer.profile.')) return true;
   if (permissions.includes('*') || permissions.includes(scope)) return true;
-  return (aliases[scope] || []).some(permission => permissions.includes(permission));
+  if ((aliases[scope] || []).some(permission => permissions.includes(permission))) return true;
+  return permissions.some(grant => grant.endsWith('.*')
+    && permissionNames.some(name => name.startsWith(grant.slice(0, -1))));
 }
 
 function createServiceHandler({ audience, getScope, target, includeCustomerProfile = false }, gatewayConfig) {
