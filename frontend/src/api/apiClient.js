@@ -99,11 +99,15 @@ async function revalidateAuthorization() {
 
 
 const configuredApiBaseUrl = String(import.meta.env.VITE_API_URL || '/api').trim();
-const rawApiBaseUrl = import.meta.env.PROD
-    ? (configuredApiBaseUrl || window.location.origin).replace(/\/+$/, '')
-    : configuredApiBaseUrl.replace(/\/+$/, '');
+const rawApiBaseUrl = configuredApiBaseUrl.replace(/\/+$/, '');
+
+// The Render static site rewrites same-origin /api/* requests to the API Gateway.
+// Keep production browser traffic on the frontend origin so HttpOnly session
+// cookies remain first-party. Calling *.onrender.com API hosts directly makes
+// refresh requests cross-site, so browsers can omit SameSite=Lax cookies.
+// VITE_API_URL is still honored for local development and its Vite proxy.
 const apiBaseUrl = import.meta.env.PROD
-    ? rawApiBaseUrl
+    ? ''
     : rawApiBaseUrl === '/api'
         ? ''
         : rawApiBaseUrl.endsWith('/api')
@@ -161,7 +165,15 @@ apiClient.interceptors.request.use(async (config) => {
     const csrfToken = getCsrfCookie();
     if (csrfToken) config.headers['X-XSRF-TOKEN'] = csrfToken;
 
-    if (runtimeAccessToken && !config.__skipRuntimeAuth && !config.headers.Authorization) {
+    const isRefreshRequest = /\/api\/(?:v1\/auth|auth)\/refresh(\/|$)/.test(String(config.url || ''));
+    if (isRefreshRequest) {
+        // Refresh is authenticated exclusively by the HttpOnly refresh cookie.
+        // Never attach a stale access JWT to this request.
+        config.headers.delete?.('Authorization');
+        config.headers.delete?.('authorization');
+        delete config.headers.Authorization;
+        delete config.headers.authorization;
+    } else if (runtimeAccessToken && !config.__skipRuntimeAuth && !config.headers.Authorization) {
         config.headers.Authorization = `Bearer ${runtimeAccessToken}`;
     }
     return config;
