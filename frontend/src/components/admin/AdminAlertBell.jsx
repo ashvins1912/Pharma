@@ -55,8 +55,8 @@ export default function AdminAlertBell({
 
             <div className="space-y-3 max-h-64 sm:max-h-80 overflow-y-auto">
               
-              {canReadWhatsApp && (
               {/* WhatsApp Gateway Status Card */}
+              {canReadWhatsApp && (
               <div className={`p-3 rounded-2xl border transition ${
                 whatsappStatus.isConnected
                   ? 'bg-emerald-50 border-emerald-200'
