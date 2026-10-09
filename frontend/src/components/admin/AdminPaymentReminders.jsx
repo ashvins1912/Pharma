@@ -3,7 +3,7 @@ import apiClient from '../../api/apiClient';
 
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
 
-export default function AdminPaymentReminders() {
+export default function AdminPaymentReminders({ canManage = false }) {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -72,9 +72,11 @@ export default function AdminPaymentReminders() {
                     <p className="mt-1 text-xl font-black text-slate-900">{currency.format(customer.amountOutstanding)}</p>
                     <p className="text-xs text-slate-500">{customer.invoiceCount} invoice{customer.invoiceCount === 1 ? '' : 's'}</p>
                   </div>
-                  <button type="button" onClick={() => sendReminder(customer)} disabled={Boolean(sendingId) || Boolean(customer.snoozedUntil)} className="rounded-xl bg-emerald-700 px-3 py-2 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50">
-                    {sendingId === customer.customerId ? 'Sending…' : customer.snoozedUntil ? 'Snoozed' : 'Send WhatsApp reminder'}
-                  </button>
+                  {canManage && (
+                    <button type="button" onClick={() => sendReminder(customer)} disabled={Boolean(sendingId) || Boolean(customer.snoozedUntil)} className="rounded-xl bg-emerald-700 px-3 py-2 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                      {sendingId === customer.customerId ? 'Sending…' : customer.snoozedUntil ? 'Snoozed' : 'Send WhatsApp reminder'}
+                    </button>
+                  )}
                 </header>
                 {customer.snoozedUntil && <p className="text-xs text-amber-700">Snoozed until {new Date(customer.snoozedUntil).toLocaleString()}</p>}
                 {customer.lastReminder && <p className="text-xs text-slate-500">Last reminder: {customer.lastReminder.status} · {new Date(customer.lastReminder.createdAt).toLocaleString()}</p>}
