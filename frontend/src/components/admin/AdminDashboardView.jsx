@@ -500,7 +500,7 @@ export default function AdminDashboardView() {
         <PlatformAccessControl />
       )}
       {adminTab === 'csquare' && canViewCSquare && <AdminCSquareTab />}
-      {adminTab === 'promotions' && canViewPromotions && <CustomerPromotionsView />}
+      {adminTab === 'promotions' && canViewPromotions && <CustomerPromotionsView canManage={hasPermission('promotions.manage')} />}
 
       {adminTab === 'fulfillment' && canViewFulfillment && (
         <div className="space-y-3">
