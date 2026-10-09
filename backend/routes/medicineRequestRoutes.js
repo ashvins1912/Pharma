@@ -39,7 +39,10 @@ const authorizeCustomerAction = (req, res, next) => {
 };
 
 const authorizeRequestList = (req, res, next) => {
-    if (req.baseUrl.startsWith('/api/admin/')) {
+    // The legacy /api/medicine-requests path is also used by some admin screens.
+    // Staff must still pass the explicit read permission; never downgrade staff
+    // requests to customer access or expose a tenant-wide queue without RBAC.
+    if (req.baseUrl.startsWith('/api/admin/') || isStaff(req.user)) {
         return requirePermission('medicine_requests.read')(req, res, next);
     }
     return requireCustomer(req, res, next);
@@ -542,7 +545,7 @@ router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
             { status: 'PROPOSAL_SENT', expiresAt: { $lt: new Date() } },
             { $set: { status: 'EXPIRED' } }
         );
-        if (req.baseUrl.startsWith('/api/admin/')) {
+        if (req.baseUrl.startsWith('/api/admin/') || isStaff(req.user)) {
             return getAdminMedicineRequests(req, res);
         }
         const query = { customerId: req.user.sub };
