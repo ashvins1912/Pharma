@@ -13,7 +13,6 @@ const CAPABILITIES = [
   ['GET', /^\/api\/admin\/medicine-requests(?:\/|$)/, 'medicine_requests.read'],
   ['PUT', /^\/api\/admin\/medicine-requests\/[^/]+\/review(?:\/|$)/, 'medicine_requests.manage'],
   ['POST', /^\/api\/admin\/medicine-requests\/[^/]+\/reject-request(?:\/|$)/, 'medicine_requests.manage'],
-  ['GET', /^\/api\/medicines(?:\/|$)/, 'inventory.read'],
   ['POST', /^\/api\/medicines(?:\/|$)/, 'inventory.write'],
   ['PUT', /^\/api\/medicines(?:\/|$)/, 'inventory.write'],
   ['PATCH', /^\/api\/medicines(?:\/|$)/, 'inventory.write'],
