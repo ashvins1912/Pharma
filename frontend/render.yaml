@@ -21,6 +21,12 @@ services:
       # Keep browser API calls same-origin while routing them through the
       # public API Gateway. This also preserves legacy /api/orders/*
       # prescription URLs stored on existing orders.
+      # Route authentication endpoints explicitly before the general API rule.
+      # This prevents a stale/broader SPA fallback rule from serving index.html
+      # for /api/v1/auth/* requests such as login, refresh, and /auth/me.
+      - type: rewrite
+        source: /api/v1/auth/*
+        destination: https://pharma-api-gateway.onrender.com/api/v1/auth/*
       - type: rewrite
         source: /api/*
         destination: https://pharma-api-gateway.onrender.com/api/*
