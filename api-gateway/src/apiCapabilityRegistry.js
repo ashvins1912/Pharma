@@ -46,6 +46,8 @@ const CAPABILITIES = [
   ['POST', /^\/api\/v1\/auth\/mfa\/(?:enroll|confirm-enroll|mfa-disable)$/, 'profile.write'],
   ['GET', /^\/api\/v1\/profile\/access\/users(?:\/|$)/, 'users.read'],
   ['PATCH', /^\/api\/v1\/profile\/access\/users(?:\/|$)/, 'users.manage'],
+  ['GET', /^\/api\/v1\/admin\/payments\/outstanding$/, 'billing.read'],
+  ['POST', /^\/api\/v1\/admin\/payments\/reminders\/dispatch$/, 'billing.write'],
   ['GET', /^\/api\/v1\/billing(?:\/|$)/, 'billing.read'],
   ['POST', /^\/api\/v1\/billing(?:\/|$)/, 'billing.write'],
   ['PUT', /^\/api\/v1\/billing(?:\/|$)/, 'billing.write'],
