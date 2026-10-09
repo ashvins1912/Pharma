@@ -49,7 +49,10 @@ function AuthTransitionScreen({ initialLoad = false }) {
 }
 
 function MainApp() {
-  const { user, isAdmin, isPharmacyOrAdmin, passwordRecoveryRequired, isFullyAuthenticated, loading: authLoading, authTransitionLoading } = useAuth();
+  const {
+    user, role, isSuperAdmin, canAccessOperations, hasPermission,
+    passwordRecoveryRequired, isFullyAuthenticated, loading: authLoading, authTransitionLoading
+  } = useAuth();
   const {
     cart,
     orders,
@@ -108,20 +111,54 @@ function MainApp() {
     if (passwordRecoveryRequired) setAuthOpen(true);
   }, [passwordRecoveryRequired]);
 
-  // Tab switch guard: Users must be signed in to access orders, tracking, requests, or addresses
+  // Navigation is permission-first. Staff workspace capabilities are separate
+  // from customer self-service permissions, even when they share a domain.
   const handleTabSwitch = (tab) => {
-    if ((tab === 'orders' || tab === 'addresses' || tab === 'requests') && !user) {
-      addToast(`Please sign in to access ${tab === 'orders' ? 'your order history and live tracking' : tab === 'requests' ? 'your medicine requests' : 'your address directory'}.`, "info");
+    if (['orders', 'addresses', 'requests'].includes(tab) && !user) {
+      addToast(`Please sign in to access ${tab === 'orders' ? 'your order history and live tracking' : tab === 'requests' ? 'your medicine requests' : 'your address directory'}.`, 'info');
       setAuthOpen(true);
       return;
     }
-    if (tab === 'requests' && isPharmacyOrAdmin) {
-      addToast('Medicine requests are available in the pharmacy operations dashboard.', 'info');
-      return;
+
+    if (tab === 'orders') {
+      if (!hasPermission('orders.read')) {
+        addToast('Your account does not have permission to view orders.', 'warning');
+        return;
+      }
+      if (canAccessOperations && !isSuperAdmin) {
+        addToast('Order operations are available in your operations dashboard.', 'info');
+        setActiveTab('admin');
+        return;
+      }
     }
-    if (tab === 'admin' && !isPharmacyOrAdmin) {
-      addToast("Pharmacy or administrator authorization is required to access operations.", "warning");
-      setAuthOpen(true);
+
+    if (tab === 'requests') {
+      if (!hasPermission('medicine_requests.read')) {
+        addToast('Your account does not have permission to view medicine requests.', 'warning');
+        return;
+      }
+      if (canAccessOperations && !isSuperAdmin) {
+        setActiveTab('admin');
+        return;
+      }
+    }
+
+    if (tab === 'addresses') {
+      if (!hasPermission('profile.read')) {
+        addToast('Your account does not have permission to view saved addresses.', 'warning');
+        return;
+      }
+      if (canAccessOperations && !isSuperAdmin) {
+        addToast('This customer address workspace is not enabled for your current account.', 'info');
+        return;
+      }
+    }
+
+    if (tab === 'admin' && !canAccessOperations) {
+      addToast(user
+        ? 'Your account does not have permission to access operations.'
+        : 'Sign in with an authorized staff account to access operations.', 'warning');
+      if (!user) setAuthOpen(true);
       return;
     }
     setActiveTab(tab);
@@ -140,11 +177,20 @@ function MainApp() {
       setRatingPromptOrder(null);
       setDismissedRatingOrderIds([]);
     }
-    if (!isPharmacyOrAdmin && activeTab === 'admin') setActiveTab('store');
+    if (activeTab === 'admin' && !canAccessOperations) setActiveTab('store');
+    if (activeTab === 'orders' && (!user || !hasPermission('orders.read') || (canAccessOperations && !isSuperAdmin))) {
+      setActiveTab(canAccessOperations && !isSuperAdmin ? 'admin' : 'store');
+    }
+    if (activeTab === 'requests' && (!user || !hasPermission('medicine_requests.read') || (canAccessOperations && !isSuperAdmin))) {
+      setActiveTab(canAccessOperations && !isSuperAdmin ? 'admin' : 'store');
+    }
+    if (activeTab === 'addresses' && (!user || !hasPermission('profile.read') || (canAccessOperations && !isSuperAdmin))) {
+      setActiveTab('store');
+    }
     if (!user && activeTrackingOrder) {
       setActiveTrackingOrder(null);
     }
-  }, [user, isAdmin, isPharmacyOrAdmin, activeTab, activeTrackingOrder, setActiveTrackingOrder]);
+  }, [user, canAccessOperations, isSuperAdmin, hasPermission, activeTab, activeTrackingOrder, setActiveTrackingOrder]);
 
   useEffect(() => {
     const requireLogin = () => setAuthOpen(true);
@@ -177,9 +223,9 @@ function MainApp() {
 
   useEffect(() => {
     let cancelled = false;
-    if (isFullyAuthenticated && isAdmin) {
+    if (isFullyAuthenticated && hasPermission('whatsapp.read')) {
       loadWhatsAppStatus().then((status) => {
-        if (!cancelled && status && !status.isConnected && !adminCheckedRef.current) {
+        if (!cancelled && status && !status.isConnected && hasPermission('whatsapp.manage') && !adminCheckedRef.current) {
           adminCheckedRef.current = true;
           setWhatsappModalOpen(true);
         }
@@ -191,7 +237,7 @@ function MainApp() {
     return () => {
       cancelled = true;
     };
-  }, [isFullyAuthenticated, isAdmin, loadWhatsAppStatus, setWhatsappModalOpen]);
+  }, [isFullyAuthenticated, hasPermission, loadWhatsAppStatus, setWhatsappModalOpen]);
 
   useEffect(() => {
     if (passwordRecoveryRequired) setAuthOpen(true);
@@ -304,13 +350,13 @@ function MainApp() {
 
         {/* TAB 2: ORDER HISTORY & TRACKING (Guarded - Sign in required) */}
         {activeTab === 'orders' && (
-          user ? (
+          user && hasPermission('orders.read') && (!canAccessOperations || isSuperAdmin) ? (
             <div className="max-w-4xl mx-auto space-y-6">
               <OrderHistoryView
                 onTrackOrder={(order) => setActiveTrackingOrder(order)}
               />
             </div>
-          ) : (
+          ) : (!user ? (
             <div className="max-w-md mx-auto my-12 bg-white border border-slate-200 rounded-3xl p-8 text-center space-y-4 shadow-sm animate-fade-in">
               <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-2xl mx-auto">
                 🔒
@@ -323,15 +369,21 @@ function MainApp() {
                 onClick={() => setAuthOpen(true)}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 rounded-xl transition cursor-pointer shadow-sm"
               >
-                Sign In to View Orders
+                {user ? 'Access restricted' : 'Sign In to View Orders'}
               </button>
             </div>
-          )
+          ) : (
+            <div className="max-w-md mx-auto my-12 bg-white border border-slate-200 rounded-3xl p-8 text-center space-y-3">
+              <div className="text-sm font-extrabold text-slate-900">Access restricted</div>
+              <p className="text-xs text-slate-500">Your current permissions do not allow access to this customer workspace.</p>
+              {canAccessOperations && <button onClick={() => setActiveTab('admin')} className="text-xs font-bold text-blue-700 underline">Open Operations Dashboard</button>}
+            </div>
+          ))
         )}
 
         {/* TAB 3: MEDICINE REQUESTS & PHARMACY PROPOSALS (Guarded - Sign in required) */}
         {activeTab === 'requests' && (
-          user ? (
+          user && hasPermission('medicine_requests.read') && (!canAccessOperations || isSuperAdmin) ? (
             <div className="max-w-4xl mx-auto space-y-6">
               <CustomerRequestsView
                 onOpenProposal={(req) => openProposalModal(req)}
@@ -362,11 +414,11 @@ function MainApp() {
 
         {/* TAB 4: MULTI-ADDRESS DIRECTORY (Guarded - Sign in required) */}
         {activeTab === 'addresses' && (
-          user ? (
+          user && hasPermission('profile.read') && (!canAccessOperations || isSuperAdmin) ? (
             <div className="max-w-3xl mx-auto space-y-6">
               <AddressManager isSelectOnly={false} />
             </div>
-          ) : (
+          ) : (!user ? (
             <div className="max-w-md mx-auto my-12 bg-white border border-slate-200 rounded-3xl p-8 text-center space-y-4 shadow-sm animate-fade-in">
               <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-2xl mx-auto">
                 🔒
@@ -382,12 +434,17 @@ function MainApp() {
                 Sign In to View Addresses
               </button>
             </div>
-          )
+          ) : (
+            <div className="max-w-md mx-auto my-12 bg-white border border-slate-200 rounded-3xl p-8 text-center space-y-3">
+              <div className="text-sm font-extrabold text-slate-900">Access restricted</div>
+              <p className="text-xs text-slate-500">Your current permissions do not allow access to saved addresses.</p>
+            </div>
+          ))
         )}
 
         {/* TAB 4: ADMIN OPERATIONS DASHBOARD (Guarded) */}
         {activeTab === 'admin' && (
-          isPharmacyOrAdmin && (
+          canAccessOperations && (
             <React.Suspense fallback={<div className="py-12 text-center text-sm text-slate-500">Loading operations dashboard...</div>}>
               <AdminDashboardView />
             </React.Suspense>
@@ -464,7 +521,7 @@ function MainApp() {
       />
 
       {/* WhatsApp Delivery Dispatch Gateway Modal */}
-      {user && isAdmin && (
+      {user && hasPermission('whatsapp.manage') && (
         <WhatsAppConnectModal
           isOpen={whatsappModalOpen}
           onClose={() => setWhatsappModalOpen(false)}
