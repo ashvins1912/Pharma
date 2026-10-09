@@ -319,27 +319,38 @@ export function AuthProvider({ children }) {
     if (googleSignInInProgressRef.current) return { skipped: true };
     googleSignInInProgressRef.current = true;
     setAuthTransitionLoading(true);
-    if (!isSupabaseConfigured || !supabase) {
-      googleSignInInProgressRef.current = false;
-      setAuthTransitionLoading(false);
-      throw new Error('Google sign-in is unavailable until Supabase is configured.');
-    }
 
-    // Clear any stale broker session locally before starting a new OAuth flow.
-    clearSupabaseLocalSession();
-
-    const redirectTo = env.VITE_FRONTEND_URL || window.location.origin;
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'select_account'
-        }
+    try {
+      if (!isSupabaseConfigured || !supabase) {
+        throw new Error('Google sign-in is unavailable until Supabase is configured.');
       }
-    });
-    if (error) {
+
+      // Clear any stale broker session locally before starting a new OAuth flow.
+      clearSupabaseLocalSession();
+
+      // In production always return to the actual storefront host. A stale
+      // VITE_FRONTEND_URL value (for example localhost or an API host) must not
+      // send the OAuth callback away from the running SPA.
+      const redirectTo = import.meta.env.PROD
+        ? window.location.origin
+        : (env.VITE_FRONTEND_URL || window.location.origin);
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account'
+          }
+        }
+      });
+      if (error) throw error;
+      return { redirecting: true };
+    } catch (error) {
+      // Supabase can reject before it initiates a browser redirect (bad config,
+      // blocked request, or provider error). Never leave the whole app in its
+      // transition screen or lock the Google button after such a failure.
       googleSignInInProgressRef.current = false;
       setAuthTransitionLoading(false);
       throw error;
