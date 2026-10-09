@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import test from 'node:test';
 import { loadConfig } from './config.js';
 import { createGatewayApp } from './server.js';
-import { isGatewayPublicPath, resolveGatewayCapability } from './apiCapabilityRegistry.js';
+import { isGatewayPublicPath, isGatewayPermissionAllowed, resolveGatewayCapability } from './apiCapabilityRegistry.js';
 
 const start = async app => {
   const server = app.listen(0, '127.0.0.1');
@@ -43,6 +43,16 @@ test('storefront medicine catalog is public and does not require inventory RBAC'
   // Mutations must remain protected even though the public read is allowed.
   assert.equal(isGatewayPublicPath('POST', '/api/medicines'), false);
   assert.equal(resolveGatewayCapability('POST', '/api/medicines'), 'inventory.write');
+});
+
+test('explicit revocations override Super Admin wildcard grants', () => {
+  const user = {
+    role: 'SUPER_ADMIN',
+    permissions: ['*'],
+    revokedPermissions: ['inventory.read']
+  };
+  assert.equal(isGatewayPermissionAllowed(user, 'inventory.read'), false);
+  assert.equal(isGatewayPermissionAllowed(user, 'inventory.write'), true);
 });
 
 const authorizedConfig = (backendApiUrl, serviceUrl) => loadConfig({
