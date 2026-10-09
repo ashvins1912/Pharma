@@ -115,7 +115,11 @@ export function AuthProvider({ children }) {
           }
         } else {
           const probe = await getAuthMe({ allowAnonymous: true });
-          const data = probe?.data || null;
+          // Axios returns the HTTP body in response.data, while the backend
+          // success contract wraps the profile again in body.data. Unwrap both
+          // layers before resolving the canonical user.
+          const responseBody = probe?.data ?? null;
+          const data = responseBody?.data ?? responseBody;
           const sessionUser = data?.user || (data?.id ? data : null);
           if (mounted && sessionUser && sessionUser.profileCompleted !== false
               && String(sessionUser.accountStatus || 'ACTIVE').toUpperCase() === 'ACTIVE') {
@@ -608,7 +612,10 @@ export function AuthProvider({ children }) {
     // Profile completion is the first point at which the application should
     // re-hydrate the canonical Pharma session from /auth/me.
     try {
-      const { data } = await apiClient.get('/api/v1/auth/me');
+      const { data: responseBody } = await apiClient.get('/api/v1/auth/me');
+      // Match the backend's standard { success, data, message, requestId }
+      // envelope instead of treating the envelope itself as the profile.
+      const data = responseBody?.data ?? responseBody;
       const sessionUser = data?.user || (data?.id ? data : null);
       if (sessionUser) {
         syncSession({ user: sessionUser }, sessionUser);
