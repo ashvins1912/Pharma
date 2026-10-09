@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { config } from './config.js';
+import { resolveGatewayCapability, isGatewayPermissionAllowed } from './apiCapabilityRegistry.js';
 
 function getUserToken(req) {
   const authorization = req.get('authorization') || '';
@@ -123,6 +124,18 @@ export function requireSuperAdmin(req, res, next) {
 }
 
 export function requireAdmin(req, res, next) {
+  // This compatibility middleware now honors the route's registered RBAC
+  // capability first. Explicit revocations override broad role grants.
+  const capability = resolveGatewayCapability(req.method, req.originalUrl || req.url || '');
+  if (capability) {
+    if (isGatewayPermissionAllowed(req.user, capability)) return next();
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'Required API permission is missing.', permission: capability },
+      requestId: req.requestId
+    });
+  }
+
   const role = req.user?.app_metadata?.role || req.user?.role;
   const allowed = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_OWNER'];
   if (!allowed.includes(role)) {
@@ -132,9 +145,6 @@ export function requireAdmin(req, res, next) {
 }
 
 export function requireInventoryImportPermission(req, res, next) {
-  const role = req.user?.app_metadata?.role || req.user?.role;
-  const permissions = req.user?.app_metadata?.permissions || req.user?.permissions || [];
-  const allowedRoles = ['admin', 'PLATFORM_SUPER_ADMIN', 'TENANT_OWNER', 'TENANT_ADMIN', 'INVENTORY_MANAGER', 'PHARMACIST', 'PHARMACY_STAFF'];
-  if (allowedRoles.includes(role) || permissions.includes('inventory.import')) return next();
-  return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Inventory import permission required.' }, requestId: req.requestId });
+  if (isGatewayPermissionAllowed(req.user, 'inventory.import')) return next();
+  return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Inventory import permission required.', permission: 'inventory.import' }, requestId: req.requestId });
 }
