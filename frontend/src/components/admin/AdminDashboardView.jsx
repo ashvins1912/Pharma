@@ -575,7 +575,11 @@ export default function AdminDashboardView() {
       )}
 
       {adminTab === 'inventory' && canViewInventory && (
-        <AdminInventoryTable onOpenBulkImport={() => setImportModalOpen(true)} />
+        <AdminInventoryTable
+          onOpenBulkImport={() => setImportModalOpen(true)}
+          canManage={hasPermission('inventory.write')}
+          canImport={canImportInventory}
+        />
       )}
 
       {adminTab === 'routes' && canManageRoutes && (
