@@ -100,7 +100,7 @@ async function revalidateAuthorization() {
 
 const configuredApiBaseUrl = String(import.meta.env.VITE_API_URL || '/api').trim();
 const rawApiBaseUrl = import.meta.env.PROD
-    ? (typeof window !== 'undefined' ? window.location.origin : '')
+    ? (configuredApiBaseUrl || window.location.origin).replace(/\/+$/, '')
     : configuredApiBaseUrl.replace(/\/+$/, '');
 const apiBaseUrl = import.meta.env.PROD
     ? rawApiBaseUrl
