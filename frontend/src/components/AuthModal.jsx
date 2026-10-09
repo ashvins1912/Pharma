@@ -260,7 +260,10 @@ export default function AuthModal({ isOpen, onClose }) {
     setLoading(true);
     setGoogleLoading(true);
     try {
-      await loginWithGoogle();
+      const result = await loginWithGoogle();
+      if (!result?.redirecting) {
+        throw new Error('Google sign-in could not start. Please try again.');
+      }
       handleClose(true);
     } catch (err) {
       setErrorMsg(friendlyAuthError(err, 'Google sign-in'));
