@@ -109,6 +109,7 @@ const CAPABILITIES = [
   ['PATCH', /^\/api\/v1\/delivery(?:\/|$)/, 'delivery.manage'],
   ['GET', /^\/api\/v1\/medicine-requests(?:\/|$)/, 'medicine_requests.read'],
   ['POST', /^\/api\/v1\/medicine-requests(?:\/|$)/, 'medicine_requests.create'],
+  ['POST', /^\/api\/v1\/integrations\/sync(?:\/|$)/, 'csquare.sync'],
   ['GET', /^\/api\/v1\/integrations(?:\/|$)/, 'csquare.read'],
   ['PUT', /^\/api\/v1\/integrations(?:\/|$)/, 'csquare.manage'],
   ['POST', /^\/api\/v1\/integrations(?:\/|$)/, 'csquare.manage'],
