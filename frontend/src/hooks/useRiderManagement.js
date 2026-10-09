@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
  * Encapsulates fleet data loading, status toggling, GPS tracking, and assignment engine telemetry.
  */
 export function useRiderManagement({ includeDisabled = false } = {}) {
-    const { isAdmin, loading: authLoading } = useAuth();
+    const { hasPermission, loading: authLoading } = useAuth();
     const [riders, setRiders] = useState([]);
     const [loadingRiders, setLoadingRiders] = useState(false);
     const [ridersError, setRidersError] = useState(null);
@@ -20,7 +20,7 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
     const [loadingEngine, setLoadingEngine] = useState(false);
 
     const fetchRiders = useCallback(async (filter = {}) => {
-        if (authLoading || !isAdmin) return;
+        if (authLoading || !hasPermission('delivery.read')) return;
         setLoadingRiders(true);
         setRidersError(null);
         try {
@@ -35,10 +35,10 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
         } finally {
             setLoadingRiders(false);
         }
-    }, [authLoading, includeDisabled, isAdmin]);
+    }, [authLoading, includeDisabled, hasPermission]);
 
     const fetchEngineStatus = useCallback(async () => {
-        if (authLoading || !isAdmin) return;
+        if (authLoading || !hasPermission('delivery.read')) return;
         setLoadingEngine(true);
         try {
             const res = await apiClient.get('/api/admin/assignment/engine-status');
@@ -48,9 +48,10 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
         } finally {
             setLoadingEngine(false);
         }
-    }, [authLoading, isAdmin]);
+    }, [authLoading, hasPermission]);
 
     const updateStatus = async (riderId, newStatus) => {
+        if (!hasPermission('delivery.manage')) throw new Error('Your account cannot update rider status.');
         try {
             const res = await apiClient.patch(`/api/admin/riders/${riderId}/status`, { status: newStatus });
             setRiders((prev) => prev.map((r) => (r.id === riderId ? res.data.rider : r)));
@@ -61,6 +62,7 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
     };
 
     const setRiderEnabled = async (riderId, enabled, action, remark) => {
+        if (!hasPermission('delivery.manage')) throw new Error('Your account cannot manage rider availability.');
         try {
             const res = await apiClient.patch(`/api/admin/riders/${riderId}/enabled`, {
                 enabled,
@@ -75,7 +77,7 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
     };
 
     useEffect(() => {
-        if (!authLoading && isAdmin) {
+        if (!authLoading && hasPermission('delivery.read')) {
             fetchRiders();
             fetchEngineStatus();
         }
