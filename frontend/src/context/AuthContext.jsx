@@ -13,23 +13,19 @@ const OPERATIONS_PERMISSIONS = [
   'orders.manage',
   'inventory.read',
   'inventory.write',
+  'inventory.import',
   'medicine_requests.pending_count',
   'medicine_requests.manage',
   'medicine_requests.proposal',
   'csquare.read',
+  'promotions.read',
   'promotions.manage',
   'billing.read',
   'billing.write',
-  'referrals.manage',
   'tenants.read',
   'tenants.manage',
-  'users.read',
   'users.manage',
-  'whatsapp.read',
-  'whatsapp.manage',
-  'delivery.read',
-  'delivery.manage',
-  'prescription.review'
+  'delivery.manage'
 ];
 
 export function AuthProvider({ children }) {
