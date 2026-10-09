@@ -141,9 +141,13 @@ function getCsrfCookie() {
 }
 
 apiClient.interceptors.request.use(async (config) => {
+    // Resolve permissions by pathname even when a deliberately public endpoint
+    // uses an absolute API Gateway URL. Absolute URLs must not bypass preflight
+    // for any future protected API calls.
+    const capabilityUrl = String(config.url || '').replace(/^https?:\/\/[^/]+/i, '');
     const capability = config.permission
         ? { permission: config.permission }
-        : resolveApiCapability(config.method, config.url);
+        : resolveApiCapability(config.method, capabilityUrl);
     if (capability?.permission && applicationSessionAuthenticated && !hasCapability(capability.permission) && !config.__skipAuthorizationRevalidation) {
         // Revalidate once before denying. This prevents stale UI RBAC state from
         // incorrectly blocking a permission that is currently granted.
