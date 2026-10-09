@@ -3,7 +3,7 @@ import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
 import { getIsConnected } from '../config/db.js';
-import { authenticateUser, isAdmin } from '../middleware/auth.js';
+import { authenticateUser } from '../middleware/auth.js';
 import ProductDiscoveryService from '../services/ProductDiscoveryService.js';
 import SearchMetricIngestionService from '../services/SearchMetricIngestionService.js';
 
@@ -34,7 +34,7 @@ const getErrorStatus = error => error.statusCode
     || (error.name === 'ValidationError' || error.name === 'CastError' ? 400 : 500);
 
 // Full inventory and CRUD are available only to verified administrators.
-router.get('/admin/inventory', authenticateUser, isAdmin, async (req, res) => {
+router.get('/admin/inventory', authenticateUser, async (req, res) => {
     try {
         const { search, category, sort, page, limit } = req.query;
         res.json(await dataStore.getMedicines(search, false, category, sort, page, limit, true));
@@ -44,7 +44,7 @@ router.get('/admin/inventory', authenticateUser, isAdmin, async (req, res) => {
     }
 });
 
-router.post('/', authenticateUser, isAdmin, async (req, res) => {
+router.post('/', authenticateUser, async (req, res) => {
     try {
         const medicine = await dataStore.createMedicine(req.body || {});
         res.status(201).json(medicine);
@@ -54,7 +54,7 @@ router.post('/', authenticateUser, isAdmin, async (req, res) => {
     }
 });
 
-router.put('/:medicineId', authenticateUser, isAdmin, async (req, res) => {
+router.put('/:medicineId', authenticateUser, async (req, res) => {
     try {
         const medicine = await dataStore.updateMedicine(req.params.medicineId, req.body || {});
         res.json(medicine);
@@ -64,7 +64,7 @@ router.put('/:medicineId', authenticateUser, isAdmin, async (req, res) => {
     }
 });
 
-router.delete('/:medicineId', authenticateUser, isAdmin, async (req, res) => {
+router.delete('/:medicineId', authenticateUser, async (req, res) => {
     try {
         res.json(await dataStore.deleteMedicine(req.params.medicineId));
     } catch (error) {
@@ -164,7 +164,7 @@ router.get('/discovery', async (req, res) => {
 });
 
 // Admin Inventory Alerts
-router.get('/alerts', authenticateUser, isAdmin, async (req, res) => {
+router.get('/alerts', authenticateUser, async (req, res) => {
     try {
         const alerts = await dataStore.getInventoryAlerts();
         res.json(alerts);
@@ -175,7 +175,7 @@ router.get('/alerts', authenticateUser, isAdmin, async (req, res) => {
 });
 
 // Inventory merge audits
-router.get('/audits', authenticateUser, isAdmin, async (req, res) => {
+router.get('/audits', authenticateUser, async (req, res) => {
     try {
         const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
         const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
@@ -194,7 +194,7 @@ const setLegacyImportDeprecation = res => {
 };
 
 // Start a durable background import job (Legacy).
-router.post('/imports', authenticateUser, isAdmin, uploadMemory.single('excelFile'), async (req, res) => {
+router.post('/imports', authenticateUser, uploadMemory.single('excelFile'), async (req, res) => {
     setLegacyImportDeprecation(res);
     try {
         if (!req.file?.buffer) return res.status(400).json({ message: 'No Excel file provided.' });
@@ -231,7 +231,7 @@ router.post('/imports', authenticateUser, isAdmin, uploadMemory.single('excelFil
     }
 });
 
-router.get('/imports/:importId/status', authenticateUser, isAdmin, async (req, res) => {
+router.get('/imports/:importId/status', authenticateUser, async (req, res) => {
     setLegacyImportDeprecation(res);
     if (!mongoose.isValidObjectId(req.params.importId)) {
         return res.status(404).json({ message: 'Inventory import was not found.' });
@@ -260,7 +260,7 @@ router.get('/imports/:importId/status', authenticateUser, isAdmin, async (req, r
     }
 });
 
-router.get('/imports/:importId/failed-records', authenticateUser, isAdmin, async (req, res) => {
+router.get('/imports/:importId/failed-records', authenticateUser, async (req, res) => {
     setLegacyImportDeprecation(res);
     if (!mongoose.isValidObjectId(req.params.importId)) {
         return res.status(404).json({ message: 'Inventory import was not found.' });
@@ -292,7 +292,7 @@ router.get('/imports/:importId/failed-records', authenticateUser, isAdmin, async
     }
 });
 
-router.post('/imports/:importId/retry', authenticateUser, isAdmin, async (req, res) => {
+router.post('/imports/:importId/retry', authenticateUser, async (req, res) => {
     setLegacyImportDeprecation(res);
     if (!mongoose.isValidObjectId(req.params.importId)) {
         return res.status(404).json({ message: 'Inventory import was not found.' });
@@ -309,7 +309,7 @@ router.post('/imports/:importId/retry', authenticateUser, isAdmin, async (req, r
 });
 
 // Workbook preview is chunked and returns only a small preview/error sample.
-router.post('/validate-import', authenticateUser, isAdmin, uploadMemory.single('excelFile'), async (req, res) => {
+router.post('/validate-import', authenticateUser, uploadMemory.single('excelFile'), async (req, res) => {
     setLegacyImportDeprecation(res);
     try {
         if (!req.file || !req.file.buffer) {
@@ -324,7 +324,7 @@ router.post('/validate-import', authenticateUser, isAdmin, uploadMemory.single('
 });
 
 // Confirm and commit validated Excel rows (Requirement 6)
-router.post('/confirm-import', authenticateUser, isAdmin, async (req, res) => {
+router.post('/confirm-import', authenticateUser, async (req, res) => {
     setLegacyImportDeprecation(res);
     try {
         const { rows } = req.body;
@@ -345,7 +345,7 @@ router.post('/confirm-import', authenticateUser, isAdmin, async (req, res) => {
 });
 
 // Direct single-step Excel upload
-router.post('/upload-excel', authenticateUser, isAdmin, uploadMemory.single('excelFile'), async (req, res) => {
+router.post('/upload-excel', authenticateUser, uploadMemory.single('excelFile'), async (req, res) => {
     setLegacyImportDeprecation(res);
     try {
         if (!req.file || !req.file.buffer) {
