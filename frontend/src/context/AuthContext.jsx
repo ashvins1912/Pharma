@@ -18,7 +18,6 @@ const OPERATIONS_PERMISSIONS = [
   'medicine_requests.proposal',
   'csquare.read',
   'promotions.manage',
-  'billing.read',
   'billing.write',
   'referrals.manage',
   'tenants.read',
