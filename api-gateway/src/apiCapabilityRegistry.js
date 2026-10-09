@@ -116,11 +116,17 @@ export function isGatewayPublicPath(method, url) {
 
 export function isGatewayPermissionAllowed(user, permission) {
   if (!permission) return false;
-  const role = user?.app_metadata?.role || user?.role;
-  if (['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return true;
   const permissions = Array.isArray(user?.permissions) ? user.permissions : (user?.app_metadata?.permissions || []);
-  const revoked = Array.isArray(user?.revokedPermissions) ? user.revokedPermissions : (user?.app_metadata?.revokedPermissions || []);
+  const revoked = Array.isArray(user?.revokedPermissions)
+    ? user.revokedPermissions
+    : (Array.isArray(user?.app_metadata?.revokedPermissions) ? user.app_metadata.revokedPermissions : []);
+  // Deny rules must win even when a platform-admin role or wildcard grant exists.
   if (revoked.includes(permission)) return false;
   if (revoked.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)))) return false;
-  return permissions.includes('*') || permissions.includes(permission) || permissions.includes(`${permission.split('.')[0]}.*`);
+
+  const role = user?.app_metadata?.role || user?.role;
+  if (['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return true;
+  return permissions.includes('*')
+    || permissions.includes(permission)
+    || permissions.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)));
 }
