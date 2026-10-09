@@ -203,7 +203,12 @@ export const API_CAPABILITIES = [
   },
   {
     method: 'POST',
-    pattern: /^\/api\/v1\/prescriptions\/[^/]+\/(?:link-order|convert-to-order|remove|hospitals)$/,
+    pattern: /^\/api\/v1\/prescriptions\/[^/]+\/(?:link-order|convert-to-order|remove)$/,
+    permission: 'prescription.write'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/prescriptions\/hospitals$/,
     permission: 'prescription.write'
   },
   {
