@@ -198,19 +198,25 @@ export default function Header({
               <AdminAlertBell onOpenAlerts={onOpenAdminAlerts} />
             )}
             {/* User Profile / Auth Button */}
-            {user && hasPermission('profile.read') ? (
-              <button
-                onClick={onOpenProfile}
-                className="w-9 h-9 sm:w-auto p-0 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition flex items-center justify-center gap-1.5 flex-shrink-0"
-                aria-label="User Account Profile"
-              >
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-600 to-blue-600 text-white font-black text-xs flex items-center justify-center uppercase shadow-sm">
-                  {user.user_metadata?.name ? user.user_metadata.name.charAt(0) : user.email?.charAt(0) || 'U'}
-                </div>
-                <span className="hidden sm:inline text-xs font-bold text-slate-700 max-w-[85px] truncate">
-                  {user.user_metadata?.name || user.email?.split('@')[0]}
+            {user ? (
+              hasPermission('profile.read') ? (
+                <button
+                  onClick={onOpenProfile}
+                  className="w-9 h-9 sm:w-auto p-0 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition flex items-center justify-center gap-1.5 flex-shrink-0"
+                  aria-label="User Account Profile"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-600 to-blue-600 text-white font-black text-xs flex items-center justify-center uppercase shadow-sm">
+                    {user.user_metadata?.name ? user.user_metadata.name.charAt(0) : user.email?.charAt(0) || 'U'}
+                  </div>
+                  <span className="hidden sm:inline text-xs font-bold text-slate-700 max-w-[85px] truncate">
+                    {user.user_metadata?.name || user.email?.split('@')[0]}
+                  </span>
+                </button>
+              ) : (
+                <span className="hidden sm:inline max-w-[120px] truncate text-xs font-medium text-slate-500" title="Profile details are restricted by your current permissions">
+                  {user.email}
                 </span>
-              </button>
+              )
             ) : (
               <button
                 onClick={onOpenAuth}
