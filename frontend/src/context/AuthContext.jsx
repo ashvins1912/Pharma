@@ -13,7 +13,6 @@ const OPERATIONS_PERMISSIONS = [
   'orders.manage',
   'inventory.read',
   'inventory.write',
-  'inventory.import',
   'medicine_requests.pending_count',
   'medicine_requests.manage',
   'medicine_requests.proposal',
