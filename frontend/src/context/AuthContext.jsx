@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { isSupabaseConfigured, supabase } from '../supabaseClient';
 import { env } from '../config/env.ts';
 import apiClient, { setAuthorizationCapabilities, clearAuthorizationCapabilities, setApplicationSessionAuthenticated, getAuthMe } from '../api/apiClient';
@@ -7,11 +7,37 @@ import { useActionLoading, LOADING_ACTIONS } from './LoadingContext';
 
 const AuthContext = createContext(null);
 
+// These capabilities identify staff workspaces, rather than customer self-service
+// access (for example, customers can read their own orders and medicine requests).
+const OPERATIONS_PERMISSIONS = [
+  'orders.manage',
+  'inventory.read',
+  'inventory.write',
+  'medicine_requests.pending_count',
+  'medicine_requests.manage',
+  'medicine_requests.proposal',
+  'csquare.read',
+  'promotions.manage',
+  'billing.read',
+  'billing.write',
+  'referrals.manage',
+  'tenants.read',
+  'tenants.manage',
+  'users.read',
+  'users.manage',
+  'whatsapp.read',
+  'whatsapp.manage',
+  'delivery.read',
+  'delivery.manage',
+  'prescription.review'
+];
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
   const [role, setRole] = useState('customer');
   const [permissions, setPermissions] = useState([]);
+  const [revokedPermissions, setRevokedPermissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [authTransitionLoading, setAuthTransitionLoading] = useState(false);
   const [passwordRecoveryRequired, setPasswordRecoveryRequired] = useState(false);
@@ -52,12 +78,24 @@ export function AuthProvider({ children }) {
         'customer';
       setRole(userRole);
       const resolvedPermissions = Array.isArray(resolvedUser.permissions) ? resolvedUser.permissions : [];
+      const resolvedRevocations = Array.isArray(resolvedUser.revokedPermissions)
+        ? resolvedUser.revokedPermissions
+        : (Array.isArray(resolvedUser.app_metadata?.revokedPermissions)
+          ? resolvedUser.app_metadata.revokedPermissions
+          : (Array.isArray(resolvedUser.accessRevokes) ? resolvedUser.accessRevokes : []));
       setPermissions(resolvedPermissions);
-      setAuthorizationCapabilities({ userId: resolvedUser.id, role: userRole, permissions: resolvedPermissions });
+      setRevokedPermissions(resolvedRevocations);
+      setAuthorizationCapabilities({
+        userId: resolvedUser.id,
+        role: userRole,
+        permissions: resolvedPermissions,
+        revokedPermissions: resolvedRevocations
+      });
     } else {
       setUser(null);
       setRole('customer');
       setPermissions([]);
+      setRevokedPermissions([]);
       clearAuthorizationCapabilities();
       setMfaEnabled(false);
       setAal('aal1');
@@ -201,13 +239,18 @@ export function AuthProvider({ children }) {
           if (refreshedUser?.id) {
             const refreshedRole = refreshedUser.app_metadata?.role || refreshedUser.role || role;
             const refreshedPermissions = Array.isArray(refreshedUser.permissions) ? refreshedUser.permissions : [];
+            const refreshedRevocations = Array.isArray(refreshedUser.revokedPermissions)
+              ? refreshedUser.revokedPermissions
+              : (Array.isArray(refreshedUser.app_metadata?.revokedPermissions) ? refreshedUser.app_metadata.revokedPermissions : []);
             setUser(previous => previous?.id === refreshedUser.id ? { ...previous, ...refreshedUser } : refreshedUser);
             setRole(refreshedRole);
             setPermissions(refreshedPermissions);
+            setRevokedPermissions(refreshedRevocations);
             setAuthorizationCapabilities({
               userId: refreshedUser.id,
               role: refreshedRole,
-              permissions: refreshedPermissions
+              permissions: refreshedPermissions,
+              revokedPermissions: refreshedRevocations
             });
           }
         })
@@ -574,15 +617,33 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const isSuperAdminRole = (value) => value === 'SUPER_ADMIN' || value === 'PLATFORM_SUPER_ADMIN' || value === 'admin';
-
-  const hasPermission = (permission) => {
+  const hasPermission = useCallback((permission) => {
     if (!permission || !user?.id) return false;
-    if (isSuperAdminRole(role)) return true;
+
+    // Explicit revocations are deny rules, including for users with wildcard
+    // or platform-administrator grants.
+    const revoked = [
+      ...(Array.isArray(revokedPermissions) ? revokedPermissions : []),
+      ...(Array.isArray(user.revokedPermissions) ? user.revokedPermissions : []),
+      ...(Array.isArray(user.app_metadata?.revokedPermissions) ? user.app_metadata.revokedPermissions : []),
+      ...(Array.isArray(user.accessRevokes) ? user.accessRevokes : [])
+    ];
+    if (revoked.includes(permission)
+      || revoked.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)))) {
+      return false;
+    }
+
     const granted = Array.isArray(permissions) ? permissions : [];
-    if (granted.includes('*') || granted.includes(permission)) return true;
-    return granted.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)));
-  };
+    return granted.includes('*')
+      || granted.includes(permission)
+      || granted.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)));
+  }, [user, permissions, revokedPermissions]);
+
+  const hasAnyPermission = useCallback((requiredPermissions = []) =>
+    Array.isArray(requiredPermissions) && requiredPermissions.some(hasPermission),
+  [hasPermission]);
+
+  const canAccessOperations = Boolean(isFullyAuthenticated && hasAnyPermission(OPERATIONS_PERMISSIONS));
 
   return (
     <AuthContext.Provider
@@ -591,12 +652,15 @@ export function AuthProvider({ children }) {
         session,
         role,
         permissions,
+        revokedPermissions,
         hasPermission,
+        hasAnyPermission,
+        canAccessOperations,
         isAdmin: role === 'SUPER_ADMIN' || role === 'admin' || role === 'PLATFORM_SUPER_ADMIN' || role === 'TENANT_ADMIN' || role === 'TENANT_OWNER',
-        isSuperAdmin: role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN',
-        isPlatformSuperAdmin: role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN',
+        isSuperAdmin: role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN' || role === 'admin',
+        isPlatformSuperAdmin: role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN' || role === 'admin',
         isTenantAdmin: role === 'TENANT_ADMIN' || role === 'TENANT_OWNER',
-        isPharmacyOrAdmin: role === 'SUPER_ADMIN' || role === 'admin' || role === 'PLATFORM_SUPER_ADMIN' || role === 'TENANT_ADMIN' || role === 'TENANT_OWNER' || role === 'pharmacy' || role === 'PHARMACY_STAFF',
+        isPharmacyOrAdmin: canAccessOperations,
         tenantId: user?.tenantId || user?.app_metadata?.tenantId || null,
         scope: (role === 'SUPER_ADMIN' || role === 'admin' || role === 'PLATFORM_SUPER_ADMIN') ? 'PLATFORM' : ((user?.tenantId || user?.app_metadata?.tenantId) ? 'TENANT' : 'CUSTOMER'),
         loading,
