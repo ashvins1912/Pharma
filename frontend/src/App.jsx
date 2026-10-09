@@ -409,7 +409,13 @@ function MainApp() {
                 Sign In to View Requests
               </button>
             </div>
-          )
+          ) : (
+            <div className="max-w-md mx-auto my-12 bg-white border border-slate-200 rounded-3xl p-8 text-center space-y-3">
+              <div className="text-sm font-extrabold text-slate-900">Access restricted</div>
+              <p className="text-xs text-slate-500">Your current permissions do not allow access to medicine requests.</p>
+              {canAccessOperations && <button onClick={() => setActiveTab('admin')} className="text-xs font-bold text-blue-700 underline">Open Operations Dashboard</button>}
+            </div>
+          ))
         )}
 
         {/* TAB 4: MULTI-ADDRESS DIRECTORY (Guarded - Sign in required) */}
