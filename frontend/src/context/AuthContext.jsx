@@ -624,7 +624,8 @@ export function AuthProvider({ children }) {
   // Access to the operations shell requires at least one complete workspace
   // capability. Individual tab/action permissions are checked separately below.
   const canAccessOperations = Boolean(isFullyAuthenticated && (
-    hasAnyPermission(['inventory.read', 'csquare.read', 'promotions.read', 'billing.read', 'delivery.manage'])
+    hasAnyPermission(['inventory.read', 'csquare.read', 'promotions.read', 'billing.read'])
+    || (hasPermission('delivery.read') && hasPermission('delivery.manage'))
     || (hasPermission('orders.read') && hasPermission('orders.manage'))
     || (hasPermission('medicine_requests.read')
       && hasAnyPermission(['medicine_requests.pending_count', 'medicine_requests.manage', 'medicine_requests.proposal']))
