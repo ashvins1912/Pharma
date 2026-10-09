@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import test from 'node:test';
 import { loadConfig } from './config.js';
 import { createGatewayApp } from './server.js';
+import { isGatewayPublicPath, resolveGatewayCapability } from './apiCapabilityRegistry.js';
 
 const start = async app => {
   const server = app.listen(0, '127.0.0.1');
@@ -33,6 +34,16 @@ const testSecrets = {
   gateway: 'test-gateway-secret-that-is-longer-than-thirty-two-characters',
   service: 'test-service-secret-that-is-longer-than-thirty-two-characters'
 };
+
+test('storefront medicine catalog is public and does not require inventory RBAC', () => {
+  const url = '/api/medicines?page=1&limit=16';
+  assert.equal(isGatewayPublicPath('GET', url), true);
+  assert.equal(resolveGatewayCapability('GET', url), null);
+
+  // Mutations must remain protected even though the public read is allowed.
+  assert.equal(isGatewayPublicPath('POST', '/api/medicines'), false);
+  assert.equal(resolveGatewayCapability('POST', '/api/medicines'), 'inventory.write');
+});
 
 const authorizedConfig = (backendApiUrl, serviceUrl) => loadConfig({
   NODE_ENV: 'test',
