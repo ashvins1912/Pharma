@@ -163,11 +163,23 @@ export class CustomerService {
   }
 
   async createFamilyPerson(userId, { displayName, relationship, dateOfBirth, gender, tenantId }) {
-    const customer = await CustomerProfile.findOne({ userId });
-    if (!customer) throw Object.assign(new Error('Customer not found'), { statusCode: 404 });
-    if (!displayName || !relationship) {
+    if (!userId) throw Object.assign(new Error('userId required'), { statusCode: 401 });
+    if (!displayName || !String(displayName).trim() || !relationship || !String(relationship).trim()) {
       throw Object.assign(new Error('displayName and relationship are required'), { statusCode: 400 });
     }
+
+    // A new account may reach People & Relatives before its customer profile
+    // has been initialized. Bootstrap only the authenticated user's own profile
+    // before creating a managed person; never accept an owner/user ID from body.
+    let customer = await CustomerProfile.findOne({ userId });
+    if (!customer) {
+      await this.ensureCustomerForUser(userId, { tenantId });
+      customer = await CustomerProfile.findOne({ userId });
+    }
+    if (!customer) {
+      throw Object.assign(new Error('Customer profile could not be initialized'), { statusCode: 409 });
+    }
+
     const puid = generatePuid();
     const person = await Person.create({
       puid,
