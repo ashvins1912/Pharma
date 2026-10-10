@@ -56,7 +56,6 @@ function MainApp() {
   const {
     cart,
     orders,
-    loadUserOrders,
     activeTrackingOrder,
     setActiveTrackingOrder,
     whatsappModalOpen,
@@ -503,13 +502,11 @@ function MainApp() {
           const resolvedOrderId = String(orderId || ratingPromptOrder?._id || '');
           if (resolvedOrderId) setDismissedRatingOrderIds((previous) => previous.includes(resolvedOrderId) ? previous : [...previous, resolvedOrderId]);
           setRatingPromptOrder(null);
-          void loadUserOrders();
         }}
         onAlreadySubmitted={(orderId) => {
           const resolvedOrderId = String(orderId || ratingPromptOrder?._id || '');
           if (resolvedOrderId) setDismissedRatingOrderIds((previous) => previous.includes(resolvedOrderId) ? previous : [...previous, resolvedOrderId]);
           setRatingPromptOrder(null);
-          void loadUserOrders();
         }}
       />
 
