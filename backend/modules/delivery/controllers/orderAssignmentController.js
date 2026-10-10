@@ -34,14 +34,14 @@ const validateAssignmentEligibility = async (req, res, orderId) => {
     const globalAdmin = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
     const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId || null;
     const branchId = req.user?.branchId || req.user?.app_metadata?.branchId || req.context?.branchId || null;
-    if (!globalAdmin && order.tenantId && String(order.tenantId) !== String(tenantId || '')) {
+    if (!globalAdmin && (!tenantId || !order.tenantId || String(order.tenantId) !== String(tenantId))) {
         res.status(403).json({
             success: false,
             error: { code: 'TENANT_SCOPE_VIOLATION', message: 'This order is outside your tenant scope.', retryable: false, requestId: req.requestId || null }
         });
         return null;
     }
-    if (!globalAdmin && branchId && order.branchId && String(order.branchId) !== String(branchId)) {
+    if (!globalAdmin && branchId && (!order.branchId || String(order.branchId) !== String(branchId))) {
         res.status(403).json({
             success: false,
             error: { code: 'BRANCH_SCOPE_VIOLATION', message: 'This order is outside your branch scope.', retryable: false, requestId: req.requestId || null }
