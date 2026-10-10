@@ -905,7 +905,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                           )
                         )}
 
-                        {col.id !== 'Pending_Review' && col.id !== 'Processing Order' && (order.prescriptionRequired || order.prescriptionUrl || order.prescriptionId) && (
+                        {col.id !== 'Pending_Review' && col.id !== 'Processing Order' && Boolean(order.prescriptionUrl || order.prescriptionId) && (
                           <div className="flex items-center justify-between text-[11px] bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
                             <span className="font-semibold text-slate-600">
                               📄 Prescription:{' '}
@@ -934,9 +934,14 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                               >
                                 {isProcessing ? 'Verifying...' : '🔬 Verify & Pack → Ready'}
                               </button>
-                              {order.prescriptionRequired && order.prescriptionVerification?.status !== 'MATCHED' && (
+                              {order.prescriptionRequired && !order.prescriptionUrl && !order.prescriptionId && (
                                 <p className="text-[10px] text-center text-amber-800 font-bold">
-                                  Prescription review must be MATCHED before dispatch
+                                  Upload a prescription before dispatch; no prescription review service is needed yet.
+                                </p>
+                              )}
+                              {order.prescriptionRequired && (order.prescriptionUrl || order.prescriptionId) && order.prescriptionVerification?.status !== 'MATCHED' && (
+                                <p className="text-[10px] text-center text-amber-800 font-bold">
+                                  Uploaded prescription must be verified before dispatch
                                 </p>
                               )}
                             </div>
