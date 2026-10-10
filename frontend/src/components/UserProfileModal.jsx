@@ -59,30 +59,30 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
   const disable = async () => { setDisablingMfa(true); try { await disableMfa(); addToast('Two-factor authentication disabled.','info'); } catch(e){addToast(e.message || 'Could not disable 2FA.','error');} finally{setDisablingMfa(false);} };
 
   return <>
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-3 sm:p-5" aria-modal="true" role="dialog">
-      <div className="pharma-modal-surface flex h-[680px] max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl">
-        <header className="relative bg-slate-950 px-5 pt-5 pb-4 text-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-3 sm:p-5" aria-modal="true" role="dialog">
+      <div className="pharma-modal-surface flex h-[80vh] max-h-[80vh] w-full min-w-[min(90vw,500px)] max-w-lg flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 text-slate-800 shadow-2xl">
+        <header className="relative bg-gradient-to-r from-blue-700 to-indigo-800 px-5 pt-5 pb-4 text-white rounded-t-[28px]">
           <button onClick={onClose} aria-label="Close profile" className="absolute right-4 top-4 h-8 w-8 rounded-full bg-white/10 text-white/80 hover:bg-white/20">×</button>
           <div className="flex items-center gap-3 pr-8">
             <div className="h-14 w-14 shrink-0 rounded-2xl bg-white/15 ring-1 ring-white/20 flex items-center justify-center text-xl font-black">{displayName.charAt(0).toUpperCase()}</div>
             <div className="min-w-0">
               <h2 className="truncate text-base font-black">{displayName}</h2>
-              <p className="truncate text-xs text-slate-300">{email}</p>
+              <p className="truncate text-xs text-blue-100">{email}</p>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <span className="rounded-full bg-blue-400/20 px-2 py-1 text-[9px] font-black uppercase text-blue-200">{role}</span>
-                {isSuperAdmin ? <span className="rounded-full bg-emerald-400/15 px-2 py-1 text-[9px] font-black text-emerald-300">FULL ACCESS</span> : !isSuperAdmin && selfPuid ? <span className="rounded-full bg-white/10 px-2 py-1 text-[9px] font-mono text-slate-300">PUID {selfPuid}</span> : null}
+                <span className="rounded-full bg-white/20 px-2 py-1 text-[9px] font-black uppercase text-white">{role}</span>
+                {isSuperAdmin ? <span className="rounded-full bg-emerald-400/20 px-2 py-1 text-[9px] font-black text-emerald-200">FULL ACCESS</span> : !isSuperAdmin && selfPuid ? <span className="rounded-full bg-white/15 px-2 py-1 text-[9px] font-mono text-blue-100">PUID {selfPuid}</span> : null}
               </div>
             </div>
           </div>
         </header>
 
-        <div className="grid grid-cols-3 gap-1 border-b border-slate-200 bg-slate-50 p-1.5">
+        <div className="grid grid-cols-3 gap-1 border-b border-slate-200 bg-slate-100/70 p-1.5">
           <TabButton active={tab==='overview'} onClick={()=>setTab('overview')}>Overview</TabButton>
           <TabButton active={tab==='personal'} onClick={()=>setTab('personal')}>Personal</TabButton>
           <TabButton active={tab==='security'} onClick={()=>setTab('security')}>Security</TabButton>
         </div>
 
-        <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+        <main className="content-area min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
           {tab==='overview' && <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-2xl bg-slate-50 p-3"><p className="text-[10px] font-bold text-slate-400">Email</p><p className="mt-1 truncate text-xs font-black text-slate-800" title={email}>{email}</p><p className={`mt-1 text-[9px] font-bold ${emailVerified?'text-emerald-600':'text-amber-600'}`}>{emailVerified?'✓ Verified':'Not verified'}</p></div>

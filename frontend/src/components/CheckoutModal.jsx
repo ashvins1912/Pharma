@@ -205,7 +205,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/40 backdrop-blur-[2px] animate-fade-in">
       <div role="dialog" aria-modal="true" aria-labelledby="checkout-modal-title" className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col relative overflow-hidden">
         
         {/* Sticky Header */}

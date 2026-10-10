@@ -22,11 +22,52 @@ html {
 body {
   margin: 0;
   overflow-anchor: none;
+  overflow-y: auto !important;
+  height: auto !important;
   padding: 0;
   min-width: 320px;
   background-color: #f8fafc;
   color: #1e293b;
   line-height: 1.5;
+}
+
+/* Full-Width Main Container Optimization */
+main.max-w-7xl,
+main {
+  max-width: none !important;
+}
+
+/* Stabilized & Theme-Consistent Modal Surface */
+.pharma-modal-surface {
+  background-color: #f8fafc !important; /* Inherited App BG */
+  color: #1e293b !important; /* Inherited App Text */
+  height: 80vh !important; /* Fixed length for stability */
+  max-height: 80vh !important;
+  width: auto !important;
+  min-width: min(90vw, 500px);
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Internal Scrolling for Modal Data */
+.pharma-modal-surface > .content-area,
+.pharma-modal-surface main,
+.pharma-modal-surface .modal-content,
+.pharma-modal-surface > div:not(header):not(.modal-header):not(.tab-header) {
+  overflow-y: auto !important;
+  flex: 1 !important;
+}
+
+/* Softened Theme-Consistent Modal Overlay */
+.fixed.inset-0.z-50,
+.fixed.inset-0.z-\[9999\],
+.fixed.inset-0.z-\[70\],
+.fixed.inset-0.z-\[60\],
+.modal-overlay {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(2px) !important;
+  -webkit-backdrop-filter: blur(2px) !important;
+  align-items: center !important;
 }
 
 #root {

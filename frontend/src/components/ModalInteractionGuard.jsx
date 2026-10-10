@@ -28,25 +28,21 @@ export default function ModalInteractionGuard() {
       const modal = findActiveModal();
       if (modal && !locked) {
         locked = true;
-        previousOverflow = document.body.style.overflow;
-        previousPaddingRight = document.body.style.paddingRight;
-        const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-        document.body.style.overflow = 'hidden';
-        if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
         document.body.classList.add('modal-open');
       } else if (!modal && locked) {
         locked = false;
-        document.body.style.overflow = previousOverflow;
-        document.body.style.paddingRight = previousPaddingRight;
         document.body.classList.remove('modal-open');
       }
     };
 
     const blockBackgroundInteraction = (event) => {
+      // Focus trapping/esc handling for modals without preventing scrolling
       const modal = findActiveModal();
       if (!modal || modal.contains(event.target)) return;
-      event.preventDefault();
-      event.stopPropagation();
+      if (['pointerdown', 'mousedown'].includes(event.type)) {
+        // Prevent background clicks outside modal overlay
+        event.stopPropagation();
+      }
     };
 
     const observer = new MutationObserver(updateLock);
@@ -57,7 +53,7 @@ export default function ModalInteractionGuard() {
       attributeFilter: ['class', 'style', 'aria-hidden']
     });
 
-    ['wheel', 'touchmove', 'pointerdown', 'mousedown', 'keydown'].forEach((name) => {
+    ['pointerdown', 'mousedown'].forEach((name) => {
       document.addEventListener(name, blockBackgroundInteraction, true);
     });
 
@@ -65,12 +61,10 @@ export default function ModalInteractionGuard() {
 
     return () => {
       observer.disconnect();
-      ['wheel', 'touchmove', 'pointerdown', 'mousedown', 'keydown'].forEach((name) => {
+      ['pointerdown', 'mousedown'].forEach((name) => {
         document.removeEventListener(name, blockBackgroundInteraction, true);
       });
       if (locked) {
-        document.body.style.overflow = previousOverflow;
-        document.body.style.paddingRight = previousPaddingRight;
         document.body.classList.remove('modal-open');
       }
     };

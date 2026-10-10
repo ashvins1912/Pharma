@@ -312,8 +312,8 @@ function MainApp() {
         }}
       />
 
-      {/* Main Content Area */}
-      <main className="min-w-0 flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Main Content Area - Full width layout */}
+      <main className="min-w-0 flex-1 w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
         {/* TAB 1: MEDICINE STORE & CATALOG */}
         {activeTab === 'store' && (

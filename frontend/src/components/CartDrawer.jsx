@@ -26,7 +26,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
       {/* Backdrop */}
       <div
         onClick={onClose}
-        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+        className="absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity"
       />
 
       <div className="fixed inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10">

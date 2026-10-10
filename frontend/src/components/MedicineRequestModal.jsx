@@ -100,7 +100,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-[2px] animate-fade-in overflow-y-auto">
       <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-lg w-full p-4 sm:p-6 md:p-8 my-6 relative max-h-[92vh] overflow-y-auto">
         
         {/* Header */}

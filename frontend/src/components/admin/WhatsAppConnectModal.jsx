@@ -66,15 +66,15 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in" aria-modal="true" role="dialog">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-[2px] animate-fade-in" aria-modal="true" role="dialog">
       <div
         className="fixed inset-0"
         onClick={handleClose}
       />
 
-      <div className="pharma-modal-surface relative flex h-[620px] max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl z-10">
+      <div className="pharma-modal-surface relative flex h-[80vh] max-h-[80vh] w-full min-w-[min(90vw,500px)] max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 text-slate-800 shadow-2xl z-10">
         {/* Modal Header */}
-        <div className="bg-slate-950 p-4 sm:p-5 text-white flex items-center justify-between">
+        <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-4 sm:p-5 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-xl">
               📲
@@ -85,7 +85,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
                   WhatsApp Dispatch Gateway
                 </h3>
                 {whatsappStatus.isConnected ? (
-                  <span className="bg-emerald-400/15 text-emerald-300 border border-emerald-300/30 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  <span className="bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
                     ● Connected
                   </span>
                 ) : (
@@ -94,7 +94,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-300 font-medium mt-0.5">
+              <p className="text-[11px] text-blue-100 font-medium mt-0.5">
                 Real-time customer delivery updates, rider tracking & OTP dispatch
               </p>
             </div>
@@ -110,7 +110,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
         </div>
 
         {/* Modal Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
+        <div className="content-area flex-1 p-4 sm:p-6 overflow-y-auto space-y-4">
           
           {whatsappStatus.isConnected ? (
             /* Connected View */
