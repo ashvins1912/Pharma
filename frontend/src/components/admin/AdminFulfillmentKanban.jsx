@@ -29,6 +29,8 @@ const getDistanceToPickup = (rider, order) => {
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
+const getCustomerMobile = (order) => order?.customerMobile || order?.addressDetails?.mobile || order?.addressDetails?.phone || order?.customerPhone || '';
+
 const formatDistance = (distanceInKm) => {
   if (distanceInKm == null) return 'Distance unavailable';
   if (distanceInKm < 1) return `${Math.round(distanceInKm * 1000)} m to pickup`;
@@ -644,7 +646,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                             <div id={`delivered-order-${order._id}`} className="space-y-2 border-t border-slate-100 p-3 text-xs text-slate-600">
                               <p><span className="font-bold">Order ID:</span> {order._id}</p>
                               <p><span className="font-bold">Customer:</span> {customerName}</p>
-                              <p><span className="font-bold">Mobile:</span> {order.customerMobile || 'No phone'}</p>
+                              <p><span className="font-bold">Mobile:</span> {getCustomerMobile(order) || 'No phone'}</p>
                               {order.deliveryAddress && <p><span className="font-bold">Address:</span> {order.deliveryAddress}</p>}
                               <p><span className="font-bold">Total:</span> ₹{order.finalTotal} COD</p>
                               {order.outForDeliveryAt && <p><span className="font-bold">Out for delivery:</span> {new Date(order.outForDeliveryAt).toLocaleString()}</p>}
@@ -682,7 +684,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                         {/* Customer & Address */}
                         <div className="min-w-0 text-xs text-slate-600 space-y-0.5 border-t border-slate-100 pt-2">
                           <p className="font-bold text-slate-800 break-words">{order.customerName || 'Customer'}</p>
-                          <p className="text-slate-500 break-words">{order.customerMobile || 'No phone'}</p>
+                          <p className="text-slate-500 break-words">{getCustomerMobile(order) || 'No phone'}</p>
                           <p className="text-slate-600 mt-1 break-words">📍 {order.deliveryAddress}</p>
                         </div>
 
@@ -1348,7 +1350,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[10px]">Phone</span>
-                      <span className="font-bold text-slate-900">{prescriptionModalOrder.customerMobile || prescriptionModalOrder.addressDetails?.phone || 'No phone'}</span>
+                      <span className="font-bold text-slate-900">{getCustomerMobile(prescriptionModalOrder) || 'No phone'}</span>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[10px]">Total Amount</span>
