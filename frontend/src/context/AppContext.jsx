@@ -106,6 +106,10 @@ export function AppProvider({ children }) {
   });
   const [whatsappModalOpen, setWhatsappModalOpen] = useState(false);
   const [whatsappWarningActive, setWhatsappWarningActive] = useState(false);
+  const whatsappPromiseRef = useRef(null);
+  const whatsappLastFetchedRef = useRef(0);
+  const whatsappStatusRef = useRef(whatsappStatus);
+  whatsappStatusRef.current = whatsappStatus;
 
   useEffect(() => {
     if (user && hasPermission('whatsapp.read')) return;
@@ -121,24 +125,79 @@ export function AppProvider({ children }) {
     });
   }, [user?.id, hasPermission]);
 
-  // Load WhatsApp status
-  const loadWhatsAppStatus = useCallback(async () => {
+  // Load WhatsApp status with deduplication, throttling, and preference checks
+  const loadWhatsAppStatus = useCallback(async ({ force = false } = {}) => {
     if (!isFullyAuthenticated || !hasPermission('whatsapp.read')) return null;
-    try {
-      const res = await apiClient.get('/api/admin/whatsapp/status', { timeout: 45000 });
-      if (res.data) {
-        setWhatsappStatus(res.data);
-        if (res.data.isConnected) {
-          setWhatsappWarningActive(false);
-          setNotifications(prev => prev.filter(n => !n.id.startsWith('notif-wa')));
-        }
-        return res.data;
+
+    // Respect user/admin preference unless explicitly forced
+    if (!force && typeof window !== 'undefined') {
+      const pref = localStorage.getItem('whatsapp_status_preference');
+      if (pref === 'not_required') {
+        return whatsappStatusRef.current;
       }
-    } catch (err) {
-      console.warn("WhatsApp status fetch skipped:", err?.message);
+      if (pref === 'later') {
+        const timeStr = localStorage.getItem('whatsapp_status_preference_time');
+        const time = Number(timeStr || 0);
+        // Suppress calls for 24 hours when 'later' is selected
+        if (Date.now() - time < 24 * 60 * 60 * 1000) {
+          return whatsappStatusRef.current;
+        }
+      }
     }
-    return null;
+
+    // Throttle calls: if already fetched recently (within 45s) and not forced, return cached status
+    const now = Date.now();
+    if (!force && now - whatsappLastFetchedRef.current < 45000 && whatsappStatusRef.current.phone !== undefined) {
+      return whatsappStatusRef.current;
+    }
+
+    // Reuse existing in-flight promise to avoid duplicate concurrent calls
+    if (whatsappPromiseRef.current) {
+      return whatsappPromiseRef.current;
+    }
+
+    whatsappPromiseRef.current = (async () => {
+      try {
+        const res = await apiClient.get('/api/admin/whatsapp/status', { timeout: 30000 });
+        if (res.data) {
+          setWhatsappStatus(res.data);
+          whatsappLastFetchedRef.current = Date.now();
+          if (res.data.isConnected) {
+            setWhatsappWarningActive(false);
+            setNotifications(prev => prev.filter(n => !n.id.startsWith('notif-wa')));
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('whatsapp_status_preference', 'connected');
+            }
+          }
+          return res.data;
+        }
+      } catch (err) {
+        console.warn("WhatsApp status fetch skipped:", err?.message);
+      } finally {
+        whatsappPromiseRef.current = null;
+      }
+      return null;
+    })();
+
+    return whatsappPromiseRef.current;
   }, [isFullyAuthenticated, hasPermission]);
+
+  const dismissWhatsAppPrompt = useCallback((mode = 'later') => {
+    if (typeof window !== 'undefined') {
+      if (mode === 'not_required') {
+        localStorage.setItem('whatsapp_status_preference', 'not_required');
+      } else {
+        localStorage.setItem('whatsapp_status_preference', 'later');
+        localStorage.setItem('whatsapp_status_preference_time', String(Date.now()));
+      }
+    }
+    setWhatsappModalOpen(false);
+    setWhatsappWarningActive(false);
+  }, []);
+
+  const checkWhatsAppBeforeNotification = useCallback(async () => {
+    return await loadWhatsAppStatus({ force: true });
+  }, [loadWhatsAppStatus]);
 
   const generateWhatsAppQR = async () => {
     if (!hasPermission('whatsapp.manage')) return null;
@@ -160,6 +219,9 @@ export function AppProvider({ children }) {
       const res = await apiClient.post('/api/admin/whatsapp/disconnect');
       if (res.data?.status) {
         setWhatsappStatus(res.data.status);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('whatsapp_status_preference');
+        }
         return res.data.status;
       }
     } catch (err) {
@@ -805,7 +867,9 @@ export function AppProvider({ children }) {
         loadWhatsAppStatus,
         generateWhatsAppQR,
         disconnectWhatsApp,
-        triggerWhatsAppWarningNotification
+        triggerWhatsAppWarningNotification,
+        dismissWhatsAppPrompt,
+        checkWhatsAppBeforeNotification
       }}
     >
       {children}

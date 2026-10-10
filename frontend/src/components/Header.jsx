@@ -16,7 +16,7 @@ export default function Header({
     user, isAdmin, isSuperAdmin, isTenantAdmin, canAccessOperations,
     hasPermission, hasAnyPermission, role, logout
   } = useAuth();
-  const { cart, whatsappStatus, setWhatsappModalOpen, medicineRequests, openRequestModal } = useApp();
+  const { cart, whatsappStatus, setWhatsappModalOpen, medicineRequests } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
@@ -38,32 +38,33 @@ export default function Header({
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 transition">
-      <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 sm:h-20 gap-1 sm:gap-4">
+      <div className="w-full px-3.5 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 sm:h-20 gap-2 sm:gap-4">
           
           {/* Left: Logo & Pharmacy Brand */}
           <div
             onClick={() => setActiveTab('store')}
-            className="flex items-center gap-1.5 sm:gap-3 cursor-pointer select-none shrink min-w-0"
+            className="flex items-center gap-2 sm:gap-3 cursor-pointer select-none shrink-0 min-w-0"
           >
-            <div className="w-8 h-8 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-base sm:text-xl shadow-md shadow-blue-500/20 shrink-0">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-base sm:text-xl shadow-md shadow-blue-500/20 shrink-0">
               ⚕️
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1 sm:gap-1.5">
-                <span className="text-sm sm:text-lg font-black text-slate-900 tracking-tight leading-none truncate block">
+            <div className="min-w-0 flex flex-col justify-center">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="text-sm sm:text-lg font-black text-slate-900 tracking-tight leading-tight truncate block">
                   Ashvin Pharmacy
                 </span>
                 {canViewOperations && (
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <span className="bg-blue-100 text-blue-700 text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider">
                       {isSuperAdmin ? 'Super Admin' : (isTenantAdmin ? 'Tenant Admin' : (role === 'admin' ? 'Admin' : 'Pharmacy'))}
                     </span>
                     {canReadWhatsApp && (canManageWhatsApp ? (
                       whatsappStatus.isConnected ? (
                         <button
+                          type="button"
                           onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
-                          className="hidden sm:inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer"
+                          className="hidden lg:inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer"
                           title="WhatsApp status and controls"
                         >
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -71,82 +72,91 @@ export default function Header({
                         </button>
                       ) : (
                         <button
+                          type="button"
                           onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
-                          className="hidden sm:inline-flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer animate-pulse"
-                          title="WhatsApp offline; manage connection"
+                          className="hidden lg:inline-flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer"
+                          title="WhatsApp offline; click to pair"
                         >
                           <span>⚠️</span>
                           <span>WA Offline</span>
                         </button>
                       )
                     ) : (
-                      <span className="hidden sm:inline-flex items-center gap-1 text-[9px] font-black uppercase text-slate-500">
+                      <span className="hidden lg:inline-flex items-center gap-1 text-[9px] font-black uppercase text-slate-500">
                         {whatsappStatus.isConnected ? 'WA Live' : 'WA Offline'}
                       </span>
                     ))}
                   </div>
                 )}
               </div>
-              <p className="hidden md:block text-[11px] text-slate-400 font-medium tracking-tight mt-0.5">
+              <p className="hidden md:block text-[11px] text-slate-400 font-medium tracking-tight leading-normal mt-0.5">
                 Your Trusted Pharmacy for Everyday Healthcare
               </p>
             </div>
           </div>
 
-          {/* Center: Desktop Navigation - Orders and Addresses only shown if user is signed in */}
-          <nav className="hidden md:flex items-center gap-1 lg:gap-2">
+          {/* Center: Desktop Navigation */}
+          <nav className="hidden md:flex items-center gap-1.5 lg:gap-2">
             <button
+              type="button"
               onClick={() => setActiveTab('store')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+              className={`h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'store'
-                  ? 'bg-blue-50 text-blue-700 font-extrabold'
+                  ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
-              💊 Store
+              <span>💊</span>
+              <span>Store</span>
             </button>
 
             {(canViewCustomerOrders || canViewCustomerRequests || canViewAddresses) && (
               <>
                 {canViewCustomerOrders && (
-                <button
+                  <button
+                    type="button"
                     onClick={() => setActiveTab('orders')}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    className={`h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                       activeTab === 'orders'
-                        ? 'bg-blue-50 text-blue-700 font-extrabold'
+                        ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                     }`}
                   >
-                    📦 Orders
+                    <span>📦</span>
+                    <span>Orders</span>
                   </button>
                 )}
                 {canViewCustomerRequests && (
                   <button
+                    type="button"
                     onClick={() => setActiveTab('requests')}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer relative ${
+                    className={`h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 relative ${
                       activeTab === 'requests'
-                        ? 'bg-blue-50 text-blue-700 font-extrabold'
+                        ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                     }`}
                   >
-                    📋 Requests
+                    <span>📋</span>
+                    <span>Requests</span>
                     {proposalsWaitingCount > 0 && (
-                      <span className="ml-1.5 bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
+                      <span className="ml-1 bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
                         {proposalsWaitingCount}
                       </span>
                     )}
                   </button>
                 )}
                 {canViewAddresses && (
-                <button
+                  <button
+                    type="button"
                     onClick={() => setActiveTab('addresses')}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    className={`h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                       activeTab === 'addresses'
-                        ? 'bg-blue-50 text-blue-700 font-extrabold'
+                        ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                     }`}
                   >
-                    🏠 Addresses
+                    <span>🏠</span>
+                    <span>Addresses</span>
                   </button>
                 )}
               </>
@@ -154,32 +164,37 @@ export default function Header({
 
             {canViewOperations && (
               <button
+                type="button"
                 onClick={() => setActiveTab('admin')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                className={`h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                   activeTab === 'admin'
                     ? 'bg-blue-600 text-white shadow-sm font-extrabold'
                     : 'text-blue-700 bg-blue-50 hover:bg-blue-100'
                 }`}
               >
-                ⚙️ Admin Operations
+                <span>⚙️</span>
+                <span>Admin Operations</span>
               </button>
             )}
           </nav>
 
-          {/* Right: Actions Bar (Notifications, Cart, User Profile, Mobile Menu) */}
-          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {/* Right: Actions Bar */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             
-            {/* Customer actions render only when the effective permissions allow them. */}
+            {/* Customer notifications */}
             {user && canViewCustomerWorkspace && hasPermission('profile.read') && (
               <NotificationBell
                 onOpenOrders={canViewCustomerOrders ? () => setActiveTab('orders') : null}
                 onRequireAuth={onOpenAuth}
               />
             )}
+
+            {/* Shopping Cart Button */}
             {user && canViewCustomerWorkspace && hasPermission('orders.create') && (
               <button
+                type="button"
                 onClick={onOpenCart}
-                className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition cursor-pointer flex items-center justify-center flex-shrink-0"
+                className="relative h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition cursor-pointer flex items-center justify-center shrink-0"
                 aria-label="View Shopping Cart"
               >
                 <svg className="w-5 h-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -193,7 +208,7 @@ export default function Header({
               </button>
             )}
 
-            {/* Admin notification bell */}
+            {/* Admin Alerts Bell */}
             {user && hasAnyPermission(['inventory.read', 'whatsapp.read']) && (
               <AdminAlertBell
                 onOpenAlerts={onOpenAdminAlerts}
@@ -202,30 +217,33 @@ export default function Header({
                 canManageWhatsApp={hasPermission('whatsapp.manage')}
               />
             )}
+
             {/* User Profile / Auth Button */}
             {user ? (
               hasPermission('profile.read') ? (
                 <button
+                  type="button"
                   onClick={onOpenProfile}
-                  className="w-9 h-9 sm:w-auto p-0 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition flex items-center justify-center gap-1.5 flex-shrink-0"
+                  className="h-9 sm:h-10 px-2 sm:px-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition flex items-center justify-center gap-2 shrink-0"
                   aria-label="User Account Profile"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-600 to-blue-600 text-white font-black text-xs flex items-center justify-center uppercase shadow-sm">
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center uppercase shadow-xs shrink-0">
                     {user.user_metadata?.name ? user.user_metadata.name.charAt(0) : user.email?.charAt(0) || 'U'}
                   </div>
-                  <span className="hidden sm:inline text-xs font-bold text-slate-700 max-w-[85px] truncate">
+                  <span className="hidden sm:inline text-xs font-bold text-slate-700 max-w-[90px] truncate leading-none">
                     {user.user_metadata?.name || user.email?.split('@')[0]}
                   </span>
                 </button>
               ) : (
-                <span className="hidden sm:inline max-w-[120px] truncate text-xs font-medium text-slate-500" title="Profile details are restricted by your current permissions">
+                <span className="hidden sm:inline max-w-[120px] truncate text-xs font-medium text-slate-500 leading-none" title="Profile details are restricted by your current permissions">
                   {user.email}
                 </span>
               )
             ) : (
               <button
+                type="button"
                 onClick={onOpenAuth}
-                className="w-auto px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm cursor-pointer transition flex items-center justify-center gap-1.5 flex-shrink-0"
+                className="h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm cursor-pointer transition flex items-center justify-center gap-1.5 shrink-0"
                 aria-label="Sign In"
               >
                 <span className="text-xs">👤</span>
@@ -233,11 +251,12 @@ export default function Header({
               </button>
             )}
 
-            {/* Mobile Navigation Sandwich / Hamburger Menu Toggle (Only shown when user is signed in) */}
+            {/* Mobile Navigation Sandwich / Hamburger Menu Toggle */}
             {user && (
               <button
+                type="button"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="md:hidden w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center flex-shrink-0"
+                className="md:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center shrink-0"
                 aria-label="Toggle Navigation Menu"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -257,98 +276,75 @@ export default function Header({
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-slate-100 py-3 space-y-1 animate-fade-in">
             <button
+              type="button"
               onClick={() => { setActiveTab('store'); setMobileMenuOpen(false); }}
-              className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
-                activeTab === 'store' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-700 hover:bg-slate-50'
+              className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                activeTab === 'store' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              <span>💊 Medicine Store</span>
-              <span className="text-slate-400">→</span>
+              <span>💊</span> Store
             </button>
-
             {canViewCustomerOrders && (
-            <button
+              <button
+                type="button"
                 onClick={() => { setActiveTab('orders'); setMobileMenuOpen(false); }}
-                className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
-                  activeTab === 'orders' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-700 hover:bg-slate-50'
+                className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                  activeTab === 'orders' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <span>📦 Order History & Tracking</span>
-                <span className="text-slate-400">→</span>
+                <span>📦</span> Orders
               </button>
             )}
-
             {canViewCustomerRequests && (
               <button
+                type="button"
                 onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
-                className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
-                  activeTab === 'requests' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-700 hover:bg-slate-50'
+                className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
+                  activeTab === 'requests' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <span>📋 My Medicine Requests</span>
-                  {proposalsWaitingCount > 0 && (
-                    <span className="bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full">
-                      {proposalsWaitingCount} new
-                    </span>
-                  )}
-                </div>
-                <span className="text-slate-400">→</span>
+                <span className="flex items-center gap-2"><span>📋</span> Requests</span>
+                {proposalsWaitingCount > 0 && (
+                  <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                    {proposalsWaitingCount} new
+                  </span>
+                )}
               </button>
             )}
-
             {canViewAddresses && (
-            <button
+              <button
+                type="button"
                 onClick={() => { setActiveTab('addresses'); setMobileMenuOpen(false); }}
-                className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
-                  activeTab === 'addresses' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-700 hover:bg-slate-50'
+                className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                  activeTab === 'addresses' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <span>🏠 Multi-Address Directory</span>
-                <span className="text-slate-400">→</span>
+                <span>🏠</span> Addresses
               </button>
             )}
-
             {canViewOperations && (
               <button
+                type="button"
                 onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
-                className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
-                  activeTab === 'admin' ? 'bg-blue-600 text-white font-extrabold' : 'text-blue-700 bg-blue-50 hover:bg-blue-100'
+                className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                  activeTab === 'admin' ? 'bg-blue-600 text-white font-extrabold' : 'text-blue-700 bg-blue-50'
                 }`}
               >
-                <span>⚙️ {isAdmin ? 'Admin' : 'Pharmacy'} Operations Dashboard</span>
-                <span>→</span>
+                <span>⚙️</span> Admin Operations
               </button>
             )}
-
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between px-2 text-xs">
-              {user ? (
-                <>
-                  <span className="text-slate-500 truncate max-w-[180px] font-medium">
-                    👤 {user.email}
-                  </span>
-                  <button
-                    onClick={handleSignOut}
-                    disabled={signingOut}
-                    aria-busy={signingOut}
-                    className="text-rose-600 font-bold hover:underline disabled:opacity-60 inline-flex items-center gap-2"
-                  >
-                    {signingOut ? (
-                      <>
-                        <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" aria-hidden="true"></span>
-                        <span>Signing out...</span>
-                      </>
-                    ) : 'Log Out'}
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => { onOpenAuth(); setMobileMenuOpen(false); }}
-                  className="w-full bg-blue-600 text-white font-bold py-2 rounded-xl text-center"
-                >
-                  Sign In / Create Account
-                </button>
-              )}
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between px-2">
+              <span className="text-[11px] text-slate-500 font-medium truncate max-w-[180px]">
+                Signed in as {user?.email}
+              </span>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                disabled={signingOut}
+                className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg transition"
+              >
+                {signingOut ? 'Signing out...' : 'Sign Out'}
+              </button>
             </div>
           </div>
         )}

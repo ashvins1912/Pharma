@@ -223,12 +223,26 @@ function MainApp() {
   useEffect(() => {
     let cancelled = false;
     if (isFullyAuthenticated && hasPermission('whatsapp.read')) {
-      loadWhatsAppStatus().then((status) => {
-        if (!cancelled && status && !status.isConnected && hasPermission('whatsapp.manage') && !adminCheckedRef.current) {
-          adminCheckedRef.current = true;
-          setWhatsappModalOpen(true);
+      // Check if user/admin selected later or not required
+      const pref = typeof window !== 'undefined' ? localStorage.getItem('whatsapp_status_preference') : null;
+      if (pref === 'not_required') {
+        return;
+      }
+      if (pref === 'later') {
+        const time = Number(localStorage.getItem('whatsapp_status_preference_time') || 0);
+        if (Date.now() - time < 24 * 60 * 60 * 1000) {
+          return;
         }
-      });
+      }
+
+      if (!adminCheckedRef.current) {
+        adminCheckedRef.current = true;
+        loadWhatsAppStatus().then((status) => {
+          if (!cancelled && status && !status.isConnected && hasPermission('whatsapp.manage')) {
+            setWhatsappModalOpen(true);
+          }
+        });
+      }
     } else {
       adminCheckedRef.current = false;
       setWhatsappModalOpen(false);
