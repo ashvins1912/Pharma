@@ -58,13 +58,6 @@ router.post('/signup', authLimiter, async (req, res) => {
         validationDetails.push({ field: 'confirmPassword', code: 'PASSWORD_MISMATCH', message: 'Passwords do not match.' });
     }
 
-
-    if (!confirmPassword) {
-        validationDetails.push({ field: 'confirmPassword', code: 'REQUIRED', message: 'Please confirm your password.' });
-    } else if (password !== confirmPassword) {
-        validationDetails.push({ field: 'confirmPassword', code: 'PASSWORD_MISMATCH', message: 'Passwords do not match.' });
-    }
-
     if (!firstName) {
         validationDetails.push({ field: 'firstName', code: 'REQUIRED', message: 'First name is required.' });
     }
@@ -109,7 +102,8 @@ router.post('/signup', authLimiter, async (req, res) => {
             mobile,
             dateOfBirth,
             gender,
-            password
+            password,
+            confirmPassword
         });
 
         return sendSuccess(res, {
