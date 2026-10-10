@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { createMedicineRequest } from '../../api/medicineRequestService';
+import apiClient from '../../api/apiClient';
 import AddressManager from '../AddressManager';
 
 // --- Client-Side Binary Signature (Magic Number) Validator ---
