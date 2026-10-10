@@ -5,7 +5,9 @@
     "frontend",
     "api-gateway",
     "backend",
-    "services/*"
+    "services/*",
+    "apps/*",
+    "packages/*"
   ],
   "version": "1.0.0",
   "type": "module",

@@ -58,6 +58,15 @@ export const connectDB = async ({ silent = false } = {}) => {
                 PaymentReminder.init(),
                 PaymentActionNonce.init()
             ]);
+            try {
+                const customersCol = mongoose.connection.db.collection('customers');
+                const indexes = await customersCol.indexes();
+                const badIndex = indexes.find(i => i.name === 'supabaseId_1' || (i.key && i.key.supabaseId !== undefined));
+                if (badIndex && !badIndex.sparse) {
+                    await customersCol.dropIndex(badIndex.name);
+                    console.log('✅ Dropped legacy non-sparse supabaseId index from customers.');
+                }
+            } catch {}
             isConnected = true;
             console.log("✅ Database connectivity successfully synchronized into MongoDB.");
             return true;
