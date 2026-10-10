@@ -403,7 +403,7 @@ const nextMedicineRequestNumber = async () => {
     const counters = mongoose.connection.db.collection('applicationCounters');
     const counterId = 'medicineRequest';
     const [latest] = await MedicineRequest.aggregate([
-        { $match: { requestNumber: /^MR-\\d+$/ } },
+        { $match: { requestNumber: /^MR-\d+$/ } },
         {
             $project: {
                 sequence: {
