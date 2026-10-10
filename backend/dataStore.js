@@ -402,38 +402,38 @@ const nextMedicineRequestNumber = async () => {
 
     const counters = mongoose.connection.db.collection('applicationCounters');
     const counterId = 'medicineRequest';
-    let counter = await counters.findOne({ _id: counterId });
-    if (!counter) {
-        const [latest] = await MedicineRequest.aggregate([
-            { $match: { requestNumber: /^MR-\d+$/ } },
-            {
-                $project: {
-                    sequence: {
-                        $convert: {
-                            input: { $arrayElemAt: [{ $split: ['$requestNumber', '-'] }, 1] },
-                            to: 'long',
-                            onError: 0,
-                            onNull: 0
-                        }
+    const [latest] = await MedicineRequest.aggregate([
+        { $match: { requestNumber: /^MR-\\d+$/ } },
+        {
+            $project: {
+                sequence: {
+                    $convert: {
+                        input: { $arrayElemAt: [{ $split: ['$requestNumber', '-'] }, 1] },
+                        to: 'long',
+                        onError: 0,
+                        onNull: 0
                     }
                 }
-            },
-            { $group: { _id: null, sequence: { $max: '$sequence' } } }
-        ]).exec();
-        const initialSequence = Math.max(10024, Number(latest?.sequence) || 0);
-        try {
-            await counters.updateOne(
-                { _id: counterId },
-                { $max: { sequence: initialSequence } },
-                { upsert: true }
-            );
-        } catch (error) {
-            if (error.code !== 11000) throw error;
-            await counters.updateOne(
-                { _id: counterId },
-                { $max: { sequence: initialSequence } }
-            );
-        }
+            }
+        },
+        { $group: { _id: null, sequence: { $max: '$sequence' } } }
+    ]).exec();
+    const highestExistingSequence = Math.max(10024, Number(latest?.sequence) || 0);
+
+    // Repair a stale counter before incrementing it. This also handles records
+    // created before the applicationCounters document was introduced.
+    try {
+        await counters.updateOne(
+            { _id: counterId },
+            { $max: { sequence: highestExistingSequence } },
+            { upsert: true }
+        );
+    } catch (error) {
+        if (error.code !== 11000) throw error;
+        await counters.updateOne(
+            { _id: counterId },
+            { $max: { sequence: highestExistingSequence } }
+        );
     }
 
     const result = await counters.findOneAndUpdate(
@@ -441,7 +441,10 @@ const nextMedicineRequestNumber = async () => {
         { $inc: { sequence: 1 } },
         { returnDocument: 'after' }
     );
-    counter = result?.value || result;
+    const counter = result?.value || result;
+    if (!Number.isSafeInteger(Number(counter?.sequence))) {
+        throw new Error('Unable to allocate a medicine request number.');
+    }
     return `MR-${counter.sequence}`;
 };
 
