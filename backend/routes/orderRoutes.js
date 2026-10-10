@@ -139,16 +139,35 @@ router.post('/', authenticateUser, async (req, res) => {
         }
         let deliveryAddress = typeof req.body.deliveryAddress === 'string' ? req.body.deliveryAddress.trim() : '';
         let coordinates = req.body.coordinates;
-        if (!deliveryAddress && req.body.addressId) {
-            const addr = await dataStore.getUserAddress(req.user.sub, req.body.addressId);
-            if (addr) {
-                deliveryAddress = addr.addressLine || `${addr.addressLine1}, ${addr.city} - ${addr.pincode}`;
-                coordinates = coordinates || addr.coordinates;
+        let addressSnapshot = null;
+        if (req.body.addressId) {
+            // Resolve the saved address only for the authenticated owner; use its
+            // contact details as the trusted delivery snapshot.
+            addressSnapshot = await dataStore.getUserAddress(req.user.sub, req.body.addressId);
+            if (addressSnapshot) {
+                deliveryAddress = deliveryAddress || addressSnapshot.addressLine
+                    || [addressSnapshot.addressLine1, addressSnapshot.city && `${addressSnapshot.city} - ${addressSnapshot.pincode || ''}`].filter(Boolean).join(', ');
+                coordinates = coordinates || addressSnapshot.coordinates;
+            } else if (!deliveryAddress) {
+                return res.status(400).json({ error: 'The selected delivery address was not found.' });
             }
         }
         if (!deliveryAddress) {
             return res.status(400).json({ error: 'A deliveryAddress is required for an order.' });
         }
+        const addressDetails = {
+            ...(addressSnapshot || {}),
+            ...(req.body.addressDetails || {}),
+            mobile: addressSnapshot?.mobile || req.body.addressDetails?.mobile || req.body.addressDetails?.phone || ''
+        };
+        const customerMobile = String(
+            addressSnapshot?.mobile
+            || req.body.mobile
+            || req.body.addressDetails?.mobile
+            || req.body.addressDetails?.phone
+            || req.user.user_metadata?.mobile
+            || ''
+        ).trim();
         const order = await Order.create({
             customerId: req.user.sub,
             userId: req.user.sub,
@@ -157,11 +176,11 @@ router.post('/', authenticateUser, async (req, res) => {
             totalAmount: amount,
             finalTotal: amount,
             deliveryAddress,
-            addressDetails: req.body.addressDetails || {},
+            addressDetails,
             coordinates,
             location: req.body.location,
-            customerName: req.user.user_metadata?.name || req.user.email || 'Customer',
-            customerMobile: req.user.user_metadata?.mobile || '',
+            customerName: addressSnapshot?.fullName || req.user.user_metadata?.name || req.user.email || 'Customer',
+            customerMobile,
             paymentMethod: req.body.paymentMethod || 'Cash on Delivery (COD)',
             status: 'pending',
             orderStatus: 'Pending_Review'
