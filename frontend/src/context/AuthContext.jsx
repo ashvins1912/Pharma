@@ -27,6 +27,8 @@ export function AuthProvider({ children }) {
   const [aal, setAal] = useState('aal1'); // 'aal1' (Single Factor) | 'aal2' (MFA Verified)
   const logoutInProgress = useRef(false);
   const googleExchangePromiseRef = useRef(null);
+  const googleExchangeCompletedTokenRef = useRef(null);
+  const googleExchangeResultRef = useRef(null);
   const googleSignInInProgressRef = useRef(false);
   const { runAction } = useActionLoading();
 
@@ -157,6 +159,10 @@ export function AuthProvider({ children }) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, supaSession) => {
         if (!mounted) return;
         if (supaSession) {
+          // Token refreshes do not require another application-session exchange.
+          // Exchange only on initial hydration/sign-in; the exchange itself is
+          // deduplicated by promise and access-token identity.
+          if (!['INITIAL_SESSION', 'SIGNED_IN'].includes(event)) return;
           const provider = supaSession.user?.app_metadata?.provider
             || supaSession.user?.identities?.[0]?.provider;
 
@@ -512,6 +518,12 @@ export function AuthProvider({ children }) {
     // the same OAuth callback. Share one exchange promise so we never create
     // two Pharma sessions or race user/profile state updates.
     if (googleExchangePromiseRef.current) return googleExchangePromiseRef.current;
+    // React hydration and Supabase's INITIAL_SESSION/SIGNED_IN callbacks can
+    // deliver the same access token at slightly different times. Remember a
+    // successful exchange so the callback cannot immediately hit the rate limit.
+    if (googleExchangeCompletedTokenRef.current === supaSession.access_token) {
+      return googleExchangeResultRef.current;
+    }
 
     googleExchangePromiseRef.current = (async () => {
       try {
@@ -534,6 +546,8 @@ export function AuthProvider({ children }) {
 
         syncSession({ user: result.user }, result.user);
         setProfileCompletionRequired(Boolean(result.requiresProfileCompletion || result.code === 'PROFILE_INCOMPLETE'));
+        googleExchangeCompletedTokenRef.current = supaSession.access_token;
+        googleExchangeResultRef.current = result;
         setAuthTransitionLoading(false);
         return result;
       } catch (error) {
