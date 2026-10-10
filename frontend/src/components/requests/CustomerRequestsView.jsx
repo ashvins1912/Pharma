@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -23,6 +23,10 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
   const { runAction, isActionLoading } = useActionLoading();
   const pagination = medicineRequestsPagination || DEFAULT_PAGINATION;
   const [updatingPrescriptionId, setUpdatingPrescriptionId] = useState(null);
+
+  useEffect(() => {
+    void loadUserMedicineRequests({ page: 1, statusGroup: 'ALL' });
+  }, [loadUserMedicineRequests]);
 
   const [statusFilter, setStatusFilter] = useState('ALL');
 
