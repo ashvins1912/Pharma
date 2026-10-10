@@ -843,7 +843,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                           </div>
                         )}
 
-                        {col.id === 'Processing Order' && (order.prescriptionRequired || order.prescriptionUrl || order.prescriptionId) && (
+                        {col.id === 'Processing Order' && Boolean(order.prescriptionUrl || order.prescriptionId) && (
                           order.prescriptionVerification?.status !== 'MATCHED' ? (
                             <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
                               <div className="flex items-center gap-1.5">
@@ -903,6 +903,12 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                               </button>
                             </div>
                           )
+                        )}
+
+                        {col.id === 'Processing Order' && order.prescriptionRequired && !order.prescriptionUrl && !order.prescriptionId && (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">
+                            Prescription upload is required before dispatch. No prescription service call or manual-review action is available until a document is uploaded.
+                          </div>
                         )}
 
                         {col.id !== 'Pending_Review' && col.id !== 'Processing Order' && Boolean(order.prescriptionUrl || order.prescriptionId) && (
