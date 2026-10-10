@@ -77,18 +77,24 @@ export function createServiceRouters(gatewayConfig = config) {
   customerRouter.use((req, res, next) => gatewayConfig.customerServiceUrl
     ? authenticateUser(req, res, next, gatewayConfig)
     : next('router'));
-  const customer = createServiceHandler({
+  const customerRead = createServiceHandler({
+    audience: gatewayConfig.customerJwtAudience,
+    getScope: () => 'customer.profile.read',
+    target: gatewayConfig.customerServiceUrl,
+    includeCustomerProfile: false
+  }, gatewayConfig);
+  const customerWrite = createServiceHandler({
     audience: gatewayConfig.customerJwtAudience,
     getScope: () => 'customer.profile.write',
     target: gatewayConfig.customerServiceUrl,
     includeCustomerProfile: false
   }, gatewayConfig);
-  customerRouter.post('/ensure', customer);
-  customerRouter.get('/persons', customer);
-  customerRouter.post('/persons', customer);
-  customerRouter.patch('/persons/:puid', customer);
-  customerRouter.delete('/persons/:puid', customer);
-  customerRouter.post('/family-invitations', customer);
+  customerRouter.post('/ensure', customerWrite);
+  customerRouter.get('/persons', customerRead);
+  customerRouter.post('/persons', customerWrite);
+  customerRouter.patch('/persons/:puid', customerWrite);
+  customerRouter.delete('/persons/:puid', customerWrite);
+  customerRouter.post('/family-invitations', customerWrite);
 
   const inventoryRouter = express.Router();
   inventoryRouter.use((req, res, next) => {
