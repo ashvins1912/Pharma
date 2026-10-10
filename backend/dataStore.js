@@ -2805,20 +2805,23 @@ export const dataStore = {
 
         if (getIsConnected()) {
             let created;
-            try {
-                created = await MedicineRequest.create(requestDoc);
-            } catch (error) {
-                const duplicateRequestNumber = error?.code === 11000
-                    && (error?.keyPattern?.requestNumber
-                        || error?.keyValue?.requestNumber
-                        || String(error?.message || '').includes('requestNumber_1'));
-                if (!duplicateRequestNumber) throw error;
-
-                // A concurrent instance or stale counter may have allocated an
-                // already-used number. Allocate a fresh number and retry once.
-                requestDoc.requestNumber = await nextMedicineRequestNumber();
-                created = await MedicineRequest.create(requestDoc);
+            // A rolling deploy or an older instance can still race the request
+            // counter. Retry only requestNumber unique-index collisions; never
+            // replay the rest of the request flow or swallow unrelated DB errors.
+            for (let attempt = 0; attempt < 5; attempt += 1) {
+                try {
+                    created = await MedicineRequest.create(requestDoc);
+                    break;
+                } catch (error) {
+                    const duplicateRequestNumber = error?.code === 11000
+                        && (error?.keyPattern?.requestNumber
+                            || error?.keyValue?.requestNumber
+                            || String(error?.message || '').includes('requestNumber_1'));
+                    if (!duplicateRequestNumber || attempt === 4) throw error;
+                    requestDoc.requestNumber = await nextMedicineRequestNumber();
+                }
             }
+            if (!created) throw new Error('Unable to persist medicine request after allocating a unique request number.');
             const plain = created.toObject();
             try {
                 await sendWhatsAppMedicineRequestAlert(plain, 'MedicineRequestCreated');
