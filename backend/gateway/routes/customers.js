@@ -7,6 +7,22 @@ import { authenticateUser } from '../../middleware/auth.js';
 
 const router = express.Router();
 
+// Idempotently ensure the authenticated user has a canonical customer profile.
+// This endpoint also supports deployments where CUSTOMER_SERVICE_URL is not configured
+// and the API Gateway falls back to the main backend.
+router.post('/ensure', authenticateUser, async (req, res, next) => {
+    try {
+        const customer = await identityService.getOrCreateCustomer(req.context.userId, {
+            name: req.body?.name || req.user.user_metadata?.name || req.user.name,
+            email: req.body?.email || req.user.email,
+            phone: req.body?.phone || req.user.user_metadata?.mobile || req.user.mobile
+        });
+        res.status(200).json({ success: true, data: customer });
+    } catch (err) {
+        next(err);
+    }
+});
+
 // Get authenticated customer profile
 router.get('/me', authenticateUser, async (req, res, next) => {
     try {
