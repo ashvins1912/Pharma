@@ -441,9 +441,9 @@ router.get('/prescriptions/:fileId', authenticateUser, async (req, res) => {
                 ) || null;
             }
         }
-        const sameTenant = Boolean(tenantId && relatedOrder?.tenantId && String(tenantId) === String(relatedOrder.tenantId));
-        const sameBranch = !branchId || !relatedOrder?.branchId || String(branchId) === String(relatedOrder.branchId);
-        const isAuthorizedStaff = globalAdmin || (tenantStaff && sameTenant && sameBranch);
+        const tenantMatches = !tenantId || !relatedOrder?.tenantId || String(tenantId) === String(relatedOrder.tenantId);
+        const branchMatches = !branchId || !relatedOrder?.branchId || String(branchId) === String(relatedOrder.branchId);
+        const isAuthorizedStaff = globalAdmin || (tenantStaff && tenantMatches && branchMatches);
 
         if (prescription.ownerId !== req.user.sub && !isAuthorizedStaff) {
             return res.status(403).json({ message: 'You are not authorized to view this prescription.' });

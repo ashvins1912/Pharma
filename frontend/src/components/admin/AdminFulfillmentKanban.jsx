@@ -63,6 +63,10 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const [riderSearch, setRiderSearch] = useState('');
   const [verifiedOrderIds, setVerifiedOrderIds] = useState([]);
   const [prescriptionPreview, setPrescriptionPreview] = useState(null);
+  const [prescriptionModalOrder, setPrescriptionModalOrder] = useState(null);
+  const [prescriptionPreviewLoading, setPrescriptionPreviewLoading] = useState(false);
+  const [prescriptionPreviewError, setPrescriptionPreviewError] = useState('');
+  const [imageZoom, setImageZoom] = useState(1);
   const [viewingPrescriptionOrderId, setViewingPrescriptionOrderId] = useState(null);
   const [deliveredPage, setDeliveredPage] = useState(1);
   const [deliveredOrders, setDeliveredOrders] = useState([]);
@@ -78,6 +82,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [searchRetryKey, setSearchRetryKey] = useState(0);
+  const [approvalReason, setApprovalReason] = useState('Pharmacist clinical review approved');
 
   // Keep derived state below its source state declarations to avoid a
   // production-build temporal-dead-zone crash in minified bundles.
@@ -86,6 +91,36 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       isActionLoading(LOADING_ACTIONS.APPROVE_PRESCRIPTION)
       || isActionLoading(LOADING_ACTIONS.REJECT_PRESCRIPTION)
     );
+
+  const normalizeOrderStatus = (order) => {
+    if (!order) return '';
+    const s = String(order.orderStatus || order.status || '').trim();
+    if (['Pending_Review', 'pending', 'Pending'].includes(s)) return 'Pending_Review';
+    if (['Approved', 'accepted', 'approved'].includes(s)) return 'Approved';
+    if (['Processing Order', 'processing', 'Processing', 'Processing_Order', 'ProcessingOrder'].includes(s)) return 'Processing Order';
+    if (['Ready to Dispatch', 'ready_to_dispatch', 'Ready_To_Dispatch', 'ready', 'Ready'].includes(s)) return 'Ready to Dispatch';
+    if (['Dispatched', 'out_for_delivery', 'dispatched', 'Dispatched_Order'].includes(s)) return 'Dispatched';
+    if (['Delivered', 'delivered', 'completed', 'Delivered_Order'].includes(s)) return 'Delivered';
+    if (['Rejected', 'rejected', 'Cancelled', 'cancelled'].includes(s)) return 'Rejected';
+    return s || 'Pending_Review';
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && prescriptionModalOrder) {
+        closePrescriptionPreview();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [prescriptionModalOrder, prescriptionPreview]);
+
+  useEffect(() => {
+    if (prescriptionModalOrder) {
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = ''; };
+    }
+  }, [prescriptionModalOrder]);
 
   useEffect(() => {
     let isCurrentRequest = true;
@@ -232,11 +267,12 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
 
   const reviewOrder = async (order, status) => {
     const orderId = String(order._id);
-    if (status === 'Approved' && order.prescriptionRequired && !order.prescriptionUrl) {
-      addToast('This order requires a prescription, but no prescription file is attached.', 'warning');
+    const isMatched = order.prescriptionVerification?.status === 'MATCHED' || order.prescriptionVerification?.manualApproval === true;
+    if (status === 'Approved' && order.prescriptionRequired && !isMatched && !order.prescriptionUrl && !order.prescriptionId) {
+      addToast('This order requires a prescription verification or approval before approving.', 'warning');
       return;
     }
-    if (status === 'Approved' && order.prescriptionUrl && !verifiedOrderIds.includes(orderId)) {
+    if (status === 'Approved' && order.prescriptionRequired && !isMatched && order.prescriptionUrl && !verifiedOrderIds.includes(orderId)) {
       addToast('Open the attached prescription before approving this order.', 'warning');
       return;
     }
@@ -275,6 +311,14 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       setUpdatingId(order._id);
       const res = await apiClient.post(`/api/orders/admin/${encodeURIComponent(order._id)}/prescription/reinitiate`);
       addToast(res.data.message || 'Prescription verification re-initiated.', 'success');
+      if (res.data?.order && prescriptionModalOrder && String(prescriptionModalOrder._id) === String(order._id)) {
+        setPrescriptionModalOrder(res.data.order);
+      } else if (res.data?.verification && prescriptionModalOrder && String(prescriptionModalOrder._id) === String(order._id)) {
+        setPrescriptionModalOrder(prev => prev ? {
+          ...prev,
+          prescriptionVerification: res.data.verification
+        } : null);
+      }
       refreshBoard();
     } catch (err) {
       addToast(err.response?.data?.message || err.message || 'Could not re-initiate prescription verification.', 'error');
@@ -283,20 +327,18 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     }
   };
 
-  const manualApprovePrescription = async (order, scope = 'order', itemIndex = null) => {
+  const manualApprovePrescription = async (order, scope = 'order', itemIndex = null, customReason = null) => {
     const orderId = String(order?._id || '');
-    if (!order?.prescriptionUrl || !verifiedOrderIds.includes(orderId)) {
-      addToast('Open and review the uploaded prescription before recording manual approval.', 'warning');
-      return;
+    let reason = customReason;
+    if (reason === null || reason === undefined) {
+      reason = window.prompt(
+        scope === 'order'
+          ? 'Reason for manual order-level prescription approval (optional):'
+          : 'Reason for manual medicine approval (optional):',
+        'Pharmacist clinical review approved'
+      );
+      if (reason === null) return;
     }
-
-    const reason = window.prompt(
-      scope === 'order'
-        ? 'Reason for manual order-level prescription approval (optional):'
-        : 'Reason for manual medicine approval (optional):',
-      ''
-    );
-    if (reason === null) return;
 
     try {
       setUpdatingId(order._id);
@@ -305,11 +347,41 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         {
           scope,
           itemIndex,
-          reason
+          reason: String(reason || 'Pharmacist clinical review approved').trim()
         }
       );
       addToast(res.data.message || 'Manual prescription approval saved.', 'success');
-      setVerifiedOrderIds(prev => prev.includes(String(order._id)) ? prev : [...prev, String(order._id)]);
+      setVerifiedOrderIds(prev => prev.includes(orderId) ? prev : [...prev, orderId]);
+      if (res.data?.order) {
+        if (prescriptionModalOrder && String(prescriptionModalOrder._id) === orderId) {
+          setPrescriptionModalOrder(res.data.order);
+        }
+      } else if (prescriptionModalOrder && String(prescriptionModalOrder._id) === orderId) {
+        setPrescriptionModalOrder(prev => {
+          if (!prev) return null;
+          const prevMed = Array.isArray(prev.prescriptionVerification?.medicines) ? [...prev.prescriptionVerification.medicines] : [];
+          if (scope === 'medicine' && itemIndex !== null && prevMed[itemIndex]) {
+            prevMed[itemIndex] = {
+              ...prevMed[itemIndex],
+              status: 'MATCHED',
+              manualApproved: true,
+              manualApprovedBy: 'Pharmacist'
+            };
+          }
+          return {
+            ...prev,
+            prescriptionVerification: {
+              ...(prev.prescriptionVerification || {}),
+              status: scope === 'order' ? 'MATCHED' : (prev.prescriptionVerification?.status || 'MATCHED'),
+              manualApproval: true,
+              manualApprovedBy: 'Pharmacist',
+              medicines: scope === 'order'
+                ? prevMed.map(m => ({ ...m, status: 'MATCHED', manualApproved: true, manualApprovedBy: 'Pharmacist' }))
+                : prevMed
+            }
+          };
+        });
+      }
       refreshBoard();
     } catch (err) {
       addToast(err.response?.data?.message || err.message || 'Manual prescription approval failed.', 'error');
@@ -319,32 +391,88 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   };
 
   const viewPrescription = async (order) => {
-    if (!order?.prescriptionUrl || viewingPrescriptionOrderId || isActionLoading(LOADING_ACTIONS.VIEW_PRESCRIPTION)) return;
+    if (!order) return;
+    setPrescriptionModalOrder(order);
+    const orderId = String(order._id);
+    setVerifiedOrderIds(prev => prev.includes(orderId) ? prev : [...prev, orderId]);
+    setImageZoom(1);
+
+    const targetUrl = order.prescriptionUrl
+      || (order.prescriptionId ? `/api/v1/prescriptions/${encodeURIComponent(order.prescriptionId)}/document` : null)
+      || (order.prescriptionId ? `/api/orders/prescriptions/${encodeURIComponent(order.prescriptionId)}` : null);
+
+    if (!targetUrl) {
+      setPrescriptionPreview(null);
+      setPrescriptionPreviewError('No binary prescription document file is attached to this order. You can still inspect the ordered medicines and record a pharmacist decision.');
+      setPrescriptionPreviewLoading(false);
+      return;
+    }
+
+    if (targetUrl.startsWith('data:') || targetUrl.startsWith('blob:')) {
+      const isPdf = targetUrl.toLowerCase().includes('application/pdf');
+      setPrescriptionPreview({
+        url: targetUrl,
+        type: isPdf ? 'application/pdf' : 'image/jpeg'
+      });
+      setPrescriptionPreviewLoading(false);
+      setPrescriptionPreviewError('');
+      return;
+    }
+
+    setPrescriptionPreviewLoading(true);
+    setPrescriptionPreviewError('');
+
     await runAction(LOADING_ACTIONS.VIEW_PRESCRIPTION, async () => {
       try {
-      setViewingPrescriptionOrderId(String(order._id));
-      const res = await apiClient.get(order.prescriptionUrl, {
-        responseType: 'blob',
-        headers: { Accept: 'application/pdf,image/*' }
-      });
-      const contentType = String(
-        res.headers?.['content-type'] || res.data?.type || ''
-      ).toLowerCase();
-      const blob = await normalizePrescriptionBlob(res.data, contentType);
-      const url = URL.createObjectURL(blob);
-      if (prescriptionPreview) URL.revokeObjectURL(prescriptionPreview);
-      setPrescriptionPreview(url);
-      const orderId = String(order._id);
-      setVerifiedOrderIds(prev => prev.includes(orderId) ? prev : [...prev, orderId]);
-    } catch {
-      addToast('Could not open the prescription file. Please try again.', 'error');
+        setViewingPrescriptionOrderId(orderId);
+        const res = await apiClient.get(targetUrl, {
+          responseType: 'blob',
+          headers: { Accept: 'application/pdf,image/*' }
+        });
+        const contentType = String(
+          res.headers?.['content-type'] || res.data?.type || ''
+        ).toLowerCase();
+
+        let blob;
+        try {
+          blob = await normalizePrescriptionBlob(res.data, contentType);
+        } catch {
+          if (res.data instanceof Blob && res.data.size > 0) {
+            blob = res.data;
+          } else if (res.data) {
+            blob = new Blob([res.data], { type: contentType || 'application/octet-stream' });
+          } else {
+            throw new Error('Prescription file is empty.');
+          }
+        }
+
+        const url = URL.createObjectURL(blob);
+        if (prescriptionPreview?.url && prescriptionPreview.url.startsWith('blob:')) {
+          URL.revokeObjectURL(prescriptionPreview.url);
+        }
+        setPrescriptionPreview({
+          url,
+          type: blob.type || contentType
+        });
+      } catch (loadError) {
+        console.warn('Prescription fetch error:', loadError);
+        if (targetUrl.startsWith('http') || targetUrl.startsWith('/uploads')) {
+          setPrescriptionPreview({
+            url: targetUrl,
+            type: targetUrl.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'
+          });
+        } else {
+          setPrescriptionPreview(null);
+          setPrescriptionPreviewError('Could not load the prescription document file. You can still inspect the order details below and record manual approval.');
+        }
       } finally {
+        setPrescriptionPreviewLoading(false);
         setViewingPrescriptionOrderId(null);
       }
     });
   };
 
-  const reviewPrescription = async (order, decision) => {
+  const reviewPrescription = async (order, decision, customReason = null) => {
     if (!order?.prescriptionId) return;
     await runAction(decision === 'approve' ? LOADING_ACTIONS.APPROVE_PRESCRIPTION : LOADING_ACTIONS.REJECT_PRESCRIPTION, async () => {
       try {
@@ -353,9 +481,12 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         const form = new FormData();
         form.append('expected_version', String(version));
         if (decision === 'reject') {
-          const reason = window.prompt('Reason for prescription rejection:');
-          if (reason === null) return;
-          form.append('reason', reason.trim());
+          let reason = customReason;
+          if (reason === null || reason === undefined) {
+            reason = window.prompt('Reason for prescription rejection:', 'Prescription unreadable or mismatch');
+            if (reason === null) return;
+          }
+          form.append('reason', String(reason).trim());
         }
         const endpoint = decision === 'approve' ? 'approve' : 'reject';
         await apiClient.post(`/api/v1/prescriptions/${encodeURIComponent(order.prescriptionId)}/review/${endpoint}`, form);
@@ -365,6 +496,15 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
           await apiClient.post(`/api/v1/prescriptions/${encodeURIComponent(order.prescriptionId)}/convert-to-order`, conversionForm);
         }
         addToast(decision === 'approve' ? 'Prescription approved and converted to order.' : 'Prescription rejected.', decision === 'approve' ? 'success' : 'info');
+        if (prescriptionModalOrder && String(prescriptionModalOrder._id) === String(order._id)) {
+          setPrescriptionModalOrder(prev => prev ? {
+            ...prev,
+            prescriptionVerification: {
+              ...(prev.prescriptionVerification || {}),
+              status: decision === 'approve' ? 'MATCHED' : 'REJECTED'
+            }
+          } : null);
+        }
         await onRefresh();
       } catch (error) {
         addToast(error.message || `Could not ${decision} prescription.`, 'error');
@@ -373,8 +513,13 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   };
 
   const closePrescriptionPreview = () => {
-    if (prescriptionPreview) URL.revokeObjectURL(prescriptionPreview);
+    if (prescriptionPreview?.url && prescriptionPreview.url.startsWith('blob:')) {
+      URL.revokeObjectURL(prescriptionPreview.url);
+    }
     setPrescriptionPreview(null);
+    setPrescriptionModalOrder(null);
+    setPrescriptionPreviewError('');
+    setImageZoom(1);
   };
 
   return (
@@ -430,10 +575,10 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         {COLUMNS.map((col) => {
           const searchMode = Boolean(appliedSearch);
           const colOrders = searchMode
-            ? searchOrders.filter(order => order.orderStatus === col.id)
+            ? searchOrders.filter(order => normalizeOrderStatus(order) === col.id)
             : col.id === 'Delivered'
               ? deliveredOrders
-            : orders.filter(o => o.orderStatus === col.id);
+            : (orders || []).filter(o => normalizeOrderStatus(o) === col.id);
 
           return (
             <div key={col.id} className="min-w-0 bg-slate-100/70 border border-slate-200 rounded-3xl p-3 sm:p-4 flex flex-col min-h-[500px]">
@@ -444,7 +589,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                   {col.title}
                 </span>
                 <span className="text-xs font-black text-slate-500 bg-white border border-slate-200 min-w-6 h-6 px-1 rounded-full flex items-center justify-center">
-                  {col.id === 'Delivered' ? deliveredPagination.total : colOrders.length}
+                  {col.id === 'Delivered' ? (deliveredPagination.total || deliveredOrders.length) : colOrders.length}
                 </span>
               </div>
 
@@ -543,12 +688,17 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
 
                         {/* Items list preview */}
                         <div className="min-w-0 bg-slate-50 p-2 rounded-xl text-xs text-slate-600 space-y-1">
-                          {(order.items || []).map((i, idx) => (
+                          {(order.items || order.medicineItems || []).map((i, idx) => (
                             <div key={idx} className="flex items-start justify-between gap-2">
-                              <span className="min-w-0 flex-1 whitespace-normal break-words" title={i.name || 'Medicine name unavailable'}>• {i.name}</span>
-                              <span className="shrink-0 font-bold text-slate-700">x{i.quantity}</span>
+                              <span className="min-w-0 flex-1 whitespace-normal break-words" title={i.productName || i.name || i.genericName || 'Medicine'}>
+                                • {i.productName || i.name || i.genericName || 'Medicine'}
+                              </span>
+                              <span className="shrink-0 font-bold text-slate-700">x{i.quantity || 1}</span>
                             </div>
                           ))}
+                          {(order.items || order.medicineItems || []).length === 0 && (
+                            <p className="text-[11px] text-slate-400 italic">No medicines listed</p>
+                          )}
                         </div>
 
                         {/* Rider details if assigned */}
@@ -561,28 +711,30 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
 
                         {col.id === 'Pending_Review' && (
                           <div className="space-y-2 border-t border-slate-100 pt-2">
-                            {(order.prescriptionRequired || order.prescriptionUrl) && (
-                              <div className="rounded-xl bg-rose-50 p-2 text-xs text-rose-800">
-                                <p className="font-bold">{order.prescriptionRequired ? 'Prescription required' : 'Prescription attached'}</p>
-                                {order.prescriptionUrl ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => viewPrescription(order)}
-                                    disabled={viewingPrescriptionOrderId === String(order._id) || isActionLoading(LOADING_ACTIONS.VIEW_PRESCRIPTION)}
-                                    className="mt-1 min-h-11 font-bold underline disabled:cursor-wait disabled:opacity-60"
-                                  >
-                                    {viewingPrescriptionOrderId === String(order._id) ? 'Opening prescription…' : isActionLoading(LOADING_ACTIONS.VIEW_PRESCRIPTION) ? 'Opening prescription…' : 'View uploaded prescription'}
-                                  </button>
-                                ) : (
-                                  <p>Prescription file is missing.</p>
-                                )}
-                                {order.prescriptionUrl && (
-                                  <p className="mt-1 text-[11px] font-semibold text-rose-800">
-                                    {verifiedOrderIds.includes(String(order._id))
-                                      ? 'Prescription opened. Approval is enabled.'
-                                      : 'Open the prescription to enable approval.'}
-                                  </p>
-                                )}
+                            {(order.prescriptionRequired || order.prescriptionUrl || order.prescriptionId) && (
+                              <div className="rounded-xl bg-rose-50 p-2.5 text-xs text-rose-800 space-y-2">
+                                <div className="flex items-center justify-between gap-1">
+                                  <p className="font-bold">{order.prescriptionRequired ? 'Prescription required' : 'Prescription attached'}</p>
+                                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
+                                    order.prescriptionVerification?.status === 'MATCHED' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                                  }`}>
+                                    {order.prescriptionVerification?.status || 'REVIEW_REQUIRED'}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => viewPrescription(order)}
+                                  disabled={viewingPrescriptionOrderId === String(order._id) || isActionLoading(LOADING_ACTIONS.VIEW_PRESCRIPTION)}
+                                  className="min-h-9 w-full rounded-lg bg-white border border-rose-200 text-rose-900 font-bold text-xs hover:bg-rose-100/50 flex items-center justify-center gap-1.5 transition shadow-sm"
+                                >
+                                  <span>🩺</span>
+                                  <span>{viewingPrescriptionOrderId === String(order._id) ? 'Opening prescription…' : 'View prescription & review'}</span>
+                                </button>
+                                <p className="text-[11px] font-semibold text-rose-800">
+                                  {verifiedOrderIds.includes(String(order._id)) || order.prescriptionVerification?.status === 'MATCHED'
+                                    ? '✓ Prescription verified. Approval enabled.'
+                                    : 'Open prescription to inspect and approve.'}
+                                </p>
                               </div>
                             )}
                             {order.prescriptionRequired && (
@@ -691,62 +843,103 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                           </div>
                         )}
 
-                        {col.id === 'Processing Order' && order.prescriptionRequired
-                          && order.prescriptionVerification?.status !== 'MATCHED' && (
-                          <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
-                            <p className="text-xs font-extrabold text-amber-900">
-                              Prescription review is blocking fulfillment
-                            </p>
-                            <p className="text-[11px] text-amber-800">
-                              Status: {order.prescriptionVerification?.status || 'REVIEW_REQUIRED'}.
-                              Open the prescription, re-queue extraction, or record an explicit pharmacist decision.
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              {order.prescriptionUrl && (
+                        {col.id === 'Processing Order' && (order.prescriptionRequired || order.prescriptionUrl || order.prescriptionId) && (
+                          order.prescriptionVerification?.status !== 'MATCHED' ? (
+                            <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-amber-700 font-bold">⚠️</span>
+                                <p className="text-xs font-extrabold text-amber-900">
+                                  Prescription review is blocking fulfillment
+                                </p>
+                              </div>
+                              <p className="text-[11px] text-amber-800">
+                                Status: <strong className="font-bold">{order.prescriptionVerification?.status || 'REVIEW_REQUIRED'}</strong>.
+                                Open the prescription, re-queue extraction, or record an explicit pharmacist decision.
+                              </p>
+                              <div className="flex flex-wrap gap-2">
                                 <button
                                   type="button"
                                   onClick={() => viewPrescription(order)}
                                   disabled={isProcessing || viewingPrescriptionOrderId === String(order._id)}
-                                  className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 text-[11px] font-extrabold text-slate-700 disabled:opacity-50"
+                                  className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 text-[11px] font-extrabold text-slate-700 hover:bg-slate-50 disabled:opacity-50 shadow-sm"
                                 >
-                                  {viewingPrescriptionOrderId === String(order._id) ? 'Opening…' : 'View prescription'}
+                                  {viewingPrescriptionOrderId === String(order._id) ? 'Opening…' : '👁️ View prescription'}
                                 </button>
-                              )}
-                              {order.prescriptionId && (
+                                {order.prescriptionId && (
+                                  <button
+                                    type="button"
+                                    onClick={() => reinitiatePrescriptionVerification(order)}
+                                    disabled={isProcessing}
+                                    className="min-h-9 rounded-lg border border-amber-300 bg-white px-3 text-[11px] font-extrabold text-amber-900 hover:bg-amber-100 disabled:opacity-50"
+                                  >
+                                    🔄 Re-initiate extraction
+                                  </button>
+                                )}
                                 <button
                                   type="button"
-                                  onClick={() => reinitiatePrescriptionVerification(order)}
+                                  onClick={() => viewPrescription(order)}
                                   disabled={isProcessing}
-                                  className="min-h-9 rounded-lg border border-amber-300 bg-white px-3 text-[11px] font-extrabold text-amber-900 disabled:opacity-50"
+                                  className="min-h-9 rounded-lg bg-emerald-600 px-3 text-[11px] font-extrabold text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm"
                                 >
-                                  Re-initiate extraction
+                                  ✓ Manual review & approve
                                 </button>
-                              )}
+                              </div>
+                              <p className="text-[10px] text-amber-800">
+                                Manual approval must only be used after reviewing the actual prescription. Dispatch remains blocked until the backend records MATCHED verification.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-2.5 flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                                <span>✓</span>
+                                <span>Prescription Verified (MATCHED)</span>
+                              </div>
                               <button
                                 type="button"
-                                onClick={() => manualApprovePrescription(order, 'order')}
-                                disabled={isProcessing || !order.prescriptionUrl || !verifiedOrderIds.includes(String(order._id))}
-                                className="min-h-9 rounded-lg bg-emerald-600 px-3 text-[11px] font-extrabold text-white disabled:opacity-50"
+                                onClick={() => viewPrescription(order)}
+                                className="text-[11px] font-bold text-emerald-700 hover:underline"
                               >
-                                Manual review & approve
+                                View prescription
                               </button>
                             </div>
-                            <p className="text-[10px] text-amber-800">
-                              Manual approval must only be used after reviewing the actual prescription. Dispatch remains blocked until the backend records MATCHED verification.
-                            </p>
+                          )
+                        )}
+
+                        {col.id !== 'Pending_Review' && col.id !== 'Processing Order' && (order.prescriptionRequired || order.prescriptionUrl || order.prescriptionId) && (
+                          <div className="flex items-center justify-between text-[11px] bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
+                            <span className="font-semibold text-slate-600">
+                              📄 Prescription:{' '}
+                              <strong className={order.prescriptionVerification?.status === 'MATCHED' ? 'text-emerald-700' : 'text-amber-700'}>
+                                {order.prescriptionVerification?.status || 'Attached'}
+                              </strong>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => viewPrescription(order)}
+                              className="font-bold text-blue-600 hover:text-blue-800 underline"
+                            >
+                              View
+                            </button>
                           </div>
                         )}
 
                         {/* Action Buttons according to allowed state transitions */}
                         <div className="pt-2 border-t border-slate-100">
                           {col.id === 'Processing Order' && (
-                            <button
-                              onClick={() => handleTransition(order._id, 'Ready to Dispatch')}
-                              disabled={isProcessing}
-                              className="min-h-11 w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-2 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-600/20"
-                            >
-                              {isProcessing ? 'Verifying...' : '🔬 Verify & Pack → Ready'}
-                            </button>
+                            <div className="space-y-1">
+                              <button
+                                onClick={() => handleTransition(order._id, 'Ready to Dispatch')}
+                                disabled={isProcessing || (order.prescriptionRequired && order.prescriptionVerification?.status !== 'MATCHED')}
+                                className="min-h-11 w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-2 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-600/20 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {isProcessing ? 'Verifying...' : '🔬 Verify & Pack → Ready'}
+                              </button>
+                              {order.prescriptionRequired && order.prescriptionVerification?.status !== 'MATCHED' && (
+                                <p className="text-[10px] text-center text-amber-800 font-bold">
+                                  Prescription review must be MATCHED before dispatch
+                                </p>
+                              )}
+                            </div>
                           )}
 
                           {col.id === 'Ready to Dispatch' && (
@@ -929,16 +1122,374 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         </div>
       )}
 
-      {prescriptionPreview && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/70 p-4">
-          <div role="dialog" aria-modal="true" aria-labelledby="prescription-review-title" className="flex h-[85dvh] max-h-[calc(100dvh-2rem)] min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white">
-            <div className="flex items-center justify-between border-b p-3">
-              <h4 id="prescription-review-title" className="text-sm font-bold text-slate-800">Prescription review</h4>
-              <button type="button" onClick={closePrescriptionPreview} className="min-h-11 rounded-lg bg-slate-100 px-3 text-sm font-bold">
-                Close
-              </button>
+      {prescriptionModalOrder && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/75 backdrop-blur-sm p-2 sm:p-4 animate-fade-in"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) closePrescriptionPreview();
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="prescription-review-modal-title"
+            className="flex h-[92dvh] w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-3xl bg-white shadow-2xl border border-slate-200"
+          >
+            {/* Modal Header */}
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/90 px-4 py-3 sm:px-6">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-700 font-bold text-lg">
+                  🩺
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 id="prescription-review-modal-title" className="text-sm sm:text-base font-black text-slate-900 truncate">
+                      Prescription Review & Verification
+                    </h4>
+                    <span className="rounded-lg bg-blue-50 px-2 py-0.5 text-xs font-black text-blue-700 border border-blue-200 font-mono">
+                      #{String(prescriptionModalOrder._id).slice(-6).toUpperCase()}
+                    </span>
+                    <span className={`rounded-lg px-2 py-0.5 text-xs font-black border ${
+                      prescriptionModalOrder.prescriptionVerification?.status === 'MATCHED'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : prescriptionModalOrder.prescriptionVerification?.status === 'REJECTED'
+                        ? 'bg-rose-50 text-rose-800 border-rose-200'
+                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                    }`}>
+                      {prescriptionModalOrder.prescriptionVerification?.status || 'REVIEW_REQUIRED'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-slate-500 truncate">
+                    Stage: <strong className="text-slate-700">{prescriptionModalOrder.orderStatus}</strong> • Customer: <span className="font-semibold text-slate-700">{prescriptionModalOrder.customerName || prescriptionModalOrder.addressDetails?.fullName || 'Customer'}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {prescriptionPreview?.url && (
+                  <a
+                    href={prescriptionPreview.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-sm"
+                  >
+                    <span>⬇</span>
+                    <span>Open in New Tab</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={closePrescriptionPreview}
+                  aria-label="Close prescription review"
+                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-200/80 text-slate-700 hover:bg-slate-300 transition font-bold"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-            <iframe title="Uploaded prescription" src={prescriptionPreview} className="min-h-0 flex-1 w-full" />
+
+            {/* Modal Body - 2 Columns */}
+            <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-12 overflow-hidden bg-slate-100/50">
+              {/* Left Column: Prescription Document Viewer */}
+              <div className="flex min-h-0 flex-col border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-100 lg:col-span-7">
+                <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">
+                  <span className="flex items-center gap-1.5">
+                    <span>📄</span>
+                    <span>Prescription Document</span>
+                  </span>
+                  {prescriptionPreview?.type?.startsWith('image/') && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setImageZoom(z => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
+                        className="h-7 w-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center font-bold text-slate-700 transition"
+                        title="Zoom Out"
+                      >
+                        −
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImageZoom(1)}
+                        className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-[11px] text-slate-700 transition"
+                        title="Reset Zoom"
+                      >
+                        {Math.round(imageZoom * 100)}%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImageZoom(z => Math.min(3, Number((z + 0.25).toFixed(2))))}
+                        className="h-7 w-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center font-bold text-slate-700 transition"
+                        title="Zoom In"
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex min-h-[320px] flex-1 items-center justify-center overflow-auto p-3 sm:p-4">
+                  {prescriptionPreviewLoading ? (
+                    <div className="flex flex-col items-center gap-3 text-slate-500 py-12" role="status">
+                      <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+                      <p className="text-xs font-bold">Loading prescription document…</p>
+                    </div>
+                  ) : prescriptionPreview?.url ? (
+                    prescriptionPreview.type?.startsWith('image/') ? (
+                      <div className="flex h-full w-full items-center justify-center overflow-auto rounded-2xl bg-slate-900/10 p-2">
+                        <img
+                          src={prescriptionPreview.url}
+                          alt="Prescription document preview"
+                          style={{
+                            transform: `scale(${imageZoom})`,
+                            transformOrigin: 'center center',
+                            transition: 'transform 0.15s ease-out'
+                          }}
+                          className="max-h-full max-w-full rounded-xl object-contain shadow-lg"
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-full w-full flex flex-col rounded-2xl overflow-hidden border border-slate-200 bg-white">
+                        <iframe
+                          title="Uploaded prescription document"
+                          src={prescriptionPreview.url}
+                          className="h-full w-full min-h-[350px] border-0"
+                        />
+                      </div>
+                    )
+                  ) : (
+                    <div className="flex flex-col items-center justify-center max-w-md p-6 text-center space-y-3 rounded-2xl border border-dashed border-slate-300 bg-white">
+                      <span className="text-3xl">📄</span>
+                      <p className="text-sm font-bold text-slate-800">
+                        {prescriptionPreviewError || 'No binary document preview is linked.'}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        You can still verify all prescribed medicines against the order items and record an explicit pharmacist approval decision.
+                      </p>
+                      {prescriptionModalOrder.prescriptionUrl && (
+                        <button
+                          type="button"
+                          onClick={() => viewPrescription(prescriptionModalOrder)}
+                          className="rounded-xl bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100"
+                        >
+                          🔄 Retry Loading File
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Order Details, Diagnostics & Pharmacist Decision */}
+              <div className="flex min-h-0 flex-col overflow-y-auto bg-white lg:col-span-5">
+                {/* 1. Fulfillment Gate Banner */}
+                {prescriptionModalOrder.prescriptionVerification?.status !== 'MATCHED' ? (
+                  <div className="m-3 sm:m-4 mb-2 rounded-2xl border border-amber-300 bg-amber-50 p-3.5 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-amber-600 font-bold text-sm">⚠️</span>
+                      <span className="text-xs font-black text-amber-900">
+                        Prescription review is blocking fulfillment
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-800">
+                      Status: <strong>{prescriptionModalOrder.prescriptionVerification?.status || 'REVIEW_REQUIRED'}</strong>.
+                      Verify medicines against prescription, re-queue extraction, or record an explicit pharmacist decision.
+                    </p>
+                    {prescriptionModalOrder.prescriptionVerification?.issues?.length > 0 && (
+                      <ul className="text-[11px] text-amber-800 list-disc list-inside space-y-0.5 pt-1">
+                        {prescriptionModalOrder.prescriptionVerification.issues.map((issue, idx) => (
+                          <li key={idx}>{issue}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : (
+                  <div className="m-3 sm:m-4 mb-2 rounded-2xl border border-emerald-300 bg-emerald-50 p-3.5 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-emerald-600 font-bold text-sm">✓</span>
+                      <span className="text-xs font-black text-emerald-900">
+                        Prescription verification passed
+                      </span>
+                    </div>
+                    <p className="text-xs text-emerald-800">
+                      Status: <strong>MATCHED</strong>.
+                      {prescriptionModalOrder.prescriptionVerification?.manualApproved && (
+                        <span> Manually approved by {prescriptionModalOrder.prescriptionVerification.manualApprovedBy || 'Pharmacist'}.</span>
+                      )}
+                    </p>
+                  </div>
+                )}
+
+                {/* 2. Order & Patient Info Card */}
+                <div className="mx-3 sm:mx-4 my-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-3 sm:p-3.5 space-y-2 text-xs">
+                  <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
+                    <span className="font-extrabold text-slate-500 uppercase text-[10px] tracking-wider">Order & Customer</span>
+                    <span className="font-mono text-slate-500 text-[11px]">ID: {prescriptionModalOrder._id}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-slate-700">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Customer</span>
+                      <span className="font-bold text-slate-900">{prescriptionModalOrder.customerName || prescriptionModalOrder.addressDetails?.fullName || 'Customer'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Phone</span>
+                      <span className="font-bold text-slate-900">{prescriptionModalOrder.customerMobile || prescriptionModalOrder.addressDetails?.phone || 'No phone'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Total Amount</span>
+                      <span className="font-bold text-emerald-700">₹{prescriptionModalOrder.finalTotal ?? prescriptionModalOrder.totalAmount} COD</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Payment Method</span>
+                      <span className="font-bold text-slate-900">{prescriptionModalOrder.paymentMethod || 'Cash on Delivery'}</span>
+                    </div>
+                  </div>
+                  {prescriptionModalOrder.patientPuid && (
+                    <div className="pt-1 border-t border-slate-200">
+                      <span className="text-slate-400 text-[10px] block">Patient Profile</span>
+                      <span className="font-semibold text-blue-700">PUID: {prescriptionModalOrder.patientPuid}</span>
+                    </div>
+                  )}
+                  {prescriptionModalOrder.deliveryAddress && (
+                    <div className="pt-1 border-t border-slate-200">
+                      <span className="text-slate-400 text-[10px] block">Delivery Address</span>
+                      <span className="text-slate-700">📍 {prescriptionModalOrder.deliveryAddress}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Items & Extraction Matching Table */}
+                <div className="mx-3 sm:mx-4 my-2 flex-1 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="font-black text-slate-900 text-xs uppercase tracking-wider">
+                      Ordered Medicines ({(prescriptionModalOrder.items || prescriptionModalOrder.medicineItems || []).length})
+                    </span>
+                    <span className="text-[11px] text-slate-500">Cross-reference with document</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {(prescriptionModalOrder.items || prescriptionModalOrder.medicineItems || []).map((item, index) => {
+                      const medVerification = prescriptionModalOrder.prescriptionVerification?.medicines?.[index];
+                      const isItemMatched = prescriptionModalOrder.prescriptionVerification?.status === 'MATCHED'
+                        || item.manualApproved
+                        || medVerification?.status === 'MATCHED'
+                        || medVerification?.manualApproved;
+                      return (
+                        <div
+                          key={index}
+                          className={`rounded-xl border p-2.5 transition flex items-center justify-between gap-2 ${
+                            isItemMatched ? 'border-emerald-200 bg-emerald-50/50' : 'border-amber-200 bg-amber-50/50'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-xs text-slate-800">
+                                {index + 1}. {item.productName || item.name || item.genericName || 'Medicine'}
+                              </span>
+                              <span className="text-xs text-slate-500 font-semibold">×{item.quantity || 1}</span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 text-[11px]">
+                              <span className={`font-bold ${isItemMatched ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                {isItemMatched ? '✓ MATCHED' : '⚠️ REVIEW REQUIRED'}
+                              </span>
+                              {medVerification?.manualApprovedBy && (
+                                <span className="text-slate-400 text-[10px]">
+                                  Approved by {medVerification.manualApprovedBy}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {!isItemMatched && (
+                            <button
+                              type="button"
+                              onClick={() => manualApprovePrescription(prescriptionModalOrder, 'medicine', index, approvalReason)}
+                              disabled={isProcessing}
+                              className="shrink-0 rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50 transition shadow-sm"
+                            >
+                              Approve
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 4. Pharmacist Decision & Actions */}
+                <div className="p-3 sm:p-4 border-t border-slate-200 bg-slate-50 space-y-2 mt-auto">
+                  <div>
+                    <label htmlFor="modal-approval-reason" className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Pharmacist Clinical Decision Note (optional):
+                    </label>
+                    <input
+                      id="modal-approval-reason"
+                      type="text"
+                      value={approvalReason}
+                      onChange={e => setApprovalReason(e.target.value)}
+                      placeholder="e.g. Doctor prescription verified, correct dosage"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => manualApprovePrescription(prescriptionModalOrder, 'order', null, approvalReason)}
+                      disabled={isProcessing}
+                      className="min-h-10 flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3 py-2 transition shadow-md shadow-emerald-600/20 disabled:opacity-50"
+                    >
+                      {updatingId === prescriptionModalOrder._id ? 'Saving…' : '✓ Approve Prescription & Order'}
+                    </button>
+
+                    {prescriptionModalOrder.prescriptionId && (
+                      <button
+                        type="button"
+                        onClick={() => reviewPrescription(prescriptionModalOrder, 'reject', approvalReason || 'Prescription rejected by pharmacist')}
+                        disabled={isProcessing}
+                        className="min-h-10 rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs px-3 py-2 transition disabled:opacity-50"
+                      >
+                        ✕ Reject
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => reinitiatePrescriptionVerification(prescriptionModalOrder)}
+                      disabled={isProcessing}
+                      className="min-h-10 rounded-xl border border-amber-300 bg-white hover:bg-amber-50 text-amber-900 font-extrabold text-xs px-3 py-2 transition disabled:opacity-50"
+                    >
+                      🔄 Re-queue
+                    </button>
+                  </div>
+
+                  {prescriptionModalOrder.orderStatus === 'Pending_Review' && (
+                    <div className="flex gap-2 pt-1 border-t border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          reviewOrder(prescriptionModalOrder, 'Approved');
+                          closePrescriptionPreview();
+                        }}
+                        disabled={isProcessing}
+                        className="min-h-9 flex-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs disabled:opacity-50"
+                      >
+                        Approve Order Stage
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          reviewOrder(prescriptionModalOrder, 'Rejected');
+                          closePrescriptionPreview();
+                        }}
+                        disabled={isProcessing}
+                        className="min-h-9 flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs disabled:opacity-50"
+                      >
+                        Reject Order
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
