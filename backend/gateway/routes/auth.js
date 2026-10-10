@@ -114,7 +114,9 @@ router.post('/signup', authLimiter, async (req, res) => {
 
         return sendSuccess(res, {
             data: result,
-            message: 'Account created. Please check your email to activate your account.',
+            message: result?.verification?.emailSent
+                ? 'Account created. Please check your email to activate your account.'
+                : 'Account created, but the verification email could not be delivered. Use Resend verification or contact support.',
             statusCode: 201,
             req
         });
