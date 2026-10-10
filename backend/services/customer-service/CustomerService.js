@@ -90,24 +90,21 @@ export class CustomerService {
         throw Object.assign(new Error('Customer profile identity is inconsistent.'), { statusCode: 409 });
       }
       if (!selfPerson) {
-        await Person.updateOne(
-          { puid: customer.selfPuid, createdByUserId: userId },
-          { $set: {
-            displayName: name?.trim() || customer.name || 'Self',
-            relationshipToOwner: 'SELF',
-            status: 'ACTIVE',
-            ...(tenantId ? { tenantId } : {})
-          }, $setOnInsert: {
+        try {
+          await Person.create({
             puid: customer.selfPuid,
             createdByUserId: userId,
             displayName: name?.trim() || customer.name || 'Self',
             relationshipToOwner: 'SELF',
             status: 'ACTIVE',
             tenantId: tenantId || null
-          } },
-          { upsert: true }
-        );
-        selfPerson = await Person.findOne({ puid: customer.selfPuid, createdByUserId: userId }).lean();
+          });
+        } catch (error) {
+          // Concurrent ensure calls may both observe the missing person. Only
+          // recover from the unique-PUID race, then verify ownership below.
+          if (error?.code !== 11000) throw error;
+        }
+        selfPerson = await Person.findOne({ puid: customer.selfPuid }).lean();
       } else {
         await Person.updateOne(
           { puid: customer.selfPuid, createdByUserId: userId },
