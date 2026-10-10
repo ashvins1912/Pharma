@@ -335,8 +335,13 @@ export default function AuthModal({ isOpen, onClose }) {
         </div>
 
         {errorMsg && (
-          <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
-            <span>⚠️</span>
+          <div
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+            className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2"
+          >
+            <span aria-hidden="true">⚠️</span>
             <span>{errorMsg}</span>
           </div>
         )}
