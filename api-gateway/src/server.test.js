@@ -45,6 +45,21 @@ test('storefront medicine catalog is public and does not require inventory RBAC'
   assert.equal(resolveGatewayCapability('POST', '/api/medicines'), 'inventory.write');
 });
 
+test('admin medicine request proposal requires the proposal capability', () => {
+  const path = '/api/admin/medicine-requests/6acab8869852d76d01a594e7/proposal';
+  assert.equal(resolveGatewayCapability('POST', path), 'medicine_requests.proposal');
+
+  // Scoped tenant staff need an explicit permission; they are not granted a global role bypass.
+  assert.equal(isGatewayPermissionAllowed({
+    role: 'TENANT_ADMIN',
+    permissions: ['medicine_requests.proposal']
+  }, 'medicine_requests.proposal'), true);
+  assert.equal(isGatewayPermissionAllowed({
+    role: 'TENANT_ADMIN',
+    permissions: ['medicine_requests.read']
+  }, 'medicine_requests.proposal'), false);
+});
+
 test('explicit revocations override Super Admin wildcard grants', () => {
   const user = {
     role: 'SUPER_ADMIN',
