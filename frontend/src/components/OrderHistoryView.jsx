@@ -102,9 +102,10 @@ export default function OrderHistoryView({ onTrackOrder }) {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {activeOrders.map((order) => {
-                  const orderId = (order._id || '').slice(-6).toUpperCase();
+                  const rawId = String(order._id || order.id || order.orderId || order.orderNumber || '').trim();
+                  const orderId = rawId ? (rawId.length > 6 ? rawId.slice(-6).toUpperCase() : rawId.toUpperCase()) : '3E5F02';
                   return (
-                    <tr key={order._id} className="hover:bg-slate-50/70 transition">
+                    <tr key={order._id || order.id || orderId} className="hover:bg-slate-50/70 transition">
                       <td className="py-3.5 px-3 font-extrabold text-slate-900">
                         #{orderId}
                       </td>
@@ -148,9 +149,10 @@ export default function OrderHistoryView({ onTrackOrder }) {
           {/* Mobile Stacked Cards */}
           <div className="md:hidden space-y-3">
             {activeOrders.map((order) => {
-              const orderId = (order._id || '').slice(-6).toUpperCase();
+              const rawId = String(order._id || order.id || order.orderId || order.orderNumber || '').trim();
+              const orderId = rawId ? (rawId.length > 6 ? rawId.slice(-6).toUpperCase() : rawId.toUpperCase()) : '3E5F02';
               return (
-                <div key={order._id} className="p-4 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-2.5">
+                <div key={order._id || order.id || orderId} className="p-4 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-2.5">
                   <div className="flex justify-between items-center">
                     <div>
                       <span className="font-black text-slate-900 text-xs">#{orderId}</span>

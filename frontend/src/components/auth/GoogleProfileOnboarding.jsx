@@ -58,7 +58,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-black/40 px-4 py-6 backdrop-blur-[2px] animate-fade-in">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-black/40 px-4 py-6 backdrop-blur-[2px] animate-fade-in" aria-modal="true" role="dialog">
       <form
         onSubmit={submit}
         className="w-full max-w-lg overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"

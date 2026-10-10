@@ -22,21 +22,23 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden animate-fade-in">
+    <div className="fixed inset-0 z-50 overflow-hidden animate-fade-in overscroll-none" aria-modal="true" role="dialog" aria-labelledby="cart-drawer-title">
       {/* Backdrop */}
       <div
         onClick={onClose}
-        className="absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity"
+        onWheel={(e) => e.preventDefault()}
+        onTouchMove={(e) => e.preventDefault()}
+        className="modal-backdrop absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity touch-none"
       />
 
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10">
-        <div className="w-screen max-w-md bg-white border-l border-slate-200 shadow-2xl flex flex-col justify-between">
+      <div className="fixed inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10 pointer-events-none">
+        <div className="w-screen max-w-md bg-white border-l border-slate-200 shadow-2xl flex flex-col justify-between pointer-events-auto overscroll-contain">
           
           {/* Header */}
-          <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+          <div className="shrink-0 px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white">
             <div className="flex items-center gap-2">
               <span className="text-xl">🛒</span>
-              <h2 className="text-base font-extrabold text-slate-900">
+              <h2 id="cart-drawer-title" className="text-base font-extrabold text-slate-900">
                 Your Shopping Cart ({cart.reduce((s, i) => s + i.quantity, 0)})
               </h2>
             </div>
@@ -49,7 +51,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
           </div>
 
           {/* Cart Content */}
-          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-4 space-y-4">
             {cart.length === 0 ? (
               <div className="text-center py-16 space-y-4">
                 <div className="w-20 h-20 mx-auto rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center text-4xl">
@@ -179,7 +181,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
 
           {/* Drawer Footer with Price Breakdown & Checkout Button */}
           {cart.length > 0 && (
-            <div className="p-6 border-t border-slate-100 bg-white space-y-3">
+            <div className="shrink-0 p-6 border-t border-slate-100 bg-white space-y-3">
               <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between text-slate-500">
                   <span>Cart Subtotal</span>

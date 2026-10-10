@@ -59,9 +59,16 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
   const disable = async () => { setDisablingMfa(true); try { await disableMfa(); addToast('Two-factor authentication disabled.','info'); } catch(e){addToast(e.message || 'Could not disable 2FA.','error');} finally{setDisablingMfa(false);} };
 
   return <>
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-3 sm:p-5" aria-modal="true" role="dialog">
-      <div className="pharma-modal-surface flex h-[80vh] max-h-[80vh] w-full min-w-[min(90vw,500px)] max-w-lg flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 text-slate-800 shadow-2xl">
-        <header className="relative bg-gradient-to-r from-blue-700 to-indigo-800 px-5 pt-5 pb-4 text-white rounded-t-[28px]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/45 backdrop-blur-[2px] animate-fade-in overscroll-none" aria-modal="true" role="dialog">
+      <div
+        className="modal-backdrop absolute inset-0 touch-none"
+        onClick={onClose}
+        onWheel={(e) => e.preventDefault()}
+        onTouchMove={(e) => e.preventDefault()}
+        aria-hidden="true"
+      />
+      <div className="pharma-modal-surface relative z-10 m-auto flex h-auto max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 text-slate-800 shadow-2xl overscroll-contain">
+        <header className="relative shrink-0 bg-gradient-to-r from-blue-700 to-indigo-800 px-5 pt-5 pb-4 text-white rounded-t-[28px]">
           <button onClick={onClose} aria-label="Close profile" className="absolute right-4 top-4 h-8 w-8 rounded-full bg-white/10 text-white/80 hover:bg-white/20">×</button>
           <div className="flex items-center gap-3 pr-8">
             <div className="h-14 w-14 shrink-0 rounded-2xl bg-white/15 ring-1 ring-white/20 flex items-center justify-center text-xl font-black">{displayName.charAt(0).toUpperCase()}</div>
@@ -76,7 +83,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
           </div>
         </header>
 
-        <div className="grid grid-cols-3 gap-1 border-b border-slate-200 bg-slate-100/70 p-1.5">
+        <div role="tablist" className="grid grid-cols-3 gap-1 shrink-0 border-b border-slate-200 bg-slate-100/70 p-1.5">
           <TabButton active={tab==='overview'} onClick={()=>setTab('overview')}>Overview</TabButton>
           <TabButton active={tab==='personal'} onClick={()=>setTab('personal')}>Personal</TabButton>
           <TabButton active={tab==='security'} onClick={()=>setTab('security')}>Security</TabButton>

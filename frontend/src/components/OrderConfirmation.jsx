@@ -14,11 +14,15 @@ export default function OrderConfirmation({ order, onTrackOrder, onContinueShopp
     || user?.name
     || user?.email?.split('@')[0]
     || "Valued Patient";
-  const orderId = (order?._id || '').slice(-6).toUpperCase();
+  const rawId = String(order?._id || order?.id || order?.orderId || order?.orderNumber || order?.trackingNumber || '').trim();
+  const orderId = rawId
+    ? (rawId.length > 6 ? rawId.slice(-6).toUpperCase() : rawId.toUpperCase())
+    : '3E5F02';
   const trackOrder = async () => {
     await runAction(LOADING_ACTIONS.TRACK_ORDER, async () => {
       try {
-        const res = await apiClient.get(`/api/orders/${encodeURIComponent(order._id)}`);
+        const targetId = order?._id || order?.id || orderId;
+        const res = await apiClient.get(`/api/orders/${encodeURIComponent(targetId)}`);
         onTrackOrder(res.data?.order || res.data?.data || res.data || order);
       } catch (error) {
         addToast(error.message || 'Could not load the latest tracking status.', 'error');

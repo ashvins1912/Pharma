@@ -22,13 +22,20 @@ html {
 body {
   margin: 0;
   overflow-anchor: none;
-  overflow-y: auto !important;
-  height: auto !important;
-  padding: 0;
+  overflow-y: auto;
   min-width: 320px;
   background-color: #f8fafc;
   color: #1e293b;
   line-height: 1.5;
+}
+
+/* Strictly restrict background scrolling when any modal is open */
+html.modal-open,
+body.modal-open {
+  overflow: hidden !important;
+  height: 100% !important;
+  overscroll-behavior: none !important;
+  touch-action: none !important;
 }
 
 /* Full-Width Main Container Optimization */
@@ -37,37 +44,49 @@ main {
   max-width: none !important;
 }
 
-/* Stabilized & Theme-Consistent Modal Surface */
+/* Stabilized & Properly Aligned Theme-Consistent Modal Surface */
 .pharma-modal-surface {
-  background-color: #f8fafc !important; /* Inherited App BG */
-  color: #1e293b !important; /* Inherited App Text */
-  height: 80vh !important; /* Fixed length for stability */
-  max-height: 80vh !important;
-  width: auto !important;
-  min-width: min(90vw, 500px);
-  display: flex !important;
-  flex-direction: column !important;
+  background-color: #f8fafc;
+  color: #1e293b;
+  width: 100%;
+  max-width: min(92vw, 540px);
+  height: auto;
+  max-height: min(88vh, 660px);
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  border-radius: 1.75rem;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25);
+  border: 1px solid #e2e8f0;
+  overscroll-behavior: contain;
 }
 
-/* Internal Scrolling for Modal Data */
+/* Keep header and navigation bars firmly in place without stretching */
+.pharma-modal-surface > header,
+.pharma-modal-surface > .modal-header,
+.pharma-modal-surface > [role="tablist"] {
+  flex-shrink: 0;
+}
+
+/* Internal Scrolling only for designated body/content containers */
 .pharma-modal-surface > .content-area,
-.pharma-modal-surface main,
-.pharma-modal-surface .modal-content,
-.pharma-modal-surface > div:not(header):not(.modal-header):not(.tab-header) {
-  overflow-y: auto !important;
-  flex: 1 !important;
+.pharma-modal-surface > main,
+.pharma-modal-surface > .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Softened Theme-Consistent Modal Overlay */
-.fixed.inset-0.z-50,
-.fixed.inset-0.z-\[9999\],
-.fixed.inset-0.z-\[70\],
-.fixed.inset-0.z-\[60\],
-.modal-overlay {
-  background-color: rgba(0, 0, 0, 0.4) !important;
-  backdrop-filter: blur(2px) !important;
-  -webkit-backdrop-filter: blur(2px) !important;
-  align-items: center !important;
+.modal-overlay,
+.fixed.inset-0[role="dialog"],
+.fixed.inset-0[aria-modal="true"] {
+  background-color: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 
 #root {

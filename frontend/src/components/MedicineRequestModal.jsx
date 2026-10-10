@@ -100,35 +100,48 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-[2px] animate-fade-in overflow-y-auto">
-      <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-lg w-full p-4 sm:p-6 md:p-8 my-6 relative max-h-[92vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/45 backdrop-blur-[2px] animate-fade-in overscroll-none"
+      aria-modal="true"
+      role="dialog"
+      aria-labelledby="medicine-request-title"
+    >
+      <div
+        className="modal-backdrop absolute inset-0 touch-none"
+        onClick={onClose}
+        onWheel={(e) => e.preventDefault()}
+        onTouchMove={(e) => e.preventDefault()}
+        aria-hidden="true"
+      />
+
+      <div className="relative z-10 m-auto flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl overscroll-contain">
         
-        {/* Header */}
-        <div className="flex justify-between items-start pb-4 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center text-xl flex-shrink-0">
+        {/* Sticky Header */}
+        <div className="shrink-0 flex justify-between items-start p-5 sm:p-6 pb-4 border-b border-slate-100 bg-white">
+          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+            <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center text-xl shrink-0">
               📋
             </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-black text-slate-900">
-                Request Special / Out-of-Stock Medicine
+            <div className="min-w-0">
+              <h3 id="medicine-request-title" className="text-base sm:text-lg font-black text-slate-900 truncate">
+                Request Special Medicine
               </h3>
               <p className="text-[11px] text-slate-400">
-                Our licensed pharmacist will verify dispensary procurement and return a customized delivery proposal.
+                Our licensed pharmacist will verify dispensary procurement.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition cursor-pointer flex-shrink-0"
+            className="text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition cursor-pointer shrink-0"
             aria-label="Close"
           >
             ✕
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="space-y-4 py-4">
+        {/* Scrollable Form Body */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto overscroll-contain p-5 sm:p-6 space-y-4">
           <div>
             <label htmlFor="preferred-delivery-timing" className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
               Preferred Delivery Timing *
