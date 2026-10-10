@@ -68,7 +68,7 @@ export function useOrderDashboard() {
             await loadOrders();
             return res.data;
         } catch (err) {
-            const msg = err.code === 'NOT_FOUND' ? 'Order not found.' : err.message || 'Unable to assign delivery for this order. Please try again.';
+            const msg = err.response?.data?.error?.message || err.response?.data?.message || (err.code === 'NOT_FOUND' ? 'Order not found.' : err.message) || 'Unable to assign delivery for this order. Please try again.';
             throw new Error(msg);
         } finally {
             setAssignmentExecuting(false);
