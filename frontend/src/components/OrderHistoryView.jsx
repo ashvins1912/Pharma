@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
@@ -9,6 +9,10 @@ export default function OrderHistoryView({ onTrackOrder }) {
   const { orders, ordersError, loadingOrders, loadUserOrders } = useApp();
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
+  useEffect(() => {
+    void loadUserOrders();
+  }, [loadUserOrders]);
+
   const editableStatuses = ['Pending_Review', 'Approved', 'Processing Order', 'Ready to Dispatch'];
   const activeOrders = orders.filter(order => !['Delivered', 'Cancelled', 'Rejected', 'Completed', 'delivered', 'cancelled', 'rejected', 'completed'].includes(order.orderStatus || order.status));
 
