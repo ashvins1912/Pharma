@@ -562,8 +562,21 @@ export function AuthProvider({ children }) {
           supabaseAccessToken: supaSession.access_token
         });
         const result = data?.data || data;
-        syncSession({ user: result?.user }, result?.user);
-        setProfileCompletionRequired(Boolean(result?.requiresProfileCompletion || result?.code === 'PROFILE_INCOMPLETE'));
+
+        // A successful HTTP status is not sufficient: the API exchange must
+        // return a Pharma user before the browser can treat Google sign-in as
+        // complete. In particular, do not silently clear auth state if a
+        // misconfigured static-site rewrite returns an empty response.
+        if (!result || typeof result !== 'object' || !result?.user?.id) {
+          const error = new Error(
+            'Google sign-in reached an API endpoint that did not return a Pharma session. Check the Render /api/v1/auth/* rewrite and API Gateway logs.'
+          );
+          error.code = 'AUTH_EXCHANGE_INCOMPLETE';
+          throw error;
+        }
+
+        syncSession({ user: result.user }, result.user);
+        setProfileCompletionRequired(Boolean(result.requiresProfileCompletion || result.code === 'PROFILE_INCOMPLETE'));
         setAuthTransitionLoading(false);
         return result;
       } catch (error) {
