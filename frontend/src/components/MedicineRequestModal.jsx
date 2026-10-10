@@ -60,7 +60,8 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
         originalAvailabilityStatus: 'NOT_IN_CATALOG'
       }]));
       form.append('addressId', selectedAddressId);
-      form.append('preferredDeliveryPreference', urgency === 'Urgent (Same Day)' ? 'Morning' : urgency === 'Critical / Life-Saving' ? 'Morning' : 'Flexible');
+      form.append('urgencyLevel', urgency);
+      form.append('preferredDeliveryPreference', 'Flexible');
       form.append('customerNote', customerNote.trim());
       if (prescriptionFile) form.append('prescription', prescriptionFile);
       const res = await apiClient.post('/api/medicine-requests', form);
