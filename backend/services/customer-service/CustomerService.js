@@ -100,8 +100,6 @@ export class CustomerService {
             tenantId: tenantId || null
           });
         } catch (error) {
-          // Concurrent ensure calls may both observe the missing person. Only
-          // recover from the unique-PUID race, then verify ownership below.
           if (error?.code !== 11000) throw error;
         }
         selfPerson = await Person.findOne({ puid: customer.selfPuid }).lean();
@@ -163,16 +161,30 @@ export class CustomerService {
   }
 
   async createFamilyPerson(userId, { displayName, relationship, dateOfBirth, gender, tenantId }) {
-    const customer = await CustomerProfile.findOne({ userId });
-    if (!customer) throw Object.assign(new Error('Customer not found'), { statusCode: 404 });
-    if (!displayName || !relationship) {
+    if (!userId) throw Object.assign(new Error('userId required'), { statusCode: 401 });
+    const normalizedName = typeof displayName === 'string' ? displayName.trim() : '';
+    const normalizedRelationship = typeof relationship === 'string' ? relationship.trim() : '';
+    if (!normalizedName || !normalizedRelationship) {
       throw Object.assign(new Error('displayName and relationship are required'), { statusCode: 400 });
     }
+
+    // The UI can be reached before a CustomerProfile has been provisioned (for
+    // example, a newly authenticated Google/Supabase user). Previously this
+    // path immediately returned 404 "Customer not found", making the form open
+    // successfully but every save fail. Provision/repair only the authenticated
+    // user's own customer + SELF relationship before creating their relative.
+    // Ownership is still keyed by userId; no client-supplied owner or tenant is trusted.
+    await this.ensureCustomerForUser(userId, { tenantId: tenantId || null });
+    const customer = await CustomerProfile.findOne({ userId });
+    if (!customer) {
+      throw Object.assign(new Error('Customer profile could not be initialized.'), { statusCode: 409 });
+    }
+
     const puid = generatePuid();
     const person = await Person.create({
       puid,
-      displayName,
-      relationshipToOwner: relationship,
+      displayName: normalizedName,
+      relationshipToOwner: normalizedRelationship,
       dateOfBirth: dateOfBirth || null,
       gender: gender || null,
       createdByUserId: userId,
@@ -182,7 +194,7 @@ export class CustomerService {
       ownerUserId: userId,
       ownerCustomerId: customer.customerId,
       personPuid: person.puid,
-      relationship,
+      relationship: normalizedRelationship,
       canManage: true
     });
     return this._serializePerson(person);
