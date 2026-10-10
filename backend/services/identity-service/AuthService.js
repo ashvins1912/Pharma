@@ -571,8 +571,9 @@ export class AuthService {
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
         const activationUrl = `${frontendUrl}/activate-account?token=${rawToken}`;
 
+        let emailSent = false;
         try {
-            await emailService.sendEmailVerification({
+            const delivery = await emailService.sendEmailVerification({
                 email: normalizedEmail,
                 name: `${fName} ${lName}`.trim(),
                 token: rawToken,
@@ -580,8 +581,15 @@ export class AuthService {
                 verificationUrl: activationUrl,
                 activationUrl
             });
+            emailSent = delivery?.success === true && delivery?.simulated !== true;
+            if (!emailSent) {
+                logger.warn('Signup verification email was not delivered.', {
+                    userId,
+                    reason: delivery?.error || (delivery?.simulated ? 'EMAIL_SIMULATED' : 'EMAIL_DELIVERY_FAILED')
+                });
+            }
         } catch (e) {
-            logger.warn('Email dispatch warning on signup:', { error: e.message });
+            logger.warn('Signup verification email dispatch failed.', { userId, error: e.message });
         }
 
         return {
@@ -603,7 +611,11 @@ export class AuthService {
             },
             verification: {
                 required: true,
-                message: 'A 6-digit verification code has been sent to your email. It expires in 10 minutes.'
+                emailSent,
+                expiresInMinutes: 10,
+                message: emailSent
+                    ? 'A 6-digit verification code has been sent to your email. It expires in 10 minutes.'
+                    : 'Your account was created, but the verification email could not be delivered. Please use Resend verification or contact support.'
             }
         };
     }
