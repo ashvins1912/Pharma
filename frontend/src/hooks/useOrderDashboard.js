@@ -45,7 +45,7 @@ export function useOrderDashboard() {
             await loadOrders();
             return res.data;
         } catch (err) {
-            const msg = err.code === 'NOT_FOUND' ? 'Order not found.' : err.message || 'Unable to assign delivery for this order. Please try again.';
+            const msg = err.response?.data?.error?.message || err.response?.data?.message || (err.code === 'NOT_FOUND' ? 'Order not found.' : err.message) || 'Unable to assign delivery for this order. Please try again.';
             throw new Error(msg);
         } finally {
             setAssignmentExecuting(false);
@@ -95,8 +95,11 @@ export function useOrderDashboard() {
 
     // Grouping by fulfillment stage
     const groupedOrders = useMemo(() => {
+        // Only show orders that have completed pharmacist review and are
+        // eligible for courier assignment. Pending review/processing orders
+        // must not appear as "ready for dispatch".
         const unassigned = orders.filter(
-            (o) => !o.rider?.riderId && !['Delivered', 'Cancelled', 'Rejected'].includes(o.orderStatus)
+            (o) => !o.rider?.riderId && ['Approved', 'Ready to Dispatch'].includes(o.orderStatus)
         );
         const assigned = orders.filter(
             (o) => Boolean(o.rider?.riderId) && !['Delivered', 'Cancelled'].includes(o.orderStatus)
