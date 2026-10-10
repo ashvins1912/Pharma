@@ -4,6 +4,7 @@
 import express from 'express';
 import { identityService } from '../../services/identity-service/IdentityService.js';
 import { authenticateUser } from '../../middleware/auth.js';
+import { customerService } from '../../services/customer-service/CustomerService.js';
 
 const router = express.Router();
 
@@ -21,6 +22,53 @@ router.post('/ensure', authenticateUser, async (req, res, next) => {
     } catch (err) {
         next(err);
     }
+});
+
+// Managed persons CRUD fallback when the standalone Customer Service is not configured.
+router.get('/persons', authenticateUser, async (req, res, next) => {
+    try {
+        const persons = await customerService.listManagedPersons(req.context.userId);
+        res.json({ success: true, data: persons });
+    } catch (err) { next(err); }
+});
+
+router.post('/persons', authenticateUser, async (req, res, next) => {
+    try {
+        const person = await customerService.createFamilyPerson(req.context.userId, {
+            displayName: req.body?.displayName,
+            relationship: req.body?.relationship,
+            dateOfBirth: req.body?.dateOfBirth,
+            gender: req.body?.gender,
+            tenantId: req.user?.tenantId || req.user?.app_metadata?.tenantId || null
+        });
+        res.status(201).json({ success: true, data: person });
+    } catch (err) { next(err); }
+});
+
+router.patch('/persons/:puid', authenticateUser, async (req, res, next) => {
+    try {
+        const person = await customerService.updateFamilyPerson(req.context.userId, req.params.puid, req.body || {});
+        res.json({ success: true, data: person });
+    } catch (err) { next(err); }
+});
+
+router.delete('/persons/:puid', authenticateUser, async (req, res, next) => {
+    try {
+        const result = await customerService.removeFamilyPerson(req.context.userId, req.params.puid);
+        res.json({ success: true, data: result });
+    } catch (err) { next(err); }
+});
+
+router.post('/family-invitations', authenticateUser, async (req, res, next) => {
+    try {
+        const invitation = await customerService.createInvitation(req.context.userId, {
+            inviteeEmail: req.body?.inviteeEmail,
+            personPuid: req.body?.personPuid,
+            relationship: req.body?.relationship,
+            ttlHours: req.body?.ttlHours
+        });
+        res.status(201).json({ success: true, data: invitation });
+    } catch (err) { next(err); }
 });
 
 // Get authenticated customer profile
