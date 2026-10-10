@@ -36,7 +36,11 @@ class EmailService {
                 this.transporter = null;
             }
         } else {
-            logger.info('EmailService running in simulated mode (SMTP_PASSWORD not configured). Outgoing emails will be logged.');
+            logger.warn('SMTP email delivery is not configured; outgoing email cannot be delivered.', {
+                environment: process.env.NODE_ENV || 'development',
+                hasSmtpUser: Boolean(this.user),
+                hasSmtpPassword: Boolean(this.pass)
+            });
         }
     }
 
@@ -219,14 +223,17 @@ class EmailService {
      */
     async _dispatchEmail({ to, subject, html, eventType, meta }) {
         if (!this.transporter) {
-            logger.info(`[EmailService:Simulated] ${eventType}`, {
+            const production = process.env.NODE_ENV === 'production';
+            logger.warn(`[EmailService:${production ? 'Unavailable' : 'Simulated'}] ${eventType}`, {
                 to,
                 subject,
-                meta
+                reason: 'SMTP_NOT_CONFIGURED',
+                production
             });
             return {
-                success: true,
-                simulated: true,
+                success: !production,
+                simulated: !production,
+                error: production ? 'SMTP_NOT_CONFIGURED' : undefined,
                 to,
                 subject
             };
