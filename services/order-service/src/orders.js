@@ -217,15 +217,18 @@ const verifyOrderPrescription = async (request, items, user) => {
       issues: []
     };
   }
-  if (!request.prescriptionId) {
+  if (!request.prescriptionId || !(request.prescriptionUrl || request.prescriptionId)) {
+    // No uploaded prescription means there is nothing to send to OCR/verification.
+    // Keep the statutory prescription-required fulfillment gate, but do not mislabel
+    // a missing document as a failed/manual verification result.
     return {
-      status: 'REVIEW_REQUIRED',
+      status: 'NOT_UPLOADED',
       prescriptionId: null,
       patientPuid: request.patientPuid || null,
       overallConfidence: 0,
       lastCheckedAt: new Date(),
       medicines: [],
-      issues: ['A prescription is required but no Prescription Service record is linked.']
+      issues: []
     };
   }
   try {
