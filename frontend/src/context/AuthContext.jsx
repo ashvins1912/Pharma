@@ -236,9 +236,17 @@ export function AuthProvider({ children }) {
             });
           }
         })
-        .catch(() => {
-          // Do not force logout from a background refresh failure. The next
-          // protected request will perform the same single retry path.
+        .catch((error) => {
+          const code = error?.code || error?.response?.data?.error?.code;
+          const status = Number(error?.status || error?.response?.status || 0);
+          // A replayed/revoked refresh token cannot recover this session. Clear
+          // the in-memory authenticated state once instead of retrying refresh
+          // every time the tab becomes visible or the timer fires.
+          if (status === 401 || code === 'REFRESH_TOKEN_REPLAY') {
+            window.dispatchEvent(new CustomEvent('ashvin:authentication-required', {
+              detail: { requestId: error?.requestId || error?.response?.data?.requestId || null }
+            }));
+          }
         })
         .finally(() => {
           refreshInFlight = null;
@@ -292,6 +300,18 @@ export function AuthProvider({ children }) {
     clearSupabaseLocalSession();
     const res = await apiClient.post('/api/v1/auth/login', { email, password });
     const data = res.data?.data || res.data;
+
+    // Some deployments/proxies may return an application-level failure body
+    // with HTTP 200. Convert it into a normal auth error so AuthModal displays
+    // the backend's specific message instead of treating it as a missing user.
+    if (res.data?.success === false || data?.success === false) {
+      const payload = res.data?.error || data?.error || {};
+      const authError = new Error(payload.message || 'Email or password is incorrect.');
+      authError.code = payload.code || 'AUTHENTICATION_FAILED';
+      authError.status = res.status;
+      authError.requestId = res.data?.requestId || payload.requestId || null;
+      throw authError;
+    }
 
     if (data.mfaRequired) {
       setMfaRequired(true);
