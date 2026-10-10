@@ -38,7 +38,7 @@ app.post('/api/v1/customers/ensure', async (req, res) => {
   }
 });
 
-app.get('/api/v1/persons', async (req, res) => {
+app.get(['/api/v1/persons', '/api/v1/customers/persons'],  async (req, res) => {
   try {
     if (!req.userId) return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED' } });
     const persons = await customerService.listManagedPersons(req.userId);
@@ -48,7 +48,7 @@ app.get('/api/v1/persons', async (req, res) => {
   }
 });
 
-app.post('/api/v1/persons', async (req, res) => {
+app.post(['/api/v1/persons', '/api/v1/customers/persons'],  async (req, res) => {
   try {
     if (!req.userId) return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED' } });
     const person = await customerService.createFamilyPerson(req.userId, {
@@ -61,7 +61,7 @@ app.post('/api/v1/persons', async (req, res) => {
   }
 });
 
-app.patch('/api/v1/persons/:puid', async (req, res) => {
+app.patch(['/api/v1/persons/:puid', '/api/v1/customers/persons/:puid'],  async (req, res) => {
   try {
     if (!req.userId) return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED' } });
     const person = await customerService.updateFamilyPerson(req.userId, req.params.puid, req.body || {});
@@ -71,7 +71,7 @@ app.patch('/api/v1/persons/:puid', async (req, res) => {
   }
 });
 
-app.delete('/api/v1/persons/:puid', async (req, res) => {
+app.delete(['/api/v1/persons/:puid', '/api/v1/customers/persons/:puid'],  async (req, res) => {
   try {
     if (!req.userId) return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED' } });
     const result = await customerService.removeFamilyPerson(req.userId, req.params.puid);
@@ -81,7 +81,7 @@ app.delete('/api/v1/persons/:puid', async (req, res) => {
   }
 });
 
-app.post('/api/v1/family-invitations', async (req, res) => {
+app.post(['/api/v1/family-invitations', '/api/v1/customers/family-invitations'],  async (req, res) => {
   try {
     if (!req.userId) return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED' } });
     const invitation = await customerService.createInvitation(req.userId, req.body || {});
