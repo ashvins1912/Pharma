@@ -33,6 +33,10 @@ export function proxyRequest(
   const headers = Object.fromEntries(
     Object.entries(req.headers).filter(([name]) => !hopByHopHeaders.has(name.toLowerCase()))
   );
+  // Never forward identity headers supplied by the browser. Internal identity
+  // context is re-created below only after the gateway authenticates the user.
+  delete headers['x-user-id'];
+  delete headers['x-tenant-id'];
   if (serviceAuthorization) {
     delete headers.authorization;
     delete headers.cookie;
@@ -40,10 +44,10 @@ export function proxyRequest(
     delete headers['x-csrf-token'];
     headers.authorization = serviceAuthorization;
     if (req.gatewayAuthenticated) headers['x-gateway-trusted-authorization'] = serviceAuthorization;
-    // Internal services receive the already-authenticated identity context.
-    // These headers are set only after gateway authentication and are never
-    // accepted from the browser as a source of trust.
-    if (req.user?.id) headers['x-user-id'] = String(req.user.id);
+    // The canonical application identity is the verified token subject (sub).
+    // Some auth adapters do not populate a separate id field.
+    const userId = req.user?.sub || req.user?.id;
+    if (userId) headers['x-user-id'] = String(userId);
     const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId;
     if (tenantId) headers['x-tenant-id'] = String(tenantId);
   }
