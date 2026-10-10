@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { friendlyAuthError } from '../api/apiErrors';
 
-const signupFields = ['name', 'email', 'password', 'confirmPassword'];
+const signupFields = ['name', 'mobile', 'dateOfBirth', 'gender', 'email', 'password', 'confirmPassword'];
 
 function validateSignupField(field, values) {
   switch (field) {
@@ -508,6 +508,52 @@ export default function AuthModal({ isOpen, onClose }) {
                       className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
                     />
                     {signupErrors.mobile && <p className="mt-1 text-[11px] text-rose-600">{signupErrors.mobile}</p>}
+                  </div>
+                )}
+
+                {isSignUp && !passwordRecoveryRequired && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="min-w-0">
+                      <label htmlFor="signup-date-of-birth" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Date of Birth <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        id="signup-date-of-birth"
+                        type="date"
+                        value={dateOfBirth}
+                        max={new Date().toISOString().slice(0, 10)}
+                        onChange={(e) => setDateOfBirth(e.target.value)}
+                        onBlur={() => handleSignupBlur('dateOfBirth')}
+                        aria-invalid={Boolean(signupErrors.dateOfBirth)}
+                        aria-describedby={signupErrors.dateOfBirth ? 'signup-date-of-birth-error' : undefined}
+                        autoComplete="bday"
+                        required
+                        className="w-full min-w-0 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                      />
+                      {signupErrors.dateOfBirth && <p id="signup-date-of-birth-error" className="mt-1 text-[11px] text-rose-600">{signupErrors.dateOfBirth}</p>}
+                    </div>
+                    <div className="min-w-0">
+                      <label htmlFor="signup-gender" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Gender <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        id="signup-gender"
+                        value={gender}
+                        onChange={(e) => setGender(e.target.value)}
+                        onBlur={() => handleSignupBlur('gender')}
+                        aria-invalid={Boolean(signupErrors.gender)}
+                        aria-describedby={signupErrors.gender ? 'signup-gender-error' : undefined}
+                        required
+                        className="w-full min-w-0 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                      >
+                        <option value="">Select gender</option>
+                        <option value="FEMALE">Female</option>
+                        <option value="MALE">Male</option>
+                        <option value="OTHER">Other</option>
+                        <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+                      </select>
+                      {signupErrors.gender && <p id="signup-gender-error" className="mt-1 text-[11px] text-rose-600">{signupErrors.gender}</p>}
+                    </div>
                   </div>
                 )}
 
