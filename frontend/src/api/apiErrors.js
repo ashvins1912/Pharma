@@ -52,7 +52,16 @@ export function normalizeApiError(error) {
 
 export function friendlyAuthError(error, action = 'login') {
   const status = Number(error?.status || error?.response?.status || 0);
-  if ((status === 401 || /invalid.*(credential|password)|invalid login/i.test(String(error?.message || ''))) && ['login', 'signup'].includes(action)) {
+  const code = String(error?.code || error?.response?.data?.error?.code || '').toUpperCase();
+  const serverMessage = String(
+    error?.response?.data?.error?.message
+    || error?.response?.data?.message
+    || error?.message
+    || ''
+  ).trim();
+
+  if (['INVALID_CREDENTIALS', 'INVALID_PASSWORD', 'INVALID_LOGIN_CREDENTIALS'].includes(code)
+    || ((status === 401 || /invalid.*(credential|password)|invalid login/i.test(serverMessage)) && ['login', 'signup'].includes(action))) {
     return 'Email or password is incorrect.';
   }
   if (status === 429) return STATUS_MESSAGES[429];
