@@ -28,6 +28,7 @@ const orderSchema = new mongoose.Schema({
     orderNumber: { type: String, unique: true, sparse: true, default: () => `ORD-${randomUUID()}` },
     customerId: { type: String, index: true },
     tenantId: { type: String, default: null, index: true },
+    branchId: { type: String, default: null, index: true },
     riderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Rider', default: null, index: true },
     userId: { type: String, required: true, index: true },
     customerName: { type: String, default: "Valued Customer" },
