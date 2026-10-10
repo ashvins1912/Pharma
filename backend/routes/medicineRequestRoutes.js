@@ -459,6 +459,9 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
                 .join(', ');
 
         const requestDoc = await dataStore.createMedicineRequest({
+            tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null,
+            branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
+            urgencyLevel: req.body.urgencyLevel || 'Normal',
             requestedItems,
             prescriptionUrl,
             prescriptionId,
