@@ -1,6 +1,7 @@
 import deliveryContainer from '../container.js';
 import { sendCustomWhatsAppAlert } from '../../../config/whatsapp.js';
 import mongoose from 'mongoose';
+import OrderModel from '../../../models/Order.js';
 
 const validOrderId = value => typeof value === 'string'
     && value !== 'undefined'
@@ -19,11 +20,68 @@ const invalidOrderId = (req, res) => res.status(400).json({
 /**
  * Controller: Order Automated Assignment & Engine Monitoring
  */
+const validateAssignmentEligibility = async (req, res, orderId) => {
+    const order = await OrderModel.findById(orderId).lean();
+    if (!order) {
+        res.status(404).json({
+            success: false,
+            error: { code: 'NOT_FOUND', message: 'Order not found.', retryable: false, requestId: req.requestId || null }
+        });
+        return null;
+    }
+
+    const role = req.user?.app_metadata?.role || req.user?.role || req.context?.role || 'customer';
+    const globalAdmin = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+    const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId || null;
+    const branchId = req.user?.branchId || req.user?.app_metadata?.branchId || req.context?.branchId || null;
+    if (!globalAdmin && order.tenantId && String(order.tenantId) !== String(tenantId || '')) {
+        res.status(403).json({
+            success: false,
+            error: { code: 'TENANT_SCOPE_VIOLATION', message: 'This order is outside your tenant scope.', retryable: false, requestId: req.requestId || null }
+        });
+        return null;
+    }
+    if (!globalAdmin && branchId && order.branchId && String(order.branchId) !== String(branchId)) {
+        res.status(403).json({
+            success: false,
+            error: { code: 'BRANCH_SCOPE_VIOLATION', message: 'This order is outside your branch scope.', retryable: false, requestId: req.requestId || null }
+        });
+        return null;
+    }
+    if (!['Approved', 'Ready to Dispatch'].includes(order.orderStatus)) {
+        res.status(409).json({
+            success: false,
+            error: {
+                code: 'ORDER_NOT_READY_FOR_ASSIGNMENT',
+                message: `Order must be approved and ready for dispatch before courier assignment. Current status: ${order.orderStatus || 'UNKNOWN'}.`,
+                retryable: false,
+                requestId: req.requestId || null
+            }
+        });
+        return null;
+    }
+    if (order.prescriptionRequired && order.prescriptionVerification?.status !== 'MATCHED') {
+        res.status(409).json({
+            success: false,
+            error: {
+                code: 'PRESCRIPTION_VERIFICATION_REQUIRED',
+                message: `Prescription verification must be MATCHED before courier assignment. Current status: ${order.prescriptionVerification?.status || 'REVIEW_REQUIRED'}.`,
+                retryable: false,
+                requestId: req.requestId || null
+            }
+        });
+        return null;
+    }
+    return order;
+};
+
 export const autoAssignOrder = async (req, res) => {
     try {
         deliveryContainer.refreshDataLayer();
         const { orderId } = req.params;
         if (!validOrderId(orderId)) return invalidOrderId(req, res);
+        const eligibleOrder = await validateAssignmentEligibility(req, res, orderId);
+        if (!eligibleOrder) return;
 
         const result = await deliveryContainer.assignmentEngine.assignOrder(orderId, req.body || {});
 
@@ -72,6 +130,8 @@ export const manualAssignOrder = async (req, res) => {
         deliveryContainer.refreshDataLayer();
         const { orderId } = req.params;
         if (!validOrderId(orderId)) return invalidOrderId(req, res);
+        const eligibleOrder = await validateAssignmentEligibility(req, res, orderId);
+        if (!eligibleOrder) return;
         const { riderId, notes } = req.body;
 
         if (!riderId) {
