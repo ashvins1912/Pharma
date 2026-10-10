@@ -1153,6 +1153,50 @@ router.get('/mine', authenticateUser, async (req, res) => {
     }
 });
 
+router.get('/history', authenticateUser, async (req, res) => {
+    if (!getIsConnected()) {
+        return res.status(503).json({ message: 'Order history is temporarily unavailable.' });
+    }
+    try {
+        const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 3));
+        const closedStatuses = new Set(['completed', 'delivered', 'cancelled', 'rejected']);
+        const statusFilter = {
+            $or: [
+                { orderStatus: { $in: [...closedStatuses].map(status => new RegExp(`^${status}$`, 'i')) } },
+                { status: { $in: [...closedStatuses].map(status => new RegExp(`^${status}$`, 'i')) } }
+            ]
+        };
+        const ownerFilter = { $or: [{ userId: req.user.sub }, { customerId: req.user.sub }] };
+        const filter = { $and: [ownerFilter, statusFilter] };
+        const total = await Order.countDocuments(filter);
+        const totalPages = Math.ceil(total / limit);
+        const currentPage = Math.min(page, Math.max(totalPages, 1));
+        const orders = await Order.find(filter)
+            .sort({ createdAt: -1, _id: -1 })
+            .skip((currentPage - 1) * limit)
+            .limit(limit)
+            .lean();
+        res.status(200).json({
+            orders,
+            items: orders,
+            pagination: {
+                page: currentPage,
+                pageSize: limit,
+                limit,
+                total,
+                totalPages,
+                hasNextPage: currentPage < totalPages,
+                hasPreviousPage: currentPage > 1
+            }
+        });
+    } catch (err) {
+        console.error('Order history retrieval failed:', err);
+        res.status(500).json({ message: 'Failed to retrieve order history.' });
+    }
+});
+
+
 // Customer/admin order detail used by the tracking UI.
 router.get('/:id', authenticateUser, async (req, res) => {
     if (!getIsConnected()) return res.status(503).json({ message: 'Order tracking is temporarily unavailable.' });
@@ -1201,48 +1245,6 @@ router.post('/:id/rating', authenticateUser, async (req, res) => {
     }
 });
 
-router.get('/history', authenticateUser, async (req, res) => {
-    if (!getIsConnected()) {
-        return res.status(503).json({ message: 'Order history is temporarily unavailable.' });
-    }
-    try {
-        const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
-        const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 3));
-        const closedStatuses = new Set(['completed', 'delivered', 'cancelled', 'rejected']);
-        const statusFilter = {
-            $or: [
-                { orderStatus: { $in: [...closedStatuses].map(status => new RegExp(`^${status}$`, 'i')) } },
-                { status: { $in: [...closedStatuses].map(status => new RegExp(`^${status}$`, 'i')) } }
-            ]
-        };
-        const ownerFilter = { $or: [{ userId: req.user.sub }, { customerId: req.user.sub }] };
-        const filter = { $and: [ownerFilter, statusFilter] };
-        const total = await Order.countDocuments(filter);
-        const totalPages = Math.ceil(total / limit);
-        const currentPage = Math.min(page, Math.max(totalPages, 1));
-        const orders = await Order.find(filter)
-            .sort({ createdAt: -1, _id: -1 })
-            .skip((currentPage - 1) * limit)
-            .limit(limit)
-            .lean();
-        res.status(200).json({
-            orders,
-            items: orders,
-            pagination: {
-                page: currentPage,
-                pageSize: limit,
-                limit,
-                total,
-                totalPages,
-                hasNextPage: currentPage < totalPages,
-                hasPreviousPage: currentPage > 1
-            }
-        });
-    } catch (err) {
-        console.error('Order history retrieval failed:', err);
-        res.status(500).json({ message: 'Failed to retrieve order history.' });
-    }
-});
 
 // Notification logs audit
 router.get('/notifications/logs', authenticateUser, isAdmin, async (req, res) => {
