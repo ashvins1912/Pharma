@@ -2804,7 +2804,21 @@ export const dataStore = {
         };
 
         if (getIsConnected()) {
-            const created = await MedicineRequest.create(requestDoc);
+            let created;
+            try {
+                created = await MedicineRequest.create(requestDoc);
+            } catch (error) {
+                const duplicateRequestNumber = error?.code === 11000
+                    && (error?.keyPattern?.requestNumber
+                        || error?.keyValue?.requestNumber
+                        || String(error?.message || '').includes('requestNumber_1'));
+                if (!duplicateRequestNumber) throw error;
+
+                // A concurrent instance or stale counter may have allocated an
+                // already-used number. Allocate a fresh number and retry once.
+                requestDoc.requestNumber = await nextMedicineRequestNumber();
+                created = await MedicineRequest.create(requestDoc);
+            }
             const plain = created.toObject();
             try {
                 await sendWhatsAppMedicineRequestAlert(plain, 'MedicineRequestCreated');
