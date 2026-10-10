@@ -448,6 +448,7 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
             addressLine2: selectedAddress.addressLine2,
             city: selectedAddress.city,
             state: selectedAddress.state,
+            postalCode: selectedAddress.postalCode || selectedAddress.pincode || '',
             pincode: selectedAddress.pincode,
             landmark: selectedAddress.landmark,
             country: selectedAddress.country,
