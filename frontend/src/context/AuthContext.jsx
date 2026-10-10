@@ -203,73 +203,10 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // Keep long-lived admin/tenant workspaces alive without weakening access control.
-  // The access JWT is short-lived; the HttpOnly refresh cookie is rotated silently
-  // while the authenticated app is open or when a backgrounded tab becomes visible.
-  useEffect(() => {
-    if (!isFullyAuthenticated) return undefined;
-
-    let stopped = false;
-    let refreshInFlight = null;
-
-    const refreshSession = async () => {
-      if (stopped || refreshInFlight) return refreshInFlight;
-      refreshInFlight = apiClient.post('/api/v1/auth/refresh')
-        .then(({ data }) => {
-          if (stopped) return;
-          const refreshedUser = data?.data?.user || data?.user;
-          if (refreshedUser?.id) {
-            const refreshedRole = refreshedUser.app_metadata?.role || refreshedUser.role || role;
-            const refreshedPermissions = Array.isArray(refreshedUser.permissions) ? refreshedUser.permissions : [];
-            const refreshedRevocations = Array.isArray(refreshedUser.revokedPermissions)
-              ? refreshedUser.revokedPermissions
-              : (Array.isArray(refreshedUser.app_metadata?.revokedPermissions) ? refreshedUser.app_metadata.revokedPermissions : []);
-            setUser(previous => previous?.id === refreshedUser.id ? { ...previous, ...refreshedUser } : refreshedUser);
-            setRole(refreshedRole);
-            setPermissions(refreshedPermissions);
-            setRevokedPermissions(refreshedRevocations);
-            setAuthorizationCapabilities({
-              userId: refreshedUser.id,
-              role: refreshedRole,
-              permissions: refreshedPermissions,
-              revokedPermissions: refreshedRevocations
-            });
-          }
-        })
-        .catch((error) => {
-          const code = error?.code || error?.response?.data?.error?.code;
-          const status = Number(error?.status || error?.response?.status || 0);
-          // A replayed/revoked refresh token cannot recover this session. Clear
-          // the in-memory authenticated state once instead of retrying refresh
-          // every time the tab becomes visible or the timer fires.
-          if (status === 401 || code === 'REFRESH_TOKEN_REPLAY') {
-            window.dispatchEvent(new CustomEvent('ashvin:authentication-required', {
-              detail: { requestId: error?.requestId || error?.response?.data?.requestId || null }
-            }));
-          }
-        })
-        .finally(() => {
-          refreshInFlight = null;
-        });
-      return refreshInFlight;
-    };
-
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') void refreshSession();
-    };
-
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void refreshSession();
-    }, 10 * 60 * 1000);
-
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [isFullyAuthenticated, role]);
-
+  // Session refresh is demand-driven by apiClient: it runs once (shared across
+  // concurrent 401 responses) only when a protected request reports an expired
+  // session. Do not rotate the refresh cookie on every tab-focus or fixed timer;
+  // those events can create a stream of successful /auth/refresh requests.
   useEffect(() => {
     const handleAuthenticationRequired = () => {
       localStorage.removeItem('demo_session');
