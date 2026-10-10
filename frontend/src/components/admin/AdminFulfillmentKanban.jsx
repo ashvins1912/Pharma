@@ -685,6 +685,52 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                           </div>
                         )}
 
+                        {col.id === 'Processing Order' && order.prescriptionRequired
+                          && order.prescriptionVerification?.status !== 'MATCHED' && (
+                          <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                            <p className="text-xs font-extrabold text-amber-900">
+                              Prescription review is blocking fulfillment
+                            </p>
+                            <p className="text-[11px] text-amber-800">
+                              Status: {order.prescriptionVerification?.status || 'REVIEW_REQUIRED'}.
+                              Open the prescription, re-queue extraction, or record an explicit pharmacist decision.
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {order.prescriptionUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => viewPrescription(order)}
+                                  disabled={isProcessing || viewingPrescriptionOrderId === String(order._id)}
+                                  className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 text-[11px] font-extrabold text-slate-700 disabled:opacity-50"
+                                >
+                                  {viewingPrescriptionOrderId === String(order._id) ? 'Opening…' : 'View prescription'}
+                                </button>
+                              )}
+                              {order.prescriptionId && (
+                                <button
+                                  type="button"
+                                  onClick={() => reinitiatePrescriptionVerification(order)}
+                                  disabled={isProcessing}
+                                  className="min-h-9 rounded-lg border border-amber-300 bg-white px-3 text-[11px] font-extrabold text-amber-900 disabled:opacity-50"
+                                >
+                                  Re-initiate extraction
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => manualApprovePrescription(order, 'order')}
+                                disabled={isProcessing || !order.prescriptionUrl}
+                                className="min-h-9 rounded-lg bg-emerald-600 px-3 text-[11px] font-extrabold text-white disabled:opacity-50"
+                              >
+                                Manual review & approve
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-amber-800">
+                              Manual approval must only be used after reviewing the actual prescription. Dispatch remains blocked until the backend records MATCHED verification.
+                            </p>
+                          </div>
+                        )}
+
                         {/* Action Buttons according to allowed state transitions */}
                         <div className="pt-2 border-t border-slate-100">
                           {col.id === 'Processing Order' && (
