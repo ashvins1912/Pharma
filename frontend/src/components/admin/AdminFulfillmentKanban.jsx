@@ -711,7 +711,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
 
                         {col.id === 'Pending_Review' && (
                           <div className="space-y-2 border-t border-slate-100 pt-2">
-                            {Boolean(order.prescriptionUrl || order.prescriptionId) && (
+                            {order.prescriptionRequired && order.prescriptionRequired && Boolean(order.prescriptionUrl || order.prescriptionId) && (
                               <div className="rounded-xl bg-rose-50 p-2.5 text-xs text-rose-800 space-y-2">
                                 <div className="flex items-center justify-between gap-1">
                                   <p className="font-bold">{order.prescriptionRequired ? 'Prescription required' : 'Prescription attached'}</p>
@@ -742,7 +742,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                                 Prescription upload is required before approval. No prescription service request, document-view icon, or manual prescription-review action is available until a document is attached.
                               </div>
                             )}
-                            {order.prescriptionRequired && Boolean(order.prescriptionUrl || order.prescriptionId) && (
+                            {order.prescriptionRequired && order.prescriptionRequired && Boolean(order.prescriptionUrl || order.prescriptionId) && (
                               <div className="rounded-xl border border-amber-200 bg-amber-50 p-2 space-y-2">
                                 <div className="flex flex-wrap gap-2">
                                   <button
@@ -848,7 +848,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                           </div>
                         )}
 
-                        {col.id === 'Processing Order' && Boolean(order.prescriptionUrl || order.prescriptionId) && (
+                        {col.id === 'Processing Order' && order.prescriptionRequired && Boolean(order.prescriptionUrl || order.prescriptionId) && (
                           order.prescriptionVerification?.status !== 'MATCHED' ? (
                             <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
                               <div className="flex items-center gap-1.5">
@@ -916,7 +916,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                           </div>
                         )}
 
-                        {col.id !== 'Pending_Review' && col.id !== 'Processing Order' && Boolean(order.prescriptionUrl || order.prescriptionId) && (
+                        {col.id !== 'Pending_Review' && col.id !== 'Processing Order' && order.prescriptionRequired && Boolean(order.prescriptionUrl || order.prescriptionId) && (
                           <div className="flex items-center justify-between text-[11px] bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
                             <span className="font-semibold text-slate-600">
                               📄 Prescription:{' '}
