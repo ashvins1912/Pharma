@@ -67,7 +67,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
         onTouchMove={(e) => e.preventDefault()}
         aria-hidden="true"
       />
-      <div className="pharma-modal-surface relative z-10 m-auto flex h-auto max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 text-slate-800 shadow-2xl overscroll-contain">
+      <div className="pharma-modal-surface relative z-10 m-auto flex h-[92dvh] max-h-[56rem] min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 text-slate-800 shadow-2xl overscroll-contain sm:h-[min(90dvh,56rem)]">
         <header className="relative shrink-0 bg-gradient-to-r from-blue-700 to-indigo-800 px-5 pt-5 pb-4 text-white rounded-t-[28px]">
           <button onClick={onClose} aria-label="Close profile" className="absolute right-4 top-4 h-8 w-8 rounded-full bg-white/10 text-white/80 hover:bg-white/20">×</button>
           <div className="flex items-center gap-3 pr-8">
