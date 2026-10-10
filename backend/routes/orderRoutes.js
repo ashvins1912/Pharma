@@ -641,7 +641,7 @@ router.post('/admin/:id/prescription/reinitiate', authenticateUser, isAdmin, asy
         const reprocessResult = await reinitiatePrescriptionProcessing({
             prescriptionId: order.prescriptionId,
             userId: req.user.sub,
-            role: req.user?.app_metadata?.role || req.user?.role || 'admin',
+            role: 'admin',
             isAdmin: true
         });
 
@@ -650,7 +650,7 @@ router.post('/admin/:id/prescription/reinitiate', authenticateUser, isAdmin, asy
             patientPuid: order.patientPuid || null,
             items,
             userId: req.user.sub,
-            role: req.user?.app_metadata?.role || req.user?.role || 'admin',
+            role: 'admin',
             isAdmin: true
         });
 
