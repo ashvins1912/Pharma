@@ -159,10 +159,8 @@ export default function AdminDashboardView() {
     loadAllOrders();
   }, [adminTab, authLoading, canViewFulfillment, activeOrdersPage]);
 
-  useEffect(() => {
-    if (authLoading || !hasPermission('inventory.read')) return;
-    loadInventoryAlerts();
-  }, [authLoading, hasPermission, loadInventoryAlerts]);
+  // Inventory alerts are loaded once by AppContext for the authenticated staff
+  // session and shared with both the header alert bell and this dashboard.
 
   useEffect(() => {
     if (authLoading || !canViewAudits || adminTab !== 'audits') return;
