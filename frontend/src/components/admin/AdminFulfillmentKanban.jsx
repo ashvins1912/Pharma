@@ -284,6 +284,12 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   };
 
   const manualApprovePrescription = async (order, scope = 'order', itemIndex = null) => {
+    const orderId = String(order?._id || '');
+    if (!order?.prescriptionUrl || !verifiedOrderIds.includes(orderId)) {
+      addToast('Open and review the uploaded prescription before recording manual approval.', 'warning');
+      return;
+    }
+
     const reason = window.prompt(
       scope === 'order'
         ? 'Reason for manual order-level prescription approval (optional):'
