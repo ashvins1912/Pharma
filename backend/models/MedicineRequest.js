@@ -5,6 +5,7 @@ const requestedItemSchema = new mongoose.Schema({
     medicineId: { type: mongoose.Schema.Types.Mixed, default: null },
     productId: { type: String, default: null },
     strength: { type: String, default: '', trim: true },
+    composition: { type: String, default: '', trim: true },
     dosageForm: { type: String, default: '', trim: true },
     manufacturer: { type: String, default: '', trim: true },
     quantity: { type: Number, required: true, min: 1, default: 1 },
@@ -114,6 +115,8 @@ const auditTrailSchema = new mongoose.Schema({
 const medicineRequestSchema = new mongoose.Schema({
     requestNumber: { type: String, required: true, unique: true, index: true },
     customerId: { type: String, required: true, index: true },
+    tenantId: { type: String, default: null, index: true },
+    branchId: { type: String, default: null, index: true },
     addressId: { type: mongoose.Schema.Types.ObjectId, ref: 'UserAddress', required: true, index: true },
     customerName: { type: String, default: 'Valued Customer' },
     customerPhone: { type: String, default: '' },
@@ -133,6 +136,12 @@ const medicineRequestSchema = new mongoose.Schema({
     coordinates: {
         lat: Number,
         lng: Number
+    },
+    urgencyLevel: {
+        type: String,
+        enum: ['Normal', 'Urgent (Same Day)', 'Critical / Life-Saving'],
+        default: 'Normal',
+        index: true
     },
     preferredDeliveryPreference: {
         type: String,
