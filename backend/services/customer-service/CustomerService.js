@@ -118,6 +118,9 @@ export class CustomerService {
       if (!selfPerson) {
         throw Object.assign(new Error('Customer self profile could not be repaired.'), { statusCode: 409 });
       }
+      if (selfPerson.createdByUserId !== userId) {
+        throw Object.assign(new Error('Customer profile identity is inconsistent.'), { statusCode: 409 });
+      }
 
       await PersonRelationship.updateOne(
         { ownerUserId: userId, personPuid: customer.selfPuid },
