@@ -23,13 +23,26 @@ export class ApiError extends Error {
   }
 }
 
+function readApiError(body) {
+  // Support both the standard error envelope and services/proxies that wrap it
+  // in one or more { data } success-envelope layers.
+  let current = body;
+  for (let depth = 0; depth < 3 && current && typeof current === 'object'; depth += 1) {
+    if (current.error && typeof current.error === 'object') return current.error;
+    if (current.code || current.errorCode || current.message) return current;
+    current = current.data;
+  }
+  return {};
+}
+
 export function normalizeApiError(error) {
   if (error instanceof ApiError) return error;
   const response = error?.response;
   const status = Number(response?.status || 0);
   const body = response?.data;
+  const apiError = readApiError(body);
   const contentType = String(response?.headers?.['content-type'] || '').toLowerCase();
-  const bodyCode = body?.error?.code || body?.code || body?.errorCode;
+  const bodyCode = apiError.code || body?.code || body?.errorCode;
   const infrastructure404 = status === 404 && (
     contentType.includes('text/html')
     || (typeof body === 'string' && /<!doctype|<html|cannot (get|post|put|delete)/i.test(body))
@@ -39,8 +52,10 @@ export function normalizeApiError(error) {
     : bodyCode || ({ 401: 'UNAUTHORIZED', 403: 'FORBIDDEN', 404: 'NOT_FOUND', 408: 'TIMEOUT', 409: 'CONFLICT', 422: 'VALIDATION_ERROR', 429: 'RATE_LIMITED', 500: 'INTERNAL_ERROR', 502: 'UPSTREAM_ERROR', 503: 'SERVICE_UNAVAILABLE', 504: 'TIMEOUT' }[status])
       || (['ECONNABORTED', 'ETIMEDOUT'].includes(error?.code) ? 'TIMEOUT' : error?.request ? 'NETWORK_ERROR' : 'UNKNOWN_ERROR');
   const message = infrastructure404 ? STATUS_MESSAGES[503]
-    : status === 0 ? (['ECONNABORTED', 'ETIMEDOUT'].includes(error?.code) ? STATUS_MESSAGES[408] : error?.request ? 'Unable to connect to the service. Check your connection and try again.' : 'Something went wrong. Please try again in a moment.')
-      : STATUS_MESSAGES[status] || 'Something went wrong. Please try again in a moment.';
+    : (apiError.message && ['INVALID_CREDENTIALS', 'INVALID_PASSWORD', 'INVALID_LOGIN_CREDENTIALS'].includes(String(bodyCode || '').toUpperCase()))
+      ? apiError.message
+      : status === 0 ? (['ECONNABORTED', 'ETIMEDOUT'].includes(error?.code) ? STATUS_MESSAGES[408] : error?.request ? 'Unable to connect to the service. Check your connection and try again.' : 'Something went wrong. Please try again in a moment.')
+        : STATUS_MESSAGES[status] || 'Something went wrong. Please try again in a moment.';
   return new ApiError({
     status: infrastructure404 ? 503 : status,
     code,
@@ -52,10 +67,11 @@ export function normalizeApiError(error) {
 
 export function friendlyAuthError(error, action = 'login') {
   const status = Number(error?.status || error?.response?.status || 0);
-  const code = String(error?.code || error?.response?.data?.error?.code || '').toUpperCase();
+  const responseBody = error?.response?.data;
+  const responseApiError = readApiError(responseBody);
+  const code = String(error?.code || responseApiError.code || '').toUpperCase();
   const serverMessage = String(
-    error?.response?.data?.error?.message
-    || error?.response?.data?.message
+    responseApiError.message
     || error?.message
     || ''
   ).trim();
