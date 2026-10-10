@@ -391,8 +391,36 @@ router.get('/prescriptions/:fileId', authenticateUser, async (req, res) => {
     try {
         const prescription = await getPrescription(req.params.fileId);
         if (!prescription) return res.status(404).json({ message: 'Prescription file not found.' });
-        const role = req.user?.app_metadata?.role || req.user?.role;
-        if (prescription.ownerId !== req.user.sub && role !== 'admin' && role !== 'pharmacy') {
+        const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
+        const roles = Array.isArray(req.user?.roles) ? req.user.roles : [];
+        const normalizedRoles = new Set([role, ...roles].map(value => String(value || '').toUpperCase()));
+        const globalAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].some(value => normalizedRoles.has(value));
+        const tenantStaff = [
+            'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACY', 'PHARMACIST',
+            'PHARMACY_STAFF', 'BRANCH_ADMIN'
+        ].some(value => normalizedRoles.has(value));
+        const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
+        const branchId = req.user?.branchId || req.user?.app_metadata?.branchId || null;
+
+        let relatedOrder = null;
+        if (prescription.ownerId !== req.user.sub && !globalAdmin && tenantStaff) {
+            const prescriptionUrl = `/api/orders/prescriptions/${req.params.fileId}`;
+            if (getIsConnected()) {
+                relatedOrder = await Order.findOne({
+                    $or: [{ prescriptionUrl }, { prescriptionId: req.params.fileId }]
+                }).select('tenantId branchId userId customerId').lean();
+            } else {
+                const orders = await dataStore.getAllOrders();
+                relatedOrder = orders.find(order =>
+                    order.prescriptionUrl === prescriptionUrl || String(order.prescriptionId || '') === String(req.params.fileId)
+                ) || null;
+            }
+        }
+        const sameTenant = Boolean(tenantId && relatedOrder?.tenantId && String(tenantId) === String(relatedOrder.tenantId));
+        const sameBranch = !branchId || !relatedOrder?.branchId || String(branchId) === String(relatedOrder.branchId);
+        const isAuthorizedStaff = globalAdmin || (tenantStaff && sameTenant && sameBranch);
+
+        if (prescription.ownerId !== req.user.sub && !isAuthorizedStaff) {
             return res.status(403).json({ message: 'You are not authorized to view this prescription.' });
         }
         res.set('Content-Type', prescription.contentType);
@@ -607,13 +635,22 @@ router.post('/admin/:id/prescription/reinitiate', authenticateUser, isAdmin, asy
             });
         }
 
+        // Re-enqueue the durable Prescription Service job first. Verification
+        // alone only reads the current PROCESSING/REVIEW_REQUIRED snapshot and
+        // cannot restart a stuck OCR/extraction job.
+        const reprocessResult = await reinitiatePrescriptionProcessing({
+            prescriptionId: order.prescriptionId,
+            userId: req.user.sub,
+            role: req.user?.app_metadata?.role || req.user?.role || 'admin',
+            isAdmin: true
+        });
+
         const verification = await verifyPrescriptionAgainstItems({
             prescriptionId: order.prescriptionId,
             patientPuid: order.patientPuid || null,
             items,
             userId: req.user.sub,
-            tenantId: order.tenantId || req.user.tenantId || null,
-            branchId: order.branchId || req.user.branchId || null,
+            role: req.user?.app_metadata?.role || req.user?.role || 'admin',
             isAdmin: true
         });
 
@@ -639,7 +676,8 @@ router.post('/admin/:id/prescription/reinitiate', authenticateUser, isAdmin, asy
             success: true,
             message: verification.status === 'MATCHED'
                 ? 'Prescription verification completed successfully.'
-                : 'Prescription verification was re-initiated. If it remains pending, use manual medicine or order approval.',
+                : 'Prescription processing was re-queued. Refresh this order after extraction completes, or use manual review after opening the uploaded prescription.',
+            processing: reprocessResult?.status || reprocessResult?.state || 'QUEUED',
             verification
         });
     } catch (err) {
