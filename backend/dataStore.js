@@ -2694,6 +2694,7 @@ export const dataStore = {
             medicineId: item.medicineId || null,
             productId: item.productId || null,
             strength: String(item.strength || '').trim(),
+            composition: String(item.composition || item.saltComposition || item.salt || '').trim(),
             dosageForm: String(item.dosageForm || '').trim(),
             manufacturer: String(item.manufacturer || '').trim(),
             quantity: Math.max(1, Number(item.quantity) || 1),
@@ -2754,6 +2755,8 @@ export const dataStore = {
         const requestDoc = {
             requestNumber: reqNum,
             customerId,
+            tenantId: payload.tenantId || user.tenantId || user.app_metadata?.tenantId || null,
+            branchId: payload.branchId || user.branchId || user.app_metadata?.branchId || null,
             customerName,
             customerPhone,
             customerEmail,
@@ -2777,6 +2780,9 @@ export const dataStore = {
             deliveryAddress: deliveryAddress,
             addressDetails: payload.addressDetails || {},
             coordinates: payload.coordinates || null,
+            urgencyLevel: ['Normal', 'Urgent (Same Day)', 'Critical / Life-Saving'].includes(payload.urgencyLevel)
+                ? payload.urgencyLevel
+                : 'Normal',
             preferredDeliveryPreference,
             status: 'REQUESTED',
             pharmacyProposal: null,
