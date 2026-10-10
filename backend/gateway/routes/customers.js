@@ -13,10 +13,11 @@ const router = express.Router();
 // and the API Gateway falls back to the main backend.
 router.post('/ensure', authenticateUser, async (req, res, next) => {
     try {
-        const customer = await identityService.getOrCreateCustomer(req.context.userId, {
+        const customer = await customerService.ensureCustomerForUser(req.context.userId, {
             name: req.body?.name || req.user.user_metadata?.name || req.user.name,
             email: req.body?.email || req.user.email,
-            phone: req.body?.phone || req.user.user_metadata?.mobile || req.user.mobile
+            phone: req.body?.phone || req.user.user_metadata?.mobile || req.user.mobile,
+            tenantId: req.user?.tenantId || req.user?.app_metadata?.tenantId || null
         });
         res.status(200).json({ success: true, data: customer });
     } catch (err) {
