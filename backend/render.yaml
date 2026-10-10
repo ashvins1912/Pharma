@@ -21,6 +21,20 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
+      # SMTP is configured on the backend service because signup and account
+      # recovery emails are sent by the identity service, not the static UI.
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
       # Shared signing pair: the backend signs Pharma access/refresh JWTs.
       - key: PHARMA_JWT_PRIVATE_KEY
         sync: false
