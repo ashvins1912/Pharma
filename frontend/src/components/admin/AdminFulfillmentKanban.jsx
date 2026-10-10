@@ -223,7 +223,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       addToast(res.data.message || `Order shifted to ${newStatus}`, 'success');
       refreshBoard();
     } catch (err) {
-      addToast(err.message || 'State transition failed', 'error');
+      addToast(err.response?.data?.message || err.message || 'State transition failed', 'error');
     } finally {
       setUpdatingId(null);
       setAssignRiderModal(null);
@@ -719,7 +719,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                               <button
                                 type="button"
                                 onClick={() => manualApprovePrescription(order, 'order')}
-                                disabled={isProcessing || !order.prescriptionUrl}
+                                disabled={isProcessing || !order.prescriptionUrl || !verifiedOrderIds.includes(String(order._id))}
                                 className="min-h-9 rounded-lg bg-emerald-600 px-3 text-[11px] font-extrabold text-white disabled:opacity-50"
                               >
                                 Manual review & approve
