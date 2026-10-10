@@ -82,23 +82,56 @@ export class CustomerService {
         customer = await CustomerProfile.findOneAndUpdate({ userId }, { $set: updates }, { new: true });
       }
 
-      await Person.updateOne(
-        { puid: customer.selfPuid, createdByUserId: userId },
-        { $set: {
-          ...(name?.trim() ? { displayName: name.trim() } : {}),
-          ...(tenantId ? { tenantId } : {})
-        } }
-      );
+      // Repair legacy/incomplete self profiles without ever attaching another
+      // user's PUID to this account. A customer profile is valid only when its
+      // self person is owned by the same authenticated user.
+      let selfPerson = await Person.findOne({ puid: customer.selfPuid }).lean();
+      if (selfPerson && selfPerson.createdByUserId !== userId) {
+        throw Object.assign(new Error('Customer profile identity is inconsistent.'), { statusCode: 409 });
+      }
+      if (!selfPerson) {
+        await Person.updateOne(
+          { puid: customer.selfPuid, createdByUserId: userId },
+          { $set: {
+            displayName: name?.trim() || customer.name || 'Self',
+            relationshipToOwner: 'SELF',
+            status: 'ACTIVE',
+            ...(tenantId ? { tenantId } : {})
+          }, $setOnInsert: {
+            puid: customer.selfPuid,
+            createdByUserId: userId,
+            displayName: name?.trim() || customer.name || 'Self',
+            relationshipToOwner: 'SELF',
+            status: 'ACTIVE',
+            tenantId: tenantId || null
+          } },
+          { upsert: true }
+        );
+        selfPerson = await Person.findOne({ puid: customer.selfPuid, createdByUserId: userId }).lean();
+      } else {
+        await Person.updateOne(
+          { puid: customer.selfPuid, createdByUserId: userId },
+          { $set: {
+            ...(name?.trim() ? { displayName: name.trim() } : {}),
+            ...(tenantId ? { tenantId } : {}),
+            status: 'ACTIVE'
+          } }
+        );
+      }
+      if (!selfPerson) {
+        throw Object.assign(new Error('Customer self profile could not be repaired.'), { statusCode: 409 });
+      }
 
       await PersonRelationship.updateOne(
         { ownerUserId: userId, personPuid: customer.selfPuid },
-        { $setOnInsert: {
-          ownerUserId: userId,
-          ownerCustomerId: customer.customerId,
-          personPuid: customer.selfPuid,
-          relationship: 'SELF',
-          canManage: true
-        } },
+        {
+          $set: { status: 'ACTIVE', relationship: 'SELF', canManage: true },
+          $setOnInsert: {
+            ownerUserId: userId,
+            ownerCustomerId: customer.customerId,
+            personPuid: customer.selfPuid
+          }
+        },
         { upsert: true }
       );
       return this._serializeCustomer(customer);
