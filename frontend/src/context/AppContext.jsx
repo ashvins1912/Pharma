@@ -357,12 +357,8 @@ export function AppProvider({ children }) {
     }
   }, [isFullyAuthenticated]);
 
-  useEffect(() => {
-    if (!isFullyAuthenticated) return;
-    loadUserOrders();
-    const refreshTimer = window.setInterval(() => loadUserOrders({ silent: true }), 15000);
-    return () => window.clearInterval(refreshTimer);
-  }, [loadUserOrders, isFullyAuthenticated]);
+  // Order data is loaded by OrderHistoryView when the customer opens the Orders tab.
+  // Keep it out of global auth hydration so sign-in does not fetch order history.
 
   // Load User Medicine Requests
   const loadUserMedicineRequests = useCallback(async ({ silent = false, page, statusGroup, append = false } = {}) => {
@@ -435,12 +431,8 @@ export function AppProvider({ children }) {
     }
   }, [isFullyAuthenticated, isPharmacyOrAdmin, isSuperAdmin]);
 
-  useEffect(() => {
-    if (!isFullyAuthenticated) return;
-    loadUserMedicineRequests();
-    const timer = window.setInterval(() => loadUserMedicineRequests({ silent: true }), 15000);
-    return () => window.clearInterval(timer);
-  }, [loadUserMedicineRequests, isFullyAuthenticated]);
+  // Customer medicine requests are loaded by CustomerRequestsView when that tab opens.
+  // Do not fetch or poll this customer-only list as part of global login hydration.
 
   const openRequestModal = (prefill = null) => {
     if (isPharmacyOrAdmin) {
