@@ -186,6 +186,7 @@ class VendorService {
         }
 
         // Invalidate previous token and generate new secure token
+        const previousTokenHash = vendor.onboardingTokenHash || null;
         const rawToken = crypto.randomBytes(32).toString('hex');
         const onboardingTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
         const onboardingTokenExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
@@ -198,7 +199,7 @@ class VendorService {
 
         if (getIsConnected()) {
             try {
-                await Vendor.findByIdAndUpdate(vendor._id || vendor.id, {
+                const persistedVendor = await Vendor.findByIdAndUpdate(vendor._id || vendor.id, {
                     $set: {
                         onboardingTokenHash,
                         onboardingTokenExpiresAt,
@@ -206,7 +207,13 @@ class VendorService {
                         onboardingStatus: 'PENDING',
                         updatedAt: new Date()
                     }
-                });
+                }, { new: true, runValidators: true });
+                if (!persistedVendor) {
+                    const persistenceError = new Error('Vendor invitation record was not found in the database. Please recreate the invitation.');
+                    persistenceError.code = 'VENDOR_PERSISTENCE_FAILED';
+                    persistenceError.status = 503;
+                    throw persistenceError;
+                }
             } catch (err) {
                 logger.error('Failed to persist the renewed vendor onboarding token.', {
                     vendorId,
@@ -219,6 +226,7 @@ class VendorService {
             }
         }
 
+        if (previousTokenHash) inMemoryVendors.delete(previousTokenHash);
         inMemoryVendors.set(vendor._id || vendor.id, vendor);
         inMemoryVendors.set(onboardingTokenHash, vendor);
 
@@ -246,10 +254,15 @@ class VendorService {
     async getVendorById(vendorId) {
         if (getIsConnected()) {
             try {
-                const found = await Vendor.findById(vendorId).lean();
-                if (found) return found;
+                // The database is authoritative in production. A process-local
+                // fallback can return invitations that were never persisted.
+                return await Vendor.findById(vendorId).lean();
             } catch (err) {
-                logger.warn('Failed to query Vendor by ID:', { error: err.message });
+                logger.error('Failed to query Vendor by ID in MongoDB.', { error: err.message });
+                const lookupError = new Error('Vendor records are temporarily unavailable. Please try again.');
+                lookupError.code = 'VENDOR_LOOKUP_UNAVAILABLE';
+                lookupError.status = 503;
+                throw lookupError;
             }
         }
         return inMemoryVendors.get(vendorId) || null;
@@ -627,6 +640,7 @@ class VendorService {
         vendor.status = 'ACTIVE';
         vendor.onboardingStatus = 'COMPLETED';
         vendor.onboardingCompletedAt = new Date();
+        if (vendor.onboardingTokenHash) inMemoryVendors.delete(vendor.onboardingTokenHash);
         vendor.onboardingTokenHash = null;
         vendor.onboardingTokenExpiresAt = null;
 
