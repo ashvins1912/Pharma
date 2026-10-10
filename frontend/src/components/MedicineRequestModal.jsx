@@ -53,19 +53,33 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
       }
       setAddressError('');
       try {
-      const form = new FormData();
-      form.append('requestedItems', JSON.stringify([{
+      const requestedItems = [{
         requestedName: medicineName.trim(),
         composition: saltComposition.trim(),
         quantity: Math.max(1, Number(quantity) || 1),
         originalAvailabilityStatus: 'NOT_IN_CATALOG'
-      }]));
-      form.append('addressId', selectedAddressId);
-      form.append('urgencyLevel', urgency);
-      form.append('preferredDeliveryPreference', preferredDeliveryPreference);
-      form.append('customerNote', customerNote.trim());
-      if (prescriptionFile) form.append('prescription', prescriptionFile);
-      const res = await apiClient.post('/api/medicine-requests', form);
+      }];
+      const requestFields = {
+        requestedItems,
+        addressId: selectedAddressId,
+        urgencyLevel: urgency,
+        preferredDeliveryPreference,
+        customerNote: customerNote.trim()
+      };
+
+      // Send ordinary requests as JSON. Use multipart only when a file must
+      // be uploaded; the browser will set its own multipart boundary.
+      let requestBody = requestFields;
+      if (prescriptionFile) {
+        requestBody = new FormData();
+        requestBody.append('requestedItems', JSON.stringify(requestedItems));
+        requestBody.append('addressId', selectedAddressId);
+        requestBody.append('urgencyLevel', urgency);
+        requestBody.append('preferredDeliveryPreference', preferredDeliveryPreference);
+        requestBody.append('customerNote', customerNote.trim());
+        requestBody.append('prescription', prescriptionFile);
+      }
+      const res = await apiClient.post('/api/medicine-requests', requestBody);
 
       addToast(res.data.message || 'Medicine request submitted to pharmacy!', 'success');
       if (onRequestSubmitted) onRequestSubmitted(res.data.request);
