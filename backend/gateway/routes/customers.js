@@ -8,10 +8,28 @@ import { customerService } from '../../services/customer-service/CustomerService
 
 const router = express.Router();
 
+// contextMiddleware may run before authenticateUser and leave context.userId
+// empty. Reconcile the context only after authentication has established req.user.
+const requireCustomerIdentity = (req, res, next) => {
+    const userId = req.user?.sub || req.user?.id || req.context?.userId;
+    if (!userId) {
+        return res.status(401).json({
+            success: false,
+            error: {
+                code: 'AUTHENTICATED_USER_REQUIRED',
+                message: 'A valid authenticated user identity is required.',
+                requestId: req.context?.requestId || req.requestId || null
+            }
+        });
+    }
+    req.context = { ...(req.context || {}), userId };
+    return next();
+};
+
 // Idempotently ensure the authenticated user has a canonical customer profile.
 // This endpoint also supports deployments where CUSTOMER_SERVICE_URL is not configured
 // and the API Gateway falls back to the main backend.
-router.post('/ensure', authenticateUser, async (req, res, next) => {
+router.post('/ensure', authenticateUser, requireCustomerIdentity, async (req, res, next) => {
     try {
         const customer = await customerService.ensureCustomerForUser(req.context.userId, {
             name: req.body?.name || req.user.user_metadata?.name || req.user.name,
@@ -26,14 +44,14 @@ router.post('/ensure', authenticateUser, async (req, res, next) => {
 });
 
 // Managed persons CRUD fallback when the standalone Customer Service is not configured.
-router.get('/persons', authenticateUser, async (req, res, next) => {
+router.get('/persons', authenticateUser, requireCustomerIdentity, async (req, res, next) => {
     try {
         const persons = await customerService.listManagedPersons(req.context.userId);
         res.json({ success: true, data: persons });
     } catch (err) { next(err); }
 });
 
-router.post('/persons', authenticateUser, async (req, res, next) => {
+router.post('/persons', authenticateUser, requireCustomerIdentity, async (req, res, next) => {
     try {
         const person = await customerService.createFamilyPerson(req.context.userId, {
             displayName: req.body?.displayName,
@@ -46,21 +64,21 @@ router.post('/persons', authenticateUser, async (req, res, next) => {
     } catch (err) { next(err); }
 });
 
-router.patch('/persons/:puid', authenticateUser, async (req, res, next) => {
+router.patch('/persons/:puid', authenticateUser, requireCustomerIdentity, async (req, res, next) => {
     try {
         const person = await customerService.updateFamilyPerson(req.context.userId, req.params.puid, req.body || {});
         res.json({ success: true, data: person });
     } catch (err) { next(err); }
 });
 
-router.delete('/persons/:puid', authenticateUser, async (req, res, next) => {
+router.delete('/persons/:puid', authenticateUser, requireCustomerIdentity, async (req, res, next) => {
     try {
         const result = await customerService.removeFamilyPerson(req.context.userId, req.params.puid);
         res.json({ success: true, data: result });
     } catch (err) { next(err); }
 });
 
-router.post('/family-invitations', authenticateUser, async (req, res, next) => {
+router.post('/family-invitations', authenticateUser, requireCustomerIdentity, async (req, res, next) => {
     try {
         const invitation = await customerService.createInvitation(req.context.userId, {
             inviteeEmail: req.body?.inviteeEmail,
@@ -73,7 +91,7 @@ router.post('/family-invitations', authenticateUser, async (req, res, next) => {
 });
 
 // Get authenticated customer profile
-router.get('/me', authenticateUser, async (req, res, next) => {
+router.get('/me', authenticateUser, requireCustomerIdentity, async (req, res, next) => {
     try {
         const customer = await identityService.getOrCreateCustomer(req.context.userId, {
             name: req.user.user_metadata?.name || req.user.name,
@@ -87,7 +105,7 @@ router.get('/me', authenticateUser, async (req, res, next) => {
 });
 
 // Get customer tenant relationship profiles across all pharmacies
-router.get('/me/tenant-profiles', authenticateUser, async (req, res, next) => {
+router.get('/me/tenant-profiles', authenticateUser, requireCustomerIdentity, async (req, res, next) => {
     try {
         const customer = await identityService.getOrCreateCustomer(req.context.userId);
         const profiles = await identityService.getCustomerTenantProfiles(customer.id);
@@ -98,7 +116,7 @@ router.get('/me/tenant-profiles', authenticateUser, async (req, res, next) => {
 });
 
 // Get customer profile at a specific pharmacy tenant
-router.get('/me/tenant-profile', authenticateUser, async (req, res, next) => {
+router.get('/me/tenant-profile', authenticateUser, requireCustomerIdentity, async (req, res, next) => {
     try {
         const tenantId = req.query.tenantId || req.context.tenantId;
         if (!tenantId) {
@@ -113,7 +131,7 @@ router.get('/me/tenant-profile', authenticateUser, async (req, res, next) => {
 });
 
 // Saved Delivery Addresses
-router.get('/me/addresses', authenticateUser, async (req, res, next) => {
+router.get('/me/addresses', authenticateUser, requireCustomerIdentity, async (req, res, next) => {
     try {
         const customer = await identityService.getOrCreateCustomer(req.context.userId);
         const addresses = await identityService.getCustomerAddresses(customer.id);
@@ -123,7 +141,7 @@ router.get('/me/addresses', authenticateUser, async (req, res, next) => {
     }
 });
 
-router.post('/me/addresses', authenticateUser, async (req, res, next) => {
+router.post('/me/addresses', authenticateUser, requireCustomerIdentity, async (req, res, next) => {
     try {
         const customer = await identityService.getOrCreateCustomer(req.context.userId);
         const address = await identityService.addCustomerAddress(customer.id, req.body);
