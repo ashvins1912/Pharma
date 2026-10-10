@@ -285,6 +285,8 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
         const order = await dataStore.reserveOrder({
             userId: req.user.sub,
             tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null,
+            branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
+            addressId: addressSnapshot?._id || addressId || null,
             customerName,
             customerMobile: addressSnapshot?.mobile || req.body.mobile || req.user.user_metadata?.mobile || '',
             items: cartItems,
