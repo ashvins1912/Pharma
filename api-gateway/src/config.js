@@ -89,7 +89,9 @@ export function loadConfig(environment = process.env) {
   if ((inventoryServiceUrl || orderServiceUrl || prescriptionServiceUrl) && gatewayAuthSecret.length < 32) {
     errors.push('GATEWAY_AUTH_SECRET must contain at least 32 characters when a service URL is configured.');
   }
-  if (production && pharmaJwtPublicKey.length < 100) errors.push('PHARMA_JWT_PUBLIC_KEY is required in production.');
+  if (production && pharmaJwtPublicKey && pharmaJwtPublicKey.length < 100) {
+    errors.push('PHARMA_JWT_PUBLIC_KEY must contain at least 100 characters in production.');
+  }
   if (production && gatewayAuthSecret.length < 32) {
     errors.push('GATEWAY_AUTH_SECRET must contain at least 32 characters in production.');
   }
@@ -148,4 +150,19 @@ export function loadConfig(environment = process.env) {
   };
 }
 
-export const config = loadConfig();
+let currentConfig;
+try {
+  currentConfig = loadConfig();
+} catch (error) {
+  if (process.env.NODE_ENV !== 'production') {
+    currentConfig = loadConfig({
+      ...process.env,
+      SERVICE_AUTH_SECRET: process.env.SERVICE_AUTH_SECRET || 'ashvin-pharmacy-dev-service-auth-secret-32chars!',
+      GATEWAY_AUTH_SECRET: process.env.GATEWAY_AUTH_SECRET || 'ashvin-pharmacy-dev-gateway-auth-secret-32chars!'
+    });
+  } else {
+    throw error;
+  }
+}
+
+export const config = currentConfig;

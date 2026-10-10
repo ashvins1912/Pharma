@@ -137,11 +137,12 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       try {
       const checkoutData = {
         items: JSON.stringify(cart.map(item => ({
-          medicineId: item._id,
+          medicineId: item._id || item.id,
           quantity: item.quantity
         }))),
-        addressId: selectedAddress._id,
+        addressId: selectedAddress._id || selectedAddress.id || '',
         deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
+        coordinates: selectedAddress.coordinates ? (typeof selectedAddress.coordinates === 'string' ? selectedAddress.coordinates : JSON.stringify(selectedAddress.coordinates)) : '',
         mobile: selectedAddress.mobile || user?.user_metadata?.mobile || '',
         couponCode: appliedCoupon?.code || '',
         pointsToRedeem: usePoints ? String(Number(pointsRequested) || 0) : '0',
@@ -150,7 +151,9 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         orderedForName: (people.find((p) => p.puid === patientPuid)?.displayName) || user?.name || user?.email || 'Customer'
       };
       const formData = new FormData();
-      Object.entries(checkoutData).forEach(([key, value]) => formData.append(key, value));
+      Object.entries(checkoutData).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) formData.append(key, value);
+      });
       if (prescriptionFile) formData.append('prescription', prescriptionFile);
 
       const res = await apiClient.post('/api/orders/checkout', formData);

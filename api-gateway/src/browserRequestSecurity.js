@@ -75,6 +75,10 @@ export function enforceBrowserRequestSecurity(req, res, next, gatewayConfig) {
   // legitimate SPA may be hosted on one origin and call the API Gateway on
   // another origin during Google/Supabase authentication. The security decision
   // therefore comes from the explicit trusted Origin/Referer below.
+  if (fetchSite === 'cross-site' && (!origin || !allowedOrigins.has(origin)) && !browserClient) {
+    return reject(res, requestId, 'CSRF_CROSS_SITE_BLOCKED', 'Cross-site state-changing requests require a trusted origin.');
+  }
+
   if (origin) {
     if (origin === 'null' || !allowedOrigins.has(origin)) {
       return reject(res, requestId, 'CSRF_ORIGIN_REJECTED', 'Request origin is not trusted.');
@@ -84,11 +88,6 @@ export function enforceBrowserRequestSecurity(req, res, next, gatewayConfig) {
     if (!refererOrigin || !allowedOrigins.has(refererOrigin)) {
       return reject(res, requestId, 'CSRF_REFERER_REJECTED', 'Request referer is not trusted.');
     }
-  } else if (fetchSite === 'cross-site' && !browserClient) {
-    // A cross-site request without an independently verifiable browser origin
-    // is not safe to accept. The first-party browser client may use the explicit
-    // X-Pharma-Client proof below when privacy tooling strips Origin/Referer.
-    return reject(res, requestId, 'CSRF_CROSS_SITE_BLOCKED', 'Cross-site state-changing requests require a trusted origin.');
   }
 
   const cookies = parseCookies(req.get('cookie') || '');
@@ -99,7 +98,11 @@ export function enforceBrowserRequestSecurity(req, res, next, gatewayConfig) {
   const csrfCookie = cookies['XSRF-TOKEN'];
   const csrfHeader = req.get('x-xsrf-token') || req.get('x-csrf-token') || '';
 
-  if (hasAccessCookie && !sameValue(csrfCookie, csrfHeader)) {
+  if (hasAccessCookie && !req.get('authorization')) {
+    if (!csrfCookie || !sameValue(csrfCookie, csrfHeader)) {
+      return reject(res, requestId, 'CSRF_INVALID', 'A valid CSRF token is required for authenticated state changes.');
+    }
+  } else if (hasAccessCookie && csrfCookie && !sameValue(csrfCookie, csrfHeader)) {
     return reject(res, requestId, 'CSRF_INVALID', 'A valid CSRF token is required for authenticated state changes.');
   }
 

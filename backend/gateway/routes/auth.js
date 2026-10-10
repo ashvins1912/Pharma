@@ -52,9 +52,7 @@ router.post('/signup', authLimiter, async (req, res) => {
     } else if (!isStrongPassword(password)) {
         validationDetails.push({ field: 'password', code: 'WEAK_PASSWORD', message: 'Password must be at least 8 characters with uppercase, lowercase and a number.' });
     }
-    if (!confirmPassword) {
-        validationDetails.push({ field: 'confirmPassword', code: 'REQUIRED', message: 'Please confirm your password.' });
-    } else if (password !== confirmPassword) {
+    if (confirmPassword && password !== confirmPassword) {
         validationDetails.push({ field: 'confirmPassword', code: 'PASSWORD_MISMATCH', message: 'Passwords do not match.' });
     }
 
@@ -74,13 +72,6 @@ router.post('/signup', authLimiter, async (req, res) => {
     }
     if (!mobile || !isValidMobile(mobile)) {
         validationDetails.push({ field: 'mobileNumber', code: 'INVALID_MOBILE', message: 'Enter a valid mobile number (at least 10 digits).' });
-    }
-    if (!password || !isStrongPassword(password)) {
-        validationDetails.push({
-            field: 'password',
-            code: 'WEAK_PASSWORD',
-            message: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, and one number.'
-        });
     }
 
     if (validationDetails.length > 0) {
@@ -428,15 +419,13 @@ const handleProfileCompletion = async (req, res) => {
     } else if (!isValidMobile(phone)) {
         validationDetails.push({ field: 'mobileNumber', code: 'INVALID_MOBILE', message: 'Enter a valid mobile number with at least 10 digits.' });
     }
-    if (!password) {
-        validationDetails.push({ field: 'password', code: 'REQUIRED', message: 'Password is required.' });
-    } else if (!isStrongPassword(password)) {
-        validationDetails.push({ field: 'password', code: 'WEAK_PASSWORD', message: 'Password must be at least 8 characters with uppercase, lowercase and a number.' });
-    }
-    if (!confirmPassword) {
-        validationDetails.push({ field: 'confirmPassword', code: 'REQUIRED', message: 'Please confirm your password.' });
-    } else if (password !== confirmPassword) {
-        validationDetails.push({ field: 'confirmPassword', code: 'PASSWORD_MISMATCH', message: 'Passwords do not match.' });
+    if (password) {
+        if (!isStrongPassword(password)) {
+            validationDetails.push({ field: 'password', code: 'WEAK_PASSWORD', message: 'Password must be at least 8 characters with uppercase, lowercase and a number.' });
+        }
+        if (confirmPassword && password !== confirmPassword) {
+            validationDetails.push({ field: 'confirmPassword', code: 'PASSWORD_MISMATCH', message: 'Passwords do not match.' });
+        }
     }
     if (!gender || !['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'].includes(gender)) {
         validationDetails.push({ field: 'gender', code: 'INVALID_GENDER', message: 'Select a valid gender option.' });

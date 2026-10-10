@@ -1,6 +1,5 @@
 const DISPATCHED_ACTION_ROWS = [
     { id: 'cash_received', title: '💵 Delivered - Cash Collected', description: 'Mark delivered and record cash collection.' },
-    { id: 'cash_not_received', title: '❌ Delivered - Cash Not Received', description: 'Mark delivered but cash was not collected.' },
     { id: 'payment_pending', title: '🟢 Delivered - Payment Pending', description: 'Mark delivered with digital payment pending.' },
     { id: 'not_reachable', title: '🟡 Customer Not Responding', description: 'Record an unsuccessful delivery attempt.' }
 ];
@@ -12,7 +11,11 @@ const ASSIGNED_ACTION_ROWS = [
     { id: 'not_reachable', title: '🟡 Customer Not Responding', description: 'Record difficulty reaching customer.' }
 ];
 
-const ALL_ACTION_ROWS = [...DISPATCHED_ACTION_ROWS, ...ASSIGNED_ACTION_ROWS];
+const EXTRA_SUPPORTED_ACTIONS = [
+    { id: 'cash_not_received', title: '❌ Delivered - Cash Not Received', description: 'Mark delivered but cash was not collected.' }
+];
+
+const ALL_ACTION_ROWS = [...DISPATCHED_ACTION_ROWS, ...ASSIGNED_ACTION_ROWS, ...EXTRA_SUPPORTED_ACTIONS];
 
 /** Use only actions already supported by the delivery state machine. */
 export const buildDeliveryActionMenu = (order, stage = 'Dispatched') => {

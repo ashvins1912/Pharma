@@ -755,5 +755,5 @@ export async function reconcilePendingPrescriptionOrders({ workerId = randomUUID
   return { processed, approved, rejected, deferred };
 }
 
-export { allowedStatuses, serializeOrder, isFulfillmentReady };
+export { allowedStatuses, serializeOrder };
 

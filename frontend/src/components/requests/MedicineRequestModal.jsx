@@ -99,6 +99,8 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
   const [requestedItems, setRequestedItems] = useState([createRequestedItem()]);
   const [deliveryPreference, setDeliveryPreference] = useState('Flexible');
   const [customerNote, setCustomerNote] = useState('');
+  const [people, setPeople] = useState([]);
+  const [patientPuid, setPatientPuid] = useState('');
 
   // File attachments
   const [prescriptionFile, setPrescriptionFile] = useState(null);
@@ -138,6 +140,17 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
     setPrescriptionPreview(null);
     setImagePreview(null);
     void loadAddresses();
+    let cancelled = false;
+    apiClient.get('/api/v1/customers/persons')
+      .then(({ data }) => {
+        if (cancelled) return;
+        const list = data?.data || data?.people || data || [];
+        setPeople(Array.isArray(list) ? list : []);
+        const self = Array.isArray(list) ? list.find((p) => String(p.relationshipToOwner).toUpperCase() === 'SELF') : null;
+        if (self) setPatientPuid((current) => current || self.puid);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, [isOpen, requestPrefillData, loadAddresses]);
 
   if (!isOpen) return null;
@@ -250,8 +263,16 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
         }));
 
       formData.append('requestedItems', JSON.stringify(requestItems));
-      formData.append('addressId', String(selectedAddress._id));
+      formData.append('addressId', String(selectedAddress._id || selectedAddress.id || ''));
+      formData.append('deliveryAddress', selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`);
+      if (selectedAddress.coordinates) {
+        formData.append('coordinates', typeof selectedAddress.coordinates === 'string' ? selectedAddress.coordinates : JSON.stringify(selectedAddress.coordinates));
+      }
       formData.append('preferredDeliveryPreference', deliveryPreference);
+      formData.append('urgencyLevel', deliveryPreference === 'Next Day' || deliveryPreference === 'Morning' ? 'Urgent' : 'Normal');
+      if (patientPuid) {
+        formData.append('patientPuid', patientPuid);
+      }
       formData.append('customerNote', customerNote.trim());
       formData.append('customerPhone', user?.user_metadata?.mobile || '');
 

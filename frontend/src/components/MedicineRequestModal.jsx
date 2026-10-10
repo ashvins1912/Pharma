@@ -18,10 +18,25 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
   const [customerNote, setCustomerNote] = useState('');
   const [prescriptionFile, setPrescriptionFile] = useState(null);
   const [addressError, setAddressError] = useState('');
+  const [people, setPeople] = useState([]);
+  const [patientPuid, setPatientPuid] = useState('');
 
-  // Sync initial medicine name when modal opens
+  // Sync initial medicine name and relatives when modal opens
   useEffect(() => {
-    if (isOpen) void loadAddresses();
+    if (isOpen) {
+      void loadAddresses();
+      let cancelled = false;
+      apiClient.get('/api/v1/customers/persons')
+        .then(({ data }) => {
+          if (cancelled) return;
+          const list = data?.data || data?.people || data || [];
+          setPeople(Array.isArray(list) ? list : []);
+          const self = Array.isArray(list) ? list.find((p) => String(p.relationshipToOwner).toUpperCase() === 'SELF') : null;
+          if (self) setPatientPuid((current) => current || self.puid);
+        })
+        .catch(() => {});
+      return () => { cancelled = true; };
+    }
   }, [isOpen, loadAddresses]);
 
   useEffect(() => {
@@ -53,6 +68,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
       }
       setAddressError('');
       try {
+      const selectedAddress = addresses.find(a => (a._id || a.id) === selectedAddressId);
       const requestedItems = [{
         requestedName: medicineName.trim(),
         composition: saltComposition.trim(),
@@ -62,9 +78,12 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
       const requestFields = {
         requestedItems,
         addressId: selectedAddressId,
+        deliveryAddress: selectedAddress?.addressLine || (selectedAddress ? `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}` : undefined),
+        coordinates: selectedAddress?.coordinates,
         urgencyLevel: urgency,
         preferredDeliveryPreference,
-        customerNote: customerNote.trim()
+        customerNote: customerNote.trim(),
+        patientPuid: patientPuid || undefined
       };
 
       // Send ordinary requests as JSON. Use multipart only when a file must
@@ -74,9 +93,18 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
         requestBody = new FormData();
         requestBody.append('requestedItems', JSON.stringify(requestedItems));
         requestBody.append('addressId', selectedAddressId);
+        if (requestFields.deliveryAddress) {
+          requestBody.append('deliveryAddress', requestFields.deliveryAddress);
+        }
+        if (requestFields.coordinates) {
+          requestBody.append('coordinates', typeof requestFields.coordinates === 'string' ? requestFields.coordinates : JSON.stringify(requestFields.coordinates));
+        }
         requestBody.append('urgencyLevel', urgency);
         requestBody.append('preferredDeliveryPreference', preferredDeliveryPreference);
         requestBody.append('customerNote', customerNote.trim());
+        if (patientPuid) {
+          requestBody.append('patientPuid', patientPuid);
+        }
         requestBody.append('prescription', prescriptionFile);
       }
       const res = await apiClient.post('/api/medicine-requests', requestBody);

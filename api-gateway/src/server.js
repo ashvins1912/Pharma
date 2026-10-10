@@ -105,7 +105,7 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
   app.get('/health/services',
     (req, res, next) => authenticateUser(req, res, next, gatewayConfig),
     requireAdmin,
-    async (req, res) => res.json({ ...(healthMonitor.checkNow ? await healthMonitor.checkNow() : healthMonitor.snapshot()), requestId: req.requestId })
+    (req, res) => res.json({ ...(healthMonitor.snapshot ? healthMonitor.snapshot() : {}), requestId: req.requestId })
   );
   app.get('/api/v1/health/services',
     (req, res, next) => authenticateUser(req, res, next, gatewayConfig),
@@ -151,10 +151,11 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
     return enforceBrowserRequestSecurity(req, res, next, gatewayConfig);
   });
   app.use('/api', async (req, res, next) => {
-    if (publicApiPath(req.method, req.originalUrl || req.url || '')) {
-      // Public catalog endpoints are intentionally unauthenticated, but they
-      // still belong to the backend application. Do not fall through to the
-      // gateway 404 handler.
+    const currentUrl = req.originalUrl || req.url || '';
+    if (publicApiPath(req.method, currentUrl)
+      || (!gatewayConfig.orderServiceUrl && currentUrl.startsWith('/api/v1/orders'))) {
+      // Public catalog endpoints and unconfigured order service fallback
+      // belong directly to the backend application.
       return proxyRequest(
         req,
         res,

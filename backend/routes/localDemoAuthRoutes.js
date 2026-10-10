@@ -7,8 +7,11 @@ const router = express.Router();
 router.use(sanitizeBodyMiddleware);
 
 router.post('/demo-admin', validateLogin, async (req, res) => {
-  if (!isDemoAdminEnabled() || !verifyDemoAdminPassword(req.body?.email, req.body?.password)) {
+  if (!isDemoAdminEnabled()) {
     return res.status(404).json({ message: 'Local demo admin access is disabled.' });
+  }
+  if (!verifyDemoAdminPassword(req.body?.email, req.body?.password)) {
+    return res.status(401).json({ message: 'Invalid demo admin credentials.' });
   }
   const access_token = await issueDemoAdminToken();
   return res.json({ access_token, token_type: 'Bearer', expires_in: 3600, user: getDemoAdminIdentity() });

@@ -7,6 +7,8 @@ import PaymentSnooze from '../models/PaymentSnooze.js';
 import PaymentReminder from '../models/PaymentReminder.js';
 import PaymentActionNonce from '../models/PaymentActionNonce.js';
 
+mongoose.set('bufferCommands', false);
+
 let isConnected = false;
 let supportsTransactions = false;
 let connectionAttempt = null;
