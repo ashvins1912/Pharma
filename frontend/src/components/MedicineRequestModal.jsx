@@ -14,6 +14,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
   const [saltComposition, setSaltComposition] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [urgency, setUrgency] = useState('Normal');
+  const [preferredDeliveryPreference, setPreferredDeliveryPreference] = useState('Flexible');
   const [customerNote, setCustomerNote] = useState('');
   const [prescriptionFile, setPrescriptionFile] = useState(null);
   const [addressError, setAddressError] = useState('');
@@ -61,7 +62,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
       }]));
       form.append('addressId', selectedAddressId);
       form.append('urgencyLevel', urgency);
-      form.append('preferredDeliveryPreference', 'Flexible');
+      form.append('preferredDeliveryPreference', preferredDeliveryPreference);
       form.append('customerNote', customerNote.trim());
       if (prescriptionFile) form.append('prescription', prescriptionFile);
       const res = await apiClient.post('/api/medicine-requests', form);
@@ -74,6 +75,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
       setSaltComposition('');
       setQuantity(1);
       setUrgency('Normal');
+      setPreferredDeliveryPreference('Flexible');
       setCustomerNote('');
       setPrescriptionFile(null);
       setAddressError('');
@@ -113,6 +115,24 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
+          <div>
+            <label htmlFor="preferred-delivery-timing" className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              Preferred Delivery Timing *
+            </label>
+            <select
+              id="preferred-delivery-timing"
+              value={preferredDeliveryPreference}
+              onChange={(e) => setPreferredDeliveryPreference(e.target.value)}
+              required
+              className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+            >
+              <option value="Morning">Morning</option>
+              <option value="Evening">Evening</option>
+              <option value="Next Day">Next Day</option>
+              <option value="Flexible">Flexible / Any time</option>
+            </select>
+          </div>
+
           <div>
             <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
               Medicine / Formulation Name *
