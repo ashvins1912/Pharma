@@ -113,9 +113,10 @@ class VendorService {
                 // provide it on insert; otherwise persistence can fail while an
                 // invitation email is still sent with a token no instance can find.
                 const { _id: persistedVendorId, ...vendorFields } = doc;
+                // The equality filter supplies _id automatically on upsert.
                 await Vendor.findOneAndUpdate(
-                    { _id: vendorId },
-                    { $set: vendorFields, $setOnInsert: { _id: persistedVendorId } },
+                    { _id: persistedVendorId },
+                    { $set: vendorFields },
                     { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
                 );
             } catch (err) {
