@@ -39,9 +39,13 @@ export default function RiderTerminal({ riderId, onClose }) {
       const allOrders = ordersRes.data?.orders || ordersRes.data || [];
       const pending = allOrders.filter(o => o.status === 'pending' || o.status === 'assigned');
       setPendingOrders(pending);
+      const activeDelivery = allOrders.find(order =>
+        ['dispatched', 'out_for_delivery'].includes(String(order.orderStatus || order.status || '').toLowerCase())
+        && String(order.rider?.riderId || order.riderId || '') === String(currentRider?._id || '')
+      );
       setActiveOrder(previous => previous
         ? (allOrders.find(order => String(order._id) === String(previous._id)) || previous)
-        : null);
+        : (activeDelivery || null));
       if (pending.length > 0 && !currentAlert && status === 'online') {
         setCurrentAlert(pending[0]);
         setCountdown(30);
