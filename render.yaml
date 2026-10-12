@@ -14,7 +14,7 @@ services:
       - key: MONGO_URI
         sync: false
       - key: CACHE_SERVICE_URL
-        value: http://ashvin-pharma-shared-cache:8080
+        value: https://caching-v0et.onrender.com
       - key: CACHE_SERVICE_TOKEN
         sync: false
 
@@ -38,7 +38,7 @@ services:
       - key: WS_PING_TIMEOUT_MS
         value: 20000
       - key: CACHE_SERVICE_URL
-        value: http://ashvin-pharma-shared-cache:8080
+        value: https://caching-v0et.onrender.com
       - key: CACHE_SERVICE_TOKEN
         sync: false
       - key: PHARMA_JWT_PUBLIC_KEY
@@ -62,23 +62,6 @@ services:
         value: 3001
 
   - type: web
-    name: ashvin-pharma-shared-cache
-    runtime: docker
-    region: oregon
-    plan: free
-    dockerfilePath: ./services/caching-service/Dockerfile
-    dockerContext: ./services/caching-service
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: 8080
-      - key: REDIS_URL
-        value: redis://127.0.0.1:6379/0
-      - key: CACHE_SERVICE_TOKEN
-        sync: false
-
-
-  - type: web
     name: ashvin-pharma-frontend
     env: static
     plan: free
@@ -88,4 +71,4 @@ services:
       - key: VITE_API_URL
         value: https://ashvin-pharma-api.onrender.com
       - key: VITE_WS_URL
-        value: https://ashvin-pharma-websocket.onrender.com
+        value: https://websockt.onrender.com
