@@ -521,8 +521,12 @@ export function AppProvider({ children }) {
       })).filter(item => item.id);
       setNotifications(previous => {
         const serverIds = new Set(mapped.map(item => item.id));
-        const localProposalItems = previous.filter(item => String(item.id).startsWith('notif-prop-') && !serverIds.has(String(item.id)));
-        return [...mapped, ...localProposalItems].slice(0, 50);
+        // Preserve socket events received while this snapshot request was in flight.
+        const localItems = previous.filter(item =>
+          (item.sourceChannel === 'realtime' || String(item.id).startsWith('notif-prop-') || String(item.id).startsWith('notif-wa'))
+          && !serverIds.has(String(item.id))
+        );
+        return [...mapped, ...localItems].slice(0, 50);
       });
       return mapped;
     } catch (error) {
@@ -615,7 +619,9 @@ export function AppProvider({ children }) {
         requestId: payload.medicineRequestId || null,
         actionType: payload.medicineRequestId ? 'VIEW_PROPOSAL' : undefined,
         channels: Array.isArray(payload.channels) ? payload.channels : [],
-        whatsappDeliveryState: payload.deliveryState || null
+        whatsappDeliveryState: payload.deliveryState || null,
+        sourceChannel: 'realtime',
+        createdAt: payload.createdAt || payload.timestamp || new Date().toISOString()
       };
       setNotifications(previous => {
         const existingIndex = previous.findIndex(item => String(item.id) === id
@@ -1054,6 +1060,9 @@ export function AppProvider({ children }) {
           const target = notifications.find(item => String(item.id) === String(id));
           if (!target || target.read) return;
           setNotifications(prev => prev.map(item => String(item.id) === String(id) ? { ...item, read: true } : item));
+          // Proposal/WhatsApp prompts synthesized locally do not have a persisted
+          // NotificationService record and must not be sent to the read API.
+          if (String(id).startsWith('notif-prop-') || String(id).startsWith('notif-wa')) return;
           try {
             await apiClient.patch(`/api/v1/notifications/${encodeURIComponent(id)}/read`);
           } catch (error) {
