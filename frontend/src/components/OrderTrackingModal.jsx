@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import ProofOfDeliveryModal from './ProofOfDeliveryModal';
+import React from 'react';
 
 const STAGES = [
   { key: 'Processing Order', label: 'Processing Order', desc: 'Pharmacist validating Rx formulation & packaging' },
@@ -9,7 +8,6 @@ const STAGES = [
 ];
 
 export default function OrderTrackingModal({ order, onClose }) {
-  const [podModalOpen, setPodModalOpen] = useState(false);
   const rawStatus = String(order?.orderStatus || order?.status || '').trim().toLowerCase();
   if (!order || rawStatus === 'delivered') return null;
 
@@ -195,15 +193,14 @@ export default function OrderTrackingModal({ order, onClose }) {
 
         </div>
 
-        {/* Sticky Footer */}
+        {/* Customer can track delivery, but only the assigned rider can submit the delivery OTP. */}
         <div className="shrink-0 border-t border-slate-100 bg-slate-50/70 p-4 sm:p-5 space-y-2.5">
-          <button
-            onClick={() => setPodModalOpen(true)}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-2xl text-xs cursor-pointer transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
-          >
-            <span>🔒</span>
-            <span>Verify Proof of Delivery (4-Digit OTP)</span>
-          </button>
+          {currentStatus === 'Dispatched' && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[11px] text-emerald-900">
+              <p className="font-black">🔐 Delivery verification</p>
+              <p className="mt-1">Your 4-digit code is sent to your WhatsApp. Share it with the rider at handover. You do not need to enter the code on this tracking screen.</p>
+            </div>
+          )}
           <button
             onClick={onClose}
             className="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2.5 rounded-xl text-xs cursor-pointer transition"
@@ -213,16 +210,6 @@ export default function OrderTrackingModal({ order, onClose }) {
         </div>
 
       </div>
-
-      <ProofOfDeliveryModal
-        isOpen={podModalOpen}
-        onClose={() => setPodModalOpen(false)}
-        order={order}
-        onSuccess={() => {
-          setPodModalOpen(false);
-          if (onClose) onClose();
-        }}
-      />
     </div>
   );
 }
