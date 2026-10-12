@@ -164,49 +164,55 @@ export class CustomerService {
     }
 
     const puid = generatePuid();
-    const person = await Person.create({
-      puid,
-      displayName: name || 'Self',
-      relationshipToOwner: 'SELF',
-      createdByUserId: userId,
-      tenantId: tenantId || null
-    });
+    // Persist the customer identity first. If another request creates it concurrently,
+    // reuse that row rather than creating a duplicate self-person/relationship.
     try {
       customer = await CustomerProfile.create({
         userId,
         supabaseId: userId,
-        selfPuid: person.puid,
+        selfPuid: puid,
         name: name || 'Valued Customer',
         email: email || '',
         phone: phone || ''
       });
     } catch (createErr) {
-      if (createErr.code === 11000) {
-        try {
-          await mongoose.connection.collection('customers').dropIndex('supabaseId_1');
-        } catch {}
-        customer = await CustomerProfile.findOne({ $or: [{ userId }, { supabaseId: userId }] });
-        if (!customer) {
-          customer = await CustomerProfile.create({
-            userId,
-            supabaseId: userId,
-            selfPuid: person.puid,
-            name: name || 'Valued Customer',
-            email: email || '',
-            phone: phone || ''
-          });
-        }
-      } else {
-        throw createErr;
+      if (createErr.code !== 11000) throw createErr;
+      customer = await CustomerProfile.findOne({ $or: [{ userId }, { supabaseId: userId }] });
+      if (!customer) throw createErr;
+      return this.ensureCustomerForUser(userId, { name, email, phone, tenantId });
+    }
+
+    let person;
+    try {
+      person = await Person.create({
+        puid: customer.selfPuid,
+        displayName: name || 'Self',
+        relationshipToOwner: 'SELF',
+        createdByUserId: userId,
+        tenantId: tenantId || null
+      });
+    } catch (error) {
+      if (error?.code !== 11000) {
+        await CustomerProfile.deleteOne({ _id: customer._id, userId }).catch(() => {});
+        throw error;
       }
     }
-    await PersonRelationship.create({
-      ownerUserId: userId,
-      ownerCustomerId: customer.customerId,
-      personPuid: person.puid,
-      relationship: 'SELF',
-      canManage: true
-    });
+    person = person || await Person.findOne({ puid: customer.selfPuid }).lean();
+    if (!person || person.createdByUserId !== userId) {
+      throw Object.assign(new Error('Customer self profile identity could not be verified.'), { statusCode: 409 });
+    }
+    await PersonRelationship.updateOne(
+      { ownerUserId: userId, personPuid: customer.selfPuid },
+      {
+        $set: { status: 'ACTIVE', relationship: 'SELF', canManage: true },
+        $setOnInsert: {
+          ownerUserId: userId,
+          ownerCustomerId: customer.customerId,
+          personPuid: customer.selfPuid
+        }
+      },
+      { upsert: true }
+    );
     return this._serializeCustomer(customer);
   }
 
