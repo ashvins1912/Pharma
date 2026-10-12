@@ -4,6 +4,8 @@ import express from 'express';
 import { authService, calculateAge, isValidDOB, isValidMobile } from '../../services/identity-service/AuthService.js';
 import { authenticateUser, requirePlatformSuperAdmin } from '../../middleware/auth.js';
 import UserProfile from '../../models/UserProfile.js';
+import Feature from '../../models/Feature.js';
+import Permission from '../../models/Permission.js';
 import { getRolePermissions, isKnownPermission } from '../../authorization/AuthorizationCatalogService.js';
 import { sendSuccess, sendError } from '../../shared/responses.js';
 import { setSessionCookies } from '../../security/sessionCookie.js';
@@ -114,6 +116,16 @@ router.put('/onboarding', authenticateUser, async (req, res) => {
             req
         });
     }
+});
+
+router.get('/access/features', authenticateUser, requirePlatformSuperAdmin, async (req, res) => {
+  try {
+    const features = await Feature.find({}).lean();
+    const permissions = await Permission.find({}).lean();
+    return sendSuccess(res, { data: { features, permissions }, message: 'Application features retrieved from database.', statusCode: 200, req });
+  } catch (err) {
+    return sendError(res, { code: 'ACCESS_FEATURES_FAILED', message: err.message || 'Could not load features.', statusCode: 500, req });
+  }
 });
 
 router.get('/access/users', authenticateUser, requirePlatformSuperAdmin, async (req, res) => {
