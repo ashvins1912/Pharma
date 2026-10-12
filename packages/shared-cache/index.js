@@ -57,7 +57,7 @@ export class SharedCacheClient {
 
   async set(key, value, ttlSeconds = 3600) {
     if (!Number.isInteger(ttlSeconds) || ttlSeconds < 1) throw new Error('ttlSeconds must be a positive integer.');
-    await this.request('/v1/cache', { method: 'POST', body: { key, value, ttlSeconds } });
+    await this.request('/v1/cache', { method: 'PUT', body: { key, value, ttlSeconds } });
     return true;
   }
 
