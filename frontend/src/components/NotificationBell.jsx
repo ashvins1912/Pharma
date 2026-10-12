@@ -75,6 +75,11 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
                   <p className={`text-[11px] mt-1 leading-snug ${n.type === 'warning' ? 'text-amber-800' : 'text-slate-600'}`}>
                     {n.message}
                   </p>
+                  {n.whatsappDeliveryState && (
+                    <p className="text-[10px] mt-1 font-bold text-emerald-700">
+                      WhatsApp: {String(n.whatsappDeliveryState).replaceAll('_', ' ')}
+                    </p>
+                  )}
                   {n.actionType === 'CONNECT_WHATSAPP' && (
                     <div className="mt-2 pt-1 border-t border-amber-200/60 flex items-center justify-between">
                       <span className="text-[10px] font-black text-amber-700 uppercase">Action Required</span>
