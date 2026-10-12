@@ -43,9 +43,14 @@ export default function RiderTerminal({ riderId, onClose }) {
         ['dispatched', 'out_for_delivery'].includes(String(order.orderStatus || order.status || '').toLowerCase())
         && String(order.rider?.riderId || order.riderId || '') === String(currentRider?._id || '')
       );
-      setActiveOrder(previous => previous
-        ? (allOrders.find(order => String(order._id) === String(previous._id)) || previous)
-        : (activeDelivery || null));
+      setActiveOrder(previous => {
+        const refreshed = previous && allOrders.find(order => String(order._id) === String(previous._id));
+        if (refreshed) {
+          const refreshedStatus = String(refreshed.orderStatus || refreshed.status || '').toLowerCase();
+          return ['delivered', 'cancelled', 'canceled'].includes(refreshedStatus) ? null : refreshed;
+        }
+        return previous || activeDelivery || null;
+      });
       if (pending.length > 0 && !currentAlert && status === 'online') {
         setCurrentAlert(pending[0]);
         setCountdown(30);
