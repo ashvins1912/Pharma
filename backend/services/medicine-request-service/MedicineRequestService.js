@@ -212,7 +212,7 @@ export class MedicineRequestService {
             notes: `Formulated proposal: ₹${totalPrice} (${proposal.priceType})`
         });
 
-        domainEvents.emitDomainEvent('PROPOSAL_CREATED', id, { proposal }, actor, request.tenantId, request.branchId);
+        domainEvents.emitDomainEvent('PROPOSAL_CREATED', id, { proposal, customerId: request.customerId, requestNumber: request.requestNumber, medicineName: request.medicineName }, actor, request.tenantId, request.branchId);
         logger.info(`Pharmacy proposal sent for request #${request.requestNumber}`, { requestId: id });
         return request;
     }
@@ -293,7 +293,7 @@ export class MedicineRequestService {
             notes: `Converted to Order #${order.orderNumber}`
         });
 
-        domainEvents.emitDomainEvent('PROPOSAL_APPROVED', id, { orderId: order.id }, actor, request.tenantId, request.branchId);
+        domainEvents.emitDomainEvent('PROPOSAL_APPROVED', id, { orderId: order.id, customerId: request.customerId, requestNumber: request.requestNumber, medicineName: request.medicineName }, actor, request.tenantId, request.branchId);
         logger.info(`Request #${request.requestNumber} converted to Order #${order.orderNumber}`, { orderId: order.id });
 
         return {
@@ -326,7 +326,7 @@ export class MedicineRequestService {
             notes: reason || 'Customer declined proposal'
         });
 
-        domainEvents.emitDomainEvent('PROPOSAL_REJECTED', id, { reason }, actor, request.tenantId, request.branchId);
+        domainEvents.emitDomainEvent('PROPOSAL_REJECTED', id, { reason, customerId: request.customerId, requestNumber: request.requestNumber, medicineName: request.medicineName }, actor, request.tenantId, request.branchId);
         return request;
     }
 
@@ -355,7 +355,7 @@ export class MedicineRequestService {
             notes: reason || 'Customer cancelled the medicine request'
         });
 
-        domainEvents.emitDomainEvent('REQUEST_CANCELLED', id, { reason }, actor, request.tenantId, request.branchId);
+        domainEvents.emitDomainEvent('REQUEST_CANCELLED', id, { reason, customerId: request.customerId, requestNumber: request.requestNumber, medicineName: request.medicineName }, actor, request.tenantId, request.branchId);
         return request;
     }
 }
