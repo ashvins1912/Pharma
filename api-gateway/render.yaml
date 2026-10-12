@@ -37,6 +37,9 @@ services:
         sync: false
       - key: CUSTOMER_SERVICE_URL
         sync: false
+      # Internal Render URL; Gateway polls /healthz as part of its service heartbeat.
+      - key: WEBSOCKET_SERVICE_URL
+        value: http://ashvin-pharma-websocket:10000
       - key: CUSTOMER_SERVICE_JWT_AUDIENCE
         value: customer-service
       - key: PRESCRIPTION_SERVICE_JWT_AUDIENCE
@@ -52,7 +55,7 @@ services:
       - key: HEALTH_CHECK_ENABLED
         value: "true"
       - key: HEALTH_CHECK_INTERVAL_MINUTES
-        value: 15
+        value: 1
       - key: HEALTH_CHECK_TIMEOUT_MS
         value: 5000
       - key: HEALTH_CHECK_RUN_ON_STARTUP
