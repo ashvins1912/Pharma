@@ -230,6 +230,36 @@ export class NotificationService {
                 sendWhatsAppMedicineRequestAlert(evt.payload.request, 'MedicineProposalReady').catch(err => logger.warn('[WhatsApp] Proposal alert failed:', err?.message));
             }
         });
+        domainEvents.on('PROPOSAL_APPROVED', (evt) => {
+            this.send({
+                tenantId: evt.tenantId, branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: 'Medicine Request Approved',
+                body: `Request ${evt.payload?.requestNumber || evt.entityId} was approved and converted to order ${evt.payload?.orderId || ''}.`,
+                eventType: 'PROPOSAL_APPROVED', medicineRequestId: evt.entityId, orderId: evt.payload?.orderId,
+                channels: ['IN_APP', 'WHATSAPP']
+            });
+        });
+        domainEvents.on('PROPOSAL_REJECTED', (evt) => {
+            this.send({
+                tenantId: evt.tenantId, branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: 'Medicine Proposal Rejected',
+                body: `The proposal for request ${evt.payload?.requestNumber || evt.entityId} was rejected.`,
+                eventType: 'PROPOSAL_REJECTED', medicineRequestId: evt.entityId,
+                channels: ['IN_APP']
+            });
+        });
+        domainEvents.on('REQUEST_CANCELLED', (evt) => {
+            this.send({
+                tenantId: evt.tenantId, branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: 'Medicine Request Cancelled',
+                body: `Medicine request ${evt.payload?.requestNumber || evt.entityId} was cancelled.`,
+                eventType: 'REQUEST_CANCELLED', medicineRequestId: evt.entityId,
+                channels: ['IN_APP']
+            });
+        });
     }
 
     send({
