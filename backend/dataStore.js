@@ -2026,7 +2026,7 @@ export const dataStore = {
         return this.getOrder(orderId);
     },
 
-    async transitionOrderStatus(orderId, newStatus, actor = 'Pharmacist', riderInfo = null, cashCollectionStatus = null) {
+    async transitionOrderStatus(orderId, newStatus, actor = 'Pharmacist', riderInfo = null, cashCollectionStatus = null, deliveryOtpVerified = false) {
         const validTransitions = {
             'Processing Order': ['Ready to Dispatch', 'Cancelled'],
             'Ready to Dispatch': ['Dispatched', 'Processing Order', 'Cancelled'],
@@ -2060,6 +2060,10 @@ export const dataStore = {
                     deliveryRewards: null,
                     previousStatus: 'Delivered'
                 };
+            }
+
+            if (newStatus === 'Delivered' && !deliveryOtpVerified) {
+                throw inventoryError('A valid customer delivery OTP is required to complete this order.', 409);
             }
 
             const allowed = validTransitions[order.orderStatus] || [];
