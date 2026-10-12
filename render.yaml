@@ -9,8 +9,6 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 3000
       - key: CORS_ALLOWED_ORIGINS
         value: "*"
       - key: MONGO_URI
@@ -26,8 +24,6 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: WS_PORT
-        value: 4000
       - key: CORS_ALLOWED_ORIGINS
         value: "*"
 
@@ -47,11 +43,11 @@ services:
   - type: redis
     name: ashvin-pharma-cache
     region: oregon
-    plan: starter # Upgraded from 'free' to support IP allowlisting
+    plan: starter
     maxmemoryPolicy: noeviction
     ipAllowList:
-      - source: 0.0.0.0/0 # Replace this with your actual trusted CIDR blocks (e.g., your API server's outbound IP)
-        description: Trusted network access
+      - source: 0.0.0.0/0
+        description: Temporary broad access; restrict to trusted service egress ranges when available
 
   - type: web
     name: ashvin-pharma-frontend
