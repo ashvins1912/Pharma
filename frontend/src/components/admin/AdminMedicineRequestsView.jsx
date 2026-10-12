@@ -34,6 +34,9 @@ export default function AdminMedicineRequestsView() {
 
   useEffect(() => {
     loadAllRequests();
+    const refreshRequests = () => { void loadAllRequests(); };
+    window.addEventListener('pharma:medicine-request-updated', refreshRequests);
+    return () => window.removeEventListener('pharma:medicine-request-updated', refreshRequests);
   }, []);
 
   const openProposalModal = (req) => {
