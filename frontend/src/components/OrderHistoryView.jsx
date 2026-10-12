@@ -13,8 +13,15 @@ export default function OrderHistoryView({ onTrackOrder }) {
     void loadUserOrders();
   }, [loadUserOrders]);
 
-  const editableStatuses = ['Pending_Review', 'Approved', 'Processing Order', 'Ready to Dispatch'];
-  const activeOrders = orders.filter(order => !['Delivered', 'Cancelled', 'Rejected', 'Completed', 'delivered', 'cancelled', 'rejected', 'completed'].includes(order.orderStatus || order.status));
+  // Cancellation is available only before fulfillment is ready to dispatch.
+  // Normalize legacy enum spellings while keeping the backend as the source of truth.
+  const getNormalizedStatus = (order) => String(order?.orderStatus || order?.status || '')
+    .trim()
+    .replace(/_/g, ' ')
+    .toLowerCase();
+  const editableStatuses = ['pending review', 'approved', 'processing order'];
+  const activeOrders = orders.filter(order => !['delivered', 'cancelled', 'rejected', 'completed'].includes(getNormalizedStatus(order)));
+  const isReadyToDispatch = (order) => getNormalizedStatus(order) === 'ready to dispatch';
 
   const cancelOrder = async (order) => {
     if (!window.confirm('Cancel this order? Reserved stock will be released.')) return;
@@ -122,7 +129,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                         {getStatusBadge(order.orderStatus)}
                       </td>
                       <td className="py-3.5 px-3 text-right">
-                        {editableStatuses.includes(order.orderStatus) && (
+                        {editableStatuses.includes(getNormalizedStatus(order)) && (
                           <button
                             onClick={() => cancelOrder(order)}
                             disabled={isActionLoading(LOADING_ACTIONS.CANCEL_ORDER)}
@@ -135,7 +142,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                             onClick={() => trackOrder(order)}
                             disabled={isActionLoading(LOADING_ACTIONS.TRACK_ORDER)} className="bg-blue-50 hover:bg-blue-100 disabled:opacity-60 disabled:cursor-wait text-blue-700 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition"
                           >
-                            Track
+                            {isReadyToDispatch(order) ? 'Ready to Dispatch' : 'Track'}
                           </button>
                         )}
                       </td>
@@ -173,7 +180,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                       <span className="font-extrabold text-emerald-600 text-sm">₹{order.finalTotal}</span>
                     </div>
                     <div className="flex gap-2">
-                      {editableStatuses.includes(order.orderStatus) && (
+                      {editableStatuses.includes(getNormalizedStatus(order)) && (
                         <>
                           <button
                             onClick={() => cancelOrder(order)}
@@ -188,7 +195,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                           onClick={() => trackOrder(order)}
                           className="bg-blue-600 text-white font-extrabold text-xs px-4 py-1.5 rounded-xl cursor-pointer"
                         >
-                          Track
+                          {isReadyToDispatch(order) ? 'Ready to Dispatch' : 'Track'}
                         </button>
                       )}
                     </div>
