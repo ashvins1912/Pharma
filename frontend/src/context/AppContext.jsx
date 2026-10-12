@@ -641,7 +641,20 @@ export function AppProvider({ children }) {
       });
     };
 
-    const onNotification = payload => upsertNotification(payload, 'notification');
+    const onNotification = payload => {
+      upsertNotification(payload, 'notification');
+      const orderEventTypes = new Set([
+        'ORDER_CREATED', 'ORDER_ACCEPTED', 'ORDER_STATUS_CHANGED',
+        'RIDER_ASSIGNED', 'DELIVERY_STATUS_CHANGED', 'ORDER_DELIVERED'
+      ]);
+      if (payload?.orderId && orderEventTypes.has(String(payload.eventType || '').toUpperCase())) {
+        window.dispatchEvent(new CustomEvent('pharma:order-status-changed', {
+          detail: { ...payload, source: 'notification-channel' }
+        }));
+        void loadUserOrders({ silent: true });
+        void loadDeliveryEvents();
+      }
+    };
     const onWhatsAppNotification = payload => upsertNotification(payload, 'whatsapp_notification');
     const onMedicineRequestUpdated = payload => {
       window.dispatchEvent(new CustomEvent('pharma:medicine-request-updated', { detail: payload }));
