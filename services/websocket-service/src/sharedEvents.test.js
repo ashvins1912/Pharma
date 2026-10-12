@@ -18,7 +18,7 @@ test('routes user and tenant events to target rooms, not global sockets', async 
       if (pollCount === 1) return { cursor: '1-0', events: [
         { channel: 'notification', userId: 'user-1', payload: { safe: true } },
         { channel: 'tenant_update', tenantId: 'tenant-1', payload: { count: 1 } },
-        { channel: 'order_status_changed', userId: 'user-1', tenantId: 'tenant-1', payload: { orderId: 'order-1', status: 'Dispatched' } },
+        { channel: 'order_status_changed', userId: 'user-1', tenantId: 'tenant-1', riderId: 'rider-1', payload: { orderId: 'order-1', status: 'Dispatched' } },
         { channel: 'catalog_updated', payload: { public: true } },
         { channel: 'notification', payload: { unsafe: true } }
       ] };
@@ -31,6 +31,6 @@ test('routes user and tenant events to target rooms, not global sockets', async 
   assert.deepEqual(calls, [
     [['bell_notifications_user-1'], 'notification', { safe: true }],
     [['tenant_tenant-1'], 'tenant_update', { count: 1 }],
-    [['bell_notifications_user-1', 'tenant_tenant-1', 'order_tracking_order-1'], 'order_status_changed', { orderId: 'order-1', status: 'Dispatched' }]
+    [['bell_notifications_user-1', 'tenant_tenant-1', 'rider_rider-1', 'order_tracking_order-1'], 'order_status_changed', { orderId: 'order-1', status: 'Dispatched' }]
   ]);
 });
