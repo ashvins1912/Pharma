@@ -292,7 +292,10 @@ export class NotificationService {
         orderId = null,
         riderId = null,
         medicineRequestId = null,
-        status = null
+        status = null,
+        promotionId = null,
+        pharmacyName = null,
+        actionUrl = null
     }) {
         const notification = {
             id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -306,6 +309,9 @@ export class NotificationService {
             orderId: orderId ? String(orderId) : null,
             riderId: riderId ? String(riderId) : null,
             medicineRequestId: medicineRequestId ? String(medicineRequestId) : null,
+            promotionId: promotionId ? String(promotionId) : null,
+            pharmacyName: pharmacyName ? String(pharmacyName) : null,
+            actionUrl: typeof actionUrl === 'string' && actionUrl.startsWith('/') ? actionUrl : null,
             status,
             read: false,
             createdAt: new Date().toISOString()
