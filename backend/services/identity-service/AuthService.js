@@ -1861,9 +1861,12 @@ export class AuthService {
             }
         }
 
+        // Prefer the canonical persisted name parts. Fall back to provider/session
+        // claims only where older records genuinely lack a field.
         const nameParts = (user.user_metadata?.name || user.name || '').trim().split(/\s+/);
         const firstName = user.firstName || nameParts[0] || 'User';
         const lastName = user.lastName || nameParts.slice(1).join(' ') || '';
+        const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
 
         const scope = isPlatform ? 'PLATFORM' : (tenantId ? 'TENANT' : 'CUSTOMER');
         const effectiveRole = isPlatform ? 'SUPER_ADMIN' : (role === 'TENANT_ADMIN' ? 'TENANT_ADMIN' : (role.toLowerCase() === 'customer' ? 'customer' : role));
@@ -1881,7 +1884,7 @@ export class AuthService {
                 firstName,
                 lastName,
                 email: user.email || '',
-                name: user.name || [firstName, lastName].filter(Boolean).join(' '),
+                name: fullName || user.name || '',
                 mobileNumber: user.mobileNumber || user.mobile || user.user_metadata?.mobile || '',
                 mobile: user.mobileNumber || user.mobile || user.user_metadata?.mobile || '',
                 dateOfBirth: user.dateOfBirth || user.user_metadata?.dateOfBirth || null,
