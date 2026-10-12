@@ -399,6 +399,13 @@ export const buildWhatsAppMedicineRequestBody = (request, eventType) => {
                 'Your proposal has been approved and converted to an active pharmacy order for fulfillment! Thank you for choosing Ashvin Pharmacy.'
             ].join('\n');
 
+        case 'MedicineRequestCancelled':
+            return [
+                `🚫 MEDICINE REQUEST CANCELLED — #${reqNum}`,
+                `Medicine: ${items}`,
+                'Your medicine request was cancelled. If you still need this medicine, please create a new request in Ashvin Pharmacy.'
+            ].join('\\n');
+
         case 'MedicineRequestRejected':
         case 'CUSTOMER_REJECTED':
         case 'PHARMACY_REJECTED':
