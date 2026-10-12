@@ -91,7 +91,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [searchRetryKey, setSearchRetryKey] = useState(0);
-  const [approvalReason, setApprovalReason] = useState('Pharmacist clinical review approved');
+  const [approvalReason, setApprovalReason] = useState('');
 
   // Keep derived state below its source state declarations to avoid a
   // production-build temporal-dead-zone crash in minified bundles.
@@ -424,6 +424,11 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     if (!order) return;
     setPrescriptionModalOrder(order);
     const orderId = String(order._id);
+    setVerifiedOrderIds(prev => prev.filter(id => id !== orderId));
+    setPrescriptionPreview(null);
+    setPrescriptionPreviewError('');
+    setPrescriptionPreviewLoading(true);
+    setApprovalReason('');
     setImageZoom(1);
 
     const targetUrl = order.prescriptionUrl
@@ -502,16 +507,8 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         });
       } catch (loadError) {
         console.error('[PrescriptionLifecycle] Prescription fetch error encountered:', loadError);
-        if (targetUrl.startsWith('http') || targetUrl.startsWith('/uploads')) {
-          console.log('[PrescriptionLifecycle] Falling back to direct targetUrl:', targetUrl);
-          setPrescriptionPreview({
-            url: targetUrl,
-            type: targetUrl.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'
-          });
-        } else {
-          setPrescriptionPreview(null);
-          setPrescriptionPreviewError('Could not load the prescription document. Retry opening it before recording any manual approval.');
-        }
+        setPrescriptionPreview(null);
+        setPrescriptionPreviewError('Could not load the prescription document through the authenticated file endpoint. Retry loading it before recording any manual approval.');
       } finally {
         setPrescriptionPreviewLoading(false);
         setViewingPrescriptionOrderId(null);
@@ -1479,7 +1476,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                       type="text"
                       value={approvalReason}
                       onChange={e => setApprovalReason(e.target.value)}
-                      placeholder="e.g. Doctor prescription verified, correct dosage"
+                      placeholder="Required: note what you verified on the prescription"
                       className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-blue-500"
                     />
                   </div>
