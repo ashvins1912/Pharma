@@ -40,7 +40,7 @@ const server = http.createServer((req, res) => {
     const healthy = !shuttingDown && server.listening && (process.env.NODE_ENV !== 'production' || authConfigured);
     res.writeHead(healthy ? 200 : 503, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
     res.end(JSON.stringify({
-      status: healthy ? 'healthy' : 'shutting-down',
+      status: shuttingDown ? 'shutting-down' : healthy ? 'healthy' : 'not-ready',
       service: 'websocket-service',
       uptimeSeconds: Math.floor(process.uptime()),
       activeConnections: io.engine.clientsCount,
@@ -54,7 +54,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && path === '/ready') {
     const ready = !shuttingDown && server.listening && (process.env.NODE_ENV !== 'production' || authConfigured);
     res.writeHead(ready ? 200 : 503, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-    res.end(JSON.stringify({ status: ready ? 'ready' : 'not-ready', service: 'websocket-service' }));
+    res.end(JSON.stringify({ status: ready ? 'ready' : 'not-ready', service: 'websocket-service', authConfigured }));
     return;
   }
   res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });
