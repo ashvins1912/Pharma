@@ -21,11 +21,10 @@ services:
   - type: web
     name: ashvin-pharma-websocket
     runtime: node
-    rootDir: services/websocket-service
     region: oregon
     plan: free
-    buildCommand: npm install --workspaces=false
-    startCommand: npm start
+    buildCommand: npm install
+    startCommand: npm --workspace services/websocket-service start
     healthCheckPath: /healthz
     envVars:
       - key: NODE_ENV
