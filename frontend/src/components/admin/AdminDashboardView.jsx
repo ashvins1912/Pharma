@@ -13,6 +13,7 @@ import CustomerPromotionsView from './CustomerPromotionsView';
 import PlatformTenantsView from './PlatformTenantsView';
 import PlatformAccessControl from './PlatformAccessControl';
 import LiveTelemetryTab from './LiveTelemetryTab';
+import RoleFeatureMatrixTab from './RoleFeatureMatrixTab';
 import { getAdminMedicineRequests, getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -182,7 +183,8 @@ export default function AdminDashboardView() {
       canViewAudits && 'audits',
       canViewTenants && 'tenants',
       canManagePlatformAccess && 'access',
-      isSuperAdmin && 'telemetry'
+      isSuperAdmin && 'telemetry',
+      isSuperAdmin && 'matrix'
     ].filter(Boolean);
     if (!allowedTabs.includes(adminTab)) setAdminTab(allowedTabs[0] || '');
   }, [
@@ -502,6 +504,19 @@ export default function AdminDashboardView() {
             <span>Live Telemetry</span>
           </button>
         )}
+        {isSuperAdmin && (
+          <button
+            onClick={() => setAdminTab('matrix')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              adminTab === 'matrix'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'bg-white text-purple-700 hover:bg-purple-50 border border-purple-200'
+            }`}
+          >
+            <span>📐</span>
+            <span>Role-Feature Matrix</span>
+          </button>
+        )}
       </div>
 
       {/* Tab Content Display */}
@@ -513,6 +528,9 @@ export default function AdminDashboardView() {
       )}
       {adminTab === 'telemetry' && isSuperAdmin && (
         <LiveTelemetryTab />
+      )}
+      {adminTab === 'matrix' && isSuperAdmin && (
+        <RoleFeatureMatrixTab />
       )}
       {adminTab === 'csquare' && canViewCSquare && <AdminCSquareTab />}
       {adminTab === 'promotions' && canViewPromotions && <CustomerPromotionsView canManage={hasPermission('promotions.manage')} />}

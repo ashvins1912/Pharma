@@ -54,7 +54,7 @@ export default function LiveTelemetryTab() {
         details: `Processed via API Gateway. Response time: ${randomLatency}ms. Tenant ID: ${tenantId?.slice(-6) || 'primary'}`
       };
 
-      setEvents(prev => [newEvent, ...prev.slice(0, 29)]);
+      setEvents(prev => [newEvent, ...prev.slice(0, 9)]);
     } catch {
       setPingCount(c => c + 1);
     }
