@@ -23,6 +23,7 @@ import MedicineRequestModal from './components/requests/MedicineRequestModal';
 import CustomerProposalModal from './components/requests/CustomerProposalModal';
 import VerifyEmailView from './components/auth/VerifyEmailView';
 import VendorOnboardingView from './components/auth/VendorOnboardingView';
+import TenantSelectorModal from './components/auth/TenantSelectorModal';
 
 function AuthTransitionScreen({ initialLoad = false }) {
   return (
@@ -86,6 +87,7 @@ function MainApp() {
   const [dismissedRatingOrderIds, setDismissedRatingOrderIds] = useState([]);
   const [vendorOnboardingToken, setVendorOnboardingToken] = useState(null);
   const [verifyEmailToken, setVerifyEmailToken] = useState(null);
+  const [tenantSelectorOpen, setTenantSelectorOpen] = useState(false);
 
   // Check URL query parameters for onboarding or verification tokens
   useEffect(() => {
@@ -345,6 +347,15 @@ function MainApp() {
                 <p className="text-xs sm:text-sm text-blue-100 font-medium leading-relaxed">
                   Find genuine pharmaceutical formulations, doctor-prescribed medications, and wellness care products delivered safely.
                 </p>
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setTenantSelectorOpen(true)}
+                    className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-xl backdrop-blur-md transition flex items-center gap-2 cursor-pointer shadow-sm"
+                  >
+                    <span>📍 Select Nearby Pharmacy / Dispensary</span>
+                  </button>
+                </div>
               </div>
 
               {/* Decorative Pill/Capsule Graphic on larger screens */}
@@ -597,6 +608,12 @@ function MainApp() {
           }}
         />
       )}
+
+      {/* Tenant Selector Modal */}
+      <TenantSelectorModal
+        isOpen={tenantSelectorOpen}
+        onClose={() => setTenantSelectorOpen(false)}
+      />
 
     </div>
   );

@@ -10,15 +10,29 @@ export const TenantProvider = ({ children }) => {
     return '65a1234567890abcdef12345';
   });
 
+  const [activeTenant, setActiveTenantState] = useState(null);
+
   const setTenantId = (id) => {
-    setTenantIdState(id);
+    const stringId = typeof id === 'object' && id !== null ? (id._id || id.id || String(id)) : String(id);
+    setTenantIdState(stringId);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('pharma_tenant_id', id);
+      localStorage.setItem('pharma_tenant_id', stringId);
+    }
+    if (typeof id === 'object' && id !== null) {
+      setActiveTenantState(id);
+    }
+  };
+
+  const setActiveTenant = (tenant) => {
+    setActiveTenantState(tenant);
+    if (tenant) {
+      const id = tenant._id || tenant.id || String(tenant);
+      setTenantId(id);
     }
   };
 
   return (
-    <TenantContext.Provider value={{ tenantId, setTenantId }}>
+    <TenantContext.Provider value={{ tenantId, setTenantId, activeTenant, setActiveTenant }}>
       {children}
     </TenantContext.Provider>
   );
