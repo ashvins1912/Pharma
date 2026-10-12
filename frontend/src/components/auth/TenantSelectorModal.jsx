@@ -14,7 +14,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   return Number((R * c).toFixed(1));
 }
 
-export default function TenantSelectorModal({ isOpen, onClose }) {
+export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId = '' }) {
   const { tenantId, setTenantId, setActiveTenant } = useTenant();
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +74,12 @@ export default function TenantSelectorModal({ isOpen, onClose }) {
       list.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
 
       setTenants(list);
-      if (!tenantId && list.length > 0) {
+      const preferred = preferredTenantId ? list.find(tenant => String(tenant._id) === String(preferredTenantId)) : null;
+      if (preferred) {
+        setTenantId(preferred._id);
+        setActiveTenant(preferred);
+        setSearchQuery(preferred.shopName || '');
+      } else if (!tenantId && list.length > 0) {
         setTenantId(list[0]._id);
         setActiveTenant(list[0]);
       }
