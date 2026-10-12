@@ -4,6 +4,7 @@ const CAPABILITIES = [
   ['GET', /^\/api\/orders\/[^/]+\/notify-whatsapp$/, 'whatsapp.manage'],
   ['POST', /^\/api\/orders\/[^/]+\/notify-whatsapp$/, 'whatsapp.manage'],
   ['POST', /^\/api\/orders\/[^/]+\/rating$/, 'orders.read'],
+  ['POST', /^\/api\/orders\/[^/]+\/verify-delivery$/, 'delivery.manage'],
   ['PUT', /^\/api\/orders\/[^/]+\/review$/, 'prescription.review'],
   ['POST', /^\/api\/orders\/admin\/[^/]+\/prescription\/(?:reinitiate|manual-approve)$/, 'prescription.review'],
   ['PUT', /^\/api\/orders\/[^/]+\/dispatch$/, 'delivery.manage'],
