@@ -1411,7 +1411,10 @@ router.post('/:id/verify-delivery', authenticateUser, async (req, res) => {
             deliveredOrder = await dataStore.transitionOrderStatus(
                 String(order._id),
                 'Delivered',
-                rider?.name || req.user.user_metadata?.name || req.user.email || 'Assigned Rider'
+                rider?.name || req.user.user_metadata?.name || req.user.email || 'Assigned Rider',
+                null,
+                null,
+                true
             );
         } catch (error) {
             await Order.updateOne({ _id: order._id, orderStatus: 'Dispatched' }, { $set: { 'deliveryVerification.verifiedAt': null } });
