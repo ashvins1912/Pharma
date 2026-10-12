@@ -404,7 +404,7 @@ export const buildWhatsAppMedicineRequestBody = (request, eventType) => {
                 `🚫 MEDICINE REQUEST CANCELLED — #${reqNum}`,
                 `Medicine: ${items}`,
                 'Your medicine request was cancelled. If you still need this medicine, please create a new request in Ashvin Pharmacy.'
-            ].join('\\n');
+            ].join('\n');
 
         case 'MedicineRequestRejected':
         case 'CUSTOMER_REJECTED':
