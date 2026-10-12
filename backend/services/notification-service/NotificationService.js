@@ -152,7 +152,7 @@ export class NotificationService {
                     branchId: evt.branchId,
                     recipientUserId: this._recipientUserId(evt),
                     title: 'Order out for delivery',
-                    body: 'Your 4-digit delivery verification code has been sent to WhatsApp. Share it with your rider at handover.',
+                    body: 'A 4-digit delivery code is required at handover. Check WhatsApp for the code, and contact the pharmacy if it has not arrived.',
                     eventType: 'ORDER_OUT_FOR_DELIVERY_OTP_SENT',
                     orderId: evt.entityId,
                     status: 'Dispatched',
