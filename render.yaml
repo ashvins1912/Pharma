@@ -10,18 +10,21 @@ services:
       - key: NODE_ENV
         value: production
       - key: CORS_ALLOWED_ORIGINS
-        value: "*"
+        value: https://pharma-ui.onrender.com
       - key: MONGO_URI
+        sync: false
+      - key: CACHE_SERVICE_URL
+        value: https://caching-v0et.onrender.com
+      - key: CACHE_SERVICE_TOKEN
         sync: false
 
   - type: web
     name: ashvin-pharma-websocket
     runtime: node
-    rootDir: services/websocket-service
     region: oregon
     plan: free
-    buildCommand: npm install --workspaces=false
-    startCommand: npm start
+    buildCommand: npm install
+    startCommand: npm --workspace services/websocket-service start
     healthCheckPath: /healthz
     envVars:
       - key: NODE_ENV
@@ -34,6 +37,16 @@ services:
         value: 25000
       - key: WS_PING_TIMEOUT_MS
         value: 20000
+      - key: CACHE_SERVICE_URL
+        value: https://caching-v0et.onrender.com
+      - key: CACHE_SERVICE_TOKEN
+        sync: false
+      - key: PHARMA_JWT_PUBLIC_KEY
+        sync: false
+      - key: PHARMA_JWT_ISSUER
+        value: pharma-auth
+      - key: PHARMA_JWT_AUDIENCE
+        value: pharma-api
 
   - type: web
     name: ashvin-pharma-prescription
@@ -48,15 +61,6 @@ services:
       - key: PORT
         value: 3001
 
-  - type: redis
-    name: ashvin-pharma-cache
-    region: oregon
-    plan: starter
-    maxmemoryPolicy: noeviction
-    ipAllowList:
-      - source: 0.0.0.0/0
-        description: Temporary broad access; restrict to trusted service egress ranges when available
-
   - type: web
     name: ashvin-pharma-frontend
     env: static
@@ -67,4 +71,4 @@ services:
       - key: VITE_API_URL
         value: https://ashvin-pharma-api.onrender.com
       - key: VITE_WS_URL
-        value: https://ashvin-pharma-websocket.onrender.com
+        value: https://websockt.onrender.com
