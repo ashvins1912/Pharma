@@ -703,7 +703,9 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
         await transmitWhatsAppMessage(record, mongoRecord);
         const targetUserId = audience === 'rider'
             ? (order.rider?.userId || order.rider?.riderId || null)
-            : (order.userId || order.customerUserId || order.customerId || null);
+            : audience === 'customer'
+                ? (order.userId || order.customerUserId || order.customerId || null)
+                : null;
         publishWhatsAppRealtimeStatus(record, {
             userId: targetUserId,
             tenantId: order.tenantId || null,
@@ -831,7 +833,7 @@ export const sendWhatsAppMedicineRequestAlert = async (request, eventType) => {
         records.push(record);
         await transmitWhatsAppMessage(record, mongoRecord);
         publishWhatsAppRealtimeStatus(record, {
-            userId: request.customerUserId || request.userId || request.customerId || null,
+            userId: audience === 'customer' ? (request.customerUserId || request.userId || request.customerId || null) : null,
             tenantId: request.tenantId || null,
             medicineRequestId: requestId,
             audience
