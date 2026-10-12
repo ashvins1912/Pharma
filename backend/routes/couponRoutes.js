@@ -21,8 +21,8 @@ router.get('/my-offer', authenticateUser, async (req, res) => {
     if (!getIsConnected() || mongoose.connection.readyState !== 1) return res.status(503).json({ success: false, message: 'Promotions are temporarily unavailable.' });
     try {
         const orderTotal = Number(req.query.orderTotal || 0);
-        const tenantId = getTenantId(req);
-        const filter = { customerId: req.user.sub, isActive: true, autoApply: true, ...(tenantId ? { tenantId } : {}) };
+        const tenantId = String(req.query.tenantId || getTenantId(req) || '').trim();
+        const filter = { customerId: req.user.sub, isActive: true, autoApply: true, tenantId: tenantId || null };
         const coupons = await Coupon.find(filter).sort({ createdAt: -1 }).lean();
         const eligible = coupons.filter(coupon => usableCoupon(coupon, orderTotal));
         if (!eligible.length) return res.json({ success: true, promotion: null });
