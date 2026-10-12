@@ -181,13 +181,14 @@ export default function AdminDashboardView() {
       canManageRoutes && 'routes',
       canViewAudits && 'audits',
       canViewTenants && 'tenants',
-      canManagePlatformAccess && 'access'
+      canManagePlatformAccess && 'access',
+      isSuperAdmin && 'telemetry'
     ].filter(Boolean);
     if (!allowedTabs.includes(adminTab)) setAdminTab(allowedTabs[0] || '');
   }, [
     adminTab, canViewFulfillment, canViewCSquare, canViewAdminRequests,
     canManageRiders, canViewPromotions, canViewPayments, canViewInventory,
-    canManageRoutes, canViewAudits, canViewTenants, canManagePlatformAccess
+    canManageRoutes, canViewAudits, canViewTenants, canManagePlatformAccess, isSuperAdmin
   ]);
 
   // Derived Metrics
