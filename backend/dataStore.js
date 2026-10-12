@@ -1859,7 +1859,12 @@ export const dataStore = {
         const filter = {
             $or: [
                 { orderStatus: { $in: ['Cancelled', 'cancelled'] } },
-                { status: { $in: ['cancelled', 'Cancelled'] } }
+                {
+                    $and: [
+                        { $or: [{ orderStatus: { $exists: false } }, { orderStatus: null }, { orderStatus: '' }] },
+                        { status: { $in: ['cancelled', 'Cancelled'] } }
+                    ]
+                }
             ]
         };
         const safeLimit = Math.min(50, Math.max(1, Number(limit) || 10));
