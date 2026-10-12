@@ -74,6 +74,8 @@ def get_redis() -> aioredis.Redis:
 @app.get("/health", status_code=status.HTTP_200_OK)
 async def health():
     try:
+        if not CACHE_SERVICE_TOKEN or len(CACHE_SERVICE_TOKEN) < 32:
+            raise HTTPException(status_code=503, detail="CACHE_SERVICE_TOKEN is not configured")
         await get_redis().ping()
         return {"status": "healthy", "service": "shared-cache"}
     except HTTPException:
