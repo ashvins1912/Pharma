@@ -1810,6 +1810,26 @@ export class AuthService {
      * Retrieve authenticated profile with full tenant & membership context
      */
     async getUserProfile(user, context = {}) {
+        // The access token is intentionally short-lived and contains a snapshot of
+        // profile fields. Rehydrate from the canonical database for reads so edits
+        // made after login (DOB, gender, phone, names) are not hidden by stale JWT
+        // claims. Never replace the verified subject with a client-supplied ID.
+        const subject = user?.sub || user?.id || user?.userId;
+        let canonicalUser = user || {};
+        if (subject && getIsConnected()) {
+            try {
+                const stored = await this.findUser({ userId: subject });
+                if (stored) {
+                    canonicalUser = { ...user, ...stored, sub: subject, id: subject, userId: subject };
+                }
+            } catch (error) {
+                logger.warn('Canonical profile hydration failed; returning verified session claims.', {
+                    userId: subject,
+                    error: error.message
+                });
+            }
+        }
+        user = canonicalUser;
         const rawRole = user.app_metadata?.role || user.role || 'customer';
         const role = isPlatformSuperAdmin(rawRole) ? 'SUPER_ADMIN' : rawRole;
         const isPlatform = role === 'SUPER_ADMIN';
