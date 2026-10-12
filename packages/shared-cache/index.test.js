@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SharedCacheClient } from './index.js';
 
-test('requires a long service token when shared cache is configured', () => {
-  assert.throws(() => new SharedCacheClient({ baseUrl: 'http://localhost:8080', token: 'short' }), /at least 32 characters/);
+test('disables shared cache when its service token is misconfigured without crashing the process', async () => {
+  const client = new SharedCacheClient({ baseUrl: 'http://localhost:8080', token: 'short' });
+  assert.equal(client.enabled, false);
+  await assert.rejects(client.get('key'), /at least 32 characters/);
 });
 
 test('encodes cache keys and sends the internal token', async () => {
