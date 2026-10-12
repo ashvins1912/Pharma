@@ -2122,7 +2122,7 @@ export const dataStore = {
 
                 order.deliveryMinutes = deliveryMinutes;
                 order.systemRating = onTime ? 5 : null;
-                order.ratingPromptPending = onTime;
+                order.ratingPromptPending = !order.customerRating;
                 if (onTime) order.postTime = Number(order.postTime || 0) - 1;
                 order.rewardMetrics = finance;
                 order.netProfit = finance.netProfit;
