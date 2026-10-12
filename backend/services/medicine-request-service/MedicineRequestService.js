@@ -305,8 +305,8 @@ export class MedicineRequestService {
             notes: `Converted to Order #${order.orderNumber}`
         });
 
-        domainEvents.emitDomainEvent('PROPOSAL_APPROVED', id, { orderId: order.id, customerId: request.customerId, requestNumber: request.requestNumber, medicineName: request.medicineName,
-            request: { id: request.id, requestNumber: request.requestNumber, customerId: request.customerId, customerName: request.customerName,
+        domainEvents.emitDomainEvent('PROPOSAL_APPROVED', id, { orderId: order.id, customerId: request.customerId, customerUserId: request.customerUserId, requestNumber: request.requestNumber, medicineName: request.medicineName,
+            request: { id: request.id, requestNumber: request.requestNumber, customerId: request.customerId, customerUserId: request.customerUserId, tenantId: request.tenantId, branchId: request.branchId, customerName: request.customerName,
                 customerPhone: request.customerPhone, requestedItems: [{ requestedName: request.medicineName, strength: request.strength, quantity: request.requestedQuantity }],
                 pharmacyProposal: request.pharmacyProposal } }, actor, request.tenantId, request.branchId);
         logger.info(`Request #${request.requestNumber} converted to Order #${order.orderNumber}`, { orderId: order.id });
@@ -341,8 +341,8 @@ export class MedicineRequestService {
             notes: reason || 'Customer declined proposal'
         });
 
-        domainEvents.emitDomainEvent('PROPOSAL_REJECTED', id, { reason, customerId: request.customerId, requestNumber: request.requestNumber, medicineName: request.medicineName,
-            request: { id: request.id, requestNumber: request.requestNumber, customerId: request.customerId, customerName: request.customerName,
+        domainEvents.emitDomainEvent('PROPOSAL_REJECTED', id, { reason, customerId: request.customerId, customerUserId: request.customerUserId, requestNumber: request.requestNumber, medicineName: request.medicineName,
+            request: { id: request.id, requestNumber: request.requestNumber, customerId: request.customerId, customerUserId: request.customerUserId, tenantId: request.tenantId, branchId: request.branchId, customerName: request.customerName,
                 customerPhone: request.customerPhone, requestedItems: [{ requestedName: request.medicineName, strength: request.strength, quantity: request.requestedQuantity }],
                 pharmacyProposal: request.pharmacyProposal } }, actor, request.tenantId, request.branchId);
         return request;
@@ -373,7 +373,11 @@ export class MedicineRequestService {
             notes: reason || 'Customer cancelled the medicine request'
         });
 
-        domainEvents.emitDomainEvent('REQUEST_CANCELLED', id, { reason, customerId: request.customerId, requestNumber: request.requestNumber, medicineName: request.medicineName }, actor, request.tenantId, request.branchId);
+        domainEvents.emitDomainEvent('REQUEST_CANCELLED', id, { reason, customerId: request.customerId, customerUserId: request.customerUserId, requestNumber: request.requestNumber, medicineName: request.medicineName,
+            request: { id: request.id, requestNumber: request.requestNumber, customerId: request.customerId, customerUserId: request.customerUserId, tenantId: request.tenantId, branchId: request.branchId,
+                customerName: request.customerName, customerPhone: request.customerPhone,
+                requestedItems: [{ requestedName: request.medicineName, strength: request.strength, quantity: request.requestedQuantity }],
+                pharmacyProposal: request.pharmacyProposal } }, actor, request.tenantId, request.branchId);
         return request;
     }
 }
