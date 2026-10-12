@@ -52,6 +52,7 @@ export function loadConfig(environment = process.env) {
   const prescriptionServiceUrl = parseOrigin(environment.PRESCRIPTION_SERVICE_URL || '');
   const customerServiceUrl = parseOrigin(environment.CUSTOMER_SERVICE_URL || '');
   const websocketServiceUrl = parseOrigin(environment.WEBSOCKET_SERVICE_URL || '');
+  const cacheServiceUrl = parseOrigin(environment.CACHE_SERVICE_URL || '');
   const healthCheckEnabled = environment.HEALTH_CHECK_ENABLED !== 'false';
   const loggingEnabled = environment.LOGGING_ENABLED !== 'false';
   const healthCheckIntervalMinutes = Number(environment.HEALTH_CHECK_INTERVAL_MINUTES || 15);
@@ -85,6 +86,9 @@ export function loadConfig(environment = process.env) {
   }
   if (environment.WEBSOCKET_SERVICE_URL && !websocketServiceUrl) {
     errors.push('WEBSOCKET_SERVICE_URL must be an HTTP(S) origin without credentials, path, query, or fragment.');
+  }
+  if (environment.CACHE_SERVICE_URL && !cacheServiceUrl) {
+    errors.push('CACHE_SERVICE_URL must be an HTTP(S) origin without credentials, path, query, or fragment.');
   }
   if (production && !environment.BACKEND_API_URL) errors.push('BACKEND_API_URL is required in production.');
   if ((inventoryServiceUrl || orderServiceUrl || prescriptionServiceUrl) && serviceAuthSecret.length < 32) {
@@ -127,6 +131,7 @@ export function loadConfig(environment = process.env) {
     prescriptionServiceUrl,
     customerServiceUrl,
     websocketServiceUrl,
+    cacheServiceUrl,
     healthCheckEnabled,
     healthCheckIntervalMs: healthCheckIntervalMinutes * 60 * 1000,
     healthCheckTimeoutMs,
@@ -138,6 +143,7 @@ export function loadConfig(environment = process.env) {
       ...(orderServiceUrl ? [{ name: 'order-service', baseUrl: orderServiceUrl, healthPath: '/ready', critical: false }] : []),
       ...(prescriptionServiceUrl ? [{ name: 'prescription-service', baseUrl: prescriptionServiceUrl, healthPath: '/health', critical: false }] : []),
       ...(customerServiceUrl ? [{ name: 'customer-service', baseUrl: customerServiceUrl, healthPath: '/ready', critical: false }] : []),
+      ...(cacheServiceUrl ? [{ name: 'cache-service', baseUrl: cacheServiceUrl, healthPath: '/health', critical: false }] : []),
       ...(websocketServiceUrl ? [{ name: 'websocket-service', baseUrl: websocketServiceUrl, healthPath: '/healthz', critical: false }] : [])
     ],
     serviceAuthSecret,

@@ -77,16 +77,11 @@ export function AppProvider({ children }) {
 
   // Customer Notifications State
   const [realtimeTokenVersion, setRealtimeTokenVersion] = useState(0);
-  const [notifications, setNotifications] = useState([
-    {
-      id: 'notif-1',
-      title: 'Welcome to Ashvin Pharmacy',
-      message: 'Browse prescription and OTC medicines with doorstep delivery in 30 mins.',
-      time: 'Just now',
-      read: false,
-      type: 'info'
-    }
-  ]);
+  const [notifications, setNotifications] = useState([]);
+  const [deliveryEvents, setDeliveryEvents] = useState([]);
+  const [realtimeConnectionStatus, setRealtimeConnectionStatus] = useState('offline');
+  const notificationLoadSequence = useRef(0);
+  const deliveryEventsLoadSequence = useRef(0);
 
   // Admin Alerts State
   const [inventoryAlerts, setInventoryAlerts] = useState({
@@ -363,6 +358,11 @@ export function AppProvider({ children }) {
         setOrders([]);
         setOrdersError('');
         setLoadingOrders(false);
+        setNotifications([]);
+        setDeliveryEvents([]);
+        setRealtimeConnectionStatus('offline');
+        notificationLoadSequence.current += 1;
+        deliveryEventsLoadSequence.current += 1;
         setMedicineRequests([]);
         setMedicineRequestsError('');
         setMedicineRequestsPagination({ page: 1, pageSize: 10, limit: 10, total: 0, totalPages: 0, hasNextPage: false });
@@ -496,6 +496,88 @@ export function AppProvider({ children }) {
     }
   }, [isFullyAuthenticated, isPharmacyOrAdmin, isSuperAdmin]);
 
+  // The authenticated notification API provides the initial snapshot and reconnect recovery.
+  // The browser never calls the cache service directly; cache events arrive via the authenticated
+  // Socket.IO service and this API fills gaps after reconnects.
+  const loadNotifications = useCallback(async () => {
+    const sequence = ++notificationLoadSequence.current;
+    if (!isFullyAuthenticated) {
+      setNotifications([]);
+      return [];
+    }
+    try {
+      const response = await apiClient.get('/api/v1/notifications');
+      const rows = Array.isArray(response.data?.data) ? response.data.data : [];
+      if (sequence !== notificationLoadSequence.current) return [];
+      const mapped = rows.map(item => ({
+        id: String(item.id || item.notificationId || ''),
+        title: item.title || 'Pharmacy Update',
+        message: item.body || item.message || 'There is an update to your pharmacy activity.',
+        time: item.createdAt ? new Date(item.createdAt).toLocaleTimeString() : 'Recent',
+        createdAt: item.createdAt || null,
+        read: Boolean(item.read),
+        type: item.status === 'FAILED' || item.status === 'ERROR' ? 'warning' : 'info',
+        eventType: item.eventType || 'NOTIFICATION_CREATED',
+        orderId: item.orderId || null,
+        requestId: item.medicineRequestId || null,
+        actionType: item.medicineRequestId ? 'VIEW_PROPOSAL' : undefined,
+        channels: Array.isArray(item.channels) ? item.channels : [],
+        whatsappDeliveryState: item.deliveryState || null
+      })).filter(item => item.id);
+      setNotifications(previous => {
+        const serverIds = new Set(mapped.map(item => item.id));
+        // Preserve socket events received while this snapshot request was in flight.
+        const localItems = previous.filter(item =>
+          (item.sourceChannel === 'realtime' || String(item.id).startsWith('notif-prop-') || String(item.id).startsWith('notif-wa'))
+          && !serverIds.has(String(item.id))
+        );
+        return [...mapped, ...localItems].slice(0, 50);
+      });
+      return mapped;
+    } catch (error) {
+      console.warn('[Notifications] Initial/recovery fetch failed:', error?.message || error);
+      return [];
+    }
+  }, [isFullyAuthenticated]);
+
+  const loadDeliveryEvents = useCallback(async () => {
+    const sequence = ++deliveryEventsLoadSequence.current;
+    if (!isFullyAuthenticated) {
+      setDeliveryEvents([]);
+      return [];
+    }
+    try {
+      const response = await apiClient.get('/api/v1/notifications/delivery-history');
+      const rows = Array.isArray(response.data?.data) ? response.data.data : [];
+      if (sequence !== deliveryEventsLoadSequence.current) return [];
+      setDeliveryEvents(previous => {
+        const byId = new Map();
+        [...rows, ...previous].forEach((item, index) => {
+          const id = String(item.id || item.eventId || [item.orderId || item.aggregateId || 'delivery', item.eventType || item.type || item.status || 'update', item.timestamp || item.createdAt || index].join(':'));
+          if (!byId.has(id)) byId.set(id, { ...item, id });
+        });
+        return [...byId.values()].slice(0, 50);
+      });
+      return rows;
+    } catch (error) {
+      console.warn('[Fulfillment] Delivery history fetch failed:', error?.message || error);
+      return [];
+    }
+  }, [isFullyAuthenticated]);
+
+  useEffect(() => {
+    if (!authLoading && isFullyAuthenticated) {
+      void loadNotifications();
+      void loadDeliveryEvents();
+    } else if (!authLoading) {
+      notificationLoadSequence.current += 1;
+      deliveryEventsLoadSequence.current += 1;
+      setNotifications([]);
+      setDeliveryEvents([]);
+      setRealtimeConnectionStatus('offline');
+    }
+  }, [authLoading, isFullyAuthenticated, loadNotifications, loadDeliveryEvents]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const handleTokenChange = () => setRealtimeTokenVersion(version => version + 1);
@@ -542,7 +624,9 @@ export function AppProvider({ children }) {
         requestId: payload.medicineRequestId || null,
         actionType: payload.medicineRequestId ? 'VIEW_PROPOSAL' : undefined,
         channels: Array.isArray(payload.channels) ? payload.channels : [],
-        whatsappDeliveryState: payload.deliveryState || null
+        whatsappDeliveryState: payload.deliveryState || null,
+        sourceChannel: 'realtime',
+        createdAt: payload.createdAt || payload.timestamp || new Date().toISOString()
       };
       setNotifications(previous => {
         const existingIndex = previous.findIndex(item => String(item.id) === id
@@ -570,29 +654,53 @@ export function AppProvider({ children }) {
       void loadUserMedicineRequests({ silent: true });
     };
     const onOrderStatusChanged = payload => {
+      const event = {
+        ...(payload || {}),
+        id: String(payload?.id || payload?.eventId || [payload?.orderId || 'order', payload?.eventType || payload?.type || payload?.status || 'update', payload?.timestamp || payload?.createdAt || Date.now()].join(':'))
+      };
+      setDeliveryEvents(previous => {
+        const exists = previous.some(item => String(item.id) === event.id);
+        return exists ? previous.map(item => String(item.id) === event.id ? { ...item, ...event } : item) : [event, ...previous].slice(0, 50);
+      });
       window.dispatchEvent(new CustomEvent('pharma:order-status-changed', { detail: payload }));
+      void loadDeliveryEvents();
       void loadUserOrders({ silent: true });
     };
 
-    socket.on('connect', () => {
+    const onSocketConnect = () => {
+      setRealtimeConnectionStatus('connected');
       socket.emit('join_bell_room', { userId: user.id, ...(tenantId ? { tenantId } : {}) });
-    });
+      // The cache consumer persists/acks its own Redis Stream cursor. Reload the
+      // authenticated snapshots on connect/reconnect to fill gaps while this browser
+      // was offline, then let future Socket.IO events update the UI immediately.
+      void loadNotifications();
+      void loadDeliveryEvents();
+      window.dispatchEvent(new CustomEvent('pharma:order-status-changed', { detail: { source: 'realtime-recovery' } }));
+      window.dispatchEvent(new CustomEvent('pharma:medicine-request-updated', { detail: { source: 'realtime-recovery' } }));
+    };
+    const onSocketDisconnect = () => setRealtimeConnectionStatus('reconnecting');
+    const onSocketConnectError = error => {
+      setRealtimeConnectionStatus('offline');
+      console.warn('[Realtime] Socket connection was rejected or unavailable:', error?.message || 'connection error');
+    };
+    socket.on('connect', onSocketConnect);
+    socket.on('disconnect', onSocketDisconnect);
+    socket.on('connect_error', onSocketConnectError);
     socket.on('notification', onNotification);
     socket.on('whatsapp_notification', onWhatsAppNotification);
     socket.on('medicine_request_updated', onMedicineRequestUpdated);
     socket.on('order_status_changed', onOrderStatusChanged);
-    socket.on('connect_error', error => {
-      console.warn('[Realtime] Socket connection was rejected or unavailable:', error?.message || 'connection error');
-    });
-
     return () => {
       socket.off('notification', onNotification);
       socket.off('whatsapp_notification', onWhatsAppNotification);
       socket.off('medicine_request_updated', onMedicineRequestUpdated);
       socket.off('order_status_changed', onOrderStatusChanged);
+      socket.off('connect', onSocketConnect);
+      socket.off('disconnect', onSocketDisconnect);
+      socket.off('connect_error', onSocketConnectError);
       socket.disconnect();
     };
-  }, [isFullyAuthenticated, user?.id, user?.tenantId, user?.app_metadata?.tenantId, user?.user_metadata?.tenantId, realtimeTokenVersion, loadUserOrders, loadUserMedicineRequests]);
+  }, [isFullyAuthenticated, user?.id, user?.tenantId, user?.app_metadata?.tenantId, user?.user_metadata?.tenantId, realtimeTokenVersion, loadUserOrders, loadUserMedicineRequests, loadNotifications, loadDeliveryEvents]);
 
   // Customer medicine requests are loaded by CustomerRequestsView when that tab opens.
   // Do not fetch or poll this customer-only list as part of global login hydration.
@@ -953,8 +1061,24 @@ export function AppProvider({ children }) {
         // Notifications
         notifications,
         unreadNotificationsCount: notifications.filter(n => !n.read).length,
-        markNotificationRead: (id) =>
-          setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n)),
+        markNotificationRead: async (id) => {
+          const target = notifications.find(item => String(item.id) === String(id));
+          if (!target || target.read) return;
+          setNotifications(prev => prev.map(item => String(item.id) === String(id) ? { ...item, read: true } : item));
+          // Proposal/WhatsApp prompts synthesized locally do not have a persisted
+          // NotificationService record and must not be sent to the read API.
+          if (String(id).startsWith('notif-prop-') || String(id).startsWith('notif-wa')) return;
+          try {
+            await apiClient.patch(`/api/v1/notifications/${encodeURIComponent(id)}/read`);
+          } catch (error) {
+            setNotifications(prev => prev.map(item => String(item.id) === String(id) ? { ...item, read: false } : item));
+            console.warn('[Notifications] Could not persist read state:', error?.message || error);
+          }
+        },
+        loadNotifications,
+        deliveryEvents,
+        loadDeliveryEvents,
+        realtimeConnectionStatus,
 
         // Admin alerts
         inventoryAlerts,

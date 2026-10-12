@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 
 export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
-  const { notifications, unreadNotificationsCount, markNotificationRead, setWhatsappModalOpen } = useApp();
+  const { notifications, unreadNotificationsCount, markNotificationRead, setWhatsappModalOpen, deliveryEvents, realtimeConnectionStatus } = useApp();
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -34,9 +34,14 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
           />
           <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 w-auto sm:w-96 max-w-md bg-white border border-slate-200 rounded-3xl shadow-2xl z-50 p-4 space-y-3 animate-fade-in">
             <div className="flex justify-between items-center border-b border-slate-100 pb-2.5">
-              <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <span>🔔</span> Notifications ({notifications.length})
-              </h4>
+              <div className="min-w-0">
+                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🔔</span> Notifications ({notifications.length})
+                </h4>
+                <p className={`mt-1 text-[10px] font-bold ${realtimeConnectionStatus === 'connected' ? 'text-emerald-600' : realtimeConnectionStatus === 'reconnecting' ? 'text-amber-600' : 'text-slate-400'}`}>
+                  {realtimeConnectionStatus === 'connected' ? '● Live updates connected' : realtimeConnectionStatus === 'reconnecting' ? '● Reconnecting to live updates…' : '● Live updates offline · showing latest fetched data'}
+                </p>
+              </div>
               <button
                 onClick={() => setIsOpen(false)}
                 className="text-slate-400 hover:text-slate-700 text-xs font-bold p-1 rounded-full hover:bg-slate-100"
@@ -91,6 +96,28 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
                 </div>
               ))}
             </div>
+
+            {deliveryEvents.length > 0 && (
+              <section className="border-t border-slate-100 pt-3">
+                <h5 className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-500">Recent fulfillment updates</h5>
+                <div className="space-y-2">
+                  {deliveryEvents.slice(0, 3).map((event, index) => {
+                    const eventLabel = String(event.eventType || event.type || event.status || 'FULFILLMENT_UPDATE').replaceAll('_', ' ');
+                    const orderLabel = event.orderNumber || event.orderId || event.aggregateId;
+                    return (
+                      <div key={event.id || `${eventLabel}-${index}`} className="rounded-xl border border-slate-100 bg-slate-50 p-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-[11px] font-bold text-slate-800">{eventLabel}</p>
+                          <span className="shrink-0 text-[9px] text-slate-400">{event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : 'Recent'}</span>
+                        </div>
+                        {orderLabel && <p className="mt-1 text-[10px] text-slate-600">Order: {String(orderLabel)}</p>}
+                        {event.status && <p className="mt-1 text-[10px] font-semibold text-indigo-700">Status: {String(event.status).replaceAll('_', ' ')}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             <div className="pt-2 border-t border-slate-100 text-center">
               <button

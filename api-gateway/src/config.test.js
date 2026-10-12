@@ -98,3 +98,22 @@ test('health monitor configuration validates interval and timeout bounds', () =>
     CORS_ALLOWED_ORIGINS: 'http://app.example.com', HEALTH_CHECK_TIMEOUT_MS: '50'
   }), /HEALTH_CHECK_TIMEOUT_MS/);
 });
+
+
+test('telemetry service registry includes cache and WebSocket health endpoints when configured', () => {
+  const config = loadConfig({
+    NODE_ENV: 'test',
+    BACKEND_API_URL: 'http://backend.example.com',
+    CACHE_SERVICE_URL: 'https://cache.example.com',
+    WEBSOCKET_SERVICE_URL: 'https://websocket.example.com',
+    CORS_ALLOWED_ORIGINS: 'http://app.example.com'
+  });
+  assert.deepEqual(
+    config.healthServices.map(service => [service.name, service.healthPath]),
+    [
+      ['backend-api', '/api/v1/health'],
+      ['cache-service', '/health'],
+      ['websocket-service', '/healthz']
+    ]
+  );
+});

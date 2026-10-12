@@ -37,6 +37,9 @@ services:
         sync: false
       - key: CUSTOMER_SERVICE_URL
         sync: false
+      # Cache health is polled independently from the private cache/event API.
+      - key: CACHE_SERVICE_URL
+        value: https://caching-v0et.onrender.com
       # Supplied HTTPS service URL; Gateway polls /healthz as part of its service heartbeat.
       - key: WEBSOCKET_SERVICE_URL
         value: https://websockt.onrender.com

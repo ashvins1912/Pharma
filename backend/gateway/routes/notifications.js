@@ -41,7 +41,9 @@ router.get('/delivery-history', authenticateUser, (req, res) => {
     const userRole = req.user?.app_metadata?.role || req.user?.role || 'customer';
     const isSuper = isPlatformSuperAdmin(userRole);
     const tenantId = isSuper ? null : (req.context?.tenantId || req.user?.app_metadata?.tenantId);
-    const branchId = req.query.branchId || null;
+    // Branch-scoped users cannot widen the delivery-history query via a URL parameter.
+    // Platform Super Admin may explicitly filter a branch; tenant-wide users see their tenant.
+    const branchId = isSuper ? (req.query.branchId || null) : (req.context?.branchId || null);
 
     const events = notificationService.getDeliveryEvents(tenantId, branchId);
     res.json({ success: true, data: events });
