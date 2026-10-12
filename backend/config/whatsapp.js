@@ -1,7 +1,7 @@
 // WhatsApp notification service abstraction & device session manager
 // Provides idempotent messaging tracking, device pairing QR generation, and delivery status updates
 import path from 'node:path';
-import { createHash, randomInt } from 'node:crypto';
+import { randomInt, scryptSync } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import { getIsConnected, getTransactionsSupported } from './db.js';
 import { cacheService } from '../services/cache/CacheService.js';
@@ -670,7 +670,7 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
                 if (otpOrder) {
                     customerDeliveryOtp = String(randomInt(0, 10000)).padStart(4, '0');
                     otpOrder.deliveryVerification = {
-                        otpHash: createHash('sha256').update(`${orderId}:${customerDeliveryOtp}`).digest('hex'),
+                        otpHash: scryptSync(customerDeliveryOtp, String(orderId), 32).toString('hex'),
                         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
                         attempts: 0,
                         verifiedAt: null
