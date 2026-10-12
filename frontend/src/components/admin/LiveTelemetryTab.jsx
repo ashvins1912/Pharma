@@ -245,6 +245,21 @@ export default function LiveTelemetryTab() {
                     {service.errorType && <p className="font-bold text-rose-600 dark:text-rose-300">Issue: {service.errorType}</p>}
                     {service.errorMessage && <p className="break-words">{service.errorMessage}</p>}
                     {service.source && <p>Source: {service.source}</p>}
+                    {service.telemetry && Object.keys(service.telemetry).some(key => !['service', 'status', 'timestamp', 'version'].includes(key)) && (
+                      <div className="mt-3 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+                        <p className="mb-2 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Service metrics</p>
+                        <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {Object.entries(service.telemetry)
+                            .filter(([key]) => !['service', 'status', 'timestamp', 'version'].includes(key))
+                            .map(([key, value]) => (
+                              <div key={key} className="min-w-0">
+                                <dt className="break-words text-[10px] text-slate-500">{key.replace(/([A-Z])/g, ' $1').replace(/^./, char => char.toUpperCase())}</dt>
+                                <dd className="break-words text-xs font-bold text-slate-800 dark:text-slate-200">{value === null ? '—' : String(value)}</dd>
+                              </div>
+                            ))}
+                        </dl>
+                      </div>
+                    )}
                   </div>
                 </article>
               );
