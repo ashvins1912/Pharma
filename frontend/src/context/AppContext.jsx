@@ -562,10 +562,12 @@ export function AppProvider({ children }) {
 
     const onNotification = payload => upsertNotification(payload, 'notification');
     const onWhatsAppNotification = payload => upsertNotification(payload, 'whatsapp_notification');
-    const onMedicineRequestUpdated = () => {
+    const onMedicineRequestUpdated = payload => {
+      window.dispatchEvent(new CustomEvent('pharma:medicine-request-updated', { detail: payload }));
       void loadUserMedicineRequests({ silent: true });
     };
-    const onOrderStatusChanged = () => {
+    const onOrderStatusChanged = payload => {
+      window.dispatchEvent(new CustomEvent('pharma:order-status-changed', { detail: payload }));
       void loadUserOrders({ silent: true });
     };
 
