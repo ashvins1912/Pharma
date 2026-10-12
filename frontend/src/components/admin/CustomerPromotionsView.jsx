@@ -42,11 +42,18 @@ export default function CustomerPromotionsView({ canManage = false }) {
     () => customers.find(customer => customer.customerId === selectedCustomer),
     [customers, selectedCustomer]
   );
+  const selectedHasActiveOffer = promotions.some(promotion =>
+    String(promotion.customerId) === String(selectedCustomer) && promotion.isActive
+  );
 
   const createPromotion = async event => {
     event.preventDefault();
     if (!selectedCustomer || !discountValue) {
       addToast('Select a customer and enter a discount value.', 'warning');
+      return;
+    }
+    if (selectedHasActiveOffer) {
+      addToast('This customer already has an active discount or coupon. Revoke it before assigning another.', 'warning');
       return;
     }
     setSaving(true);
@@ -59,7 +66,8 @@ export default function CustomerPromotionsView({ canManage = false }) {
         minOrderAmount: Number(minOrderAmount || 0),
         expiryDate: expiryDate || null,
         code: code.trim() || undefined,
-        promotionLabel: label.trim() || 'Pharma discount for you'
+        promotionLabel: label.trim() || 'Pharma discount for you',
+        customerName: selected?.name || ''
       });
       addToast(promotionType === 'CUSTOMER_COUPON'
         ? 'Customer coupon assigned successfully.'
@@ -77,6 +85,7 @@ export default function CustomerPromotionsView({ canManage = false }) {
   const togglePromotion = async promotion => {
     try {
       await apiClient.patch(`/api/coupons/admin/customer-promotions/${promotion._id}`, { isActive: !promotion.isActive });
+      addToast(promotion.isActive ? 'Offer revoked. The customer has been notified.' : 'Offer reactivated.', 'success');
       await load();
     } catch (error) {
       addToast(error.message || 'Could not update promotion.', 'error');
@@ -108,12 +117,14 @@ export default function CustomerPromotionsView({ canManage = false }) {
             <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && load()} placeholder="Search customer…" className="w-40 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-blue-500" />
           </div>
           <div className="max-h-[430px] space-y-2 overflow-y-auto pr-1">
-            {customers.map(customer => (
+            {customers.map(customer => {
+              const hasActiveOffer = promotions.some(promotion => String(promotion.customerId) === String(customer.customerId) && promotion.isActive);
+              return (
               <button type="button" key={customer.customerId} onClick={() => setSelectedCustomer(customer.customerId)}
                 className={`w-full rounded-2xl border p-3 text-left transition ${selectedCustomer === customer.customerId ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-slate-50/60 hover:bg-slate-100'}`}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="min-w-0 truncate text-xs font-black text-slate-900">{customer.name}</span>
-                  <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black text-slate-600">{customer.frequency}</span>
+                  <span className={`rounded-full px-2 py-1 text-[9px] font-black ${hasActiveOffer ? 'bg-amber-100 text-amber-800' : 'bg-white text-slate-600'}`}>{hasActiveOffer ? 'HAS ACTIVE OFFER' : customer.frequency}</span>
                 </div>
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500">
                   <span>{customer.mobile || customer.email || 'No contact'}</span>
@@ -122,7 +133,8 @@ export default function CustomerPromotionsView({ canManage = false }) {
                   <span>{money(customer.lifetimeSpend)} lifetime</span>
                 </div>
               </button>
-            ))}
+            );
+            })}
             {!customers.length && <p className="py-10 text-center text-xs text-slate-400">No customer history found.</p>}
           </div>
         </div>
@@ -131,7 +143,8 @@ export default function CustomerPromotionsView({ canManage = false }) {
         <form onSubmit={createPromotion} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
           <div>
             <h4 className="text-sm font-black text-slate-900">Assign an offer</h4>
-            <p className="mt-1 text-[11px] text-slate-500">{selected ? `Selected: ${selected.name} · ${selected.orderCount} orders` : 'Select a customer from the history list.'}</p>
+            <p className="mt-1 text-[11px] text-slate-500">{selected ? `Selected: ${selected.name} · Customer ID: ${selected.customerId} · ${selected.orderCount} orders` : 'Select a customer from the history list.'}</p>
+            {selectedHasActiveOffer && <p role="alert" className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">This customer already has an active discount or coupon. Revoke the existing offer before assigning another.</p>}
           </div>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setPromotionType('CUSTOMER_DISCOUNT')} className={`rounded-xl px-3 py-2 text-xs font-black ${promotionType === 'CUSTOMER_DISCOUNT' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}>Direct discount</button>
@@ -147,7 +160,7 @@ export default function CustomerPromotionsView({ canManage = false }) {
             <label className="text-[10px] font-black uppercase text-slate-500">Expiry<input type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs" /></label>
             <label className="text-[10px] font-black uppercase text-slate-500">Checkout label<input value={label} onChange={e => setLabel(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs" /></label>
           </div>
-          <button type="submit" disabled={saving || !selectedCustomer} className="w-full min-h-11 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white shadow-sm disabled:opacity-40">
+          <button type="submit" disabled={saving || !selectedCustomer || selectedHasActiveOffer} className="w-full min-h-11 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white shadow-sm disabled:opacity-40">
             {saving ? 'Assigning…' : promotionType === 'CUSTOMER_COUPON' ? '🎟️ Issue & Assign Coupon' : '🏷️ Assign Customer Discount'}
           </button>
         </form>
@@ -173,7 +186,9 @@ export default function CustomerPromotionsView({ canManage = false }) {
                 )}
               </div>
               <p className="mt-1 text-[10px] text-slate-500">{promotion.promotionType === 'CUSTOMER_COUPON' ? 'Customer coupon' : 'Direct customer discount'} · {promotion.discountType === 'percentage' ? `${promotion.discountValue}%` : money(promotion.discountValue)} off · min {money(promotion.minOrderAmount)}</p>
-              <p className="mt-1 text-[10px] text-slate-400">Customer {promotion.customerId}</p>
+              <p className="mt-1 text-[10px] text-slate-600">Customer: <span className="font-bold">{promotion.customerName || customers.find(customer => String(customer.customerId) === String(promotion.customerId))?.name || 'Customer'}</span></p>
+              <p className="mt-1 break-all text-[10px] text-slate-400">Customer ID: {promotion.customerId}</p>
+              {canManage && promotion.isActive && promotion.tenantId && <button type="button" onClick={async () => { try { const response = await apiClient.post(`/api/coupons/admin/customer-promotions/${promotion._id}/notify`); addToast(response.data?.message || 'Customer notified.', 'success'); } catch (error) { addToast(error.response?.data?.message || error.message || 'Could not notify customer.', 'error'); } }} className="mt-3 min-h-9 rounded-lg border border-blue-200 bg-blue-50 px-3 text-[10px] font-black text-blue-800 hover:bg-blue-100">🔔 Notify / Remind customer</button>}
             </div>
           ))}
         </div>
