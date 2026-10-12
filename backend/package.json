@@ -1,31 +1,15 @@
 {
-  "name": "ashvin-pharmacy-backend",
+  "name": "pharma-backend",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node --watch dev.js",
-    "start": "node server-entry.js",
-    "test": "node --test",
-    "admin:promote": "node scripts/promote-admin.mjs"
+    "dev": "node server-entry.js",
+    "start": "node server-entry.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.1",
-    "@whiskeysockets/baileys": "^6.7.24",
-    "axios": "^1.7.9",
-    "cookie-parser": "^1.4.7",
+    "express": "^4.19.2",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "jose": "^5.9.6",
-    "jsonwebtoken": "^9.0.2",
-    "jwks-rsa": "^3.1.0",
-    "mongoose": "^9.10.4",
-    "multer": "^1.4.5-lts.1",
-    "qrcode": "^1.5.4",
-    "xlsx": "^0.18.5",
-    "zod": "^4.6.5",
-    "nodemailer": "^10.0.14",
-    "bcryptjs": "^3.0.3"
+    "jsonwebtoken": "^9.0.2"
   }
 }

@@ -10,22 +10,22 @@ import { ToastProvider } from './context/ToastContext';
 import { AppProvider } from './context/AppContext';
 import { LoadingProvider } from './context/LoadingContext';
 import ModalInteractionGuard from './components/ModalInteractionGuard';
-import CustomerErrorBoundary from './components/CustomerErrorBoundary';
+import ErrorBoundary from './components/ErrorBoundary';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <LoadingProvider>
-      <AuthProvider>
-        <ToastProvider>
-          <AppProvider>
-            <ModalInteractionGuard />
-            <CustomerErrorBoundary>
+    <ErrorBoundary>
+      <LoadingProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <AppProvider>
+              <ModalInteractionGuard />
               <App />
-            </CustomerErrorBoundary>
-            <SpeedInsights />
-          </AppProvider>
-        </ToastProvider>
-      </AuthProvider>
-    </LoadingProvider>
+              <SpeedInsights />
+            </AppProvider>
+          </ToastProvider>
+        </AuthProvider>
+      </LoadingProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

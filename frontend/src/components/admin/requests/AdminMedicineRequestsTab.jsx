@@ -77,6 +77,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
   
   const openPrescription = async (prescriptionUrl) => {
     if (!prescriptionUrl || prescriptionLoading) return;
+    console.log('[MedicineRequestPrescription] Opening prescription URL:', prescriptionUrl);
     setPrescriptionLoading(true);
     setPrescriptionError('');
     setPrescriptionPreview(null);
@@ -89,14 +90,16 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
       const contentType = String(
         response.headers?.['content-type'] || response.data?.type || ''
       ).toLowerCase();
+      console.log('[MedicineRequestPrescription] Response received:', { status: response.status, contentType, size: response.data?.size });
       const blob = await normalizePrescriptionBlob(response.data, contentType);
       const objectUrl = URL.createObjectURL(blob);
+      console.log('[MedicineRequestPrescription] Successfully mapped state for prescription preview:', { objectUrl, type: blob.type });
       setPrescriptionPreview({
         url: objectUrl,
         type: blob.type
       });
     } catch (error) {
-      console.error('Failed to open prescription:', error);
+      console.error('[MedicineRequestPrescription] Failed to open prescription:', error);
       setPrescriptionError(
         error?.response?.status === 404
           ? 'Prescription file was not found. Please re-upload the prescription.'

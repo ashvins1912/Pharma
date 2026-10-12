@@ -403,7 +403,15 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       || (order.prescriptionId ? `/api/v1/prescriptions/${encodeURIComponent(order.prescriptionId)}/document` : null)
       || (order.prescriptionId ? `/api/orders/prescriptions/${encodeURIComponent(order.prescriptionId)}` : null);
 
+    console.log('[PrescriptionLifecycle] Initiating fetch for order/request:', {
+      orderId,
+      prescriptionId: order.prescriptionId,
+      prescriptionUrl: order.prescriptionUrl,
+      targetUrl
+    });
+
     if (!targetUrl) {
+      console.warn('[PrescriptionLifecycle] No targetUrl resolved for order:', orderId);
       setPrescriptionPreview(null);
       setPrescriptionPreviewError('No binary prescription document file is attached to this order. You can still inspect the ordered medicines and record a pharmacist decision.');
       setPrescriptionPreviewLoading(false);
@@ -411,6 +419,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     }
 
     if (targetUrl.startsWith('data:') || targetUrl.startsWith('blob:')) {
+      console.log('[PrescriptionLifecycle] Using direct data/blob URL for preview:', targetUrl);
       const isPdf = targetUrl.toLowerCase().includes('application/pdf');
       setPrescriptionPreview({
         url: targetUrl,
@@ -435,10 +444,17 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
           res.headers?.['content-type'] || res.data?.type || ''
         ).toLowerCase();
 
+        console.log('[PrescriptionLifecycle] Response received:', {
+          status: res.status,
+          contentType,
+          blobSize: res.data?.size
+        });
+
         let blob;
         try {
           blob = await normalizePrescriptionBlob(res.data, contentType);
-        } catch {
+        } catch (normErr) {
+          console.warn('[PrescriptionLifecycle] Blob normalization failed or fallback triggered:', normErr);
           if (res.data instanceof Blob && res.data.size > 0) {
             blob = res.data;
           } else if (res.data) {
@@ -452,13 +468,15 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         if (prescriptionPreview?.url && prescriptionPreview.url.startsWith('blob:')) {
           URL.revokeObjectURL(prescriptionPreview.url);
         }
+        console.log('[PrescriptionLifecycle] Successfully mapped state for prescription preview:', { url, type: blob.type || contentType });
         setPrescriptionPreview({
           url,
           type: blob.type || contentType
         });
       } catch (loadError) {
-        console.warn('Prescription fetch error:', loadError);
+        console.error('[PrescriptionLifecycle] Prescription fetch error encountered:', loadError);
         if (targetUrl.startsWith('http') || targetUrl.startsWith('/uploads')) {
+          console.log('[PrescriptionLifecycle] Falling back to direct targetUrl:', targetUrl);
           setPrescriptionPreview({
             url: targetUrl,
             type: targetUrl.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'
