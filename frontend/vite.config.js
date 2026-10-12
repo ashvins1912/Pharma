@@ -137,6 +137,16 @@ export default defineConfig({
               return;
             }
 
+            if (req.url.includes('/ready')) {
+              res.end(JSON.stringify({
+                status: 'ready',
+                service: 'backend-api',
+                database: 'connected',
+                timestamp: new Date().toISOString()
+              }));
+              return;
+            }
+
             if (req.url.includes('/medicines')) {
               res.end(JSON.stringify({
                 medicines: [
