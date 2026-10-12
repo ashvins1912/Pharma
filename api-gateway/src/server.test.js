@@ -45,6 +45,12 @@ test('storefront medicine catalog is public and does not require inventory RBAC'
   assert.equal(resolveGatewayCapability('POST', '/api/medicines'), 'inventory.write');
 });
 
+test('delivery OTP verification requires delivery management permission', () => {
+  assert.equal(resolveGatewayCapability('POST', '/api/orders/6accca6691b2129986259f9c/verify-delivery'), 'delivery.manage');
+  assert.equal(isGatewayPermissionAllowed({ role: 'TENANT_ADMIN', permissions: ['delivery.manage'] }, 'delivery.manage'), true);
+  assert.equal(isGatewayPermissionAllowed({ role: 'TENANT_ADMIN', permissions: ['orders.read'] }, 'delivery.manage'), false);
+});
+
 test('admin medicine request proposal requires the proposal capability', () => {
   const path = '/api/admin/medicine-requests/6acab8869852d76d01a594e7/proposal';
   assert.equal(resolveGatewayCapability('POST', path), 'medicine_requests.proposal');
