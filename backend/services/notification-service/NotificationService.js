@@ -92,8 +92,9 @@ export class NotificationService {
                 recipientUserId: this._recipientUserId(evt),
                 title: 'New Medicine Request',
                 body: `Medicine request ${evt.payload?.requestNumber || evt.entityId} was created for ${evt.payload?.medicineName || 'a medicine'}.`,
-                eventType: 'MEDICINE_REQUEST_CREATED', medicineRequestId: evt.entityId, channels: ['IN_APP']
+                eventType: 'MEDICINE_REQUEST_CREATED', medicineRequestId: evt.entityId, channels: ['IN_APP', 'WHATSAPP']
             });
+            if (evt.payload?.request) sendWhatsAppMedicineRequestAlert(evt.payload.request, 'MedicineRequestCreated').catch(err => logger.warn('[WhatsApp] Medicine request creation alert failed:', err?.message));
         });
 
         domainEvents.on('TENANT_CREATED', async (evt) => {
@@ -131,7 +132,7 @@ export class NotificationService {
                 eventType: 'ORDER_STATUS_CHANGED',
                 orderId: evt.entityId,
                 status,
-                channels: ['IN_APP']
+                channels: ['IN_APP', 'WHATSAPP']
             });
         });
 
@@ -254,6 +255,7 @@ export class NotificationService {
                 eventType: 'PROPOSAL_APPROVED', medicineRequestId: evt.entityId, orderId: evt.payload?.orderId,
                 channels: ['IN_APP', 'WHATSAPP']
             });
+            if (evt.payload?.request) sendWhatsAppMedicineRequestAlert(evt.payload.request, 'MedicineRequestApproved').catch(err => logger.warn('[WhatsApp] Medicine request approval alert failed:', err?.message));
         });
         domainEvents.on('PROPOSAL_REJECTED', (evt) => {
             this.send({
@@ -262,8 +264,9 @@ export class NotificationService {
                 title: 'Medicine Proposal Rejected',
                 body: `The proposal for request ${evt.payload?.requestNumber || evt.entityId} was rejected.`,
                 eventType: 'PROPOSAL_REJECTED', medicineRequestId: evt.entityId,
-                channels: ['IN_APP']
+                channels: ['IN_APP', 'WHATSAPP']
             });
+            if (evt.payload?.request) sendWhatsAppMedicineRequestAlert(evt.payload.request, 'MedicineRequestRejected').catch(err => logger.warn('[WhatsApp] Medicine request rejection alert failed:', err?.message));
         });
         domainEvents.on('REQUEST_CANCELLED', (evt) => {
             this.send({
@@ -272,8 +275,9 @@ export class NotificationService {
                 title: 'Medicine Request Cancelled',
                 body: `Medicine request ${evt.payload?.requestNumber || evt.entityId} was cancelled.`,
                 eventType: 'REQUEST_CANCELLED', medicineRequestId: evt.entityId,
-                channels: ['IN_APP']
+                channels: ['IN_APP', 'WHATSAPP']
             });
+            if (evt.payload?.request) sendWhatsAppMedicineRequestAlert(evt.payload.request, 'MedicineRequestCancelled').catch(err => logger.warn('[WhatsApp] Medicine request cancellation alert failed:', err?.message));
         });
     }
 
