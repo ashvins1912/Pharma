@@ -255,19 +255,13 @@ export function AppProvider({ children }) {
       // Do not automatically replay catalog requests. A 502/503 is an
       // infrastructure signal and a 401/403/404 is an authorization/routing
       // signal; replaying either obscures the real failure and creates duplicate
-      // browser traffic. Gateway readiness now protects normal production flow.
-      // The storefront catalog is deliberately public and must work before
-      // sign-in. Route this read-only request to the public API Gateway origin
-      // instead of relying on the static-site /api rewrite (which can return a
-      // frontend-host 404). Protected APIs continue using the same-origin client
-      // so HttpOnly session cookies remain first-party.
-      const publicGatewayBaseUrl = String(
-        import.meta.env.VITE_API_GATEWAY_URL
-          || (import.meta.env.PROD ? 'https://pharma-api-gateway.onrender.com' : '')
-      ).replace(/\/+$/, '');
-      const catalogUrl = publicGatewayBaseUrl
-        ? `${publicGatewayBaseUrl}/api/medicines`
-        : '/api/medicines';
+      // browser traffic.
+      // Use the frontend's same-origin /api rewrite for the public catalog too.
+      // This avoids browser CORS/preflight failures when the gateway origin is
+      // configured differently in Render, while keeping the catalog available
+      // before sign-in. The gateway remains the trust boundary and its public
+      // catalog route stays read-only; protected APIs still use apiClient.
+      const catalogUrl = '/api/medicines';
       const res = await getCachedPublicCatalog(apiClient, catalogUrl, params);
 
       if (res.data && res.data.medicines) {
