@@ -1407,7 +1407,8 @@ export const dataStore = {
             });
             domainEvents.emitDomainEvent('ORDER_CREATED', createdOrder._id.toString(), {
                 orderNumber: createdOrder.orderNumber || createdOrder._id.toString(),
-                customerId: createdOrder.customerId || createdOrder.userId || orderData.customerId || orderData.userId,
+                customerUserId: createdOrder.userId || orderData.userId || null,
+                customerId: createdOrder.customerId || orderData.customerId || null,
                 totalAmount: createdOrder.totalAmount,
                 status: createdOrder.orderStatus || 'Pending_Review'
             }, actor, createdOrder.tenantId || orderData.tenantId || null, createdOrder.branchId || orderData.branchId || null);
@@ -1515,7 +1516,8 @@ export const dataStore = {
             });
             domainEvents.emitDomainEvent('ORDER_CREATED', String(order._id), {
                 orderNumber: order.orderNumber || String(order._id),
-                customerId: order.customerId || order.userId || orderData.customerId || orderData.userId,
+                customerUserId: order.userId || orderData.userId || null,
+                customerId: order.customerId || orderData.customerId || null,
                 totalAmount: order.totalAmount,
                 status: order.orderStatus || 'Pending_Review'
             }, actor, order.tenantId || orderData.tenantId || null, order.branchId || orderData.branchId || null);
@@ -2177,7 +2179,8 @@ export const dataStore = {
         });
         domainEvents.emitDomainEvent('ORDER_STATUS_CHANGED', String(orderId), {
             orderNumber: transitionResult.order.orderNumber || String(orderId),
-            customerId: transitionResult.order.customerId || transitionResult.order.userId || null,
+            customerUserId: transitionResult.order.userId || null,
+            customerId: transitionResult.order.customerId || null,
             previousStatus: transitionResult.previousStatus,
             newStatus,
             rider: transitionResult.order.rider || null
