@@ -1816,15 +1816,36 @@ export class AuthService {
         const subject = user?.sub || user?.id || user?.userId;
         let canonicalUser = user || {};
         if (subject && getIsConnected()) {
+            let stored = null;
             try {
-                const stored = await this.findUser({ userId: subject });
-                if (stored) canonicalUser = { ...user, ...stored, sub: subject, id: subject, userId: subject };
+                stored = await this.findUser({ userId: subject });
             } catch (error) {
                 logger.warn('Canonical profile hydration failed.', { userId: subject, error: error.message });
                 throw Object.assign(new Error('Profile information is temporarily unavailable. Please retry.'), {
                     code: 'PROFILE_LOOKUP_UNAVAILABLE',
                     status: 503
                 });
+            }
+            if (stored) {
+                // Stored authorization fields may be stale relative to the verified
+                // access token. Hydrate profile attributes, but preserve role, tenant,
+                // branch, scope, permissions and revocations from the verified session.
+                const session = user || {};
+                canonicalUser = {
+                    ...session,
+                    ...stored,
+                    sub: subject,
+                    id: subject,
+                    userId: subject,
+                    role: session.role ?? stored.role,
+                    roles: session.roles ?? stored.roles,
+                    tenantId: session.tenantId ?? session.app_metadata?.tenantId ?? stored.tenantId,
+                    branchId: session.branchId ?? session.app_metadata?.branchId ?? stored.branchId,
+                    scope: session.scope ?? stored.scope,
+                    permissions: session.permissions ?? stored.permissions,
+                    revokedPermissions: session.revokedPermissions ?? stored.revokedPermissions,
+                    permissionVersion: session.permissionVersion ?? stored.permissionVersion
+                };
             }
         }
         user = canonicalUser;
