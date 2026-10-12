@@ -77,7 +77,25 @@ export class NotificationService {
         }
     }
 
+    _recipientUserId(evt) {
+        const payload = evt?.payload || {};
+        const order = payload.order || {};
+        return payload.customerUserId || payload.customerId || payload.recipientUserId || payload.userId
+            || order.userId || order.customerId
+            || (evt?.eventType === 'ORDER_CREATED' ? evt?.actor?.userId : null) || null;
+    }
+
     _bindDomainEvents() {
+        domainEvents.on('MEDICINE_REQUEST_CREATED', (evt) => {
+            this.send({
+                tenantId: evt.tenantId, branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: 'New Medicine Request',
+                body: `Medicine request ${evt.payload?.requestNumber || evt.entityId} was created for ${evt.payload?.medicineName || 'a medicine'}.`,
+                eventType: 'MEDICINE_REQUEST_CREATED', medicineRequestId: evt.entityId, channels: ['IN_APP']
+            });
+        });
+
         domainEvents.on('TENANT_CREATED', async (evt) => {
             const tenant = evt.payload;
             this.send({
@@ -91,9 +109,10 @@ export class NotificationService {
             this.send({
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
-                recipientUserId: evt.actor?.userId,
+                recipientUserId: this._recipientUserId(evt),
                 title: 'Order Confirmed',
-                body: `Your order #${evt.payload?.orderNumber} has been received and queued for pharmacy verification.`,
+                body: `Your order #${evt.payload?.orderNumber || evt.entityId} has been received and queued for pharmacy verification.`,
+                eventType: 'ORDER_CREATED', orderId: evt.entityId,
                 channels: ['IN_APP', 'WHATSAPP']
             });
             if (evt.payload?.order) {
@@ -105,9 +124,10 @@ export class NotificationService {
             this.send({
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
-                recipientUserId: evt.actor?.userId,
+                recipientUserId: this._recipientUserId(evt),
                 title: 'Order Processing',
                 body: `Pharmacist has verified your medicines and started packing.`,
+                eventType: 'ORDER_ACCEPTED', orderId: evt.entityId,
                 channels: ['IN_APP', 'WHATSAPP']
             });
             if (evt.payload?.order) {
@@ -119,8 +139,10 @@ export class NotificationService {
             this.send({
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
                 title: 'Delivery Partner Assigned',
                 body: `Rider ${evt.payload?.riderName} has been assigned to deliver your order.`,
+                eventType: 'RIDER_ASSIGNED', orderId: evt.entityId,
                 channels: ['IN_APP', 'WHATSAPP']
             });
             this._broadcastDeliveryEvent({
@@ -144,8 +166,10 @@ export class NotificationService {
             this.send({
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
                 title: `Delivery Update: ${evt.payload?.status}`,
-                body: `Order #${evt.payload?.orderNumber || evt.aggregateId} status changed to ${evt.payload?.status}.`,
+                body: `Order #${evt.payload?.orderNumber || evt.entityId} status changed to ${evt.payload?.status}.`,
+                eventType: 'DELIVERY_STATUS_CHANGED', orderId: evt.entityId, status: evt.payload?.status,
                 channels: ['IN_APP', 'WHATSAPP']
             });
             this._broadcastDeliveryEvent({
@@ -169,8 +193,10 @@ export class NotificationService {
             this.send({
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
                 title: 'Order Delivered',
-                body: `Order #${evt.payload?.orderNumber} was delivered successfully. Stay healthy!`,
+                body: `Order #${evt.payload?.orderNumber || evt.entityId} was delivered successfully. Stay healthy!`,
+                eventType: 'ORDER_DELIVERED', orderId: evt.entityId, status: 'DELIVERED',
                 channels: ['IN_APP', 'WHATSAPP']
             });
             this._broadcastDeliveryEvent({
@@ -194,8 +220,10 @@ export class NotificationService {
             this.send({
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
                 title: 'Medicine Proposal Ready',
                 body: `Pharmacy formulated a proposal for your medicine request. Please review and approve.`,
+                eventType: 'PROPOSAL_CREATED', medicineRequestId: evt.entityId,
                 channels: ['IN_APP', 'WHATSAPP']
             });
             if (evt.payload?.request) {
@@ -210,7 +238,11 @@ export class NotificationService {
         recipientUserId = null,
         title,
         body,
-        channels = ['IN_APP']
+        channels = ['IN_APP'],
+        eventType = 'NOTIFICATION_CREATED',
+        orderId = null,
+        medicineRequestId = null,
+        status = null
     }) {
         const notification = {
             id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -220,6 +252,10 @@ export class NotificationService {
             title,
             body,
             channels,
+            eventType,
+            orderId: orderId ? String(orderId) : null,
+            medicineRequestId: medicineRequestId ? String(medicineRequestId) : null,
+            status,
             read: false,
             createdAt: new Date().toISOString()
         };
@@ -232,11 +268,18 @@ export class NotificationService {
         // Publish only to a verified user or tenant audience. Never send private
         // notification bodies as unscoped/global WebSocket events.
         if (recipientUserId || tenantId) {
-            void cacheService.publishEvent('notification', {
-                ...notification,
-                userId: recipientUserId,
-                source: 'notification-service'
-            }, { userId: recipientUserId, tenantId });
+            const eventPayload = { ...notification, userId: recipientUserId, tenantId, source: 'notification-service' };
+            const target = { userId: recipientUserId, tenantId };
+            void cacheService.publishEvent('notification', eventPayload, target);
+            if (channels.includes('WHATSAPP')) {
+                void cacheService.publishEvent('whatsapp_notification', { ...eventPayload, deliveryState: 'REQUESTED' }, target);
+            }
+            if (orderId && ['ORDER_CREATED', 'ORDER_ACCEPTED', 'ORDER_STATUS_CHANGED', 'RIDER_ASSIGNED', 'DELIVERY_STATUS_CHANGED', 'ORDER_DELIVERED'].includes(eventType)) {
+                void cacheService.publishEvent('order_status_changed', eventPayload, target);
+            }
+            if (medicineRequestId || eventType.startsWith('MEDICINE_REQUEST') || eventType.startsWith('PROPOSAL_') || eventType.startsWith('REQUEST_')) {
+                void cacheService.publishEvent('medicine_request_updated', eventPayload, target);
+            }
         }
         return notification;
     }
