@@ -142,7 +142,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                             onClick={() => trackOrder(order)}
                             disabled={isActionLoading(LOADING_ACTIONS.TRACK_ORDER)} className="bg-blue-50 hover:bg-blue-100 disabled:opacity-60 disabled:cursor-wait text-blue-700 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition"
                           >
-                            {isReadyToDispatch(order) ? 'Ready to Dispatch' : 'Track'}
+                            Track
                           </button>
                         )}
                       </td>
@@ -195,7 +195,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                           onClick={() => trackOrder(order)}
                           className="bg-blue-600 text-white font-extrabold text-xs px-4 py-1.5 rounded-xl cursor-pointer"
                         >
-                          {isReadyToDispatch(order) ? 'Ready to Dispatch' : 'Track'}
+                          Track
                         </button>
                       )}
                     </div>
