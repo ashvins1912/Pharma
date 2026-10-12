@@ -26,8 +26,10 @@ export function startSharedEventConsumer(io, {
           const payload = event.payload ?? {};
           // Never broadcast user/tenant-targeted notifications to every socket.
           if (event.userId) {
-            io.to(`bell_notifications_${event.userId}`).emit(event.channel, payload);
-            io.to(`rider_${event.userId}`).emit(event.channel, payload);
+            const room = event.channel === 'new_order_alert'
+              ? `rider_${event.userId}`
+              : `bell_notifications_${event.userId}`;
+            io.to(room).emit(event.channel, payload);
           } else if (event.tenantId) {
             io.to(`tenant_${event.tenantId}`).emit(event.channel, payload);
           } else {
