@@ -23,7 +23,7 @@ export class NotificationService {
         try {
             cacheService.subscribe((envelope) => {
                 const { channel, payload } = envelope;
-                if (payload?.source === 'notification-service') return;
+                if (payload?.source === 'notification-service' || payload?.source === 'whatsapp-service') return;
                 logger.info(`[NotificationService] Consuming message from cache/Redis broker on channel [${channel}]`);
                 if (payload && (payload.title || payload.body || payload.message)) {
                     this.send({
