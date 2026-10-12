@@ -752,7 +752,7 @@ export const dataStore = {
                 .select('_id deliveredAt createdAt customerName statusHistory medicineItems items')
                 .sort({ deliveredAt: -1, createdAt: -1 })
                 .lean()
-            : inMemoryOrders.filter(order => order.orderStatus === 'Delivered')
+            : inMemoryOrders.filter(order => order.orderStatus === 'Delivered' && (!filter.createdAt || (new Date(order.createdAt) >= filter.createdAt.$gte && new Date(order.createdAt) < filter.createdAt.$lt)))
                 .sort((a, b) => new Date(b.deliveredAt || b.createdAt) - new Date(a.deliveredAt || a.createdAt));
         const deliveryAudits = deliveredOrders.flatMap(order => {
             const actor = order.statusHistory?.findLast?.(entry => entry.newStatus === 'Delivered')?.changedBy || 'Delivery';
@@ -1830,8 +1830,13 @@ export const dataStore = {
         return [...inMemoryOrders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     },
 
-    async getDeliveredOrdersPage(page = 1, limit = 5) {
+    async getDeliveredOrdersPage(page = 1, limit = 5, { startDate = null, endDate = null } = {}) {
         const filter = { orderStatus: 'Delivered' };
+        const start = startDate ? new Date(startDate) : null;
+        const end = endDate ? new Date(endDate) : null;
+        if (start && end && Number.isFinite(start.getTime()) && Number.isFinite(end.getTime()) && start < end) {
+            filter.createdAt = { $gte: start, $lt: end };
+        }
         if (getIsConnected()) {
             const total = await Order.countDocuments(filter);
             const safePage = Math.min(page, Math.max(Math.ceil(total / limit), 1));
