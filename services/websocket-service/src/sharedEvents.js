@@ -12,15 +12,16 @@ export function startSharedEventConsumer(io, {
   logger = console
 } = {}) {
   let stopped = false;
-  let cursor = '$';
+  let cursor = '0-0';
   let runningPromise;
 
   const run = async () => {
     while (!stopped && cacheClient.enabled) {
       try {
+        if (cursor === '0-0') cursor = await cacheClient.getEventCursor();
         const result = await cacheClient.pollEvents(cursor, 5000);
-        if (result?.cursor) cursor = result.cursor;
-        for (const event of result?.events || []) {
+        const events = result?.events || [];
+        for (const event of events) {
           if (!event?.channel) continue;
           const payload = event.payload ?? {};
           // Never broadcast user/tenant-targeted notifications to every socket.
@@ -32,6 +33,10 @@ export function startSharedEventConsumer(io, {
           } else {
             io.emit(event.channel, payload);
           }
+        }
+        if (result?.cursor && (events.length > 0 || result.cursor !== cursor)) {
+          cursor = result.cursor;
+          await cacheClient.acknowledgeEvents(cursor);
         }
       } catch (error) {
         if (!stopped) logger.error('[WebSocket] Shared event consumer failed; retrying:', error.message);
