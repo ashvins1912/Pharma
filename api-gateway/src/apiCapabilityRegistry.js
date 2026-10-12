@@ -94,6 +94,9 @@ const CAPABILITIES = [
   ['GET', /^\/api\/v1\/customers(?:\/|$)/, 'profile.read'],
   ['POST', /^\/api\/v1\/customers(?:\/|$)/, 'profile.write'],
   ['PATCH', /^\/api\/v1\/customers(?:\/|$)/, 'profile.write'],
+  // Explicitly register managed-person deletion; keep the mutation limited to
+  // the persons resource and subject to the same profile.write authorization.
+  ['DELETE', /^\/api\/v1\/customers\/persons\/[^/]+$/, 'profile.write'],
   ['POST', /^\/api\/v1\/inventory\/adjust$/, 'inventory.write'],
   ['POST', /^\/api\/v1\/prescriptions\/[^/]+\/review(?:\/(?:claim|approve|reject|wait))?$/, 'prescription.review'],
   ['POST', /^\/api\/v1\/prescriptions\/hospitals$/, 'prescription.write'],
