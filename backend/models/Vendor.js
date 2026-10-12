@@ -81,6 +81,13 @@ const vendorSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
+    // Preserve the pre-created identity so completion links the invitation to
+    // the same user instead of generating a second identity after Mongo reload.
+    userId: {
+        type: String,
+        default: null,
+        index: true
+    },
     invitedBy: {
         type: String,
         default: null
