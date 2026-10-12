@@ -128,6 +128,8 @@ const PUBLIC_PATHS = [
   // deliberately unauthenticated, sanitized catalog endpoint. Keep admin
   // inventory (/admin/inventory) and all mutations protected by capabilities.
   ['GET', /^\/api\/medicines$/],
+  // Nearby pharmacy discovery is a read-only storefront feature; do not require staff RBAC.
+  ['GET', /^\/api\/tenants\/nearby$/],
   ['GET', /^\/api\/medicines\/discovery$/],
   ['GET', /^\/api\/public\//], ['POST', /^\/api\/public\//],
   ['GET', /^\/api\/vendors\//], ['POST', /^\/api\/vendors\//],

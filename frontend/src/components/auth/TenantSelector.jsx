@@ -40,36 +40,42 @@ export default function TenantSelector({ onTenantSelected }) {
         },
         (err) => {
           console.warn('Geolocation denied or unavailable:', err);
-          const defaultCoords = { lat: 37.7749, lng: -122.4194 };
-          setUserLocation(defaultCoords);
-          fetchTenants(defaultCoords);
+          setUserLocation(null);
+          fetchTenants(null);
         },
         { timeout: 10000, enableHighAccuracy: true }
       );
     } else {
-      const defaultCoords = { lat: 37.7749, lng: -122.4194 };
-      setUserLocation(defaultCoords);
-      fetchTenants(defaultCoords);
+      setUserLocation(null);
+      fetchTenants(null);
     }
   };
 
   const fetchTenants = async (coords) => {
     setError('');
     try {
-      const response = await apiClient.get('/api/tenants/nearby');
+      const response = await apiClient.get('/api/tenants/nearby', {
+        params: coords ? { lat: coords.lat, lng: coords.lng } : {}
+      });
       let list = response.data?.tenants || [];
 
       list = list.map((tenant) => {
-        const tLng = tenant?.geoLocation?.coordinates?.[0] ?? 0;
-        const tLat = tenant?.geoLocation?.coordinates?.[1] ?? 0;
-        const distance = calculateDistance(coords.lat, coords.lng, tLat, tLng);
+        const coordinates = tenant?.geoLocation?.coordinates;
+        const hasCoordinates = Array.isArray(coordinates)
+          && Number.isFinite(Number(coordinates[0]))
+          && Number.isFinite(Number(coordinates[1]));
+        const distance = coords && hasCoordinates
+          ? calculateDistance(coords.lat, coords.lng, Number(coordinates[1]), Number(coordinates[0]))
+          : null;
         return {
           ...tenant,
           calculatedDistance: distance
         };
       });
 
-      list.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
+      if (coords) {
+        list.sort((a, b) => (a.calculatedDistance ?? Number.POSITIVE_INFINITY) - (b.calculatedDistance ?? Number.POSITIVE_INFINITY));
+      }
 
       setTenants(list);
       
@@ -169,7 +175,7 @@ export default function TenantSelector({ onTenantSelected }) {
                 </p>
                 <div className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
                   <span>📍</span>
-                  <span>Distance: {tenant.calculatedDistance} km away</span>
+                  <span>{tenant.calculatedDistance == null ? 'Distance unavailable — enable location to sort nearby' : `Distance: ${tenant.calculatedDistance} km away`}</span>
                 </div>
               </div>
               {isSelected && (
