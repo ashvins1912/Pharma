@@ -174,6 +174,9 @@ apiClient.interceptors.request.use(async (config) => {
     // Explicit first-party browser marker. It is not a credential; it allows the
     // Gateway to distinguish our SPA fetches when privacy tooling strips Origin.
     config.headers['X-Pharma-Client'] = 'web';
+    
+    const activeTenantId = (typeof window !== 'undefined' && localStorage.getItem('pharma_tenant_id')) || '65a1234567890abcdef12345';
+    config.headers['X-Tenant-Id'] = activeTenantId;
 
     if (!config.headers['X-Request-ID']) {
         config.headers['X-Request-ID'] = globalThis.crypto?.randomUUID?.()

@@ -15,6 +15,80 @@ export default defineConfig({
       },
       shared: ['react', 'react-dom', 'zustand', 'axios']
     }),
+    {
+      name: 'mock-api-fallback',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url && req.url.startsWith('/api')) {
+            res.setHeader('Content-Type', 'application/json');
+
+            if (req.url.includes('/vendor/profile')) {
+              res.end(JSON.stringify({
+                status: 'success',
+                tenant: {
+                  _id: '65a1234567890abcdef12345',
+                  shopName: 'City Health Pharmacy & Wellness',
+                  address: {
+                    street: '123 Main Street',
+                    city: 'San Francisco',
+                    state: 'CA',
+                    zipCode: '94105'
+                  },
+                  geoLocation: {
+                    type: 'Point',
+                    coordinates: [-122.4194, 37.7749]
+                  },
+                  shopPhotoUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80',
+                  ownerDetails: {
+                    name: 'Ashvin Singh',
+                    email: 'ashvinsingh25@gmail.com',
+                    phone: '+19876543210'
+                  }
+                },
+                personnel: [
+                  { _id: 'user-1', name: 'Ashvin Singh', email: 'ashvinsingh25@gmail.com', role: 'OWNER' },
+                  { _id: 'user-2', name: 'Jane Doe', email: 'jane.admin@pharmacy.com', role: 'TENANT_ADMIN' },
+                  { _id: 'user-3', name: 'Bob Smith', email: 'bob.manager@pharmacy.com', role: 'MANAGER' }
+                ]
+              }));
+              return;
+            }
+
+            if (req.url.includes('/auth/me')) {
+              res.end(JSON.stringify({
+                status: 'success',
+                data: {
+                  user: {
+                    id: 'demo-admin-1',
+                    email: 'ashvinsingh25@gmail.com',
+                    role: 'admin',
+                    app_metadata: { role: 'admin' },
+                    permissions: ['*']
+                  }
+                }
+              }));
+              return;
+            }
+
+            if (req.url.includes('/medicines')) {
+              res.end(JSON.stringify({
+                medicines: [
+                  { _id: 'med-1', name: 'Paracetamol 500mg', category: 'Pain Relief', price: 25, stock: 150, description: 'Effective fever and pain reducer', prescriptionRequired: false }
+                ],
+                total: 1,
+                page: 1,
+                totalPages: 1
+              }));
+              return;
+            }
+
+            res.end(JSON.stringify({ status: 'success', data: {}, message: 'Mock API response' }));
+            return;
+          }
+          next();
+        });
+      }
+    }
   ],
   server: {
     host: '0.0.0.0',
