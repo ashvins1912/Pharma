@@ -1,171 +1,195 @@
-import os
+import hmac
 import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, Header, HTTPException, Query, status
 from pydantic import BaseModel, Field
 import redis.asyncio as aioredis
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-)
-logger = logging.getLogger("caching-services")
-
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("pharma-shared-cache")
 REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 PORT = int(os.getenv("PORT", "8080"))
-
-# Global redis connection reference
+CACHE_SERVICE_TOKEN = os.getenv("CACHE_SERVICE_TOKEN", "")
+EVENT_STREAM = "pharma:shared-events"
+MAX_STREAM_LENGTH = int(os.getenv("CACHE_EVENT_STREAM_MAXLEN", "10000"))
 redis_client: Optional[aioredis.Redis] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global redis_client
-    logger.info("Initializing Redis connection pool at %s", REDIS_URL)
     redis_client = aioredis.from_url(
-        REDIS_URL,
-        decode_responses=True,
-        max_connections=50,
-        socket_timeout=2.0,
-        socket_connect_timeout=2.0,
+        REDIS_URL, decode_responses=True, max_connections=50,
+        socket_timeout=3.0, socket_connect_timeout=3.0,
     )
     try:
         await redis_client.ping()
-        logger.info("Redis connection established successfully.")
-    except Exception as e:
-        logger.warning("Initial Redis ping failed: %s (will retry on health checks)", e)
-    
+        logger.info("Redis connection established")
+    except Exception:
+        logger.exception("Redis unavailable during startup")
     yield
-
-    logger.info("Closing Redis connection pool.")
     if redis_client:
         await redis_client.aclose()
 
 
 app = FastAPI(
-    title="caching-services",
-    description="Internal High-Performance In-Memory Redis Microservice for Render",
-    version="1.0.0",
+    title="Pharma Shared Cache",
+    description="Internal Redis cache and event stream for API and WebSocket services",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
 
 class CacheSetPayload(BaseModel):
-    key: str = Field(..., min_length=1, description="Unique cache key")
-    value: Any = Field(..., description="Data payload to cache (primitives, dicts, lists)")
-    ttlSeconds: Optional[int] = Field(default=3600, ge=1, description="Time-to-live in seconds")
+    key: str = Field(..., min_length=1, max_length=512)
+    value: Any
+    ttlSeconds: int = Field(default=3600, ge=1, le=2592000)
+
+
+class EventPayload(BaseModel):
+    channel: str = Field(..., min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9:_-]+$")
+    payload: Any
+    userId: Optional[str] = Field(default=None, max_length=128)
+    tenantId: Optional[str] = Field(default=None, max_length=128)
+
+
+def require_internal_token(x_cache_service_token: Optional[str]) -> None:
+    if not CACHE_SERVICE_TOKEN or len(CACHE_SERVICE_TOKEN) < 32:
+        raise HTTPException(status_code=503, detail="Internal cache service token is not configured")
+    if not x_cache_service_token or not hmac.compare_digest(x_cache_service_token, CACHE_SERVICE_TOKEN):
+        raise HTTPException(status_code=401, detail="Invalid cache service credentials")
+
+
+def get_redis() -> aioredis.Redis:
+    if redis_client is None:
+        raise HTTPException(status_code=503, detail="Redis client unavailable")
+    return redis_client
 
 
 @app.get("/health", status_code=status.HTTP_200_OK)
 async def health():
-    """
-    Render health check probe endpoint.
-    Verifies that FastAPI is running and the underlying Redis engine responds to PING.
-    """
-    if not redis_client:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Redis client not initialized"
-        )
     try:
-        is_alive = await redis_client.ping()
-        if not is_alive:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Redis ping returned non-truthy response"
-            )
-        return {"status": "healthy"}
-    except Exception as exc:
-        logger.error("Health probe failed: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Service unhealthy: {str(exc)}"
-        )
+        await get_redis().ping()
+        return {"status": "healthy", "service": "shared-cache"}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Cache health probe failed")
+        raise HTTPException(status_code=503, detail="Redis is unavailable")
 
 
-@app.post("/set", status_code=status.HTTP_200_OK)
-async def set_cache(payload: CacheSetPayload):
-    """
-    Persists key-value pairs into Redis with automatic JSON serialization and TTL enforcement.
-    """
-    if not redis_client:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Redis client unavailable"
-        )
+@app.get("/ready")
+async def ready():
+    return await health()
 
+
+@app.get("/v1/cache")
+async def get_cache(key: str = Query(..., min_length=1, max_length=512),
+                    x_cache_service_token: Optional[str] = Header(default=None)):
+    require_internal_token(x_cache_service_token)
     try:
-        # Transparently serialize composite objects (dict, list) to JSON strings
-        if isinstance(payload.value, (dict, list)):
-            stored_val = json.dumps(payload.value, separators=(",", ":"))
-        elif isinstance(payload.value, (str, int, float, bool)):
-            stored_val = json.dumps(payload.value)
-        else:
-            stored_val = str(payload.value)
-
-        ttl = payload.ttlSeconds if payload.ttlSeconds is not None else 3600
-        await redis_client.set(name=payload.key, value=stored_val, ex=ttl)
-        return {"status": "ok", "key": payload.key, "ttlSeconds": ttl}
-    except Exception as exc:
-        logger.error("Failed to set key '%s': %s", payload.key, exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Cache write error: {str(exc)}"
-        )
+        value = await get_redis().get("cache:" + key)
+        if value is None:
+            return {"hit": False, "value": None}
+        return {"hit": True, "value": json.loads(value)}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Cache read failed")
+        raise HTTPException(status_code=503, detail="Cache read failed")
 
 
-@app.get("/get/{key}", status_code=status.HTTP_200_OK)
-async def get_cache(key: str):
-    """
-    Retrieves key from Redis. Deserializes JSON strings to native data structures.
-    Returns:
-      Hit:  {"status": "hit", "data": <deserialized_data>}
-      Miss: {"status": "miss", "data": None}
-    """
-    if not redis_client:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Redis client unavailable"
-        )
-
+@app.post("/v1/cache")
+async def set_cache(payload: CacheSetPayload,
+                    x_cache_service_token: Optional[str] = Header(default=None)):
+    require_internal_token(x_cache_service_token)
     try:
-        raw_val = await redis_client.get(name=key)
-        if raw_val is None:
-            return {"status": "miss", "data": None}
-
-        try:
-            parsed = json.loads(raw_val)
-            return {"status": "hit", "data": parsed}
-        except (json.JSONDecodeError, TypeError):
-            return {"status": "hit", "data": raw_val}
-    except Exception as exc:
-        logger.error("Failed to read key '%s': %s", key, exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Cache read error: {str(exc)}"
-        )
+        encoded = json.dumps(payload.value, separators=(",", ":"), ensure_ascii=False)
+        await get_redis().set("cache:" + payload.key, encoded, ex=payload.ttlSeconds)
+        return {"status": "ok", "key": payload.key, "ttlSeconds": payload.ttlSeconds}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Cache write failed")
+        raise HTTPException(status_code=503, detail="Cache write failed")
 
 
-@app.delete("/del/{key}", status_code=status.HTTP_200_OK)
-async def delete_cache(key: str):
-    """
-    Utility endpoint to invalidate specific cache entries on demand.
-    """
-    if not redis_client:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Redis client unavailable"
-        )
-
+@app.delete("/v1/cache")
+async def delete_cache(key: str = Query(..., min_length=1, max_length=512),
+                       x_cache_service_token: Optional[str] = Header(default=None)):
+    require_internal_token(x_cache_service_token)
     try:
-        deleted = await redis_client.delete(key)
+        deleted = await get_redis().delete("cache:" + key)
         return {"status": "ok", "deleted": bool(deleted)}
-    except Exception as exc:
-        logger.error("Failed to delete key '%s': %s", key, exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Cache delete error: {str(exc)}"
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Cache delete failed")
+        raise HTTPException(status_code=503, detail="Cache delete failed")
+
+
+@app.post("/v1/events")
+async def publish_event(payload: EventPayload,
+                        x_cache_service_token: Optional[str] = Header(default=None)):
+    require_internal_token(x_cache_service_token)
+    try:
+        event = {
+            "channel": payload.channel,
+            "payload": payload.payload,
+            "userId": payload.userId,
+            "tenantId": payload.tenantId,
+        }
+        stream_id = await get_redis().xadd(
+            EVENT_STREAM, {"event": json.dumps(event, separators=(",", ":"), ensure_ascii=False)},
+            maxlen=MAX_STREAM_LENGTH, approximate=True,
         )
+        return {"status": "published", "id": stream_id}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Event publish failed")
+        raise HTTPException(status_code=503, detail="Event publish failed")
+
+
+@app.get("/v1/events/poll")
+async def poll_events(cursor: str = Query(default="$", max_length=64),
+                      blockMs: int = Query(default=5000, ge=1000, le=10000),
+                      x_cache_service_token: Optional[str] = Header(default=None)):
+    require_internal_token(x_cache_service_token)
+    try:
+        streams = await get_redis().xread({EVENT_STREAM: cursor}, count=100, block=blockMs)
+        events = []
+        next_cursor = cursor
+        for _stream_name, entries in streams:
+            for stream_id, fields in entries:
+                next_cursor = stream_id
+                raw_event = fields.get("event")
+                if raw_event:
+                    events.append({"id": stream_id, **json.loads(raw_event)})
+        return {"events": events, "cursor": next_cursor}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Event poll failed")
+        raise HTTPException(status_code=503, detail="Event poll failed")
+
+
+# Compatibility endpoints for existing internal scripts. These are protected too.
+@app.post("/set")
+async def legacy_set(payload: CacheSetPayload, x_cache_service_token: Optional[str] = Header(default=None)):
+    return await set_cache(payload, x_cache_service_token)
+
+
+@app.get("/get/{key:path}")
+async def legacy_get(key: str, x_cache_service_token: Optional[str] = Header(default=None)):
+    result = await get_cache(key, x_cache_service_token)
+    return {"status": "hit" if result["hit"] else "miss", "data": result["value"]}
+
+
+@app.delete("/del/{key:path}")
+async def legacy_delete(key: str, x_cache_service_token: Optional[str] = Header(default=None)):
+    return await delete_cache(key, x_cache_service_token)
