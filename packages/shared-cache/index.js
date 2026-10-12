@@ -77,7 +77,16 @@ export class SharedCacheClient {
     });
   }
 
-  async pollEvents(cursor = '$', blockMs = 5000) {
+  async getEventCursor() {
+    const result = await this.request('/v1/events/cursor');
+    return result?.cursor || '0-0';
+  }
+
+  async acknowledgeEvents(cursor) {
+    return this.request('/v1/events/ack', { method: 'POST', body: { cursor } });
+  }
+
+  async pollEvents(cursor = '0-0', blockMs = 5000) {
     const boundedBlockMs = Math.max(1000, Math.min(10000, Number(blockMs) || 5000));
     return this.request(`/v1/events/poll?cursor=${encodeURIComponent(cursor)}&blockMs=${boundedBlockMs}`, {
       timeoutMs: boundedBlockMs + this.timeoutMs + 500
