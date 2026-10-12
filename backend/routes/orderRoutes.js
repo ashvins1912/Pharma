@@ -1374,7 +1374,7 @@ router.post('/:id/verify-delivery', authenticateUser, async (req, res) => {
         }
 
         const code = String(req.body?.otp || '').trim();
-        if (!/^\\d{4}$/.test(code)) return res.status(400).json({ message: 'Enter the 4-digit code shared by the customer.' });
+        if (!/^\d{4}$/.test(code)) return res.status(400).json({ message: 'Enter the 4-digit code shared by the customer.' });
         const verification = order.deliveryVerification || {};
         if (!verification.otpHash || !verification.expiresAt || new Date(verification.expiresAt) <= new Date()) {
             return res.status(409).json({ message: 'The delivery code is missing or expired. Ask the pharmacy to resend the out-for-delivery notification.' });
