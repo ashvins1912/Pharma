@@ -6,6 +6,7 @@ import { normalizeOrdersResponse } from '../api/orderService';
 import { applyCouponCode } from '../api/couponService';
 import { getCustomerMedicineRequestsPage } from '../api/medicineRequestService';
 import { useAuth } from './AuthContext';
+import { useTenant } from './TenantContext';
 import usePersistentState from '../hooks/usePersistentState';
 import { useToast } from './ToastContext';
 import { useActionLoading, LOADING_ACTIONS } from './LoadingContext';
@@ -17,6 +18,7 @@ const CACHE_TTL = 5 * 60 * 1000;
 
 export function AppProvider({ children }) {
   const { user, isSuperAdmin, isPharmacyOrAdmin, hasPermission, loading: authLoading, isFullyAuthenticated } = useAuth();
+  const { tenantId } = useTenant();
   const { addToast } = useToast();
   const { runAction } = useActionLoading();
 
@@ -853,7 +855,7 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (!isFullyAuthenticated || !user?.id || subtotal <= 0 || appliedCouponRef.current) return;
     let active = true;
-    apiClient.get('/api/coupons/my-offer', { params: { orderTotal: subtotal } })
+    apiClient.get('/api/coupons/my-offer', { params: { orderTotal: subtotal, tenantId } })
       .then(({ data }) => {
         if (!active || !data?.promotion) return;
         const promotion = data.promotion;
@@ -869,7 +871,7 @@ export function AppProvider({ children }) {
       })
       .catch(() => {});
     return () => { active = false; };
-  }, [isFullyAuthenticated, user?.id, subtotal]);
+  }, [isFullyAuthenticated, user?.id, subtotal, tenantId]);
 
   // Coupon logic
   const applyCoupon = async (codeToApply) => {
