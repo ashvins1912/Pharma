@@ -690,7 +690,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                 ) : (
                   colOrders.map((order) => {
                     const orderId = col.id === 'Delivered'
-                      ? String(order.orderNumber || order._id || 'Unknown order')
+                      ? String(order._id || order.orderNumber || 'Unknown order')
                       : String(order.orderNumber || order._id || 'Unknown order').slice(-6).toUpperCase();
                     const isProcessing = updatingId === order._id;
 
@@ -733,7 +733,8 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                           </button>
                           {isExpanded && (
                             <div id={`delivered-order-${order._id}`} className="space-y-2 border-t border-slate-100 p-3 text-xs text-slate-600">
-                              <p className="break-all"><span className="font-bold">Order ID:</span> {order.orderNumber || order._id}</p>
+                              <p className="break-all"><span className="font-bold">Order ID:</span> {order._id || order.orderNumber}</p>
+                              {order.orderNumber && <p className="break-all"><span className="font-bold">Order number:</span> {order.orderNumber}</p>}
                               <p><span className="font-bold">Customer:</span> {customerName}</p>
                               <p><span className="font-bold">Mobile:</span> {getCustomerMobile(order) || 'No phone'}</p>
                               {order.deliveryAddress && <p><span className="font-bold">Address:</span> {order.deliveryAddress}</p>}
