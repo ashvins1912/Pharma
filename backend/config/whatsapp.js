@@ -26,6 +26,7 @@ const publishWhatsAppRealtimeStatus = (record, { userId = null, tenantId = null,
         orderId: orderId ? String(orderId) : null,
         medicineRequestId: medicineRequestId ? String(medicineRequestId) : null,
         channels: ['WHATSAPP'],
+        source: 'whatsapp-service',
         tenantId,
         audience
     }, { userId: userId ? String(userId) : null, tenantId: tenantId ? String(tenantId) : null })
