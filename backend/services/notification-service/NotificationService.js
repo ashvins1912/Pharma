@@ -158,7 +158,7 @@ export class NotificationService {
                 recipientUserId: this._recipientUserId(evt),
                 title: 'Delivery Partner Assigned',
                 body: `Rider ${evt.payload?.riderName} has been assigned to deliver your order.`,
-                eventType: 'RIDER_ASSIGNED', orderId: evt.entityId,
+                eventType: 'RIDER_ASSIGNED', orderId: evt.entityId, riderId: evt.payload?.riderId,
                 channels: ['IN_APP', 'WHATSAPP']
             });
             this._broadcastDeliveryEvent({
@@ -290,6 +290,7 @@ export class NotificationService {
         channels = ['IN_APP'],
         eventType = 'NOTIFICATION_CREATED',
         orderId = null,
+        riderId = null,
         medicineRequestId = null,
         status = null
     }) {
@@ -303,6 +304,7 @@ export class NotificationService {
             channels,
             eventType,
             orderId: orderId ? String(orderId) : null,
+            riderId: riderId ? String(riderId) : null,
             medicineRequestId: medicineRequestId ? String(medicineRequestId) : null,
             status,
             read: false,
@@ -318,7 +320,7 @@ export class NotificationService {
         // notification bodies as unscoped/global WebSocket events.
         if (recipientUserId || tenantId) {
             const eventPayload = { ...notification, userId: recipientUserId, tenantId, source: 'notification-service' };
-            const target = { userId: recipientUserId, tenantId };
+            const target = { userId: recipientUserId, tenantId, riderId };
             void cacheService.publishEvent('notification', eventPayload, target);
             if (channels.includes('WHATSAPP')) {
                 void cacheService.publishEvent('whatsapp_notification', { ...eventPayload, deliveryState: 'REQUESTED' }, target);
