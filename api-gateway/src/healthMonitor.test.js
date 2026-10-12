@@ -127,3 +127,35 @@ test('health state transitions are logged once per status change, including reco
   assert.equal(stateChanges.length, 1);
   assert.equal(recoveries.length, 1);
 });
+
+
+test('health snapshots expose only allowlisted operational telemetry from service responses', async () => {
+  const monitor = createHealthMonitor({
+    services: [service('websocket')],
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        service: 'websocket-service',
+        status: 'healthy',
+        uptimeSeconds: 120,
+        activeConnections: 7,
+        heartbeatIntervalMs: 25000,
+        authConfigured: true,
+        secret: 'must-not-be-exposed',
+        tenantIds: ['tenant-private']
+      })
+    }),
+    logger: {}
+  });
+
+  const result = await monitor.checkNow();
+  assert.deepEqual(result.services[0].telemetry, {
+    service: 'websocket-service',
+    status: 'healthy',
+    uptimeSeconds: 120,
+    activeConnections: 7,
+    heartbeatIntervalMs: 25000,
+    authConfigured: true
+  });
+});
