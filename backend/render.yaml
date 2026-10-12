@@ -1,0 +1,86 @@
+services:
+  - type: pserv
+    name: ashvin-pharmacy-platform
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: MONGO_URI
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      # SMTP is configured on the backend service because signup and account
+      # recovery emails are sent by the identity service, not the static UI.
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      # Shared signing pair: the backend signs Pharma access/refresh JWTs.
+      - key: PHARMA_JWT_PRIVATE_KEY
+        sync: false
+      - key: PHARMA_JWT_PUBLIC_KEY
+        sync: false
+      - key: PHARMA_JWT_ISSUER
+        value: pharma-auth
+      - key: PHARMA_JWT_AUDIENCE
+        value: pharma-api
+      - key: PHARMA_ACCESS_TOKEN_TTL
+        value: "1h"
+      - key: PHARMA_REFRESH_TOKEN_TTL
+        value: "7d"
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: LOGGING_ENABLED
+        value: "true"
+      - key: REQUIRE_GATEWAY_TRUST
+        value: "true"
+      - key: GATEWAY_AUTH_SECRET
+        sync: false
+      - key: SERVICE_AUTH_SECRET
+        sync: false
+      - key: SERVICE_JWT_ISSUER
+        value: ashvin-pharmacy
+      - key: SERVICE_JWT_AUDIENCE
+        value: inventory-service
+      - key: ORDER_SERVICE_URL
+        sync: false
+      - key: ORDER_SERVICE_JWT_AUDIENCE
+        value: order-service
+      - key: DEMO_ADMIN_ENABLED
+        value: "false"
+      - key: DEMO_ADMIN_INSTANT_ACCESS_ENABLED
+        value: "false"
+      - key: DEMO_CUSTOMER_ENABLED
+        value: "false"
+      - key: WHATSAPP_DELIVERY_TRACKING_ENABLED
+        value: "false"
+      - key: MONGO_TRANSACTIONS_CONFIRMED
+        value: "false"
+      - key: DELIVERY_ACTION_BASE_URL
+        sync: false
+      - key: DELIVERY_MAX_ATTEMPTS
+        sync: false
+      - key: SYSTEM_SECRET_KEY
+        sync: false
+      - key: DELIVERY_EVENT_SECRET
+        sync: false

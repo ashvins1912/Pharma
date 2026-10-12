@@ -1,0 +1,16 @@
+name: Cache Awake Heartbeat
+
+on:
+  schedule:
+    # Runs every 10 minutes to prevent Render Free Tier from spinning down after 15 min idle
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  keepalive:
+    name: Ping Cache Web Service
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit Health Endpoint
+        run: |
+          curl -sS --max-time 15 --retry 2 --retry-delay 5 "https://${{ secrets.RENDER_CACHE_APP_NAME }}.onrender.com/health" || echo "Ping dispatched"

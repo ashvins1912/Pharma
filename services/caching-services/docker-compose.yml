@@ -1,0 +1,17 @@
+services:
+  caching-services:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: caching-services
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - REDIS_URL=redis://127.0.0.1:6379/0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3

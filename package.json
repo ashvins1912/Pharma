@@ -2,17 +2,25 @@
   "name": "ashvin-pharmacy",
   "private": true,
   "workspaces": [
-    "frontend"
+    "frontend",
+    "api-gateway",
+    "backend",
+    "services/*",
+    "apps/*",
+    "packages/*"
   ],
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.js",
+    "dev:frontend": "npm --workspace frontend run dev",
+    "dev:gateway": "npm --workspace api-gateway run dev",
+    "dev:backend": "npm --workspace backend run dev",
     "build": "npm --workspace frontend run build",
-    "lint": "npm --workspace frontend run lint"
-  },
-  "dependencies": {
-    "@originjs/vite-plugin-federation": "^1.4.1",
-    "zustand": "^5.0.15"
+    "lint": "npm --workspace frontend run lint",
+    "test": "npm --workspace api-gateway test && npm --workspace backend test && npm --workspace services/inventory-service test && npm --workspace services/order-service test",
+    "admin:promote": "npm --workspace backend run admin:promote",
+    "admin:bootstrap": "node scripts/bootstrap-super-admin.mjs",
+    "tenant:create": "node scripts/create-tenant.mjs"
   }
 }
