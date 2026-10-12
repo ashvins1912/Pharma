@@ -218,12 +218,9 @@ export class CustomerService {
       throw Object.assign(new Error('displayName and relationship are required'), { statusCode: 400 });
     }
 
-    // The UI can be reached before a CustomerProfile has been provisioned (for
-    // example, a newly authenticated Google/Supabase user). Previously this
-    // path immediately returned 404 "Customer not found", making the form open
-    // successfully but every save fail. Provision/repair only the authenticated
-    // user's own customer + SELF relationship before creating their relative.
-    // Ownership is still keyed by userId; no client-supplied owner or tenant is trusted.
+    // Identity and profile data are resolved server-side; caller-supplied owner IDs
+    // are never accepted. A relative is linked to the authenticated account's
+    // canonical CustomerProfile and its PersonRelationship.
     await this.ensureCustomerForUser(userId, { tenantId: tenantId || null });
     const customer = await CustomerProfile.findOne({ userId });
     if (!customer) {
@@ -240,13 +237,22 @@ export class CustomerService {
       createdByUserId: userId,
       tenantId: tenantId || null
     });
-    await PersonRelationship.create({
-      ownerUserId: userId,
-      ownerCustomerId: customer.customerId,
-      personPuid: person.puid,
-      relationship: normalizedRelationship,
-      canManage: true
-    });
+    try {
+      await PersonRelationship.create({
+        ownerUserId: userId,
+        ownerCustomerId: customer.customerId,
+        personPuid: person.puid,
+        relationship: normalizedRelationship,
+        canManage: true
+      });
+    } catch (error) {
+      // Avoid orphaning a person when a concurrent duplicate relationship wins.
+      await Person.deleteOne({ puid: person.puid, createdByUserId: userId }).catch(() => {});
+      if (error?.code === 11000) {
+        throw Object.assign(new Error('This relative already exists in your profile.'), { statusCode: 409 });
+      }
+      throw error;
+    }
     return this._serializePerson(person);
   }
 
