@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import apiClient from '../api/apiClient';
+import apiClient, { getRuntimeAccessToken } from '../api/apiClient';
+import { io } from 'socket.io-client';
 import { getCachedPublicCatalog } from '../api/publicCatalogCache.js';
 import { normalizeOrdersResponse } from '../api/orderService';
 import { applyCouponCode } from '../api/couponService';
@@ -493,6 +494,87 @@ export function AppProvider({ children }) {
       if (!silent && requestSequence === medicineRequestLoadSequence.current) setLoadingMedicineRequests(false);
     }
   }, [isFullyAuthenticated, isPharmacyOrAdmin, isSuperAdmin]);
+
+  // Authenticated realtime updates. The server derives identity from the signed token;
+  // browser-supplied user/tenant IDs only request rooms and are verified server-side.
+  useEffect(() => {
+    if (!isFullyAuthenticated || !user?.id || typeof window === 'undefined') return undefined;
+    const token = getRuntimeAccessToken();
+    const wsUrl = String(import.meta.env.VITE_WS_URL || '').trim();
+    if (!token || !wsUrl) return undefined;
+
+    const tenantId = user.tenantId
+      || user.app_metadata?.tenantId
+      || user.user_metadata?.tenantId
+      || user.tenantMembership?.tenantId
+      || null;
+    const socket = io(wsUrl, {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 10000
+    });
+
+    const upsertNotification = (payload, sourceChannel = 'notification') => {
+      if (!payload || typeof payload !== 'object') return;
+      const id = String(payload.id || payload.notificationId || '');
+      if (!id) return;
+      const notification = {
+        id,
+        title: payload.title || 'Pharmacy Update',
+        message: payload.body || payload.message || 'There is an update to your pharmacy activity.',
+        time: 'Just now',
+        read: false,
+        type: 'info',
+        eventType: payload.eventType || sourceChannel,
+        orderId: payload.orderId || null,
+        requestId: payload.medicineRequestId || null,
+        actionType: payload.medicineRequestId ? 'VIEW_PROPOSAL' : undefined,
+        channels: Array.isArray(payload.channels) ? payload.channels : [],
+        whatsappDeliveryState: payload.deliveryState || null
+      };
+      setNotifications(previous => {
+        const existingIndex = previous.findIndex(item => String(item.id) === id);
+        if (existingIndex >= 0) {
+          return previous.map(item => String(item.id) === id
+            ? { ...item, ...notification, read: item.read, whatsappDeliveryState: payload.deliveryState || item.whatsappDeliveryState }
+            : item);
+        }
+        return [notification, ...previous].slice(0, 50);
+      });
+    };
+
+    const onNotification = payload => upsertNotification(payload, 'notification');
+    const onWhatsAppNotification = payload => upsertNotification(payload, 'whatsapp_notification');
+    const onMedicineRequestUpdated = () => {
+      void loadUserMedicineRequests({ silent: true });
+    };
+    const onOrderStatusChanged = () => {
+      void loadUserOrders({ silent: true });
+    };
+
+    socket.on('connect', () => {
+      socket.emit('join_bell_room', { userId: user.id, ...(tenantId ? { tenantId } : {}) });
+    });
+    socket.on('notification', onNotification);
+    socket.on('whatsapp_notification', onWhatsAppNotification);
+    socket.on('medicine_request_updated', onMedicineRequestUpdated);
+    socket.on('order_status_changed', onOrderStatusChanged);
+    socket.on('connect_error', error => {
+      console.warn('[Realtime] Socket connection was rejected or unavailable:', error?.message || 'connection error');
+    });
+
+    return () => {
+      socket.off('notification', onNotification);
+      socket.off('whatsapp_notification', onWhatsAppNotification);
+      socket.off('medicine_request_updated', onMedicineRequestUpdated);
+      socket.off('order_status_changed', onOrderStatusChanged);
+      socket.disconnect();
+    };
+  }, [isFullyAuthenticated, user?.id, user?.tenantId, user?.app_metadata?.tenantId, user?.user_metadata?.tenantId, loadUserOrders, loadUserMedicineRequests]);
 
   // Customer medicine requests are loaded by CustomerRequestsView when that tab opens.
   // Do not fetch or poll this customer-only list as part of global login hydration.
