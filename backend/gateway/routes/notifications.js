@@ -11,13 +11,26 @@ import { isPlatformSuperAdmin } from '../../shared/contracts/index.js';
 const router = express.Router();
 
 router.get('/', authenticateUser, (req, res) => {
-    const list = notificationService.getUserNotifications(req.context.userId);
+    const userRole = req.user?.app_metadata?.role || req.user?.role || 'customer';
+    const isSuperAdmin = isPlatformSuperAdmin(userRole);
+    const list = notificationService.getUserNotifications(req.context.userId, {
+        tenantId: isSuperAdmin ? null : (req.context?.tenantId || req.user?.app_metadata?.tenantId || null),
+        branchId: req.context?.branchId || null,
+        isSuperAdmin
+    });
     res.json({ success: true, data: list });
 });
 
 router.patch('/:id/read', authenticateUser, (req, res) => {
-    const updated = notificationService.markAsRead(req.params.id, req.context.userId);
-    res.json({ success: true, data: updated });
+    const userRole = req.user?.app_metadata?.role || req.user?.role || 'customer';
+    const isSuperAdmin = isPlatformSuperAdmin(userRole);
+    const updated = notificationService.markAsRead(req.params.id, req.context.userId, {
+        tenantId: isSuperAdmin ? null : (req.context?.tenantId || req.user?.app_metadata?.tenantId || null),
+        branchId: req.context?.branchId || null,
+        isSuperAdmin
+    });
+    if (!updated) return res.status(404).json({ success: false, error: { code: 'NOTIFICATION_NOT_FOUND' } });
+    return res.json({ success: true, data: updated });
 });
 
 /**
