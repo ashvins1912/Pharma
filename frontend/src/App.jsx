@@ -94,7 +94,9 @@ function MainApp() {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const token = urlParams.get('token');
+      const preferredTenantId = urlParams.get('tenantId');
       const path = window.location.pathname;
+      if (preferredTenantId && !token) setTenantSelectorOpen(true);
 
       if (token) {
         if (path.includes('vendor') || path.includes('onboarding') || urlParams.get('type') === 'vendor') {
@@ -612,6 +614,7 @@ function MainApp() {
       {/* Tenant Selector Modal */}
       <TenantSelectorModal
         isOpen={tenantSelectorOpen}
+        preferredTenantId={new URLSearchParams(window.location.search).get('tenantId') || ''}
         onClose={() => setTenantSelectorOpen(false)}
       />
 
