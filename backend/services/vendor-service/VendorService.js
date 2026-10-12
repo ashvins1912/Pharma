@@ -10,7 +10,7 @@ import Vendor from '../../models/Vendor.js';
 import Tenant from '../../models/Tenant.js';
 import TenantMembership from '../../models/TenantMembership.js';
 import UserProfile from '../../models/UserProfile.js';
-import { getIsConnected } from '../../config/db.js';
+import { getIsConnected, getTransactionsSupported } from '../../config/db.js';
 import { emailService } from '../email-service/EmailService.js';
 import { tenantService } from '../tenant-service/TenantService.js';
 import { logger } from '../../shared/observability/logger.js';
@@ -574,7 +574,11 @@ class VendorService {
 
         // Commit records to MongoDB
         if (getIsConnected()) {
-            const session = await mongoose.startSession().catch(() => null);
+            // MongoDB transactions require a replica set or sharded cluster. Do not
+            // start a session transaction on standalone MongoDB: it fails on the first write
+            // with "Transaction numbers are only allowed..." even though startSession succeeds.
+            const transactionsSupported = getTransactionsSupported();
+            const session = transactionsSupported ? await mongoose.startSession().catch(() => null) : null;
             try {
                 if (session) {
                     session.startTransaction();
@@ -622,7 +626,14 @@ class VendorService {
                 }
             } catch (txErr) {
                 if (session) await session.abortTransaction().catch(() => {});
-                logger.error('Transaction failed during vendor onboarding completion:', { error: txErr.message });
+                logger.error('Vendor onboarding persistence failed.', {
+                    error: txErr.message,
+                    errorName: txErr.name,
+                    errorCode: txErr.code,
+                    errorCodeName: txErr.codeName,
+                    transactionsSupported,
+                    vendorId: vendor._id || vendor.id
+                });
                 const err = new Error('This onboarding request could not be completed because the account has already been processed or encountered a conflict.');
                 err.code = 'ONBOARDING_CONFLICT';
                 err.status = 409;
