@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../api/apiClient';
+import { getCachedPublicCatalog } from '../api/publicCatalogCache.js';
 import { normalizeOrdersResponse } from '../api/orderService';
 import { applyCouponCode } from '../api/couponService';
 import { getCustomerMedicineRequestsPage } from '../api/medicineRequestService';
@@ -270,7 +271,7 @@ export function AppProvider({ children }) {
       const catalogUrl = publicGatewayBaseUrl
         ? `${publicGatewayBaseUrl}/api/medicines`
         : '/api/medicines';
-      const res = await apiClient.get(catalogUrl, { params });
+      const res = await getCachedPublicCatalog(apiClient, catalogUrl, params);
 
       if (res.data && res.data.medicines) {
         setMedicines(res.data.medicines || []);
