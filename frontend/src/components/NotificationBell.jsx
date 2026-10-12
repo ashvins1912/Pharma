@@ -59,6 +59,8 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
                     setIsOpen(false);
                     if (n.actionType === 'CONNECT_WHATSAPP') {
                       setWhatsappModalOpen(true);
+                    } else if (n.actionType === 'VIEW_PHARMACY_CATALOG' && n.actionUrl && n.actionUrl.startsWith('/')) {
+                      window.location.assign(n.actionUrl);
                     } else if (onOpenOrders) {
                       onOpenOrders();
                     }
@@ -84,6 +86,12 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
                     <p className="text-[10px] mt-1 font-bold text-emerald-700">
                       WhatsApp: {String(n.whatsappDeliveryState).replaceAll('_', ' ')}
                     </p>
+                  )}
+                  {n.actionType === 'VIEW_PHARMACY_CATALOG' && (
+                    <div className="mt-2 pt-1 border-t border-blue-100 flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase text-blue-700">Pharmacy offer</span>
+                      <span className="text-[11px] font-extrabold text-blue-700 underline">View pharmacy catalog →</span>
+                    </div>
                   )}
                   {n.actionType === 'CONNECT_WHATSAPP' && (
                     <div className="mt-2 pt-1 border-t border-amber-200/60 flex items-center justify-between">
