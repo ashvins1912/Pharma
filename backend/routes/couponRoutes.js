@@ -81,9 +81,9 @@ router.patch('/admin/customer-promotions/:id', authenticateUser, requirePermissi
 router.post('/admin/customer-promotions/:id/notify', authenticateUser, requirePermission('promotions.manage'), requireTenantPromotionAccess, async (req, res) => {
     if (!getIsConnected() || !mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid promotion.' });
     try {
-        const filter = { _id: req.params.id, customerId: { $ne: null }, isActive: true };
         const tenantId = getTenantId(req);
-        if (tenantId && !isPlatformRole(getRole(req))) filter.tenantId = tenantId;
+        if (!tenantId) return res.status(403).json({ success: false, message: 'A pharmacy tenant context is required to notify a customer about an offer.' });
+        const filter = { _id: req.params.id, customerId: { $ne: null }, isActive: true, tenantId };
         const promotion = await Coupon.findOne(filter).lean();
         if (!promotion) return res.status(404).json({ success: false, message: 'Active promotion not found in your tenant scope.' });
         if (!promotion.tenantId || (tenantId && !isPlatformRole(getRole(req)) && promotion.tenantId !== tenantId)) return res.status(403).json({ success: false, message: 'You cannot notify customers about offers outside your pharmacy tenant.' });
