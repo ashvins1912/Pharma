@@ -292,7 +292,10 @@ export class NotificationService {
         orderId = null,
         riderId = null,
         medicineRequestId = null,
-        status = null
+        status = null,
+        promotionId = null,
+        pharmacyName = null,
+        actionUrl = null
     }) {
         const notification = {
             id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -306,6 +309,9 @@ export class NotificationService {
             orderId: orderId ? String(orderId) : null,
             riderId: riderId ? String(riderId) : null,
             medicineRequestId: medicineRequestId ? String(medicineRequestId) : null,
+            promotionId: promotionId ? String(promotionId) : null,
+            pharmacyName: pharmacyName ? String(pharmacyName) : null,
+            actionUrl: typeof actionUrl === 'string' && actionUrl.startsWith('/') ? actionUrl : null,
             status,
             read: false,
             createdAt: new Date().toISOString()
@@ -338,8 +344,8 @@ export class NotificationService {
     getUserNotifications(userId, { tenantId = null, branchId = null, isSuperAdmin = false } = {}) {
         return this.notifications.filter(notification => {
             if (!isSuperAdmin && notification.recipientUserId && notification.recipientUserId !== userId) return false;
-            if (!isSuperAdmin && notification.tenantId && notification.tenantId !== tenantId) return false;
-            if (!isSuperAdmin && notification.branchId && notification.branchId !== branchId) return false;
+            if (!isSuperAdmin && !notification.recipientUserId && notification.tenantId && notification.tenantId !== tenantId) return false;
+            if (!isSuperAdmin && !notification.recipientUserId && notification.branchId && notification.branchId !== branchId) return false;
             // Untargeted platform notifications must not leak to ordinary tenant users.
             if (!isSuperAdmin && !notification.recipientUserId && !notification.tenantId) return false;
             return true;

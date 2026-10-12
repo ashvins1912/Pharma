@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 import Coupon from '../models/Coupon.js';
 import Order from '../models/Order.js';
 import UserProfile from '../models/UserProfile.js';
+import Tenant from '../models/Tenant.js';
+import { notificationService } from '../services/notification-service/NotificationService.js';
 import { authenticateUser, requirePermission } from '../middleware/auth.js';
 import { getIsConnected } from '../config/db.js';
 
@@ -19,8 +21,8 @@ router.get('/my-offer', authenticateUser, async (req, res) => {
     if (!getIsConnected() || mongoose.connection.readyState !== 1) return res.status(503).json({ success: false, message: 'Promotions are temporarily unavailable.' });
     try {
         const orderTotal = Number(req.query.orderTotal || 0);
-        const tenantId = getTenantId(req);
-        const filter = { customerId: req.user.sub, isActive: true, autoApply: true, ...(tenantId ? { tenantId } : {}) };
+        const tenantId = String(req.query.tenantId || getTenantId(req) || '').trim();
+        const filter = { customerId: req.user.sub, isActive: true, autoApply: true, tenantId: tenantId || null };
         const coupons = await Coupon.find(filter).sort({ createdAt: -1 }).lean();
         const eligible = coupons.filter(coupon => usableCoupon(coupon, orderTotal));
         if (!eligible.length) return res.json({ success: true, promotion: null });
@@ -53,21 +55,43 @@ router.get('/admin/customer-promotions', authenticateUser, requirePermission('pr
 router.post('/admin/customer-promotions', authenticateUser, requirePermission('promotions.manage'), requireTenantPromotionAccess, async (req, res) => {
     if (!getIsConnected() || mongoose.connection.readyState !== 1) return res.status(503).json({ success: false, message: 'Promotion data is temporarily unavailable.' });
     try {
-        const role = getRole(req); const tenantId = getTenantId(req) || (isPlatformRole(role) ? String(req.body.tenantId || '').trim() || null : null); if (!tenantId && !isPlatformRole(role)) return res.status(400).json({ success: false, message: 'Your tenant context is required.' });
+        const role = getRole(req); const tenantId = getTenantId(req) || (isPlatformRole(role) ? String(req.body.tenantId || '').trim() || null : null); if (!tenantId) return res.status(400).json({ success: false, message: 'A pharmacy tenant context is required for personal discounts and coupons.' });
         const customerId = String(req.body.customerId || '').trim(); if (!customerId) return res.status(400).json({ success: false, message: 'Select a customer.' });
         const customerFilter = { $or: [{ userId: customerId }, { supabase_user_id: customerId }, { supabaseId: customerId }] }; if (tenantId) customerFilter.tenantId = tenantId; const customer = await UserProfile.findOne(customerFilter).select('userId supabase_user_id supabaseId tenantId').lean(); if (!customer) return res.status(404).json({ success: false, message: 'Customer does not belong to this tenant.' });
         const discountType = req.body.discountType || 'percentage'; const value = Number(req.body.discountValue); const minimum = Number(req.body.minOrderAmount || 0); if (!['percentage','fixed'].includes(discountType) || !Number.isFinite(value) || value <= 0 || (discountType === 'percentage' && value > 100) || !Number.isFinite(minimum) || minimum < 0) return res.status(400).json({ success: false, message: 'Enter a valid discount type, value and minimum order amount.' });
         const expiryDate = req.body.expiryDate ? new Date(req.body.expiryDate) : null; if (expiryDate && Number.isNaN(expiryDate.getTime())) return res.status(400).json({ success: false, message: 'Invalid expiry date.' });
         let code = String(req.body.code || '').trim().toUpperCase(); if (!code) code = 'PHARMA-' + Math.random().toString(36).slice(2, 8).toUpperCase(); if (!/^[A-Z0-9_-]{3,40}$/.test(code)) return res.status(400).json({ success: false, message: 'Coupon code must be 3–40 letters, numbers, underscores, or hyphens.' });
         const promotionType = req.body.promotionType === 'CUSTOMER_COUPON' ? 'CUSTOMER_COUPON' : 'CUSTOMER_DISCOUNT';
-        const promotion = await Coupon.create({ code, discountType, discountValue: value, discountPercentage: discountType === 'percentage' ? value : 0, minOrderAmount: minimum, minOrderValue: minimum, expiryDate, usageLimit: req.body.usageLimit == null ? null : Number(req.body.usageLimit), isActive: true, tenantId, customerId: String(customer.userId || customer.supabase_user_id || customer.supabaseId), autoApply: true, promotionLabel: String(req.body.promotionLabel || 'Pharma discount for you').trim().slice(0, 120), promotionType });
+        const resolvedCustomerId = String(customer.userId || customer.supabase_user_id || customer.supabaseId);
+        const duplicate = await Coupon.findOne({ tenantId, customerId: resolvedCustomerId, isActive: true, promotionType: { $in: ['CUSTOMER_DISCOUNT', 'CUSTOMER_COUPON'] } }).select('_id code promotionType').lean();
+        if (duplicate) return res.status(409).json({ success: false, code: 'CUSTOMER_ALREADY_HAS_ACTIVE_OFFER', message: `This customer already has an active ${duplicate.promotionType === 'CUSTOMER_COUPON' ? 'coupon' : 'discount'} (${duplicate.code}). Revoke it before assigning another offer.` });
+        const pharmacy = tenantId ? await Tenant.findById(tenantId).select('name').lean() : null;
+        const pharmacyName = pharmacy?.name || 'Your pharmacy';
+        const promotion = await Coupon.create({ code, discountType, discountValue: value, discountPercentage: discountType === 'percentage' ? value : 0, minOrderAmount: minimum, minOrderValue: minimum, expiryDate, usageLimit: req.body.usageLimit == null ? null : Number(req.body.usageLimit), isActive: true, tenantId, customerId: resolvedCustomerId, customerName: String(req.body.customerName || customer.name || [customer.firstName, customer.lastName].filter(Boolean).join(' ') || '').trim().slice(0, 160), autoApply: true, promotionLabel: String(req.body.promotionLabel || 'Pharma discount for you').trim().slice(0, 120), promotionType });
+        notificationService.send({ tenantId, recipientUserId: resolvedCustomerId, title: `${pharmacyName} gave you a special offer`, body: `${pharmacyName} provided a ${discountType === 'percentage' ? `${value}%` : `₹${value}`} discount on a minimum purchase of ₹${minimum}. ${promotionType === 'CUSTOMER_COUPON' ? `Use coupon ${promotion.code}.` : 'Your discount will be applied automatically at checkout.'}`, eventType: 'CUSTOMER_PROMOTION_ASSIGNED', promotionId: String(promotion._id), pharmacyName, actionUrl: `/?tenantId=${encodeURIComponent(tenantId)}&promotionId=${encodeURIComponent(String(promotion._id))}`, channels: ['IN_APP'] });
         return res.status(201).json({ success: true, promotion });
     } catch (error) { if (error.code === 11000) return res.status(409).json({ success: false, message: 'That coupon code already exists.' }); return res.status(500).json({ success: false, message: error.message || 'Failed to create customer promotion.' }); }
 });
 
 router.patch('/admin/customer-promotions/:id', authenticateUser, requirePermission('promotions.manage'), requireTenantPromotionAccess, async (req, res) => {
     if (!getIsConnected() || !mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid promotion.' });
-    try { const tenantId = getTenantId(req); const filter = { _id: req.params.id, customerId: { $ne: null } }; if (tenantId && !isPlatformRole(getRole(req))) filter.tenantId = tenantId; const promotion = await Coupon.findOneAndUpdate(filter, { $set: { isActive: req.body.isActive !== false } }, { new: true }).lean(); if (!promotion) return res.status(404).json({ success: false, message: 'Promotion not found.' }); return res.json({ success: true, promotion }); } catch { return res.status(500).json({ success: false, message: 'Failed to update promotion.' }); }
+    try { const tenantId = getTenantId(req); const filter = { _id: req.params.id, customerId: { $ne: null } }; if (tenantId && !isPlatformRole(getRole(req))) filter.tenantId = tenantId; const promotion = await Coupon.findOneAndUpdate(filter, { $set: { isActive: req.body.isActive !== false } }, { new: true }).lean(); if (!promotion) return res.status(404).json({ success: false, message: 'Promotion not found.' }); if (req.body.isActive === false) { const pharmacy = promotion.tenantId ? await Tenant.findById(promotion.tenantId).select('name').lean() : null; const pharmacyName = pharmacy?.name || 'Your pharmacy'; notificationService.send({ tenantId: promotion.tenantId, recipientUserId: promotion.customerId, title: 'Pharmacy offer revoked', body: `${pharmacyName} has withdrawn offer ${promotion.code}.`, eventType: 'CUSTOMER_PROMOTION_REVOKED', promotionId: String(promotion._id), pharmacyName, channels: ['IN_APP'] }); } return res.json({ success: true, promotion }); } catch { return res.status(500).json({ success: false, message: 'Failed to update promotion.' }); }
+});
+
+router.post('/admin/customer-promotions/:id/notify', authenticateUser, requirePermission('promotions.manage'), requireTenantPromotionAccess, async (req, res) => {
+    if (!getIsConnected() || !mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid promotion.' });
+    try {
+        const tenantId = getTenantId(req);
+        if (!tenantId) return res.status(403).json({ success: false, message: 'A pharmacy tenant context is required to notify a customer about an offer.' });
+        const filter = { _id: req.params.id, customerId: { $ne: null }, isActive: true, tenantId };
+        const promotion = await Coupon.findOne(filter).lean();
+        if (!promotion) return res.status(404).json({ success: false, message: 'Active promotion not found in your tenant scope.' });
+        if (!promotion.tenantId || (tenantId && !isPlatformRole(getRole(req)) && promotion.tenantId !== tenantId)) return res.status(403).json({ success: false, message: 'You cannot notify customers about offers outside your pharmacy tenant.' });
+        const pharmacy = await Tenant.findById(promotion.tenantId).select('name').lean();
+        const pharmacyName = pharmacy?.name || 'Your pharmacy';
+        notificationService.send({ tenantId: promotion.tenantId, recipientUserId: promotion.customerId, title: `${pharmacyName} reminder: your special offer`, body: `${promotion.discountType === 'percentage' ? `${promotion.discountValue}%` : `₹${promotion.discountValue}`} off on a minimum purchase of ₹${promotion.minOrderAmount ?? promotion.minOrderValue ?? 0}. ${promotion.promotionType === 'CUSTOMER_COUPON' ? `Use coupon ${promotion.code}.` : 'Your discount is applied automatically at checkout.'}`, eventType: 'CUSTOMER_PROMOTION_REMINDER', promotionId: String(promotion._id), pharmacyName, actionUrl: `/?tenantId=${encodeURIComponent(promotion.tenantId)}&promotionId=${encodeURIComponent(String(promotion._id))}`, channels: ['IN_APP'] });
+        return res.json({ success: true, message: 'Offer reminder sent to the customer notification bell.' });
+    } catch (error) { return res.status(500).json({ success: false, message: 'Could not notify the customer.' }); }
 });
 
 

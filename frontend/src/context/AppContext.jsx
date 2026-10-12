@@ -6,6 +6,7 @@ import { normalizeOrdersResponse } from '../api/orderService';
 import { applyCouponCode } from '../api/couponService';
 import { getCustomerMedicineRequestsPage } from '../api/medicineRequestService';
 import { useAuth } from './AuthContext';
+import { useTenant } from './TenantContext';
 import usePersistentState from '../hooks/usePersistentState';
 import { useToast } from './ToastContext';
 import { useActionLoading, LOADING_ACTIONS } from './LoadingContext';
@@ -17,6 +18,7 @@ const CACHE_TTL = 5 * 60 * 1000;
 
 export function AppProvider({ children }) {
   const { user, isSuperAdmin, isPharmacyOrAdmin, hasPermission, loading: authLoading, isFullyAuthenticated } = useAuth();
+  const { tenantId } = useTenant();
   const { addToast } = useToast();
   const { runAction } = useActionLoading();
 
@@ -514,7 +516,10 @@ export function AppProvider({ children }) {
         eventType: item.eventType || 'NOTIFICATION_CREATED',
         orderId: item.orderId || null,
         requestId: item.medicineRequestId || null,
-        actionType: item.medicineRequestId ? 'VIEW_PROPOSAL' : undefined,
+        promotionId: item.promotionId || null,
+        pharmacyName: item.pharmacyName || null,
+        actionUrl: typeof item.actionUrl === 'string' && item.actionUrl.startsWith('/') ? item.actionUrl : null,
+        actionType: item.promotionId ? 'VIEW_PHARMACY_CATALOG' : item.medicineRequestId ? 'VIEW_PROPOSAL' : undefined,
         channels: Array.isArray(item.channels) ? item.channels : [],
         whatsappDeliveryState: item.deliveryState || null
       })).filter(item => item.id);
@@ -616,7 +621,10 @@ export function AppProvider({ children }) {
         eventType: payload.eventType || sourceChannel,
         orderId: payload.orderId || null,
         requestId: payload.medicineRequestId || null,
-        actionType: payload.medicineRequestId ? 'VIEW_PROPOSAL' : undefined,
+        promotionId: payload.promotionId || null,
+        pharmacyName: payload.pharmacyName || null,
+        actionUrl: typeof payload.actionUrl === 'string' && payload.actionUrl.startsWith('/') ? payload.actionUrl : null,
+        actionType: payload.promotionId ? 'VIEW_PHARMACY_CATALOG' : payload.medicineRequestId ? 'VIEW_PROPOSAL' : undefined,
         channels: Array.isArray(payload.channels) ? payload.channels : [],
         whatsappDeliveryState: payload.deliveryState || null,
         sourceChannel: 'realtime',
@@ -840,6 +848,12 @@ export function AppProvider({ children }) {
   const finalTotal = Math.max(0, subtotal - discountAmount + deliveryFee);
   const appliedCouponRef = useRef(appliedCoupon);
   useEffect(() => { appliedCouponRef.current = appliedCoupon; }, [appliedCoupon]);
+  // A pharmacy switch must not carry a tenant-issued discount into another pharmacy's cart.
+  useEffect(() => {
+    setAppliedCoupon(null);
+    setCouponCode('');
+    setCouponError('');
+  }, [tenantId]);
 
   // Tenant-assigned customer promotions are selected by the backend and
   // automatically applied before checkout. Explicit public coupons can still
@@ -847,7 +861,7 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (!isFullyAuthenticated || !user?.id || subtotal <= 0 || appliedCouponRef.current) return;
     let active = true;
-    apiClient.get('/api/coupons/my-offer', { params: { orderTotal: subtotal } })
+    apiClient.get('/api/coupons/my-offer', { params: { orderTotal: subtotal, tenantId } })
       .then(({ data }) => {
         if (!active || !data?.promotion) return;
         const promotion = data.promotion;
@@ -863,7 +877,7 @@ export function AppProvider({ children }) {
       })
       .catch(() => {});
     return () => { active = false; };
-  }, [isFullyAuthenticated, user?.id, subtotal]);
+  }, [isFullyAuthenticated, user?.id, subtotal, tenantId]);
 
   // Coupon logic
   const applyCoupon = async (codeToApply) => {

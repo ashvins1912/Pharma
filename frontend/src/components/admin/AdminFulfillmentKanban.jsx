@@ -37,6 +37,24 @@ const formatDistance = (distanceInKm) => {
   return `${distanceInKm.toFixed(1)} km to pickup`;
 };
 
+const getLocalDayRange = () => {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { startDate: start.toISOString(), endDate: end.toISOString() };
+};
+
+const isCreatedToday = (order) => {
+  if (!order?.createdAt) return false;
+  const created = new Date(order.createdAt);
+  const now = new Date();
+  return Number.isFinite(created.getTime())
+    && created.getFullYear() === now.getFullYear()
+    && created.getMonth() === now.getMonth()
+    && created.getDate() === now.getDate();
+};
+
 const getPageWindow = (currentPage, totalPages) => {
   const visibleCount = Math.min(totalPages, 7);
   const firstPage = Math.max(1, Math.min(currentPage - 3, totalPages - visibleCount + 1));
@@ -137,7 +155,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     setDeliveredLoading(true);
     setDeliveredError('');
     apiClient.get('/api/orders/admin/all', {
-      params: { status: 'Delivered', page: deliveredPage, limit: 10 }
+      params: { status: 'Delivered', page: deliveredPage, limit: 10, ...getLocalDayRange() }
     }).then(response => {
       if (!isCurrentRequest) return;
       const data = response.data || {};
@@ -617,7 +635,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         {searchError && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-rose-700" role="alert"><span>{searchError}</span><button type="button" onClick={retrySearch} disabled={searchLoading} className="font-bold underline">Try again</button></div>}
       </form>
 
-      {/* 4-Column Kanban Grid */}
+      {/* Today's orders · Cancelled history remains available */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {COLUMNS.map((col) => {
           const searchMode = Boolean(appliedSearch);
@@ -627,7 +645,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
               ? deliveredOrders
               : col.id === 'Cancelled'
                 ? cancelledOrders
-                : (orders || []).filter(o => normalizeOrderStatus(o) === col.id);
+                : (orders || []).filter(o => normalizeOrderStatus(o) === col.id && isCreatedToday(o));
 
           return (
             <div key={col.id} className="min-w-0 bg-slate-100/70 border border-slate-200 rounded-3xl p-3 sm:p-4 flex flex-col min-h-[500px]">
@@ -671,7 +689,9 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                   </div>
                 ) : (
                   colOrders.map((order) => {
-                    const orderId = (order._id || '').slice(-6).toUpperCase();
+                    const orderId = col.id === 'Delivered'
+                      ? String(order._id || order.orderNumber || 'Unknown order')
+                      : String(order.orderNumber || order._id || 'Unknown order').slice(-6).toUpperCase();
                     const isProcessing = updatingId === order._id;
 
                     if (col.id === 'Cancelled') {
@@ -713,7 +733,8 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                           </button>
                           {isExpanded && (
                             <div id={`delivered-order-${order._id}`} className="space-y-2 border-t border-slate-100 p-3 text-xs text-slate-600">
-                              <p><span className="font-bold">Order ID:</span> {order._id}</p>
+                              <p className="break-all"><span className="font-bold">Order ID:</span> {order._id || order.orderNumber}</p>
+                              {order.orderNumber && <p className="break-all"><span className="font-bold">Order number:</span> {order.orderNumber}</p>}
                               <p><span className="font-bold">Customer:</span> {customerName}</p>
                               <p><span className="font-bold">Mobile:</span> {getCustomerMobile(order) || 'No phone'}</p>
                               {order.deliveryAddress && <p><span className="font-bold">Address:</span> {order.deliveryAddress}</p>}

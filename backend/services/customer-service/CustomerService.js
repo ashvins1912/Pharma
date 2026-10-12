@@ -10,7 +10,7 @@ const INSECURE = /^(change-me|secret123|default-secret)$/i;
 
 function generatePuid() {
   // Server-generated, opaque, not derived from PII
-  return `PUID-${crypto.randomBytes(12).toString('hex').toUpperCase()}`;
+  return String(crypto.randomInt(1000000000, 10000000000));
 }
 
 const personSchema = new mongoose.Schema({

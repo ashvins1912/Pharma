@@ -19,13 +19,13 @@ createRoot(document.getElementById('root')).render(
       <LoadingProvider>
         <AuthProvider>
           <ToastProvider>
-            <AppProvider>
-              <TenantProvider>
+            <TenantProvider>
+              <AppProvider>
                 <ModalInteractionGuard />
                 <App />
                 <SpeedInsights />
-              </TenantProvider>
-            </AppProvider>
+              </AppProvider>
+            </TenantProvider>
           </ToastProvider>
         </AuthProvider>
       </LoadingProvider>
