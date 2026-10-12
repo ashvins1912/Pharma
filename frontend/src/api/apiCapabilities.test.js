@@ -17,6 +17,11 @@ describe('API capability registry', () => {
       .toBe('orders.create');
   });
 
+  it('requires delivery management permission to verify a delivery OTP', () => {
+    expect(resolveApiCapability('POST', '/api/orders/6accca6691b2129986259f9c/verify-delivery')?.permission)
+      .toBe('delivery.manage');
+  });
+
   it('does not classify public auth APIs as protected capabilities', () => {
     expect(resolveApiCapability('POST', '/api/v1/auth/login')).toBeNull();
   });
