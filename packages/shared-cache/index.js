@@ -73,7 +73,8 @@ export class SharedCacheClient {
         channel,
         payload,
         userId: target.userId || payload?.userId || payload?.recipientUserId || null,
-        tenantId: target.tenantId || payload?.tenantId || null
+        tenantId: target.tenantId || payload?.tenantId || null,
+        riderId: target.riderId || payload?.riderId || null
       }
     });
   }
