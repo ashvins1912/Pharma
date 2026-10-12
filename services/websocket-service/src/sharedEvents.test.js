@@ -11,6 +11,8 @@ test('routes user and tenant events to target rooms, not global sockets', async 
   let pollCount = 0;
   const client = {
     enabled: true,
+    async getEventCursor() { return '0-0'; },
+    async acknowledgeEvents() {},
     async pollEvents() {
       pollCount += 1;
       if (pollCount === 1) return { cursor: '1-0', events: [
