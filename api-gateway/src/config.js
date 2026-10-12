@@ -51,6 +51,7 @@ export function loadConfig(environment = process.env) {
   const orderServiceUrl = parseOrigin(environment.ORDER_SERVICE_URL || '');
   const prescriptionServiceUrl = parseOrigin(environment.PRESCRIPTION_SERVICE_URL || '');
   const customerServiceUrl = parseOrigin(environment.CUSTOMER_SERVICE_URL || '');
+  const websocketServiceUrl = parseOrigin(environment.WEBSOCKET_SERVICE_URL || '');
   const healthCheckEnabled = environment.HEALTH_CHECK_ENABLED !== 'false';
   const loggingEnabled = environment.LOGGING_ENABLED !== 'false';
   const healthCheckIntervalMinutes = Number(environment.HEALTH_CHECK_INTERVAL_MINUTES || 15);
@@ -81,6 +82,9 @@ export function loadConfig(environment = process.env) {
   }
   if (environment.CUSTOMER_SERVICE_URL && !customerServiceUrl) {
     errors.push('CUSTOMER_SERVICE_URL must be an HTTP(S) origin without credentials, path, query, or fragment.');
+  }
+  if (environment.WEBSOCKET_SERVICE_URL && !websocketServiceUrl) {
+    errors.push('WEBSOCKET_SERVICE_URL must be an HTTP(S) origin without credentials, path, query, or fragment.');
   }
   if (production && !environment.BACKEND_API_URL) errors.push('BACKEND_API_URL is required in production.');
   if ((inventoryServiceUrl || orderServiceUrl || prescriptionServiceUrl) && serviceAuthSecret.length < 32) {
@@ -122,6 +126,7 @@ export function loadConfig(environment = process.env) {
     orderServiceUrl,
     prescriptionServiceUrl,
     customerServiceUrl,
+    websocketServiceUrl,
     healthCheckEnabled,
     healthCheckIntervalMs: healthCheckIntervalMinutes * 60 * 1000,
     healthCheckTimeoutMs,
@@ -132,7 +137,8 @@ export function loadConfig(environment = process.env) {
       ...(inventoryServiceUrl ? [{ name: 'inventory-service', baseUrl: inventoryServiceUrl, healthPath: '/ready', critical: false }] : []),
       ...(orderServiceUrl ? [{ name: 'order-service', baseUrl: orderServiceUrl, healthPath: '/ready', critical: false }] : []),
       ...(prescriptionServiceUrl ? [{ name: 'prescription-service', baseUrl: prescriptionServiceUrl, healthPath: '/health', critical: false }] : []),
-      ...(customerServiceUrl ? [{ name: 'customer-service', baseUrl: customerServiceUrl, healthPath: '/ready', critical: false }] : [])
+      ...(customerServiceUrl ? [{ name: 'customer-service', baseUrl: customerServiceUrl, healthPath: '/ready', critical: false }] : []),
+      ...(websocketServiceUrl ? [{ name: 'websocket-service', baseUrl: websocketServiceUrl, healthPath: '/healthz', critical: false }] : [])
     ],
     serviceAuthSecret,
     gatewayAuthSecret,

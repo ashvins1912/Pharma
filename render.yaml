@@ -16,16 +16,24 @@ services:
 
   - type: web
     name: ashvin-pharma-websocket
-    env: node
+    runtime: node
+    rootDir: services/websocket-service
     region: oregon
     plan: free
-    buildCommand: npm install
-    startCommand: node backend/services/websocket/WebsocketServer.js
+    buildCommand: npm install --workspaces=false
+    startCommand: npm start
+    healthCheckPath: /healthz
     envVars:
       - key: NODE_ENV
         value: production
       - key: CORS_ALLOWED_ORIGINS
-        value: "*"
+        value: https://pharma-ui.onrender.com
+      - key: WS_HEARTBEAT_INTERVAL_MS
+        value: 25000
+      - key: WS_PING_INTERVAL_MS
+        value: 25000
+      - key: WS_PING_TIMEOUT_MS
+        value: 20000
 
   - type: web
     name: ashvin-pharma-prescription
