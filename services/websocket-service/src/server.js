@@ -110,7 +110,18 @@ io.use((socket, next) => {
 });
 
 io.on('connection', socket => {
-  console.info(JSON.stringify({ event: 'client_connected', socketId: socket.id, activeConnections: io.engine.clientsCount }));
+  const identity = socket.data.identity;
+  // Join the authenticated user's own notification room from the verified token.
+  // Do not depend on a browser-supplied user ID to receive private notifications.
+  socket.join(`bell_notifications_${identity.userId}`);
+  if (identity.tenantId) socket.join(`tenant_${identity.tenantId}`);
+  console.info(JSON.stringify({
+    event: 'client_connected',
+    socketId: socket.id,
+    activeConnections: io.engine.clientsCount,
+    ownNotificationRoomJoined: true,
+    tenantRoomJoined: Boolean(identity.tenantId)
+  }));
 
   socket.on('heartbeat', (ack) => {
     const response = { service: 'websocket-service', timestamp: new Date().toISOString() };
