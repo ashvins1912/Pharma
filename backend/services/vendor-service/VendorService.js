@@ -554,10 +554,12 @@ class VendorService {
         };
 
         // 3. Create Tenant Membership
+        // TenantMembership uses Mongoose's default ObjectId _id. Do not pass
+        // a "mem_*" string as _id: Mongoose attempts to cast it to ObjectId and
+        // throws a CastError during onboarding completion. Keep the response ID
+        // as a separate correlation ID; MongoDB generates the persisted _id.
         const membershipId = `mem_${crypto.randomUUID()}`;
         const membershipDoc = {
-            _id: membershipId,
-            id: membershipId,
             userId,
             tenantId,
             branchId: null,
