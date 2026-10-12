@@ -1,11 +1,13 @@
 // WhatsApp notification service abstraction & device session manager
 // Provides idempotent messaging tracking, device pairing QR generation, and delivery status updates
 import path from 'node:path';
+import { createHash, randomInt } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import { getIsConnected, getTransactionsSupported } from './db.js';
 import { cacheService } from '../services/cache/CacheService.js';
 import WhatsAppMessage from '../models/WhatsAppMessage.js';
 import PaymentReminder from '../models/PaymentReminder.js';
+import Order from '../models/Order.js';
 import { createRiderDeliveryActionToken } from '../services/payment/SignedPaymentActionService.js';
 import { buildDeliveryActionMenu, getDeliveryActionFromListReply } from '../services/delivery/DeliveryWhatsAppMenu.js';
 
@@ -284,7 +286,7 @@ export const normalizeOrderStatus = (rawStatus) => {
     return rawStatus;
 };
 
-export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActionLinks = [] } = {}) => {
+export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActionLinks = [], deliveryOtp = null } = {}) => {
     const normalizedStatus = normalizeOrderStatus(status);
     const orderId = order?._id?.toString() || order?.id?.toString() || 'UNKNOWN';
     const shortId = orderId.slice(-6).toUpperCase();
@@ -333,6 +335,8 @@ export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActi
         return [
             `🚚 YOUR ORDER IS OUT FOR DELIVERY — #${shortId}`,
             `Status: Out for Delivery`,
+            deliveryOtp ? `🔐 Customer delivery verification code: ${deliveryOtp}` : null,
+            deliveryOtp ? 'Share this 4-digit code with your delivery rider in person. Never share it before the rider arrives.' : null,
             `Rider: ${order.rider?.riderName || 'Assigned Rider'}`,
             `Rider contact: ${order.rider?.riderMobile || 'Not provided'}`,
             `Delivery address: ${getCompleteAddress(order)}`,
@@ -653,6 +657,29 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
                 : [])
         ];
     const records = [];
+    let customerDeliveryOtp = null;
+    if (normalizedStatus === 'Dispatched' && getIsConnected() && customerPhone) {
+        const customerRecipient = normalizeWhatsAppNumber(customerPhone);
+        const customerDedupeKey = `${orderId}:${normalizedStatus}:customer:${customerRecipient || 'missing'}`;
+        if (!sentNotifications.has(customerDedupeKey)) {
+            const existingMessage = await WhatsAppMessage.findOne({ dedupeKey: customerDedupeKey, expiresAt: { $gt: new Date() } });
+            if (existingMessage) {
+                sentNotifications.set(customerDedupeKey, existingMessage.toObject());
+            } else {
+                const otpOrder = await Order.findById(orderId).select('+deliveryVerification.otpHash +deliveryVerification.expiresAt +deliveryVerification.attempts');
+                if (otpOrder) {
+                    customerDeliveryOtp = String(randomInt(0, 10000)).padStart(4, '0');
+                    otpOrder.deliveryVerification = {
+                        otpHash: createHash('sha256').update(`${orderId}:${customerDeliveryOtp}`).digest('hex'),
+                        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                        attempts: 0,
+                        verifiedAt: null
+                    };
+                    await otpOrder.save();
+                }
+            }
+        }
+    }
 
     for (const { audience, phone } of recipients) {
         const recipient = normalizeWhatsAppNumber(phone);
@@ -684,7 +711,8 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
             messageBody: buildWhatsAppMessageBody(order, normalizedStatus, audience, {
                 deliveryActionLinks: audience === 'rider' && ['Assigned', 'Dispatched'].includes(normalizedStatus)
                     ? createDeliveryActionLinks(order, normalizedStatus)
-                    : []
+                    : [],
+                deliveryOtp: audience === 'customer' ? customerDeliveryOtp : null
             }),
             deliveryMenu: audience === 'rider' && ['Assigned', 'Dispatched'].includes(normalizedStatus)
                 ? createDeliveryActionMenu(order, normalizedStatus)
