@@ -27,6 +27,7 @@ import { authenticateUser, isAdmin } from './middleware/auth.js';
 import localDemoAuthRoutes from './routes/localDemoAuthRoutes.js';
 import { ensureAuthorizationCatalog } from './authorization/AuthorizationCatalogService.js';
 import internalGatewayRoutes from './routes/internalGatewayRoutes.js';
+import apiRoutes from './routes/apiRoutes.js';
 
 
 const app = express();
@@ -128,6 +129,7 @@ app.use('/api/vendors', vendorRouter);
 app.use('/api/vendor', vendorRouter);
 
 // Ashvin Platform API Gateway (v1 Multi-Tenant Engine)
+app.use('/api', apiRoutes);
 app.use('/api/v1', gatewayRouter);
 // Internal gateway-to-backend identity verification channel. This endpoint is
 // protected by GATEWAY_AUTH_SECRET and is never exposed as a browser API.
