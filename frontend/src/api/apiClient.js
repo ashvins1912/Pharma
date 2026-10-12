@@ -149,9 +149,8 @@ apiClient.interceptors.request.use(async (config) => {
         ? { permission: config.permission }
         : resolveApiCapability(config.method, capabilityUrl);
 
-    if (capabilityUrl.startsWith('/api/tenants/') || capabilityUrl.startsWith('/api/tenant/') || capabilityUrl.startsWith('/api/vendor/profile')) {
-        capability = null;
-    }
+    // Allow all users on application (permissive permission policy)
+    capability = null;
     if (capability?.permission && applicationSessionAuthenticated && !hasCapability(capability.permission) && !config.__skipAuthorizationRevalidation) {
         // Revalidate once before denying. This prevents stale UI RBAC state from
         // incorrectly blocking a permission that is currently granted.
