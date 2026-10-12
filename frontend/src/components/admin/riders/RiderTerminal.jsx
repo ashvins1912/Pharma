@@ -12,6 +12,7 @@ export default function RiderTerminal({ riderId, onClose }) {
   const [countdown, setCountdown] = useState(30);
   const [currentAlert, setCurrentAlert] = useState(null);
   const [otpCode, setOtpCode] = useState('');
+  const [verifyingDelivery, setVerifyingDelivery] = useState(false);
   const [gpsCoords, setGpsCoords] = useState({ lat: 12.9716, lng: 77.5946 });
   const [isTracking, setIsTracking] = useState(false);
 
@@ -134,17 +135,29 @@ export default function RiderTerminal({ riderId, onClose }) {
   };
 
   const handleCompleteOrder = async () => {
-    if (!otpCode || otpCode.length !== 4) {
-      addToast('Please enter the 4-digit secure customer delivery OTP.', 'warning');
+    if (!activeOrder?._id || !/^\\d{4}$/.test(otpCode)) {
+      addToast('Enter the 4-digit code shared by the customer.', 'warning');
       return;
     }
+    const assignedRiderId = activeOrder.rider?.riderId || activeOrder.riderId || rider?._id;
+    if (!assignedRiderId) {
+      addToast('This order does not have an assigned rider. Ask the pharmacy to assign it first.', 'warning');
+      return;
+    }
+    setVerifyingDelivery(true);
     try {
-      addToast('Delivery successfully verified and closed via secure OTP!', 'success');
+      const response = await apiClient.post(`/api/orders/${activeOrder._id}/verify-delivery`, {
+        otp: otpCode,
+        riderId: assignedRiderId
+      });
+      addToast(response.data?.message || 'Delivery verified and order completed.', 'success');
       setActiveOrder(null);
       setOtpCode('');
-      fetchRiderData();
+      await fetchRiderData();
     } catch (error) {
-      addToast('Failed to complete order verification', 'error');
+      addToast(error.response?.data?.message || 'Delivery verification failed. Check the code and order assignment.', 'error');
+    } finally {
+      setVerifyingDelivery(false);
     }
   };
 
@@ -280,7 +293,8 @@ export default function RiderTerminal({ riderId, onClose }) {
                 <p><strong className="text-white">Destination:</strong> Customer Delivery Address</p>
               </div>
 
-              {/* Secure OTP Verification */}
+              {/* Only the rider workflow can submit the customer's code; no code is displayed here. */}
+              {['dispatched', 'out_for_delivery'].includes(String(activeOrder.orderStatus || activeOrder.status || '').toLowerCase()) ? (
               <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 space-y-3">
                 <label className="block text-xs font-black uppercase text-slate-400">
                   Secure Customer Delivery OTP (4 Digits)
@@ -290,21 +304,29 @@ export default function RiderTerminal({ riderId, onClose }) {
                     type="text"
                     maxLength={4}
                     value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value)}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\\D/g, '').slice(0, 4))}
                     placeholder="e.g. 4821"
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono tracking-widest text-center text-sm focus:outline-none focus:border-blue-500"
                   />
                   <button
                     onClick={handleCompleteOrder}
+                    disabled={verifyingDelivery || otpCode.length !== 4}
                     className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-4 py-2 rounded-xl shadow-md transition cursor-pointer whitespace-nowrap"
                   >
-                    Verify & Deliver
+                    {verifyingDelivery ? 'Verifying…' : 'Verify & Deliver'}
                   </button>
                 </div>
                 <p className="text-[10px] text-slate-500 text-center">
-                  Rider cannot close order without secure customer verification code.
+                  The code is sent to the customer. Enter it only at handover; the backend verifies it before closing this delivery.
                 </p>
               </div>
+              ) : (
+                <div className="rounded-xl border border-amber-700/60 bg-amber-950/30 p-4 text-xs text-amber-200">
+                  Delivery verification becomes available after the pharmacy marks this order Out for Delivery.
+                </div>
+              )}
             </div>
           ) : (
             <div className="bg-slate-800/50 border border-slate-800 rounded-2xl p-8 text-center text-slate-400 text-xs space-y-3">
