@@ -18,7 +18,7 @@
     "dev:backend": "npm --workspace backend run dev",
     "build": "npm --workspace frontend run build",
     "lint": "npm --workspace frontend run lint",
-    "test": "npm --workspace api-gateway test && npm --workspace backend test && npm --workspace services/inventory-service test && npm --workspace services/order-service test",
+    "test": "npm --workspace api-gateway test && npm --workspace backend test && npm --workspace services/inventory-service test && npm --workspace services/order-service test && npm --workspace services/websocket-service test",
     "admin:promote": "npm --workspace backend run admin:promote",
     "admin:bootstrap": "node scripts/bootstrap-super-admin.mjs",
     "tenant:create": "node scripts/create-tenant.mjs"
