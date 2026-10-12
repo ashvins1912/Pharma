@@ -3,6 +3,23 @@ import { randomUUID } from 'node:crypto';
 const RETRY_DELAY_MS = 250;
 const MAX_ATTEMPTS = 2;
 
+// Health endpoints may return service-specific operational counters. Keep only
+// this explicit allowlist so arbitrary health payloads/secrets never reach the UI.
+const TELEMETRY_FIELDS = new Set([
+  'service', 'status', 'version', 'timestamp', 'uptimeSeconds',
+  'activeConnections', 'heartbeatIntervalMs', 'lastHeartbeatAt',
+  'authConfigured', 'database', 'redis', 'cacheStatus', 'connected'
+]);
+
+function safeTelemetry(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return {};
+  return Object.fromEntries(Object.entries(payload).filter(([key, value]) =>
+    TELEMETRY_FIELDS.has(key)
+    && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value === null)
+    && (typeof value !== 'string' || value.length <= 160)
+  ));
+}
+
 const safeFailure = (error, httpStatus = null) => {
   const timedOut = error?.name === 'TimeoutError' || error?.name === 'AbortError' || error?.code === 'ETIMEDOUT';
   if (timedOut) return { status: 'TIMEOUT', errorType: 'TIMEOUT', errorMessage: 'Health request timed out.', httpStatus };
@@ -54,8 +71,18 @@ export function createHealthMonitor({
           signal: controller.signal
         });
         if (response.ok) {
-          void response.body?.cancel?.().catch?.(() => {});
-          result = { status: 'HEALTHY', httpStatus: response.status, errorType: null, errorMessage: null };
+          let telemetry = {};
+          if (typeof response.json === 'function') {
+            try {
+              telemetry = safeTelemetry(await response.json());
+            } catch {
+              // A health endpoint can be healthy even if its optional metrics body is malformed.
+              void response.body?.cancel?.().catch?.(() => {});
+            }
+          } else {
+            void response.body?.cancel?.().catch?.(() => {});
+          }
+          result = { status: 'HEALTHY', httpStatus: response.status, errorType: null, errorMessage: null, telemetry };
           break;
         }
         void response.body?.cancel?.().catch?.(() => {});
@@ -80,7 +107,8 @@ export function createHealthMonitor({
       responseTimeMs: Math.max(0, Date.now() - startedAt),
       httpStatus: result.httpStatus,
       errorType: result.errorType,
-      errorMessage: result.errorMessage
+      errorMessage: result.errorMessage,
+      telemetry: result.telemetry || {}
     };
     statuses.set(service.name, state);
     const context = { event: 'service_health_check', requestId, service: service.name, status: state.status, responseTimeMs: state.responseTimeMs, httpStatus: state.httpStatus };
