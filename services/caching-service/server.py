@@ -16,6 +16,7 @@ PORT = int(os.getenv("PORT", "8080"))
 CACHE_SERVICE_TOKEN = os.getenv("CACHE_SERVICE_TOKEN", "")
 EVENT_STREAM = "pharma:shared-events"
 MAX_STREAM_LENGTH = int(os.getenv("CACHE_EVENT_STREAM_MAXLEN", "10000"))
+EVENT_CURSOR_KEY = "pharma:shared-events:websocket-cursor"
 redis_client: Optional[aioredis.Redis] = None
 
 
@@ -155,8 +156,44 @@ async def publish_event(payload: EventPayload,
         raise HTTPException(status_code=503, detail="Event publish failed")
 
 
+@app.get("/v1/events/cursor")
+async def get_event_cursor(x_cache_service_token: Optional[str] = Header(default=None)):
+    require_internal_token(x_cache_service_token)
+    try:
+        redis = get_redis()
+        cursor = await redis.get(EVENT_CURSOR_KEY)
+        if cursor:
+            return {"cursor": cursor}
+        latest = await redis.xrevrange(EVENT_STREAM, count=1)
+        cursor = latest[0][0] if latest else "0-0"
+        await redis.set(EVENT_CURSOR_KEY, cursor)
+        return {"cursor": cursor}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Event cursor initialization failed")
+        raise HTTPException(status_code=503, detail="Event cursor initialization failed")
+
+
+@app.post("/v1/events/ack")
+async def acknowledge_events(payload: dict,
+                             x_cache_service_token: Optional[str] = Header(default=None)):
+    require_internal_token(x_cache_service_token)
+    cursor = payload.get("cursor")
+    if not isinstance(cursor, str) or not cursor or len(cursor) > 64:
+        raise HTTPException(status_code=400, detail="A valid stream cursor is required")
+    try:
+        await get_redis().set(EVENT_CURSOR_KEY, cursor)
+        return {"status": "acknowledged", "cursor": cursor}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Event cursor acknowledgement failed")
+        raise HTTPException(status_code=503, detail="Event cursor acknowledgement failed")
+
+
 @app.get("/v1/events/poll")
-async def poll_events(cursor: str = Query(default="$", max_length=64),
+async def poll_events(cursor: str = Query(default="0-0", max_length=64),
                       blockMs: int = Query(default=5000, ge=1000, le=10000),
                       x_cache_service_token: Optional[str] = Header(default=None)):
     require_internal_token(x_cache_service_token)
