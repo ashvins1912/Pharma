@@ -32,6 +32,11 @@ export const API_CAPABILITIES = [
     permission: 'orders.read'
   },
   {
+    method: 'POST',
+    pattern: /^\/api\/orders\/[^/]+\/verify-delivery$/,
+    permission: 'delivery.manage'
+  },
+  {
     method: 'PUT',
     pattern: /^\/api\/orders\/[^/]+\/review$/,
     permission: 'prescription.review'

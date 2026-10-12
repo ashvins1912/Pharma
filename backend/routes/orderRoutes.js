@@ -1,4 +1,5 @@
 import express from 'express';
+import { scryptSync, timingSafeEqual } from 'node:crypto';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
@@ -1335,6 +1336,99 @@ router.post('/:id/rating', authenticateUser, async (req, res) => {
     } catch (error) {
         console.error('Customer rating save failed:', error);
         res.status(getErrorStatus(error)).json({ message: error.message || 'Could not save your rating.' });
+    }
+});
+
+
+// Rider-only proof of delivery. Customers may receive the OTP, but can never submit it
+// or complete their own delivery from the customer tracking screen.
+router.post('/:id/verify-delivery', authenticateUser, async (req, res) => {
+    const role = String(req.user?.app_metadata?.role || req.user?.role || 'customer');
+    const staffRoles = new Set(['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER']);
+    try {
+        if (!getIsConnected() || !mongoose.isValidObjectId(req.params.id)) {
+            return res.status(503).json({ message: 'Delivery verification is temporarily unavailable.' });
+        }
+        const order = await Order.findById(req.params.id).select('+deliveryVerification.otpHash +deliveryVerification.expiresAt +deliveryVerification.attempts +deliveryVerification.verifiedAt');
+        if (!order) return res.status(404).json({ message: 'Order not found.' });
+        if (order.orderStatus !== 'Dispatched') {
+            return res.status(409).json({ message: 'The order must be out for delivery before it can be completed.' });
+        }
+
+        const rider = await Rider.findOne({ supabaseId: req.user.sub, enabled: true }).lean();
+        if (rider) {
+            if (String(order.rider?.riderId || order.riderId || '') !== String(rider._id)) {
+                return res.status(403).json({ message: 'This delivery is not assigned to your rider account.' });
+            }
+        } else {
+            if (!staffRoles.has(role)) return res.status(403).json({ message: 'Only the assigned rider can verify delivery.' });
+            const requestedRiderId = String(req.body?.riderId || '');
+            if (!requestedRiderId || requestedRiderId !== String(order.rider?.riderId || order.riderId || '')) {
+                return res.status(403).json({ message: 'Select the rider assigned to this order before verifying delivery.' });
+            }
+            const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
+            if (!['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)
+                && tenantId && order.tenantId && String(tenantId) !== String(order.tenantId)) {
+                return res.status(403).json({ message: 'This order belongs to another pharmacy tenant.' });
+            }
+        }
+
+        const code = String(req.body?.otp || '').trim();
+        if (!/^\d{4}$/.test(code)) return res.status(400).json({ message: 'Enter the 4-digit code shared by the customer.' });
+        const verification = order.deliveryVerification || {};
+        if (!verification.otpHash || !verification.expiresAt || new Date(verification.expiresAt) <= new Date()) {
+            return res.status(409).json({ message: 'The delivery code is missing or expired. Ask the pharmacy to resend the out-for-delivery notification.' });
+        }
+        if (Number(verification.attempts || 0) >= 5) {
+            return res.status(429).json({ message: 'Too many incorrect attempts. Ask the pharmacy to reissue the delivery code.' });
+        }
+        const candidateHash = scryptSync(code, String(order._id), 32).toString('hex');
+        const storedHash = String(verification.otpHash);
+        const matches = candidateHash.length === storedHash.length
+            && timingSafeEqual(Buffer.from(candidateHash, 'hex'), Buffer.from(storedHash, 'hex'));
+        if (!matches) {
+            await Order.updateOne({
+                _id: order._id,
+                orderStatus: 'Dispatched',
+                'deliveryVerification.verifiedAt': null,
+                'deliveryVerification.attempts': { $lt: 5 }
+            }, { $inc: { 'deliveryVerification.attempts': 1 } });
+            return res.status(400).json({ message: 'The delivery code is incorrect. Check the customer’s code and try again.' });
+        }
+
+        const claimed = await Order.findOneAndUpdate({
+            _id: order._id,
+            orderStatus: 'Dispatched',
+            'deliveryVerification.otpHash': storedHash,
+            'deliveryVerification.verifiedAt': null,
+            'deliveryVerification.expiresAt': { $gt: new Date() },
+            'deliveryVerification.attempts': { $lt: 5 }
+        }, { $set: { 'deliveryVerification.verifiedAt': new Date() } }, { new: true });
+        if (!claimed) return res.status(409).json({ message: 'This delivery code has already been used, expired, or the order has changed.' });
+
+        let deliveredOrder;
+        try {
+            deliveredOrder = await dataStore.transitionOrderStatus(
+                String(order._id),
+                'Delivered',
+                rider?.name || req.user.user_metadata?.name || req.user.email || 'Assigned Rider',
+                null,
+                null,
+                true
+            );
+        } catch (error) {
+            await Order.updateOne({ _id: order._id, orderStatus: 'Dispatched' }, { $set: { 'deliveryVerification.verifiedAt': null } });
+            throw error;
+        }
+        try {
+            await sendCustomWhatsAppAlert(deliveredOrder, 'Delivered');
+        } catch (notificationError) {
+            console.warn('[WhatsApp] Delivery-complete notification failed:', notificationError?.message);
+        }
+        return res.json({ success: true, message: 'Delivery verified and order completed.', order: deliveredOrder });
+    } catch (error) {
+        console.error('Proof of delivery verification failed:', error);
+        return res.status(getErrorStatus(error)).json({ message: error.message || 'Could not verify delivery.' });
     }
 });
 

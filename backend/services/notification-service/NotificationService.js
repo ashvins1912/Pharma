@@ -134,6 +134,31 @@ export class NotificationService {
                 status,
                 channels: ['IN_APP', 'WHATSAPP']
             });
+            if (['delivered', 'order delivered'].includes(String(status).trim().toLowerCase())) {
+                this.send({
+                    tenantId: evt.tenantId,
+                    branchId: evt.branchId,
+                    recipientUserId: this._recipientUserId(evt),
+                    title: 'How was your delivery?',
+                    body: 'Your order has been delivered. Tap to rate your experience.',
+                    eventType: 'ORDER_DELIVERED_RATING_PROMPT',
+                    orderId: evt.entityId,
+                    status: 'Delivered',
+                    channels: ['IN_APP']
+                });
+            } else if (['dispatched', 'out_for_delivery'].includes(String(status).trim().toLowerCase())) {
+                this.send({
+                    tenantId: evt.tenantId,
+                    branchId: evt.branchId,
+                    recipientUserId: this._recipientUserId(evt),
+                    title: 'Order out for delivery',
+                    body: 'A 4-digit delivery code is required at handover. Check WhatsApp for the code, and contact the pharmacy if it has not arrived.',
+                    eventType: 'ORDER_OUT_FOR_DELIVERY_OTP_SENT',
+                    orderId: evt.entityId,
+                    status: 'Dispatched',
+                    channels: ['IN_APP']
+                });
+            }
         });
 
         domainEvents.on('ORDER_ACCEPTED', (evt) => {
@@ -331,7 +356,7 @@ export class NotificationService {
             if (channels.includes('WHATSAPP')) {
                 void cacheService.publishEvent('whatsapp_notification', { ...eventPayload, deliveryState: 'REQUESTED' }, target);
             }
-            if (orderId && ['ORDER_CREATED', 'ORDER_ACCEPTED', 'ORDER_STATUS_CHANGED', 'RIDER_ASSIGNED', 'DELIVERY_STATUS_CHANGED', 'ORDER_DELIVERED', 'PROPOSAL_APPROVED'].includes(eventType)) {
+            if (orderId && ['ORDER_CREATED', 'ORDER_ACCEPTED', 'ORDER_STATUS_CHANGED', 'RIDER_ASSIGNED', 'DELIVERY_STATUS_CHANGED', 'ORDER_DELIVERED', 'ORDER_DELIVERED_RATING_PROMPT', 'ORDER_OUT_FOR_DELIVERY_OTP_SENT', 'PROPOSAL_APPROVED'].includes(eventType)) {
                 void cacheService.publishEvent('order_status_changed', eventPayload, target);
             }
             if (medicineRequestId || eventType.startsWith('MEDICINE_REQUEST') || eventType.startsWith('PROPOSAL_') || eventType.startsWith('REQUEST_')) {

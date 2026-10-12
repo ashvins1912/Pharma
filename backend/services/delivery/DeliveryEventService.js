@@ -68,7 +68,7 @@ export const processDeliveryEvent = async (event, { requestId = null } = {}) => 
                 result = { duplicate: true, result: alreadyProcessed.result };
                 return;
             }
-            const order = await Order.findById(event.orderId).session(session);
+            const order = await Order.findById(event.orderId).select('+deliveryVerification.verifiedAt').session(session);
             if (!order) {
                 const error = new Error('Order not found.');
                 error.statusCode = 404;
@@ -80,6 +80,14 @@ export const processDeliveryEvent = async (event, { requestId = null } = {}) => 
                 const error = new Error('Delivery event does not match the current order state.');
                 error.statusCode = 409;
                 error.code = transition.code;
+                throw error;
+            }
+            if (transition.nextOrderStatus === 'Delivered'
+                && String(order.orderStatus || '').toLowerCase() !== 'delivered'
+                && !order.deliveryVerification?.verifiedAt) {
+                const error = new Error('A valid customer delivery OTP is required before completing this order.');
+                error.statusCode = 409;
+                error.code = 'DELIVERY_OTP_REQUIRED';
                 throw error;
             }
             const now = new Date();

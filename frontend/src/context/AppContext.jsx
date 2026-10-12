@@ -663,7 +663,9 @@ export function AppProvider({ children }) {
         'ORDER_STATUS_CHANGED',
         'RIDER_ASSIGNED',
         'DELIVERY_STATUS_CHANGED',
-        'ORDER_DELIVERED'
+        'ORDER_DELIVERED',
+        'ORDER_DELIVERED_RATING_PROMPT',
+        'ORDER_OUT_FOR_DELIVERY_OTP_SENT'
       ]);
       if (payload?.orderId && orderEventTypes.has(String(payload.eventType || '').toUpperCase())) {
         window.dispatchEvent(new CustomEvent('pharma:order-status-changed', {
