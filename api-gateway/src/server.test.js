@@ -60,6 +60,23 @@ test('admin medicine request proposal requires the proposal capability', () => {
   }, 'medicine_requests.proposal'), false);
 });
 
+test('customer person DELETE is registered as profile.write without opening other customer DELETE routes', () => {
+  const personPath = '/api/v1/customers/persons/PUID-0FDB8DDF449EF67E4C371517';
+  assert.equal(resolveGatewayCapability('DELETE', personPath), 'profile.write');
+  assert.equal(isGatewayPermissionAllowed({
+    role: 'customer',
+    permissions: ['profile.write']
+  }, 'profile.write'), true);
+  assert.equal(isGatewayPermissionAllowed({
+    role: 'customer',
+    permissions: ['profile.read']
+  }, 'profile.write'), false);
+
+  // The registration is intentionally narrow: other customer DELETE endpoints
+  // stay unregistered until they receive their own explicit authorization policy.
+  assert.equal(resolveGatewayCapability('DELETE', '/api/v1/customers/me'), null);
+});
+
 test('explicit revocations override Super Admin wildcard grants', () => {
   const user = {
     role: 'SUPER_ADMIN',
