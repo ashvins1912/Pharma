@@ -1855,6 +1855,40 @@ export const dataStore = {
         };
     },
 
+    async getCancelledOrdersPage(page = 1, limit = 10) {
+        const filter = {
+            $or: [
+                { orderStatus: { $in: ['Cancelled', 'cancelled'] } },
+                { status: { $in: ['cancelled', 'Cancelled'] } }
+            ]
+        };
+        const safeLimit = Math.min(50, Math.max(1, Number(limit) || 10));
+        const requestedPage = Math.max(1, Number(page) || 1);
+        if (getIsConnected()) {
+            const total = await Order.countDocuments(filter);
+            const safePage = Math.min(requestedPage, Math.max(Math.ceil(total / safeLimit), 1));
+            const items = await Order.find(filter)
+                .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
+                .skip((safePage - 1) * safeLimit)
+                .limit(safeLimit)
+                .lean();
+            return { items, total, page: safePage };
+        }
+        const cancelled = inMemoryOrders
+            .filter(order => ['cancelled', 'Cancelled'].includes(String(order.orderStatus || order.status || '')))
+            .sort((a, b) => {
+                const updatedAtDelta = new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
+                return updatedAtDelta || String(b._id || '').localeCompare(String(a._id || ''));
+            });
+        const total = cancelled.length;
+        const safePage = Math.min(requestedPage, Math.max(Math.ceil(total / safeLimit), 1));
+        return {
+            items: cancelled.slice((safePage - 1) * safeLimit, safePage * safeLimit),
+            total,
+            page: safePage
+        };
+    },
+
     async getFulfillmentSnapshot(page = 1, limit = 10) {
         const activeFilter = { orderStatus: { $nin: ['Delivered', 'delivered'] } };
         const parsedLimit = Math.min(50, Math.max(1, Number(limit) || 10));
