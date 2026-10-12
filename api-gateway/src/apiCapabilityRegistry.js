@@ -131,6 +131,11 @@ const PUBLIC_PATHS = [
   ['GET', /^\/api\/medicines\/discovery$/],
   ['GET', /^\/api\/public\//], ['POST', /^\/api\/public\//],
   ['GET', /^\/api\/vendors\//], ['POST', /^\/api\/vendors\//],
+  // Token-based vendor onboarding is a public invitation flow. Only the
+  // high-entropy token can authorize these two operations; administration
+  // endpoints remain session- and capability-protected.
+  ['GET', /^\/api\/v1\/vendor\/onboarding\/[^/]+$/],
+  ['POST', /^\/api\/v1\/vendor\/onboarding\/[^/]+\/complete$/],
   ['GET', /^\/api\/vendor\//], ['POST', /^\/api\/vendor\//]
 ];
 
