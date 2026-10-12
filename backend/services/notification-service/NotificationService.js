@@ -333,14 +333,28 @@ export class NotificationService {
         return notification;
     }
 
-    getUserNotifications(userId) {
-        return this.notifications.filter(n => !n.recipientUserId || n.recipientUserId === userId);
+    getUserNotifications(userId, { tenantId = null, branchId = null, isSuperAdmin = false } = {}) {
+        return this.notifications.filter(notification => {
+            if (!isSuperAdmin && notification.recipientUserId && notification.recipientUserId !== userId) return false;
+            if (!isSuperAdmin && notification.tenantId && notification.tenantId !== tenantId) return false;
+            if (!isSuperAdmin && notification.branchId && notification.branchId !== branchId) return false;
+            // Untargeted platform notifications must not leak to ordinary tenant users.
+            if (!isSuperAdmin && !notification.recipientUserId && !notification.tenantId) return false;
+            return true;
+        });
     }
 
-    markAsRead(notificationId, userId) {
-        const notif = this.notifications.find(n => n.id === notificationId && (!n.recipientUserId || n.recipientUserId === userId));
+    markAsRead(notificationId, userId, { tenantId = null, branchId = null, isSuperAdmin = false } = {}) {
+        const notif = this.notifications.find(notification => {
+            if (notification.id !== notificationId) return false;
+            if (!isSuperAdmin && notification.recipientUserId && notification.recipientUserId !== userId) return false;
+            if (!isSuperAdmin && notification.tenantId && notification.tenantId !== tenantId) return false;
+            if (!isSuperAdmin && notification.branchId && notification.branchId !== branchId) return false;
+            if (!isSuperAdmin && !notification.recipientUserId && !notification.tenantId) return false;
+            return true;
+        });
         if (notif) notif.read = true;
-        return notif;
+        return notif || null;
     }
 }
 
