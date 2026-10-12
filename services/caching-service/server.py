@@ -56,6 +56,7 @@ class EventPayload(BaseModel):
     payload: Any
     userId: Optional[str] = Field(default=None, max_length=128)
     tenantId: Optional[str] = Field(default=None, max_length=128)
+    riderId: Optional[str] = Field(default=None, max_length=128)
 
 
 def require_internal_token(x_cache_service_token: Optional[str]) -> None:
@@ -145,6 +146,7 @@ async def publish_event(payload: EventPayload,
             "payload": payload.payload,
             "userId": payload.userId,
             "tenantId": payload.tenantId,
+            "riderId": payload.riderId,
         }
         stream_id = await get_redis().xadd(
             EVENT_STREAM, {"event": json.dumps(event, separators=(",", ":"), ensure_ascii=False)},
