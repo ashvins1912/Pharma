@@ -38,7 +38,11 @@ export function useOrderDashboard() {
 
     useEffect(() => {
         if (!authLoading && hasPermission('orders.manage')) loadOrders();
-    }, [loadOrders]);
+        if (typeof window === 'undefined') return undefined;
+        const refreshOrders = () => { if (hasPermission('orders.manage')) void loadOrders(); };
+        window.addEventListener('pharma:order-status-changed', refreshOrders);
+        return () => window.removeEventListener('pharma:order-status-changed', refreshOrders);
+    }, [loadOrders, authLoading, hasPermission]);
 
     // Feature 2: Trigger automated assignment engine pipeline
     const autoAssignOrder = async (orderId) => {
