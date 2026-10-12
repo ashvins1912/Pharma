@@ -475,6 +475,9 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         const contentType = String(
           res.headers?.['content-type'] || res.data?.type || ''
         ).toLowerCase();
+        if (!contentType.includes('application/pdf') && !contentType.startsWith('image/')) {
+          throw new Error('The authenticated endpoint did not return a PDF or image prescription document.');
+        }
 
         console.log('[PrescriptionLifecycle] Response received:', {
           status: res.status,
