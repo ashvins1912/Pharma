@@ -514,7 +514,10 @@ export function AppProvider({ children }) {
         eventType: item.eventType || 'NOTIFICATION_CREATED',
         orderId: item.orderId || null,
         requestId: item.medicineRequestId || null,
-        actionType: item.medicineRequestId ? 'VIEW_PROPOSAL' : undefined,
+        promotionId: item.promotionId || null,
+        pharmacyName: item.pharmacyName || null,
+        actionUrl: typeof item.actionUrl === 'string' && item.actionUrl.startsWith('/') ? item.actionUrl : null,
+        actionType: item.promotionId ? 'VIEW_PHARMACY_CATALOG' : item.medicineRequestId ? 'VIEW_PROPOSAL' : undefined,
         channels: Array.isArray(item.channels) ? item.channels : [],
         whatsappDeliveryState: item.deliveryState || null
       })).filter(item => item.id);
