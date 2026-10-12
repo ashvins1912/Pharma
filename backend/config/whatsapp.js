@@ -3,12 +3,35 @@
 import path from 'node:path';
 import { rm } from 'node:fs/promises';
 import { getIsConnected, getTransactionsSupported } from './db.js';
+import { cacheService } from '../services/cache/CacheService.js';
 import WhatsAppMessage from '../models/WhatsAppMessage.js';
 import PaymentReminder from '../models/PaymentReminder.js';
 import { createRiderDeliveryActionToken } from '../services/payment/SignedPaymentActionService.js';
 import { buildDeliveryActionMenu, getDeliveryActionFromListReply } from '../services/delivery/DeliveryWhatsAppMenu.js';
 
 const sentNotifications = new Map();
+
+const publishWhatsAppRealtimeStatus = (record, { userId = null, tenantId = null, orderId = null, medicineRequestId = null, audience = 'customer' } = {}) => {
+    if (!userId && !tenantId) return;
+    const deliveryState = String(record?.status || 'UNKNOWN').toUpperCase();
+    const referenceId = String(orderId || medicineRequestId || record?.orderId || 'unknown');
+    void cacheService.publishEvent('whatsapp_notification', {
+        id: `whatsapp-status:${referenceId}:${record?.eventType || 'update'}:${audience}`,
+        title: deliveryState === 'SENT' ? 'WhatsApp notification sent'
+            : deliveryState === 'FAILED' || deliveryState === 'MISSING_RECIPIENT' ? 'WhatsApp notification failed'
+                : 'WhatsApp notification update',
+        body: `WhatsApp ${record?.eventType || 'notification'} status: ${deliveryState}.`,
+        eventType: 'WHATSAPP_DELIVERY_STATUS',
+        deliveryState,
+        orderId: orderId ? String(orderId) : null,
+        medicineRequestId: medicineRequestId ? String(medicineRequestId) : null,
+        channels: ['WHATSAPP'],
+        source: 'whatsapp-service',
+        tenantId,
+        audience
+    }, { userId: userId ? String(userId) : null, tenantId: tenantId ? String(tenantId) : null })
+        .catch(error => console.warn('[WhatsApp] Failed to publish realtime delivery status:', error?.message));
+};
 const authDirectory = process.env.WHATSAPP_AUTH_DIR || path.resolve('data/whatsapp-auth');
 const qrLifetimeMs = 20_000;
 const messageRetentionMs = 24 * 60 * 60 * 1000;
@@ -399,6 +422,13 @@ export const buildWhatsAppMedicineRequestBody = (request, eventType) => {
                 'Your proposal has been approved and converted to an active pharmacy order for fulfillment! Thank you for choosing Ashvin Pharmacy.'
             ].join('\n');
 
+        case 'MedicineRequestCancelled':
+            return [
+                `🚫 MEDICINE REQUEST CANCELLED — #${reqNum}`,
+                `Medicine: ${items}`,
+                'Your medicine request was cancelled. If you still need this medicine, please create a new request in Ashvin Pharmacy.'
+            ].join('\n');
+
         case 'MedicineRequestRejected':
         case 'CUSTOMER_REJECTED':
         case 'PHARMACY_REJECTED':
@@ -672,6 +702,17 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
         sentNotifications.set(dedupeKey, record);
         records.push(record);
         await transmitWhatsAppMessage(record, mongoRecord);
+        const targetUserId = audience === 'rider'
+            ? (order.rider?.userId || order.rider?.riderId || null)
+            : audience === 'customer'
+                ? (order.userId || order.customerUserId || order.customerId || null)
+                : null;
+        publishWhatsAppRealtimeStatus(record, {
+            userId: targetUserId,
+            tenantId: order.tenantId || null,
+            orderId,
+            audience
+        });
 
         if (normalizedStatus === 'Delivered') {
             if (record.status === 'SENT' || record.status === 'MISSING_RECIPIENT') {
@@ -792,6 +833,12 @@ export const sendWhatsAppMedicineRequestAlert = async (request, eventType) => {
         sentNotifications.set(dedupeKey, record);
         records.push(record);
         await transmitWhatsAppMessage(record, mongoRecord);
+        publishWhatsAppRealtimeStatus(record, {
+            userId: audience === 'customer' ? (request.customerUserId || request.userId || request.customerId || null) : null,
+            tenantId: request.tenantId || null,
+            medicineRequestId: requestId,
+            audience
+        });
     }
 
     return records;
