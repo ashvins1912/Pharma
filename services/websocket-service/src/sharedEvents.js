@@ -24,16 +24,22 @@ export function startSharedEventConsumer(io, {
         for (const event of events) {
           if (!event?.channel) continue;
           const payload = event.payload ?? {};
-          // Never broadcast user/tenant-targeted notifications to every socket.
+          // Only deliver to explicit audiences. Never globally broadcast an event
+          // that has no verified user, tenant, rider or order target.
+          const rooms = [];
           if (event.userId) {
-            const room = event.channel === 'new_order_alert'
+            rooms.push(event.channel === 'new_order_alert'
               ? `rider_${event.userId}`
-              : `bell_notifications_${event.userId}`;
-            io.to(room).emit(event.channel, payload);
-          } else if (event.tenantId) {
-            io.to(`tenant_${event.tenantId}`).emit(event.channel, payload);
+              : `bell_notifications_${event.userId}`);
+          }
+          if (event.tenantId) rooms.push(`tenant_${event.tenantId}`);
+          if (event.channel === 'order_status_changed' && payload.orderId) {
+            rooms.push(`order_tracking_${payload.orderId}`);
+          }
+          if (rooms.length) {
+            io.to([...new Set(rooms)]).emit(event.channel, payload);
           } else {
-            io.emit(event.channel, payload);
+            logger.warn('[WebSocket] Dropping shared event without an explicit audience:', event.channel);
           }
         }
         if (result?.cursor && (events.length > 0 || result.cursor !== cursor)) {
