@@ -51,8 +51,10 @@ const vendorSchema = new mongoose.Schema({
         uppercase: true
     },
     status: {
+        // createVendor/resendOnboardingInvite persist INVITED before email dispatch.
+        // Keep the schema enum aligned with the lifecycle values used by VendorService.
         type: String,
-        enum: ['PENDING_ONBOARDING', 'ACTIVE', 'SUSPENDED'],
+        enum: ['PENDING_ONBOARDING', 'INVITED', 'ACTIVE', 'SUSPENDED'],
         default: 'PENDING_ONBOARDING',
         index: true
     },
