@@ -138,7 +138,7 @@ export default function RiderTerminal({ riderId, onClose }) {
   };
 
   const handleCompleteOrder = async () => {
-    if (!activeOrder?._id || !/^\\d{4}$/.test(otpCode)) {
+    if (!activeOrder?._id || !/^\d{4}$/.test(otpCode)) {
       addToast('Enter the 4-digit code shared by the customer.', 'warning');
       return;
     }
@@ -309,7 +309,7 @@ export default function RiderTerminal({ riderId, onClose }) {
                     value={otpCode}
                     inputMode="numeric"
                     autoComplete="one-time-code"
-                    onChange={(e) => setOtpCode(e.target.value.replace(/\\D/g, '').slice(0, 4))}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
                     placeholder="e.g. 4821"
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono tracking-widest text-center text-sm focus:outline-none focus:border-blue-500"
                   />
