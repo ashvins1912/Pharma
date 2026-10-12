@@ -15,6 +15,8 @@ const couponSchema = new mongoose.Schema({
     // Tenant/customer-scoped promotions. A null tenantId is a platform coupon.
     tenantId: { type: String, default: null, index: true },
     customerId: { type: String, default: null, index: true },
+    customerName: { type: String, default: '', trim: true, maxlength: 160 },
+    customerName: { type: String, default: '', trim: true, maxlength: 160 },
     autoApply: { type: Boolean, default: false, index: true },
     promotionLabel: { type: String, default: 'Pharma discount for you', trim: true, maxlength: 120 },
     promotionType: { type: String, enum: ['PUBLIC', 'CUSTOMER_DISCOUNT', 'CUSTOMER_COUPON'], default: 'PUBLIC' }
