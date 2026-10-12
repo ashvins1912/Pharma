@@ -10,12 +10,22 @@ let authorizationRevalidationPromise = null;
 let applicationSessionAuthenticated = false;
 let authorizationCapabilities = { userId: null, role: null, permissions: [], revokedPermissions: [] };
 
+function notifyRuntimeAccessTokenChanged() {
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('pharma:access-token-changed'));
+}
+
 export function setRuntimeAccessToken(token) {
     runtimeAccessToken = typeof token === 'string' && token.trim() ? token.trim() : null;
+    notifyRuntimeAccessTokenChanged();
 }
 
 export function clearRuntimeAccessToken() {
     runtimeAccessToken = null;
+    notifyRuntimeAccessTokenChanged();
+}
+
+export function getRuntimeAccessToken() {
+    return runtimeAccessToken;
 }
 
 // HttpOnly session cookies cannot be inspected from JavaScript. AuthContext
