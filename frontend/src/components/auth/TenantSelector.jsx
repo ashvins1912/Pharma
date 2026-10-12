@@ -41,14 +41,12 @@ export default function TenantSelector({ onTenantSelected }) {
         (err) => {
           console.warn('Geolocation denied or unavailable:', err);
           setUserLocation(null);
-          setError('Location permission was denied or unavailable. Showing pharmacies without distance sorting. Allow location access to see the nearest options first.');
           fetchTenants(null);
         },
         { timeout: 10000, enableHighAccuracy: true }
       );
     } else {
       setUserLocation(null);
-      setError('Location is not supported by this browser. Showing pharmacies without distance sorting.');
       fetchTenants(null);
     }
   };
