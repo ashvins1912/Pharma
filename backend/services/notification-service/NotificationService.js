@@ -323,7 +323,7 @@ export class NotificationService {
             if (channels.includes('WHATSAPP')) {
                 void cacheService.publishEvent('whatsapp_notification', { ...eventPayload, deliveryState: 'REQUESTED' }, target);
             }
-            if (orderId && ['ORDER_CREATED', 'ORDER_ACCEPTED', 'ORDER_STATUS_CHANGED', 'RIDER_ASSIGNED', 'DELIVERY_STATUS_CHANGED', 'ORDER_DELIVERED'].includes(eventType)) {
+            if (orderId && ['ORDER_CREATED', 'ORDER_ACCEPTED', 'ORDER_STATUS_CHANGED', 'RIDER_ASSIGNED', 'DELIVERY_STATUS_CHANGED', 'ORDER_DELIVERED', 'PROPOSAL_APPROVED'].includes(eventType)) {
                 void cacheService.publishEvent('order_status_changed', eventPayload, target);
             }
             if (medicineRequestId || eventType.startsWith('MEDICINE_REQUEST') || eventType.startsWith('PROPOSAL_') || eventType.startsWith('REQUEST_')) {
