@@ -284,12 +284,10 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
                     email: req.user.email || ''
                 });
                 orderedForPerson = await customerService.getManagedPerson(req.user.sub, customer.selfPuid);
-            } catch {
-                orderedForPerson = {
-                    puid: `PUID-${String(req.user.sub).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16)}`,
-                    displayName: customerName,
-                    relationshipToOwner: 'SELF'
-                };
+            } catch (error) {
+                return res.status(error.statusCode || 503).json({
+                    message: 'Your customer identity could not be verified. Please refresh your profile and try again.'
+                });
             }
         }
         if (req.file) {
