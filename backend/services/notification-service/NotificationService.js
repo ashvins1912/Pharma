@@ -23,6 +23,7 @@ export class NotificationService {
         try {
             cacheService.subscribe((envelope) => {
                 const { channel, payload } = envelope;
+                if (payload?.source === 'notification-service') return;
                 logger.info(`[NotificationService] Consuming message from cache/Redis broker on channel [${channel}]`);
                 if (payload && (payload.title || payload.body || payload.message)) {
                     this.send({
@@ -227,6 +228,16 @@ export class NotificationService {
         if (this.notifications.length > 200) this.notifications.pop();
 
         logger.info(`Notification dispatched: "${title}" via [${channels.join(', ')}]`, { tenantId, branchId });
+
+        // Publish only to a verified user or tenant audience. Never send private
+        // notification bodies as unscoped/global WebSocket events.
+        if (recipientUserId || tenantId) {
+            void cacheService.publishEvent('notification', {
+                ...notification,
+                userId: recipientUserId,
+                source: 'notification-service'
+            }, { userId: recipientUserId, tenantId });
+        }
         return notification;
     }
 
