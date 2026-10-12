@@ -41,6 +41,12 @@ services:
         value: http://ashvin-pharma-cache:8080
       - key: CACHE_SERVICE_TOKEN
         sync: false
+      - key: PHARMA_JWT_PUBLIC_KEY
+        sync: false
+      - key: PHARMA_JWT_ISSUER
+        value: pharma-auth
+      - key: PHARMA_JWT_AUDIENCE
+        value: pharma-api
 
   - type: web
     name: ashvin-pharma-prescription
