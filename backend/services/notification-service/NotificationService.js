@@ -120,6 +120,21 @@ export class NotificationService {
             }
         });
 
+        domainEvents.on('ORDER_STATUS_CHANGED', (evt) => {
+            const status = evt.payload?.newStatus || 'updated';
+            this.send({
+                tenantId: evt.tenantId,
+                branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: `Order Status Updated: ${status}`,
+                body: `Order #${evt.payload?.orderNumber || evt.entityId} changed from ${evt.payload?.previousStatus || 'previous status'} to ${status}.`,
+                eventType: 'ORDER_STATUS_CHANGED',
+                orderId: evt.entityId,
+                status,
+                channels: ['IN_APP']
+            });
+        });
+
         domainEvents.on('ORDER_ACCEPTED', (evt) => {
             this.send({
                 tenantId: evt.tenantId,
