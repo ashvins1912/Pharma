@@ -1,5 +1,5 @@
 import express from 'express';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { scryptSync, timingSafeEqual } from 'node:crypto';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
@@ -1382,7 +1382,7 @@ router.post('/:id/verify-delivery', authenticateUser, async (req, res) => {
         if (Number(verification.attempts || 0) >= 5) {
             return res.status(429).json({ message: 'Too many incorrect attempts. Ask the pharmacy to reissue the delivery code.' });
         }
-        const candidateHash = createHash('sha256').update(`${String(order._id)}:${code}`).digest('hex');
+        const candidateHash = scryptSync(code, String(order._id), 32).toString('hex');
         const storedHash = String(verification.otpHash);
         const matches = candidateHash.length === storedHash.length
             && timingSafeEqual(Buffer.from(candidateHash, 'hex'), Buffer.from(storedHash, 'hex'));
