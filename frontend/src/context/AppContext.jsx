@@ -681,6 +681,12 @@ export function AppProvider({ children }) {
       void loadUserMedicineRequests({ silent: true });
     };
     const onOrderStatusChanged = payload => {
+      // The dedicated order stream is also a notification fallback. This keeps
+      // customer-facing order updates visible if the separate notification
+      // channel is delayed, while upsertNotification deduplicates shared IDs.
+      if (payload && typeof payload === 'object' && (payload.orderId || payload.eventType)) {
+        upsertNotification(payload, 'order_status_changed');
+      }
       const event = {
         ...(payload || {}),
         id: String(payload?.id || payload?.eventId || [payload?.orderId || 'order', payload?.eventType || payload?.type || payload?.status || 'update', payload?.timestamp || payload?.createdAt || Date.now()].join(':'))
