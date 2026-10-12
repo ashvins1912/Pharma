@@ -100,6 +100,12 @@ const orderSchema = new mongoose.Schema({
     expectedOutForDeliveryAt: { type: Date, default: null },
     outForDeliveryAt: { type: Date, default: null },
     deliveredAt: { type: Date, default: null },
+    deliveryVerification: {
+        otpHash: { type: String, default: null, select: false },
+        expiresAt: { type: Date, default: null, select: false },
+        attempts: { type: Number, default: 0, select: false },
+        verifiedAt: { type: Date, default: null, select: false }
+    },
     inventoryDeductedAt: { type: Date, default: null },
     deliveryMinutes: { type: Number, default: null },
     systemRating: { type: Number, min: 1, max: 5, default: null },
