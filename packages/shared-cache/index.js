@@ -71,7 +71,7 @@ export class SharedCacheClient {
       body: {
         channel,
         payload,
-        userId: target.userId || payload?.userId || null,
+        userId: target.userId || payload?.userId || payload?.recipientUserId || null,
         tenantId: target.tenantId || payload?.tenantId || null
       }
     });
