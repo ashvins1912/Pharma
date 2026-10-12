@@ -33,6 +33,7 @@ export function startSharedEventConsumer(io, {
               : `bell_notifications_${event.userId}`);
           }
           if (event.tenantId) rooms.push(`tenant_${event.tenantId}`);
+          if (event.riderId) rooms.push(`rider_${event.riderId}`);
           if (event.channel === 'order_status_changed' && payload.orderId) {
             rooms.push(`order_tracking_${payload.orderId}`);
           }
