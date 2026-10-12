@@ -1213,7 +1213,7 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
             const limit = Number.isSafeInteger(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 50) : 10;
             let result;
             if (req.query.status === 'Delivered') {
-                result = await dataStore.getDeliveredOrdersPage(requestedPage, limit);
+                result = await dataStore.getDeliveredOrdersPage(requestedPage, limit, { startDate: req.query.startDate, endDate: req.query.endDate });
             } else if (req.query.status === 'Cancelled') {
                 result = await dataStore.getCancelledOrdersPage(requestedPage, limit);
             } else {
