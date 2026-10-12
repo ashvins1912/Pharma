@@ -50,7 +50,8 @@ const COLUMNS = [
   { id: 'Processing Order', title: 'Processing Order', color: 'border-amber-500 text-amber-800 bg-amber-50' },
   { id: 'Ready to Dispatch', title: 'Ready to Dispatch', color: 'border-blue-500 text-blue-800 bg-blue-50' },
   { id: 'Dispatched', title: 'Out for Delivery', color: 'border-blue-500 text-blue-800 bg-blue-50' },
-  { id: 'Delivered', title: 'Delivered', color: 'border-emerald-500 text-emerald-800 bg-emerald-50' }
+  { id: 'Delivered', title: 'Delivered', color: 'border-emerald-500 text-emerald-800 bg-emerald-50' },
+  { id: 'Cancelled', title: 'Cancelled', color: 'border-slate-500 text-slate-800 bg-slate-100' }
 ];
 
 export default function AdminFulfillmentKanban({ orders, onRefresh }) {
@@ -77,6 +78,12 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const [deliveredError, setDeliveredError] = useState('');
   const [deliveredRetryKey, setDeliveredRetryKey] = useState(0);
   const [expandedDeliveredOrderId, setExpandedDeliveredOrderId] = useState(null);
+  const [cancelledPage, setCancelledPage] = useState(1);
+  const [cancelledOrders, setCancelledOrders] = useState([]);
+  const [cancelledPagination, setCancelledPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+  const [cancelledLoading, setCancelledLoading] = useState(true);
+  const [cancelledError, setCancelledError] = useState('');
+  const [cancelledRetryKey, setCancelledRetryKey] = useState(0);
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [searchOrders, setSearchOrders] = useState([]);
@@ -103,7 +110,8 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     if (['Ready to Dispatch', 'ready_to_dispatch', 'Ready_To_Dispatch', 'ready', 'Ready'].includes(s)) return 'Ready to Dispatch';
     if (['Dispatched', 'out_for_delivery', 'dispatched', 'Dispatched_Order'].includes(s)) return 'Dispatched';
     if (['Delivered', 'delivered', 'completed', 'Delivered_Order'].includes(s)) return 'Delivered';
-    if (['Rejected', 'rejected', 'Cancelled', 'cancelled'].includes(s)) return 'Rejected';
+    if (['Cancelled', 'cancelled'].includes(s)) return 'Cancelled';
+    if (['Rejected', 'rejected'].includes(s)) return 'Rejected';
     return s || 'Pending_Review';
   };
 
@@ -144,6 +152,25 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   }, [deliveredPage, deliveredRetryKey]);
 
   useEffect(() => {
+    let isCurrentRequest = true;
+    setCancelledLoading(true);
+    setCancelledError('');
+    apiClient.get('/api/orders/admin/all', { params: { status: 'Cancelled', page: cancelledPage, limit: 10 } })
+      .then(response => {
+        if (!isCurrentRequest) return;
+        const data = response.data || {};
+        setCancelledOrders(Array.isArray(data.items) ? data.items : []);
+        setCancelledPagination(data.pagination || { page: cancelledPage, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
+      }).catch(error => {
+        if (isCurrentRequest) {
+          setCancelledOrders([]);
+          setCancelledError(error.response?.data?.message || error.message || 'Unable to load cancelled order history.');
+        }
+      }).finally(() => { if (isCurrentRequest) setCancelledLoading(false); });
+    return () => { isCurrentRequest = false; };
+  }, [cancelledPage, cancelledRetryKey]);
+
+  useEffect(() => {
     if (!appliedSearch) return undefined;
     let isCurrentRequest = true;
     setSearchLoading(true);
@@ -169,6 +196,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const refreshBoard = () => {
     onRefresh?.();
     setDeliveredRetryKey(value => value + 1);
+    setCancelledRetryKey(value => value + 1);
   };
 
   const changeDeliveredPage = (page) => {
@@ -396,7 +424,6 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     if (!order) return;
     setPrescriptionModalOrder(order);
     const orderId = String(order._id);
-    setVerifiedOrderIds(prev => prev.includes(orderId) ? prev : [...prev, orderId]);
     setImageZoom(1);
 
     const targetUrl = order.prescriptionUrl
@@ -598,7 +625,9 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
             ? searchOrders.filter(order => normalizeOrderStatus(order) === col.id)
             : col.id === 'Delivered'
               ? deliveredOrders
-            : (orders || []).filter(o => normalizeOrderStatus(o) === col.id);
+              : col.id === 'Cancelled'
+                ? cancelledOrders
+                : (orders || []).filter(o => normalizeOrderStatus(o) === col.id);
 
           return (
             <div key={col.id} className="min-w-0 bg-slate-100/70 border border-slate-200 rounded-3xl p-3 sm:p-4 flex flex-col min-h-[500px]">
@@ -609,7 +638,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                   {col.title}
                 </span>
                 <span className="text-xs font-black text-slate-500 bg-white border border-slate-200 min-w-6 h-6 px-1 rounded-full flex items-center justify-center">
-                  {col.id === 'Delivered' ? (deliveredPagination.total || deliveredOrders.length) : colOrders.length}
+                  {col.id === 'Delivered' ? (deliveredPagination.total || deliveredOrders.length) : col.id === 'Cancelled' ? (cancelledPagination.total || cancelledOrders.length) : colOrders.length}
                 </span>
               </div>
 
@@ -630,6 +659,12 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                   <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">No orders found.</div>
                 ) : col.id === 'Delivered' && deliveredPagination.total === 0 && !searchMode ? (
                   <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">No delivered orders found.</div>
+                ) : col.id === 'Cancelled' && cancelledLoading && !searchMode ? (
+                  <div className="h-40 flex items-center justify-center text-slate-500 text-xs" role="status">Loading cancelled order history…</div>
+                ) : col.id === 'Cancelled' && cancelledError && !searchMode ? (
+                  <div className="min-h-40 flex flex-col items-center justify-center gap-2 text-center text-xs text-rose-700" role="alert"><p>{cancelledError}</p><button type="button" onClick={() => setCancelledRetryKey(value => value + 1)} className="font-bold underline">Try again</button></div>
+                ) : col.id === 'Cancelled' && cancelledPagination.total === 0 && !searchMode ? (
+                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">No cancelled orders found.</div>
                 ) : colOrders.length === 0 ? (
                   <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">
                     No orders in this stage
@@ -638,6 +673,22 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                   colOrders.map((order) => {
                     const orderId = (order._id || '').slice(-6).toUpperCase();
                     const isProcessing = updatingId === order._id;
+
+                    if (col.id === 'Cancelled') {
+                      const customerName = order.customerName || order.addressDetails?.fullName || 'Customer';
+                      const cancelledAt = (order.statusHistory || []).filter(entry => ['Cancelled', 'cancelled'].includes(String(entry.newStatus || ''))).sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))[0]?.timestamp || order.updatedAt || order.createdAt;
+                      return (
+                        <section key={order._id} className="min-w-0 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+                          <div className="space-y-2 p-3">
+                            <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="font-black text-xs text-slate-900">#{orderId}</p><p className="mt-1 truncate text-xs font-semibold text-slate-600">{customerName}</p></div><span className="shrink-0 rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">Cancelled</span></div>
+                            <p className="text-[11px] text-slate-600"><span className="font-bold">Cancelled:</span> {new Date(cancelledAt).toLocaleString()}</p>
+                            <p className="text-xs font-bold text-slate-800">₹{order.finalTotal ?? order.totalAmount ?? 0}</p>
+                            <p className="text-[11px] text-slate-500 break-words">{(order.items || order.medicineItems || []).map(item => `${item.productName || item.name || item.genericName || 'Medicine'} × ${item.quantity || 1}`).join(', ') || 'Order items unavailable'}</p>
+                            {order.statusHistory?.length > 0 && <details className="border-t border-slate-100 pt-2 text-[11px] text-slate-600"><summary className="cursor-pointer font-bold">View order timeline</summary><div className="mt-2 space-y-1">{order.statusHistory.slice().sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0)).map((entry, index) => <p key={index}>{entry.newStatus || entry.previousStatus || 'Update'} · {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : 'Time unavailable'}{entry.notes ? ` — ${entry.notes}` : ''}</p>)}</div></details>}
+                          </div>
+                        </section>
+                      );
+                    }
 
                     if (col.id === 'Delivered') {
                       const isExpanded = String(expandedDeliveredOrderId) === String(order._id);
@@ -1114,9 +1165,6 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       {prescriptionModalOrder && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/75 backdrop-blur-sm p-2 sm:p-4 animate-fade-in"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) closePrescriptionPreview();
-          }}
         >
           <div
             role="dialog"
@@ -1233,6 +1281,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                             transformOrigin: 'center center',
                             transition: 'transform 0.15s ease-out'
                           }}
+                          onLoad={() => setVerifiedOrderIds(prev => prev.includes(String(prescriptionModalOrder._id)) ? prev : [...prev, String(prescriptionModalOrder._id)])}
                           className="max-h-full max-w-full rounded-xl object-contain shadow-lg"
                         />
                       </div>
@@ -1241,6 +1290,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                         <iframe
                           title="Uploaded prescription document"
                           src={prescriptionPreview.url}
+                          onLoad={() => setVerifiedOrderIds(prev => prev.includes(String(prescriptionModalOrder._id)) ? prev : [...prev, String(prescriptionModalOrder._id)])}
                           className="h-full w-full min-h-[350px] border-0"
                         />
                       </div>
@@ -1391,7 +1441,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                             <button
                               type="button"
                               onClick={() => manualApprovePrescription(prescriptionModalOrder, 'medicine', index, approvalReason)}
-                              disabled={isProcessing}
+                              disabled={isProcessing || !verifiedOrderIds.includes(String(prescriptionModalOrder._id)) || !approvalReason.trim()}
                               className="shrink-0 rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50 transition shadow-sm"
                             >
                               Approve
@@ -1407,7 +1457,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                 <div className="p-3 sm:p-4 border-t border-slate-200 bg-slate-50 space-y-2 mt-auto">
                   <div>
                     <label htmlFor="modal-approval-reason" className="block text-[11px] font-bold text-slate-700 mb-1">
-                      Pharmacist Clinical Decision Note (optional):
+                      Pharmacist Clinical Decision Note (required):
                     </label>
                     <input
                       id="modal-approval-reason"
@@ -1423,7 +1473,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                     <button
                       type="button"
                       onClick={() => manualApprovePrescription(prescriptionModalOrder, 'order', null, approvalReason)}
-                      disabled={isProcessing}
+                      disabled={isProcessing || !verifiedOrderIds.includes(String(prescriptionModalOrder._id)) || !approvalReason.trim() || !(prescriptionModalOrder.prescriptionUrl || prescriptionModalOrder.prescriptionId)}
                       className="min-h-10 flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3 py-2 transition shadow-md shadow-emerald-600/20 disabled:opacity-50"
                     >
                       {updatingId === prescriptionModalOrder._id ? 'Saving…' : '✓ Approve Prescription & Order'}
@@ -1450,14 +1500,13 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                     </button>
                   </div>
 
+                  {!verifiedOrderIds.includes(String(prescriptionModalOrder._id)) && (prescriptionModalOrder.prescriptionUrl || prescriptionModalOrder.prescriptionId) && <p className="text-[11px] font-semibold text-amber-800">Open and review the prescription document above before recording a manual approval. Approval stays disabled until the document loads successfully.</p>}
+                  {!approvalReason.trim() && <p className="text-[11px] font-semibold text-rose-700">Enter a pharmacist decision note to continue.</p>}
                   {prescriptionModalOrder.orderStatus === 'Pending_Review' && (
                     <div className="flex gap-2 pt-1 border-t border-slate-200">
                       <button
                         type="button"
-                        onClick={() => {
-                          reviewOrder(prescriptionModalOrder, 'Approved');
-                          closePrescriptionPreview();
-                        }}
+                        onClick={() => { void reviewOrder(prescriptionModalOrder, 'Approved'); }}
                         disabled={isProcessing}
                         className="min-h-9 flex-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs disabled:opacity-50"
                       >
@@ -1465,10 +1514,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          reviewOrder(prescriptionModalOrder, 'Rejected');
-                          closePrescriptionPreview();
-                        }}
+                        onClick={() => { void reviewOrder(prescriptionModalOrder, 'Rejected'); }}
                         disabled={isProcessing}
                         className="min-h-9 flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs disabled:opacity-50"
                       >
