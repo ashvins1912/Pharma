@@ -68,6 +68,7 @@ export class MedicineRequestService {
         tenantId,
         branchId,
         customerId,
+        customerUserId = null,
         customerName,
         customerPhone,
         medicineName,
@@ -91,6 +92,7 @@ export class MedicineRequestService {
             tenantId,
             branchId,
             customerId,
+            customerUserId,
             customerName: customerName || 'Valued Customer',
             customerPhone: customerPhone || '',
             medicineName: String(medicineName).trim(),
@@ -120,10 +122,10 @@ export class MedicineRequestService {
 
         this.requests.set(id, reqDoc);
         domainEvents.emitDomainEvent('MEDICINE_REQUEST_CREATED', id, {
-            requestNumber, medicineName, customerId, customerName: reqDoc.customerName, customerPhone: reqDoc.customerPhone,
+            requestNumber, medicineName, customerId, customerUserId, customerName: reqDoc.customerName, customerPhone: reqDoc.customerPhone,
             requestedItems: [{ requestedName: reqDoc.medicineName, strength: reqDoc.strength, quantity: reqDoc.requestedQuantity }],
             preferredDeliveryPreference: reqDoc.preferredDeliveryTiming,
-            request: { id, requestNumber, customerId, tenantId: reqDoc.tenantId, branchId: reqDoc.branchId, customerName: reqDoc.customerName, customerPhone: reqDoc.customerPhone,
+            request: { id, requestNumber, customerId, customerUserId, tenantId: reqDoc.tenantId, branchId: reqDoc.branchId, customerName: reqDoc.customerName, customerPhone: reqDoc.customerPhone,
                 requestedItems: [{ requestedName: reqDoc.medicineName, strength: reqDoc.strength, quantity: reqDoc.requestedQuantity }],
                 preferredDeliveryPreference: reqDoc.preferredDeliveryTiming }
         }, actor, tenantId, branchId);
@@ -219,8 +221,8 @@ export class MedicineRequestService {
             notes: `Formulated proposal: ₹${totalPrice} (${proposal.priceType})`
         });
 
-        domainEvents.emitDomainEvent('PROPOSAL_CREATED', id, { proposal, customerId: request.customerId, requestNumber: request.requestNumber, medicineName: request.medicineName,
-            request: { id: request.id, requestNumber: request.requestNumber, customerId: request.customerId, tenantId: request.tenantId, branchId: request.branchId, customerName: request.customerName,
+        domainEvents.emitDomainEvent('PROPOSAL_CREATED', id, { proposal, customerId: request.customerId, customerUserId: request.customerUserId, requestNumber: request.requestNumber, medicineName: request.medicineName,
+            request: { id: request.id, requestNumber: request.requestNumber, customerId: request.customerId, customerUserId: request.customerUserId, tenantId: request.tenantId, branchId: request.branchId, customerName: request.customerName,
                 customerPhone: request.customerPhone, requestedItems: [{ requestedName: request.medicineName, strength: request.strength, quantity: request.requestedQuantity }],
                 preferredDeliveryPreference: request.preferredDeliveryTiming, pharmacyProposal: proposal } }, actor, request.tenantId, request.branchId);
         logger.info(`Pharmacy proposal sent for request #${request.requestNumber}`, { requestId: id });
