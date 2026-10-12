@@ -1,0 +1,15 @@
+{
+  "name": "ashvin-pharma-websocket-service",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Independent Socket.IO service for Pharma real-time events",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.1"
+  }
+}
