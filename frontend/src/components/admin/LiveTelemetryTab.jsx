@@ -1,199 +1,285 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../../api/apiClient';
-import { useTenant } from '../../context/TenantContext';
 import { useAuth } from '../../context/AuthContext';
 
+const STATUS_STYLES = {
+  HEALTHY: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300',
+  UNHEALTHY: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300',
+  UNREACHABLE: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300',
+  TIMEOUT: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300',
+  DEGRADED: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300',
+  UNKNOWN: 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+};
+
+const labelFor = (name = '') => ({
+  'api-gateway': 'API Gateway',
+  'backend-api': 'Backend API',
+  'cache-service': 'Shared Cache Service',
+  'websocket-service': 'WebSocket / Realtime',
+  'inventory-service': 'Inventory Service',
+  'order-service': 'Order Service',
+  'prescription-service': 'Prescription Service',
+  'customer-service': 'Customer Service'
+}[name] || name.replace(/[-_]/g, ' ').replace(/\\b\\w/g, char => char.toUpperCase()));
+
+const formatTime = value => {
+  if (!value) return 'Not checked yet';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString();
+};
+
+const normalizeStatus = value => String(value || 'UNKNOWN').toUpperCase();
+
+function MetricCard({ label, value, hint }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{value}</p>
+      <p className="mt-1 text-xs text-slate-500">{hint}</p>
+    </div>
+  );
+}
+
 export default function LiveTelemetryTab() {
-  const { user, role } = useAuth();
-  const { tenantId, activeTenant } = useTenant();
-  
-  const [telemetry, setTelemetry] = useState({
-    status: 'operational',
-    database: 'connected',
-    service: 'backend-api',
-    uptime: '99.99%',
-    activeConnections: 142,
-    memoryUsageMB: 284,
-    cpuUsagePercent: 12.4
-  });
-  
-  const [pingCount, setPingCount] = useState(1);
-  const [selectedInterval, setSelectedInterval] = useState('5000');
-  const [events, setEvents] = useState([
-    { id: 101, time: new Date().toLocaleTimeString(), type: 'GATEWAY_AUTH_CHECK', status: 'SUCCESS', details: 'RS256 session token verified. RBAC permissions active.' },
-    { id: 102, time: new Date().toLocaleTimeString(), type: 'TENANT_SCOPE_RESOLVE', status: 'SUCCESS', details: `Active tenant scope bound: ${tenantId || '65a1234567890abcdef12345'}` },
-    { id: 103, time: new Date().toLocaleTimeString(), type: 'DATABASE_POOL_PULSE', status: 'SUCCESS', details: 'MongoDB Mongoose connection pool active with 2dsphere spatial index.' }
-  ]);
+  const { user } = useAuth();
+  const [snapshot, setSnapshot] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const [selectedInterval, setSelectedInterval] = useState('10000');
+  const [refreshCount, setRefreshCount] = useState(0);
+  const [events, setEvents] = useState([]);
+  const previousStatuses = useRef(new Map());
 
-  const pollTelemetry = useCallback(async () => {
+  const pollTelemetry = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setRefreshing(true);
     try {
-      const res = await apiClient.get('/ready').catch(() => apiClient.get('/api/ready').catch(() => null));
-      const data = res?.data || {};
-      
-      setTelemetry(prev => ({
-        ...prev,
-        status: data.status || 'operational',
-        database: data.database || 'connected',
-        service: data.service || 'backend-api',
-        activeConnections: Math.floor(135 + Math.random() * 20),
-        memoryUsageMB: Math.floor(275 + Math.random() * 25),
-        cpuUsagePercent: Number((10 + Math.random() * 8).toFixed(1))
+      // This endpoint is authenticated at the gateway and restricted to admins.
+      // It returns measured health-check latency/status; it does not fabricate CPU,
+      // memory, traffic or uptime values that the services do not expose.
+      const response = await apiClient.get('/api/v1/health/services', { timeout: 20000 });
+      const data = response?.data || {};
+      const rawServices = Array.isArray(data.services) ? data.services : [];
+      const checkedAt = data.checkedAt || new Date().toISOString();
+      const services = rawServices.map(service => ({
+        ...service,
+        serviceName: service.serviceName || service.name || 'unnamed-service',
+        status: normalizeStatus(service.status)
       }));
-      
-      setPingCount(c => c + 1);
 
-      const actionTypes = ['GATEWAY_PROXY_ROUTE', 'INVENTORY_BULK_WRITE', 'DISPATCH_FLEET_PING', 'CLIENT_HEARTBEAT'];
-      const randomType = actionTypes[Math.floor(Math.random() * actionTypes.length)];
-      const randomLatency = Math.floor(10 + Math.random() * 25);
-
-      const newEvent = {
-        id: Date.now(),
-        time: new Date().toLocaleTimeString(),
-        type: randomType,
-        status: 'SUCCESS',
-        details: `Processed via API Gateway. Response time: ${randomLatency}ms. Tenant ID: ${tenantId?.slice(-6) || 'primary'}`
+      // A successful response from this protected route confirms the gateway is
+      // reachable. Add it as a separate service card while keeping upstream health
+      // strictly sourced from the gateway's actual monitor snapshot.
+      const gatewayStatus = {
+        serviceName: 'api-gateway',
+        status: 'HEALTHY',
+        checkedAt,
+        responseTimeMs: null,
+        httpStatus: response.status,
+        errorType: null,
+        errorMessage: null,
+        source: 'Authenticated telemetry API'
       };
+      const byName = new Map(services.map(service => [service.serviceName, service]));
+      byName.set('api-gateway', gatewayStatus);
+      const allServices = [...byName.values()].sort((a, b) => {
+        const order = ['api-gateway', 'backend-api', 'cache-service', 'websocket-service', 'inventory-service', 'order-service', 'prescription-service', 'customer-service'];
+        const ai = order.indexOf(a.serviceName);
+        const bi = order.indexOf(b.serviceName);
+        return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi) || a.serviceName.localeCompare(b.serviceName);
+      });
 
-      setEvents(prev => [newEvent, ...prev.slice(0, 9)]);
-    } catch {
-      setPingCount(c => c + 1);
+      const changes = [];
+      for (const service of allServices) {
+        const previous = previousStatuses.current.get(service.serviceName);
+        if (previous && previous !== service.status) {
+          changes.push({
+            id: `${service.serviceName}-${checkedAt}-${service.status}`,
+            time: checkedAt,
+            serviceName: service.serviceName,
+            status: service.status,
+            type: service.status === 'HEALTHY' ? 'SERVICE_RECOVERED' : 'SERVICE_STATUS_CHANGED',
+            details: `${labelFor(service.serviceName)} changed from ${previous} to ${service.status}.`
+          });
+        }
+        previousStatuses.current.set(service.serviceName, service.status);
+      }
+      if (changes.length) setEvents(current => [...changes, ...current].slice(0, 30));
+      setSnapshot({
+        overallStatus: normalizeStatus(data.overallStatus || data.status),
+        checkedAt,
+        services: allServices,
+        requestId: data.requestId || response.headers?.['x-request-id'] || null
+      });
+      setError('');
+      setRefreshCount(count => count + 1);
+    } catch (requestError) {
+      const statusCode = requestError?.response?.status;
+      const message = statusCode === 401 || statusCode === 403
+        ? 'Access denied. This telemetry view requires an authorized administrator session.'
+        : requestError?.response?.data?.error?.message || requestError?.message || 'Telemetry could not be loaded.';
+      setError(message);
+      setEvents(current => [{
+        id: `telemetry-error-${Date.now()}`,
+        time: new Date().toISOString(),
+        serviceName: 'api-gateway',
+        status: 'UNREACHABLE',
+        type: 'TELEMETRY_FETCH_FAILED',
+        details: message
+      }, ...current].slice(0, 30));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-  }, [tenantId]);
+  }, []);
 
   useEffect(() => {
+    void pollTelemetry();
     const intervalMs = Number(selectedInterval);
-    if (!intervalMs || intervalMs <= 0) return;
-    const timer = setInterval(pollTelemetry, intervalMs);
-    return () => clearInterval(timer);
-  }, [selectedInterval, pollTelemetry]);
+    if (!intervalMs) return undefined;
+    const timer = window.setInterval(() => { void pollTelemetry({ silent: true }); }, intervalMs);
+    return () => window.clearInterval(timer);
+  }, [pollTelemetry, selectedInterval]);
+
+  const services = snapshot?.services || [];
+  const healthyCount = services.filter(service => service.status === 'HEALTHY').length;
+  const unhealthyCount = services.filter(service => ['UNHEALTHY', 'UNREACHABLE', 'TIMEOUT'].includes(service.status)).length;
+  const degradedCount = services.filter(service => ['DEGRADED', 'UNKNOWN'].includes(service.status)).length;
+  const overall = unhealthyCount ? 'UNHEALTHY' : degradedCount ? 'DEGRADED' : services.length ? 'HEALTHY' : 'UNKNOWN';
 
   return (
-    <div className="space-y-6 animate-fadeIn">
-      {/* Top Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 md:p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <span className="text-xs font-bold px-3 py-1 bg-indigo-500/30 text-indigo-300 rounded-full border border-indigo-400/30 uppercase tracking-wider">
-            Super Admin Restricted Telemetry
-          </span>
-          <h2 className="text-2xl md:text-3xl font-black mt-2">Live UI &amp; API Gateway Telemetry</h2>
-          <p className="text-xs text-slate-300 mt-1 max-w-xl">
-            Real-time observability stream monitoring API Gateway health, multi-tenant routing, client sessions, and request pipelines.
-          </p>
-        </div>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-white/10 px-4 py-3 rounded-2xl backdrop-blur-md border border-white/10">
-          <div>
-            <label className="block text-[10px] uppercase font-bold text-slate-300 mb-1">Polling Interval</label>
+    <div className="min-w-0 space-y-6 animate-fadeIn">
+      <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 p-6 text-white shadow-xl md:p-8">
+        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
+          <div className="min-w-0">
+            <span className="inline-flex rounded-full border border-indigo-300/30 bg-indigo-400/10 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-indigo-200">
+              Platform Super Admin · Restricted
+            </span>
+            <h2 className="mt-3 text-2xl font-black tracking-tight md:text-3xl">Live Service Telemetry</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+              Live health, measured probe latency, HTTP status and last-check time for the gateway, backend, shared cache, WebSocket transport and configured domain services.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+            <label className="text-xs font-bold text-slate-300" htmlFor="telemetry-interval">Refresh</label>
             <select
+              id="telemetry-interval"
               value={selectedInterval}
-              onChange={(e) => setSelectedInterval(e.target.value)}
-              className="bg-slate-800 text-white text-xs font-bold rounded-xl px-3 py-1.5 border border-slate-700 outline-none focus:border-indigo-400 cursor-pointer"
+              onChange={event => setSelectedInterval(event.target.value)}
+              className="rounded-xl border border-white/15 bg-slate-900 px-3 py-2 text-xs font-bold text-white outline-none focus:border-indigo-300"
             >
-              <option value="3000">Every 3 seconds</option>
-              <option value="5000">Every 5 seconds</option>
               <option value="10000">Every 10 seconds</option>
               <option value="30000">Every 30 seconds</option>
+              <option value="60000">Every minute</option>
               <option value="0">Paused</option>
             </select>
-          </div>
-          <div className="flex items-center gap-2 pt-2 sm:pt-0">
-            <div className={`w-3 h-3 rounded-full ${Number(selectedInterval) > 0 ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`} />
-            <div className="text-xs">
-              <p className="font-bold text-white">{Number(selectedInterval) > 0 ? 'Live Pulse Active' : 'Polling Paused'}</p>
-              <p className="text-slate-300 text-[10px]">Ping count: {pingCount}</p>
-            </div>
+            <button
+              type="button"
+              onClick={() => void pollTelemetry()}
+              disabled={refreshing}
+              className="rounded-xl bg-white px-3 py-2 text-xs font-extrabold text-slate-900 transition hover:bg-indigo-100 disabled:cursor-wait disabled:opacity-60"
+            >
+              {refreshing ? 'Refreshing…' : 'Refresh now ↻'}
+            </button>
           </div>
         </div>
+        <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-300">
+          <span className="inline-flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${selectedInterval !== '0' ? 'animate-pulse bg-emerald-400' : 'bg-amber-400'}`} />{selectedInterval !== '0' ? 'Auto-refresh enabled' : 'Auto-refresh paused'}</span>
+          <span>Successful snapshots: {refreshCount}</span>
+          <span>Last snapshot: {formatTime(snapshot?.checkedAt)}</span>
+          {snapshot?.requestId && <span className="break-all">Request ID: {snapshot.requestId}</span>}
+        </div>
+      </section>
+
+      {error && (
+        <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
+          <p className="font-extrabold">Telemetry unavailable</p>
+          <p className="mt-1">{error}</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Platform status" value={loading && !snapshot ? 'Loading…' : overall} hint={`Gateway snapshot: ${snapshot?.overallStatus || 'Not available'}`} />
+        <MetricCard label="Services monitored" value={services.length} hint="Only configured service endpoints are included" />
+        <MetricCard label="Healthy" value={healthyCount} hint="Successful latest health probes" />
+        <MetricCard label="Needs attention" value={unhealthyCount + degradedCount} hint={`${unhealthyCount} unavailable · ${degradedCount} unknown/degraded`} />
       </div>
 
-      {/* Grid of Key Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-gray-800">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">API Gateway Status</span>
-          <div className="flex items-center gap-2 mt-2">
-            <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-lg font-black text-slate-900 dark:text-white uppercase">
-              {telemetry.status}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-1">Uptime: {telemetry.uptime} (Service: {telemetry.service})</p>
-        </div>
-
-        <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-gray-800">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">Database Cluster</span>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 uppercase">
-              {telemetry.database}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-1">Active Connections: {telemetry.activeConnections}</p>
-        </div>
-
-        <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-gray-800">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">System Resources</span>
-          <div className="flex items-baseline gap-3 mt-2">
-            <span className="text-base font-black text-indigo-600 dark:text-indigo-400">
-              {telemetry.memoryUsageMB} MB RAM
-            </span>
-            <span className="text-xs font-bold text-slate-500">
-              {telemetry.cpuUsagePercent}% CPU
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-1">Node.js V8 Heap &amp; Event Loop</p>
-        </div>
-
-        <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-gray-800">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">Super Admin Account</span>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-sm font-black text-slate-900 dark:text-white truncate">
-              {user?.email || 'ashvinsingh25@gmail.com'}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-1 truncate">Role: {role || 'SUPER_ADMIN'}</p>
-        </div>
-      </div>
-
-      {/* Real-Time Request / Event Stream */}
-      <div className="bg-white dark:bg-gray-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-gray-800 space-y-4">
-        <div className="flex items-center justify-between">
+      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:p-6">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h3 className="font-extrabold text-base text-slate-900 dark:text-white">API Gateway &amp; UI Event Stream</h3>
-            <p className="text-xs text-slate-500">Live request tracking, proxy health checks, and telemetry logs.</p>
+            <h3 className="text-base font-black text-slate-900 dark:text-white">Service health matrix</h3>
+            <p className="mt-1 text-xs text-slate-500">Status is measured from each service's configured health endpoint, not simulated client data.</p>
           </div>
-          <button
-            onClick={pollTelemetry}
-            className="px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-300 text-xs font-extrabold rounded-xl transition cursor-pointer"
-          >
-            Force Pulse Refresh ↻
-          </button>
+          <span className="text-xs text-slate-500">{services.length} services · refreshed {formatTime(snapshot?.checkedAt)}</span>
         </div>
+        {loading && !snapshot ? (
+          <div className="rounded-2xl bg-slate-50 p-8 text-center text-sm text-slate-500 dark:bg-slate-800">Loading service telemetry…</div>
+        ) : services.length === 0 ? (
+          <div className="rounded-2xl bg-slate-50 p-8 text-center text-sm text-slate-500 dark:bg-slate-800">No service health data has been returned yet.</div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+            {services.map(service => {
+              const status = normalizeStatus(service.status);
+              return (
+                <article key={service.serviceName} className="min-w-0 rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h4 className="break-words text-sm font-black text-slate-900 dark:text-white">{labelFor(service.serviceName)}</h4>
+                      <p className="mt-1 break-all text-[11px] text-slate-500">{service.serviceName}</p>
+                    </div>
+                    <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-extrabold ${STATUS_STYLES[status] || STATUS_STYLES.UNKNOWN}`}>{status}</span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/70">
+                      <p className="text-[10px] font-bold uppercase text-slate-500">Probe latency</p>
+                      <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">{Number.isFinite(Number(service.responseTimeMs)) && service.responseTimeMs !== null ? `${service.responseTimeMs} ms` : '—'}</p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/70">
+                      <p className="text-[10px] font-bold uppercase text-slate-500">HTTP status</p>
+                      <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">{service.httpStatus ?? '—'}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-1 text-[11px] text-slate-500">
+                    <p>Last checked: {formatTime(service.checkedAt)}</p>
+                    {service.errorType && <p className="font-bold text-rose-600 dark:text-rose-300">Issue: {service.errorType}</p>}
+                    {service.errorMessage && <p className="break-words">{service.errorMessage}</p>}
+                    {service.source && <p>Source: {service.source}</p>}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="border-b border-slate-100 dark:border-gray-800 text-slate-400 font-bold uppercase tracking-wider">
-                <th className="py-3 px-4">Timestamp</th>
-                <th className="py-3 px-4">Event Type</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Telemetry Details</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-gray-800 font-mono text-[11px]">
-              {events.map((ev) => (
-                <tr key={ev.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50 transition">
-                  <td className="py-3 px-4 text-slate-500">{ev.time}</td>
-                  <td className="py-3 px-4 font-bold text-slate-800 dark:text-slate-200">{ev.type}</td>
-                  <td className="py-3 px-4">
-                    <span className="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
-                      {ev.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{ev.details}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:p-6">
+        <div className="mb-4">
+          <h3 className="text-base font-black text-slate-900 dark:text-white">Telemetry state changes</h3>
+          <p className="mt-1 text-xs text-slate-500">Records only observed service status changes and failed telemetry fetches; no synthetic activity is generated.</p>
         </div>
-      </div>
+        {events.length === 0 ? (
+          <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500 dark:bg-slate-800">No status changes observed in this session.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[650px] text-left text-xs">
+              <thead><tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-500 dark:border-slate-800">
+                <th className="px-3 py-3">Time</th><th className="px-3 py-3">Service</th><th className="px-3 py-3">Event</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Details</th>
+              </tr></thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {events.map(event => <tr key={event.id}>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-500">{formatTime(event.time)}</td>
+                  <td className="px-3 py-3 font-bold text-slate-800 dark:text-slate-200">{labelFor(event.serviceName)}</td>
+                  <td className="px-3 py-3 font-mono text-[10px] text-slate-600 dark:text-slate-400">{event.type}</td>
+                  <td className="px-3 py-3"><span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${STATUS_STYLES[normalizeStatus(event.status)] || STATUS_STYLES.UNKNOWN}`}>{event.status}</span></td>
+                  <td className="max-w-md break-words px-3 py-3 text-slate-600 dark:text-slate-400">{event.details}</td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+      <p className="text-[11px] text-slate-500">Signed in as {user?.email || 'authorized administrator'}. CPU, memory, request throughput and uptime are intentionally omitted until services expose trusted measurements for those metrics.</p>
     </div>
   );
 }
