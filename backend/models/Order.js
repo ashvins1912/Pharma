@@ -54,7 +54,12 @@ const orderSchema = new mongoose.Schema({
         overallConfidence: { type: Number, default: 0, min: 0, max: 1 },
         lastCheckedAt: { type: Date, default: null },
         medicines: { type: [mongoose.Schema.Types.Mixed], default: [] },
-        issues: { type: [String], default: [] }
+        issues: { type: [String], default: [] },
+        manualApproval: { type: Boolean, default: false },
+        manualApprovalScope: { type: String, enum: ['order', 'medicine'], default: null },
+        manualApprovedBy: { type: String, default: null },
+        manualApprovalAt: { type: Date, default: null },
+        manualApprovalReason: { type: String, maxlength: 500, default: null }
     },
     couponCode: { type: String, default: null },
     subtotal: { type: Number, min: 0 },
