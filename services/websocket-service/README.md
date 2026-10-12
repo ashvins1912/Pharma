@@ -1,46 +1,45 @@
 # Pharma WebSocket Service
 
-A standalone Node.js + Socket.IO service. It is deployed independently from the API and API Gateway from this directory, and does not import the backend's in-process cache.
+Independent Node.js + Socket.IO service. It uses the authenticated shared cache HTTP API; Redis Streams carries API events to this process. It does not import backend in-process state.
+
+## Deployed service
+
+The current Render WebSocket URL supplied for this integration is `https://websockt.onrender.com`. The health route is `GET /healthz` (not `/helathz`, which is a spelling error).
 
 ## Local run
 
+Run from the repository root after `npm install`. Set `CACHE_SERVICE_URL`, `CACHE_SERVICE_TOKEN`, and the same `PHARMA_JWT_PUBLIC_KEY` used by the backend. Then start with:
+
 ```bash
-npm install
-CORS_ALLOWED_ORIGINS=http://localhost:5173 npm start
+CORS_ALLOWED_ORIGINS=http://localhost:5173 npm --workspace services/websocket-service start
 ```
 
-The service binds to `0.0.0.0` and uses Render's `PORT` when provided.
+## Health and heartbeat
 
-## Endpoints
+- `GET /healthz` or `GET /health`: process health, active connections, heartbeat telemetry, and whether JWT verification is configured.
+- `GET /ready`: in production it is not ready until the Pharma public key is configured.
+- Socket.IO transport ping interval defaults to 25 seconds; timeout defaults to 20 seconds.
+- Application heartbeat emits `server_heartbeat` every 25 seconds.
 
-- `GET /healthz` or `GET /health`: process health, active connections, and heartbeat telemetry.
-- `GET /ready`: readiness for load balancers and deployment checks.
-- Socket.IO transport heartbeat: ping every `WS_PING_INTERVAL_MS` (default 25 seconds), disconnect timeout `WS_PING_TIMEOUT_MS` (default 20 seconds).
-- Application heartbeat: emits `server_heartbeat` every `WS_HEARTBEAT_INTERVAL_MS` (default 25 seconds). Clients can emit `heartbeat` and receive `heartbeat_ack`.
+## Security and event routing
 
-## Render
+Clients connect using `auth: { token: <Pharma RS256 access token> }`. The service verifies signature, issuer, audience, and `token_type=pharma_access`. Browser-supplied user and tenant IDs are not treated as identity; room joins are checked against verified claims.
 
-Deploy as a Node web service with root directory `services/websocket-service`, build command `npm install --workspaces=false`, start command `npm start`, and health check path `/healthz`.
+- User bell events are restricted to the authenticated user.
+- Tenant events are restricted to the authenticated tenant.
+- Fulfillment events are routed to authorized user/tenant/order rooms.
+- Events without an explicit audience are dropped; they are never globally broadcast.
+- The UI uses Socket.IO to update bell notifications, medicine requests, and order views. WhatsApp status events contain only status metadata—never recipient phone numbers or message bodies.
 
-Set:
+## Render environment
+
+Set on the deployed `websockt` service:
 - `NODE_ENV=production`
-- `CORS_ALLOWED_ORIGINS=https://pharma-ui.onrender.com` (comma-separated exact browser origins)
-- Optional: `WS_HEARTBEAT_INTERVAL_MS=25000`, `WS_PING_INTERVAL_MS=25000`, `WS_PING_TIMEOUT_MS=20000`
+- `CORS_ALLOWED_ORIGINS=https://pharma-ui.onrender.com` (exact browser origins only)
+- `CACHE_SERVICE_URL=https://caching-v0et.onrender.com`
+- `CACHE_SERVICE_TOKEN`: the same random secret configured on the cache and API (minimum 32 characters)
+- `PHARMA_JWT_PUBLIC_KEY`: the backend RS256 public key, with PEM newlines preserved or escaped as `\\n`
+- `PHARMA_JWT_ISSUER=pharma-auth`
+- `PHARMA_JWT_AUDIENCE=pharma-api`
 
-Do not set a fixed `PORT`; Render injects it.
-
-## Gateway monitoring
-
-Set `WEBSOCKET_SERVICE_URL` on the API Gateway to the WebSocket service's private URL, for example `http://ashvin-pharma-websocket:10000` when both services are on the same Render private network. The Gateway health monitor probes `/healthz` and includes the WebSocket status in `GET /health` and the admin-only service health snapshot.
-
-The browser should connect to the public service URL using Socket.IO; the Gateway's internal health check URL is separate from the browser URL.
-
-## Compatibility events
-
-- `join_rider_room`
-- `join_order_tracking`
-- `join_bell_room`
-- `update_location` -> `location_changed`
-- `server_heartbeat`, `heartbeat`, and `heartbeat_ack`
-
-Room-join authorization should be enforced with verified user identity before exposing sensitive production events. This extraction preserves the existing event names but does not yet migrate backend notification publishing or shared-cache/pub-sub into this service.
+Do not expose the cache token or JWT private key to the browser. Do not set a fixed `PORT`; Render injects it. Redeploy this service from the repository-root build so it includes `packages/shared-cache` and `services/websocket-service/src/sharedEvents.js`.
