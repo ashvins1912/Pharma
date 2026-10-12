@@ -14,7 +14,7 @@ services:
       - key: MONGO_URI
         sync: false
       - key: CACHE_SERVICE_URL
-        value: http://ashvin-pharma-cache:8080
+        value: http://ashvin-pharma-shared-cache:8080
       - key: CACHE_SERVICE_TOKEN
         sync: false
 
@@ -38,7 +38,7 @@ services:
       - key: WS_PING_TIMEOUT_MS
         value: 20000
       - key: CACHE_SERVICE_URL
-        value: http://ashvin-pharma-cache:8080
+        value: http://ashvin-pharma-shared-cache:8080
       - key: CACHE_SERVICE_TOKEN
         sync: false
       - key: PHARMA_JWT_PUBLIC_KEY
@@ -62,7 +62,7 @@ services:
         value: 3001
 
   - type: web
-    name: ashvin-pharma-cache
+    name: ashvin-pharma-shared-cache
     runtime: docker
     region: oregon
     plan: free
