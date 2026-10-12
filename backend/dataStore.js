@@ -14,6 +14,7 @@ import ProfitMarginRewardEngine from './strategies/ProfitMarginRewardEngine.js';
 import DefaultProfitRewardStrategy from './strategies/ProfitRewardStrategy.js';
 import FixedDeliveryRewardStrategy from './strategies/DeliveryRewardStrategy.js';
 import { verifyPrescriptionAgainstItems } from './services/prescription-verification/PrescriptionVerificationService.js';
+import { domainEvents } from './shared/events/DomainEvents.js';
 
 const profitMarginRewardEngine = new ProfitMarginRewardEngine({
     strategy: new DefaultProfitRewardStrategy()
@@ -1404,6 +1405,12 @@ export const dataStore = {
                 itemCount: createdOrder.medicineItems.length,
                 inventoryAction: 'RESERVED'
             });
+            domainEvents.emitDomainEvent('ORDER_CREATED', createdOrder._id.toString(), {
+                orderNumber: createdOrder.orderNumber || createdOrder._id.toString(),
+                customerId: createdOrder.customerId || createdOrder.userId || orderData.customerId || orderData.userId,
+                totalAmount: createdOrder.totalAmount,
+                status: createdOrder.orderStatus || 'Pending_Review'
+            }, actor, createdOrder.tenantId || orderData.tenantId || null, createdOrder.branchId || orderData.branchId || null);
             return createdOrder;
         }
 
@@ -1506,6 +1513,12 @@ export const dataStore = {
                 itemCount: medicineItems.length,
                 inventoryAction: 'RESERVED'
             });
+            domainEvents.emitDomainEvent('ORDER_CREATED', String(order._id), {
+                orderNumber: order.orderNumber || String(order._id),
+                customerId: order.customerId || order.userId || orderData.customerId || orderData.userId,
+                totalAmount: order.totalAmount,
+                status: order.orderStatus || 'Pending_Review'
+            }, actor, order.tenantId || orderData.tenantId || null, order.branchId || orderData.branchId || null);
             return order;
         } catch (error) {
             for (const { medicine, quantity } of reservedMedicines) {
@@ -2162,6 +2175,13 @@ export const dataStore = {
             newStatus,
             rider: transitionResult.order.rider
         });
+        domainEvents.emitDomainEvent('ORDER_STATUS_CHANGED', String(orderId), {
+            orderNumber: transitionResult.order.orderNumber || String(orderId),
+            customerId: transitionResult.order.customerId || transitionResult.order.userId || null,
+            previousStatus: transitionResult.previousStatus,
+            newStatus,
+            rider: transitionResult.order.rider || null
+        }, actor, transitionResult.order.tenantId || null, transitionResult.order.branchId || null);
         return {
             ...transitionResult.order,
             ...(transitionResult.deliveryRewards ? { deliveryRewards: transitionResult.deliveryRewards } : {})
