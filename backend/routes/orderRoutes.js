@@ -738,6 +738,13 @@ router.post('/admin/:id/prescription/manual-approve', authenticateUser, isAdmin,
         if (!order.prescriptionRequired) {
             return res.status(400).json({ message: 'This order does not require prescription approval.' });
         }
+        if (!order.prescriptionUrl && !order.prescriptionId) {
+            return res.status(409).json({ message: 'Manual approval is blocked because no prescription document is attached to this order.' });
+        }
+        const decisionReason = String(reason || '').trim();
+        if (!decisionReason) {
+            return res.status(400).json({ message: 'A pharmacist decision note is required for manual prescription approval.' });
+        }
         if (scope === 'medicine' && (!Number.isInteger(Number(itemIndex)) || Number(itemIndex) < 0)) {
             return res.status(400).json({ message: 'A valid medicine itemIndex is required.' });
         }
@@ -764,7 +771,7 @@ router.post('/admin/:id/prescription/manual-approve', authenticateUser, isAdmin,
                     ? (req.user.user_metadata?.name || req.user.email || 'Admin')
                     : current.manualApprovedBy,
                 manualApprovedAt: shouldApprove ? new Date().toISOString() : current.manualApprovedAt,
-                manualApprovalReason: shouldApprove ? String(reason || 'Admin manual approval').slice(0, 500) : current.manualApprovalReason
+                manualApprovalReason: shouldApprove ? decisionReason.slice(0, 500) : current.manualApprovalReason
             };
         });
 
@@ -1201,14 +1208,18 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
             return res.json({ ...paginationResult(result.items, result.total, page, limit), searchType: type });
         }
         if (req.query.status !== undefined) {
-            if (req.query.status !== 'Delivered') {
-                return res.status(400).json({ message: 'Only Delivered orders support pagination on this endpoint.' });
-            }
             const parsedPage = Number.parseInt(req.query.page, 10);
             const parsedLimit = Number.parseInt(req.query.limit, 10);
             const requestedPage = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
             const limit = Number.isSafeInteger(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 50) : 10;
-            const result = await dataStore.getDeliveredOrdersPage(requestedPage, limit);
+            let result;
+            if (req.query.status === 'Delivered') {
+                result = await dataStore.getDeliveredOrdersPage(requestedPage, limit);
+            } else if (req.query.status === 'Cancelled') {
+                result = await dataStore.getCancelledOrdersPage(requestedPage, limit);
+            } else {
+                return res.status(400).json({ message: 'Only Delivered and Cancelled orders support pagination on this endpoint.' });
+            }
             const page = result.page || 1;
             return res.json(paginationResult(result.items, result.total, page, limit));
         }
