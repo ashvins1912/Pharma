@@ -37,26 +37,26 @@ export default function Header({
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 transition">
-      <div className="w-full px-3.5 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 sm:h-20 gap-2 sm:gap-4">
+    <header className="sticky top-0 z-40 w-full min-w-0 bg-white/95 backdrop-blur-md border-b border-slate-200 transition">
+      <div className="w-full min-w-0 px-2.5 sm:px-6 lg:px-8">
+        <div className="flex min-h-16 sm:min-h-20 h-auto items-center justify-between gap-2 sm:gap-4 py-2">
           
           {/* Left: Logo & Pharmacy Brand */}
           <div
             onClick={() => setActiveTab('store')}
-            className="flex items-center gap-2 sm:gap-3 cursor-pointer select-none shrink-0 min-w-0"
+            className="flex flex-1 items-center gap-2 sm:gap-3 cursor-pointer select-none min-w-0"
           >
-            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-base sm:text-xl shadow-md shadow-blue-500/20 shrink-0">
+            <div className="h-8 w-8 min-[400px]:h-9 min-[400px]:w-9 sm:h-11 sm:w-11 rounded-lg min-[400px]:rounded-xl sm:rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-sm min-[400px]:text-base sm:text-xl shadow-md shadow-blue-500/20 shrink-0">
               ⚕️
             </div>
-            <div className="min-w-0 flex flex-col justify-center">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <span className="text-sm sm:text-lg font-black text-slate-900 tracking-tight leading-tight truncate block">
+            <div className="min-w-0 flex-1 flex flex-col justify-center">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-2">
+                <span className="block min-w-0 max-w-[112px] min-[400px]:max-w-[150px] sm:max-w-none text-[13px] min-[400px]:text-sm sm:text-lg font-black text-slate-900 tracking-tight leading-tight whitespace-normal break-words">
                   Ashvin Pharmacy
                 </span>
                 {canViewOperations && (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="bg-blue-100 text-blue-700 text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5 max-w-full">
+                    <span className="max-w-full whitespace-normal break-words bg-blue-100 text-blue-700 text-[8px] min-[400px]:text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider leading-tight">
                       {isSuperAdmin ? 'Super Admin' : (isTenantAdmin ? 'Tenant Admin' : (role === 'admin' ? 'Admin' : 'Pharmacy'))}
                     </span>
                     {canReadWhatsApp && (canManageWhatsApp ? (
@@ -179,7 +179,7 @@ export default function Header({
           </nav>
 
           {/* Right: Actions Bar */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0 max-w-[58vw] sm:max-w-none">
             
             {/* Customer notifications */}
             {user && canViewCustomerWorkspace && hasPermission('profile.read') && (

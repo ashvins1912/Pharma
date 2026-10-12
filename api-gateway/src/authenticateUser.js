@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { config } from './config.js';
 import { resolveGatewayCapability, isGatewayPermissionAllowed } from './apiCapabilityRegistry.js';
+import { createBackendAuthToken } from './serviceAuth.js';
 
 function getUserToken(req) {
   const authorization = req.get('authorization') || '';
@@ -13,41 +14,42 @@ function getUserToken(req) {
 
 function normalizeUser(payload) {
   const rawRole = payload.role
+    || payload.app_metadata?.role
     || (Array.isArray(payload.roles) ? payload.roles.find(value => ['SUPER_ADMIN','PLATFORM_SUPER_ADMIN','admin','TENANT_ADMIN','TENANT_OWNER','pharmacy','PHARMACIST','PHARMACY_STAFF','ORDER_MANAGER'].includes(value)) : null)
     || 'customer';
-  const role = ['SUPER_ADMIN','PLATFORM_SUPER_ADMIN','admin'].includes(rawRole) ? 'SUPER_ADMIN' : rawRole;
+  const role = rawRole;
   const roles = Array.isArray(payload.roles) && payload.roles.length
-    ? payload.roles.map(value => ['SUPER_ADMIN','PLATFORM_SUPER_ADMIN','admin'].includes(value) ? 'SUPER_ADMIN' : value)
+    ? payload.roles
     : [role];
   const permissions = ['SUPER_ADMIN','PLATFORM_SUPER_ADMIN','admin'].includes(rawRole)
     ? ['*']
-    : (Array.isArray(payload.permissions) ? payload.permissions : []);
+    : (Array.isArray(payload.permissions) ? payload.permissions : (Array.isArray(payload.app_metadata?.permissions) ? payload.app_metadata.permissions : []));
   return {
-    sub: payload.sub,
-    id: payload.sub,
+    sub: payload.sub || payload.id,
+    id: payload.sub || payload.id,
     email: payload.email || '',
-    name: payload.name || '',
+    name: payload.name || payload.user_metadata?.name || '',
     firstName: payload.firstName || '',
     lastName: payload.lastName || '',
     role,
     roles,
     permissions,
-    revokedPermissions: Array.isArray(payload.revokedPermissions) ? payload.revokedPermissions : [],
+    revokedPermissions: Array.isArray(payload.revokedPermissions) ? payload.revokedPermissions : (Array.isArray(payload.app_metadata?.revokedPermissions) ? payload.app_metadata.revokedPermissions : []),
     permissionVersion: Number(payload.permissionVersion || 1),
-    tenantId: payload.tenantId || null,
-    branchId: payload.branchId || null,
+    tenantId: payload.tenantId || payload.app_metadata?.tenantId || null,
+    branchId: payload.branchId || payload.app_metadata?.branchId || null,
     scope: payload.scope || 'CUSTOMER',
     app_metadata: {
-      role,
-      tenantId: payload.tenantId || null,
+      role: rawRole,
+      tenantId: payload.tenantId || payload.app_metadata?.tenantId || null,
       permissions,
       revokedPermissions: Array.isArray(payload.revokedPermissions) ? payload.revokedPermissions : []
     },
     user_metadata: {
-      name: payload.name || '',
-      mobile: payload.mobile || '',
-      dateOfBirth: payload.dateOfBirth || null,
-      gender: payload.gender || null
+      name: payload.name || payload.user_metadata?.name || '',
+      mobile: payload.mobile || payload.user_metadata?.mobile || '',
+      dateOfBirth: payload.dateOfBirth || payload.user_metadata?.dateOfBirth || null,
+      gender: payload.gender || payload.user_metadata?.gender || null
     },
     aal: payload.aal || 'aal1',
     sessionId: payload.sessionId || null,
@@ -65,7 +67,35 @@ export async function authenticateUser(req, res, next, gatewayConfig = config) {
   }
 
   try {
-    if (!gatewayConfig.pharmaJwtPublicKey) throw Object.assign(new Error('PHARMA_JWT_PUBLIC_KEY is not configured.'), { code: 'GATEWAY_JWT_KEY_MISSING' });
+    if (!gatewayConfig.pharmaJwtPublicKey) {
+      if (gatewayConfig.backendApiUrl && gatewayConfig.gatewayAuthSecret) {
+        const backendToken = createBackendAuthToken(gatewayConfig);
+        const authRes = await fetch(`${gatewayConfig.backendApiUrl}/internal/gateway/authenticate`, {
+          method: 'POST',
+          headers: {
+            'x-gateway-authorization': `Bearer ${backendToken}`,
+            authorization: `Bearer ${userToken}`,
+            'x-request-id': req.requestId || '',
+            'content-type': 'application/json'
+          }
+        });
+        if (!authRes.ok) {
+          const authError = new Error('Backend identity verification failed.');
+          authError.statusCode = authRes.status;
+          throw authError;
+        }
+        const authBody = await authRes.json();
+        const authenticatedUser = authBody.user || authBody;
+        if (!authenticatedUser?.sub && !authenticatedUser?.id) {
+          throw new Error('Invalid user payload from backend authentication.');
+        }
+        req.user = normalizeUser({ ...authenticatedUser, sub: authenticatedUser.sub || authenticatedUser.id });
+        req.gatewayAuthenticated = true;
+        req.gatewayAuthRequestId = req.requestId;
+        return next();
+      }
+      throw Object.assign(new Error('PHARMA_JWT_PUBLIC_KEY is not configured.'), { code: 'GATEWAY_JWT_KEY_MISSING' });
+    }
     const payload = jwt.verify(userToken, gatewayConfig.pharmaJwtPublicKey, {
       algorithms: ['RS256'],
       issuer: gatewayConfig.pharmaJwtIssuer,
@@ -95,7 +125,7 @@ export async function authenticateUser(req, res, next, gatewayConfig = config) {
     req.gatewayAuthRequestId = req.requestId;
     return next();
   } catch (error) {
-    const status = error.code === 'GATEWAY_JWT_KEY_MISSING' ? 503 : 401;
+    const status = error.statusCode || (error.code === 'GATEWAY_JWT_KEY_MISSING' ? 503 : 401);
     console.warn(JSON.stringify({
       serviceName: 'api-gateway',
       event: 'authentication_failed',

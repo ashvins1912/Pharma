@@ -2,6 +2,7 @@ import { tenantService } from '../services/tenant-service/TenantService.js';
 import { isPlatformSuperAdmin } from '../shared/contracts/index.js';
 import { getRolePermissions, getRoleScope } from './AuthorizationCatalogService.js';
 import UserProfile from '../models/UserProfile.js';
+import mongoose from 'mongoose';
 
 function hasPermission(granted, required, revoked = []) {
   if (!required) return true;
@@ -74,7 +75,11 @@ export class AuthorizationService {
     if (!membership) for (const permission of user?.permissions || []) permissions.add(permission);
 
     let userProfile = null;
-    userProfile = await UserProfile.findOne({ $or: [{ supabase_user_id: userId }, { supabaseId: userId }, { userId }] }).select('permissions accessGrants accessRevokes permissionVersion').lean();
+    if (mongoose.connection?.readyState === 1) {
+      try {
+        userProfile = await UserProfile.findOne({ $or: [{ supabase_user_id: userId }, { supabaseId: userId }, { userId }] }).select('permissions accessGrants accessRevokes permissionVersion').lean();
+      } catch {}
+    }
     for (const permission of userProfile?.permissions || []) permissions.add(permission);
     for (const permission of userProfile?.accessGrants || []) permissions.add(permission);
     for (const permission of userProfile?.accessRevokes || []) { permissions.delete(permission); revokedPermissions.add(permission); }

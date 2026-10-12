@@ -29,8 +29,8 @@ const tokenOverlap = (left, right) => {
 
 const extractPrescribedQuantity = medicine => {
   const course = medicine?.course || {};
-  if (Number.isFinite(Number(course.calculatedQuantity))) return Number(course.calculatedQuantity);
   if (Number.isFinite(Number(course.value))) return Number(course.value);
+  if (Number.isFinite(Number(course.calculatedQuantity))) return Number(course.calculatedQuantity);
   return null;
 };
 

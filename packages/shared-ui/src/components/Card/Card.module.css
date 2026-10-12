@@ -1,0 +1,10 @@
+.card { background-color: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-lg); box-shadow: var(--shadow-sm); transition: var(--transition-smooth); display: flex; flex-direction: column; justify-content: space-between; gap: var(--space-md); }
+.card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: rgba(37, 99, 235, 0.3); }
+.contentGroup { display: flex; flex-direction: column; gap: var(--space-xs); }
+.title { font-size: 1.25rem; font-weight: 700; color: var(--color-text-main); }
+.description { font-size: 0.95rem; color: var(--color-text-muted); line-height: 1.5; }
+.actionBtn { display: inline-flex; align-items: center; justify-content: center; min-height: var(--min-touch-target); padding: 0 var(--space-lg); background-color: var(--color-primary); color: #ffffff; border: none; border-radius: var(--radius-md); font-weight: 600; cursor: pointer; transition: var(--transition-smooth); width: 100%; }
+.actionBtn:hover { background-color: var(--color-primary-hover); }
+@media (min-width: 640px) {
+  .actionBtn { width: max-content; }
+}

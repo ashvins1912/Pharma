@@ -48,7 +48,7 @@ export default function OrderTrackingModal({ order, onClose }) {
         aria-hidden="true"
       />
 
-      <div className="relative z-10 m-auto flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl overscroll-contain">
+      <div className="relative z-10 m-auto flex h-[85dvh] max-h-[85dvh] min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl overscroll-contain">
         
         {/* Sticky Header: Always pinned & visible with Order Tracking: #{orderId} */}
         <div className="shrink-0 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4 sm:px-6 sm:py-5">

@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { applyCouponCode } from '../api/couponService';
 
 export default function ShoppingCart() {
-    const { cart, subtotal = 0, selectedAddressId, updateQuantity, clearCart } = useApp();
+    const { cart, subtotal = 0, addresses = [], selectedAddressId, updateQuantity, clearCart } = useApp();
     const [code, setCode] = useState('');
     const [pct, setPct] = useState(0);
     const [discountAmount, setDiscountAmount] = useState(0);
@@ -48,11 +48,20 @@ export default function ShoppingCart() {
         setLoading(true);
         try {
             const finalAmt = Math.max(0, subtotal - discountAmount);
+            const selectedAddress = addresses.find(a => (a._id || a.id) === selectedAddressId);
+            const deliveryAddress = selectedAddress?.addressLine || (selectedAddress?.addressLine1 ? `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}` : undefined);
+            const coordinates = selectedAddress?.coordinates;
             const res = await apiClient.post('/api/orders/checkout', {
                 cartItems: cart,
+                items: cart.map(item => ({
+                    medicineId: item._id || item.id,
+                    quantity: item.quantity
+                })),
                 totalAmount: subtotal,
                 finalTotal: finalAmt,
                 addressId: selectedAddressId,
+                deliveryAddress,
+                coordinates,
                 couponCode: code.trim() || undefined
             });
             setMsg(res.data.message || "🎉 Cash-on-Delivery order logged successfully!");

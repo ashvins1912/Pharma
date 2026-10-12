@@ -24,7 +24,10 @@ function hasScopePermission(user, scope) {
     item === name || (item.endsWith('.*') && name.startsWith(item.slice(0, -1)))
   ))) return false;
   if (['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return true;
-  if (role === 'customer' && scope.startsWith('customer.profile.')) return true;
+  if (role === 'customer' && (
+    scope.startsWith('customer.profile.')
+    || ['orders.create', 'orders.read', 'prescription.read', 'prescription.write'].includes(scope)
+  )) return true;
   if (permissions.includes('*') || permissions.includes(scope)) return true;
   if ((aliases[scope] || []).some(permission => permissions.includes(permission))) return true;
   return permissions.some(grant => grant.endsWith('.*')

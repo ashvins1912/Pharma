@@ -1,20 +1,19 @@
 import assert from 'node:assert/strict';
 import express from 'express';
 import test from 'node:test';
-import { SignJWT } from 'jose';
+import { issuePharmaAccessToken } from './security/pharmaToken.js';
 
 process.env.NODE_ENV = 'test';
 
 const { default: medicineRequestRoutes } = await import('./routes/medicineRequestRoutes.js');
 
 const createToken = async role => {
-    const secret = process.env.DEMO_ADMIN_JWT_SECRET
-        || process.env.ENCRYPTION_SECRET_KEY
-        || 'ashvin-pharmacy-demo-admin-jwt-secret-key-32chars!';
-    return new SignJWT({ app_metadata: { role } })
-        .setProtectedHeader({ alg: 'HS256' })
-        .setSubject(`test-${role}`)
-        .sign(new TextEncoder().encode(secret));
+    return issuePharmaAccessToken({
+        sub: `test-${role}`,
+        role,
+        roles: [role],
+        app_metadata: { role }
+    });
 };
 
 const start = async () => {

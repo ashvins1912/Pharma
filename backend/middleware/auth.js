@@ -71,6 +71,10 @@ export const authenticateUser = async (req, res, next, options = {}) => {
 
     // 1. Check HttpOnly cookie first (XSS Hardened)
     let token = req.cookies?.['access_token'];
+    if (!token && typeof req.headers?.cookie === 'string') {
+        const match = req.headers.cookie.match(/(?:^|;\s*)access_token=([^;]+)/);
+        if (match) token = decodeURIComponent(match[1].trim());
+    }
 
     // 2. Fallback to Authorization Header
     if (!token) {

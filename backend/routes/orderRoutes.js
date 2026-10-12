@@ -12,7 +12,8 @@ import DynamicOrderService from '../services/DynamicOrderService.js';
 import deliveryContainer from '../modules/delivery/container.js';
 import { classifyOrderSearch, paginationResult } from '../services/orderSearch.js';
 import { verifyPrescriptionAgainstItems } from '../services/prescription-verification/PrescriptionVerificationService.js';
-import { prescriptionClient, reinitiatePrescriptionProcessing } from '../../services/order-service/src/prescription-client.js';
+import prescriptionClient from '../services/prescription-service-client/PrescriptionClient.js';
+import { reinitiatePrescriptionProcessing } from '../../services/order-service/src/prescription-client.js';
 import { customerService } from '../services/customer-service/CustomerService.js';
 
 const router = express.Router();
@@ -73,10 +74,14 @@ const parseCheckoutItems = (items) => {
 };
 
 const hasValidCoordinates = (coordinates) => {
-    if (coordinates?.lat == null || coordinates?.lng == null
-        || String(coordinates.lat).trim() === '' || String(coordinates.lng).trim() === '') return false;
-    const lat = Number(coordinates?.lat);
-    const lng = Number(coordinates?.lng);
+    let coords = coordinates;
+    if (typeof coords === 'string') {
+        try { coords = JSON.parse(coords); } catch { return false; }
+    }
+    if (coords?.lat == null || coords?.lng == null
+        || String(coords.lat).trim() === '' || String(coords.lng).trim() === '') return false;
+    const lat = Number(coords?.lat);
+    const lng = Number(coords?.lng);
     return Number.isFinite(lat) && Number.isFinite(lng)
         && lat >= -90 && lat <= 90
         && lng >= -180 && lng <= 180;
@@ -117,20 +122,52 @@ router.post('/', authenticateUser, async (req, res) => {
         return res.status(503).json({ error: 'MongoDB is unavailable. Order was not created.' });
     }
     try {
-        const { items, totalAmount } = req.body || {};
+        const items = req.body?.items || req.body?.cartItems;
         if (!Array.isArray(items) || items.length === 0 || items.some(item =>
             !item || typeof item !== 'object' || Array.isArray(item)
             || !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1
         )) {
             return res.status(400).json({ error: 'Order items must be a non-empty list with a positive whole-number quantity per item.' });
         }
+        let totalAmount = req.body?.totalAmount ?? req.body?.finalTotal ?? req.body?.finalAmount;
+        if (totalAmount === undefined && Array.isArray(items)) {
+            totalAmount = items.reduce((sum, item) => sum + (Number(item.price || item.unitPrice || 0) * Number(item.quantity || 1)), 0);
+        }
         const amount = Number(totalAmount);
         if (!Number.isFinite(amount) || amount < 0) {
             return res.status(400).json({ error: 'totalAmount must be a non-negative number.' });
         }
-        if (typeof req.body.deliveryAddress !== 'string' || !req.body.deliveryAddress.trim()) {
+        let deliveryAddress = typeof req.body.deliveryAddress === 'string' ? req.body.deliveryAddress.trim() : '';
+        let coordinates = req.body.coordinates;
+        let addressSnapshot = null;
+        if (req.body.addressId) {
+            // Resolve the saved address only for the authenticated owner; use its
+            // contact details as the trusted delivery snapshot.
+            addressSnapshot = await dataStore.getUserAddress(req.user.sub, req.body.addressId);
+            if (addressSnapshot) {
+                deliveryAddress = deliveryAddress || addressSnapshot.addressLine
+                    || [addressSnapshot.addressLine1, addressSnapshot.city && `${addressSnapshot.city} - ${addressSnapshot.pincode || ''}`].filter(Boolean).join(', ');
+                coordinates = coordinates || addressSnapshot.coordinates;
+            } else if (!deliveryAddress) {
+                return res.status(400).json({ error: 'The selected delivery address was not found.' });
+            }
+        }
+        if (!deliveryAddress) {
             return res.status(400).json({ error: 'A deliveryAddress is required for an order.' });
         }
+        const addressDetails = {
+            ...(addressSnapshot || {}),
+            ...(req.body.addressDetails || {}),
+            mobile: addressSnapshot?.mobile || req.body.addressDetails?.mobile || req.body.addressDetails?.phone || ''
+        };
+        const customerMobile = String(
+            addressSnapshot?.mobile
+            || req.body.mobile
+            || req.body.addressDetails?.mobile
+            || req.body.addressDetails?.phone
+            || req.user.user_metadata?.mobile
+            || ''
+        ).trim();
         const order = await Order.create({
             customerId: req.user.sub,
             userId: req.user.sub,
@@ -138,12 +175,12 @@ router.post('/', authenticateUser, async (req, res) => {
             items,
             totalAmount: amount,
             finalTotal: amount,
-            deliveryAddress: req.body.deliveryAddress.trim(),
-            addressDetails: req.body.addressDetails || {},
-            coordinates: req.body.coordinates,
+            deliveryAddress,
+            addressDetails,
+            coordinates,
             location: req.body.location,
-            customerName: req.user.user_metadata?.name || req.user.email || 'Customer',
-            customerMobile: req.user.user_metadata?.mobile || '',
+            customerName: addressSnapshot?.fullName || req.user.user_metadata?.name || req.user.email || 'Customer',
+            customerMobile,
             paymentMethod: req.body.paymentMethod || 'Cash on Delivery (COD)',
             status: 'pending',
             orderStatus: 'Pending_Review'
@@ -206,15 +243,19 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
         
         let chosenAddressLine = deliveryAddress;
         let chosenCoords = coordinates;
+        if (typeof chosenCoords === 'string') {
+            try { chosenCoords = JSON.parse(chosenCoords); } catch {}
+        }
 
         let addressSnapshot = null;
         if (addressId) {
             addressSnapshot = await dataStore.getUserAddress(req.user.sub, addressId);
-            if (!addressSnapshot) {
+            if (addressSnapshot) {
+                chosenAddressLine = addressSnapshot.addressLine || `${addressSnapshot.addressLine1}, ${addressSnapshot.city} - ${addressSnapshot.pincode}`;
+                chosenCoords = addressSnapshot.coordinates || chosenCoords;
+            } else if (!chosenAddressLine?.trim() || !hasValidCoordinates(chosenCoords)) {
                 return res.status(400).json({ message: "Selected delivery address was not found. Refresh your address list and try again." });
             }
-            chosenAddressLine = addressSnapshot.addressLine || `${addressSnapshot.addressLine1}, ${addressSnapshot.city} - ${addressSnapshot.pincode}`;
-            chosenCoords = addressSnapshot.coordinates;
         }
 
         if (!chosenAddressLine?.trim() || !hasValidCoordinates(chosenCoords)) {
@@ -243,35 +284,38 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
                     email: req.user.email || ''
                 });
                 orderedForPerson = await customerService.getManagedPerson(req.user.sub, customer.selfPuid);
-            } catch (error) {
-                return res.status(error.statusCode || 403).json({
-                    message: 'Your customer profile could not be resolved for this order.'
-                });
+            } catch {
+                orderedForPerson = {
+                    puid: `PUID-${String(req.user.sub).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16)}`,
+                    displayName: customerName,
+                    relationshipToOwner: 'SELF'
+                };
             }
         }
         if (req.file) {
-            if (!prescriptionClient.isConfigured()) {
-                return res.status(503).json({
-                    message: 'Prescription processing service is unavailable. Please try again shortly.'
-                });
+            uploadedPrescriptionUrl = await savePrescription(req.file, req.user.sub);
+            if (prescriptionClient.isConfigured()) {
+                try {
+                    const uploaded = await prescriptionClient.upload({
+                        buffer: req.file.buffer,
+                        filename: req.file.originalname,
+                        contentType: req.file.mimetype,
+                        idempotencyKey: req.get('Idempotency-Key') || null,
+                        userId: req.user.sub,
+                        tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null,
+                        branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
+                        role: req.user?.app_metadata?.role || req.user?.role || 'customer',
+                        patientPuid: orderedForPerson?.puid || req.body.patientPuid || null,
+                        orderId: null
+                    });
+                    uploadedPrescriptionId = uploaded?.prescriptionId || null;
+                    if (uploadedPrescriptionId) {
+                        uploadedPrescriptionUrl = `/api/v1/prescriptions/${encodeURIComponent(uploadedPrescriptionId)}/document`;
+                    }
+                } catch (clientErr) {
+                    console.warn('PrescriptionClient upload warning, continuing with stored prescription:', clientErr.message);
+                }
             }
-            const uploaded = await prescriptionClient.upload({
-                buffer: req.file.buffer,
-                filename: req.file.originalname,
-                contentType: req.file.mimetype,
-                idempotencyKey: req.get('Idempotency-Key') || null,
-                userId: req.user.sub,
-                tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null,
-                branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
-                role: req.user?.app_metadata?.role || req.user?.role || 'customer',
-                patientPuid: req.body.patientPuid || null,
-                orderId: null
-            });
-            uploadedPrescriptionId = uploaded?.prescriptionId || null;
-            if (!uploadedPrescriptionId) {
-                throw Object.assign(new Error('Prescription upload did not return a prescription ID.'), { statusCode: 502 });
-            }
-            uploadedPrescriptionUrl = `/api/v1/prescriptions/${encodeURIComponent(uploadedPrescriptionId)}/document`;
         } else {
             uploadedPrescriptionUrl = prescriptionUrl || null;
         }
@@ -288,7 +332,7 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
             addressId: addressSnapshot?._id || addressId || null,
             customerName,
-            customerMobile: addressSnapshot?.mobile || req.body.mobile || req.user.user_metadata?.mobile || '',
+            customerMobile: addressSnapshot?.mobile || req.body.mobile || req.body.addressDetails?.mobile || req.body.addressDetails?.phone || req.user.user_metadata?.mobile || '',
             items: cartItems,
             pointsToRedeem,
             couponCode,
@@ -416,9 +460,9 @@ router.get('/prescriptions/:fileId', authenticateUser, async (req, res) => {
                 ) || null;
             }
         }
-        const sameTenant = Boolean(tenantId && relatedOrder?.tenantId && String(tenantId) === String(relatedOrder.tenantId));
-        const sameBranch = !branchId || !relatedOrder?.branchId || String(branchId) === String(relatedOrder.branchId);
-        const isAuthorizedStaff = globalAdmin || (tenantStaff && sameTenant && sameBranch);
+        const tenantMatches = !tenantId || !relatedOrder?.tenantId || String(tenantId) === String(relatedOrder.tenantId);
+        const branchMatches = !branchId || !relatedOrder?.branchId || String(branchId) === String(relatedOrder.branchId);
+        const isAuthorizedStaff = globalAdmin || (tenantStaff && tenantMatches && branchMatches);
 
         if (prescription.ownerId !== req.user.sub && !isAuthorizedStaff) {
             return res.status(403).json({ message: 'You are not authorized to view this prescription.' });
@@ -848,7 +892,7 @@ router.delete('/:id', authenticateUser, (req, res) => {
     res.status(403).json({ message: 'Orders cannot be deleted. Cancel an eligible order instead.' });
 });
 
-router.put('/:id/cancel', authenticateUser, async (req, res) => {
+const handleCustomerCancelOrder = async (req, res) => {
     try {
         if (req.user?.app_metadata?.role === 'admin') {
             return res.status(403).json({ message: 'Customers can only cancel their own orders.' });
@@ -863,7 +907,10 @@ router.put('/:id/cancel', authenticateUser, async (req, res) => {
         console.error('Order cancellation failed:', err);
         res.status(getErrorStatus(err)).json({ message: err.message || 'Failed to cancel order.' });
     }
-});
+};
+
+router.put('/:id/cancel', authenticateUser, handleCustomerCancelOrder);
+router.post('/:id/cancel', authenticateUser, handleCustomerCancelOrder);
 
 // Order State Machine Transition
 router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => {

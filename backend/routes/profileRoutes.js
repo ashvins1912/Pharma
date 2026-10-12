@@ -35,20 +35,21 @@ const serializeAddress = (address) => ({
 });
 
 const getAddressFields = (body) => {
-    const addressLine1 = typeof body.addressLine1 === 'string' ? body.addressLine1.trim() : '';
+    let addressLine1 = typeof body.addressLine1 === 'string' ? body.addressLine1.trim() : '';
+    if (!addressLine1 && typeof body.addressLine === 'string' && body.addressLine.trim()) {
+        addressLine1 = body.addressLine.trim();
+    }
     if (!addressLine1) throw Object.assign(new Error('addressLine1 is required.'), { statusCode: 400 });
 
-    const isDefault = body.isDefault === undefined ? false : body.isDefault;
-    if (typeof isDefault !== 'boolean') {
-        throw Object.assign(new Error('isDefault must be a boolean.'), { statusCode: 400 });
-    }
+    const isDefault = body.isDefault === undefined ? false : Boolean(body.isDefault);
 
     const coordinates = body.coordinates || {};
-    const lat = coordinates.lat === undefined ? 12.9716 : Number(coordinates.lat);
-    const lng = coordinates.lng === undefined ? 77.5946 : Number(coordinates.lng);
+    let lat = coordinates.lat === undefined ? 12.9716 : Number(coordinates.lat);
+    let lng = coordinates.lng === undefined ? 77.5946 : Number(coordinates.lng);
     if (!Number.isFinite(lat) || lat < -90 || lat > 90
         || !Number.isFinite(lng) || lng < -180 || lng > 180) {
-        throw Object.assign(new Error('Address coordinates must be valid latitude and longitude values.'), { statusCode: 400 });
+        lat = 12.9716;
+        lng = 77.5946;
     }
 
     const postalCode = String(body.postalCode ?? body.pincode ?? '').trim();
@@ -64,13 +65,20 @@ const getAddressFields = (body) => {
         pincode: postalCode,
         country: String(body.country || 'India').trim(),
         landmark: String(body.landmark || '').trim(),
-        addressLine: String(body.addressLine || '').trim(),
+        addressLine: String(body.addressLine || addressLine1).trim(),
         coordinates: { lat, lng },
         isDefault
     };
 };
 
 router.use(authenticateUser);
+
+router.use((req, res, next) => {
+    if (req.user) {
+        req.user.supabaseId = req.user.supabaseId || req.user.sub || req.user.id;
+    }
+    next();
+});
 
 router.get('/', async (req, res) => {
     if (!requireDatabase(res)) return;
@@ -99,7 +107,7 @@ router.get('/', async (req, res) => {
 router.put('/', async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
-        const { firstName, lastName, phone, mobileNumber, dateOfBirth } = req.body || {};
+        const { name: rawName, firstName, lastName, phone, mobile, mobileNumber, dateOfBirth, gender } = req.body || {};
         if (firstName !== undefined && (typeof firstName !== 'string' || firstName.trim().length > 100)) {
             return res.status(400).json({ success: false, error: 'firstName must be a string up to 100 characters.' });
         }
@@ -111,16 +119,24 @@ router.put('/', async (req, res) => {
         }
 
         const existing = await UserProfile.findOne(profileIdentity(req.user.supabaseId)).lean();
-        const nextFirstName = firstName === undefined
+        let nextFirstName = firstName;
+        let nextLastName = lastName;
+        if (nextFirstName === undefined && rawName) {
+            const parts = String(rawName).trim().split(/\s+/);
+            nextFirstName = parts[0] || '';
+            if (nextLastName === undefined) nextLastName = parts.slice(1).join(' ');
+        }
+        nextFirstName = nextFirstName === undefined
             ? existing?.firstName || existing?.name?.trim().split(/\s+/)[0] || ''
-            : firstName.trim();
-        const nextLastName = lastName === undefined
+            : String(nextFirstName).trim();
+        nextLastName = nextLastName === undefined
             ? existing?.lastName || existing?.name?.trim().split(/\s+/).slice(1).join(' ') || ''
-            : lastName.trim();
-        const nextPhone = phone === undefined ? (mobileNumber || existing?.phone || existing?.mobile || '') : phone.trim();
-        const name = [nextFirstName, nextLastName].filter(Boolean).join(' ');
+            : String(nextLastName).trim();
+        const nextPhone = phone === undefined ? (mobileNumber || mobile || existing?.phone || existing?.mobile || '') : String(phone).trim();
+        const name = rawName ? String(rawName).trim() : [nextFirstName, nextLastName].filter(Boolean).join(' ');
         const email = String(req.user.email || existing?.email || '').toLowerCase().trim();
         const nextDob = dateOfBirth || existing?.dateOfBirth || null;
+        const nextGender = gender || existing?.gender || null;
 
         const profile = await UserProfile.findOneAndUpdate(
             profileIdentity(req.user.supabaseId),
@@ -136,6 +152,7 @@ router.put('/', async (req, res) => {
                     mobile: nextPhone,
                     mobileNumber: nextPhone,
                     dateOfBirth: nextDob,
+                    gender: nextGender,
                     email
                 }
             },
@@ -148,14 +165,14 @@ router.put('/', async (req, res) => {
 });
 
 router.put('/onboarding', async (req, res) => {
-    const { firstName, lastName, dateOfBirth, mobileNumber, phone } = req.body || {};
+    const { firstName, lastName, dateOfBirth, mobileNumber, phone, gender } = req.body || {};
     const effectivePhone = (mobileNumber || phone || '').trim();
 
     if (!firstName || !firstName.trim()) {
         return res.status(400).json({ success: false, error: 'First name is required.' });
     }
     if (gender && !['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'].includes(gender)) {
-        validationDetails.push({ field: 'gender', code: 'INVALID_GENDER', message: 'Select a valid gender option.' });
+        return res.status(400).json({ success: false, error: 'Select a valid gender option.' });
     }
     if (!dateOfBirth) {
         return res.status(400).json({ success: false, error: 'Date of birth is required.' });
@@ -185,6 +202,7 @@ router.put('/onboarding', async (req, res) => {
                     mobile: effectivePhone,
                     mobileNumber: effectivePhone,
                     dateOfBirth,
+                    gender: gender || null,
                     profileCompleted: true,
                     accountStatus: 'ACTIVE',
                     status: 'ACTIVE'

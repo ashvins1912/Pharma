@@ -146,8 +146,8 @@ router.post('/', authenticateUser, async (req, res) => {
 
         const order = await dataStore.reserveOrder({
             userId: req.user.sub,
-            customerName: req.user.user_metadata?.name || req.user.email || 'Customer',
-            customerMobile: req.user.user_metadata?.mobile || '',
+            customerName: body.addressDetails?.fullName || req.user.user_metadata?.name || req.user.email || 'Customer',
+            customerMobile: String(body.mobile || body.addressDetails?.mobile || body.addressDetails?.phone || req.user.user_metadata?.mobile || '').trim(),
             items: resolvedItems,
             deliveryAddress: body.deliveryAddress.trim(),
             addressDetails: body.addressDetails || {},

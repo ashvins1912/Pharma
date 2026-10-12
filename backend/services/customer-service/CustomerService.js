@@ -29,6 +29,7 @@ personSchema.index({ createdByUserId: 1, status: 1 });
 const customerSchema = new mongoose.Schema({
   customerId: { type: String, required: true, unique: true, default: () => `cust-${crypto.randomUUID().slice(0, 8)}` },
   userId: { type: String, required: true, unique: true, index: true },
+  supabaseId: { type: String, default: null, sparse: true, index: true },
   selfPuid: { type: String, required: true, index: true },
   email: { type: String, default: '' },
   phone: { type: String, default: '' },
@@ -69,17 +70,44 @@ function maskPuid(puid) {
   return `PUID-••••${puid.slice(-4)}`;
 }
 
+let indexRemediated = false;
+async function remediateCustomerIndexes() {
+  if (indexRemediated) return;
+  try {
+    if (mongoose.connection?.readyState !== 1) return;
+    const collection = mongoose.connection.collection('customers');
+    const indexes = await collection.indexes();
+    const badIndex = indexes.find(i => i.name === 'supabaseId_1' || (i.key && i.key.supabaseId !== undefined));
+    if (badIndex && !badIndex.sparse) {
+      console.warn('⚠️ Dropping legacy non-sparse supabaseId_1 index on customers collection...');
+      await collection.dropIndex(badIndex.name);
+    }
+    // Also backfill any existing customer documents that have null supabaseId
+    await collection.updateMany(
+      { supabaseId: null, userId: { $exists: true, $ne: null } },
+      [{ $set: { supabaseId: '$userId' } }]
+    ).catch(() => {});
+    indexRemediated = true;
+  } catch (err) {
+    if (err.code === 27 || err.codeName === 'IndexNotFound' || err.codeName === 'NamespaceNotFound') {
+      indexRemediated = true;
+    }
+  }
+}
+
 export class CustomerService {
   async ensureCustomerForUser(userId, { name, email, phone, tenantId } = {}) {
     if (!userId) throw Object.assign(new Error('userId required'), { statusCode: 401 });
-    let customer = await CustomerProfile.findOne({ userId });
+    await remediateCustomerIndexes();
+    let customer = await CustomerProfile.findOne({ $or: [{ userId }, { supabaseId: userId }] });
     if (customer) {
       const updates = {};
+      if (!customer.supabaseId) updates.supabaseId = userId;
       if (name && name.trim() && name.trim() !== customer.name) updates.name = name.trim();
       if (email && email !== customer.email) updates.email = email;
       if (phone && phone !== customer.phone) updates.phone = phone;
       if (Object.keys(updates).length) {
-        customer = await CustomerProfile.findOneAndUpdate({ userId }, { $set: updates }, { new: true });
+        customer = await CustomerProfile.findOneAndUpdate({ _id: customer._id }, { $set: updates }, { new: true });
       }
 
       // Repair legacy/incomplete self profiles without ever attaching another
@@ -143,13 +171,35 @@ export class CustomerService {
       createdByUserId: userId,
       tenantId: tenantId || null
     });
-    customer = await CustomerProfile.create({
-      userId,
-      selfPuid: person.puid,
-      name: name || 'Valued Customer',
-      email: email || '',
-      phone: phone || ''
-    });
+    try {
+      customer = await CustomerProfile.create({
+        userId,
+        supabaseId: userId,
+        selfPuid: person.puid,
+        name: name || 'Valued Customer',
+        email: email || '',
+        phone: phone || ''
+      });
+    } catch (createErr) {
+      if (createErr.code === 11000) {
+        try {
+          await mongoose.connection.collection('customers').dropIndex('supabaseId_1');
+        } catch {}
+        customer = await CustomerProfile.findOne({ $or: [{ userId }, { supabaseId: userId }] });
+        if (!customer) {
+          customer = await CustomerProfile.create({
+            userId,
+            supabaseId: userId,
+            selfPuid: person.puid,
+            name: name || 'Valued Customer',
+            email: email || '',
+            phone: phone || ''
+          });
+        }
+      } else {
+        throw createErr;
+      }
+    }
     await PersonRelationship.create({
       ownerUserId: userId,
       ownerCustomerId: customer.customerId,

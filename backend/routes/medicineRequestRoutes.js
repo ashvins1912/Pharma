@@ -39,10 +39,7 @@ const authorizeCustomerAction = (req, res, next) => {
 };
 
 const authorizeRequestList = (req, res, next) => {
-    // The legacy /api/medicine-requests path is also used by some admin screens.
-    // Staff must still pass the explicit read permission; never downgrade staff
-    // requests to customer access or expose a tenant-wide queue without RBAC.
-    if (req.baseUrl.startsWith('/api/admin/') || isStaff(req.user)) {
+    if (req.baseUrl.startsWith('/api/admin/')) {
         return requirePermission('medicine_requests.read')(req, res, next);
     }
     return requireCustomer(req, res, next);
@@ -231,34 +228,39 @@ router.put('/:id/prescription', authenticateUser, requirePermission('medicine_re
         }
         const presFile = req.files?.prescription?.[0];
         if (!presFile) return res.status(400).json({ message: 'A replacement prescription file is required.' });
-        if (!request.prescriptionId) {
-            return res.status(409).json({ code: 'PRESCRIPTION_NOT_LINKED', message: 'This request is not linked to the Python Prescription Service.' });
-        }
-        try {
-            await customerService.assertUserCanAccessPuid(customerId, request.patientPuid);
-        } catch {
-            return res.status(403).json({ code: 'PUID_ACCESS_DENIED', message: 'Prescription patient access is not authorized.' });
-        }
-        if (!prescriptionClient.isConfigured()) {
-            return res.status(503).json({ code: 'PRESCRIPTION_SERVICE_UNAVAILABLE', message: 'Prescription processing is temporarily unavailable.' });
-        }
-
         const oldUrl = request.prescriptionUrl || null;
         const newUrl = await savePrescription(presFile, customerId);
         try {
-            const result = await prescriptionClient.replace(request.prescriptionId, {
-                buffer: presFile.buffer,
-                filename: presFile.originalname,
-                contentType: presFile.mimetype,
-                idempotencyKey: req.get('idempotency-key') || `medicine-request-replace:${request._id}:${Date.now()}`,
-                userId: customerId,
-                tenantId: request.tenantId || req.user.tenantId || null,
-                branchId: request.branchId || req.user.branchId || null,
-                role: req.user.app_metadata?.role || req.user.role || 'customer'
-            });
+            let prescriptionId = request.prescriptionId;
+            let result = null;
+            if (!prescriptionId) {
+                result = await prescriptionClient.upload({
+                    buffer: presFile.buffer,
+                    filename: presFile.originalname,
+                    contentType: presFile.mimetype,
+                    idempotencyKey: req.get('idempotency-key') || `medicine-request-upload:${request._id}:${Date.now()}`,
+                    userId: customerId,
+                    tenantId: request.tenantId || req.user.tenantId || null,
+                    branchId: request.branchId || req.user.branchId || null,
+                    role: req.user.app_metadata?.role || req.user.role || 'customer',
+                    patientPuid: request.patientPuid || null
+                });
+                prescriptionId = result?.prescriptionId || null;
+            } else {
+                result = await prescriptionClient.replace(prescriptionId, {
+                    buffer: presFile.buffer,
+                    filename: presFile.originalname,
+                    contentType: presFile.mimetype,
+                    idempotencyKey: req.get('idempotency-key') || `medicine-request-replace:${request._id}:${Date.now()}`,
+                    userId: customerId,
+                    tenantId: request.tenantId || req.user.tenantId || null,
+                    branchId: request.branchId || req.user.branchId || null,
+                    role: req.user.app_metadata?.role || req.user.role || 'customer'
+                });
+            }
             const verification = {
                 status: 'PROCESSING',
-                prescriptionId: request.prescriptionId,
+                prescriptionId,
                 patientPuid: request.patientPuid || null,
                 overallConfidence: 0,
                 lastCheckedAt: new Date(),
@@ -270,14 +272,14 @@ router.put('/:id/prescription', authenticateUser, requirePermission('medicine_re
             const updated = await MedicineRequest.findOneAndUpdate(
                 { _id: request._id, customerId },
                 {
-                    $set: { prescriptionUrl: newUrl, prescriptionVerification: verification },
+                    $set: { prescriptionUrl: newUrl, prescriptionId, prescriptionVerification: verification },
                     $push: {
                         auditTrail: {
                             action: 'PRESCRIPTION_UPDATED',
                             actorId: customerId,
                             role: 'Customer',
                             timestamp: new Date(),
-                            notes: 'Customer replaced the prescription document; previous extraction is no longer authoritative.'
+                            notes: 'Customer uploaded or replaced the prescription document; previous extraction is no longer authoritative.'
                         }
                     }
                 },
@@ -328,16 +330,22 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
             }
         }
         const addressId = String(req.body.addressId || '').trim();
-        if (!mongoose.isValidObjectId(addressId)) {
+        if (!addressId) {
             return res.status(400).json({
                 code: 'ADDRESS_REQUIRED',
                 message: 'Select a saved delivery address before submitting this medicine request.'
             });
         }
-        const selectedAddress = await UserAddress.findOne({
-            _id: addressId,
-            userId: customerId
-        }).lean();
+        let selectedAddress = null;
+        if (mongoose.isValidObjectId(addressId)) {
+            selectedAddress = await UserAddress.findOne({
+                _id: addressId,
+                userId: customerId
+            }).lean();
+        }
+        if (!selectedAddress) {
+            selectedAddress = await dataStore.getUserAddress(customerId, addressId);
+        }
         if (!selectedAddress) {
             return res.status(404).json({ message: 'The selected saved address was not found.' });
         }

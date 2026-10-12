@@ -217,7 +217,23 @@ const verifyOrderPrescription = async (request, items, user) => {
       issues: []
     };
   }
+  if (!request.prescriptionUrl && !request.prescriptionId) {
+    // No uploaded document means there is nothing to send to OCR/verification.
+    // Keep the prescription-required fulfillment gate, but do not create a
+    // false manual-review result for a document that does not exist.
+    return {
+      status: 'NOT_UPLOADED',
+      prescriptionId: null,
+      patientPuid: request.patientPuid || null,
+      overallConfidence: 0,
+      lastCheckedAt: new Date(),
+      medicines: [],
+      issues: []
+    };
+  }
   if (!request.prescriptionId) {
+    // Legacy/private uploads without a Prescription Service record can be
+    // reviewed manually; do not call the external service without its ID.
     return {
       status: 'REVIEW_REQUIRED',
       prescriptionId: null,
@@ -225,7 +241,7 @@ const verifyOrderPrescription = async (request, items, user) => {
       overallConfidence: 0,
       lastCheckedAt: new Date(),
       medicines: [],
-      issues: ['A prescription is required but no Prescription Service record is linked.']
+      issues: ['Uploaded prescription needs manual pharmacist verification.']
     };
   }
   try {
@@ -755,5 +771,5 @@ export async function reconcilePendingPrescriptionOrders({ workerId = randomUUID
   return { processed, approved, rejected, deferred };
 }
 
-export { allowedStatuses, serializeOrder, isFulfillmentReady };
+export { allowedStatuses, serializeOrder };
 

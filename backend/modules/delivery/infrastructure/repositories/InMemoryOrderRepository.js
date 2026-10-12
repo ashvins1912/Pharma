@@ -17,7 +17,7 @@ export class InMemoryOrderRepository extends IOrderRepository {
         return new Order({
             id,
             customerName: rawOrder.customerName || rawOrder.addressDetails?.fullName || 'Customer',
-            customerMobile: rawOrder.customerMobile || rawOrder.addressDetails?.mobile || '',
+            customerMobile: rawOrder.customerMobile || rawOrder.addressDetails?.mobile || rawOrder.addressDetails?.phone || '',
             deliveryAddress: rawOrder.deliveryAddress || 'Central Dispensary Area',
             addressDetails: rawOrder.addressDetails || {},
             paymentMethod: rawOrder.paymentMethod || 'Cash on Delivery (COD)',

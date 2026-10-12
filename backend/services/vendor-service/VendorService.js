@@ -109,9 +109,25 @@ class VendorService {
 
         if (getIsConnected()) {
             try {
-                await Vendor.findByIdAndUpdate(vendorId, { $set: doc }, { upsert: true, new: true });
+                // MongoDB treats _id as immutable. Keep it out of $set and only
+                // provide it on insert; otherwise persistence can fail while an
+                // invitation email is still sent with a token no instance can find.
+                const { _id: persistedVendorId, ...vendorFields } = doc;
+                // The equality filter supplies _id automatically on upsert.
+                await Vendor.findOneAndUpdate(
+                    { _id: persistedVendorId },
+                    { $set: vendorFields },
+                    { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+                );
             } catch (err) {
-                logger.error('Failed to save Vendor in MongoDB:', { error: err.message });
+                logger.error('Failed to save Vendor in MongoDB; refusing to send an unusable onboarding link.', {
+                    vendorId,
+                    error: err.message
+                });
+                const persistenceError = new Error('Could not save the vendor invitation. Please try again.');
+                persistenceError.code = 'VENDOR_PERSISTENCE_FAILED';
+                persistenceError.status = 503;
+                throw persistenceError;
             }
         }
 
@@ -171,6 +187,7 @@ class VendorService {
         }
 
         // Invalidate previous token and generate new secure token
+        const previousTokenHash = vendor.onboardingTokenHash || null;
         const rawToken = crypto.randomBytes(32).toString('hex');
         const onboardingTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
         const onboardingTokenExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
@@ -183,7 +200,7 @@ class VendorService {
 
         if (getIsConnected()) {
             try {
-                await Vendor.findByIdAndUpdate(vendor._id || vendor.id, {
+                const persistedVendor = await Vendor.findByIdAndUpdate(vendor._id || vendor.id, {
                     $set: {
                         onboardingTokenHash,
                         onboardingTokenExpiresAt,
@@ -191,12 +208,26 @@ class VendorService {
                         onboardingStatus: 'PENDING',
                         updatedAt: new Date()
                     }
-                });
+                }, { new: true, runValidators: true });
+                if (!persistedVendor) {
+                    const persistenceError = new Error('Vendor invitation record was not found in the database. Please recreate the invitation.');
+                    persistenceError.code = 'VENDOR_PERSISTENCE_FAILED';
+                    persistenceError.status = 503;
+                    throw persistenceError;
+                }
             } catch (err) {
-                logger.error('Failed to update Vendor token in MongoDB:', { error: err.message });
+                logger.error('Failed to persist the renewed vendor onboarding token.', {
+                    vendorId,
+                    error: err.message
+                });
+                const persistenceError = new Error('Could not renew the onboarding link. Please try again.');
+                persistenceError.code = 'VENDOR_PERSISTENCE_FAILED';
+                persistenceError.status = 503;
+                throw persistenceError;
             }
         }
 
+        if (previousTokenHash) inMemoryVendors.delete(previousTokenHash);
         inMemoryVendors.set(vendor._id || vendor.id, vendor);
         inMemoryVendors.set(onboardingTokenHash, vendor);
 
@@ -224,10 +255,15 @@ class VendorService {
     async getVendorById(vendorId) {
         if (getIsConnected()) {
             try {
-                const found = await Vendor.findById(vendorId).lean();
-                if (found) return found;
+                // The database is authoritative in production. A process-local
+                // fallback can return invitations that were never persisted.
+                return await Vendor.findById(vendorId).lean();
             } catch (err) {
-                logger.warn('Failed to query Vendor by ID:', { error: err.message });
+                logger.error('Failed to query Vendor by ID in MongoDB.', { error: err.message });
+                const lookupError = new Error('Vendor records are temporarily unavailable. Please try again.');
+                lookupError.code = 'VENDOR_LOOKUP_UNAVAILABLE';
+                lookupError.status = 503;
+                throw lookupError;
             }
         }
         return inMemoryVendors.get(vendorId) || null;
@@ -272,11 +308,16 @@ class VendorService {
             try {
                 vendor = await Vendor.findOne({ onboardingTokenHash: tokenHash }).lean();
             } catch (err) {
-                logger.warn('Failed to find vendor by token hash in Mongo:', { error: err.message });
+                logger.error('Vendor onboarding token lookup failed in MongoDB.', { error: err.message });
+                const lookupError = new Error('Onboarding is temporarily unavailable. Please try again shortly.');
+                lookupError.code = 'ONBOARDING_LOOKUP_UNAVAILABLE';
+                lookupError.status = 503;
+                throw lookupError;
             }
-        }
-
-        if (!vendor) {
+            // MongoDB is authoritative in production. Never fall back to a
+            // process-local cache when connected: it can hide failed writes,
+            // break across Render instances, and revive invalidated tokens.
+        } else {
             vendor = inMemoryVendors.get(tokenHash) || null;
         }
 
@@ -362,10 +403,13 @@ class VendorService {
             try {
                 vendor = await Vendor.findOne({ onboardingTokenHash: tokenHash });
             } catch (err) {
-                logger.warn('Failed to query vendor for completion in Mongo:', { error: err.message });
+                logger.error('Vendor onboarding completion token lookup failed in MongoDB.', { error: err.message });
+                const lookupError = new Error('Onboarding is temporarily unavailable. Please try again shortly.');
+                lookupError.code = 'ONBOARDING_LOOKUP_UNAVAILABLE';
+                lookupError.status = 503;
+                throw lookupError;
             }
-        }
-        if (!vendor) {
+        } else {
             vendor = inMemoryVendors.get(tokenHash) || null;
         }
 
@@ -597,6 +641,7 @@ class VendorService {
         vendor.status = 'ACTIVE';
         vendor.onboardingStatus = 'COMPLETED';
         vendor.onboardingCompletedAt = new Date();
+        if (vendor.onboardingTokenHash) inMemoryVendors.delete(vendor.onboardingTokenHash);
         vendor.onboardingTokenHash = null;
         vendor.onboardingTokenExpiresAt = null;
 

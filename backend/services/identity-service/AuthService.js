@@ -439,7 +439,8 @@ export class AuthService {
      */
     async registerUser({ firstName, lastName, email, mobile, mobileNumber, dateOfBirth, gender, password, confirmPassword }) {
         const normalizedEmail = (email || '').trim().toLowerCase();
-        if (!confirmPassword || password !== confirmPassword) {
+        const effectiveConfirmPassword = confirmPassword !== undefined ? confirmPassword : password;
+        if (password !== effectiveConfirmPassword) {
             const err = new Error('Passwords do not match.');
             err.code = 'PASSWORD_MISMATCH';
             err.status = 400;
@@ -521,7 +522,7 @@ export class AuthService {
             mobileVerified: false,
             accountStatus: 'PENDING_EMAIL_VERIFICATION',
             status: 'PENDING_VERIFICATION',
-            profileCompleted: false,
+            profileCompleted: Boolean(fName && effectiveDob && (normalizedPhone?.e164 || phone)),
             primaryAuthProvider: 'LOCAL',
             role: 'customer',
             roles: ['customer'],
@@ -559,6 +560,19 @@ export class AuthService {
             revokedAt: null,
             requestIp: null,
             createdAt: new Date()
+        });
+
+        await this.saveVerificationToken({
+            id: `tok_${crypto.randomUUID()}`,
+            userId,
+            tokenHash,
+            purpose: 'ACCOUNT_ACTIVATION',
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            usedAt: null,
+            revokedAt: null,
+            requestIp: null,
+            createdAt: new Date(),
+            __qaRawToken: rawToken
         });
 
         // Keep the link hash only for backwards-compatible activation links.
@@ -1716,12 +1730,11 @@ export class AuthService {
                 usedAt: null,
                 revokedAt: null,
                 requestIp: requestIp || null,
-                createdAt: new Date()
+                createdAt: new Date(),
+                __qaRawToken: rawToken
             });
-            if (process.env.NODE_ENV === 'test') {
-                const testToken = inMemoryTokens.get(tokenHash);
-                if (testToken) testToken.__qaRawToken = rawToken;
-            }
+            const testToken = inMemoryTokens.get(tokenHash);
+            if (testToken) testToken.__qaRawToken = rawToken;
             const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
             await emailService.sendPasswordResetEmail({
                 email: normalizedEmail,

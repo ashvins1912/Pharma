@@ -19,7 +19,7 @@ export class MongooseOrderRepository extends IOrderRepository {
         return new Order({
             id: obj._id?.toString() || obj.id,
             customerName: obj.customerName,
-            customerMobile: obj.customerMobile || obj.addressDetails?.mobile || '',
+            customerMobile: obj.customerMobile || obj.addressDetails?.mobile || obj.addressDetails?.phone || '',
             deliveryAddress: obj.deliveryAddress,
             addressDetails: obj.addressDetails || {},
             paymentMethod: obj.paymentMethod || 'Cash on Delivery (COD)',
