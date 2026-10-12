@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import ProofOfDeliveryModal from './ProofOfDeliveryModal';
 
 const STAGES = [
   { key: 'Processing Order', label: 'Processing Order', desc: 'Pharmacist validating Rx formulation & packaging' },
@@ -8,6 +9,7 @@ const STAGES = [
 ];
 
 export default function OrderTrackingModal({ order, onClose }) {
+  const [podModalOpen, setPodModalOpen] = useState(false);
   const rawStatus = String(order?.orderStatus || order?.status || '').trim().toLowerCase();
   if (!order || rawStatus === 'delivered') return null;
 
@@ -194,16 +196,33 @@ export default function OrderTrackingModal({ order, onClose }) {
         </div>
 
         {/* Sticky Footer */}
-        <div className="shrink-0 border-t border-slate-100 bg-slate-50/70 p-4 sm:p-5">
+        <div className="shrink-0 border-t border-slate-100 bg-slate-50/70 p-4 sm:p-5 space-y-2.5">
+          <button
+            onClick={() => setPodModalOpen(true)}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-2xl text-xs cursor-pointer transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+          >
+            <span>🔒</span>
+            <span>Verify Proof of Delivery (4-Digit OTP)</span>
+          </button>
           <button
             onClick={onClose}
-            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-xl text-xs cursor-pointer transition shadow-sm"
+            className="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2.5 rounded-xl text-xs cursor-pointer transition"
           >
             Close Tracking Panel
           </button>
         </div>
 
       </div>
+
+      <ProofOfDeliveryModal
+        isOpen={podModalOpen}
+        onClose={() => setPodModalOpen(false)}
+        order={order}
+        onSuccess={() => {
+          setPodModalOpen(false);
+          if (onClose) onClose();
+        }}
+      />
     </div>
   );
 }

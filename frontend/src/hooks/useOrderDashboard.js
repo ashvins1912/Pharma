@@ -20,7 +20,15 @@ export function useOrderDashboard() {
         setError(null);
         try {
             const res = await apiClient.get('/api/orders/admin/all');
-            setOrders(res.data || []);
+            const dataPayload = res.data;
+            const orderArray = Array.isArray(dataPayload)
+                ? dataPayload
+                : Array.isArray(dataPayload?.orders)
+                ? dataPayload.orders
+                : Array.isArray(dataPayload?.data)
+                ? dataPayload.data
+                : [];
+            setOrders(orderArray);
         } catch (err) {
             setError(err.response?.data?.message || err.message || 'Could not load order dashboard.');
         } finally {
@@ -95,16 +103,17 @@ export function useOrderDashboard() {
 
     // Grouping by fulfillment stage
     const groupedOrders = useMemo(() => {
+        const list = Array.isArray(orders) ? orders : [];
         // Only show orders that have completed pharmacist review and are
         // eligible for courier assignment. Pending review/processing orders
         // must not appear as "ready for dispatch".
-        const unassigned = orders.filter(
+        const unassigned = list.filter(
             (o) => !o.rider?.riderId && ['Approved', 'Ready to Dispatch'].includes(o.orderStatus)
         );
-        const assigned = orders.filter(
+        const assigned = list.filter(
             (o) => Boolean(o.rider?.riderId) && !['Delivered', 'Cancelled'].includes(o.orderStatus)
         );
-        const delivered = orders.filter((o) => o.orderStatus === 'Delivered');
+        const delivered = list.filter((o) => o.orderStatus === 'Delivered');
 
         return {
             unassigned,

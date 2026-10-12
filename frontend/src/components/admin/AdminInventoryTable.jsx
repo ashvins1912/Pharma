@@ -52,12 +52,20 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
     if (!canManage) return;
     setMedicineDraft(medicine ? {
       ...medicine,
+      drug: medicine.drug || medicine.activeSalt || '',
+      batchNumber: medicine.batchNumber || '',
+      hsnSac: medicine.hsnSac || '',
+      imageUrl: medicine.imageUrl || '',
       stockQuantity: medicine.stockQuantity ?? medicine.stock ?? medicine.quantity ?? 0,
       expiryDate: medicine.expiryDate ? new Date(medicine.expiryDate).toISOString().slice(0, 10) : ''
     } : {
       name: '',
       brand: '',
       sku: '',
+      drug: '',
+      batchNumber: '',
+      hsnSac: '',
+      imageUrl: '',
       category: 'General Medicine',
       description: '',
       price: '',
@@ -124,7 +132,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h3 className="text-base font-black text-slate-900">📊 Inventory & Master Catalog ({adminTotal.toLocaleString()} Items)</h3>
-          <p className="text-xs text-slate-500">Track stock levels, batch numbers, out-of-stock items, and regulatory expiry dates.</p>
+          <p className="text-xs text-slate-500">Track stock levels, batch numbers, HSN/SAC, drug formulas, and regulatory expiry dates.</p>
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -132,9 +140,9 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
             <button
               type="button"
               onClick={() => openMedicineForm()}
-              className="flex-1 sm:flex-initial rounded-xl bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white transition hover:bg-emerald-700"
+              className="flex-1 sm:flex-initial rounded-xl bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white transition hover:bg-emerald-700 shadow-sm"
             >
-              + Add Medicine
+              + Add Medicine / Product
             </button>
           )}
           {canImport && (
@@ -149,167 +157,55 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
         </div>
       </div>
 
-      {/* Filter / Search Bar */}
-      <div className="flex items-center relative">
-        <span className="absolute left-3.5 text-slate-400 text-xs">🔍</span>
+      {/* Search Bar */}
+      <div className="relative">
         <input
           type="text"
-          placeholder="Filter by SKU (e.g. MED-PNF-PARA-01), medicine name, category, or brand..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white"
+          placeholder="Search by medicine name, drug, batch number, or HSN/SAC..."
+          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500 transition"
         />
+        <svg className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
       </div>
 
-      {/* Desktop/Tablet Table View */}
-      <div className="hidden md:block overflow-x-auto">
-        <table className="w-full text-left text-xs">
-          <thead>
-            <tr className="border-b border-slate-200 text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
-              <th className="py-3 px-3">Medicine & Brand</th>
-              <th className="py-3 px-3">SKU</th>
-              <th className="py-3 px-3">Category</th>
-              <th className="py-3 px-3">Stock Units</th>
-              <th className="py-3 px-3">Price</th>
-              <th className="py-3 px-3">Batch & Expiry</th>
-              <th className="py-3 px-3">Rx Status</th>
-              <th className="py-3 px-3 text-right">Inventory Health</th>
-              <th className="py-3 px-3 text-right">Admin Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {loading ? (
-              <tr>
-                <td colSpan={9} className="py-8 text-center text-slate-400">Loading catalog items...</td>
-              </tr>
-            ) : adminMeds.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="py-8 text-center text-slate-400">No matching medicines found.</td>
-              </tr>
-            ) : (
-              adminMeds.map((med) => {
-                const stock = med.availableQuantity ?? med.stock ?? med.quantity ?? 0;
-                const physicalStock = med.stockQuantity ?? stock;
-                return (
-                  <tr key={med._id} className="hover:bg-slate-50/70 transition">
-                    <td className="py-3 px-3">
-                      <div className="flex items-center gap-2.5">
-                        <img
-                          src={med.imageUrl || "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=80&q=80"}
-                          alt={med.name}
-                          className="w-9 h-9 object-cover rounded-lg bg-slate-100 border border-slate-200"
-                          onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=80&q=80"; }}
-                        />
-                        <div>
-                          <span className="font-bold text-slate-900 block leading-tight">{med.name}</span>
-                          <span className="text-[10px] text-slate-400">{med.brand} • {med.manufacturer || 'Lab'}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 font-mono text-[11px] text-slate-600 font-bold">
-                      {med.sku || 'N/A'}
-                    </td>
-                    <td className="py-3 px-3 text-slate-600 font-medium">
-                      {med.category || 'General'}
-                    </td>
-                    <td className="py-3 px-3">
-                      <span className={`font-black ${stock <= 0 ? 'text-slate-400' : stock <= 3 ? 'text-amber-600' : 'text-slate-900'}`}>
-                        {physicalStock} units
-                      </span>
-                      {(med.reservedQuantity || 0) > 0 && (
-                        <span className="block text-[10px] text-slate-400">
-                          {stock} available · {med.reservedQuantity} reserved
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 font-black text-emerald-600">
-                      ₹{med.price}
-                    </td>
-                    <td className="py-3 px-3 text-[11px]">
-                      <span className="font-mono text-slate-500 block">{med.batchNumber || 'BTH-2024'}</span>
-                      <span className={med.isExpired ? 'text-red-600 font-bold' : med.isExpiringSoon ? 'text-amber-600 font-bold' : 'text-slate-500'}>
-                        Exp: {new Date(med.expiryDate).toLocaleDateString()}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3">
-                      {med.requiresPrescription ? (
-                        <span className="bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-black px-1.5 py-0.5 rounded">
-                          Rx Only
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 text-[10px] font-bold">OTC</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      {getStatusBadge(med)}
-                    </td>
-                    <td className="py-3 px-3 text-right whitespace-nowrap">
-                      {canManage && (
-                      <button
-                          type="button"
-                          onClick={() => openMedicineForm(med)}
-                          className="mr-2 font-bold text-blue-700 hover:underline cursor-pointer"
-                        >
-                          Edit
-                        </button>
-                      )}
-                      {canManage && (
-                      <button
-                          type="button"
-                          onClick={() => archiveMedicine(med)}
-                          className="font-bold text-rose-700 hover:underline cursor-pointer"
-                        >
-                          Archive
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Mobile Card View (Section 16 Option B) */}
-      <div className="md:hidden space-y-3">
-        {loading ? (
-          <div className="py-8 text-center text-slate-400 text-xs">Loading catalog items...</div>
+      {/* Grid of Admin Medicines */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        {loading && adminMeds.length === 0 ? (
+          <div className="col-span-full py-12 text-center text-xs text-slate-400">Loading catalog inventory...</div>
         ) : adminMeds.length === 0 ? (
-          <div className="py-8 text-center text-slate-400 text-xs">No matching medicines found.</div>
+          <div className="col-span-full py-12 text-center text-xs text-slate-400">No products found matching your search.</div>
         ) : (
           adminMeds.map((med) => {
-            const stock = med.availableQuantity ?? med.stock ?? med.quantity ?? 0;
-            const physicalStock = med.stockQuantity ?? stock;
+            const stock = med.stock !== undefined ? med.stock : med.quantity;
+            const physicalStock = med.stockQuantity !== undefined ? med.stockQuantity : stock;
             return (
-              <div key={med._id} className="p-3.5 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-2.5">
-                <div className="flex items-start gap-2.5">
-                  <img
-                    src={med.imageUrl || "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=80&q=80"}
-                    alt={med.name}
-                    className="w-12 h-12 object-cover rounded-xl bg-white border border-slate-200 flex-shrink-0"
-                    onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=80&q=80"; }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-extrabold text-xs text-slate-900 leading-tight truncate">{med.name}</h4>
-                    <p className="text-[10px] text-slate-500 mt-0.5">{med.brand} • {med.category || 'General'}</p>
-                    <span className="font-mono text-[9px] text-slate-400">{med.sku || 'N/A'}</span>
+              <div key={med._id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3 flex flex-col justify-between shadow-xs">
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <img
+                      src={med.imageUrl || med.image || 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&q=80'}
+                      alt={med.name}
+                      className="w-12 h-12 rounded-xl object-cover border border-slate-200 bg-white flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-extrabold text-slate-900 text-xs truncate">{med.name}</h4>
+                      <p className="text-[11px] text-blue-700 font-bold truncate">Drug: {med.drug || med.activeSalt || 'Standard'}</p>
+                      <p className="text-[10px] text-slate-400 truncate">HSN/SAC: {med.hsnSac || '3004'} | SKU: {med.sku || 'N/A'}</p>
+                    </div>
                   </div>
-                  <div>
-                    {getStatusBadge(med)}
-                  </div>
+                  <div>{getStatusBadge(med)}</div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-200 text-slate-600">
                   <div>
                     <span className="text-[10px] text-slate-400 uppercase font-bold block">Stock</span>
                     <span className="font-black text-slate-900">{physicalStock} units</span>
-                    {(med.reservedQuantity || 0) > 0 && (
-                      <span className="text-[10px] text-slate-400 block">({stock} avail)</span>
-                    )}
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Unit Price</span>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Price</span>
                     <span className="font-black text-emerald-700 text-sm">₹{med.price}</span>
                   </div>
                 </div>
@@ -317,13 +213,13 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
                 <div className="flex justify-between items-center text-[10px] text-slate-500 pt-1">
                   <span>Batch: <strong className="font-mono">{med.batchNumber || 'BTH-2024'}</strong></span>
                   <span className={med.isExpired ? 'text-red-600 font-bold' : ''}>
-                    Exp: {new Date(med.expiryDate).toLocaleDateString()}
+                    Exp: {med.expiryDate ? new Date(med.expiryDate).toLocaleDateString() : 'N/A'}
                   </span>
                 </div>
 
                 <div className="pt-2 border-t border-slate-200 flex justify-end gap-2">
                   {canManage && (
-                  <button
+                    <button
                       type="button"
                       onClick={() => openMedicineForm(med)}
                       className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold hover:bg-blue-100 min-h-[36px]"
@@ -332,7 +228,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
                     </button>
                   )}
                   {canManage && (
-                  <button
+                    <button
                       type="button"
                       onClick={() => archiveMedicine(med)}
                       className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 min-h-[36px]"
@@ -363,21 +259,25 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
           <form onSubmit={saveMedicine} className="max-h-[90vh] w-full max-w-xl space-y-4 overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between">
               <h4 className="text-base font-black text-slate-900">
-                {medicineDraft._id ? 'Edit medicine' : 'Add medicine'}
+                {medicineDraft._id ? 'Edit Medicine / Product' : 'Add New Medicine / Product'}
               </h4>
-              <button type="button" onClick={() => setMedicineDraft(null)} className="rounded-lg bg-slate-100 px-3 py-1 text-slate-600">
-                Close
+              <button type="button" onClick={() => setMedicineDraft(null)} className="rounded-lg bg-slate-100 px-3 py-1 text-slate-600 text-xs font-bold">
+                ✕ Close
               </button>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {[
                 ['name', 'Medicine name', 'text'],
+                ['drug', 'Drug / Active salt', 'text'],
+                ['batchNumber', 'Batch number', 'text'],
+                ['hsnSac', 'HSN/SAC code', 'text'],
                 ['brand', 'Brand', 'text'],
                 ['sku', 'SKU / Code', 'text'],
                 ['category', 'Category', 'text'],
-                ['price', 'Price', 'number'],
+                ['price', 'Price (₹)', 'number'],
                 ['stockQuantity', 'Physical stock', 'number'],
-                ['expiryDate', 'Expiry date', 'date']
+                ['expiryDate', 'Expiry date', 'date'],
+                ['imageUrl', 'Image URL (photo)', 'text']
               ].map(([field, label, type]) => (
                 <label key={field} className="space-y-1 text-xs font-bold text-slate-600">
                   <span>{label}</span>
@@ -386,7 +286,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
                     value={medicineDraft[field] ?? ''}
                     min={type === 'number' ? 0 : undefined}
                     step={field === 'price' ? '0.01' : type === 'number' ? '1' : undefined}
-                    required={['name', 'brand', 'price', 'stockQuantity', 'expiryDate'].includes(field)}
+                    required={['name', 'drug', 'batchNumber', 'hsnSac', 'price', 'stockQuantity', 'expiryDate'].includes(field)}
                     onChange={event => setMedicineDraft(prev => ({ ...prev, [field]: event.target.value }))}
                     className="w-full rounded-xl border border-slate-200 px-3 py-2 font-normal outline-none focus:border-blue-500"
                   />
@@ -410,15 +310,15 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
                     isPrescriptionRequired: event.target.checked
                   }))}
                 />
-                Prescription required
+                Prescription required (Rx)
               </label>
             </div>
             <div className="flex justify-end gap-2 border-t pt-3">
               <button type="button" onClick={() => setMedicineDraft(null)} className="rounded-xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-700">
                 Cancel
               </button>
-              <button type="submit" disabled={savingMedicine} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-extrabold text-white disabled:opacity-50">
-                {savingMedicine ? 'Saving…' : 'Save medicine'}
+              <button type="submit" disabled={savingMedicine} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-extrabold text-white disabled:opacity-50">
+                {savingMedicine ? 'Saving…' : 'Save Product / Medicine'}
               </button>
             </div>
           </form>

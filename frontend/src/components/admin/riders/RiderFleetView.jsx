@@ -4,6 +4,7 @@ import { useOrderDashboard } from '../../../hooks/useOrderDashboard';
 import RiderCard from './RiderCard';
 import RiderOnboardingModal from './RiderOnboardingModal';
 import AssignmentEngineMonitor from './AssignmentEngineMonitor';
+import RiderTerminal from './RiderTerminal';
 
 /**
  * Pure Presentation View: RiderFleetView
@@ -88,6 +89,17 @@ export default function RiderFleetView() {
                         <span>⚡</span>
                         <span>Auto-Assignment Engine ({groupedOrders.unassigned.length} pending)</span>
                     </button>
+                    <button
+                        onClick={() => setActiveSubTab('terminal')}
+                        className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                            activeSubTab === 'terminal'
+                                ? 'bg-blue-600 text-white shadow-sm'
+                                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                        }`}
+                    >
+                        <span>📍</span>
+                        <span>Rider Terminal (2dsphere)</span>
+                    </button>
                 </div>
 
                 <button
@@ -139,6 +151,11 @@ export default function RiderFleetView() {
                 <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs">
                     {ridersError}
                 </div>
+            )}
+
+            {/* SUB-TAB 3: RIDER TERMINAL */}
+            {activeSubTab === 'terminal' && (
+                <RiderTerminal />
             )}
 
             {/* SUB-TAB 1: RIDER FLEET CARDS */}

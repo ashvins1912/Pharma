@@ -29,7 +29,15 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
             if (filter.search) params.search = filter.search;
             if (filter.includeDisabled ?? includeDisabled) params.includeDisabled = true;
             const res = await apiClient.get('/api/admin/riders', { params });
-            setRiders(res.data || []);
+            const dataPayload = res.data;
+            const riderArray = Array.isArray(dataPayload)
+                ? dataPayload
+                : Array.isArray(dataPayload?.riders)
+                ? dataPayload.riders
+                : Array.isArray(dataPayload?.data)
+                ? dataPayload.data
+                : [];
+            setRiders(riderArray);
         } catch (err) {
             setRidersError(err.response?.data?.message || err.message || 'Failed to load riders.');
         } finally {
@@ -84,7 +92,8 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
     }, [fetchRiders, fetchEngineStatus]);
 
     const stats = useMemo(() => {
-        const activeRiders = riders.filter((r) => r.enabled !== false);
+        const list = Array.isArray(riders) ? riders : [];
+        const activeRiders = list.filter((r) => r.enabled !== false);
         const available = activeRiders.filter((r) => r.status === 'Available').length;
         const busy = activeRiders.filter((r) => r.status === 'Busy').length;
         const offDuty = activeRiders.filter((r) => r.status === 'Off-duty').length;
