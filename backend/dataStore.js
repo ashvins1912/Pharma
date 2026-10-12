@@ -1848,7 +1848,7 @@ export const dataStore = {
             return { items, total, page: safePage };
         }
         const delivered = inMemoryOrders
-            .filter(order => order.orderStatus === 'Delivered')
+            .filter(order => order.orderStatus === 'Delivered' && (!filter.createdAt || (new Date(order.createdAt) >= filter.createdAt.$gte && new Date(order.createdAt) < filter.createdAt.$lt)))
             .sort((a, b) => {
                 const createdAtDelta = new Date(b.createdAt) - new Date(a.createdAt);
                 return createdAtDelta || String(b._id || '').localeCompare(String(a._id || ''));
