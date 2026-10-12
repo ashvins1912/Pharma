@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { Server } from 'socket.io';
+import { startSharedEventConsumer } from './sharedEvents.js';
 
 const PORT = Number(process.env.PORT || process.env.WS_PORT || 4000);
 const HEARTBEAT_INTERVAL_MS = Number(process.env.WS_HEARTBEAT_INTERVAL_MS || 25_000);
@@ -13,6 +14,7 @@ const startedAt = Date.now();
 let lastHeartbeatAt = null;
 let heartbeatTimer = null;
 let shuttingDown = false;
+let stopSharedEventConsumer = async () => {};
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   throw new Error('PORT must be an integer from 1 to 65535.');
@@ -118,6 +120,7 @@ async function shutdown(signal) {
   shuttingDown = true;
   console.info(JSON.stringify({ event: 'shutdown_started', signal }));
   if (heartbeatTimer) clearInterval(heartbeatTimer);
+  await stopSharedEventConsumer();
   await new Promise(resolve => io.close(() => resolve()));
   if (server.listening) await new Promise(resolve => server.close(() => resolve()));
   process.exitCode = 0;
@@ -134,6 +137,7 @@ server.listen(PORT, '0.0.0.0', () => {
     allowedOrigins: allowedOrigins.length ? allowedOrigins : 'none-configured'
   }));
   startHeartbeat();
+  stopSharedEventConsumer = startSharedEventConsumer(io);
 });
 
 process.once('SIGTERM', () => { void shutdown('SIGTERM'); });
