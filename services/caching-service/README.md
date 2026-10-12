@@ -14,7 +14,7 @@ This is the internal shared cache and event transport used by the backend API an
 - `PORT=8080`
 - `REDIS_URL=redis://127.0.0.1:6379/0`
 - `CACHE_SERVICE_TOKEN`: a randomly generated secret with at least 32 characters. Set the exact same value on the cache, backend API, and WebSocket services.
-- API and WebSocket services: `CACHE_SERVICE_URL=http://ashvin-pharma-cache:8080`.
+- API and WebSocket services: `CACHE_SERVICE_URL=http://ashvin-pharma-shared-cache:8080`.
 
 Do not expose `CACHE_SERVICE_TOKEN` to Vite or any browser bundle.
 
