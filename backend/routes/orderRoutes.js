@@ -16,6 +16,7 @@ import { verifyPrescriptionAgainstItems } from '../services/prescription-verific
 import prescriptionClient from '../services/prescription-service-client/PrescriptionClient.js';
 import { reinitiatePrescriptionProcessing } from '../../services/order-service/src/prescription-client.js';
 import { customerService } from '../services/customer-service/CustomerService.js';
+import { domainEvents } from '../shared/events/DomainEvents.js';
 
 const router = express.Router();
 const dynamicOrderService = new DynamicOrderService({
@@ -186,6 +187,23 @@ router.post('/', authenticateUser, async (req, res) => {
             status: 'pending',
             orderStatus: 'Pending_Review'
         });
+
+        // This checkout route creates Order documents directly instead of using
+        // dataStore.createOrder(). Emit the same domain event so the notification
+        // service targets the authenticated customer and the authorized tenant.
+        try {
+            domainEvents.emitDomainEvent('ORDER_CREATED', String(order._id), {
+                orderNumber: order.orderNumber || String(order._id),
+                customerUserId: String(order.userId || req.user.sub),
+                customerId: String(order.customerId || req.user.sub),
+                totalAmount: order.totalAmount ?? order.finalTotal ?? amount,
+                status: order.orderStatus || 'Pending_Review'
+            }, req.user, order.tenantId || req.user.app_metadata?.tenantId || null,
+            order.branchId || req.user.app_metadata?.branchId || null);
+        } catch (notificationError) {
+            console.error('[Orders] Order-created notification event failed:', notificationError?.message || notificationError);
+        }
+
         return res.status(201).json({ order });
     } catch (error) {
         if (error.name === 'ValidationError' || error.name === 'CastError') {
