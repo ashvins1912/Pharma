@@ -145,9 +145,13 @@ apiClient.interceptors.request.use(async (config) => {
     // uses an absolute API Gateway URL. Absolute URLs must not bypass preflight
     // for any future protected API calls.
     const capabilityUrl = String(config.url || '').replace(/^https?:\/\/[^/]+/i, '');
-    const capability = config.permission
+    let capability = config.permission
         ? { permission: config.permission }
         : resolveApiCapability(config.method, capabilityUrl);
+
+    if (capabilityUrl.startsWith('/api/tenants/') || capabilityUrl.startsWith('/api/tenant/') || capabilityUrl.startsWith('/api/vendor/profile')) {
+        capability = null;
+    }
     if (capability?.permission && applicationSessionAuthenticated && !hasCapability(capability.permission) && !config.__skipAuthorizationRevalidation) {
         // Revalidate once before denying. This prevents stale UI RBAC state from
         // incorrectly blocking a permission that is currently granted.
