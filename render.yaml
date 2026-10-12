@@ -13,6 +13,10 @@ services:
         value: "*"
       - key: MONGO_URI
         sync: false
+      - key: CACHE_SERVICE_URL
+        value: http://ashvin-pharma-cache:8080
+      - key: CACHE_SERVICE_TOKEN
+        sync: false
 
   - type: web
     name: ashvin-pharma-websocket
@@ -34,6 +38,10 @@ services:
         value: 25000
       - key: WS_PING_TIMEOUT_MS
         value: 20000
+      - key: CACHE_SERVICE_URL
+        value: http://ashvin-pharma-cache:8080
+      - key: CACHE_SERVICE_TOKEN
+        sync: false
 
   - type: web
     name: ashvin-pharma-prescription
@@ -48,14 +56,22 @@ services:
       - key: PORT
         value: 3001
 
-  - type: redis
+  - type: web
     name: ashvin-pharma-cache
+    runtime: docker
     region: oregon
-    plan: starter
-    maxmemoryPolicy: noeviction
-    ipAllowList:
-      - source: 0.0.0.0/0
-        description: Temporary broad access; restrict to trusted service egress ranges when available
+    plan: free
+    dockerfilePath: ./services/caching-service/Dockerfile
+    dockerContext: ./services/caching-service
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: REDIS_URL
+        value: redis://127.0.0.1:6379/0
+      - key: CACHE_SERVICE_TOKEN
+        sync: false
+
 
   - type: web
     name: ashvin-pharma-frontend
