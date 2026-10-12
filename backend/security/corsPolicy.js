@@ -40,7 +40,11 @@ export function createCorsMiddleware(allowedOrigins) {
             'X-Request-ID',
             'X-Correlation-ID',
             'X-XSRF-TOKEN',
-            'X-CSRF-TOKEN'
+            'X-CSRF-TOKEN',
+            'X-Pharma-Client',
+            'X-Tenant-Id',
+            'X-Pharma-Tenant-Id',
+            'X-Gateway-Trusted-Authorization'
         ],
         exposedHeaders: ['X-Request-Id', 'X-Correlation-Id'],
         maxAge: 600,

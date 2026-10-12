@@ -12,6 +12,7 @@ import AdminCSquareTab from './AdminCSquareTab';
 import CustomerPromotionsView from './CustomerPromotionsView';
 import PlatformTenantsView from './PlatformTenantsView';
 import PlatformAccessControl from './PlatformAccessControl';
+import LiveTelemetryTab from './LiveTelemetryTab';
 import { getAdminMedicineRequests, getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -487,6 +488,19 @@ export default function AdminDashboardView() {
             <span>🛡️</span><span>Security Access</span>
           </button>
         )}
+        {isSuperAdmin && (
+          <button
+            onClick={() => setAdminTab('telemetry')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              adminTab === 'telemetry'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-200'
+            }`}
+          >
+            <span>📡</span>
+            <span>Live Telemetry</span>
+          </button>
+        )}
       </div>
 
       {/* Tab Content Display */}
@@ -495,6 +509,9 @@ export default function AdminDashboardView() {
       )}
       {adminTab === 'access' && canManagePlatformAccess && (
         <PlatformAccessControl />
+      )}
+      {adminTab === 'telemetry' && isSuperAdmin && (
+        <LiveTelemetryTab />
       )}
       {adminTab === 'csquare' && canViewCSquare && <AdminCSquareTab />}
       {adminTab === 'promotions' && canViewPromotions && <CustomerPromotionsView canManage={hasPermission('promotions.manage')} />}

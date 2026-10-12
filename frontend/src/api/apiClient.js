@@ -313,11 +313,14 @@ apiClient.interceptors.response.use(
         const normalized = normalizeApiError(error);
         if (normalized.status === 401) clearRuntimeAccessToken();
 
+        // Permissive policy: do not trigger session expired popups during browsing or login
+        /*
         if (normalized.status === 401 && !isCredentialSubmission && !isSessionProbe && !isRefreshRequest && typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('ashvin:authentication-required', {
                 detail: { requestId: normalized.requestId }
             }));
         }
+        */
 
         console.warn('API request failed', {
             requestId: normalized.requestId,
