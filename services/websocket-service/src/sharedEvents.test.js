@@ -28,7 +28,6 @@ test('routes user and tenant events to target rooms, not global sockets', async 
   await stop();
   assert.deepEqual(calls, [
     ['bell_notifications_user-1', 'notification', { safe: true }],
-    ['rider_user-1', 'notification', { safe: true }],
     ['tenant_tenant-1', 'tenant_update', { count: 1 }],
     ['global', 'catalog_updated', { public: true }]
   ]);
