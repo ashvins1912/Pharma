@@ -21,15 +21,16 @@ export class SharedCacheClient {
     if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 30000) {
       throw new Error('CACHE_SERVICE_TIMEOUT_MS must be between 100 and 30000.');
     }
-    if (this.baseUrl && this.token.length < 32) {
-      throw new Error('CACHE_SERVICE_TOKEN must contain at least 32 characters when CACHE_SERVICE_URL is configured.');
-    }
+    this.configurationError = this.baseUrl && this.token.length < 32
+      ? 'CACHE_SERVICE_TOKEN must contain at least 32 characters when CACHE_SERVICE_URL is configured.'
+      : null;
   }
 
-  get enabled() { return Boolean(this.baseUrl); }
+  get enabled() { return Boolean(this.baseUrl && !this.configurationError); }
 
   async request(path, { method = 'GET', body, timeoutMs = this.timeoutMs } = {}) {
-    if (!this.enabled) throw new Error('Shared cache is not configured (CACHE_SERVICE_URL is empty).');
+    if (!this.baseUrl) throw new Error('Shared cache is not configured (CACHE_SERVICE_URL is empty).');
+    if (this.configurationError) throw new Error(this.configurationError);
     const response = await this.fetchImpl(new URL(path, this.baseUrl), {
       method,
       headers: {
