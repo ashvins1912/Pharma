@@ -286,44 +286,12 @@ export function AppProvider({ children }) {
         setIsSearching(Boolean(searchQuery));
       }
     } catch (err) {
-      console.warn("API catalog fetch notice (using mock fallback catalog):", err?.message || err);
-      const mockMedicines = [
-        { _id: 'med-1', name: 'Paracetamol 650mg', brand: 'Dolo 650', category: 'Pain Relief', price: 30, mrp: 35, requiresPrescription: false, stock: 150, image: '', description: 'Effective fever and mild to moderate pain relief.' },
-        { _id: 'med-2', name: 'Azithromycin 500mg', brand: 'Azithral', category: 'Antibiotics', price: 120, mrp: 140, requiresPrescription: true, stock: 80, image: '', description: 'Broad-spectrum antibiotic used for bacterial infections.' },
-        { _id: 'med-3', name: 'Amoxicillin & Potassium Clavulanate', brand: 'Augmentin 625 Duo', category: 'Antibiotics', price: 210, mrp: 245, requiresPrescription: true, stock: 65, image: '', description: 'Combination antibiotic for respiratory and bacterial infections.' },
-        { _id: 'med-4', name: 'Pantoprazole 40mg', brand: 'Pan 40', category: 'Gastric & Digestion', price: 115, mrp: 130, requiresPrescription: false, stock: 200, image: '', description: 'Reduces stomach acid for acid reflux and ulcers.' },
-        { _id: 'med-5', name: 'Cetirizine 10mg', brand: 'Cetzine', category: 'Allergy & Cold', price: 20, mrp: 25, requiresPrescription: false, stock: 300, image: '', description: 'Anti-allergy antihistamine for runny nose and sneezing.' },
-        { _id: 'med-6', name: 'Ibuprofen 400mg + Paracetamol 325mg', brand: 'Combiflam', category: 'Pain Relief', price: 45, mrp: 52, requiresPrescription: false, stock: 120, image: '', description: 'Dual action pain reliever and anti-inflammatory.' },
-        { _id: 'med-7', name: 'Atorvastatin 10mg', brand: 'Storvas 10', category: 'Heart & Blood Pressure', price: 160, mrp: 185, requiresPrescription: true, stock: 90, image: '', description: 'Cholesterol-lowering statin medication.' },
-        { _id: 'med-8', name: 'Metformin Hydrochloride 500mg', brand: 'Glycomet 500 SR', category: 'Diabetes Care', price: 50, mrp: 60, requiresPrescription: true, stock: 250, image: '', description: 'First-line medication for type 2 diabetes management.' },
-        { _id: 'med-9', name: 'Vitamin C & Zinc Chewable Tablets', brand: 'Limcee / Becados', category: 'Vitamins & Supplements', price: 95, mrp: 110, requiresPrescription: false, stock: 400, image: '', description: 'Immunity booster nutritional supplement.' },
-        { _id: 'med-10', name: 'Montelukast 10mg + Levocetirizine 5mg', brand: 'Montek-LC', category: 'Allergy & Cold', price: 195, mrp: 225, requiresPrescription: true, stock: 110, image: '', description: 'Prevents asthma symptoms and allergic rhinitis.' },
-        { _id: 'med-11', name: 'Glimepiride 2mg + Metformin 500mg', brand: 'Glycomet-GP 2', category: 'Diabetes Care', price: 140, mrp: 165, requiresPrescription: true, stock: 140, image: '', description: 'Combination anti-diabetic medication.' },
-        { _id: 'med-12', name: 'Omeprazole 20mg', brand: 'Omez 20', category: 'Gastric & Digestion', price: 42, mrp: 50, requiresPrescription: false, stock: 180, image: '', description: 'Proton pump inhibitor for heartburn and acid reflux.' }
-      ];
-
-      let filtered = mockMedicines.filter(m => {
-        if (hideRx && m.requiresPrescription) return false;
-        if (selectedCategory && selectedCategory !== 'All' && m.category !== selectedCategory) return false;
-        if (searchQuery) {
-          const q = searchQuery.toLowerCase();
-          const matchesName = m.name.toLowerCase().includes(q) || m.brand.toLowerCase().includes(q) || m.description.toLowerCase().includes(q) || m.category.toLowerCase().includes(q);
-          if (!matchesName) return false;
-        }
-        return true;
-      });
-
-      const total = filtered.length;
-      const startIndex = (page - 1) * limit;
-      const paginated = filtered.slice(startIndex, startIndex + limit);
-
-      setMedicines(paginated);
-      setMedicinesError('');
-      setTotalMedicines(total);
-      setTotalPages(Math.ceil(total / limit) || 1);
-      setIsSearching(Boolean(searchQuery));
+      console.error("Failed to load catalog:", err);
+      setMedicines([]);
+      setTotalMedicines(0);
+      setTotalPages(1);
+      setMedicinesError(err.message || 'The medicine catalog is temporarily unavailable. Please try again.');
     } finally {
-
       setLoadingMedicines(false);
     }
   }, [searchQuery, hideRx, selectedCategory, sortOption, page, limit]);
