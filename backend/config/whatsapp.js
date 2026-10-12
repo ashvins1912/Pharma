@@ -335,8 +335,8 @@ export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActi
         return [
             `🚚 YOUR ORDER IS OUT FOR DELIVERY — #${shortId}`,
             `Status: Out for Delivery`,
-            deliveryOtp ? `🔐 Customer delivery verification code: ${deliveryOtp}` : null,
-            deliveryOtp ? 'Share this 4-digit code with your delivery rider in person. Never share it before the rider arrives.' : null,
+            deliveryOtp ? `🔐 4-Digit Verification Code: ${deliveryOtp}` : null,
+            deliveryOtp ? 'Share this code with your delivery person at handover. Never share it before the rider arrives.' : null,
             `Rider: ${order.rider?.riderName || 'Assigned Rider'}`,
             `Rider contact: ${order.rider?.riderMobile || 'Not provided'}`,
             `Delivery address: ${getCompleteAddress(order)}`,
