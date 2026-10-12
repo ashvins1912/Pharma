@@ -32,7 +32,7 @@ Do not expose the cache service token or the JWT private key to the browser. Onl
 
 ## Shared cache/event stream
 
-Set the same `CACHE_SERVICE_URL=http://ashvin-pharma-cache:8080` and `CACHE_SERVICE_TOKEN` on the backend and WebSocket service. The backend publishes domain notifications to the shared Redis Stream; the WebSocket consumer long-polls it and persists its cursor after delivery. If the WebSocket process restarts, unacknowledged events can be delivered again, so client handlers should be idempotent.
+Set the same `CACHE_SERVICE_URL=http://ashvin-pharma-shared-cache:8080` and `CACHE_SERVICE_TOKEN` on the backend and WebSocket service. The backend publishes domain notifications to the shared Redis Stream; the WebSocket consumer long-polls it and persists its cursor after delivery. If the WebSocket process restarts, unacknowledged events can be delivered again, so client handlers should be idempotent.
 
 The cache service is an independent deployment. If it is unavailable, the WebSocket process remains running and retries event consumption; cross-service events pause until it recovers.
 
@@ -47,7 +47,7 @@ The service must build from the repository root so it can import `packages/share
 Set:
 - `NODE_ENV=production`
 - `CORS_ALLOWED_ORIGINS=https://pharma-ui.onrender.com` (comma-separated exact browser origins)
-- `CACHE_SERVICE_URL=http://ashvin-pharma-cache:8080`
+- `CACHE_SERVICE_URL=http://ashvin-pharma-shared-cache:8080`
 - `CACHE_SERVICE_TOKEN`: the exact same random secret as on the cache and backend API services (minimum 32 characters)
 - `PHARMA_JWT_PUBLIC_KEY`: same RS256 public key as backend, with PEM newlines preserved or escaped as `\\n`
 - `PHARMA_JWT_ISSUER=pharma-auth`
