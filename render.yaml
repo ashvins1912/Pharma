@@ -47,13 +47,15 @@ services:
   - type: redis
     name: ashvin-pharma-cache
     region: oregon
-    plan: free
+    plan: starter # Upgraded from 'free' to support IP allowlisting
     maxmemoryPolicy: noeviction
+    ipAllowList:
+      - source: 0.0.0.0/0 # Replace this with your actual trusted CIDR blocks (e.g., your API server's outbound IP)
+        description: Trusted network access
 
   - type: web
     name: ashvin-pharma-frontend
     env: static
-    region: oregon
     plan: free
     buildCommand: npm --workspace frontend install && npm --workspace frontend run build
     staticPublishPath: ./frontend/dist
