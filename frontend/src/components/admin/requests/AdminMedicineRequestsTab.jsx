@@ -53,6 +53,12 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
   };
 
   useEffect(() => {
+    const refreshRequests = () => { void loadRequests(1); };
+    window.addEventListener('pharma:medicine-request-updated', refreshRequests);
+    return () => window.removeEventListener('pharma:medicine-request-updated', refreshRequests);
+  }, []);
+
+  useEffect(() => {
     // Dashboard owns the initial ALL/15 request. Wait for it rather than racing
     // with a second identical request when the pharmacy dashboard mounts.
     if (selectedStatus === 'ALL' && !searchQuery.trim() && initialLoading) return;

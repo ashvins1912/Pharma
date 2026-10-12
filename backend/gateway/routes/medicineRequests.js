@@ -67,6 +67,7 @@ router.post('/', authenticateUser, async (req, res, next) => {
             tenantId: targetTenantId,
             branchId: targetBranchId,
             customerId: customer.id,
+            customerUserId: req.context.userId,
             customerName: customer.name,
             customerPhone: customer.phone,
             medicineName: req.body.medicineName,

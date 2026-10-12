@@ -25,6 +25,9 @@ export default function MedicineRequestsView({ onOrderCreated }) {
 
   useEffect(() => {
     loadRequests();
+    const refreshRequests = () => { void loadRequests(); };
+    window.addEventListener('pharma:medicine-request-updated', refreshRequests);
+    return () => window.removeEventListener('pharma:medicine-request-updated', refreshRequests);
   }, []);
 
   const handleDecision = async (requestId, decision) => {

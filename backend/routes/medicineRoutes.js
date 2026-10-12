@@ -1,4 +1,5 @@
 import express from 'express';
+import { createHash, randomUUID } from 'node:crypto';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
@@ -6,6 +7,7 @@ import { getIsConnected } from '../config/db.js';
 import { authenticateUser } from '../middleware/auth.js';
 import ProductDiscoveryService from '../services/ProductDiscoveryService.js';
 import SearchMetricIngestionService from '../services/SearchMetricIngestionService.js';
+import { cacheService } from '../services/cache/CacheService.js';
 
 const router = express.Router();
 const importFileLimit = Number.parseInt(process.env.INVENTORY_IMPORT_MAX_FILE_BYTES || '', 10);
@@ -33,6 +35,30 @@ const publicMedicine = medicine => {
 const getErrorStatus = error => error.statusCode
     || (error.name === 'ValidationError' || error.name === 'CastError' ? 400 : 500);
 
+const PUBLIC_CATALOG_VERSION_KEY = 'public-medicines:catalog-version';
+const PUBLIC_CATALOG_TTL_SECONDS = 10;
+
+async function getPublicCatalogVersion() {
+    const existing = await cacheService.get(PUBLIC_CATALOG_VERSION_KEY);
+    if (typeof existing === 'string' && existing) return existing;
+    const version = randomUUID();
+    await cacheService.set(PUBLIC_CATALOG_VERSION_KEY, version, 24 * 60 * 60);
+    return version;
+}
+
+async function invalidatePublicCatalog() {
+    await cacheService.set(PUBLIC_CATALOG_VERSION_KEY, randomUUID(), 24 * 60 * 60);
+}
+
+function publicCatalogCacheKey(version, tenantId, query) {
+    const digest = createHash('sha256').update(JSON.stringify({
+        tenantId,
+        query: Object.fromEntries(Object.entries(query).sort(([a], [b]) => a.localeCompare(b)))
+    })).digest('hex');
+    return `public-medicines:v:${version}:${digest}`;
+}
+
+
 // Full inventory and CRUD are protected by inventory.read / inventory.write capabilities.
 router.get('/admin/inventory', authenticateUser, async (req, res) => {
     try {
@@ -47,6 +73,7 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
 router.post('/', authenticateUser, async (req, res) => {
     try {
         const medicine = await dataStore.createMedicine(req.body || {});
+        await invalidatePublicCatalog();
         res.status(201).json(medicine);
     } catch (error) {
         console.error('Medicine creation failed:', error);
@@ -57,6 +84,7 @@ router.post('/', authenticateUser, async (req, res) => {
 router.put('/:medicineId', authenticateUser, async (req, res) => {
     try {
         const medicine = await dataStore.updateMedicine(req.params.medicineId, req.body || {});
+        await invalidatePublicCatalog();
         res.json(medicine);
     } catch (error) {
         console.error('Medicine update failed:', error);
@@ -66,7 +94,9 @@ router.put('/:medicineId', authenticateUser, async (req, res) => {
 
 router.delete('/:medicineId', authenticateUser, async (req, res) => {
     try {
-        res.json(await dataStore.deleteMedicine(req.params.medicineId));
+        const result = await dataStore.deleteMedicine(req.params.medicineId);
+        await invalidatePublicCatalog();
+        res.json(result);
     } catch (error) {
         console.error('Medicine archival failed:', error);
         res.status(getErrorStatus(error)).json({ message: error.message || 'Failed to delete medicine.' });
@@ -77,6 +107,22 @@ router.delete('/:medicineId', authenticateUser, async (req, res) => {
 router.get('/', async (req, res) => {
     try {
         const { search, hideRx, category, sort, page, limit, paginate } = req.query;
+        // Only cache non-search public catalog reads. Search requests have impression
+        // ingestion side effects and should continue to execute normally.
+        const cacheEligible = !(typeof search === 'string' && search.trim())
+            && paginate !== 'false';
+        const tenantId = String(req.headers['x-tenant-id'] || 'public').slice(0, 128);
+        let cacheKey = null;
+        if (cacheEligible) {
+            const version = await getPublicCatalogVersion();
+            cacheKey = publicCatalogCacheKey(version, tenantId, { hideRx, category, sort, page, limit, paginate });
+            const cached = await cacheService.get(cacheKey);
+            if (cached !== null && cached !== undefined) {
+                res.set('X-Pharma-Cache', 'HIT');
+                return res.json(cached);
+            }
+        }
+
         const result = await dataStore.getMedicines(
             search,
             hideRx,
@@ -95,11 +141,12 @@ router.get('/', async (req, res) => {
                 .catch(error => console.error('Medicine search impression recording failed:', error));
         }
 
-        if (paginate === 'false') {
-            return res.json(medicines);
+        const response = paginate === 'false' ? medicines : { ...result, medicines };
+        if (cacheEligible && cacheKey) {
+            await cacheService.set(cacheKey, response, PUBLIC_CATALOG_TTL_SECONDS);
+            res.set('X-Pharma-Cache', 'MISS');
         }
-
-        res.json({ ...result, medicines });
+        return res.json(response);
     } catch (err) {
         console.error("Error fetching medicines:", err);
         res.status(500).json({ message: "Failed to fetch medicines" });
