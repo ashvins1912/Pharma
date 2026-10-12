@@ -1874,6 +1874,12 @@ export class AuthService {
         const authorization = await authorizationService.resolve(user);
 
         const age = calculateAge(user.dateOfBirth);
+        // If canonical user storage is available but the profile row does not yet
+        // exist, preserve only verified session values and return a complete, stable
+        // shape instead of hiding fields behind undefined values.
+        const resolvedMobile = user.mobileNumber || user.mobile || user.user_metadata?.mobile || '';
+        const resolvedDob = user.dateOfBirth || user.user_metadata?.dateOfBirth || null;
+        const resolvedGender = user.gender || user.user_metadata?.gender || null;
 
         return {
             user: {
@@ -1883,10 +1889,10 @@ export class AuthService {
                 lastName,
                 email: user.email || '',
                 name: fullName || user.name || '',
-                mobileNumber: user.mobileNumber || user.mobile || user.user_metadata?.mobile || '',
-                mobile: user.mobileNumber || user.mobile || user.user_metadata?.mobile || '',
-                dateOfBirth: user.dateOfBirth || user.user_metadata?.dateOfBirth || null,
-                gender: user.gender || user.user_metadata?.gender || null,
+                mobileNumber: resolvedMobile,
+                mobile: resolvedMobile,
+                dateOfBirth: resolvedDob,
+                gender: resolvedGender,
                 age,
                 emailVerified: Boolean(user.emailVerified !== false),
                 accountStatus: user.accountStatus || 'ACTIVE',
