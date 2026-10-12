@@ -107,7 +107,8 @@ async def get_cache(key: str = Query(..., min_length=1, max_length=512),
         raise HTTPException(status_code=503, detail="Cache read failed")
 
 
-@app.post("/v1/cache")
+@app.put("/v1/cache")
+@app.post("/v1/cache")  # Backward compatibility for older deployed clients.
 async def set_cache(payload: CacheSetPayload,
                     x_cache_service_token: Optional[str] = Header(default=None)):
     require_internal_token(x_cache_service_token)
