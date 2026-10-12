@@ -18,6 +18,10 @@ export function clearRuntimeAccessToken() {
     runtimeAccessToken = null;
 }
 
+export function getRuntimeAccessToken() {
+    return runtimeAccessToken;
+}
+
 // HttpOnly session cookies cannot be inspected from JavaScript. AuthContext
 // explicitly mirrors the authenticated state here so a public 401 can never
 // cause the refresh interceptor to probe/rotate a session that does not exist.
