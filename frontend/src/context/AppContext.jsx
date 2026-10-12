@@ -545,11 +545,16 @@ export function AppProvider({ children }) {
         whatsappDeliveryState: payload.deliveryState || null
       };
       setNotifications(previous => {
-        const existingIndex = previous.findIndex(item => String(item.id) === id);
+        const existingIndex = previous.findIndex(item => String(item.id) === id
+          || (sourceChannel === 'whatsapp_notification' && payload.eventType === 'WHATSAPP_DELIVERY_STATUS'
+            && ((payload.orderId && String(item.orderId) === String(payload.orderId))
+              || (payload.medicineRequestId && String(item.requestId) === String(payload.medicineRequestId)))));
         if (existingIndex >= 0) {
-          return previous.map(item => String(item.id) === id
-            ? { ...item, ...notification, read: item.read, whatsappDeliveryState: payload.deliveryState || item.whatsappDeliveryState }
-            : item);
+          return previous.map((item, index) => {
+            if (index !== existingIndex) return item;
+            if (payload.eventType === 'WHATSAPP_DELIVERY_STATUS') return { ...item, whatsappDeliveryState: payload.deliveryState || item.whatsappDeliveryState };
+            return { ...item, ...notification, read: item.read, whatsappDeliveryState: payload.deliveryState || item.whatsappDeliveryState };
+          });
         }
         return [notification, ...previous].slice(0, 50);
       });
