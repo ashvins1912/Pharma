@@ -20,7 +20,7 @@ services:
     rootDir: services/websocket-service
     region: oregon
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install --workspaces=false
     startCommand: npm start
     healthCheckPath: /healthz
     envVars:
