@@ -1,10 +1,12 @@
 import { EventEmitter } from 'node:events';
 import QueuedMessage from '../../models/QueuedMessage.js';
+import { sharedCache } from '../../../packages/shared-cache/index.js';
 
 export class CacheService extends EventEmitter {
     constructor() {
         super();
         this.store = new Map();
+        this.sharedCache = sharedCache;
         this.subscribers = new Set();
         this.telemetry = {
             putsCount: 0,
@@ -19,12 +21,27 @@ export class CacheService extends EventEmitter {
     async set(key, value, ttlSeconds = 3600) {
         this.telemetry.putsCount += 1;
         this.telemetry.lastActivity = new Date().toISOString();
+        if (this.sharedCache.enabled) {
+            try {
+                await this.sharedCache.set(key, value, ttlSeconds);
+                return true;
+            } catch (error) {
+                console.warn('[CacheService] Shared cache write failed; using process-local fallback:', error.message);
+            }
+        }
         const expiresAt = Date.now() + ttlSeconds * 1000;
         this.store.set(key, { value, expiresAt });
         return true;
     }
 
     async get(key) {
+        if (this.sharedCache.enabled) {
+            try {
+                return await this.sharedCache.get(key);
+            } catch (error) {
+                console.warn('[CacheService] Shared cache read failed; using process-local fallback:', error.message);
+            }
+        }
         const item = this.store.get(key);
         if (!item) return null;
         if (Date.now() > item.expiresAt) {
@@ -35,6 +52,13 @@ export class CacheService extends EventEmitter {
     }
 
     async del(key) {
+        if (this.sharedCache.enabled) {
+            try {
+                return await this.sharedCache.del(key);
+            } catch (error) {
+                console.warn('[CacheService] Shared cache delete failed; clearing local fallback:', error.message);
+            }
+        }
         return this.store.delete(key);
     }
 
@@ -51,6 +75,16 @@ export class CacheService extends EventEmitter {
 
         this.emit('message', envelope);
         this.emit(channel, eventPayload);
+
+        if (this.sharedCache.enabled) {
+            try {
+                await this.sharedCache.publishEvent(channel, eventPayload, target);
+            } catch (error) {
+                // Cache is an acceleration/transport dependency, never the source of truth.
+                // Preserve local listeners and durable queue persistence if it is temporarily down.
+                console.error('[CacheService] Shared event publish failed:', error.message);
+            }
+        }
 
         // If listeners are sparse or explicit user/tenant target, persist to DB queue backlog
         if (target.userId || target.tenantId || this.listenerCount('message') === 0) {
