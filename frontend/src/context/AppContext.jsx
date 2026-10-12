@@ -848,6 +848,12 @@ export function AppProvider({ children }) {
   const finalTotal = Math.max(0, subtotal - discountAmount + deliveryFee);
   const appliedCouponRef = useRef(appliedCoupon);
   useEffect(() => { appliedCouponRef.current = appliedCoupon; }, [appliedCoupon]);
+  // A pharmacy switch must not carry a tenant-issued discount into another pharmacy's cart.
+  useEffect(() => {
+    setAppliedCoupon(null);
+    setCouponCode('');
+    setCouponError('');
+  }, [tenantId]);
 
   // Tenant-assigned customer promotions are selected by the backend and
   // automatically applied before checkout. Explicit public coupons can still
