@@ -164,8 +164,8 @@ export class CustomerService {
     }
 
     const puid = generatePuid();
-    // Persist the customer identity first. If another request creates it concurrently,
-    // reuse that row rather than creating a duplicate self-person/relationship.
+    // Persist the customer identity first. When requests race, re-read the winner
+    // and continue repairing its own self record rather than creating an orphan.
     try {
       customer = await CustomerProfile.create({
         userId,
@@ -179,25 +179,26 @@ export class CustomerService {
       if (createErr.code !== 11000) throw createErr;
       customer = await CustomerProfile.findOne({ $or: [{ userId }, { supabaseId: userId }] });
       if (!customer) throw createErr;
-      return this.ensureCustomerForUser(userId, { name, email, phone, tenantId });
     }
 
-    let person;
-    try {
-      person = await Person.create({
-        puid: customer.selfPuid,
-        displayName: name || 'Self',
-        relationshipToOwner: 'SELF',
-        createdByUserId: userId,
-        tenantId: tenantId || null
-      });
-    } catch (error) {
-      if (error?.code !== 11000) {
-        await CustomerProfile.deleteOne({ _id: customer._id, userId }).catch(() => {});
-        throw error;
-      }
+    let person = await Person.findOne({ puid: customer.selfPuid }).lean();
+    if (person && person.createdByUserId !== userId) {
+      throw Object.assign(new Error('Customer profile identity is inconsistent.'), { statusCode: 409 });
     }
-    person = person || await Person.findOne({ puid: customer.selfPuid }).lean();
+    if (!person) {
+      try {
+        await Person.create({
+          puid: customer.selfPuid,
+          displayName: name || customer.name || 'Self',
+          relationshipToOwner: 'SELF',
+          createdByUserId: userId,
+          tenantId: tenantId || null
+        });
+      } catch (error) {
+        if (error?.code !== 11000) throw error;
+      }
+      person = await Person.findOne({ puid: customer.selfPuid }).lean();
+    }
     if (!person || person.createdByUserId !== userId) {
       throw Object.assign(new Error('Customer self profile identity could not be verified.'), { statusCode: 409 });
     }
