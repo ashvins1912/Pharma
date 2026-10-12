@@ -788,7 +788,8 @@ router.post('/admin/:id/prescription/manual-approve', authenticateUser, isAdmin,
             manualApproval: true,
             manualApprovalScope: scope,
             manualApprovedBy: req.user.user_metadata?.name || req.user.email || 'Admin',
-            manualApprovalAt: new Date()
+            manualApprovalAt: new Date(),
+            manualApprovalReason: decisionReason.slice(0, 500)
         };
 
         if (getIsConnected() && order._id) {
@@ -803,9 +804,7 @@ router.post('/admin/:id/prescription/manual-approve', authenticateUser, isAdmin,
                         newStatus: order.orderStatus,
                         changedBy: req.user.user_metadata?.name || req.user.email || 'Admin',
                         timestamp: new Date(),
-                        notes: scope === 'order'
-                            ? 'Prescription manually approved at order level.'
-                            : `Medicine item ${Number(itemIndex) + 1} manually approved.`
+                        notes: `Manual prescription decision (${scope}): ${decisionReason.slice(0, 500)}`
                     }
                 }
             });
