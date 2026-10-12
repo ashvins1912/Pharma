@@ -546,6 +546,9 @@ export function AppProvider({ children }) {
       };
       setNotifications(previous => {
         const existingIndex = previous.findIndex(item => String(item.id) === id
+          || (item.eventType === 'WHATSAPP_DELIVERY_STATUS'
+            && ((payload.orderId && String(item.orderId) === String(payload.orderId))
+              || (payload.medicineRequestId && String(item.requestId) === String(payload.medicineRequestId))))
           || (sourceChannel === 'whatsapp_notification' && payload.eventType === 'WHATSAPP_DELIVERY_STATUS'
             && ((payload.orderId && String(item.orderId) === String(payload.orderId))
               || (payload.medicineRequestId && String(item.requestId) === String(payload.medicineRequestId)))));
