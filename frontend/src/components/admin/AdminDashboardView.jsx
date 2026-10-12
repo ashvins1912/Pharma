@@ -108,13 +108,7 @@ export default function AdminDashboardView() {
   }, [authLoading, canAccessOperations, canViewAdminRequests]);
 
   const loadPendingMedicineRequestCount = async () => {
-    if (authLoading || !canAccessOperations || !hasPermission('medicine_requests.pending_count')) return;
-    try {
-      const count = await getAdminPendingMedicineRequestCount();
-      setPendingMedicineRequestCount(Number.isInteger(count) && count > 0 ? count : 0);
-    } catch (error) {
-      console.error('Failed to load pending medicine request count:', error);
-    }
+    setPendingMedicineRequestCount(0);
   };
 
   const loadAllOrders = async () => {

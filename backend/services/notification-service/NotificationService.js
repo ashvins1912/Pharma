@@ -1,11 +1,13 @@
 /**
  * Centralized Notification Service
  * Dispatches domain events across IN_APP, WHATSAPP, SMS, and EMAIL channels
+ * and consumes data from Redis/Cache broker on getting message alerts from WebSockets.
  */
 import { domainEvents } from '../../shared/events/DomainEvents.js';
 import { logger } from '../../shared/observability/logger.js';
 import { emailService } from './EmailService.js';
 import { sendCustomWhatsAppAlert, sendWhatsAppMedicineRequestAlert } from '../../config/whatsapp.js';
+import { cacheService } from '../cache/CacheService.js';
 
 export class NotificationService {
     constructor() {
@@ -14,6 +16,28 @@ export class NotificationService {
         this.sseClients = new Map(); // clientId -> { res, context }
         this.emailService = emailService;
         this._bindDomainEvents();
+        this._bindCacheConsumer();
+    }
+
+    _bindCacheConsumer() {
+        try {
+            cacheService.subscribe((envelope) => {
+                const { channel, payload } = envelope;
+                logger.info(`[NotificationService] Consuming message from cache/Redis broker on channel [${channel}]`);
+                if (payload && (payload.title || payload.body || payload.message)) {
+                    this.send({
+                        tenantId: payload.tenantId || null,
+                        branchId: payload.branchId || null,
+                        recipientUserId: payload.userId || payload.recipientUserId || null,
+                        title: payload.title || 'WebSocket Message Alert',
+                        body: payload.body || payload.message || JSON.stringify(payload),
+                        channels: ['IN_APP']
+                    });
+                }
+            });
+        } catch (err) {
+            logger.warn('[NotificationService] Failed to bind cache/Redis consumer:', err?.message);
+        }
     }
 
     addSseClient(clientId, res, context = {}) {

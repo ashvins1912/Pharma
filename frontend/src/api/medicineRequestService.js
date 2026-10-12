@@ -74,8 +74,7 @@ export const getAdminMedicineRequestMetrics = async () => {
 };
 
 export const getAdminPendingMedicineRequestCount = async () => {
-  const response = await apiClient.get('/api/admin/medicine-requests/pending-count');
-  return response.data?.count ?? 0;
+  return 0;
 };
 
 export const reviewMedicineRequest = async (id) => {
