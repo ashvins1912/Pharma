@@ -119,7 +119,14 @@ export class MedicineRequestService {
         };
 
         this.requests.set(id, reqDoc);
-        domainEvents.emitDomainEvent('MEDICINE_REQUEST_CREATED', id, { requestNumber, medicineName }, actor, tenantId, branchId);
+        domainEvents.emitDomainEvent('MEDICINE_REQUEST_CREATED', id, {
+            requestNumber, medicineName, customerId, customerName: reqDoc.customerName, customerPhone: reqDoc.customerPhone,
+            requestedItems: [{ requestedName: reqDoc.medicineName, strength: reqDoc.strength, quantity: reqDoc.requestedQuantity }],
+            preferredDeliveryPreference: reqDoc.preferredDeliveryTiming,
+            request: { id, requestNumber, customerId, customerName: reqDoc.customerName, customerPhone: reqDoc.customerPhone,
+                requestedItems: [{ requestedName: reqDoc.medicineName, strength: reqDoc.strength, quantity: reqDoc.requestedQuantity }],
+                preferredDeliveryPreference: reqDoc.preferredDeliveryTiming }
+        }, actor, tenantId, branchId);
         logger.info(`New medicine request created #${requestNumber}`, { requestId: id, tenantId });
         return reqDoc;
     }
@@ -212,7 +219,10 @@ export class MedicineRequestService {
             notes: `Formulated proposal: ₹${totalPrice} (${proposal.priceType})`
         });
 
-        domainEvents.emitDomainEvent('PROPOSAL_CREATED', id, { proposal, customerId: request.customerId, requestNumber: request.requestNumber, medicineName: request.medicineName }, actor, request.tenantId, request.branchId);
+        domainEvents.emitDomainEvent('PROPOSAL_CREATED', id, { proposal, customerId: request.customerId, requestNumber: request.requestNumber, medicineName: request.medicineName,
+            request: { id: request.id, requestNumber: request.requestNumber, customerId: request.customerId, customerName: request.customerName,
+                customerPhone: request.customerPhone, requestedItems: [{ requestedName: request.medicineName, strength: request.strength, quantity: request.requestedQuantity }],
+                preferredDeliveryPreference: request.preferredDeliveryTiming, pharmacyProposal: proposal } }, actor, request.tenantId, request.branchId);
         logger.info(`Pharmacy proposal sent for request #${request.requestNumber}`, { requestId: id });
         return request;
     }
@@ -293,7 +303,10 @@ export class MedicineRequestService {
             notes: `Converted to Order #${order.orderNumber}`
         });
 
-        domainEvents.emitDomainEvent('PROPOSAL_APPROVED', id, { orderId: order.id, customerId: request.customerId, requestNumber: request.requestNumber, medicineName: request.medicineName }, actor, request.tenantId, request.branchId);
+        domainEvents.emitDomainEvent('PROPOSAL_APPROVED', id, { orderId: order.id, customerId: request.customerId, requestNumber: request.requestNumber, medicineName: request.medicineName,
+            request: { id: request.id, requestNumber: request.requestNumber, customerId: request.customerId, customerName: request.customerName,
+                customerPhone: request.customerPhone, requestedItems: [{ requestedName: request.medicineName, strength: request.strength, quantity: request.requestedQuantity }],
+                pharmacyProposal: request.pharmacyProposal } }, actor, request.tenantId, request.branchId);
         logger.info(`Request #${request.requestNumber} converted to Order #${order.orderNumber}`, { orderId: order.id });
 
         return {
@@ -326,7 +339,10 @@ export class MedicineRequestService {
             notes: reason || 'Customer declined proposal'
         });
 
-        domainEvents.emitDomainEvent('PROPOSAL_REJECTED', id, { reason, customerId: request.customerId, requestNumber: request.requestNumber, medicineName: request.medicineName }, actor, request.tenantId, request.branchId);
+        domainEvents.emitDomainEvent('PROPOSAL_REJECTED', id, { reason, customerId: request.customerId, requestNumber: request.requestNumber, medicineName: request.medicineName,
+            request: { id: request.id, requestNumber: request.requestNumber, customerId: request.customerId, customerName: request.customerName,
+                customerPhone: request.customerPhone, requestedItems: [{ requestedName: request.medicineName, strength: request.strength, quantity: request.requestedQuantity }],
+                pharmacyProposal: request.pharmacyProposal } }, actor, request.tenantId, request.branchId);
         return request;
     }
 
