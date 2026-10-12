@@ -101,7 +101,10 @@ export class CustomerService {
     await remediateCustomerIndexes();
     let customer = await CustomerProfile.findOne({ $or: [{ userId }, { supabaseId: userId }] });
     if (customer) {
+      // Keep profile attributes synchronized when a customer account was first
+      // provisioned before its canonical identity/profile fields were populated.
       const updates = {};
+      if (!customer.userId) updates.userId = userId;
       if (!customer.supabaseId) updates.supabaseId = userId;
       if (name && name.trim() && name.trim() !== customer.name) updates.name = name.trim();
       if (email && email !== customer.email) updates.email = email;
@@ -148,6 +151,9 @@ export class CustomerService {
         throw Object.assign(new Error('Customer profile identity is inconsistent.'), { statusCode: 409 });
       }
 
+      // A repaired profile's response must return the freshly loaded, synchronized
+      // customer data; re-read after writes so callers aren't given stale fields.
+      customer = await CustomerProfile.findOne({ _id: customer._id });
       await PersonRelationship.updateOne(
         { ownerUserId: userId, personPuid: customer.selfPuid },
         {
@@ -164,49 +170,56 @@ export class CustomerService {
     }
 
     const puid = generatePuid();
-    const person = await Person.create({
-      puid,
-      displayName: name || 'Self',
-      relationshipToOwner: 'SELF',
-      createdByUserId: userId,
-      tenantId: tenantId || null
-    });
+    // Persist the customer identity first. When requests race, re-read the winner
+    // and continue repairing its own self record rather than creating an orphan.
     try {
       customer = await CustomerProfile.create({
         userId,
         supabaseId: userId,
-        selfPuid: person.puid,
+        selfPuid: puid,
         name: name || 'Valued Customer',
         email: email || '',
         phone: phone || ''
       });
     } catch (createErr) {
-      if (createErr.code === 11000) {
-        try {
-          await mongoose.connection.collection('customers').dropIndex('supabaseId_1');
-        } catch {}
-        customer = await CustomerProfile.findOne({ $or: [{ userId }, { supabaseId: userId }] });
-        if (!customer) {
-          customer = await CustomerProfile.create({
-            userId,
-            supabaseId: userId,
-            selfPuid: person.puid,
-            name: name || 'Valued Customer',
-            email: email || '',
-            phone: phone || ''
-          });
-        }
-      } else {
-        throw createErr;
-      }
+      if (createErr.code !== 11000) throw createErr;
+      customer = await CustomerProfile.findOne({ $or: [{ userId }, { supabaseId: userId }] });
+      if (!customer) throw createErr;
     }
-    await PersonRelationship.create({
-      ownerUserId: userId,
-      ownerCustomerId: customer.customerId,
-      personPuid: person.puid,
-      relationship: 'SELF',
-      canManage: true
-    });
+
+    let person = await Person.findOne({ puid: customer.selfPuid }).lean();
+    if (person && person.createdByUserId !== userId) {
+      throw Object.assign(new Error('Customer profile identity is inconsistent.'), { statusCode: 409 });
+    }
+    if (!person) {
+      try {
+        await Person.create({
+          puid: customer.selfPuid,
+          displayName: name || customer.name || 'Self',
+          relationshipToOwner: 'SELF',
+          createdByUserId: userId,
+          tenantId: tenantId || null
+        });
+      } catch (error) {
+        if (error?.code !== 11000) throw error;
+      }
+      person = await Person.findOne({ puid: customer.selfPuid }).lean();
+    }
+    if (!person || person.createdByUserId !== userId) {
+      throw Object.assign(new Error('Customer self profile identity could not be verified.'), { statusCode: 409 });
+    }
+    await PersonRelationship.updateOne(
+      { ownerUserId: userId, personPuid: customer.selfPuid },
+      {
+        $set: { status: 'ACTIVE', relationship: 'SELF', canManage: true },
+        $setOnInsert: {
+          ownerUserId: userId,
+          ownerCustomerId: customer.customerId,
+          personPuid: customer.selfPuid
+        }
+      },
+      { upsert: true }
+    );
     return this._serializeCustomer(customer);
   }
 
@@ -218,14 +231,11 @@ export class CustomerService {
       throw Object.assign(new Error('displayName and relationship are required'), { statusCode: 400 });
     }
 
-    // The UI can be reached before a CustomerProfile has been provisioned (for
-    // example, a newly authenticated Google/Supabase user). Previously this
-    // path immediately returned 404 "Customer not found", making the form open
-    // successfully but every save fail. Provision/repair only the authenticated
-    // user's own customer + SELF relationship before creating their relative.
-    // Ownership is still keyed by userId; no client-supplied owner or tenant is trusted.
+    // Identity and profile data are resolved server-side; caller-supplied owner IDs
+    // are never accepted. A relative is linked to the authenticated account's
+    // canonical CustomerProfile and its PersonRelationship.
     await this.ensureCustomerForUser(userId, { tenantId: tenantId || null });
-    const customer = await CustomerProfile.findOne({ userId });
+    const customer = await CustomerProfile.findOne({ $or: [{ userId }, { supabaseId: userId }] });
     if (!customer) {
       throw Object.assign(new Error('Customer profile could not be initialized.'), { statusCode: 409 });
     }
@@ -240,13 +250,22 @@ export class CustomerService {
       createdByUserId: userId,
       tenantId: tenantId || null
     });
-    await PersonRelationship.create({
-      ownerUserId: userId,
-      ownerCustomerId: customer.customerId,
-      personPuid: person.puid,
-      relationship: normalizedRelationship,
-      canManage: true
-    });
+    try {
+      await PersonRelationship.create({
+        ownerUserId: userId,
+        ownerCustomerId: customer.customerId,
+        personPuid: person.puid,
+        relationship: normalizedRelationship,
+        canManage: true
+      });
+    } catch (error) {
+      // Avoid orphaning a person when a concurrent duplicate relationship wins.
+      await Person.deleteOne({ puid: person.puid, createdByUserId: userId }).catch(() => {});
+      if (error?.code === 11000) {
+        throw Object.assign(new Error('This relative already exists in your profile.'), { statusCode: 409 });
+      }
+      throw error;
+    }
     return this._serializePerson(person);
   }
 

@@ -1810,6 +1810,45 @@ export class AuthService {
      * Retrieve authenticated profile with full tenant & membership context
      */
     async getUserProfile(user, context = {}) {
+        // Resolve canonical profile data first, but retain authorization and tenant
+        // claims from the verified token. Profile reads must not silently depend on
+        // the age of the access token.
+        const subject = user?.sub || user?.id || user?.userId;
+        let canonicalUser = user || {};
+        if (subject && getIsConnected()) {
+            let stored = null;
+            try {
+                stored = await this.findUser({ userId: subject });
+            } catch (error) {
+                logger.warn('Canonical profile hydration failed.', { userId: subject, error: error.message });
+                throw Object.assign(new Error('Profile information is temporarily unavailable. Please retry.'), {
+                    code: 'PROFILE_LOOKUP_UNAVAILABLE',
+                    status: 503
+                });
+            }
+            if (stored) {
+                // Stored authorization fields may be stale relative to the verified
+                // access token. Hydrate profile attributes, but preserve role, tenant,
+                // branch, scope, permissions and revocations from the verified session.
+                const session = user || {};
+                canonicalUser = {
+                    ...session,
+                    ...stored,
+                    sub: subject,
+                    id: subject,
+                    userId: subject,
+                    role: session.role ?? stored.role,
+                    roles: session.roles ?? stored.roles,
+                    tenantId: session.tenantId ?? session.app_metadata?.tenantId ?? stored.tenantId,
+                    branchId: session.branchId ?? session.app_metadata?.branchId ?? stored.branchId,
+                    scope: session.scope ?? stored.scope,
+                    permissions: session.permissions ?? stored.permissions,
+                    revokedPermissions: session.revokedPermissions ?? stored.revokedPermissions,
+                    permissionVersion: session.permissionVersion ?? stored.permissionVersion
+                };
+            }
+        }
+        user = canonicalUser;
         const rawRole = user.app_metadata?.role || user.role || 'customer';
         const role = isPlatformSuperAdmin(rawRole) ? 'SUPER_ADMIN' : rawRole;
         const isPlatform = role === 'SUPER_ADMIN';
@@ -1841,9 +1880,12 @@ export class AuthService {
             }
         }
 
+        // Prefer the canonical persisted name parts. Fall back to provider/session
+        // claims only where older records genuinely lack a field.
         const nameParts = (user.user_metadata?.name || user.name || '').trim().split(/\s+/);
         const firstName = user.firstName || nameParts[0] || 'User';
         const lastName = user.lastName || nameParts.slice(1).join(' ') || '';
+        const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
 
         const scope = isPlatform ? 'PLATFORM' : (tenantId ? 'TENANT' : 'CUSTOMER');
         const effectiveRole = isPlatform ? 'SUPER_ADMIN' : (role === 'TENANT_ADMIN' ? 'TENANT_ADMIN' : (role.toLowerCase() === 'customer' ? 'customer' : role));
@@ -1853,6 +1895,12 @@ export class AuthService {
         const authorization = await authorizationService.resolve(user);
 
         const age = calculateAge(user.dateOfBirth);
+        // If canonical user storage is available but the profile row does not yet
+        // exist, preserve only verified session values and return a complete, stable
+        // shape instead of hiding fields behind undefined values.
+        const resolvedMobile = user.mobileNumber || user.mobile || user.user_metadata?.mobile || '';
+        const resolvedDob = user.dateOfBirth || user.user_metadata?.dateOfBirth || null;
+        const resolvedGender = user.gender || user.user_metadata?.gender || null;
 
         return {
             user: {
@@ -1861,11 +1909,11 @@ export class AuthService {
                 firstName,
                 lastName,
                 email: user.email || '',
-                name: user.name || [firstName, lastName].filter(Boolean).join(' '),
-                mobileNumber: user.mobileNumber || user.mobile || user.user_metadata?.mobile || '',
-                mobile: user.mobileNumber || user.mobile || user.user_metadata?.mobile || '',
-                dateOfBirth: user.dateOfBirth || user.user_metadata?.dateOfBirth || null,
-                gender: user.gender || user.user_metadata?.gender || null,
+                name: fullName || user.name || '',
+                mobileNumber: resolvedMobile,
+                mobile: resolvedMobile,
+                dateOfBirth: resolvedDob,
+                gender: resolvedGender,
                 age,
                 emailVerified: Boolean(user.emailVerified !== false),
                 accountStatus: user.accountStatus || 'ACTIVE',
