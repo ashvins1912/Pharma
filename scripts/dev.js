@@ -3,8 +3,6 @@ import { spawn } from 'node:child_process';
 let shuttingDown = false;
 
 const processes = [
-  ['backend', ['--prefix', 'backend', 'run', 'dev'], {}],
-  ['api-gateway', ['--prefix', 'api-gateway', 'run', 'dev'], {}],
   ['frontend', ['--prefix', 'frontend', 'run', 'dev'], {}]
 ].map(([name, args, overrides]) => {
   const child = spawn('npm', args, {
