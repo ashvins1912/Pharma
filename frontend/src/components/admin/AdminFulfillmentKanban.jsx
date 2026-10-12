@@ -440,7 +440,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     if (!targetUrl) {
       console.warn('[PrescriptionLifecycle] No targetUrl resolved for order:', orderId);
       setPrescriptionPreview(null);
-      setPrescriptionPreviewError('No binary prescription document file is attached to this order. You can still inspect the ordered medicines and record a pharmacist decision.');
+      setPrescriptionPreviewError('No binary prescription document file is attached to this order. Manual approval is unavailable until a prescription document is attached and successfully opened.');
       setPrescriptionPreviewLoading(false);
       return;
     }
@@ -510,7 +510,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
           });
         } else {
           setPrescriptionPreview(null);
-          setPrescriptionPreviewError('Could not load the prescription document file. You can still inspect the order details below and record manual approval.');
+          setPrescriptionPreviewError('Could not load the prescription document. Retry opening it before recording any manual approval.');
         }
       } finally {
         setPrescriptionPreviewLoading(false);
@@ -1040,6 +1040,21 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                   label="delivered orders"
                 />
               )}
+              {col.id === 'Cancelled' && !searchMode && !cancelledLoading && !cancelledError && (
+                <Pagination
+                  page={cancelledPagination.page || cancelledPage}
+                  totalPages={cancelledPagination.totalPages}
+                  total={cancelledPagination.total}
+                  pageSize={10}
+                  onPageChange={page => {
+                    if (page >= 1 && page <= cancelledPagination.totalPages && page !== cancelledPage) {
+                      setCancelledPage(page);
+                    }
+                  }}
+                  loading={cancelledLoading}
+                  label="cancelled orders"
+                />
+              )}
 
             </div>
           );
@@ -1302,7 +1317,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                         {prescriptionPreviewError || 'No binary document preview is linked.'}
                       </p>
                       <p className="text-xs text-slate-500">
-                        You can still verify all prescribed medicines against the order items and record an explicit pharmacist approval decision.
+                        Attach and successfully open the actual prescription before recording an explicit pharmacist decision.
                       </p>
                       {prescriptionModalOrder.prescriptionUrl && (
                         <button
