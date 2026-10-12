@@ -104,6 +104,7 @@ export class CustomerService {
       // Keep profile attributes synchronized when a customer account was first
       // provisioned before its canonical identity/profile fields were populated.
       const updates = {};
+      if (!customer.userId) updates.userId = userId;
       if (!customer.supabaseId) updates.supabaseId = userId;
       if (name && name.trim() && name.trim() !== customer.name) updates.name = name.trim();
       if (email && email !== customer.email) updates.email = email;
@@ -234,7 +235,7 @@ export class CustomerService {
     // are never accepted. A relative is linked to the authenticated account's
     // canonical CustomerProfile and its PersonRelationship.
     await this.ensureCustomerForUser(userId, { tenantId: tenantId || null });
-    const customer = await CustomerProfile.findOne({ userId });
+    const customer = await CustomerProfile.findOne({ $or: [{ userId }, { supabaseId: userId }] });
     if (!customer) {
       throw Object.assign(new Error('Customer profile could not be initialized.'), { statusCode: 409 });
     }
