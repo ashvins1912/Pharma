@@ -6,7 +6,7 @@ test('routes user and tenant events to target rooms, not global sockets', async 
   const calls = [];
   const io = {
     emit: (...args) => calls.push(['global', ...args]),
-    to: room => ({ emit: (...args) => calls.push([room, ...args]) })
+    to: rooms => ({ emit: (...args) => calls.push([rooms, ...args]) })
   };
   let pollCount = 0;
   const client = {
@@ -18,7 +18,8 @@ test('routes user and tenant events to target rooms, not global sockets', async 
       if (pollCount === 1) return { cursor: '1-0', events: [
         { channel: 'notification', userId: 'user-1', payload: { safe: true } },
         { channel: 'tenant_update', tenantId: 'tenant-1', payload: { count: 1 } },
-        { channel: 'catalog_updated', payload: { public: true } }
+        { channel: 'catalog_updated', payload: { public: true } },
+        { channel: 'notification', payload: { unsafe: true } }
       ] };
       return new Promise(resolve => setTimeout(() => resolve({ cursor: '1-0', events: [] }), 10));
     }
@@ -27,8 +28,7 @@ test('routes user and tenant events to target rooms, not global sockets', async 
   await new Promise(resolve => setTimeout(resolve, 20));
   await stop();
   assert.deepEqual(calls, [
-    ['bell_notifications_user-1', 'notification', { safe: true }],
-    ['tenant_tenant-1', 'tenant_update', { count: 1 }],
-    ['global', 'catalog_updated', { public: true }]
+    [['bell_notifications_user-1'], 'notification', { safe: true }],
+    [['tenant_tenant-1'], 'tenant_update', { count: 1 }]
   ]);
 });
