@@ -20,7 +20,7 @@ The service binds to `0.0.0.0` and uses Render's `PORT` when provided.
 
 ## Render
 
-Deploy as a Node web service with root directory `services/websocket-service`, build command `npm install`, start command `npm start`, and health check path `/healthz`.
+Deploy as a Node web service with root directory `services/websocket-service`, build command `npm install --workspaces=false`, start command `npm start`, and health check path `/healthz`.
 
 Set:
 - `NODE_ENV=production`
