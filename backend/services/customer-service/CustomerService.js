@@ -101,6 +101,8 @@ export class CustomerService {
     await remediateCustomerIndexes();
     let customer = await CustomerProfile.findOne({ $or: [{ userId }, { supabaseId: userId }] });
     if (customer) {
+      // Keep profile attributes synchronized when a customer account was first
+      // provisioned before its canonical identity/profile fields were populated.
       const updates = {};
       if (!customer.supabaseId) updates.supabaseId = userId;
       if (name && name.trim() && name.trim() !== customer.name) updates.name = name.trim();
@@ -148,6 +150,9 @@ export class CustomerService {
         throw Object.assign(new Error('Customer profile identity is inconsistent.'), { statusCode: 409 });
       }
 
+      // A repaired profile's response must return the freshly loaded, synchronized
+      // customer data; re-read after writes so callers aren't given stale fields.
+      customer = await CustomerProfile.findOne({ _id: customer._id });
       await PersonRelationship.updateOne(
         { ownerUserId: userId, personPuid: customer.selfPuid },
         {
