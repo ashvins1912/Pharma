@@ -641,7 +641,30 @@ export function AppProvider({ children }) {
       });
     };
 
-    const onNotification = payload => upsertNotification(payload, 'notification');
+    const onNotification = payload => {
+      upsertNotification(payload, 'notification');
+
+      // The notification channel is also an order-update signal. Refresh the
+      // customer order state and notify open staff dashboards immediately, so
+      // the UI stays live even if the dedicated order_status_changed event is
+      // delayed or unavailable. The server has already scoped this event to the
+      // authenticated user's or tenant's authorized room.
+      const orderEventTypes = new Set([
+        'ORDER_CREATED',
+        'ORDER_ACCEPTED',
+        'ORDER_STATUS_CHANGED',
+        'RIDER_ASSIGNED',
+        'DELIVERY_STATUS_CHANGED',
+        'ORDER_DELIVERED'
+      ]);
+      if (payload?.orderId && orderEventTypes.has(String(payload.eventType || '').toUpperCase())) {
+        window.dispatchEvent(new CustomEvent('pharma:order-status-changed', {
+          detail: { ...payload, source: 'notification-channel' }
+        }));
+        void loadUserOrders({ silent: true });
+        void loadDeliveryEvents();
+      }
+    };
     const onWhatsAppNotification = payload => upsertNotification(payload, 'whatsapp_notification');
     const onMedicineRequestUpdated = payload => {
       window.dispatchEvent(new CustomEvent('pharma:medicine-request-updated', { detail: payload }));
