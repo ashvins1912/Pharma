@@ -20,7 +20,7 @@ const labelFor = (name = '') => ({
   'order-service': 'Order Service',
   'prescription-service': 'Prescription Service',
   'customer-service': 'Customer Service'
-}[name] || name.replace(/[-_]/g, ' ').replace(/\\b\\w/g, char => char.toUpperCase()));
+}[name] || name.split(/[-_]/).map(part => part ? part[0].toUpperCase() + part.slice(1) : '').join(' '));
 
 const formatTime = value => {
   if (!value) return 'Not checked yet';
