@@ -76,6 +76,7 @@ export function AppProvider({ children }) {
   const medicineRequestPage = useRef({ page: 1, statusGroup: 'ALL' });
 
   // Customer Notifications State
+  const [realtimeTokenVersion, setRealtimeTokenVersion] = useState(0);
   const [notifications, setNotifications] = useState([
     {
       id: 'notif-1',
@@ -495,6 +496,13 @@ export function AppProvider({ children }) {
     }
   }, [isFullyAuthenticated, isPharmacyOrAdmin, isSuperAdmin]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handleTokenChange = () => setRealtimeTokenVersion(version => version + 1);
+    window.addEventListener('pharma:access-token-changed', handleTokenChange);
+    return () => window.removeEventListener('pharma:access-token-changed', handleTokenChange);
+  }, []);
+
   // Authenticated realtime updates. The server derives identity from the signed token;
   // browser-supplied user/tenant IDs only request rooms and are verified server-side.
   useEffect(() => {
@@ -574,7 +582,7 @@ export function AppProvider({ children }) {
       socket.off('order_status_changed', onOrderStatusChanged);
       socket.disconnect();
     };
-  }, [isFullyAuthenticated, user?.id, user?.tenantId, user?.app_metadata?.tenantId, user?.user_metadata?.tenantId, loadUserOrders, loadUserMedicineRequests]);
+  }, [isFullyAuthenticated, user?.id, user?.tenantId, user?.app_metadata?.tenantId, user?.user_metadata?.tenantId, realtimeTokenVersion, loadUserOrders, loadUserMedicineRequests]);
 
   // Customer medicine requests are loaded by CustomerRequestsView when that tab opens.
   // Do not fetch or poll this customer-only list as part of global login hydration.
