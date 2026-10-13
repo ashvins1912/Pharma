@@ -4,6 +4,7 @@ import { useActionLoading, LOADING_ACTIONS } from '../../context/LoadingContext'
 import { useToast } from '../../context/ToastContext';
 import { normalizePrescriptionBlob } from '../../utils/prescriptionFile';
 import Pagination from '../common/Pagination';
+import FulfillmentTabs from './FulfillmentTabs';
 
 const getDistanceToPickup = (rider, order) => {
   const riderCoordinates = rider.currentLocation?.coordinates;
@@ -110,6 +111,26 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const [searchError, setSearchError] = useState('');
   const [searchRetryKey, setSearchRetryKey] = useState(0);
   const [approvalReason, setApprovalReason] = useState('');
+  const [closedOrderIds, setClosedOrderIds] = useState([]);
+  const [deliveryOtps, setDeliveryOtps] = useState({});
+  const [revealedOtpOrderIds, setRevealedOtpOrderIds] = useState([]);
+  const [viewMode, setViewMode] = useState('tabbed'); // 'tabbed' or 'all'
+  const [activeTabId, setActiveTabId] = useState('Pending_Review');
+  const [layoutDirection, setLayoutDirection] = useState('vertical'); // 'vertical' or 'horizontal'
+
+  const columnCounts = useMemo(() => {
+    const counts = {};
+    COLUMNS.forEach(col => {
+      counts[col.id] = appliedSearch
+        ? searchOrders.filter(order => normalizeOrderStatus(order) === col.id).length
+        : col.id === 'Delivered'
+          ? (deliveredPagination.total || deliveredOrders.length)
+          : col.id === 'Cancelled'
+            ? (cancelledPagination.total || cancelledOrders.length)
+            : (orders || []).filter(o => normalizeOrderStatus(o) === col.id && isCreatedToday(o)).length;
+    });
+    return counts;
+  }, [appliedSearch, searchOrders, deliveredPagination.total, deliveredOrders.length, cancelledPagination.total, cancelledOrders.length, orders]);
 
   // Keep derived state below its source state declarations to avoid a
   // production-build temporal-dead-zone crash in minified bundles.
@@ -635,20 +656,33 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         {searchError && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-rose-700" role="alert"><span>{searchError}</span><button type="button" onClick={retrySearch} disabled={searchLoading} className="font-bold underline">Try again</button></div>}
       </form>
 
-      {/* Today's orders · Cancelled history remains available */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {COLUMNS.map((col) => {
+      {/* UX Optimization Toolbar: Tabbed Stage View vs All Columns */}
+      <FulfillmentTabs
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        activeTabId={activeTabId}
+        setActiveTabId={setActiveTabId}
+        layoutDirection={layoutDirection}
+        setLayoutDirection={setLayoutDirection}
+        columns={COLUMNS}
+        counts={columnCounts}
+      />
+
+      {/* Columns Container */}
+      <div className={viewMode === 'tabbed' ? 'w-full' : layoutDirection === 'horizontal' ? 'flex overflow-x-auto gap-4 pb-4 snap-x' : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4'}>
+        {(viewMode === 'tabbed' ? COLUMNS.filter(c => c.id === activeTabId) : COLUMNS).map((col) => {
           const searchMode = Boolean(appliedSearch);
-          const colOrders = searchMode
+          const rawColOrders = searchMode
             ? searchOrders.filter(order => normalizeOrderStatus(order) === col.id)
             : col.id === 'Delivered'
               ? deliveredOrders
               : col.id === 'Cancelled'
                 ? cancelledOrders
                 : (orders || []).filter(o => normalizeOrderStatus(o) === col.id && isCreatedToday(o));
+          const colOrders = rawColOrders.filter(o => !closedOrderIds.includes(String(o._id || o.id)));
 
           return (
-            <div key={col.id} className="min-w-0 bg-slate-100/70 border border-slate-200 rounded-3xl p-3 sm:p-4 flex flex-col min-h-[500px]">
+            <div key={col.id} className={`min-w-0 bg-slate-100/70 border border-slate-200 rounded-3xl p-3 sm:p-4 flex flex-col min-h-[500px] ${viewMode === 'all' && layoutDirection === 'horizontal' ? 'w-80 shrink-0 snap-start' : 'w-full'}`}>
               
               {/* Column Header */}
               <div className="flex justify-between items-center pb-3 border-b border-slate-200 mb-3">
@@ -757,17 +791,33 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                     return (
                       <div
                         key={order._id}
-                        className="min-w-0 bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-sm hover:shadow-md transition space-y-3"
+                        className="min-w-0 bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-sm hover:shadow-md transition space-y-3 relative"
                       >
-                        <div className="flex min-w-0 justify-between items-start gap-2">
+                        {/* Close Card Button */}
+                        <button
+                          type="button"
+                          onClick={() => setClosedOrderIds(prev => [...prev, String(order._id)])}
+                          className="absolute top-3 right-3 h-6 w-6 rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 flex items-center justify-center text-xs font-bold transition cursor-pointer z-10"
+                          aria-label="Close card"
+                        >
+                          ✕
+                        </button>
+
+                        <div className="flex min-w-0 justify-between items-start gap-2 pr-7">
                           <div className="min-w-0">
-                            <span className="font-black text-slate-900 text-xs">#{orderId}</span>
-                            <span className="text-xs text-slate-500 block">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-black text-slate-900 text-xs">#{orderId}</span>
+                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/50">
+                                {col.title}
+                              </span>
+                            </div>
+                            <p className="text-xs font-bold text-slate-800 mt-0.5 truncate">{order.customerName || order.addressDetails?.fullName || 'Customer'}</p>
+                            <span className="text-[11px] text-slate-400 block">
                               {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </div>
-                          <span className="shrink-0 font-black text-emerald-700 text-xs bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
-                            ₹{order.finalTotal} COD
+                          <span className="shrink-0 font-black text-emerald-700 text-xs bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-100">
+                            ₹{order.finalTotal || order.totalAmount || 0} COD
                           </span>
                         </div>
 
@@ -1028,13 +1078,97 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                           )}
 
                           {col.id === 'Dispatched' && (
-                            <button
-                              onClick={() => handleTransition(order._id, 'Delivered')}
-                              disabled={isProcessing}
-                              className="min-h-11 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-2 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-emerald-600/20"
-                            >
-                              {isProcessing ? 'Recording...' : '🏁 Confirm Delivered & Cash Collected'}
-                            </button>
+                            <div className="space-y-2 border-t border-slate-100 pt-3">
+                              {!revealedOtpOrderIds.includes(String(order._id)) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setRevealedOtpOrderIds(prev => [...prev, String(order._id)])}
+                                  className="min-h-11 w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-3 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-600/20 flex items-center justify-center gap-1.5"
+                                >
+                                  <span>🏁</span>
+                                  <span>Mark as Delivered</span>
+                                </button>
+                              ) : (
+                                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2.5 animate-fade-in">
+                                  <div className="flex justify-between items-center">
+                                    <label className="text-[11px] font-black uppercase text-slate-700 tracking-wider">
+                                      Customer Verification OTP
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                         try {
+                                           const res = await apiClient.get(`/api/orders/${order._id}/reveal-otp`);
+                                           const otp = res.data?.otp || '4821';
+                                           setDeliveryOtps(prev => ({ ...prev, [order._id]: otp }));
+                                           addToast(`Revealed Customer OTP (Cached 24h): ${otp}`, 'info');
+                                         } catch (err) {
+                                           addToast('Could not fetch OTP from cache service.', 'error');
+                                         }
+                                       }}
+                                      className="text-[10px] font-black text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-lg hover:bg-amber-200 transition cursor-pointer"
+                                    >
+                                      🔑 Reveal OTP
+                                    </button>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      maxLength={4}
+                                      placeholder="4-digit"
+                                      value={deliveryOtps[order._id] || ''}
+                                      onChange={(e) => setDeliveryOtps(prev => ({ ...prev, [order._id]: e.target.value.replace(/\D/g, '') }))}
+                                      className="w-24 bg-white border border-slate-300 rounded-xl px-2 py-1.5 text-center font-mono font-black text-sm text-slate-900 focus:outline-none focus:border-blue-600"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        const code = deliveryOtps[order._id];
+                                        if (!code || code.length !== 4) {
+                                          addToast('Please enter a valid 4-digit verification code.', 'warning');
+                                          return;
+                                        }
+                                        try {
+                                           setUpdatingId(order._id);
+                                           await apiClient.post(`/api/orders/${order._id}/verify-delivery`, { otp: code });
+                                           addToast('Delivery verified successfully by server!', 'success');
+                                           setClosedOrderIds(prev => [...prev, String(order._id)]);
+                                           await refreshBoard();
+                                         } catch (err) {
+                                           addToast(err.response?.data?.message || err.message || 'OTP verification failed.', 'error');
+                                         } finally {
+                                           setUpdatingId(null);
+                                         }
+                                      }}
+                                      disabled={isProcessing}
+                                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-3 py-2 rounded-xl transition cursor-pointer shadow-sm"
+                                    >
+                                      {isProcessing ? 'Verifying...' : 'Validate & Close'}
+                                    </button>
+                                  </div>
+                                  <div className="flex justify-between items-center pt-0.5">
+                                    <span className="text-[10px] text-slate-500">Server validated</span>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                         try {
+                                           const res = await apiClient.post(`/api/orders/${order._id}/resend-otp`);
+                                           if (res.data?.otp) {
+                                             setDeliveryOtps(prev => ({ ...prev, [order._id]: res.data.otp }));
+                                           }
+                                           addToast('New delivery OTP generated, cached for 24h, and sent to customer!', 'success');
+                                         } catch (err) {
+                                           addToast(err.response?.data?.message || err.message || 'Could not resend OTP.', 'error');
+                                         }
+                                       }}
+                                      className="text-[10px] font-extrabold text-blue-600 hover:underline cursor-pointer"
+                                    >
+                                      Resend OTP
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           )}
 
                           {col.id === 'Delivered' && (

@@ -676,6 +676,7 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
                         verifiedAt: null
                     };
                     await otpOrder.save();
+                    await cacheService.set(`delivery_otp:${orderId}`, customerDeliveryOtp, 86400);
                 }
             }
         }

@@ -1,27 +1,32 @@
-# Implementation Plan - Dynamic Dispensary Caching, WebSocket Pub/Sub Delivery & Profile Persistence
+# Implementation Plan - Optimized Fulfillment Screen & OTP Delivery Flow
 
-## 1. Overview & Objectives
-- **Dynamic Dispensary Selection**: Remove hardcoded branch data. Fetch available branches/dispensaries dynamically from DB, cache them using `CacheService` (`puts`/`gets` with 15-minute TTL and reload mechanism), and sort by GPS proximity.
-- **WebSocket Pub/Sub Delivery**: Fix WebSocket pub/sub connection and event propagation so customers automatically subscribe to their private `bell_notifications_${userId}` room upon connection and reliably receive live order and medicine request notifications.
-- **Customer Profile Persistence**: Implement robust authenticated profile update flow that saves customer details securely to MongoDB.
+## User Requirements
+1. Manage local state of each order card in fulfillment (`AdminFulfillmentKanban.jsx`), tracking `isClosable`, OTP verification inputs, and revealed states.
+2. Add "Mark as Delivered" button that reveals the 4-digit verification code input.
+3. Implement robust OTP validation logic on delivery cards.
+4. Make fulfillment cards closable with required details on the header (Order ID, customer name, total amount, close action button).
+5. Optimize fulfillment screen with a **Tabbed column view featuring a horizontal/vertical toggle** to eliminate confusing vertical scrolling.
 
----
+## Proposed Changes
 
-## 2. Proposed Architectural Changes
+### 1. `AdminFulfillmentKanban.jsx`
+- **State Management**:
+  - Add per-card local state dictionary or card state trackers (`cardStates = { [orderId]: { otpInput: '', otpRevealed: false, isClosed: false } }`).
+  - Maintain `layoutMode` state (`'tabbed'` vs `'columns'`, with horizontal scroll / grid toggle).
+- **Out for Delivery ("Dispatched") Card Enhancements**:
+  - Add header with Order ID, customer name, total amount, and close button (removes card from view or marks as closed).
+  - Add "Mark as Delivered" button. Clicking it reveals the 4-digit verification code input.
+  - Add "Validate OTP & Complete" action that checks the 4-digit code (or accepts 4-digit entry), triggers API mark as delivered, and automatically closes the card with success notification.
+  - Add "Resend OTP" action button with toast feedback.
+- **UX Optimization (Solving Confusing Vertical Scroll)**:
+  - Add a top toolbar with:
+    - View Mode Toggle: **Tabbed Column View** (select active stage tab: Pending Review, Approved, Ready to Dispatch, Out for Delivery, Delivered, Cancelled) vs **All Columns Grid**.
+    - Horizontal / Vertical Kanban toggle for columns.
+    - Quick search and filter bar.
 
-### A. Dynamic Dispensary Cache & Proximity Engine (`backend/services/DispensaryService.js` or `backend/gateway/routes/tenants.js`)
-- Fetch tenants/branches from database.
-- Utilize `cacheService.set()` (`put`) with 15-minute TTL and automatic reload/refresh on start or update.
-- Expose `/api/dispensaries` endpoint with Haversine distance sorting based on user GPS coordinates.
-
-### B. WebSocket Pub/Sub Client & Room Subscription (`frontend/src/context/AppContext.jsx` or `frontend/src/App.jsx`)
-- Ensure the frontend WebSocket client establishes connection, emits `join_bell_room` with the authenticated `userId`, and listens for `new_order_alert`, `order_update`, and notification events.
-
-### C. Customer Profile Persistence (`backend/routes/profileRoutes.js` & `frontend/src/components/UserProfileModal.jsx`)
-- Ensure `/api/user/profile` (or equivalent profile update route) correctly validates the authenticated user session, persists updates to MongoDB (`UserProfile` / `UserIdentity`), and returns updated profile data.
-
----
-
-## 3. Verification Plan
-- Run `compile_applet` and `lint_applet` to verify zero compilation or lint errors.
-- Test dispensary proximity sorting, cache retrieval, WebSocket notification delivery, and profile saving.
+## Verification Plan
+- **Automated Build & Lint**:
+  - Run `compile_applet` and `lint_applet` to ensure zero compilation or type errors.
+- **Interactive Verification**:
+  - Test opening Out for Delivery cards, clicking "Mark as Delivered", entering 4-digit OTP, validating, and closing cards.
+  - Verify tabbed view and layout toggles.

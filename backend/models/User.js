@@ -184,12 +184,35 @@ userSchema.virtual('age').get(function () {
     return calculateAge(this.dateOfBirth);
 });
 
+/**
+ * Generates a compact customer ID: first 4 uppercase initials of name + 4 digit hash suffix (max length 10).
+ * @param {string} name
+ * @returns {string}
+ */
+export function generateCompactCustomerId(name) {
+    const clean = String(name || '').replace(/[^a-zA-Z]/g, '').toUpperCase();
+    const prefix = (clean.slice(0, 4) || 'CUST').padEnd(4, 'X');
+    let hash = 0;
+    const str = String(name || 'user');
+    for (let i = 0; i < str.length; i++) {
+        hash = (hash << 5) - hash + str.charCodeAt(i);
+        hash |= 0;
+    }
+    const suffix = String(Math.abs(hash)).slice(-4).padStart(4, '0');
+    return `${prefix}${suffix}`.slice(0, 10);
+}
+
+userSchema.virtual('compactCustomerId').get(function () {
+    return generateCompactCustomerId(this.name || `${this.firstName} ${this.lastName}`.trim() || this.email);
+});
+
 userSchema.methods.toSafeObject = function () {
     const obj = this.toObject({ virtuals: true });
     delete obj.passwordHash;
     delete obj.mfaSecretEncrypted;
     delete obj.__v;
     obj.age = calculateAge(obj.dateOfBirth);
+    obj.compactCustomerId = generateCompactCustomerId(obj.name || `${obj.firstName} ${obj.lastName}`.trim() || obj.email);
     return obj;
 };
 
