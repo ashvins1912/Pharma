@@ -1130,7 +1130,10 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                                         }
                                         try {
                                            setUpdatingId(order._id);
-                                           await apiClient.post(`/api/orders/${order._id}/verify-delivery`, { otp: code });
+                                           await apiClient.post('/api/orders/' + order._id + '/verify-delivery', {
+                                             otp: code,
+                                             riderId: order.rider?.riderId || order.riderId || order.assignedRiderId || order.riderName || 'AdminAssignedRider'
+                                           });
                                            addToast('Delivery verified successfully by server!', 'success');
                                            setClosedOrderIds(prev => [...prev, String(order._id)]);
                                            await refreshBoard();
@@ -1152,7 +1155,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                                       type="button"
                                       onClick={async () => {
                                          try {
-                                           const res = await apiClient.post(`/api/orders/${order._id}/resend-otp`);
+                                           const res = await apiClient.post('/api/orders/' + order._id + '/resend-otp');
                                            if (res.data?.otp) {
                                              setDeliveryOtps(prev => ({ ...prev, [order._id]: res.data.otp }));
                                            }

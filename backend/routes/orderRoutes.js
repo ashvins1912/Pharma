@@ -1439,8 +1439,8 @@ router.post('/:id/verify-delivery', authenticateUser, async (req, res) => {
             }
         } else {
             if (!staffRoles.has(role)) return res.status(403).json({ message: 'Only the assigned rider can verify delivery.' });
-            const requestedRiderId = String(req.body?.riderId || '');
-            if (!requestedRiderId || requestedRiderId !== String(order.rider?.riderId || order.riderId || '')) {
+            const requestedRiderId = String(req.body?.riderId || order.rider?.riderId || order.riderId || '');
+            if (!requestedRiderId) {
                 return res.status(403).json({ message: 'Select the rider assigned to this order before verifying delivery.' });
             }
             const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
