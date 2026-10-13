@@ -1359,26 +1359,30 @@ router.post('/:id/rating', authenticateUser, async (req, res) => {
 });
 
 
-// Retrieve delivery OTP from cache service (held for 1 day) or fallback
+// Retrieve delivery OTP from cache service (held for 1 day) or generate/sync with database
 router.get('/:id/reveal-otp', authenticateUser, async (req, res) => {
     try {
         if (!getIsConnected() || !mongoose.isValidObjectId(req.params.id)) {
             return res.status(503).json({ message: 'Service unavailable.' });
         }
-        const cachedOtp = await cacheService.get(`delivery_otp:${req.params.id}`);
+        let cachedOtp = await cacheService.get(`delivery_otp:${req.params.id}`);
         if (cachedOtp) {
             return res.json({ otp: cachedOtp, source: 'cache_service_1_day' });
         }
-        const order = await Order.findById(req.params.id).select('+deliveryVerification.otpHash');
+        const order = await Order.findById(req.params.id);
         if (!order) return res.status(404).json({ message: 'Order not found.' });
-        let hash = 0;
-        const str = String(order._id);
-        for (let i = 0; i < str.length; i++) {
-            hash = (hash << 5) - hash + str.charCodeAt(i);
-            hash |= 0;
-        }
-        const fallbackOtp = String(Math.abs(hash)).slice(-4).padStart(4, '4821');
-        return res.json({ otp: fallbackOtp, source: 'fallback' });
+
+        cachedOtp = String(randomInt(0, 10000)).padStart(4, '0');
+        order.deliveryVerification = {
+            otpHash: scryptSync(cachedOtp, String(order._id), 32).toString('hex'),
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            attempts: 0,
+            verifiedAt: null
+        };
+        await order.save();
+        await cacheService.set(`delivery_otp:${req.params.id}`, cachedOtp, 86400);
+
+        return res.json({ otp: cachedOtp, source: 'generated_and_cached' });
     } catch (error) {
         return res.status(500).json({ message: error.message || 'Could not reveal OTP.' });
     }

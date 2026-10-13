@@ -125,7 +125,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const [searchError, setSearchError] = useState('');
   const [searchRetryKey, setSearchRetryKey] = useState(0);
   const [approvalReason, setApprovalReason] = useState('');
-  const [closedOrderIds, setClosedOrderIds] = useState([]);
+  const [collapsedOrderIds, setCollapsedOrderIds] = useState([]);
   const [deliveryOtps, setDeliveryOtps] = useState({});
   const [revealedOtpOrderIds, setRevealedOtpOrderIds] = useState([]);
   const [viewMode, setViewMode] = useState('tabbed'); // 'tabbed' or 'all'
@@ -679,7 +679,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
               : col.id === 'Cancelled'
                 ? cancelledOrders
                 : (orders || []).filter(o => normalizeOrderStatus(o) === col.id && isCreatedToday(o));
-          const colOrders = rawColOrders.filter(o => !closedOrderIds.includes(String(o._id || o.id)));
+          const colOrders = rawColOrders;
 
           return (
             <div key={col.id} className={`min-w-0 bg-slate-100/70 border border-slate-200 rounded-3xl p-3 sm:p-4 flex flex-col min-h-[500px] ${viewMode === 'all' && layoutDirection === 'horizontal' ? 'w-80 shrink-0 snap-start' : 'w-full'}`}>
@@ -793,18 +793,9 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                         key={order._id}
                         className="min-w-0 bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-sm hover:shadow-md transition space-y-3 relative"
                       >
-                        {/* Close Card Button */}
-                        <button
-                          type="button"
-                          onClick={() => setClosedOrderIds(prev => [...prev, String(order._id)])}
-                          className="absolute top-3 right-3 h-6 w-6 rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 flex items-center justify-center text-xs font-bold transition cursor-pointer z-10"
-                          aria-label="Close card"
-                        >
-                          ✕
-                        </button>
-
-                        <div className="flex min-w-0 justify-between items-start gap-2 pr-7">
-                          <div className="min-w-0">
+                        {/* Accordion Toggle Header */}
+                        <div className="flex min-w-0 justify-between items-start gap-2">
+                          <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-black text-slate-900 text-xs">#{orderId}</span>
                               <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/50">
@@ -816,10 +807,24 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                               {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </div>
-                          <span className="shrink-0 font-black text-emerald-700 text-xs bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-100">
-                            ₹{order.finalTotal || order.totalAmount || 0} COD
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="shrink-0 font-black text-emerald-700 text-xs bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-100">
+                              ₹{order.finalTotal || order.totalAmount || 0} COD
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setCollapsedOrderIds(prev => prev.includes(String(order._id)) ? prev.filter(id => id !== String(order._id)) : [...prev, String(order._id)])}
+                              className="h-7 w-7 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center font-bold text-xs transition cursor-pointer"
+                              aria-label="Toggle accordion collapse"
+                            >
+                              {collapsedOrderIds.includes(String(order._id)) ? '+' : '−'}
+                            </button>
+                          </div>
                         </div>
+
+                        {/* Accordion Body */}
+                        {!collapsedOrderIds.includes(String(order._id)) && (
+                          <div className="space-y-3 animate-fade-in pt-1">
 
                         {/* Customer & Address */}
                         <div className="min-w-0 text-xs text-slate-600 space-y-0.5 border-t border-slate-100 pt-2">
@@ -1180,6 +1185,8 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                             </div>
                           )}
                         </div>
+                          </div>
+                        )}
 
                       </div>
                     );
