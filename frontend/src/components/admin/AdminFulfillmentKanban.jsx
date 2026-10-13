@@ -73,6 +73,20 @@ const COLUMNS = [
   { id: 'Cancelled', title: 'Cancelled', color: 'border-slate-500 text-slate-800 bg-slate-100' }
 ];
 
+const normalizeOrderStatus = (order) => {
+  if (!order) return '';
+  const s = String(order.orderStatus || order.status || '').trim();
+  if (['Pending_Review', 'pending', 'Pending'].includes(s)) return 'Pending_Review';
+  if (['Approved', 'accepted', 'approved'].includes(s)) return 'Approved';
+  if (['Processing Order', 'processing', 'Processing', 'Processing_Order', 'ProcessingOrder'].includes(s)) return 'Processing Order';
+  if (['Ready to Dispatch', 'ready_to_dispatch', 'Ready_To_Dispatch', 'ready', 'Ready'].includes(s)) return 'Ready to Dispatch';
+  if (['Dispatched', 'out_for_delivery', 'dispatched', 'Dispatched_Order'].includes(s)) return 'Dispatched';
+  if (['Delivered', 'delivered', 'completed', 'Delivered_Order'].includes(s)) return 'Delivered';
+  if (['Cancelled', 'cancelled'].includes(s)) return 'Cancelled';
+  if (['Rejected', 'rejected'].includes(s)) return 'Rejected';
+  return s || 'Pending_Review';
+};
+
 export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
@@ -139,20 +153,6 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       isActionLoading(LOADING_ACTIONS.APPROVE_PRESCRIPTION)
       || isActionLoading(LOADING_ACTIONS.REJECT_PRESCRIPTION)
     );
-
-  const normalizeOrderStatus = (order) => {
-    if (!order) return '';
-    const s = String(order.orderStatus || order.status || '').trim();
-    if (['Pending_Review', 'pending', 'Pending'].includes(s)) return 'Pending_Review';
-    if (['Approved', 'accepted', 'approved'].includes(s)) return 'Approved';
-    if (['Processing Order', 'processing', 'Processing', 'Processing_Order', 'ProcessingOrder'].includes(s)) return 'Processing Order';
-    if (['Ready to Dispatch', 'ready_to_dispatch', 'Ready_To_Dispatch', 'ready', 'Ready'].includes(s)) return 'Ready to Dispatch';
-    if (['Dispatched', 'out_for_delivery', 'dispatched', 'Dispatched_Order'].includes(s)) return 'Dispatched';
-    if (['Delivered', 'delivered', 'completed', 'Delivered_Order'].includes(s)) return 'Delivered';
-    if (['Cancelled', 'cancelled'].includes(s)) return 'Cancelled';
-    if (['Rejected', 'rejected'].includes(s)) return 'Rejected';
-    return s || 'Pending_Review';
-  };
 
   useEffect(() => {
     const handleKeyDown = (e) => {
