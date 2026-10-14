@@ -857,6 +857,41 @@ router.put('/:id/dispatch', authenticateUser, isAdmin, async (req, res) => {
     }
 });
 
+router.post('/admin/:id/auto-assign', authenticateUser, isAdmin, async (req, res) => {
+    try {
+        if (!getIsConnected()) {
+            return res.status(503).json({ message: 'Auto-assignment requires an active MongoDB connection.' });
+        }
+        deliveryContainer.refreshDataLayer();
+        const orderId = req.params.id;
+        const result = await deliveryContainer.assignmentEngine.assignOrder(orderId);
+        if (!result.success) {
+            return res.status(404).json({
+                success: false,
+                message: result.reason || 'No available rider found for automatic assignment. Please assign manually.'
+            });
+        }
+        const updatedOrder = result.order.toJSON ? result.order.toJSON() : result.order;
+        try {
+            await sendCustomWhatsAppAlert(updatedOrder, 'Assigned', result.rider.mobile);
+        } catch (notificationError) {
+            console.warn(`[WhatsApp] Auto-assign notification failed for order ${orderId}:`, notificationError.message);
+        }
+        return res.json({
+            success: true,
+            message: `Order successfully auto-assigned to rider ${result.rider.name}!`,
+            order: updatedOrder,
+            rider: result.rider
+        });
+    } catch (err) {
+        console.error('Auto-assignment failed:', err);
+        return res.status(getErrorStatus(err)).json({
+            success: false,
+            message: err.message || 'Auto-assignment failed.'
+        });
+    }
+});
+
 router.put('/:id/modify', authenticateUser, handlePrescriptionUpload, async (req, res) => {
     let uploadedPrescriptionUrl = null;
     let newlyUploadedPrescriptionUrl = null;

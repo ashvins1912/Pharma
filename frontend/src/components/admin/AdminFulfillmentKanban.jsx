@@ -968,14 +968,36 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                         )}
 
                         {col.id === 'Approved' && (
-                          <button
-                            type="button"
-                            onClick={() => setAssignRiderModal(order)}
-                            disabled={isProcessing}
-                            className="min-h-11 w-full rounded-xl bg-blue-600 px-2 py-2 text-xs font-extrabold text-white disabled:opacity-50"
-                          >
-                            Assign Rider & Dispatch
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setAssignRiderModal(order)}
+                              disabled={isProcessing}
+                              className="min-h-11 flex-1 rounded-xl bg-blue-600 px-2 py-2 text-xs font-extrabold text-white disabled:opacity-50"
+                            >
+                              Assign Rider
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  setUpdatingId(order._id);
+                                  const res = await apiClient.post(`/api/orders/admin/${order._id}/auto-assign`);
+                                  addToast(res.data?.message || 'Rider auto-assigned successfully!', 'success');
+                                  if (typeof onRefresh === 'function') onRefresh();
+                                  else window.location.reload();
+                                } catch (err) {
+                                  addToast(err.response?.data?.message || err.message || 'Auto-assignment failed.', 'error');
+                                } finally {
+                                  setUpdatingId(null);
+                                }
+                              }}
+                              disabled={isProcessing}
+                              className="min-h-11 flex-1 rounded-xl bg-teal-600 hover:bg-teal-700 px-2 py-2 text-xs font-extrabold text-white disabled:opacity-50"
+                            >
+                              🤖 Auto Assign
+                            </button>
+                          </div>
                         )}
 
                         {(order.outForDeliveryAt || order.deliveredAt) && (
@@ -1072,13 +1094,35 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                                 🛵 Dispatch Assigned Rider
                               </button>
                             ) : (
-                              <button
-                                onClick={() => setAssignRiderModal(order)}
-                                disabled={isProcessing}
-                                className="min-h-11 w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-2 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-600/20"
-                              >
-                                🛵 Assign Rider & Dispatch
-                              </button>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => setAssignRiderModal(order)}
+                                  disabled={isProcessing}
+                                  className="min-h-11 flex-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-2 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-600/20"
+                                >
+                                  Assign Rider
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      setUpdatingId(order._id);
+                                      const res = await apiClient.post(`/api/orders/admin/${order._id}/auto-assign`);
+                                      addToast(res.data?.message || 'Rider auto-assigned successfully!', 'success');
+                                      if (typeof onRefresh === 'function') onRefresh();
+                                      else window.location.reload();
+                                    } catch (err) {
+                                      addToast(err.response?.data?.message || err.message || 'Auto-assignment failed.', 'error');
+                                    } finally {
+                                      setUpdatingId(null);
+                                    }
+                                  }}
+                                  disabled={isProcessing}
+                                  className="min-h-11 flex-1 rounded-xl bg-teal-600 hover:bg-teal-700 px-2 py-2 text-xs font-extrabold text-white disabled:opacity-50"
+                                >
+                                  🤖 Auto Assign
+                                </button>
+                              </div>
                             )
                           )}
 
