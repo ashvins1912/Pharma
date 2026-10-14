@@ -57,10 +57,10 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-8 relative overflow-hidden max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay animate-fade-in">
+            <div className="pharma-modal-surface relative max-w-lg w-full p-6 sm:p-8 overflow-hidden max-h-[90vh] overflow-y-auto">
                 {/* Header */}
-                <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                <div className="flex items-center justify-between pb-4 border-b border-slate-100 pr-10">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-xl shadow-md shadow-blue-500/25">
                             🛵
@@ -75,7 +75,8 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
                             resetForm();
                             onClose();
                         }}
-                        className="text-slate-400 hover:text-slate-600 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition cursor-pointer"
+                        aria-label="Close rider onboarding"
+                        className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer z-20"
                     >
                         ✕
                     </button>

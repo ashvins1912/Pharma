@@ -66,6 +66,7 @@ export default function AddressManager({
   const { addToast } = useToast();
   const { user } = useAuth();
   const { isActionLoading } = useActionLoading();
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const savingAddress = isActionLoading(LOADING_ACTIONS.SAVE_ADDRESS) || isActionLoading(LOADING_ACTIONS.EDIT_ADDRESS);
   const deletingAddressId = isActionLoading(LOADING_ACTIONS.REMOVE_ADDRESS) ? (deleteTarget?._id || 'busy') : null;
 
@@ -85,7 +86,7 @@ export default function AddressManager({
   const deleteInProgressRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [pinConfirmed, setPinConfirmed] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
+
 
   useEffect(() => {
     if (!deleteTarget) return undefined;

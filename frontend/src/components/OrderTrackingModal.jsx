@@ -34,24 +34,24 @@ export default function OrderTrackingModal({ order, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/45 backdrop-blur-[2px] animate-fade-in overscroll-none"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 modal-overlay animate-fade-in overscroll-none"
       aria-modal="true"
       role="dialog"
       aria-labelledby="order-tracking-title"
     >
       {/* Backdrop */}
       <div
-        className="modal-backdrop absolute inset-0 touch-none"
+        className="absolute inset-0 touch-none"
         onClick={onClose}
         onWheel={(e) => e.preventDefault()}
         onTouchMove={(e) => e.preventDefault()}
         aria-hidden="true"
       />
 
-      <div className="relative z-10 m-auto flex h-[85dvh] max-h-[85dvh] min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl overscroll-contain">
+      <div className="pharma-modal-surface relative z-10 m-auto flex h-[85dvh] max-h-[85dvh] min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl overscroll-contain">
         
         {/* Sticky Header: Always pinned & visible with Order Tracking: #{orderId} */}
-        <div className="shrink-0 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4 sm:px-6 sm:py-5">
+        <div className="shrink-0 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4 sm:px-6 sm:py-5 pr-14">
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-xl text-blue-600 shadow-sm border border-blue-100/60">
               📦
@@ -74,7 +74,7 @@ export default function OrderTrackingModal({ order, onClose }) {
           <button
             onClick={onClose}
             aria-label="Close tracking"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer ml-2"
+            className="absolute top-4 right-4 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer z-20"
           >
             ✕
           </button>

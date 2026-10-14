@@ -5,12 +5,20 @@ export default function ProofOfDeliveryModal({ isOpen, onClose, order }) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 modal-overlay animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="delivery-code-info-title"
     >
-      <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-5">
+      <div className="pharma-modal-surface relative p-6 space-y-5">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer z-20"
+        >
+          ✕
+        </button>
         <div className="flex items-start gap-3">
           <span className="text-2xl">🔐</span>
           <div>

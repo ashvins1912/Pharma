@@ -1228,16 +1228,16 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
 
       {/* Assign Rider Modal */}
       {assignRiderModal && (
-        <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div role="dialog" aria-modal="true" aria-labelledby="assign-rider-title" className="max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto bg-white border border-slate-200 rounded-3xl p-4 sm:p-6 space-y-4 shadow-2xl">
-            <div className="sticky top-0 z-10 flex justify-between items-center bg-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 modal-overlay animate-fade-in">
+          <div role="dialog" aria-modal="true" aria-labelledby="assign-rider-title" className="pharma-modal-surface relative max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto p-5 sm:p-6 space-y-4">
+            <div className="sticky top-0 z-10 flex justify-between items-center bg-white pr-10">
               <h4 id="assign-rider-title" className="text-sm font-black text-slate-900 uppercase tracking-wider">
                 🛵 Assign Delivery Rider
               </h4>
               <button
                 onClick={() => setAssignRiderModal(null)}
                 aria-label="Close rider assignment"
-                className="min-h-11 min-w-11 text-slate-500 hover:text-slate-700"
+                className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer z-20"
               >
                 ✕
               </button>
@@ -1344,16 +1344,16 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
 
       {prescriptionModalOrder && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/75 backdrop-blur-sm p-2 sm:p-4 animate-fade-in"
+          className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay p-2 sm:p-4 animate-fade-in"
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="prescription-review-modal-title"
-            className="flex h-[92dvh] w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-3xl bg-white shadow-2xl border border-slate-200"
+            className="pharma-modal-surface relative flex h-[92dvh] w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-3xl bg-white shadow-2xl border border-slate-200"
           >
             {/* Modal Header */}
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/90 px-4 py-3 sm:px-6">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/90 px-4 py-3 sm:px-6 pr-14">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-700 font-bold text-lg">
                   🩺
@@ -1398,7 +1398,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                   type="button"
                   onClick={closePrescriptionPreview}
                   aria-label="Close prescription review"
-                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-200/80 text-slate-700 hover:bg-slate-300 transition font-bold"
+                  className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer z-20"
                 >
                   ✕
                 </button>

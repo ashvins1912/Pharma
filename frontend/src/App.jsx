@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from './context/AuthContext';
 import { useToast } from './context/ToastContext';
 import { useApp } from './context/AppContext';
+import { useTenant } from './context/TenantContext';
 
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -73,6 +74,7 @@ function MainApp() {
     openProposalModal
   } = useApp();
   const { addToast } = useToast();
+  const { activeTenant } = useTenant();
 
   // Tab State: 'store' | 'orders' | 'requests' | 'addresses' | 'admin'
   const [activeTab, setActiveTab] = useState('store');
@@ -339,24 +341,37 @@ function MainApp() {
             
             {/* Friendly Hero Banner */}
             <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl sm:rounded-3xl p-4 sm:p-8 text-white shadow-lg shadow-blue-600/15 relative overflow-hidden">
-              <div className="relative z-10 max-w-xl space-y-1.5 sm:space-y-2">
-                <span className="inline-block bg-white/20 backdrop-blur-md text-white text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                  Express 30-Min Prescription Delivery
-                </span>
+              <div className="relative z-10 max-w-xl space-y-2 sm:space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-block bg-white/20 backdrop-blur-md text-white text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    Express 30-Min Prescription Delivery
+                  </span>
+                  {activeTenant && (
+                    <span className="inline-flex items-center gap-1 bg-emerald-500/30 border border-emerald-400/40 backdrop-blur-md text-emerald-50 text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full">
+                      <span>🏥</span>
+                      <span>{activeTenant.shopName || activeTenant.name || 'Selected Pharmacy'}</span>
+                    </span>
+                  )}
+                </div>
                 <h1 className="text-lg sm:text-3xl font-black tracking-tight leading-tight m-0 text-white">
                   Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {displayName}!
                 </h1>
                 <p className="text-xs sm:text-sm text-blue-100 font-medium leading-relaxed">
-                  Find genuine pharmaceutical formulations, doctor-prescribed medications, and wellness care products delivered safely.
+                  Welcome to <strong className="text-white">{activeTenant?.shopName || activeTenant?.name || 'Ashvin Pharmacy'}</strong>! Your trusted local dispensary brings you warm greetings and rapid door delivery for genuine pharmaceutical formulations, doctor-prescribed medications, and wellness care products.
                 </p>
-                <div className="pt-2">
+                <div className="pt-2 flex flex-wrap items-center gap-3">
                   <button
                     type="button"
                     onClick={() => setTenantSelectorOpen(true)}
                     className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-xl backdrop-blur-md transition flex items-center gap-2 cursor-pointer shadow-sm"
                   >
-                    <span>📍 Select Nearby Pharmacy / Dispensary</span>
+                    <span>📍 {activeTenant ? 'Change Pharmacy / Dispensary' : 'Select Nearby Pharmacy / Dispensary'}</span>
                   </button>
+                  {activeTenant?.address && (
+                    <span className="text-[11px] text-blue-200">
+                      📍 {activeTenant.address.street || activeTenant.address.city || ''}
+                    </span>
+                  )}
                 </div>
               </div>
 
