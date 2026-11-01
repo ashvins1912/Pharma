@@ -1,15 +1,12 @@
-import React, { useMemo } from 'react';
-import { analyzeCustomerOffers } from '../services/analystService';
+import React from 'react';
+import { useDashboardAnalytics } from '../context/DashboardAnalyticsContext';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 
 export default function OfferZoneBanner() {
-  const { orders, medicines, addToCart } = useApp();
+  const { addToCart } = useApp();
   const { addToast } = useToast();
-
-  const offersData = useMemo(() => {
-    return analyzeCustomerOffers(orders, medicines);
-  }, [orders, medicines]);
+  const offersData = useDashboardAnalytics();
 
   const { smartRefillOffers, offerZoneItems } = offersData;
 

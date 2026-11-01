@@ -10,6 +10,7 @@ import { ToastProvider } from './context/ToastContext';
 import { AppProvider } from './context/AppContext';
 import { LoadingProvider } from './context/LoadingContext';
 import { TenantProvider } from './context/TenantContext';
+import { DashboardAnalyticsProvider } from './context/DashboardAnalyticsContext';
 import ModalInteractionGuard from './components/ModalInteractionGuard';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -21,9 +22,11 @@ createRoot(document.getElementById('root')).render(
           <ToastProvider>
             <TenantProvider>
               <AppProvider>
-                <ModalInteractionGuard />
-                <App />
-                <SpeedInsights />
+                <DashboardAnalyticsProvider>
+                  <ModalInteractionGuard />
+                  <App />
+                  <SpeedInsights />
+                </DashboardAnalyticsProvider>
               </AppProvider>
             </TenantProvider>
           </ToastProvider>

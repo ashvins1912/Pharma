@@ -6,6 +6,16 @@ const server = app.listen(config.port, '0.0.0.0', () => {
   app.locals.healthMonitor.start();
 });
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.warn(`Port ${config.port} is already in use. Releasing / restarting gracefully.`);
+    process.exit(0);
+  } else {
+    console.error('Server error:', err);
+    process.exit(1);
+  }
+});
+
 let shuttingDown = false;
 const shutdown = async () => {
   if (shuttingDown) return;

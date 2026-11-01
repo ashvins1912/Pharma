@@ -1,14 +1,9 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { computeSpendingAnalytics } from '../services/analystService';
-import { useApp } from '../context/AppContext';
+import { useDashboardAnalytics } from '../context/DashboardAnalyticsContext';
 
 export default function SpendingAnalyticsWidget() {
-  const { orders } = useApp();
-
-  const analytics = useMemo(() => {
-    return computeSpendingAnalytics(orders);
-  }, [orders]);
+  const analytics = useDashboardAnalytics();
 
   const { chartData, totalSpent30Days, totalOrders30Days } = analytics;
 

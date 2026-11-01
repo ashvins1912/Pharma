@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
+import { SpatialGridIndex, SimpleBloomFilter } from '../../utils/spatialProbUtils';
 
 export default function AdminRouteOptimizer({ onRefresh }) {
   const { addToast } = useToast();
@@ -96,14 +97,24 @@ export default function AdminRouteOptimizer({ onRefresh }) {
   return (
     <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
       <div>
-        <div className="flex items-center gap-2">
-          <span className="text-xl">🗺️</span>
-          <h3 className="text-base font-black text-slate-900">
-            Smart Delivery Route Clubbing & Dispatch
-          </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🗺️</span>
+            <h3 className="text-base font-black text-slate-900">
+              Smart Delivery Route Clubbing & Dispatch
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1">
+              <span>📍 Spatial Geohash Indexing</span>
+            </span>
+            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1">
+              <span>⚡ Probabilistic Bloom Filter</span>
+            </span>
+          </div>
         </div>
         <p className="text-xs text-slate-500 mt-0.5">
-          Haversine geographic corridor clustering with multi-stop Google Maps deep links.
+          Haversine geographic corridor clustering with multi-stop Google Maps deep links & spatial-probabilistic data indexing.
         </p>
       </div>
 
