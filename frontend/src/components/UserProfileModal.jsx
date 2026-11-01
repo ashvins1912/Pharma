@@ -21,6 +21,7 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
   const [editMode, setEditMode] = useState(false);
   const [profileForm, setProfileForm] = useState({ firstName:'', lastName:'', gender:'', mobileNumber:'', dateOfBirth:'' });
   const [selfPuid, setSelfPuid] = useState(user?.puid || user?.userPuid || '');
+  const [darkMode, setDarkMode] = useState(() => typeof window !== 'undefined' && document.documentElement.classList.contains('dark'));
 
   useEffect(() => {
     if (!user) return;
@@ -113,6 +114,23 @@ export default function UserProfileModal({ isOpen, onClose, onNavigate }) {
           </div>}
 
           {tab==='security' && <div className="space-y-3">
+            <div className="rounded-2xl border border-slate-200 p-4">
+              <div className="flex items-center justify-between">
+                <div><h3 className="text-xs font-black text-slate-800">Dark Mode</h3><p className="mt-1 text-[10px] text-slate-400">Toggle dark theme appearance</p></div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !document.documentElement.classList.contains('dark');
+                    document.documentElement.classList.toggle('dark', next);
+                    localStorage.setItem('theme', next ? 'dark' : 'light');
+                    setDarkMode(next);
+                  }}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${document.documentElement.classList.contains('dark') ? 'bg-blue-600' : 'bg-slate-300'}`}
+                >
+                  <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${document.documentElement.classList.contains('dark') ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </div>
+            </div>
             {isSuperAdmin && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><p className="text-xs font-black text-emerald-900">🛡️ Complete platform access</p><p className="mt-1 text-[11px] text-emerald-800">Super Admin is not restricted by user-level access assignments.</p></div>}
             <div className="rounded-2xl border border-slate-200 p-4">
               <div className="flex items-center justify-between"><div><h3 className="text-xs font-black text-slate-800">Two-factor authentication</h3><p className="mt-1 text-[10px] text-slate-400">Authenticator-app protection</p></div><span className={`rounded-full px-2 py-1 text-[9px] font-black ${mfaEnabled?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-500'}`}>{mfaEnabled?'ACTIVE':'OFF'}</span></div>

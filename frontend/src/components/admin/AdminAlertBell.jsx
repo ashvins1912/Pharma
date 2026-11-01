@@ -7,11 +7,16 @@ export default function AdminAlertBell({
   canReadWhatsApp = true,
   canManageWhatsApp = false
 }) {
-  const { inventoryAlerts, whatsappStatus, setWhatsappModalOpen } = useApp();
+  const { inventoryAlerts = {}, whatsappStatus = {}, setWhatsappModalOpen } = useApp();
   const [isOpen, setIsOpen] = useState(false);
 
-  const total = (canViewInventoryAlerts ? Number(inventoryAlerts.totalAlerts || 0) : 0)
-    + (canReadWhatsApp && !whatsappStatus.isConnected ? 1 : 0);
+  const alerts = inventoryAlerts || {};
+  const expired = Array.isArray(alerts.expired) ? alerts.expired : [];
+  const expiringSoon = Array.isArray(alerts.expiringSoon) ? alerts.expiringSoon : [];
+  const lowStock = Array.isArray(alerts.lowStock) ? alerts.lowStock : [];
+
+  const total = (canViewInventoryAlerts ? Number(alerts.totalAlerts || 0) : 0)
+    + (canReadWhatsApp && !whatsappStatus?.isConnected ? 1 : 0);
 
   return (
     <div className="relative flex-shrink-0">
@@ -58,30 +63,30 @@ export default function AdminAlertBell({
               {/* WhatsApp Gateway Status Card */}
               {canReadWhatsApp && (
               <div className={`p-3 rounded-2xl border transition ${
-                whatsappStatus.isConnected
+                whatsappStatus?.isConnected
                   ? 'bg-emerald-50 border-emerald-200'
                   : 'bg-amber-50 border-amber-300'
               }`}>
                 <div className="flex items-center justify-between">
                   <span className={`text-xs font-black flex items-center gap-1.5 ${
-                    whatsappStatus.isConnected ? 'text-emerald-900' : 'text-amber-950'
+                    whatsappStatus?.isConnected ? 'text-emerald-900' : 'text-amber-950'
                   }`}>
                     <span>📲</span> WhatsApp Dispatch Gateway
                   </span>
                   <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded uppercase ${
-                    whatsappStatus.isConnected ? 'bg-emerald-200 text-emerald-800' : 'bg-rose-200 text-rose-800'
+                    whatsappStatus?.isConnected ? 'bg-emerald-200 text-emerald-800' : 'bg-rose-200 text-rose-800'
                   }`}>
-                    {whatsappStatus.isConnected ? 'Connected' : 'Offline'}
+                    {whatsappStatus?.isConnected ? 'Connected' : 'Offline'}
                   </span>
                 </div>
                 <p className={`text-[11px] mt-1 leading-snug ${
-                  whatsappStatus.isConnected ? 'text-emerald-700' : 'text-amber-800'
+                  whatsappStatus?.isConnected ? 'text-emerald-700' : 'text-amber-800'
                 }`}>
-                  {whatsappStatus.isConnected
+                  {whatsappStatus?.isConnected
                     ? `Linked to ${whatsappStatus.phone || 'Primary Phone'} for real-time mobile order dispatch updates.`
                     : 'You may miss delivery updates on mobile. Automated SMS/WhatsApp notifications are paused.'}
                 </p>
-                {!whatsappStatus.isConnected && canManageWhatsApp && (
+                {!whatsappStatus?.isConnected && canManageWhatsApp && (
                   <button
                     onClick={() => {
                       setIsOpen(false);
@@ -102,20 +107,20 @@ export default function AdminAlertBell({
               <div className="p-3 bg-red-50 border border-red-200 rounded-2xl space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-red-900 flex items-center gap-1.5">
-                    <span>🔴</span> Expired Medicines ({inventoryAlerts.expiredCount})
+                    <span>🔴</span> Expired Medicines ({alerts.expiredCount || expired.length})
                   </span>
                   <span className="text-[10px] bg-red-200 text-red-800 font-extrabold px-1.5 py-0.5 rounded">
                     Blocked
                   </span>
                 </div>
-                {inventoryAlerts.expired.length === 0 ? (
+                {expired.length === 0 ? (
                   <p className="text-[11px] text-slate-500">No expired pharmaceuticals.</p>
                 ) : (
                   <div className="space-y-1">
-                    {inventoryAlerts.expired.map(m => (
-                      <div key={m._id} className="text-[11px] text-red-700 flex justify-between">
+                    {expired.map(m => (
+                      <div key={m._id || m.id} className="text-[11px] text-red-700 flex justify-between">
                         <span className="truncate max-w-[170px]">• {m.name}</span>
-                        <span className="font-bold">Expired {Math.abs(m.daysLeft)}d ago</span>
+                        <span className="font-bold">Expired {Math.abs(m.daysLeft || 0)}d ago</span>
                       </div>
                     ))}
                   </div>
@@ -126,20 +131,20 @@ export default function AdminAlertBell({
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-amber-900 flex items-center gap-1.5">
-                    <span>🟠</span> Expiring in ≤30 days ({inventoryAlerts.expiringSoonCount})
+                    <span>🟠</span> Expiring in ≤30 days ({alerts.expiringSoonCount || expiringSoon.length})
                   </span>
                   <span className="text-[10px] bg-amber-200 text-amber-900 font-extrabold px-1.5 py-0.5 rounded">
                     Urgent
                   </span>
                 </div>
-                {inventoryAlerts.expiringSoon.length === 0 ? (
+                {expiringSoon.length === 0 ? (
                   <p className="text-[11px] text-slate-500">No medicines near expiry.</p>
                 ) : (
                   <div className="space-y-1">
-                    {inventoryAlerts.expiringSoon.map(m => (
-                      <div key={m._id} className="text-[11px] text-amber-800 flex justify-between">
+                    {expiringSoon.map(m => (
+                      <div key={m._id || m.id} className="text-[11px] text-amber-800 flex justify-between">
                         <span className="truncate max-w-[170px]">• {m.name}</span>
-                        <span className="font-bold">{m.daysLeft}d left</span>
+                        <span className="font-bold">{m.daysLeft || 0}d left</span>
                       </div>
                     ))}
                   </div>
@@ -150,20 +155,20 @@ export default function AdminAlertBell({
               <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-2xl space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-yellow-900 flex items-center gap-1.5">
-                    <span>🟡</span> Low Stock ({inventoryAlerts.lowStockCount})
+                    <span>🟡</span> Low Stock ({alerts.lowStockCount || lowStock.length})
                   </span>
                   <span className="text-[10px] bg-yellow-200 text-yellow-900 font-extrabold px-1.5 py-0.5 rounded">
                     Restock
                   </span>
                 </div>
-                {inventoryAlerts.lowStock.length === 0 ? (
+                {lowStock.length === 0 ? (
                   <p className="text-[11px] text-slate-500">Adequate inventory levels.</p>
                 ) : (
                   <div className="space-y-1">
-                    {inventoryAlerts.lowStock.map(m => (
-                      <div key={m._id} className="text-[11px] text-yellow-800 flex justify-between">
+                    {lowStock.map(m => (
+                      <div key={m._id || m.id} className="text-[11px] text-yellow-800 flex justify-between">
                         <span className="truncate max-w-[170px]">• {m.name}</span>
-                        <span className="font-bold">{m.stock} left</span>
+                        <span className="font-bold">{m.stock || 0} left</span>
                       </div>
                     ))}
                   </div>

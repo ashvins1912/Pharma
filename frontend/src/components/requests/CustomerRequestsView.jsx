@@ -194,7 +194,11 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
           </button>
         </div>
       ) : loadingMedicineRequests && medicineRequests.length === 0 ? (
-        <div className="py-12 text-center text-sm font-semibold text-slate-500" role="status">Loading medicine requests...</div>
+        <div className="space-y-3 py-6 animate-pulse">
+          {[1, 2, 3].map(n => (
+            <div key={n} className="h-24 bg-slate-100 dark:bg-slate-800 rounded-2xl w-full"></div>
+          ))}
+        </div>
       ) : filteredRequests.length === 0 ? (
         <div className="py-16 text-center text-slate-400 space-y-3">
           <p className="text-4xl">💊</p>

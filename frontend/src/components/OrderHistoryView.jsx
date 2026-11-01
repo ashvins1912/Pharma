@@ -81,7 +81,14 @@ export default function OrderHistoryView({ onTrackOrder }) {
         </button>
       </div>
 
-      {ordersError ? (
+      {loadingOrders ? (
+        <div className="space-y-3 py-6 animate-pulse">
+          <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded-lg w-48 mb-4"></div>
+          {[1, 2, 3].map(n => (
+            <div key={n} className="h-20 bg-slate-100 dark:bg-slate-800 rounded-2xl w-full"></div>
+          ))}
+        </div>
+      ) : ordersError ? (
         <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
           <p>{ordersError}</p>
           <button type="button" onClick={() => loadUserOrders()} disabled={loadingOrders} className="mt-2 font-bold underline disabled:opacity-50">Try again</button>

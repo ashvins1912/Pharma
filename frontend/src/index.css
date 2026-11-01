@@ -4,9 +4,11 @@
 
 :root {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  color-scheme: light;
+  color-scheme: light dark;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-smooth: always;
 }
 
 html {
@@ -16,6 +18,9 @@ html {
   -webkit-text-size-adjust: 100%;
   overflow-x: clip;
   overflow-y: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 *, *:before, *:after {
@@ -213,4 +218,53 @@ body.modal-open { overscroll-behavior: none; }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Comprehensive Dark Mode Rules */
+html.dark {
+  color-scheme: dark;
+}
+html.dark body {
+  background-color: #0b0f19;
+  color: #f1f5f9;
+}
+html.dark .pharma-modal-surface {
+  background-color: #111827;
+  color: #f1f5f9;
+  border-color: #374151;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+}
+html.dark header {
+  background-color: rgba(11, 15, 25, 0.95);
+  border-color: #374151;
+}
+html.dark .bg-white {
+  background-color: #111827 !important;
+  color: #f1f5f9 !important;
+  border-color: #374151 !important;
+}
+html.dark .bg-slate-50,
+html.dark .bg-slate-100 {
+  background-color: #0b0f19 !important;
+  color: #f1f5f9 !important;
+}
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-slate-700 {
+  color: #f8fafc !important;
+}
+html.dark .text-slate-500,
+html.dark .text-slate-400 {
+  color: #9ca3af !important;
+}
+html.dark .border-slate-200,
+html.dark .border-slate-100 {
+  border-color: #374151 !important;
+}
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #0b0f19 !important;
+  color: #f8fafc !important;
+  border-color: #374151 !important;
 }
