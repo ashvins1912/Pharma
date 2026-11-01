@@ -1,7 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
-import { analyzeCustomerOffers } from '../../services/analystService';
 
 export default function AdminOfferZoneManager() {
   const { medicines, orders } = useApp();
@@ -13,17 +12,20 @@ export default function AdminOfferZoneManager() {
   const [discountOverrides, setDiscountOverrides] = useState({});
   const [reasonOverrides, setReasonOverrides] = useState({});
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterCategory]);
+
   // Seasonal & Platform Recommendation Logic
   const recommendationInsights = useMemo(() => {
     const currentMonth = new Date().getMonth(); // 0-11
-    // Season detection: 
-    // Winter / Monsoon (Nov-Feb, Jun-Sep): Cough, cold, flu, immunity, paracetamol
-    // Spring / Summer (Mar-May, Oct): Allergy, hydration, antacids, vitamins
     const isColdSeason = currentMonth >= 10 || currentMonth <= 1; // Nov - Feb
     const isMonsoonSeason = currentMonth >= 5 && currentMonth <= 8; // Jun - Sep
     const seasonName = isColdSeason ? 'Winter & Cold Care Season' : isMonsoonSeason ? 'Monsoon & Immunity Season' : 'Summer & Allergy Season';
 
-    // Count platform-wide medicine sales frequency from orders
     const salesFrequencyMap = {};
     (Array.isArray(orders) ? orders : []).forEach(order => {
       const items = order.items || order.medicines || [];
@@ -33,23 +35,17 @@ export default function AdminOfferZoneManager() {
       });
     });
 
-    const topSold = Object.entries(salesFrequencyMap)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count);
-
-    // Categorize catalog medicines into seasonal/commonly used groups
     const catalogItems = (Array.isArray(medicines) ? medicines : []).map((med, idx) => {
       const name = med.name || med.title || 'Medicine';
       const category = (med.category || 'General').toLowerCase();
       const soldCount = salesFrequencyMap[name] || (15 + (idx * 7) % 60);
 
-      // Seasonal match logic
       let isSeasonalRecommended = false;
       let seasonReason = 'Standard essential medicine';
-      if (isColdSeason && (category.includes('cough') || category.includes('cold') || category.includes('fever') || name.toLowerCase().includes('paracetamol') || name.toLowerCase().includes('azithromycin') || name.toLowerCase().includes('cough'))) {
+      if (isColdSeason && (category.includes('cough') || category.includes('cold') || category.includes('fever') || name.toLowerCase().includes('paracetamol') || name.toLowerCase().includes('azithromycin'))) {
         isSeasonalRecommended = true;
         seasonReason = 'High winter demand for cold, flu & cough relief.';
-      } else if (isMonsoonSeason && (category.includes('fever') || category.includes('infection') || name.toLowerCase().includes('multivitamin') || name.toLowerCase().includes('zinc'))) {
+      } else if (isMonsoonSeason && (category.includes('fever') || category.includes('infection') || name.toLowerCase().includes('multivitamin'))) {
         isSeasonalRecommended = true;
         seasonReason = 'High monsoon demand for infection & immunity support.';
       } else if (!isColdSeason && !isMonsoonSeason && (category.includes('allergy') || category.includes('stomach') || category.includes('antacid') || name.toLowerCase().includes('cetirizine'))) {
@@ -73,7 +69,6 @@ export default function AdminOfferZoneManager() {
 
     return {
       seasonName,
-      topSold,
       catalogItems
     };
   }, [medicines, orders, offerZoneOverrides, discountOverrides, reasonOverrides]);
@@ -94,6 +89,12 @@ export default function AdminOfferZoneManager() {
       return matchesSearch && matchesCategory;
     });
   }, [catalogItems, search, filterCategory]);
+
+  const totalPages = Math.ceil(filteredMedicines.length / pageSize) || 1;
+  const paginatedMedicines = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredMedicines.slice(start, start + pageSize);
+  }, [filteredMedicines, currentPage]);
 
   const toggleOfferZone = (id) => {
     setOfferZoneOverrides(prev => ({
@@ -118,13 +119,13 @@ export default function AdminOfferZoneManager() {
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/10 skew-x-12 pointer-events-none" />
         <div className="relative z-10">
           <span className="bg-white/20 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider backdrop-blur-md">
-            ⚡ Pharmacy Admin Offer Zone & Recommendations
+            ⚡ Pharmacy Admin Offer Zone &amp; Recommendations
           </span>
           <h2 className="text-xl sm:text-2xl font-black tracking-tight mt-2 text-white">
-            Offer Zone Curation & Intelligent Refill Engine
+            Offer Zone Curation &amp; Intelligent Refill Engine
           </h2>
           <p className="text-xs sm:text-sm text-indigo-100 max-w-2xl mt-1 leading-relaxed">
-            Configure which products appear in the customer Offer Zone, set promotional discounts, and monitor platform-wide sales frequencies with seasonal demand intelligence.
+            Configure which products appear in the customer Offer Zone, set promotional discounts, and monitor platform-wide sales frequencies with seasonal demand intelligence (20 records per page).
           </p>
         </div>
 
@@ -142,7 +143,7 @@ export default function AdminOfferZoneManager() {
           </div>
           <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3">
             <div className="text-[10px] uppercase font-bold text-indigo-200">Recommendation Engine</div>
-            <div className="text-sm font-black text-emerald-300">Active (Sales & Season Synced)</div>
+            <div className="text-sm font-black text-emerald-300">Active (Sales &amp; Season Synced)</div>
           </div>
         </div>
       </div>
@@ -178,14 +179,14 @@ export default function AdminOfferZoneManager() {
       </div>
 
       {/* Product Offer Configuration Table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm overflow-hidden space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-black text-slate-900 dark:text-white">Product Offer & Recommendation Control</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Toggle products into the customer Offer Zone and customize discount percentages.</p>
+            <h3 className="text-sm font-black text-slate-900 dark:text-white">Product Offer &amp; Recommendation Control</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Toggle products into the customer Offer Zone and customize discount percentages (20 records per page).</p>
           </div>
-          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-3 py-1.5 rounded-xl">
-            Showing {filteredMedicines.length} items
+          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-3 py-1.5 rounded-xl w-fit">
+            Showing {paginatedMedicines.length} of {filteredMedicines.length} items (Page {currentPage} of {totalPages})
           </span>
         </div>
 
@@ -193,7 +194,7 @@ export default function AdminOfferZoneManager() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] font-black uppercase text-slate-400 tracking-wider">
-                <th className="py-3 px-4">Medicine & Category</th>
+                <th className="py-3 px-4">Medicine &amp; Category</th>
                 <th className="py-3 px-4">Platform Sales</th>
                 <th className="py-3 px-4">Seasonal / Recommendation Reason</th>
                 <th className="py-3 px-4">Discount %</th>
@@ -201,7 +202,7 @@ export default function AdminOfferZoneManager() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-              {filteredMedicines.map((med) => {
+              {paginatedMedicines.map((med) => {
                 const id = med.id || med._id;
                 const price = med.price || 150;
                 const discount = med.discountPercent || 20;
@@ -265,7 +266,7 @@ export default function AdminOfferZoneManager() {
                   </tr>
                 );
               })}
-              {filteredMedicines.length === 0 && (
+              {paginatedMedicines.length === 0 && (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-slate-400 text-xs">
                     No matching medicines found in catalog.
@@ -275,6 +276,29 @@ export default function AdminOfferZoneManager() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Navigation */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-extrabold text-xs rounded-xl disabled:opacity-40 transition cursor-pointer"
+            >
+              ← Previous Page
+            </button>
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
+              Page {currentPage} of {totalPages} (20 records per page)
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-extrabold text-xs rounded-xl disabled:opacity-40 transition cursor-pointer"
+            >
+              Next Page →
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

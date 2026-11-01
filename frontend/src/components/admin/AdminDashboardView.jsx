@@ -4,6 +4,7 @@ import AdminFulfillmentKanban from './AdminFulfillmentKanban';
 import AdminInventoryTable from './AdminInventoryTable';
 import AdminRouteOptimizer from './AdminRouteOptimizer';
 import AdminBulkImportModal from './AdminBulkImportModal';
+import AdminNewStockModal from './AdminNewStockModal';
 import RiderFleetView from './riders/RiderFleetView';
 import AdminOrderFinancials from './AdminOrderFinancials';
 import AdminMedicineRequestsTab from './requests/AdminMedicineRequestsTab';
@@ -84,6 +85,7 @@ export default function AdminDashboardView() {
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [ordersError, setOrdersError] = useState('');
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [newStockModalOpen, setNewStockModalOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditPagination, setAuditPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
   const [activeOrdersPage, setActiveOrdersPage] = useState(1);
@@ -275,6 +277,17 @@ export default function AdminDashboardView() {
               >
                 <span>📥</span>
                 <span>Bulk Excel Ingestion</span>
+              </button>
+            )}
+
+            {canAccessOperations && (
+              <button
+                type="button"
+                onClick={() => setNewStockModalOpen(true)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer flex items-center gap-2"
+              >
+                <span>+</span>
+                <span>Add Medicine</span>
               </button>
             )}
           </div>
@@ -765,6 +778,15 @@ export default function AdminDashboardView() {
       <AdminBulkImportModal
         isOpen={importModalOpen && canImportInventory}
         onClose={() => setImportModalOpen(false)}
+      />
+
+      {/* Add New Stock Modal */}
+      <AdminNewStockModal
+        isOpen={newStockModalOpen}
+        onClose={() => setNewStockModalOpen(false)}
+        onStockCreated={() => {
+          loadAllOrders();
+        }}
       />
 
     </div>

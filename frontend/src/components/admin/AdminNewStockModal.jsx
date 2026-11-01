@@ -136,6 +136,11 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/45 backdrop-blur-[2px] animate-fade-in overscroll-none" aria-modal="true" role="dialog">
       <div
+        className="modal-backdrop absolute inset-0 touch-none"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
         ref={modalRef}
         role="dialog"
         aria-modal="true"
