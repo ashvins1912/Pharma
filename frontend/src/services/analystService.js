@@ -119,19 +119,9 @@ export function computeSpendingAnalytics(orders = []) {
   const totalSpent30Days = chartData.reduce((acc, curr) => acc + curr.spending, 0);
   const totalOrders30Days = chartData.reduce((acc, curr) => acc + curr.ordersCount, 0);
 
-  // If no orders in last 30 days, generate realistic sample data for demo visualization
-  if (totalSpent30Days === 0) {
-    chartData.forEach((item, idx) => {
-      if (idx % 7 === 2 || idx % 9 === 5) {
-        item.spending = Math.round(350 + (idx * 25) % 800);
-        item.ordersCount = 1;
-      }
-    });
-  }
-
   return {
     chartData,
-    totalSpent30Days: totalSpent30Days > 0 ? totalSpent30Days : 2450,
-    totalOrders30Days: totalOrders30Days > 0 ? totalOrders30Days : 4
+    totalSpent30Days,
+    totalOrders30Days
   };
 }

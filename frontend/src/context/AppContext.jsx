@@ -338,6 +338,31 @@ export function AppProvider({ children }) {
     }
   }, [addressCacheKey, isFullyAuthenticated]);
 
+  // Fetch Orders
+  const loadUserOrders = useCallback(async ({ silent = false } = {}) => {
+    const requestSequence = ++orderLoadSequence.current;
+    if (!isFullyAuthenticated) {
+      setOrders([]);
+      setLoadingOrders(false);
+      return;
+    }
+    try {
+      if (!silent) setLoadingOrders(true);
+      const res = await apiClient.get('/api/orders/mine', { showLoader: !silent });
+      if (requestSequence === orderLoadSequence.current) {
+        setOrders(normalizeOrdersResponse(res.data));
+        setOrdersError('');
+      }
+    } catch (error) {
+      console.error('Failed to load customer orders:', error);
+      if (requestSequence === orderLoadSequence.current) setOrdersError('Unable to load your orders right now. Please try again in a moment.');
+    } finally {
+      if (requestSequence === orderLoadSequence.current) {
+        setLoadingOrders(false);
+      }
+    }
+  }, [isFullyAuthenticated]);
+
   useEffect(() => {
     if (authLoading) return;
 
@@ -386,40 +411,15 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (isFullyAuthenticated && !isSuperAdmin) {
       loadAddresses();
+      loadUserOrders({ silent: true });
     } else {
       setAddresses([]);
       setAddressesError('');
       setSelectedAddressId('');
-    }
-  }, [isFullyAuthenticated, isSuperAdmin, loadAddresses]);
-
-  // Fetch Orders
-  const loadUserOrders = useCallback(async ({ silent = false } = {}) => {
-    const requestSequence = ++orderLoadSequence.current;
-    if (!isFullyAuthenticated) {
       setOrders([]);
-      setLoadingOrders(false);
-      return;
+      setOrdersError('');
     }
-    try {
-      if (!silent) setLoadingOrders(true);
-      const res = await apiClient.get('/api/orders/mine', { showLoader: !silent });
-      if (requestSequence === orderLoadSequence.current) {
-        setOrders(normalizeOrdersResponse(res.data));
-        setOrdersError('');
-      }
-    } catch (error) {
-      console.error('Failed to load customer orders:', error);
-      if (requestSequence === orderLoadSequence.current) setOrdersError('Unable to load your orders right now. Please try again in a moment.');
-    } finally {
-      if (requestSequence === orderLoadSequence.current) {
-        setLoadingOrders(false);
-      }
-    }
-  }, [isFullyAuthenticated]);
-
-  // Order data is loaded by OrderHistoryView when the customer opens the Orders tab.
-  // Keep it out of global auth hydration so sign-in does not fetch order history.
+  }, [isFullyAuthenticated, isSuperAdmin, loadAddresses, loadUserOrders]);
 
   // Load User Medicine Requests
   const loadUserMedicineRequests = useCallback(async ({ silent = false, page, statusGroup, append = false } = {}) => {
