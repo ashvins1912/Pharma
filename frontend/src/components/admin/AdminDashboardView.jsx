@@ -352,16 +352,16 @@ export default function AdminDashboardView() {
         </div>
       )}
 
-      {/* Admin Operations Navigation - Clean Wrapped Pill Grid (No Confusing Horizontal Scrolling) */}
+      {/* Dispensary Command Center & Operations Hub - Wrapped Grid */}
       <div className="bg-white dark:bg-gray-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200 dark:border-gray-800 space-y-3">
         <div className="flex items-center justify-between px-1">
           <div>
             <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Operational Workspaces &amp; Control Panels
+              Dispensary Command Center &amp; Operations Hub
             </h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">Switch between management modules instantly without horizontal scrolling</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">Real-time dispensary workflows, logistics routing, and platform governance</p>
           </div>
-          <span className="text-[10px] font-extrabold px-2.5 py-1 bg-slate-100 dark:bg-gray-800 text-slate-600 dark:text-slate-300 rounded-full">
+          <span className="text-[10px] font-extrabold px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-full">
             Active Workspace
           </span>
         </div>
