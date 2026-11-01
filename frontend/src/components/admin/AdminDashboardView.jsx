@@ -3,8 +3,7 @@ import apiClient from '../../api/apiClient';
 import AdminFulfillmentKanban from './AdminFulfillmentKanban';
 import AdminInventoryTable from './AdminInventoryTable';
 import AdminRouteOptimizer from './AdminRouteOptimizer';
-import AdminBulkImportModal from './AdminBulkImportModal';
-import AdminNewStockModal from './AdminNewStockModal';
+
 import RiderFleetView from './riders/RiderFleetView';
 import AdminOrderFinancials from './AdminOrderFinancials';
 import AdminMedicineRequestsTab from './requests/AdminMedicineRequestsTab';
@@ -55,7 +54,7 @@ export default function AdminDashboardView() {
     role,
     loading: authLoading
   } = useAuth();
-  const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen } = useApp();
+  const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen, setAdminBulkImportModalOpen, setAdminNewStockModalOpen } = useApp();
   const [adminTab, setAdminTab] = useState('fulfillment');
 
   // Navigation visibility and component rendering share these exact permission gates.
@@ -84,8 +83,7 @@ export default function AdminDashboardView() {
   const [medicinePreloadLoading, setMedicinePreloadLoading] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [ordersError, setOrdersError] = useState('');
-  const [importModalOpen, setImportModalOpen] = useState(false);
-  const [newStockModalOpen, setNewStockModalOpen] = useState(false);
+
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditPagination, setAuditPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
   const [activeOrdersPage, setActiveOrdersPage] = useState(1);
@@ -272,7 +270,7 @@ export default function AdminDashboardView() {
 
             {canImportInventory && (
               <button
-                onClick={() => setImportModalOpen(true)}
+                onClick={() => setAdminBulkImportModalOpen(true)}
                 className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer flex items-center gap-2"
               >
                 <span>📥</span>
@@ -283,7 +281,7 @@ export default function AdminDashboardView() {
             {canAccessOperations && (
               <button
                 type="button"
-                onClick={() => setNewStockModalOpen(true)}
+                onClick={() => setAdminNewStockModalOpen(true)}
                 className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer flex items-center gap-2"
               >
                 <span>+</span>
@@ -774,20 +772,7 @@ export default function AdminDashboardView() {
         </div>
       )}
 
-      {/* Bulk Excel Ingestion Modal */}
-      <AdminBulkImportModal
-        isOpen={importModalOpen && canImportInventory}
-        onClose={() => setImportModalOpen(false)}
-      />
 
-      {/* Add New Stock Modal */}
-      <AdminNewStockModal
-        isOpen={newStockModalOpen}
-        onClose={() => setNewStockModalOpen(false)}
-        onStockCreated={() => {
-          loadAllOrders();
-        }}
-      />
 
     </div>
   );

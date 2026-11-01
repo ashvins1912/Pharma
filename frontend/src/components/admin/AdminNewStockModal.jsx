@@ -146,7 +146,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
         aria-modal="true"
         aria-labelledby="new-stock-modal-title"
         tabIndex={-1}
-        className="pharma-modal-surface relative z-10 m-auto flex h-[92dvh] max-h-[56rem] min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white text-slate-800 shadow-2xl overscroll-contain sm:h-[min(90dvh,56rem)]"
+        className="pharma-modal-surface relative z-10 m-auto flex h-[90dvh] max-h-[calc(100dvh-1.5rem)] min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white text-slate-800 shadow-2xl overscroll-contain"
       >
         <header className="relative shrink-0 bg-white dark:bg-gray-900 border-b border-slate-100 dark:border-slate-800 px-5 pt-5 pb-4 w-full">
           <button

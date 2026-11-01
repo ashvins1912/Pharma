@@ -3,10 +3,8 @@ import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import apiClient from '../../api/apiClient';
 import Pagination from '../common/Pagination';
-import AdminNewStockModal from './AdminNewStockModal';
-
 export default function AdminInventoryTable({ onOpenBulkImport, canManage = false, canImport = false }) {
-  const { fetchMedicines } = useApp();
+  const { fetchMedicines, setAdminNewStockModalOpen } = useApp();
   const { addToast } = useToast();
   
   const [adminMeds, setAdminMeds] = useState([]);
@@ -17,7 +15,6 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
   const [adminTotal, setAdminTotal] = useState(0);
   const [medicineDraft, setMedicineDraft] = useState(null);
   const [savingMedicine, setSavingMedicine] = useState(false);
-  const [newStockModalOpen, setNewStockModalOpen] = useState(false);
 
   const loadAdminInventory = async (page = 1, search = '') => {
     try {
@@ -141,7 +138,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
           {canManage && (
             <button
               type="button"
-              onClick={() => setNewStockModalOpen(true)}
+              onClick={() => setAdminNewStockModalOpen(true)}
               className="flex-1 sm:flex-initial rounded-xl bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white transition hover:bg-emerald-700 shadow-sm"
             >
               + Add Medicine / Product
@@ -326,14 +323,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
           </form>
         </div>
       )}
-      <AdminNewStockModal
-        isOpen={newStockModalOpen}
-        onClose={() => setNewStockModalOpen(false)}
-        onStockCreated={() => {
-          loadAdminInventory(adminPage, searchTerm);
-          fetchMedicines();
-        }}
-      />
+
     </div>
   );
 }

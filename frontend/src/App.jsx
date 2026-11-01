@@ -19,6 +19,8 @@ import AuthModal from './components/AuthModal';
 import UserProfileModal from './components/UserProfileModal';
 const AdminDashboardView = React.lazy(() => import('./components/admin/AdminDashboardView'));
 import WhatsAppConnectModal from './components/admin/WhatsAppConnectModal';
+import AdminNewStockModal from './components/admin/AdminNewStockModal';
+import AdminBulkImportModal from './components/admin/AdminBulkImportModal';
 import CustomerRequestsView from './components/requests/CustomerRequestsView';
 import MedicineRequestModal from './components/requests/MedicineRequestModal';
 import CustomerProposalModal from './components/requests/CustomerProposalModal';
@@ -73,7 +75,12 @@ function MainApp() {
     resumeRequestAfterAuthentication,
     activeProposalRequest,
     setActiveProposalRequest,
-    openProposalModal
+    openProposalModal,
+    fetchMedicines,
+    adminNewStockModalOpen,
+    setAdminNewStockModalOpen,
+    adminBulkImportModalOpen,
+    setAdminBulkImportModalOpen
   } = useApp();
   const { addToast } = useToast();
   const { activeTenant } = useTenant();
@@ -639,6 +646,21 @@ function MainApp() {
         isOpen={tenantSelectorOpen}
         preferredTenantId={new URLSearchParams(window.location.search).get('tenantId') || ''}
         onClose={() => setTenantSelectorOpen(false)}
+      />
+
+      {/* Global Admin New Stock Modal */}
+      <AdminNewStockModal
+        isOpen={adminNewStockModalOpen}
+        onClose={() => setAdminNewStockModalOpen(false)}
+        onStockCreated={() => {
+          fetchMedicines();
+        }}
+      />
+
+      {/* Global Admin Bulk Import Modal */}
+      <AdminBulkImportModal
+        isOpen={adminBulkImportModalOpen}
+        onClose={() => setAdminBulkImportModalOpen(false)}
       />
 
     </div>

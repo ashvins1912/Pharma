@@ -1900,15 +1900,24 @@ export const dataStore = {
     },
 
     async getFulfillmentSnapshot(page = 1, limit = 10) {
-        const activeFilter = { orderStatus: { $nin: ['Delivered', 'delivered'] } };
+        const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+        const pipelineFilter = {
+            $or: [
+                { orderStatus: { $nin: ['Delivered', 'delivered'] } },
+                {
+                    orderStatus: { $in: ['Delivered', 'delivered'] },
+                    createdAt: { $gte: twoDaysAgo }
+                }
+            ]
+        };
         const parsedLimit = Math.min(50, Math.max(1, Number(limit) || 10));
         const parsedPage = Math.max(1, Number(page) || 1);
         if (getIsConnected()) {
             const [activeTotal, total, deliveredCount, items, recentOrders] = await Promise.all([
-                Order.countDocuments(activeFilter),
+                Order.countDocuments(pipelineFilter),
                 Order.countDocuments({}),
                 Order.countDocuments({ orderStatus: 'Delivered' }),
-                Order.find(activeFilter).sort({ createdAt: -1, _id: -1 }).skip((parsedPage - 1) * parsedLimit).limit(parsedLimit).lean(),
+                Order.find(pipelineFilter).sort({ createdAt: -1, _id: -1 }).skip((parsedPage - 1) * parsedLimit).limit(parsedLimit).lean(),
                 Order.find().sort({ createdAt: -1, _id: -1 }).limit(6).lean()
             ]);
             const totalPages = Math.ceil(activeTotal / parsedLimit) || 1;
@@ -1918,16 +1927,22 @@ export const dataStore = {
                 pagination: { page: currentPage, limit: parsedLimit, total: activeTotal, totalPages, hasNextPage: currentPage < totalPages, hasPreviousPage: currentPage > 1 }
             };
         }
+        const twoDaysAgoTime = Date.now() - 48 * 60 * 60 * 1000;
         const allOrders = [...inMemoryOrders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        const activeOrders = allOrders.filter(order => !['Delivered', 'delivered'].includes(order.orderStatus));
-        const activeTotal = activeOrders.length;
+        const pipelineOrders = allOrders.filter(order => {
+            const status = String(order.orderStatus || '').trim().toLowerCase();
+            if (status !== 'delivered') return true;
+            const orderDate = new Date(order.createdAt || Date.now()).getTime();
+            return orderDate >= twoDaysAgoTime;
+        });
+        const activeTotal = pipelineOrders.length;
         const totalPages = Math.ceil(activeTotal / parsedLimit) || 1;
         const currentPage = Math.min(parsedPage, totalPages);
         return {
-            items: activeOrders.slice((currentPage - 1) * parsedLimit, currentPage * parsedLimit),
+            items: pipelineOrders.slice((currentPage - 1) * parsedLimit, currentPage * parsedLimit),
             total: allOrders.length,
             activeTotal,
-            deliveredCount: allOrders.filter(order => order.orderStatus === 'Delivered').length,
+            deliveredCount: allOrders.filter(order => String(order.orderStatus || '').trim().toLowerCase() === 'delivered').length,
             recentOrders: allOrders.slice(0, 6),
             pagination: { page: currentPage, limit: parsedLimit, total: activeTotal, totalPages, hasNextPage: currentPage < totalPages, hasPreviousPage: currentPage > 1 }
         };

@@ -250,8 +250,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/40 backdrop-blur-[2px] animate-fade-in" aria-modal="true" role="dialog">
-      <div className="w-full max-w-3xl max-h-[92vh] flex flex-col bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden relative my-auto">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-[2px] animate-fade-in overscroll-none" aria-modal="true" role="dialog">
+      <div className="w-full max-w-3xl h-[88dvh] sm:h-[90dvh] max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] min-h-0 flex flex-col bg-white border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden relative mt-auto sm:my-auto overscroll-contain">
         
         {/* Sticky Header */}
         <div className="shrink-0 p-4 sm:p-6 pb-3.5 border-b border-slate-100 bg-white flex justify-between items-center gap-3">

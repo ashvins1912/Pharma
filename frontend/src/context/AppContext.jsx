@@ -106,6 +106,8 @@ export function AppProvider({ children }) {
   });
   const [whatsappModalOpen, setWhatsappModalOpen] = useState(false);
   const [whatsappWarningActive, setWhatsappWarningActive] = useState(false);
+  const [adminNewStockModalOpen, setAdminNewStockModalOpen] = useState(false);
+  const [adminBulkImportModalOpen, setAdminBulkImportModalOpen] = useState(false);
   const whatsappPromiseRef = useRef(null);
   const whatsappLastFetchedRef = useRef(0);
   const whatsappStatusRef = useRef(whatsappStatus);
@@ -1133,7 +1135,13 @@ export function AppProvider({ children }) {
         disconnectWhatsApp,
         triggerWhatsAppWarningNotification,
         dismissWhatsAppPrompt,
-        checkWhatsAppBeforeNotification
+        checkWhatsAppBeforeNotification,
+
+        // Admin Modals
+        adminNewStockModalOpen,
+        setAdminNewStockModalOpen,
+        adminBulkImportModalOpen,
+        setAdminBulkImportModalOpen
       }}
     >
       {children}
