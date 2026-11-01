@@ -93,6 +93,7 @@ router.get('/tenant/branches', async (req, res) => {
 import Tenant from '../models/Tenant.js';
 import Vendor from '../models/Vendor.js';
 import { cacheService } from '../services/cache/CacheService.js';
+import { pharmacyLocationService } from '../services/PharmacyLocationService.js';
 
 router.get('/tenants/nearby', async (req, res) => {
     try {
@@ -105,7 +106,7 @@ router.get('/tenants/nearby', async (req, res) => {
             const vendors = await Vendor.find({ status: 'ACTIVE' }).lean();
 
             tenants = dbTenants.map((t, idx) => {
-                const vendor = vendors.find(v => v.tenantId === t._id) || vendors[idx] || {};
+                const vendor = vendors.find(v => String(v.tenantId) === String(t._id)) || vendors[idx] || {};
                 return {
                     _id: t._id,
                     shopName: t.name || vendor.companyName || 'Pharmacy Dispensary',
@@ -139,31 +140,30 @@ router.get('/tenants/nearby', async (req, res) => {
                 ];
             }
 
-            // Cache put with 15-minute TTL (900 seconds)
+            // Build Quadtree spatial index and cache tenants
+            pharmacyLocationService.buildIndex(tenants);
             await cacheService.set(cacheKey, tenants, 900);
+        }
+
+        if (!pharmacyLocationService.isIndexed) {
+            pharmacyLocationService.buildIndex(tenants);
         }
 
         const userLat = lat != null ? Number(lat) : null;
         const userLng = lng != null ? Number(lng) : null;
 
-        const results = tenants.map(t => {
-            let distanceKm = 1.2;
-            if (userLat != null && userLng != null && t.geoLocation?.coordinates) {
-                const [tLng, tLat] = t.geoLocation.coordinates;
-                const R = 6371;
-                const dLat = (tLat - userLat) * (Math.PI / 180);
-                const dLon = (tLng - userLng) * (Math.PI / 180);
-                const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                          Math.cos(userLat * (Math.PI / 180)) * Math.cos(tLat * (Math.PI / 180)) *
-                          Math.sin(dLon / 2) * Math.sin(dLon / 2);
-                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                distanceKm = Number((R * c).toFixed(1));
-            }
-            return { ...t, distanceKm };
-        });
-
+        let results;
         if (userLat != null && userLng != null) {
-            results.sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999));
+            // O(log N) Quadtree spatial radius query
+            results = pharmacyLocationService.findNearby(userLat, userLng, 500);
+            const foundIds = new Set(results.map(r => String(r._id)));
+            const missing = tenants.filter(t => !foundIds.has(String(t._id))).map(t => ({
+                ...t,
+                distanceKm: 999.0
+            }));
+            results = [...results, ...missing];
+        } else {
+            results = tenants.map(t => ({ ...t, distanceKm: null }));
         }
 
         res.json({

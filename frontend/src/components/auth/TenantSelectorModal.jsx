@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../api/apiClient';
 import { useTenant } from '../../context/TenantContext';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // Earth radius in km
@@ -21,6 +22,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
   const [error, setError] = useState('');
   const [userLocation, setUserLocation] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const modalRef = useFocusTrap(isOpen, onClose);
 
   useEffect(() => {
     if (isOpen) {
@@ -111,11 +113,18 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl max-w-lg w-full p-6 md:p-8 border border-gray-100 dark:border-gray-800 space-y-6">
+      <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tenant-modal-title"
+        tabIndex={-1}
+        className="pharma-modal-surface bg-white dark:bg-gray-900 rounded-3xl shadow-2xl max-w-lg w-full p-6 md:p-8 border border-gray-100 dark:border-gray-800 space-y-6"
+      >
         <div className="flex items-center justify-between">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Geolocation Proximity Engine</span>
-            <h3 className="text-xl font-black text-gray-900 dark:text-white mt-1">Select Active Pharmacy Dispensary</h3>
+            <h3 id="tenant-modal-title" className="text-xl font-black text-gray-900 dark:text-white mt-1">Select Active Pharmacy Dispensary</h3>
           </div>
           <button
             onClick={onClose}

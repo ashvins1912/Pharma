@@ -141,7 +141,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
           ? (deliveredPagination.total || deliveredOrders.length)
           : col.id === 'Cancelled'
             ? (cancelledPagination.total || cancelledOrders.length)
-            : (orders || []).filter(o => normalizeOrderStatus(o) === col.id && isCreatedToday(o)).length;
+            : (orders || []).filter(o => normalizeOrderStatus(o) === col.id).length;
     });
     return counts;
   }, [appliedSearch, searchOrders, deliveredPagination.total, deliveredOrders.length, cancelledPagination.total, cancelledOrders.length, orders]);

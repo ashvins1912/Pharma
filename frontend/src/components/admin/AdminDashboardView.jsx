@@ -352,176 +352,224 @@ export default function AdminDashboardView() {
         </div>
       )}
 
-      {/* Admin Tab Navigation Bar */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar border-b border-slate-200 pb-2">
-        {canViewFulfillment && <button
-          onClick={() => setAdminTab('fulfillment')}
-          className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
-            adminTab === 'fulfillment'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          📦 Fulfillment Queue ({orders.length})
-        </button>}
+      {/* Admin Operations Navigation - Clean Wrapped Pill Grid (No Confusing Horizontal Scrolling) */}
+      <div className="bg-white dark:bg-gray-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200 dark:border-gray-800 space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Operational Workspaces &amp; Control Panels
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-0.5">Switch between management modules instantly without horizontal scrolling</p>
+          </div>
+          <span className="text-[10px] font-extrabold px-2.5 py-1 bg-slate-100 dark:bg-gray-800 text-slate-600 dark:text-slate-300 rounded-full">
+            Active Workspace
+          </span>
+        </div>
 
-
-        {canViewCSquare && (
-          <button
-            onClick={() => setAdminTab('csquare')}
-            className={'px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ' + (adminTab === 'csquare' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200')}
-          >
-            <span>🔗</span><span>C-Square</span>
-          </button>
-        )}
-        {canViewAdminRequests && (
-          <button
-            onClick={() => setAdminTab('requests')}
-            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              adminTab === 'requests'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+        <div className="flex flex-wrap gap-2 pt-1">
+          {canViewFulfillment && <button
+            onClick={() => setAdminTab('fulfillment')}
+            className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+              adminTab === 'fulfillment'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
             }`}
           >
-            <span>📋</span>
-            <span>Medicine Requests & Proposals</span>
-            <span
-              aria-hidden={pendingMedicineRequestCount === 0}
-              className={`inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[10px] font-black leading-none text-white ${pendingMedicineRequestCount === 0 ? 'invisible' : ''}`}
-            >
-              {pendingMedicineRequestCount || 0}
+            <span>📦</span>
+            <span>Fulfillment Queue</span>
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${adminTab === 'fulfillment' ? 'bg-blue-700 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300'}`}>
+              {orders.length}
             </span>
-          </button>
-        )}
+          </button>}
 
-        {canManageRiders && (
-        <button
-          onClick={() => setAdminTab('riders')}
-          className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-            adminTab === 'riders'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          <span>🛵</span>
-          <span>Rider Fleet & Auto-Assignment</span>
-        </button>
-        )}
+          {canViewCSquare && (
+            <button
+              onClick={() => setAdminTab('csquare')}
+              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                adminTab === 'csquare'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
+              }`}
+            >
+              <span>🔗</span>
+              <span>C-Square</span>
+            </button>
+          )}
 
-        {canViewPromotions && (
-          <button
-            onClick={() => setAdminTab('promotions')}
-            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${adminTab === 'promotions' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
-          >
-            <span>🏷️</span><span>Customer Offers</span>
-          </button>
-        )}
+          {canViewAdminRequests && (
+            <button
+              onClick={() => setAdminTab('requests')}
+              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                adminTab === 'requests'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
+              }`}
+            >
+              <span>📋</span>
+              <span>Medicine Requests</span>
+              <span
+                aria-hidden={pendingMedicineRequestCount === 0}
+                className={`inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[10px] font-black leading-none text-white ${pendingMedicineRequestCount === 0 ? 'invisible' : ''}`}
+              >
+                {pendingMedicineRequestCount || 0}
+              </span>
+            </button>
+          )}
 
-        {canViewPromotions && (
-          <button
-            onClick={() => setAdminTab('offerZone')}
-            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${adminTab === 'offerZone' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
-          >
-            <span>⚡</span><span>Offer Zone & Recommendations</span>
-          </button>
-        )}
+          {canManageRiders && (
+            <button
+              onClick={() => setAdminTab('riders')}
+              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                adminTab === 'riders'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
+              }`}
+            >
+              <span>🛵</span>
+              <span>Rider Fleet &amp; Auto-Assignment</span>
+            </button>
+          )}
 
-        {canViewPayments && (
-        <button
-          onClick={() => setAdminTab('payments')}
-          className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
-            adminTab === 'payments'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          💳 Payment reminders
-        </button>
-        )}
+          {canViewPromotions && (
+            <button
+              onClick={() => setAdminTab('promotions')}
+              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                adminTab === 'promotions'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
+              }`}
+            >
+              <span>🏷️</span>
+              <span>Customer Offers</span>
+            </button>
+          )}
 
-        {canViewInventory && (
-        <button
-          onClick={() => setAdminTab('inventory')}
-          className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
-            adminTab === 'inventory'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          📊 Inventory & Catalog
-        </button>
-        )}
+          {canViewPromotions && (
+            <button
+              onClick={() => setAdminTab('offerZone')}
+              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                adminTab === 'offerZone'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
+              }`}
+            >
+              <span>⚡</span>
+              <span>Offer Zone &amp; Recommendations</span>
+            </button>
+          )}
 
-        {canManageRoutes && (
-        <button
-          onClick={() => setAdminTab('routes')}
-          className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
-            adminTab === 'routes'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          🗺️ Smart Route Clubbing
-        </button>
-        )}
+          {canViewPayments && (
+            <button
+              onClick={() => setAdminTab('payments')}
+              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                adminTab === 'payments'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
+              }`}
+            >
+              <span>💳</span>
+              <span>Payment Reminders</span>
+            </button>
+          )}
 
-        {canViewAudits && (
-        <button
-          onClick={() => setAdminTab('audits')}
-          className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
-            adminTab === 'audits'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          📜 Inventory Merge Audits
-        </button>
-        )}
+          {canViewInventory && (
+            <button
+              onClick={() => setAdminTab('inventory')}
+              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                adminTab === 'inventory'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
+              }`}
+            >
+              <span>📊</span>
+              <span>Inventory &amp; Catalog</span>
+            </button>
+          )}
 
-        {canViewTenants && (
-          <button
-            onClick={() => setAdminTab('tenants')}
-            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              adminTab === 'tenants'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'bg-white text-blue-700 hover:bg-blue-50 border border-blue-200'
-            }`}
-          >
-            <span>🌐</span>
-            <span>Platform Tenants</span>
-          </button>
-        )}
-        {canManagePlatformAccess && (
-          <button onClick={() => setAdminTab('access')} className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${adminTab === 'access' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-blue-700 hover:bg-blue-50 border border-blue-200'}`}>
-            <span>🛡️</span><span>Security Access</span>
-          </button>
-        )}
-        {isSuperAdmin && (
-          <button
-            onClick={() => setAdminTab('telemetry')}
-            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              adminTab === 'telemetry'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-200'
-            }`}
-          >
-            <span>📡</span>
-            <span>Live Telemetry</span>
-          </button>
-        )}
-        {isSuperAdmin && (
-          <button
-            onClick={() => setAdminTab('matrix')}
-            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              adminTab === 'matrix'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'bg-white text-purple-700 hover:bg-purple-50 border border-purple-200'
-            }`}
-          >
-            <span>📐</span>
-            <span>Role-Feature Matrix</span>
-          </button>
-        )}
+          {canManageRoutes && (
+            <button
+              onClick={() => setAdminTab('routes')}
+              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                adminTab === 'routes'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
+              }`}
+            >
+              <span>🗺️</span>
+              <span>Smart Route Clubbing</span>
+            </button>
+          )}
+
+          {canViewAudits && (
+            <button
+              onClick={() => setAdminTab('audits')}
+              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                adminTab === 'audits'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
+              }`}
+            >
+              <span>📜</span>
+              <span>Inventory Audits</span>
+            </button>
+          )}
+
+          {canViewTenants && (
+            <button
+              onClick={() => setAdminTab('tenants')}
+              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                adminTab === 'tenants'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-slate-50 dark:bg-gray-800 text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-blue-200 dark:border-gray-700'
+              }`}
+            >
+              <span>🌐</span>
+              <span>Platform Tenants</span>
+            </button>
+          )}
+
+          {canManagePlatformAccess && (
+            <button
+              onClick={() => setAdminTab('access')}
+              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                adminTab === 'access'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-slate-50 dark:bg-gray-800 text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-blue-200 dark:border-gray-700'
+              }`}
+            >
+              <span>🛡️</span>
+              <span>Security Access</span>
+            </button>
+          )}
+
+          {isSuperAdmin && (
+            <button
+              onClick={() => setAdminTab('telemetry')}
+              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                adminTab === 'telemetry'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'bg-slate-50 dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-indigo-200 dark:border-gray-700'
+              }`}
+            >
+              <span>📡</span>
+              <span>Live Telemetry</span>
+            </button>
+          )}
+
+          {isSuperAdmin && (
+            <button
+              onClick={() => setAdminTab('matrix')}
+              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                adminTab === 'matrix'
+                  ? 'bg-purple-600 text-white shadow-md'
+                  : 'bg-slate-50 dark:bg-gray-800 text-purple-600 dark:text-purple-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-purple-200 dark:border-gray-700'
+              }`}
+            >
+              <span>📐</span>
+              <span>Role-Feature Matrix</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tab Content Display */}
