@@ -1,27 +1,43 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useDashboardAnalytics } from '../context/DashboardAnalyticsContext';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
 export default function OfferZoneBanner() {
   const { addToCart } = useApp();
+  const { user } = useAuth();
   const { addToast } = useToast();
   const offersData = useDashboardAnalytics();
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 4;
+
   const { smartRefillOffers, offerZoneItems } = offersData;
+
+  if (!user) return null; // Show on sign-in only
+  if (!offerZoneItems || offerZoneItems.length === 0) return null;
+
+  // Sort by highest discount on top
+  const sortedOffers = [...offerZoneItems].sort((a, b) => {
+    const discA = a.discountPercent || 20;
+    const discB = b.discountPercent || 20;
+    return discB - discA;
+  });
+
+  const totalPages = Math.ceil(sortedOffers.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const currentOffers = sortedOffers.slice(startIndex, startIndex + itemsPerPage);
 
   const handleAddToCartWithDiscount = (item) => {
     const price = item.discountedPrice || item.price || 150;
-    const name = item.name || item.title || 'Medicine';
-    
     addToCart({
       ...item,
       price,
       originalPrice: item.price || price
     });
+    addToast(`Added ${item.name || item.title || 'item'} with special discount to cart!`, 'success');
   };
-
-  if (!offerZoneItems || offerZoneItems.length === 0) return null;
 
   return (
     <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 rounded-2xl sm:rounded-3xl p-5 sm:p-7 text-white shadow-lg shadow-orange-500/20 space-y-4 my-6 relative overflow-hidden">
@@ -31,28 +47,48 @@ export default function OfferZoneBanner() {
         <div>
           <div className="flex items-center gap-2">
             <span className="bg-white/20 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider backdrop-blur-md">
-              ⚡ Exclusive Offer Zone
+              ⚡ Clearance Savings &amp; Surplus Specials
             </span>
             <span className="text-xs font-bold text-amber-100">
-              Limited-Time Pharmacy Refill Specials & Near-Expiry Savings
+              Verified formulation discounts sorted by maximum savings
             </span>
           </div>
           <h2 className="text-base sm:text-xl font-black tracking-tight text-white mt-1">
-            {smartRefillOffers.length > 0 ? 'Smart Refills & Personalized Discounts' : 'Near-Expiry & Slow-Moving Stock Discounts'}
+            {smartRefillOffers.length > 0 ? 'Smart Refills & Top-Tier Discounts' : 'Exclusive Surplus Savings'}
           </h2>
         </div>
-        <div className="text-xs font-bold bg-white/25 px-3 py-1.5 rounded-xl backdrop-blur-md w-fit">
-          Save up to 30% on required formulations
-        </div>
+
+        {/* Pagination Controls / Navigation on Offer Screen */}
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-2xl w-fit">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+              disabled={currentPage === 1}
+              className="text-xs font-extrabold px-2 py-1 bg-white/20 hover:bg-white/40 disabled:opacity-40 rounded-xl transition cursor-pointer"
+            >
+              ← Prev
+            </button>
+            <span className="text-xs font-bold text-white px-1">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="text-xs font-extrabold px-2 py-1 bg-white/20 hover:bg-white/40 disabled:opacity-40 rounded-xl transition cursor-pointer"
+            >
+              Next →
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Offer Cards Carousel / Grid */}
+      {/* Offer Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 relative z-10 pt-1">
-        {offerZoneItems.slice(0, 4).map((item, idx) => {
+        {currentOffers.map((item, idx) => {
           const name = item.name || item.title || 'Medicine Item';
           const price = item.price || 150;
-          const discountedPrice = item.discountedPrice || Math.round(price * 0.8);
           const discountPercent = item.discountPercent || 20;
+          const discountedPrice = item.discountedPrice || Math.round(price * (1 - discountPercent / 100));
           const isSmartRefill = item.isSmartRefill;
 
           return (
@@ -66,7 +102,7 @@ export default function OfferZoneBanner() {
                     {isSmartRefill ? '🔥 Smart Refill' : `🏷️ ${discountPercent}% OFF`}
                   </span>
                   <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
-                    {item.isExpiringSoon ? 'Near Expiry (6M)' : 'Special Offer'}
+                    {item.isExpiringSoon ? 'Near Expiry (6M)' : 'Highest Saving'}
                   </span>
                 </div>
                 <h4 className="font-extrabold text-xs sm:text-sm line-clamp-1 text-slate-900 dark:text-white">

@@ -1,11 +1,23 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { useDashboardAnalytics } from '../context/DashboardAnalyticsContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function SpendingAnalyticsWidget() {
   const analytics = useDashboardAnalytics();
+  const { user } = useAuth();
+  const [timeRange, setTimeRange] = useState('30d'); // '7d' | '14d' | '30d'
 
-  const { chartData, totalSpent30Days, totalOrders30Days } = analytics;
+  if (!user) return null; // Show on sign-in only
+
+  const { chartData } = analytics;
+
+  // Filter chart data based on selected time range navigation filter
+  const daysCount = timeRange === '7d' ? 7 : timeRange === '14d' ? 14 : 30;
+  const filteredChartData = chartData.slice(-daysCount);
+
+  const filteredSpent = filteredChartData.reduce((sum, d) => sum + (d.spending || 0), 0);
+  const filteredOrders = filteredChartData.reduce((sum, d) => sum + (d.ordersCount || 0), 0);
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm space-y-5 transition-colors">
@@ -14,27 +26,48 @@ export default function SpendingAnalyticsWidget() {
           <div className="flex items-center gap-2">
             <span className="text-xl">📊</span>
             <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white tracking-tight">
-              30-Day Spending & Order Analytics
+              Monthly Healthcare Expenditure &amp; Refill Insights
             </h3>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Track your pharmacy expenditure and prescription refill patterns over the last month.
+            Track your verified pharmacy spending and prescription refill trajectory over time.
           </p>
         </div>
 
-        <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 px-4 py-2.5 rounded-2xl">
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Total Spent</div>
-            <div className="text-sm sm:text-base font-black text-blue-600 dark:text-blue-400">
-              ₹{totalSpent30Days.toLocaleString()}
-            </div>
+        {/* Navigation Filters / Range Tabs */}
+        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl">
+          {[
+            { id: '7d', label: '7 Days' },
+            { id: '14d', label: '14 Days' },
+            { id: '30d', label: '30 Days' }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setTimeRange(tab.id)}
+              className={`px-3 py-1.5 text-xs font-black rounded-xl transition cursor-pointer ${
+                timeRange === tab.id
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-700'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl w-fit">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Expenditure ({timeRange})</div>
+          <div className="text-sm sm:text-base font-black text-blue-600 dark:text-blue-400">
+            ₹{filteredSpent.toLocaleString()}
           </div>
-          <div className="h-8 w-px bg-slate-200 dark:bg-slate-700" />
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Orders</div>
-            <div className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
-              {totalOrders30Days} Refills
-            </div>
+        </div>
+        <div className="h-8 w-px bg-slate-200 dark:bg-slate-700" />
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Refills ({timeRange})</div>
+          <div className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+            {filteredOrders} Orders
           </div>
         </div>
       </div>
@@ -42,7 +75,7 @@ export default function SpendingAnalyticsWidget() {
       {/* Recharts Area Chart */}
       <div className="w-full h-56 sm:h-64 pt-2">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <AreaChart data={filteredChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="spendingGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#2563eb" stopOpacity={0.35} />
@@ -55,7 +88,7 @@ export default function SpendingAnalyticsWidget() {
               tick={{ fontSize: 10, fill: '#64748b' }}
               tickLine={false}
               axisLine={{ stroke: '#cbd5e1', strokeOpacity: 0.5 }}
-              interval={4}
+              interval={timeRange === '7d' ? 0 : 4}
             />
             <YAxis
               tick={{ fontSize: 10, fill: '#64748b' }}
