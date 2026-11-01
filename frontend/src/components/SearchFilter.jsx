@@ -1,5 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
+import SearchGroundingInfo from './SearchGroundingInfo';
 
 const CATEGORIES = [
   'All',
@@ -111,6 +112,9 @@ export default function SearchFilter() {
           <span>Hide Rx Drugs</span>
         </label>
       </div>
+
+      {/* Real-Time Medical Search Grounding Box */}
+      <SearchGroundingInfo searchQuery={searchQuery} />
     </div>
   );
 }

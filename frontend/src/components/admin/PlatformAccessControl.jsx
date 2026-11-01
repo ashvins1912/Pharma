@@ -30,9 +30,12 @@ export default function PlatformAccessControl(){
     setLoading(true);
     try {
       const r = await apiClient.get('/api/v1/profile/access/users', { params: { search } });
-      setUsers(r.data?.data || []);
+      const raw = r.data?.data || r.data?.users || r.data || [];
+      const list = Array.isArray(raw) ? raw : (raw?.users || raw?.items || []);
+      setUsers(Array.isArray(list) ? list : []);
     } catch (e) {
       setMessage(e.message || 'Unable to load platform users.');
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -106,8 +109,8 @@ export default function PlatformAccessControl(){
       <div className="grid lg:grid-cols-[300px_1fr] min-h-[440px]">
         <aside className="border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50 p-3">
           <div className="px-2 py-2 text-[10px] font-black uppercase tracking-wider text-slate-400">{loading ? 'Loading…' : users.length + ' platform users'}</div>
-          <div className="space-y-1.5 max-h-[560px] overflow-auto">
-            {users.map(u => (
+           <div className="space-y-1.5 max-h-[560px] overflow-auto">
+            {(Array.isArray(users) ? users : []).map(u => (
               <button key={u.id} onClick={() => select(u)} className={'w-full text-left rounded-xl p-3 border transition ' + (selected?.id === u.id ? 'bg-blue-50 border-blue-200' : 'bg-white border-transparent hover:border-slate-200')}>
                 <div className="flex items-center gap-2">
                   <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xs">{(u.name || u.email || '?').charAt(0).toUpperCase()}</span>

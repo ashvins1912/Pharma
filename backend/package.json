@@ -26,6 +26,7 @@
     "xlsx": "^0.18.5",
     "zod": "^4.6.5",
     "nodemailer": "^10.0.14",
-    "bcryptjs": "^3.0.3"
+    "bcryptjs": "^3.0.3",
+    "@google/genai": "^2.25.0"
   }
 }

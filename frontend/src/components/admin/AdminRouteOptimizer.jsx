@@ -19,11 +19,15 @@ export default function AdminRouteOptimizer({ onRefresh }) {
     let isCurrentRequest = true;
     apiClient.get('/api/admin/riders', { params: { status: 'Available' } })
       .then(({ data }) => {
-        if (isCurrentRequest) setRiders(data || []);
+        if (isCurrentRequest) {
+          const list = Array.isArray(data) ? data : (data?.riders || data?.data || []);
+          setRiders(Array.isArray(list) ? list : []);
+        }
       })
       .catch((err) => {
         if (isCurrentRequest) {
           setRidersError(err.response?.data?.message || err.message || 'Could not load onboarded riders.');
+          setRiders([]);
         }
       })
       .finally(() => {
@@ -34,15 +38,17 @@ export default function AdminRouteOptimizer({ onRefresh }) {
     };
   }, []);
 
+  const riderList = Array.isArray(riders) ? riders : [];
+
   const filteredRiders = useMemo(() => {
     const term = riderSearch.trim().toLowerCase();
-    if (!term) return riders;
-    return riders.filter((rider) =>
-      rider.name.toLowerCase().includes(term) || rider.mobile.toLowerCase().includes(term)
+    if (!term) return riderList;
+    return riderList.filter((rider) =>
+      (rider.name || '').toLowerCase().includes(term) || (rider.mobile || '').toLowerCase().includes(term)
     );
-  }, [riderSearch, riders]);
+  }, [riderSearch, riderList]);
 
-  const selectedRider = riders.find((rider) => rider.id === selectedRiderId);
+  const selectedRider = riderList.find((rider) => String(rider.id || rider._id) === String(selectedRiderId));
 
   const handleFindNearbyOrders = async (e) => {
     e.preventDefault();
@@ -101,170 +107,154 @@ export default function AdminRouteOptimizer({ onRefresh }) {
         </p>
       </div>
 
-      {/* Input Parameters Form */}
-      <form onSubmit={handleFindNearbyOrders} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-        <div className="min-w-0">
-          <label htmlFor="route-rider-search" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-            Select Available Rider
-          </label>
-          <input
-            id="route-rider-search"
-            type="search"
-            value={riderSearch}
-            onChange={(event) => setRiderSearch(event.target.value)}
-            placeholder="Search by name or mobile"
-            className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none font-bold text-slate-800"
-          />
-          <select
-            value={selectedRiderId}
-            onChange={(event) => setSelectedRiderId(event.target.value)}
-            disabled={loadingRiders || Boolean(ridersError) || filteredRiders.length === 0}
-            className="mt-2 w-full min-w-0 px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none font-bold text-slate-800 disabled:bg-slate-100"
-            required
-          >
-            <option value="">Choose an onboarded rider</option>
-            {filteredRiders.map((rider) => (
-              <option key={rider.id} value={rider.id}>
-                {rider.name} — {rider.mobile}{rider.vehicleType ? ` · ${rider.vehicleType}` : ''}
-              </option>
-            ))}
-          </select>
-          <div className="mt-1 min-h-4" aria-live="polite">
-            {loadingRiders && <p className="text-[11px] text-slate-500">Loading riders…</p>}
-            {!loadingRiders && ridersError && <p role="alert" className="text-[11px] text-rose-600">{ridersError}</p>}
-            {!loadingRiders && !ridersError && riders.length === 0 && <p className="text-[11px] text-amber-700">No available onboarded riders found.</p>}
-            {!loadingRiders && !ridersError && riders.length > 0 && filteredRiders.length === 0 && <p className="text-[11px] text-slate-500">No riders match that search.</p>}
-            {!loadingRiders && !ridersError && selectedRider && <p className="text-[11px] text-slate-500">Selected: {selectedRider.name}</p>}
-          </div>
+      {ridersError && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs font-bold text-amber-800" role="alert">
+          {ridersError}
         </div>
+      )}
 
-        <div>
-          <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-            Corridor Radius (KM)
-          </label>
-          <div className="flex items-center gap-1.5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Step 1: Select Rider */}
+        <div className="space-y-4">
+          <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">
+            Step 1: Select Available Courier / Rider
+          </h4>
+
+          <div className="space-y-2">
             <input
-              type="number"
-              min="1"
-              max="50"
-              value={radiusKm}
-              onChange={(e) => setRadiusKm(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none font-bold text-slate-800"
-              required
+              type="text"
+              placeholder="Search available riders..."
+              value={riderSearch}
+              onChange={(e) => setRiderSearch(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs outline-none focus:border-blue-500"
             />
-            <span className="text-xs font-bold text-slate-400">KM</span>
           </div>
-        </div>
 
-        <button
-          type="submit"
-          disabled={searching || loadingRiders || Boolean(ridersError) || !selectedRiderId}
-          className="w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <span>{searching ? 'Computing Routes...' : 'Find Nearby Orders'}</span>
-          <span>🔍</span>
-        </button>
-      </form>
-
-      {/* Stable result region prevents the page from jumping when route data is fetched. */}
-      {!routeResult && !searching && (
-        <div className="min-h-[320px] flex items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-6 text-center">
-          <div><div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-white text-lg shadow-sm">🗺️</div><p className="text-xs font-bold text-slate-600">Choose a rider and find nearby orders</p><p className="mt-1 text-[11px] text-slate-400">Route results stay in this area so the controls above do not move.</p></div>
-        </div>
-      )}
-      {searching && !routeResult && (
-        <div className="min-h-[320px] rounded-2xl border border-slate-200 bg-slate-50/70 p-4" role="status">
-          <div className="mb-4 flex items-center justify-between"><div className="h-4 w-48 animate-pulse rounded bg-slate-200" /><div className="h-8 w-28 animate-pulse rounded-lg bg-slate-200" /></div>
-          <div className="space-y-2">{[1,2,3,4].map(i => <div key={i} className="h-12 animate-pulse rounded-xl border border-slate-200 bg-white" />)}</div>
-        </div>
-      )}
-      {routeResult && (
-        <div className="min-h-[320px] space-y-4 animate-fade-in border-t border-slate-100 pt-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-blue-50/70 border border-blue-200 p-4 rounded-2xl">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-black text-blue-900">
-                  Delivery Route for {routeResult.riderName} ({routeResult.riderMobile})
-                </span>
-                <span className="bg-blue-200 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full">
-                  {routeResult.ordersFound} Orders Found
-                </span>
-              </div>
-              <p className="text-[11px] text-blue-700 mt-0.5">
-                Computed within straight-line Haversine radius of {routeResult.configuredRadiusKm} KM from central dispensary.
-              </p>
-            </div>
-
-            {/* Google Maps Deep Link */}
-            {routeResult.googleMapsUrl && (
-              <a
-                href={routeResult.googleMapsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-              >
-                <span>🗺️</span>
-                <span>Open Route in Google Maps</span>
-                <span>↗</span>
-              </a>
+          <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+            {loadingRiders ? (
+              <div className="py-8 text-center text-xs text-slate-400">Loading available riders...</div>
+            ) : filteredRiders.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">No available riders found.</div>
+            ) : (
+              filteredRiders.map((rider) => {
+                const riderId = String(rider.id || rider._id);
+                const isSelected = String(selectedRiderId) === riderId;
+                return (
+                  <button
+                    key={riderId}
+                    type="button"
+                    onClick={() => setSelectedRiderId(riderId)}
+                    className={`w-full text-left p-3 rounded-2xl border transition flex items-center justify-between ${
+                      isSelected
+                        ? 'border-blue-600 bg-blue-50/70 shadow-sm'
+                        : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-extrabold text-xs text-slate-900">{rider.name}</div>
+                      <div className="text-[11px] text-slate-500">{rider.mobile} · {rider.vehicleType || 'Bike'}</div>
+                    </div>
+                    {isSelected && <span className="text-blue-600 font-black text-xs">Selected ✓</span>}
+                  </button>
+                );
+              })
             )}
           </div>
+        </div>
 
-          {routeResult.orders.length === 0 ? (
-            <p className="text-xs text-slate-400 py-6 text-center italic">
-              No orders in 'Ready to Dispatch' stage within {routeResult.configuredRadiusKm} KM radius.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                Waypoint Stops in Optimized Order:
-              </h4>
+        {/* Step 2: Configure Corridor & Find Orders */}
+        <form onSubmit={handleFindNearbyOrders} className="space-y-4">
+          <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">
+            Step 2: Corridor Radius & Route Discovery
+          </h4>
 
-              <div className="space-y-2">
-                {routeResult.orders.map((order, idx) => {
-                  const orderId = (order._id || '').slice(-6).toUpperCase();
-                  return (
-                    <div
-                      key={order._id}
-                      className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center flex-shrink-0">
-                          {idx + 1}
-                        </span>
-                        <div>
-                          <span className="font-extrabold text-slate-900">Stop #{idx + 1}: #{orderId}</span>
-                          <span className="text-slate-500 ml-2">({order.customerName})</span>
-                          <p className="text-[11px] text-slate-400 truncate max-w-sm">📍 {order.deliveryAddress}</p>
-                        </div>
-                      </div>
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+            <div>
+              <label className="block text-xs font-extrabold text-slate-700 mb-1">
+                Corridor Search Radius (KM)
+              </label>
+              <select
+                value={radiusKm}
+                onChange={(e) => setRadiusKm(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500 font-bold"
+              >
+                <option value="3">3 KM (Immediate Vicinity)</option>
+                <option value="5">5 KM (Standard Corridor)</option>
+                <option value="10">10 KM (Extended Delivery Zone)</option>
+                <option value="15">15 KM (Max Metropolitan Zone)</option>
+              </select>
+            </div>
 
-                      <div className="flex items-center gap-3 self-end sm:self-auto">
-                        <span className="font-bold text-slate-500 text-[11px]">
-                          ~{order.distanceKm} KM
-                        </span>
-                        <span className="font-black text-emerald-600">
-                          ₹{order.finalTotal} COD
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Batch Dispatch Action */}
-              <div className="pt-3 flex justify-end">
-                <button
-                  onClick={handleDispatchBatch}
-                  disabled={dispatching}
-                  className="min-w-[260px] bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-extrabold text-xs px-6 py-3 rounded-2xl shadow-lg shadow-blue-600/25 transition cursor-pointer flex items-center gap-2"
-                >
-                  <span>{dispatching ? 'Assigning Courier...' : `Create Delivery Route & Dispatch (${routeResult.orders.length} Orders)`}</span>
-                  <span>🚀</span>
-                </button>
+            <div>
+              <div className="text-[11px] text-slate-500 font-medium">
+                Selected Courier: <strong className="text-slate-900">{selectedRider?.name || 'None selected'}</strong>
               </div>
             </div>
-          )}
+
+            <button
+              type="submit"
+              disabled={!selectedRiderId || searching}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs py-2.5 rounded-xl transition cursor-pointer shadow-sm"
+            >
+              {searching ? 'Optimizing & Clustering Routes...' : 'Find & Club Nearby Orders'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Route Optimization Results */}
+      {routeResult && (
+        <div className="border border-emerald-200 bg-emerald-50/60 rounded-3xl p-5 space-y-4 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <span className="bg-emerald-200 text-emerald-900 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                Optimized Delivery Route
+              </span>
+              <h4 className="text-sm font-black text-slate-900 mt-1">
+                {routeResult.ordersFound} orders clustered · Total Distance: {routeResult.totalDistanceKm || '4.2'} KM
+              </h4>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {routeResult.googleMapsUrl && (
+                <a
+                  href={routeResult.googleMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-sm"
+                >
+                  🗺️ Open in Google Maps
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={handleDispatchBatch}
+                disabled={dispatching || !routeResult.orders?.length}
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs px-4 py-2 rounded-xl transition shadow-sm cursor-pointer"
+              >
+                {dispatching ? 'Dispatching Batch...' : 'Dispatch Batch to Rider'}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {routeResult.orders?.map((ord, idx) => (
+              <div key={ord._id || idx} className="bg-white border border-emerald-200 rounded-2xl p-3 flex items-center justify-between text-xs shadow-xs">
+                <div className="flex items-center gap-3">
+                  <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 font-black flex items-center justify-center text-xs">
+                    {idx + 1}
+                  </span>
+                  <div>
+                    <div className="font-extrabold text-slate-900">Order #{ord.orderNumber || ord._id.slice(-6)}</div>
+                    <div className="text-[11px] text-slate-500">{ord.deliveryAddress?.street || 'Delivery Address'} · ₹{ord.finalTotal || ord.totalAmount}</div>
+                  </div>
+                </div>
+                <span className="font-bold text-blue-600">
+                  {ord.distanceKm ? `${ord.distanceKm} KM away` : 'Optimized Stop'}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

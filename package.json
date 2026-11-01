@@ -22,5 +22,8 @@
     "admin:promote": "npm --workspace backend run admin:promote",
     "admin:bootstrap": "node scripts/bootstrap-super-admin.mjs",
     "tenant:create": "node scripts/create-tenant.mjs"
+  },
+  "dependencies": {
+    "recharts": "^3.10.1"
   }
 }

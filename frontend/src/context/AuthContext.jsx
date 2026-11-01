@@ -316,9 +316,8 @@ export function AuthProvider({ children }) {
       // In production always return to the actual storefront host. A stale
       // VITE_FRONTEND_URL value (for example localhost or an API host) must not
       // send the OAuth callback away from the running SPA.
-      const redirectTo = import.meta.env.PROD
-        ? window.location.origin
-        : (env.VITE_FRONTEND_URL || window.location.origin);
+      // Always use current window origin and path (invoker address) to avoid localhost redirection issues
+      const redirectTo = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : (env.VITE_FRONTEND_URL || 'http://localhost:3000');
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',

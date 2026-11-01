@@ -14,6 +14,16 @@ import versionedOrderRoutes from './versionedOrderRoutes.js';
 import adminRoutes from './adminRoutes.js';
 import riderRoutes from '../modules/delivery/routes/riderRoutes.js';
 import assignmentRoutes from '../modules/delivery/routes/assignmentRoutes.js';
+import { GoogleGenAI } from '@google/genai';
+
+const ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY,
+    httpOptions: {
+        headers: {
+            'User-Agent': 'aistudio-build'
+        }
+    }
+});
 
 const router = express.Router();
 
@@ -162,6 +172,39 @@ router.get('/tenants/nearby', async (req, res) => {
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/med-search-grounding', async (req, res) => {
+    try {
+        const { query } = req.body;
+        if (!query || !query.trim()) {
+            return res.status(400).json({ error: 'Search query is required.' });
+        }
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: `Provide real-time medical information, clinical usage, indications, dosage guidance, warnings, and local pharmacy availability insights for the medicine or query: "${query.trim()}". Keep it concise, professional, and clear for a pharmacy customer or dispenser.`,
+            config: {
+                tools: [{ googleSearch: {} }]
+            }
+        });
+
+        const text = response.text || 'No medical summary found.';
+        const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        const sources = chunks
+            .map(c => c.web ? { title: c.web.title, uri: c.web.uri } : null)
+            .filter(Boolean);
+
+        res.json({
+            status: 'success',
+            query: query.trim(),
+            summary: text,
+            sources
+        });
+    } catch (error) {
+        console.error('Search grounding error:', error);
+        res.status(500).json({ error: error.message || 'Failed to fetch grounded medical search results.' });
     }
 });
 

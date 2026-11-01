@@ -21,8 +21,9 @@ export default function RiderTerminal({ riderId, onClose }) {
     try {
       setLoading(true);
       const res = await apiClient.get('/api/admin/riders');
-      const ridersList = res.data || [];
-      const currentRider = riderId ? ridersList.find(r => r._id === riderId) : ridersList[0];
+      const ridersRaw = res.data?.riders || res.data?.items || res.data?.data || res.data || [];
+      const ridersList = Array.isArray(ridersRaw) ? ridersRaw : [];
+      const currentRider = riderId ? ridersList.find(r => String(r._id || r.id) === String(riderId)) : ridersList[0];
       if (currentRider) {
         setRider(currentRider);
         setStatus(currentRider.status || 'offline');
@@ -36,15 +37,16 @@ export default function RiderTerminal({ riderId, onClose }) {
 
       // Fetch pending orders for delivery dispatch
       const ordersRes = await apiClient.get('/api/admin/orders');
-      const allOrders = ordersRes.data?.orders || ordersRes.data || [];
-      const pending = allOrders.filter(o => o.status === 'pending' || o.status === 'assigned');
+      const ordersRaw = ordersRes.data?.orders || ordersRes.data?.items || ordersRes.data?.data || ordersRes.data || [];
+      const allOrders = Array.isArray(ordersRaw) ? ordersRaw : (ordersRaw?.orders || []);
+      const pending = Array.isArray(allOrders) ? allOrders.filter(o => o.status === 'pending' || o.status === 'assigned') : [];
       setPendingOrders(pending);
-      const activeDelivery = allOrders.find(order =>
+      const activeDelivery = Array.isArray(allOrders) ? allOrders.find(order =>
         ['dispatched', 'out_for_delivery'].includes(String(order.orderStatus || order.status || '').toLowerCase())
-        && String(order.rider?.riderId || order.riderId || '') === String(currentRider?._id || '')
-      );
+        && String(order.rider?.riderId || order.riderId || '') === String(currentRider?._id || currentRider?.id || '')
+      ) : null;
       setActiveOrder(previous => {
-        const refreshed = previous && allOrders.find(order => String(order._id) === String(previous._id));
+        const refreshed = previous && Array.isArray(allOrders) && allOrders.find(order => String(order._id) === String(previous._id));
         if (refreshed) {
           const refreshedStatus = String(refreshed.orderStatus || refreshed.status || '').toLowerCase();
           return ['delivered', 'cancelled', 'canceled'].includes(refreshedStatus) ? null : refreshed;

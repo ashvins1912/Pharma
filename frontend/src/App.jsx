@@ -25,6 +25,8 @@ import CustomerProposalModal from './components/requests/CustomerProposalModal';
 import VerifyEmailView from './components/auth/VerifyEmailView';
 import VendorOnboardingView from './components/auth/VendorOnboardingView';
 import TenantSelectorModal from './components/auth/TenantSelectorModal';
+import OfferZoneBanner from './components/OfferZoneBanner';
+import SpendingAnalyticsWidget from './components/SpendingAnalyticsWidget';
 
 function AuthTransitionScreen({ initialLoad = false }) {
   return (
@@ -380,6 +382,12 @@ function MainApp() {
                 💊
               </div>
             </div>
+
+            {/* Smart Refill & Expiry Offer Zone Banner */}
+            <OfferZoneBanner />
+
+            {/* 30-Day Spending & Order Analytics Widget */}
+            <SpendingAnalyticsWidget />
 
             {/* Live Search & Filter Bar */}
             <SearchFilter />

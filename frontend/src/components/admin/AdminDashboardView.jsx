@@ -10,6 +10,7 @@ import AdminMedicineRequestsTab from './requests/AdminMedicineRequestsTab';
 import AdminPaymentReminders from './AdminPaymentReminders';
 import AdminCSquareTab from './AdminCSquareTab';
 import CustomerPromotionsView from './CustomerPromotionsView';
+import AdminOfferZoneManager from './AdminOfferZoneManager';
 import PlatformTenantsView from './PlatformTenantsView';
 import PlatformAccessControl from './PlatformAccessControl';
 import LiveTelemetryTab from './LiveTelemetryTab';
@@ -171,6 +172,7 @@ export default function AdminDashboardView() {
       canViewAdminRequests && 'requests',
       canManageRiders && 'riders',
       canViewPromotions && 'promotions',
+      canViewPromotions && 'offerZone',
       canViewPayments && 'payments',
       canViewInventory && 'inventory',
       canManageRoutes && 'routes',
@@ -415,6 +417,15 @@ export default function AdminDashboardView() {
           </button>
         )}
 
+        {canViewPromotions && (
+          <button
+            onClick={() => setAdminTab('offerZone')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${adminTab === 'offerZone' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+          >
+            <span>⚡</span><span>Offer Zone & Recommendations</span>
+          </button>
+        )}
+
         {canViewPayments && (
         <button
           onClick={() => setAdminTab('payments')}
@@ -595,6 +606,10 @@ export default function AdminDashboardView() {
 
       {adminTab === 'riders' && canManageRiders && (
         <RiderFleetView />
+      )}
+
+      {adminTab === 'offerZone' && canViewPromotions && (
+        <AdminOfferZoneManager />
       )}
 
       {adminTab === 'payments' && canViewPayments && (
