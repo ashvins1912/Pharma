@@ -192,10 +192,16 @@ router.get('/', authenticateUser, async (req, res) => {
     if (!getIsConnected()) return res.status(503).json({ message: 'Orders are temporarily unavailable.' });
     try {
         const query = {};
-        const admin = req.user?.app_metadata?.role === 'admin' || req.user?.role === 'admin';
-        if (admin) {
+        const role = String(req.user?.role || req.user?.app_metadata?.role || '').toUpperCase();
+        const platformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const tenantStaff = ['TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'].includes(role);
+        if (platformAdmin) {
             if (req.query.source) query.source = req.query.source;
             if (req.query.customerId) query.customerId = req.query.customerId;
+        } else if (tenantStaff) {
+            const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId;
+            if (!tenantId) return res.status(403).json({ message: 'An active tenant context is required.' });
+            query.tenantId = String(tenantId);
         } else {
             query.userId = req.user.sub;
         }
@@ -235,8 +241,14 @@ router.get('/:id', authenticateUser, async (req, res) => {
             ? await Order.findOne({ orderNumber: req.params.id }).lean()
             : await dataStore.getOrder(req.params.id);
         if (!order) return res.status(404).json({ message: 'Order was not found.' });
-        const admin = req.user?.app_metadata?.role === 'admin' || req.user?.role === 'admin';
-        if (!admin && order.userId !== req.user.sub && order.customerId !== req.user.sub) {
+        const role = String(req.user?.role || req.user?.app_metadata?.role || '').toUpperCase();
+        const platformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const tenantStaff = ['TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'].includes(role);
+        const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId;
+        if (tenantStaff && (!tenantId || !order.tenantId || String(order.tenantId) !== String(tenantId))) {
+            return res.status(404).json({ message: 'Order was not found.' });
+        }
+        if (!platformAdmin && !tenantStaff && order.userId !== req.user.sub && order.customerId !== req.user.sub) {
             return res.status(404).json({ message: 'Order was not found.' });
         }
         return res.json({ order: serializeOrder(order) });
