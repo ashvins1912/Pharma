@@ -336,15 +336,25 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
               </>}
             </div>
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 max-h-48 overflow-y-auto space-y-2">
-              {cart.map((item) => (
-                <div key={item._id} className="flex justify-between items-center text-xs">
-                  <div>
-                    <span className="font-bold text-slate-900">{item.name}</span>
-                    <span className="text-slate-400 ml-2">x{item.quantity}</span>
+              {cart.map((item) => {
+                const quotedItem = rewardQuote?.items?.find(quoted =>
+                  String(quoted.medicineId || quoted._id || quoted.id) === String(item.medicineId || item._id)
+                );
+                const verifiedUnitPrice = Number(quotedItem?.currentPrice ?? item.price);
+                const originalUnitPrice = Number(item.originalPrice ?? item.price);
+                return (
+                  <div key={item._id} className="flex justify-between items-center gap-3 text-xs">
+                    <div className="min-w-0">
+                      <span className="font-bold text-slate-900">{item.name}</span>
+                      <span className="text-slate-400 ml-2">x{item.quantity}</span>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      {verifiedUnitPrice < originalUnitPrice && <div className="text-[10px] text-slate-400 line-through">₹{(originalUnitPrice * item.quantity).toFixed(2)}</div>}
+                      <span className="font-extrabold text-slate-800">₹{(verifiedUnitPrice * item.quantity).toFixed(2)}</span>
+                    </div>
                   </div>
-                  <span className="font-extrabold text-slate-800">₹{item.price * item.quantity}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
