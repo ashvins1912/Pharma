@@ -329,9 +329,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
               <label htmlFor="inventory-stock-mode" className="block text-xs font-bold text-amber-900">Stock update behaviour</label>
               <select id="inventory-stock-mode" value={stockMode} onChange={event => setStockMode(event.target.value)} className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-slate-800">
                 <option value="REPLACE">Replace existing batch quantity (safe default)</option>
-                <option value="ADD">Add uploaded quantity to existing batch</option>
               </select>
-              <p className="text-[11px] text-amber-900">Rows are matched by SKU + Batch Number. Different batches remain separate. Expired batches are rejected.</p>
+              <p className="text-[11px] text-amber-900">Rows are matched by SKU + Batch Number. Different batches remain separate. Expired batches are rejected. Upload replaces the selected batch quantity; additive mode is disabled to prevent duplicate stock increases during worker recovery.</p>
             </div>
           </div>
         )}
