@@ -229,41 +229,24 @@ router.post('/', authenticateUser, async (req, res) => {
             || req.user.user_metadata?.mobile
             || ''
         ).trim();
-        const order = await Order.create({
-            customerId: req.user.sub,
+        if (!hasValidCoordinates(coordinates)) {
+            return res.status(400).json({ code: 'DELIVERY_PIN_REQUIRED', message: 'A confirmed delivery map pin is required to place an order.' });
+        }
+        const order = await dataStore.reserveOrder({
             userId: req.user.sub,
+            customerId: req.user.sub,
             tenantId: selectedTenantId,
-            riderId: null,
+            addressId: addressSnapshot?._id || req.body.addressId || null,
+            customerName: addressSnapshot?.fullName || req.user.user_metadata?.name || req.user.email || 'Customer',
+            customerMobile,
             items: scopedItems,
-            subtotal: amount,
-            totalAmount: amount,
-            finalTotal: amount,
             deliveryAddress,
             addressDetails,
             coordinates,
-            location: req.body.location,
-            customerName: addressSnapshot?.fullName || req.user.user_metadata?.name || req.user.email || 'Customer',
-            customerMobile,
             paymentMethod: req.body.paymentMethod || 'Cash on Delivery (COD)',
-            status: 'pending',
-            orderStatus: 'Pending_Review'
-        });
-
-        // This checkout route creates Order documents directly instead of using
-        // dataStore.createOrder(). Emit the same domain event so the notification
-        // service targets the authenticated customer and the authorized tenant.
-        try {
-            domainEvents.emitDomainEvent('ORDER_CREATED', String(order._id), {
-                orderNumber: order.orderNumber || String(order._id),
-                customerUserId: String(order.userId || req.user.sub),
-                customerId: String(order.customerId || req.user.sub),
-                totalAmount: order.totalAmount ?? order.finalTotal ?? amount,
-                status: order.orderStatus || 'Pending_Review'
-            }, req.user, order.tenantId || req.user.app_metadata?.tenantId || null,
-            order.branchId || req.user.app_metadata?.branchId || null);
-        } catch (notificationError) {
-            console.error('[Orders] Order-created notification event failed:', notificationError?.message || notificationError);
-        }
+            couponCode: req.body.couponCode || '',
+            pointsToRedeem: Number(req.body.pointsToRedeem || 0)
+        }, req.user.user_metadata?.name || req.user.email || 'Customer');
 
         return res.status(201).json({ order });
     } catch (error) {
