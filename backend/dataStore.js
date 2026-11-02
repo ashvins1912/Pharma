@@ -1313,6 +1313,7 @@ export const dataStore = {
                     }).session(session).lean();
                     const priorRedemptions = activeCampaigns.length
                         ? await SurplusSavingsRedemption.find({
+                            tenantId: selectedTenantId,
                             campaignId: { $in: activeCampaigns.map(campaign => campaign._id) },
                             customerId: String(orderData.userId)
                         }).session(session).select('campaignId').lean()
