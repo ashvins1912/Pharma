@@ -1,46 +1,94 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import apiClient from '../api/apiClient';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useTenant } from '../context/TenantContext';
 import { useToast } from '../context/ToastContext';
 
+const CACHE_PREFIX = 'pharma_surplus_savings_v1:';
+const CACHE_TTL_MS = 2 * 60 * 1000;
+
+const readCampaignCache = key => {
+  if (!key || typeof window === 'undefined') return null;
+  try {
+    const cached = JSON.parse(window.localStorage.getItem(key) || 'null');
+    if (!cached || !Array.isArray(cached.items) || Date.now() - cached.savedAt > CACHE_TTL_MS) return null;
+    return cached.items;
+  } catch {
+    return null;
+  }
+};
+
+const writeCampaignCache = (key, items) => {
+  if (!key || typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify({ items, savedAt: Date.now() }));
+  } catch {
+    // Storage can be unavailable or full; the live API remains authoritative.
+  }
+};
+
 export default function OfferZoneBanner() {
   const { addToCart } = useApp();
-  const { user } = useAuth();
+  const { user, loading: authLoading, isFullyAuthenticated } = useAuth();
   const { tenantId, activeTenant } = useTenant();
   const { addToast } = useToast();
   const [items, setItems] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const requestSequence = useRef(0);
   const itemsPerPage = 4;
+  const cacheKey = user?.id && tenantId ? `${CACHE_PREFIX}${user.id}:${tenantId}` : null;
 
   useEffect(() => {
+    const sequence = ++requestSequence.current;
     let active = true;
-    setItems([]);
-    setCurrentPage(1);
-    setLoadError('');
-    if (!user || !tenantId) {
+
+    if (authLoading) return () => { active = false; };
+    if (!user || !isFullyAuthenticated) {
+      setItems([]);
       setLoading(false);
+      setLoadError('');
       return () => { active = false; };
     }
+
+    if (!tenantId) {
+      setItems([]);
+      setLoading(false);
+      setLoadError('');
+      return () => { active = false; };
+    }
+
+    const cachedItems = readCampaignCache(cacheKey);
+    if (cachedItems) setItems(cachedItems);
+    setCurrentPage(1);
+    setLoadError('');
     setLoading(true);
+
     apiClient.get('/api/surplus-savings', { params: { tenantId } })
       .then(({ data }) => {
-        if (!active) return;
-        setItems(Array.isArray(data?.items) ? data.items : []);
+        if (!active || sequence !== requestSequence.current) return;
+        const nextItems = Array.isArray(data?.items) ? data.items : [];
+        setItems(nextItems);
+        writeCampaignCache(cacheKey, nextItems);
+        setLoadError('');
       })
       .catch(error => {
-        if (active) setLoadError(error?.message || 'Surplus Savings are temporarily unavailable.');
+        if (!active || sequence !== requestSequence.current) return;
+        // Keep the last known-good campaign list during temporary auth/network/API
+        // failures. An error is not proof that the pharmacy has no active offers.
+        setLoadError(error?.response?.data?.message || error?.message || 'Surplus Savings are temporarily unavailable.');
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active && sequence === requestSequence.current) setLoading(false);
       });
-    return () => { active = false; };
-  }, [user?.id, tenantId]);
 
-  if (!user || !tenantId || (!loading && items.length === 0 && !loadError)) return null;
+    return () => { active = false; };
+  }, [user?.id, authLoading, isFullyAuthenticated, tenantId, cacheKey]);
+
+  if (authLoading || !user || !isFullyAuthenticated || !tenantId) return null;
+  if (!loading && items.length === 0 && !loadError) return null;
 
   const totalPages = Math.max(1, Math.ceil(items.length / itemsPerPage));
   const currentOffers = items.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -86,8 +134,8 @@ export default function OfferZoneBanner() {
         )}
       </div>
 
-      {loading && <p className="relative z-10 text-xs font-semibold">Loading this pharmacy's active savings…</p>}
-      {loadError && <p role="alert" className="relative z-10 text-xs font-semibold">{loadError}</p>}
+      {loading && <p className="relative z-10 text-xs font-semibold">{items.length ? 'Refreshing this pharmacy’s savings…' : 'Loading this pharmacy’s active savings…'}</p>}
+      {loadError && <p role="alert" className="relative z-10 text-xs font-semibold">{loadError} {items.length > 0 ? 'Showing the last successfully loaded offers.' : ''}</p>}
       {!loading && !loadError && items.length === 0 && (
         <p className="relative z-10 text-xs font-semibold">No active surplus campaigns at this pharmacy right now.</p>
       )}
