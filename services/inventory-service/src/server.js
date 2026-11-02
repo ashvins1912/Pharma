@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 import { config, validateConfig } from './config.js';
 import routes from './routes.js';
 import { recoverImportJobs } from './imports.js';
-import { Audit, ImportFailure, ImportJob, Inventory, Product, Reservation } from './models.js';
+import { Audit, ImportBatch, ImportBatchSnapshot, ImportFailure, ImportJob, Inventory, Product, Reservation } from './models.js';
 
 validateConfig();
 const app = express();
@@ -77,6 +77,8 @@ await Promise.all([
   Inventory.init(),
   Reservation.init(),
   ImportJob.init(),
+  ImportBatch.init(),
+  ImportBatchSnapshot.init(),
   ImportFailure.init(),
   Audit.init()
 ]);
