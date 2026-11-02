@@ -15,8 +15,11 @@ const userAddressSchema = new mongoose.Schema({
     landmark: { type: String, default: '' },
     addressLine: { type: String, default: '' },
     coordinates: {
-        lat: { type: Number, min: -90, max: 90, default: 12.9716 },
-        lng: { type: Number, min: -180, max: 180, default: 77.5946 }
+        type: new mongoose.Schema({
+            lat: { type: Number, min: -90, max: 90, required: true },
+            lng: { type: Number, min: -180, max: 180, required: true }
+        }, { _id: false }),
+        default: null
     },
     isDefault: { type: Boolean, default: false }
 }, { timestamps: true });
