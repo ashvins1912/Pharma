@@ -84,6 +84,8 @@ The Render disk is for import/work files, not the authoritative inventory databa
 ### Inventory import safety gate (default OFF)
 - `INVENTORY_IMPORTS_ENABLED` defaults to `false`. Do not enable it on production while validating the workflow.
 - The preview endpoint remains read-only and displays the signed tenant + branch target.
+- Import preview, write, status, retry and rollback requests validate the active tenant, persisted branch-to-tenant relationship and current user membership through the backend internal gateway.
+- Branch records are persisted in the TenantBranch registry; seeded branches are safely materialized into the registry and new/updated branches are persisted.
 - A write requires an explicit preview fingerprint confirmation. The fingerprint includes the workbook rows, tenant/branch identity and current stock snapshot; stale previews are rejected.
 - Writes require MongoDB replica-set transactions. Standalone MongoDB deployments fail closed; there is no non-transactional fallback.
 - Every import gets one persistent UUID batch ID. Inventory and product before/after snapshots are recorded in the same transaction as each applied chunk.
