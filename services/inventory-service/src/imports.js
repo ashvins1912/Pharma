@@ -147,6 +147,8 @@ async function executeBatchOperations(tenantId, branchId, stockMode, eligibleRow
             description: value.description,
             imageUrl: value.imageUrl,
             requiresPrescription: value.requiresPrescription,
+            baseCostPrice: value.baseCostPrice,
+            marginTier: value.marginTier,
             active: true
           },
           $setOnInsert: { _id: productId, tenantId, sku: value.sku, version: 0 },
