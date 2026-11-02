@@ -306,8 +306,8 @@ async function saveBatch(job, batch, batchId, seenSkus) {
               updateOne: {
                 filter: { tenantId, branchId, batchId, entityType: 'PRODUCT', entityKey: sku },
                 update: {
-                  $set: { after, created: !before },
-                  $setOnInsert: { tenantId, branchId, batchId, entityType: 'PRODUCT', entityKey: sku, before }
+                  $set: { after },
+                  $setOnInsert: { tenantId, branchId, batchId, entityType: 'PRODUCT', entityKey: sku, before, created: !before }
                 },
                 upsert: true
               }
@@ -322,8 +322,8 @@ async function saveBatch(job, batch, batchId, seenSkus) {
               updateOne: {
                 filter: { tenantId, branchId, batchId, entityType: 'INVENTORY', entityKey: key },
                 update: {
-                  $set: { after, created: !before },
-                  $setOnInsert: { tenantId, branchId, batchId, entityType: 'INVENTORY', entityKey: key, before }
+                  $set: { after },
+                  $setOnInsert: { tenantId, branchId, batchId, entityType: 'INVENTORY', entityKey: key, before, created: !before }
                 },
                 upsert: true
               }
