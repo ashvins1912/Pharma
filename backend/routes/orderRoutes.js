@@ -42,6 +42,42 @@ const canTenantAccessOrder = (req, order) => {
     return String(order?.userId || order?.customerId || '') === String(req.user?.sub || '');
 };
 
+const sanitizeTenantRiderReferences = async orders => {
+    const list = (Array.isArray(orders) ? orders : [orders]).filter(Boolean);
+    if (!list.length) return Array.isArray(orders) ? list : orders;
+    const grouped = new Map();
+    for (const order of list) {
+        const tenantId = String(order.tenantId || '');
+        const riderId = String(order.rider?.riderId || order.riderId || order.assignedRiderId || '');
+        if (!tenantId || !riderId || !mongoose.isValidObjectId(riderId)) continue;
+        if (!grouped.has(tenantId)) grouped.set(tenantId, new Set());
+        grouped.get(tenantId).add(riderId);
+    }
+    const valid = new Set();
+    try {
+        for (const [tenantId, riderIds] of grouped.entries()) {
+            const rows = await Rider.find({ tenantId, _id: { $in: [...riderIds] } }).select('_id').lean();
+            for (const row of rows) valid.add(`${tenantId}:${String(row._id)}`);
+        }
+    } catch (error) {
+        console.warn('[OrderRoutes] Could not verify rider tenant ownership; stripping rider details:', error.message);
+    }
+    for (const order of list) {
+        const riderId = String(order.rider?.riderId || order.riderId || order.assignedRiderId || '');
+        const key = `${String(order.tenantId || '')}:${riderId}`;
+        if (!riderId || !valid.has(key)) {
+            order.rider = null;
+            order.riderId = null;
+            order.assignedRiderId = null;
+            order.deliveryPersonMobile = null;
+            order.deliveryPersonName = null;
+            order.riderMobile = null;
+            order.riderName = null;
+        }
+    }
+    return Array.isArray(orders) ? list : list[0];
+};
+
 const tenantOrderIdGuard = async (req, res, next) => {
     if (!isTenantOrderStaff(req)) return next();
     const orderId = req.params.id;
@@ -289,13 +325,15 @@ router.get('/', authenticateUser, async (req, res) => {
         } else if (tenantStaff) {
             if (riderId) query.riderId = riderId;
         } else if (riderId) {
-            const rider = await Rider.findOne({ supabaseId: req.user.sub, _id: riderId }).select('_id').lean();
+            const rider = await Rider.findOne({ supabaseId: req.user.sub, _id: riderId, enabled: true }).select('_id tenantId').lean();
             if (!rider) return res.status(403).json({ error: 'You can only fetch orders assigned to your rider profile.' });
-            query.riderId = rider._id;
+            query.tenantId = String(rider.tenantId);
+            query.$or = [{ riderId: rider._id }, { 'rider.riderId': String(rider._id) }];
         } else {
             query.customerId = req.user.sub;
         }
         const orders = await Order.find(query).sort({ createdAt: -1 }).lean();
+        if (!isPlatformOrderAdmin(req)) await sanitizeTenantRiderReferences(orders);
         return res.json({ orders });
     } catch (error) {
         console.error('Order retrieval failed:', error);
@@ -1444,6 +1482,7 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
 router.get('/mine', authenticateUser, async (req, res) => {
     try {
         const orders = await dataStore.getUserOrders(req.user.sub);
+        await sanitizeTenantRiderReferences(orders);
         res.json(orders);
     } catch (err) {
         console.error('Customer order retrieval failed:', err);
@@ -1475,6 +1514,7 @@ router.get('/history', authenticateUser, async (req, res) => {
             .skip((currentPage - 1) * limit)
             .limit(limit)
             .lean();
+        await sanitizeTenantRiderReferences(orders);
         res.status(200).json({
             orders,
             items: orders,
@@ -1505,6 +1545,7 @@ router.get('/:id', authenticateUser, async (req, res) => {
         if (!canTenantAccessOrder(req, order)) {
             return res.status(404).json({ message: 'Order not found.' });
         }
+        if (!isPlatformOrderAdmin(req)) await sanitizeTenantRiderReferences(order);
         return res.json({ success: true, order });
     } catch (error) {
         console.error('Order tracking retrieval failed:', error);
