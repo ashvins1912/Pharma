@@ -2,15 +2,24 @@ import React, { createContext, useContext, useState } from 'react';
 
 const TenantContext = createContext(null);
 
+const readSavedTenant = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const value = localStorage.getItem('pharma_active_tenant');
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+};
+
 export const TenantProvider = ({ children }) => {
-  // A customer must explicitly select a pharmacy. This ID is a selector only;
-  // the backend revalidates tenant status, inventory and membership.
+  // The saved tenant is a customer preference, never authorization evidence.
   const [tenantId, setTenantIdState] = useState(() => {
     if (typeof window === 'undefined') return null;
     const saved = localStorage.getItem('pharma_tenant_id');
     return saved && saved !== 'null' && saved !== 'undefined' ? saved : null;
   });
-  const [activeTenant, setActiveTenantState] = useState(null);
+  const [activeTenant, setActiveTenantState] = useState(readSavedTenant);
 
   const setTenantId = (value) => {
     const id = value == null ? null
@@ -21,8 +30,13 @@ export const TenantProvider = ({ children }) => {
       if (id) localStorage.setItem('pharma_tenant_id', String(id));
       else localStorage.removeItem('pharma_tenant_id');
     }
-    if (value && typeof value === 'object') setActiveTenantState(value);
-    else if (!id) setActiveTenantState(null);
+    if (value && typeof value === 'object') {
+      setActiveTenantState(value);
+      if (typeof window !== 'undefined') localStorage.setItem('pharma_active_tenant', JSON.stringify(value));
+    } else if (!id || (activeTenant && String(activeTenant._id || activeTenant.id) !== String(id))) {
+      setActiveTenantState(null);
+      if (typeof window !== 'undefined') localStorage.removeItem('pharma_active_tenant');
+    }
   };
 
   const setActiveTenant = (tenant) => {
