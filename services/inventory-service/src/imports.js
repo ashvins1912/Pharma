@@ -382,7 +382,20 @@ async function saveBatch(job, batch, batchId, seenSkus) {
   }
 
   if (failures.length) {
-    await ImportFailure.insertMany(failures, { ordered: false }).catch(() => {});
+    await ImportFailure.bulkWrite(failures.map(failure => ({
+      updateOne: {
+        filter: { tenantId, branchId, batchId, rowNumber: failure.rowNumber },
+        update: { $set: failure },
+        upsert: true
+      }
+    })), { ordered: false }).catch(() => {});
+  }
+  if (!lastError && eligibleRows.length) {
+    await ImportFailure.deleteMany({
+      tenantId, branchId, batchId,
+      rowNumber: { $in: eligibleRows.map(item => item.rowNumber) },
+      retryable: true
+    }).catch(() => {});
   }
 
   const failedInBatch = failures.length;
@@ -426,12 +439,14 @@ async function processJob(job) {
     failedRecords += result.failedInBatch;
   }
 
-  const finalStatus = failedRecords ? 'COMPLETED_WITH_ERRORS' : 'COMPLETED';
+  const remainingFailures = await ImportFailure.countDocuments({ batchId: job.batchId, tenantId: job.tenantId, branchId: job.branchId });
+  const finalStatus = remainingFailures ? 'COMPLETED_WITH_ERRORS' : 'COMPLETED';
   await ImportJob.updateOne({ _id: job._id }, {
     $set: { status: finalStatus, completedAt: new Date() }
   });
   await ImportBatch.updateOne({ batchId: job.batchId, tenantId: job.tenantId, branchId: job.branchId }, {
-    $set: { status: finalStatus, totalRecords: rows.length }
+    $set: { status: finalStatus },
+    $max: { totalRecords: rows.length }
   });
 
   await Audit.create({
