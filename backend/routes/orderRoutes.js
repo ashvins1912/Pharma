@@ -321,9 +321,9 @@ router.get('/', authenticateUser, async (req, res) => {
         }
         if (isAdminUser) {
             if (customerId) query.customerId = customerId;
-            if (riderId) query.riderId = riderId;
+            if (riderId) query.$or = [{ riderId }, { 'rider.riderId': String(riderId) }];
         } else if (tenantStaff) {
-            if (riderId) query.riderId = riderId;
+            if (riderId) query.$or = [{ riderId }, { 'rider.riderId': String(riderId) }];
         } else if (riderId) {
             const rider = await Rider.findOne({ supabaseId: req.user.sub, _id: riderId, enabled: true }).select('_id tenantId').lean();
             if (!rider) return res.status(403).json({ error: 'You can only fetch orders assigned to your rider profile.' });
@@ -1396,11 +1396,14 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
             const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
             const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
             if (req.query.fulfillmentSnapshot === 'true') {
-                return res.json(await dataStore.getFulfillmentSnapshot(page, limit, String(tenantId)));
+                const snapshot = await dataStore.getFulfillmentSnapshot(page, limit, String(tenantId));
+                for (const key of ['orders', 'items', 'recentOrders', 'latestOrders']) if (Array.isArray(snapshot?.[key])) await sanitizeTenantRiderReferences(snapshot[key]);
+                return res.json(snapshot);
             }
             if (req.query.search !== undefined) {
                 const { type, value } = classifyOrderSearch(req.query.search);
                 const result = await dataStore.searchOrders({ type, value, page, limit, tenantId: String(tenantId) });
+                await sanitizeTenantRiderReferences(result.items || []);
                 return res.json({ ...paginationResult(result.items, result.total, result.page || 1, limit), searchType: type });
             }
             const filter = { tenantId: String(tenantId) };
@@ -1413,9 +1416,11 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
                     Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
                     Order.countDocuments(filter)
                 ]);
+                await sanitizeTenantRiderReferences(items);
                 return res.json(paginationResult(items, total, page, limit));
             }
             const orders = await Order.find(filter).sort({ createdAt: -1, _id: -1 }).lean();
+            await sanitizeTenantRiderReferences(orders);
             return res.json(orders);
         }
         if (isPlatformOrderAdmin(req) && req.query.tenantId) {
