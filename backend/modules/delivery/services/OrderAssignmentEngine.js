@@ -171,6 +171,7 @@ export class OrderAssignmentEngine {
             const logEntry = {
                 id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
                 orderId: order.id,
+                tenantId: order.tenantId || options.tenantId || null,
                 customerName: order.customerName,
                 status: 'ASSIGNED',
                 strategyUsed: matchedResult.strategyName,
@@ -211,6 +212,7 @@ export class OrderAssignmentEngine {
         const failedLogEntry = {
             id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
             orderId: order.id,
+            tenantId: order.tenantId || options.tenantId || null,
             customerName: order.customerName,
             status: 'UNASSIGNED',
             strategyUsed: 'NONE',
