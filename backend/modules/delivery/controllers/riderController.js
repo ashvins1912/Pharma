@@ -14,6 +14,8 @@ export const registerRider = async (req, res) => {
         if (!await requireMongoConnection(res)) return;
         deliveryContainer.refreshDataLayer();
         const { name, mobile, vehicleType, longitude, latitude } = req.body;
+        const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
+        if (!tenantId) return res.status(403).json({ code: 'TENANT_CONTEXT_REQUIRED', message: 'A pharmacy tenant context is required.' });
 
         let coordinates = [77.5946, 12.9716];
         if (longitude !== undefined && latitude !== undefined) {
@@ -21,6 +23,8 @@ export const registerRider = async (req, res) => {
         }
 
         const rider = await deliveryContainer.registerRiderUseCase.execute({
+            tenantId,
+            branchId: req.user?.branchId || req.user?.app_metadata?.branchId || null,
             name,
             mobile,
             vehicleType,
@@ -44,6 +48,7 @@ export const listRiders = async (req, res) => {
         deliveryContainer.refreshDataLayer();
         const riders = await deliveryContainer.getRidersUseCase.execute({
             ...req.query,
+            tenantId: req.user?.tenantId || req.user?.app_metadata?.tenantId,
             includeDisabled: req.query.includeDisabled === 'true'
         });
         res.json(riders.map(r => r.toJSON()));
@@ -75,7 +80,8 @@ export const setRiderEnabled = async (req, res) => {
             req.params.riderId,
             enabled,
             action,
-            remark
+            remark,
+            req.user?.tenantId || req.user?.app_metadata?.tenantId
         );
         res.json({
             message: enabled
@@ -94,7 +100,7 @@ export const updateRiderStatus = async (req, res) => {
         if (!await requireMongoConnection(res)) return;
         deliveryContainer.refreshDataLayer();
         const { status } = req.body;
-        const updated = await deliveryContainer.updateRiderStatusUseCase.execute(req.params.riderId, status);
+        const updated = await deliveryContainer.updateRiderStatusUseCase.execute(req.params.riderId, status, req.user?.tenantId || req.user?.app_metadata?.tenantId);
         res.json({
             message: `Rider status updated to ${status}.`,
             rider: updated.toJSON()
@@ -113,7 +119,7 @@ export const updateRiderLocation = async (req, res) => {
         if (lng === undefined || lat === undefined) {
             return res.status(400).json({ message: 'Both lng and lat coordinates are required.' });
         }
-        const updated = await deliveryContainer.updateRiderLocationUseCase.execute(req.params.riderId, lng, lat);
+        const updated = await deliveryContainer.updateRiderLocationUseCase.execute(req.params.riderId, lng, lat, req.user?.tenantId || req.user?.app_metadata?.tenantId);
         res.json({
             message: 'Rider GPS coordinates updated.',
             rider: updated.toJSON()
