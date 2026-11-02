@@ -535,18 +535,28 @@ router.post('/checkout/quote', authenticateUser, async (req, res) => {
         return res.status(503).json({ message: 'Reward quotes are temporarily unavailable.' });
     }
     try {
+        const selectedTenantId = String(req.body?.tenantId || '').trim();
+        if (!selectedTenantId) {
+            return res.status(400).json({
+                code: 'PHARMACY_SELECTION_REQUIRED',
+                message: 'Select a pharmacy before calculating reward points.'
+            });
+        }
         const items = parseCheckoutItems(req.body.items || req.body.cartItems);
         const pointsToRedeem = Number(req.body.pointsToRedeem || 0);
+        if (!Number.isSafeInteger(pointsToRedeem) || pointsToRedeem < 0) {
+            return res.status(400).json({ message: 'Points to redeem must be a non-negative whole number.' });
+        }
         const quote = await dynamicOrderService.evaluateCheckout(
             items,
             req.user.sub,
             pointsToRedeem,
-            { couponCode: req.body.couponCode || undefined, tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null }
+            { couponCode: req.body.couponCode || undefined, tenantId: selectedTenantId }
         );
         return res.json(quote);
     } catch (error) {
         console.error('Checkout reward quote failed:', error);
-        return res.status(error.statusCode || 400).json({
+        return res.status(getErrorStatus(error)).json({
             message: error.message || 'Unable to calculate the reward quote.'
         });
     }
