@@ -569,6 +569,13 @@ export async function createImportJob({
   if (!tenantId || !branchId) { const error = new Error('Verified tenant and branch context are required.'); error.statusCode = 403; throw error; }
   if (stockMode !== 'REPLACE') { const error = new Error('Only REPLACE stock mode is currently supported; additive imports are disabled.'); error.statusCode = 400; throw error; }
   if (!previewFingerprint) { const error = new Error('A server-generated preview fingerprint and explicit confirmation are required.'); error.statusCode = 400; throw error; }
+  const freshPreview = await previewImportFile({ filePath: file.path, tenantId, branchId });
+  if (freshPreview.previewFingerprint !== previewFingerprint) {
+    const error = new Error('The approved preview is stale. Re-preview the workbook before importing.');
+    error.statusCode = 409;
+    error.code = 'PREVIEW_FINGERPRINT_MISMATCH';
+    throw error;
+  }
   const normalizedKey = String(idempotencyKey || '').trim();
   const safeFileName = path.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, '_');
   const isConnected = mongoose.connection.readyState === 1;
