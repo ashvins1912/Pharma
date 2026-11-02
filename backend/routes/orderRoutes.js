@@ -907,6 +907,10 @@ router.post('/admin/:id/prescription/manual-approve', authenticateUser, isAdmin,
 
 router.put('/:id/dispatch', authenticateUser, isAdmin, async (req, res) => {
     try {
+        if (isTenantOrderStaff(req)) return res.status(403).json({
+            code: 'TENANT_RIDER_SCOPE_REQUIRED',
+            message: 'Tenant dispatch is disabled until riders are assigned to the same tenant.'
+        });
         const riderInfo = await resolveDispatchRider(req.body.riderInfo?.riderId, req.params.id);
         const order = await dataStore.dispatchOrder(
             req.params.id,
@@ -923,6 +927,10 @@ router.put('/:id/dispatch', authenticateUser, isAdmin, async (req, res) => {
 
 router.post('/admin/:id/auto-assign', authenticateUser, isAdmin, async (req, res) => {
     try {
+        if (isTenantOrderStaff(req)) return res.status(403).json({
+            code: 'TENANT_RIDER_SCOPE_REQUIRED',
+            message: 'Automatic assignment is unavailable until riders are tenant-scoped.'
+        });
         if (!getIsConnected()) {
             return res.status(503).json({ message: 'Auto-assignment requires an active MongoDB connection.' });
         }
@@ -1039,6 +1047,10 @@ router.post('/:id/cancel', authenticateUser, handleCustomerCancelOrder);
 router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => {
     try {
         const { orderId, newStatus, cashCollectionStatus } = req.body;
+        if (isTenantOrderStaff(req) && newStatus === 'Dispatched') return res.status(403).json({
+            code: 'TENANT_RIDER_SCOPE_REQUIRED',
+            message: 'Dispatch is unavailable until riders are tenant-scoped.'
+        });
         if (isTenantOrderStaff(req)) {
             const tenantId = getActorTenantId(req);
             if (!tenantId) return res.status(403).json({ message: 'An active tenant context is required.' });
@@ -1069,7 +1081,7 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
         let notificationEvent = newStatus === 'Ready to Dispatch' ? 'Ready to Dispatch' : null;
         let notificationMobile = updatedOrder.rider?.riderMobile;
 
-        if (newStatus === 'Approved' || newStatus === 'Ready to Dispatch') {
+        if (newStatus === 'Approved' || (newStatus === 'Ready to Dispatch' && !isTenantOrderStaff(req))) {
             try {
                 deliveryContainer.refreshDataLayer();
                 const assignResult = await deliveryContainer.assignmentEngine.assignOrder(orderId);
@@ -1123,6 +1135,10 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
 // Smart Delivery Route Clubbing & Google Maps link generation (Requirements 11, 12, 13, 14)
 router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, async (req, res) => {
     try {
+        if (isTenantOrderStaff(req)) return res.status(403).json({
+            code: 'TENANT_RIDER_SCOPE_REQUIRED',
+            message: 'Route optimization is unavailable until riders are tenant-scoped.'
+        });
         if (!getIsConnected()) {
             return res.status(503).json({ message: 'Route planning requires an active MongoDB connection.' });
         }
@@ -1154,6 +1170,10 @@ router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, async 
 // Dispatch batch of clubbed orders to rider
 router.post('/admin/dispatch-batch', authenticateUser, isAdmin, async (req, res) => {
     try {
+        if (isTenantOrderStaff(req)) return res.status(403).json({
+            code: 'TENANT_RIDER_SCOPE_REQUIRED',
+            message: 'Batch dispatch is unavailable until riders are tenant-scoped.'
+        });
         if (!getIsConnected()) {
             return res.status(503).json({ message: 'Batch dispatch requires an active MongoDB connection.' });
         }
@@ -1197,6 +1217,10 @@ router.post('/admin/dispatch-batch', authenticateUser, isAdmin, async (req, res)
 router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res) => {
     try {
         const { orderId, step } = req.params;
+        if (isTenantOrderStaff(req) && step === 'dispatch') return res.status(403).json({
+            code: 'TENANT_RIDER_SCOPE_REQUIRED',
+            message: 'Dispatch is unavailable until riders are tenant-scoped.'
+        });
         const actor = req.user.user_metadata?.name || req.user.email || 'Pharmacist Admin';
         let targetStatus = 'Processing Order';
         if (step === 'ready') targetStatus = 'Ready to Dispatch';
@@ -1212,7 +1236,7 @@ router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res
         let order = await dataStore.transitionOrderStatus(orderId, targetStatus, actor, riderInfo);
         let assignmentMessage = '';
         let notificationEvent = step === 'ready' ? 'Ready to Dispatch' : null;
-        if (step === 'ready') {
+        if (step === 'ready' && !isTenantOrderStaff(req)) {
             try {
                 deliveryContainer.refreshDataLayer();
                 const result = await deliveryContainer.assignmentEngine.assignOrder(orderId);
@@ -1449,7 +1473,6 @@ router.get('/:id', authenticateUser, async (req, res) => {
         if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid order ID.' });
         const order = await Order.findById(req.params.id).lean();
         if (!order) return res.status(404).json({ message: 'Order not found.' });
-        const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
         if (!canTenantAccessOrder(req, order)) {
             return res.status(404).json({ message: 'Order not found.' });
         }
