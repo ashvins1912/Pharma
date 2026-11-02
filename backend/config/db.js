@@ -6,6 +6,7 @@ import RiderLedger from '../models/RiderLedger.js';
 import PaymentSnooze from '../models/PaymentSnooze.js';
 import PaymentReminder from '../models/PaymentReminder.js';
 import PaymentActionNonce from '../models/PaymentActionNonce.js';
+import TenantBranch from '../models/TenantBranch.js';
 
 mongoose.set('bufferCommands', false);
 
@@ -56,7 +57,8 @@ export const connectDB = async ({ silent = false } = {}) => {
                 RiderLedger.init(),
                 PaymentSnooze.init(),
                 PaymentReminder.init(),
-                PaymentActionNonce.init()
+                PaymentActionNonce.init(),
+                TenantBranch.init()
             ]);
             try {
                 const customersCol = mongoose.connection.db.collection('customers');
