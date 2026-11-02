@@ -3,10 +3,15 @@ import * as xlsx from 'xlsx';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 
 export default function AdminBulkImportModal({ isOpen, onClose }) {
   const { addToast } = useToast();
   const { fetchMedicines } = useApp();
+  const { isSuperAdmin } = useAuth();
+  const [targetTenantId, setTargetTenantId] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('pharma_import_target_tenant_id') || localStorage.getItem('pharma_tenant_id') || '') : '');
+  const [targetBranchId, setTargetBranchId] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('pharma_import_target_branch_id') || localStorage.getItem('pharma_branch_id') || '') : '');
+  const getImportScopeHeaders = () => isSuperAdmin ? { 'X-Tenant-Id': targetTenantId.trim(), 'X-Branch-Id': targetBranchId.trim() } : {};
 
   const [file, setFile] = useState(null);
   const [stockMode, setStockMode] = useState('REPLACE');
@@ -24,7 +29,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
     const pollStatus = async () => {
       try {
-        const response = await apiClient.get(`/api/v1/inventory/imports/${importJob.jobId}`);
+        const response = await apiClient.get(`/api/v1/inventory/imports/${importJob.jobId}`, { headers: getImportScopeHeaders() });
         if (cancelled) return;
         setPollError('');
         setImportJob(response.data);
@@ -48,7 +53,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [importJob?.jobId, importJob?.status, fetchMedicines, addToast, pollError]);
+  }, [importJob?.jobId, importJob?.status, fetchMedicines, addToast, pollError, isSuperAdmin, targetTenantId, targetBranchId]);
 
   if (!isOpen) return null;
 
@@ -56,10 +61,14 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   const handleFileChange = async (selectedFile) => {
     if (!selectedFile) return;
     if (!/\.(xlsx|xls)$/i.test(selectedFile.name)) { addToast('Please select an .xlsx or .xls workbook.', 'warning'); return; }
+    if (isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) {
+      addToast('Platform administrators must select an explicit tenant ID and branch ID before previewing.', 'warning');
+      return;
+    }
     setFile(selectedFile); setAnalyzing(true); setPreviewData(null); setImportJob(null); setPollError('');
     try {
       const formData = new FormData(); formData.append('excelFile', selectedFile);
-      const response = await apiClient.post('/api/v1/inventory/imports/preview', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const response = await apiClient.post('/api/v1/inventory/imports/preview', formData, { headers: { 'Content-Type': 'multipart/form-data', ...getImportScopeHeaders() } });
       setPreviewData(response.data);
       addToast('Server validated ' + response.data.rowsDetected + ' rows (' + response.data.validCount + ' valid)', 'info');
     } catch (error) {
@@ -75,6 +84,10 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
   // Authoritative Single Upload to /api/v1/inventory/imports with unique Idempotency-Key
   const handleConfirmImport = async () => {
+    if (isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) {
+      addToast('Select a tenant and branch before importing.', 'warning');
+      return;
+    }
     if (!previewData?.importsEnabled) {
       addToast('Inventory writes are disabled. Preview is available, but import must wait for an isolated controlled test environment.', 'warning');
       return;
@@ -98,7 +111,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       const res = await apiClient.post('/api/v1/inventory/imports', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
-          'Idempotency-Key': idempotencyKey
+          'Idempotency-Key': idempotencyKey,
+          ...getImportScopeHeaders()
         }
       });
 
@@ -115,7 +129,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     if (!importJob?.batchId) return;
     if (!window.confirm(`Revert inventory changes from batch ${importJob.batchId}? This is allowed only if affected stock and catalogue records have not changed since import.`)) return;
     try {
-      const response = await apiClient.post(`/api/v1/inventory/imports/batches/${importJob.batchId}/rollback`, {});
+      const response = await apiClient.post(`/api/v1/inventory/imports/batches/${importJob.batchId}/rollback`, {}, { headers: getImportScopeHeaders() });
       setImportJob(previous => ({ ...previous, status: response.data.status, revertedAt: response.data.revertedAt }));
       fetchMedicines();
       addToast('Import batch reverted successfully.', 'success');
@@ -251,6 +265,32 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 overscroll-contain">
+          {isSuperAdmin && (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 space-y-2">
+              <p className="text-xs font-extrabold text-sky-950">Platform import target</p>
+              <p className="text-[11px] text-sky-800">Select the exact active tenant and branch. The backend verifies the branch belongs to the tenant before preview, import, status lookup or rollback.</p>
+              <input
+                value={targetTenantId}
+                onChange={event => {
+                  setTargetTenantId(event.target.value);
+                  localStorage.setItem('pharma_import_target_tenant_id', event.target.value);
+                  setPreviewData(null);
+                }}
+                placeholder="Target tenant ID"
+                className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
+              />
+              <input
+                value={targetBranchId}
+                onChange={event => {
+                  setTargetBranchId(event.target.value);
+                  localStorage.setItem('pharma_import_target_branch_id', event.target.value);
+                  setPreviewData(null);
+                }}
+                placeholder="Target branch ID"
+                className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
+              />
+            </div>
+          )}
           {/* Upload Zone */}
           {!previewData && (
           <div className="py-6 space-y-4">
