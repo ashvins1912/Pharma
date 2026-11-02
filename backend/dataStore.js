@@ -2587,10 +2587,11 @@ export const dataStore = {
         return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
     },
 
-    async clubDeliveryRoute(riderName, riderMobile, radiusKm = 5, startLat = 12.9716, startLng = 77.5946) {
+    async clubDeliveryRoute(riderName, riderMobile, radiusKm = 5, startLat = 12.9716, startLng = 77.5946, tenantId) {
+        if (!tenantId) throw inventoryError('A pharmacy tenant is required to optimize delivery routes.', 403);
         const eligibleOrders = getIsConnected()
-            ? await Order.find({ orderStatus: 'Ready to Dispatch' }).sort({ createdAt: 1 }).lean()
-            : inMemoryOrders.filter(o => o.orderStatus === 'Ready to Dispatch');
+            ? await Order.find({ tenantId: String(tenantId), orderStatus: 'Ready to Dispatch' }).sort({ createdAt: 1 }).lean()
+            : inMemoryOrders.filter(o => String(o.tenantId || '') === String(tenantId) && o.orderStatus === 'Ready to Dispatch');
         const radius = Number(radiusKm) || 5;
 
         const matchingOrders = [];
