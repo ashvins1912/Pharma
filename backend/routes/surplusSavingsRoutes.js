@@ -37,7 +37,7 @@ router.get('/', async (req, res) => {
         const now = new Date();
         const campaigns = await SurplusSavingsCampaign.find({
             tenantId, status: 'ACTIVE', startsAt: { $lte: now }, endsAt: { $gt: now },
-            $or: [{ usageLimit: null }, { usageLimit: { $gt: 0 } }, { $expr: { $lt: ['$usageCount', '$usageLimit'] } }]
+            $or: [{ usageLimit: null }, { $expr: { $lt: ['$usageCount', '$usageLimit'] } }]
         }).sort({ createdAt: -1 }).lean();
         const ids = [...new Set(campaigns.flatMap(c => c.medicineIds.map(String)))];
         if (!ids.length) return res.json({ success: true, tenantId, items: [] });
@@ -60,7 +60,7 @@ router.get('/', async (req, res) => {
                 price: money(price - best.discount), discountedPrice: money(price - best.discount),
                 savingsAmount: best.discount, discountPercent: price > 0 ? money(best.discount / price * 100) : 0,
                 campaignId: String(best.campaign._id), campaignName: best.campaign.name,
-                campaignDescription: best.campaign.description, endsAt: best.campaign.endsAt,
+                campaignDescription: best.campaign.description, minOrderAmount: Number(best.campaign.minOrderAmount || 0), endsAt: best.campaign.endsAt,
                 stock: medicine.stockQuantity ?? medicine.stock ?? medicine.quantity ?? 0,
                 isPrescriptionRequired: Boolean(medicine.isPrescriptionRequired ?? medicine.requiresPrescription)
             });
@@ -111,7 +111,7 @@ router.post('/admin', requireCampaignAdmin, async (req, res) => {
         if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt || !Number.isFinite(minOrderAmount) || minOrderAmount < 0) {
             return res.status(400).json({ message: 'Provide valid campaign dates and a non-negative minimum order amount.' });
         }
-        if ((usageLimit != null && (!Number.isInteger(usageLimit) || usageLimit < 1)) || !Number.isInteger(perCustomerLimit) || perCustomerLimit < 1
+        if ((usageLimit != null && (!Number.isInteger(usageLimit) || usageLimit < 1)) || perCustomerLimit !== 1
             || (maxDiscountAmount != null && (!Number.isFinite(maxDiscountAmount) || maxDiscountAmount <= 0))) {
             return res.status(400).json({ message: 'Usage limits and maximum discount must be positive whole-number/amount values.' });
         }
