@@ -78,6 +78,8 @@ export class DynamicOrderService {
             throw new TypeError('Authenticated customer ID is required.');
         }
         if (!tenantId) throw new TypeError('Selected pharmacy tenant is required for checkout pricing.');
+        const activeTenant = await Tenant.findOne({ _id: String(tenantId), status: 'ACTIVE' }).select('_id settings.allowOfferWithCoupon settings.allowOfferWithRewards').lean();
+        if (!activeTenant) throw new Error('The selected pharmacy is not active.');
         if (!Array.isArray(cartItems) || cartItems.length === 0) {
             throw new TypeError('Basket must contain at least one item.');
         }
@@ -155,9 +157,7 @@ export class DynamicOrderService {
         const couponBaseTotal = Math.max(0, subtotal - surplusSavingsDiscount);
         const coupon = await this.couponValidator(couponCode || '', couponBaseTotal, { customerId, tenantId });
         if (!coupon.valid) throw new Error(coupon.message || 'Coupon is invalid.');
-        const tenantSettings = surplusSavingsDiscount > 0 && (coupon.code || Number(requestedPoints) > 0)
-            ? await Tenant.findById(tenantId).select('settings.allowOfferWithCoupon settings.allowOfferWithRewards').lean()
-            : null;
+        const tenantSettings = activeTenant;
         if (surplusSavingsDiscount > 0 && coupon.code && tenantSettings?.settings?.allowOfferWithCoupon !== true) {
             throw new Error('This pharmacy does not allow surplus savings to be combined with coupons.');
         }
