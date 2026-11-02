@@ -11,6 +11,7 @@ import Rider from './models/Rider.js';
 import Tenant from './models/Tenant.js';
 import SurplusSavingsCampaign from './models/SurplusSavingsCampaign.js';
 import SurplusSavingsRedemption from './models/SurplusSavingsRedemption.js';
+import { calculateSurplusUnitDiscount, roundCurrency } from './services/surplusSavingsPricing.js';
 import MedicineRequest from './models/MedicineRequest.js';
 import { normalizeWhatsAppNumber, sendWhatsAppMedicineRequestAlert, sendCustomWhatsAppAlert } from './config/whatsapp.js';
 import ProfitMarginRewardEngine from './strategies/ProfitMarginRewardEngine.js';
@@ -1321,20 +1322,14 @@ export const dataStore = {
                             && (campaign.usageLimit == null || Number(campaign.usageCount || 0) < Number(campaign.usageLimit))
                             && !alreadyRedeemed.has(String(campaign._id))
                         ).map(campaign => {
-                            const rawDiscount = campaign.discountType === 'fixed'
-                                ? Number(campaign.discountValue)
-                                : Number(item.price) * Number(campaign.discountValue) / 100;
                             const used = campaignUsage.get(String(campaign._id)) || 0;
-                            const capRemaining = campaign.maxDiscountAmount == null
-                                ? Number.POSITIVE_INFINITY
-                                : Math.max(0, Number(campaign.maxDiscountAmount) - used);
-                            const discount = Math.min(Number(item.price), rawDiscount, capRemaining / Number(item.quantity));
-                            return { campaign, discount: Math.max(0, discount) };
+                            const discount = calculateSurplusUnitDiscount(item.price, campaign, used, item.quantity);
+                            return { campaign, discount };
                         }).filter(candidate => candidate.discount > 0)
                           .sort((a, b) => b.discount - a.discount);
                         if (!candidates.length) continue;
                         const { campaign, discount } = candidates[0];
-                        const itemSavings = Math.round(discount * Number(item.quantity) * 100) / 100;
+                        const itemSavings = roundCurrency(discount * Number(item.quantity));
                         const campaignId = String(campaign._id);
                         const itemSnapshot = itemSnapshots.find(snapshot => String(snapshot.medicineId) === String(item.medicineId));
                         item.price = Math.max(0, Math.round((Number(item.price) - discount) * 100) / 100);
