@@ -10,9 +10,10 @@ test('delivery signature verifies timestamped raw request bytes and rejects stal
     const rawBody = Buffer.from('{"eventId":"event-1234","action":"cash_received"}');
     const timestamp = String(Math.floor(Date.now() / 1000));
     const signature = crypto.createHmac('sha256', secret).update(`${timestamp}.`).update(rawBody).digest('hex');
+    const tamperedSignature = `${signature[0] === '0' ? '1' : '0'}${signature.slice(1)}`;
     try {
         assert.equal(verifyDeliverySignature(rawBody, signature, timestamp), true);
-        assert.equal(verifyDeliverySignature(rawBody, `0${signature.slice(1)}`, timestamp), false);
+        assert.equal(verifyDeliverySignature(rawBody, tamperedSignature, timestamp), false);
         assert.equal(verifyDeliverySignature(rawBody, signature, String(Number(timestamp) - 301)), false);
         assert.equal(verifyDeliverySignature(rawBody, 'bad', timestamp), false);
         assert.equal(verifyDeliverySignature(undefined, signature, timestamp), false);
