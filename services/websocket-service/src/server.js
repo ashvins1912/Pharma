@@ -137,8 +137,7 @@ io.on('connection', socket => {
   });
   socket.on('join_order_tracking', orderId => {
     const identity = socket.data.identity;
-    const elevated = ['super_admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'admin'].includes(identity.role)
-      || identity.permissions.includes('orders.read.all');
+    const elevated = ['super_admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'admin', 'ADMIN'].includes(String(identity.role || '').toUpperCase());
     if (typeof orderId === 'string' && orderId.length > 0
       && (identity.orderIds.includes(orderId) || elevated)) socket.join(`order_tracking_${orderId}`);
     else socket.emit('authorization_error', { code: 'REALTIME_ROOM_FORBIDDEN' });

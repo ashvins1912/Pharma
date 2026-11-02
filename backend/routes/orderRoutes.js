@@ -39,7 +39,8 @@ const canTenantAccessOrder = (req, order) => {
         const tenantId = getActorTenantId(req);
         return isSameTenant(tenantId, order?.tenantId);
     }
-    return String(order?.userId || order?.customerId || '') === String(req.user?.sub || '');
+    const ownerIds = [order?.userId, order?.customerId].filter(Boolean).map(String);
+    return ownerIds.includes(String(req.user?.sub || ''));
 };
 
 const sanitizeTenantRiderReferences = async orders => {
@@ -330,7 +331,7 @@ router.get('/', authenticateUser, async (req, res) => {
             query.tenantId = String(rider.tenantId);
             query.$or = [{ riderId: rider._id }, { 'rider.riderId': String(rider._id) }];
         } else {
-            query.customerId = req.user.sub;
+            query.$or = [{ customerId: req.user.sub }, { userId: req.user.sub }];
         }
         const orders = await Order.find(query).sort({ createdAt: -1 }).lean();
         if (!isPlatformOrderAdmin(req)) await sanitizeTenantRiderReferences(orders);
@@ -415,7 +416,7 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             }
         }
         if (req.file) {
-            uploadedPrescriptionUrl = await savePrescription(req.file, req.user.sub);
+            uploadedPrescriptionUrl = await savePrescription(req.file, req.user.sub, selectedTenantId);
             if (prescriptionClient.isConfigured()) {
                 try {
                     const uploaded = await prescriptionClient.upload({
@@ -592,8 +593,9 @@ router.get('/prescriptions/:fileId', authenticateUser, async (req, res) => {
                 ) || null;
             }
         }
-        const tenantMatches = !tenantId || !relatedOrder?.tenantId || String(tenantId) === String(relatedOrder.tenantId);
-        const branchMatches = !branchId || !relatedOrder?.branchId || String(branchId) === String(relatedOrder.branchId);
+        const tenantMatches = Boolean(tenantId && prescription.tenantId && String(tenantId) === String(prescription.tenantId)
+            && relatedOrder?.tenantId && String(tenantId) === String(relatedOrder.tenantId));
+        const branchMatches = !branchId || Boolean(relatedOrder?.branchId && String(branchId) === String(relatedOrder.branchId));
         const isAuthorizedStaff = globalAdmin || (tenantStaff && tenantMatches && branchMatches);
 
         if (prescription.ownerId !== req.user.sub && !isAuthorizedStaff) {
@@ -624,10 +626,8 @@ router.get(['/prescriptions/:fileId/scan', '/:id/scan-prescription'], authentica
         const order = await dataStore.getOrderById(req.params.id || req.params.fileId);
         if (!order) return res.status(404).json({ success: false, message: 'Order not found.' });
 
-        const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
-        const admin = ['admin', 'pharmacy', 'SUPER_ADMIN', 'TENANT_ADMIN'].includes(role);
-        if (!admin && String(order.userId || order.customerId) !== String(req.user.sub)) {
-            return res.status(403).json({ success: false, message: 'Not authorized to inspect this order.' });
+        if (!canTenantAccessOrder(req, order)) {
+            return res.status(404).json({ success: false, message: 'Order not found.' });
         }
 
         if (!order.prescriptionRequired) {
@@ -1040,8 +1040,13 @@ router.put('/:id/modify', authenticateUser, handlePrescriptionUpload, async (req
                 return res.status(403).json({ message: 'The uploaded prescription does not belong to this account.' });
             }
         }
+        const existingOrder = await Order.findOne({
+            _id: req.params.id,
+            $or: [{ userId: req.user.sub }, { customerId: req.user.sub }]
+        }).select('_id tenantId').lean();
+        if (!existingOrder) return res.status(404).json({ message: 'Order not found.' });
         if (req.file) {
-            uploadedPrescriptionUrl = await savePrescription(req.file, req.user.sub);
+            uploadedPrescriptionUrl = await savePrescription(req.file, req.user.sub, existingOrder.tenantId || null);
             newlyUploadedPrescriptionUrl = uploadedPrescriptionUrl;
         } else {
             uploadedPrescriptionUrl = previousPrescriptionUrl || undefined;
@@ -1191,7 +1196,9 @@ router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, async 
         }
         deliveryContainer.refreshDataLayer();
         const { riderId, maxRadiusKm, startLat, startLng } = req.body;
-        const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || req.body.tenantId || null;
+        const tenantId = isTenantOrderStaff(req)
+            ? getActorTenantId(req)
+            : (getActorTenantId(req) || req.body.tenantId || null);
         if (!tenantId) return res.status(400).json({ message: 'Select a pharmacy tenant before planning a route.' });
         if (!riderId) return res.status(400).json({ message: 'Select an onboarded rider before planning a route.' });
         const rider = await deliveryContainer.riderRepository.findById(riderId, tenantId);
@@ -1598,12 +1605,12 @@ router.get('/:id/reveal-otp', authenticateUser, async (req, res) => {
         if (!getIsConnected() || !mongoose.isValidObjectId(req.params.id)) {
             return res.status(503).json({ message: 'Service unavailable.' });
         }
+        const order = await Order.findById(req.params.id);
+        if (!order || !canTenantAccessOrder(req, order)) return res.status(404).json({ message: 'Order not found.' });
         let cachedOtp = await cacheService.get(`delivery_otp:${req.params.id}`);
         if (cachedOtp) {
             return res.json({ otp: cachedOtp, source: 'cache_service_1_day' });
         }
-        const order = await Order.findById(req.params.id);
-        if (!order) return res.status(404).json({ message: 'Order not found.' });
 
         cachedOtp = String(randomInt(0, 10000)).padStart(4, '0');
         order.deliveryVerification = {
@@ -1628,7 +1635,7 @@ router.post('/:id/resend-otp', authenticateUser, async (req, res) => {
             return res.status(503).json({ message: 'Service unavailable.' });
         }
         const order = await Order.findById(req.params.id);
-        if (!order) return res.status(404).json({ message: 'Order not found.' });
+        if (!order || !canTenantAccessOrder(req, order)) return res.status(404).json({ message: 'Order not found.' });
         if (order.orderStatus !== 'Dispatched') {
             return res.status(409).json({ message: 'Order must be out for delivery to resend OTP.' });
         }
@@ -1761,7 +1768,15 @@ router.post('/:id/verify-delivery', authenticateUser, async (req, res) => {
 // Notification logs audit
 router.get('/notifications/logs', authenticateUser, isAdmin, async (req, res) => {
     try {
-        res.json(await getNotificationLog());
+        const logs = await getNotificationLog();
+        if (isTenantOrderStaff(req)) {
+            const tenantId = getActorTenantId(req);
+            if (!tenantId) return res.status(403).json({ message: 'An active tenant context is required.' });
+            const tenantOrders = await Order.find({ tenantId: String(tenantId) }).select('_id orderNumber').lean();
+            const allowedOrderReferences = new Set(tenantOrders.flatMap(order => [String(order._id), String(order.orderNumber || '')]));
+            return res.json(logs.filter(log => allowedOrderReferences.has(String(log.orderId || ''))));
+        }
+        return res.json(logs);
     } catch (err) {
         console.error("Notification log retrieval failed:", err);
         res.status(500).json({ message: "Failed to retrieve notification logs" });

@@ -1985,6 +1985,7 @@ export const dataStore = {
         const safeLimit = Math.min(50, Math.max(1, Number(limit) || 10));
         const requestedPage = Math.max(1, Number(page) || 1);
         if (getIsConnected()) {
+            if (tenantId) filter = { $and: [filter, { tenantId: String(tenantId) }] };
             const total = await Order.countDocuments(filter);
             const safePage = Math.min(requestedPage, Math.max(Math.ceil(total / safeLimit), 1));
             const items = await Order.find(filter)
@@ -2101,6 +2102,7 @@ export const dataStore = {
         }
 
         if (getIsConnected()) {
+            if (tenantId) filter = { $and: [filter, { tenantId: String(tenantId) }] };
             const total = await Order.countDocuments(filter);
             const safePage = Math.min(page, Math.max(Math.ceil(total / limit), 1));
             const items = await Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip((safePage - 1) * limit).limit(limit).lean();
@@ -2134,9 +2136,9 @@ export const dataStore = {
 
     async getUserOrders(userId) {
         if (getIsConnected()) {
-            return Order.find({ userId }).sort({ createdAt: -1 }).lean();
+            return Order.find({ $or: [{ userId }, { customerId: userId }] }).sort({ createdAt: -1 }).lean();
         }
-        return inMemoryOrders.filter(o => o.userId === userId)
+        return inMemoryOrders.filter(o => o.userId === userId || o.customerId === userId)
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     },
 
@@ -3050,16 +3052,24 @@ export const dataStore = {
 
     async getMedicineRequests(filter = {}, user = null) {
         const role = user?.app_metadata?.role || user?.role;
-        const isStaff = user && [
-            'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
-            'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF'
-        ].includes(role);
+        const normalizedRole = String(role || '').toUpperCase();
+        const isStaff = Boolean(user) && [
+            'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'PHARMACY',
+            'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF',
+            'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
+        ].includes(normalizedRole);
+        const isPlatformStaff = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(normalizedRole);
+        const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
 
         if (getIsConnected()) {
             const now = new Date();
-            // Auto expire past proposals
+            // Expiry maintenance is scoped to the caller's own customer/tenant
+            // records; only explicitly privileged platform staff run it globally.
+            const expiryScope = isStaff
+                ? (isPlatformStaff ? {} : (actorTenantId ? { tenantId: String(actorTenantId) } : { tenantId: '__NO_TENANT_ACCESS__' }))
+                : (user ? { customerId: user.sub || user.id } : { customerId: '__NO_CUSTOMER_ACCESS__' });
             await MedicineRequest.updateMany(
-                { status: 'PROPOSAL_SENT', expiresAt: { $lt: now } },
+                { ...expiryScope, status: 'PROPOSAL_SENT', expiresAt: { $lt: now } },
                 {
                     $set: { status: 'EXPIRED' },
                     $push: {
@@ -3077,8 +3087,12 @@ export const dataStore = {
             const query = {};
             if (!isStaff) {
                 query.customerId = user ? user.sub : 'unauthenticated';
-            } else if (filter.customerId) {
-                query.customerId = filter.customerId;
+            } else {
+                if (!isPlatformStaff) {
+                    if (!actorTenantId) throw inventoryError('An active pharmacy tenant is required.', 403);
+                    query.tenantId = String(actorTenantId);
+                }
+                if (filter.customerId) query.customerId = filter.customerId;
             }
 
             if (filter.status && filter.status !== 'ALL') {
@@ -3120,8 +3134,12 @@ export const dataStore = {
                 || (customerId?.startsWith('demo-customer') && String(r.customerId)?.startsWith('demo-customer'))
                 || (user?.email && r.customerEmail === user.email)
             );
-        } else if (filter.customerId) {
-            list = list.filter(r => r.customerId === filter.customerId);
+        } else {
+            if (!isPlatformStaff) {
+                if (!actorTenantId) throw inventoryError('An active pharmacy tenant is required.', 403);
+                list = list.filter(r => String(r.tenantId || '') === String(actorTenantId));
+            }
+            if (filter.customerId) list = list.filter(r => r.customerId === filter.customerId);
         }
 
         if (filter.status && filter.status !== 'ALL') {
@@ -3145,17 +3163,25 @@ export const dataStore = {
         const safePage = Math.max(1, Number.parseInt(page, 10) || 1);
         const safeLimit = Math.min(50, Math.max(1, Number.parseInt(limit, 10) || 8));
         const role = user?.app_metadata?.role || user?.role;
-        const isStaff = user && [
-            'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
-            'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF'
-        ].includes(role);
+        const normalizedRole = String(role || '').toUpperCase();
+        const isStaff = Boolean(user) && [
+            'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'PHARMACY',
+            'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF',
+            'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
+        ].includes(normalizedRole);
+        const isPlatformStaff = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(normalizedRole);
+        const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
 
         if (getIsConnected()) {
             const query = {};
             if (!isStaff) {
                 query.customerId = user ? user.sub : 'unauthenticated';
-            } else if (filter.customerId) {
-                query.customerId = filter.customerId;
+            } else {
+                if (!isPlatformStaff) {
+                    if (!actorTenantId) throw inventoryError('An active pharmacy tenant is required.', 403);
+                    query.tenantId = String(actorTenantId);
+                }
+                if (filter.customerId) query.customerId = filter.customerId;
             }
             if (filter.status && filter.status !== 'ALL') query.status = filter.status;
             if (filter.search?.trim()) {
@@ -3206,10 +3232,24 @@ export const dataStore = {
 
     async getMedicineRequestById(id, user = null) {
         let request = null;
+        const role = user?.app_metadata?.role || user?.role;
+        const normalizedRole = String(role || '').toUpperCase();
+        const isStaff = Boolean(user) && [
+            'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'PHARMACY',
+            'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF',
+            'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
+        ].includes(normalizedRole);
+        const isPlatformStaff = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(normalizedRole);
+        const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
+        const ownerScope = user && !isStaff ? { customerId: user.sub || user.id } : {};
+        const tenantScope = user && isStaff && !isPlatformStaff
+            ? (actorTenantId ? { tenantId: String(actorTenantId) } : { tenantId: '__NO_TENANT_ACCESS__' })
+            : {};
+        const idScope = mongoose.isValidObjectId(id)
+            ? { _id: new mongoose.Types.ObjectId(id) }
+            : { $or: [{ _id: id }, { requestNumber: id }] };
         if (getIsConnected()) {
-            request = mongoose.isValidObjectId(id)
-                ? await MedicineRequest.findById(id).lean()
-                : await MedicineRequest.findOne({ $or: [{ _id: id }, { requestNumber: id }] }).lean();
+            request = await MedicineRequest.findOne({ $and: [idScope, ownerScope, tenantScope] }).lean();
         } else {
             request = inMemoryMedicineRequests.find(r =>
                 String(r._id) === String(id) || r.requestNumber === id
@@ -3218,16 +3258,8 @@ export const dataStore = {
 
         if (!request) return null;
 
-        const role = user?.app_metadata?.role || user?.role;
-        const isStaff = user && [
-            'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
-            'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST',
-            'PHARMACY_STAFF', 'ORDER_MANAGER'
-        ].includes(role);
-
-        if (user && !isStaff && request.customerId !== (user.sub || user.id)) {
-            return null;
-        }
+        if (user && !isStaff && request.customerId !== (user.sub || user.id)) return null;
+        if (user && isStaff && !isPlatformStaff && (!actorTenantId || String(request.tenantId || '') !== String(actorTenantId))) return null;
 
         // Auto expire check
         if (request.status === 'PROPOSAL_SENT' && request.expiresAt && new Date() > new Date(request.expiresAt)) {
@@ -3252,11 +3284,13 @@ export const dataStore = {
         return request;
     },
 
-    async getPendingMedicineRequestCount() {
-        if (getIsConnected()) {
-            return MedicineRequest.countDocuments({ status: { $in: ['REQUESTED', 'UNDER_REVIEW'] } });
-        }
-        return inMemoryMedicineRequests.filter(r => ['REQUESTED', 'UNDER_REVIEW'].includes(r.status)).length;
+    async getPendingMedicineRequestCount(tenantId = null) {
+        const filter = { status: { $in: ['REQUESTED', 'UNDER_REVIEW'] }, ...(tenantId ? { tenantId: String(tenantId) } : {}) };
+        if (getIsConnected()) return MedicineRequest.countDocuments(filter);
+        return inMemoryMedicineRequests.filter(r =>
+            ['REQUESTED', 'UNDER_REVIEW'].includes(r.status)
+            && (!tenantId || String(r.tenantId || '') === String(tenantId))
+        ).length;
     },
 
     async reviewMedicineRequest(id, actor = 'Pharmacist', actorRole = 'Pharmacist') {
@@ -3966,8 +4000,9 @@ export const dataStore = {
         return this.approveMedicineProposalAndConvertToOrder(id, param2, param3);
     },
 
-    async getMedicineRequestMetrics() {
-        const requests = await this.getMedicineRequests({}, { app_metadata: { role: 'admin' } });
+    async getMedicineRequestMetrics(user = null) {
+        const actor = user || { app_metadata: { role: 'admin' } };
+        const requests = await this.getMedicineRequests({}, actor);
 
         const total = requests.length;
         const requested = requests.filter(r => r.status === 'REQUESTED').length;

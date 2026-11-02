@@ -2,11 +2,12 @@ import express from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
-import { authenticateUser, requirePermission, isPharmacyOrAdmin } from '../middleware/auth.js';
+import { authenticateUser, requirePermission } from '../middleware/auth.js';
 import { getPrescription, savePrescription } from '../config/prescriptionStorage.js';
 import { getIsConnected } from '../config/db.js';
 import MedicineRequest from '../models/MedicineRequest.js';
 import UserAddress from '../models/UserAddress.js';
+import Tenant from '../models/Tenant.js';
 import { customerService } from '../services/customer-service/CustomerService.js';
 import prescriptionClient from '../services/prescription-service-client/PrescriptionClient.js';
 
@@ -19,9 +20,10 @@ const requireDatabase = (res) => {
 };
 
 const isStaff = (user) => [
-    'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
-    'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF'
-].includes(user?.app_metadata?.role || user?.role);
+    'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'PHARMACY',
+    'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF',
+    'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
+].includes(String(user?.app_metadata?.role || user?.role || '').toUpperCase());
 
 const requireCustomer = (req, res, next) => {
     const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
@@ -45,11 +47,24 @@ const authorizeRequestList = (req, res, next) => {
     return requireCustomer(req, res, next);
 };
 
-const authorizeRequestDetails = (req, res, next) => {
-    if (req.baseUrl.startsWith('/api/admin/')) {
-        return isPharmacyOrAdmin(req, res, next);
+const getRequestActorTenantId = req => req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
+const isPlatformRequestAdmin = req => ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN']
+    .includes(String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase());
+
+const authorizeRequestDetails = async (req, res, next) => {
+    if (req.params.fileId) return next(); // Attachment ownership is checked against file metadata in its handler.
+    if (req.baseUrl.startsWith('/api/admin/') && !isStaff(req.user)) {
+        return res.status(403).json({ message: 'You are not authorized to view this medicine request.' });
     }
-    return next();
+    if (!requireDatabase(res)) return;
+    try {
+        const request = await dataStore.getMedicineRequestById(req.params.id, req.user);
+        if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
+        req.authorizedMedicineRequest = request;
+        return next();
+    } catch (error) {
+        return res.status(error.statusCode || 503).json({ message: 'Unable to authorize medicine request access.' });
+    }
 };
 
 const allowedMimeTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
@@ -229,7 +244,7 @@ router.put('/:id/prescription', authenticateUser, requirePermission('medicine_re
         const presFile = req.files?.prescription?.[0];
         if (!presFile) return res.status(400).json({ message: 'A replacement prescription file is required.' });
         const oldUrl = request.prescriptionUrl || null;
-        const newUrl = await savePrescription(presFile, customerId);
+        const newUrl = await savePrescription(presFile, customerId, request.tenantId || null);
         try {
             let prescriptionId = request.prescriptionId;
             let result = null;
@@ -378,9 +393,16 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
         let prescriptionVerification = null;
         let savedPrescriptionUrl = null;
 
+        const selectedTenantId = String(req.body.tenantId || req.body.selectedTenantId || '').trim();
+        if (!selectedTenantId) {
+            return res.status(400).json({ message: 'Select a pharmacy before submitting a medicine procurement request.' });
+        }
+        const selectedTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!selectedTenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
+
         const presFile = req.files?.prescription?.[0];
         if (presFile) {
-            savedPrescriptionUrl = await savePrescription(presFile, req.user.sub);
+            savedPrescriptionUrl = await savePrescription(presFile, req.user.sub, selectedTenantId);
             prescriptionUrl = savedPrescriptionUrl;
 
             if (!prescriptionClient.isConfigured()) {
@@ -401,7 +423,7 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
                     contentType: presFile.mimetype,
                     idempotencyKey: req.get('idempotency-key') || `medicine-request:${customerId}:${Date.now()}`,
                     userId: customerId,
-                    tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null,
+                    tenantId: selectedTenantId,
                     branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
                     role: req.user.app_metadata?.role || req.user.role || 'customer',
                     patientPuid
@@ -444,7 +466,7 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
 
         const imgFile = req.files?.productImage?.[0];
         if (imgFile) {
-            productImageUrl = await savePrescription(imgFile, req.user.sub);
+            productImageUrl = await savePrescription(imgFile, req.user.sub, selectedTenantId);
         }
 
         const addressDetails = {
@@ -468,7 +490,7 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
                 .join(', ');
 
         const requestDoc = await dataStore.createMedicineRequest({
-            tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null,
+            tenantId: selectedTenantId,
             branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
             urgencyLevel: req.body.urgencyLevel || 'Normal',
             requestedItems,
@@ -511,8 +533,16 @@ router.get('/active', authenticateUser, authorizeRequestList, async (req, res) =
 
     try {
         const query = { status: { $nin: ['converted', 'CONVERTED_TO_ORDER'] } };
-        if (!staff) query.customerId = req.user.sub;
-        else if (req.query.customerId) query.customerId = String(req.query.customerId);
+        if (!staff) {
+            query.customerId = req.user.sub;
+        } else if (!isPlatformRequestAdmin(req)) {
+            const tenantId = getRequestActorTenantId(req);
+            if (!tenantId) return res.status(403).json({ message: 'An active pharmacy tenant is required.' });
+            query.tenantId = String(tenantId);
+            if (req.query.customerId) query.customerId = String(req.query.customerId);
+        } else if (req.query.tenantId) {
+            query.tenantId = String(req.query.tenantId);
+        }
         const requests = await MedicineRequest.find(query).sort({ createdAt: -1 }).lean();
         res.json({ requests });
     } catch (error) {
@@ -549,15 +579,23 @@ router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
     try {
         const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
         const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 3));
+        const staff = isStaff(req.user);
+        const platformAdmin = isPlatformRequestAdmin(req);
+        const actorTenantId = getRequestActorTenantId(req);
+        const expiryScope = platformAdmin
+            ? {}
+            : staff
+                ? (actorTenantId ? { tenantId: String(actorTenantId) } : { tenantId: '__NO_TENANT_ACCESS__' })
+                : { customerId: req.user.sub };
         await MedicineRequest.updateMany(
-            { status: 'converted', pharmacyProposal: { $ne: null } },
+            { ...expiryScope, status: 'converted', pharmacyProposal: { $ne: null } },
             { $set: { status: 'PROPOSAL_SENT' } }
         );
         await MedicineRequest.updateMany(
-            { status: 'PROPOSAL_SENT', expiresAt: { $lt: new Date() } },
+            { ...expiryScope, status: 'PROPOSAL_SENT', expiresAt: { $lt: new Date() } },
             { $set: { status: 'EXPIRED' } }
         );
-        if (req.baseUrl.startsWith('/api/admin/') || isStaff(req.user)) {
+        if (req.baseUrl.startsWith('/api/admin/') || staff) {
             return getAdminMedicineRequests(req, res);
         }
         const query = { customerId: req.user.sub };
@@ -613,7 +651,9 @@ router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
 router.get('/pending-count', authenticateUser, requirePermission('medicine_requests.pending_count'), async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
-        const count = await dataStore.getPendingMedicineRequestCount();
+        const tenantId = isPlatformRequestAdmin(req) ? (req.query.tenantId || null) : getRequestActorTenantId(req);
+        if (!isPlatformRequestAdmin(req) && !tenantId) return res.status(403).json({ message: 'An active pharmacy tenant is required.' });
+        const count = await dataStore.getPendingMedicineRequestCount(tenantId);
         res.json({ count });
     } catch (error) {
         console.error('Pending medicine request count retrieval failed:', error);
@@ -627,9 +667,15 @@ router.get('/attachments/:fileId', authenticateUser, authorizeRequestDetails, as
         const file = await getPrescription(req.params.fileId);
         if (!file) return res.status(404).json({ message: 'Attachment file not found.' });
 
-        const role = req.user?.app_metadata?.role || req.user?.role;
-        if (file.ownerId !== req.user.sub && role !== 'admin' && role !== 'pharmacy') {
-            return res.status(403).json({ message: 'You are not authorized to view this attachment.' });
+        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+        const platformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const actorTenantId = getRequestActorTenantId(req);
+        const tenantStaff = ['PHARMACY', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'].includes(role);
+        const ownerAccess = String(file.ownerId || '') === String(req.user.sub);
+        const tenantAccess = tenantStaff && actorTenantId && file.tenantId
+            && String(actorTenantId) === String(file.tenantId);
+        if (!ownerAccess && !tenantAccess && !platformAdmin) {
+            return res.status(404).json({ message: 'Attachment file not found.' });
         }
 
         res.set('Content-Type', file.contentType || 'application/octet-stream');
@@ -788,7 +834,9 @@ router.delete('/:id', authenticateUser, requirePermission('medicine_requests.dec
 router.get('/metrics/overview', authenticateUser, requirePermission('medicine_requests.read'), async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
-        const metrics = await dataStore.getMedicineRequestMetrics();
+        const tenantId = isPlatformRequestAdmin(req) ? null : getRequestActorTenantId(req);
+        if (!isPlatformRequestAdmin(req) && !tenantId) return res.status(403).json({ message: 'An active pharmacy tenant is required.' });
+        const metrics = await dataStore.getMedicineRequestMetrics(req.user);
         res.json(metrics);
     } catch (err) {
         console.error('Failed to get medicine request metrics:', err);
@@ -797,7 +845,7 @@ router.get('/metrics/overview', authenticateUser, requirePermission('medicine_re
 });
 
 // Review request
-router.put('/:id/review', authenticateUser, requirePermission('medicine_requests.manage'), async (req, res) => {
+router.put('/:id/review', authenticateUser, requirePermission('medicine_requests.manage'), authorizeRequestDetails, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
@@ -810,7 +858,7 @@ router.put('/:id/review', authenticateUser, requirePermission('medicine_requests
 });
 
 // Create/Send proposal
-router.post('/:id/proposal', authenticateUser, requirePermission('medicine_requests.proposal'), async (req, res) => {
+router.post('/:id/proposal', authenticateUser, requirePermission('medicine_requests.proposal'), authorizeRequestDetails, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
@@ -824,7 +872,7 @@ router.post('/:id/proposal', authenticateUser, requirePermission('medicine_reque
 });
 
 // Update proposal
-router.put('/:id/proposal', authenticateUser, requirePermission('medicine_requests.proposal'), async (req, res) => {
+router.put('/:id/proposal', authenticateUser, requirePermission('medicine_requests.proposal'), authorizeRequestDetails, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
@@ -838,7 +886,7 @@ router.put('/:id/proposal', authenticateUser, requirePermission('medicine_reques
 });
 
 // Pharmacy rejects request
-router.post('/:id/reject-request', authenticateUser, requirePermission('medicine_requests.manage'), async (req, res) => {
+router.post('/:id/reject-request', authenticateUser, requirePermission('medicine_requests.manage'), authorizeRequestDetails, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useTenant } from '../../context/TenantContext';
 import { createMedicineRequest } from '../../api/medicineRequestService';
 import apiClient from '../../api/apiClient';
 import AddressManager from '../AddressManager';
@@ -86,6 +87,7 @@ const createRequestedItem = (values = {}) => ({
 
 export default function MedicineRequestModal({ isOpen, onClose }) {
   const { user } = useAuth();
+  const { tenantId, activeTenant } = useTenant();
   const {
     requestPrefillData,
     addresses,
@@ -248,7 +250,12 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
     try {
       submitInProgressRef.current = true;
       setSubmitting(true);
+      if (!tenantId) {
+        addToast('Select a pharmacy before submitting your medicine request.', 'warning');
+        return;
+      }
       const formData = new FormData();
+      formData.append('tenantId', String(tenantId));
 
       const requestItems = requestedItems
         .filter(item => item.requestedName.trim())
@@ -307,7 +314,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
               Dispensary Procurement Request
             </span>
               <h3 className="text-base sm:text-lg font-black text-slate-900">
-                Request Medicine from Ashvin Pharmacy
+                Request Medicine from {activeTenant?.shopName || activeTenant?.name || 'Selected Pharmacy'}
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Can't find a medicine or currently out of stock? Our pharmacists will arrange it from licensed distributors.

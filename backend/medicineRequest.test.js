@@ -263,6 +263,49 @@ test('Complete Medicine Request -> Proposal -> Customer Approval -> Order Conver
     assert.equal(cancelledReq.customerResponse?.responseNote, 'Found at local clinic');
 });
 
+test('Medicine procurement requests are isolated between pharmacy tenants', async () => {
+    const customerA = { sub: 'customer-tenant-a-001', email: 'customer-a@example.com' };
+    const customerB = { sub: 'customer-tenant-b-001', email: 'customer-b@example.com' };
+    const pharmacyA = { sub: 'pharmacy-tenant-a-001', tenantId: 'tenant-isolation-a', app_metadata: { role: 'PHARMACY_STAFF' } };
+    const pharmacyB = { sub: 'pharmacy-tenant-b-001', tenantId: 'tenant-isolation-b', app_metadata: { role: 'PHARMACY_STAFF' } };
+
+    const requestA = await dataStore.createMedicineRequest({
+        tenantId: pharmacyA.tenantId,
+        requestedItems: [{ requestedName: 'Tenant A confidential medicine' }],
+        addressId: 'tenant-a-address',
+        deliveryAddress: 'Tenant A delivery address'
+    }, customerA);
+    const requestB = await dataStore.createMedicineRequest({
+        tenantId: pharmacyB.tenantId,
+        requestedItems: [{ requestedName: 'Tenant B confidential medicine' }],
+        addressId: 'tenant-b-address',
+        deliveryAddress: 'Tenant B delivery address'
+    }, customerB);
+
+    const tenantARequests = await dataStore.getMedicineRequests({}, pharmacyA);
+    const tenantBRequests = await dataStore.getMedicineRequests({}, pharmacyB);
+    assert.ok(tenantARequests.some(request => String(request._id) === String(requestA._id)));
+    assert.ok(!tenantARequests.some(request => String(request._id) === String(requestB._id)));
+    assert.ok(tenantBRequests.some(request => String(request._id) === String(requestB._id)));
+    assert.ok(!tenantBRequests.some(request => String(request._id) === String(requestA._id)));
+
+    assert.equal(await dataStore.getMedicineRequestById(requestB._id, pharmacyA), null);
+    assert.equal(await dataStore.getMedicineRequestById(requestA._id, pharmacyB), null);
+    assert.ok(await dataStore.getMedicineRequestById(requestA._id, pharmacyA));
+    assert.ok(await dataStore.getMedicineRequestById(requestB._id, pharmacyB));
+
+    const tenantAPage = await dataStore.getMedicineRequestsPage({}, pharmacyA, 1, 50);
+    const tenantBPage = await dataStore.getMedicineRequestsPage({}, pharmacyB, 1, 50);
+    assert.ok(tenantAPage.requests.some(request => String(request._id) === String(requestA._id)));
+    assert.ok(!tenantAPage.requests.some(request => String(request._id) === String(requestB._id)));
+    assert.ok(tenantBPage.requests.some(request => String(request._id) === String(requestB._id)));
+    assert.ok(!tenantBPage.requests.some(request => String(request._id) === String(requestA._id)));
+    assert.equal(await dataStore.getPendingMedicineRequestCount(pharmacyA.tenantId), 1);
+    assert.equal(await dataStore.getPendingMedicineRequestCount(pharmacyB.tenantId), 1);
+    const tenantAMetrics = await dataStore.getMedicineRequestMetrics(pharmacyA);
+    assert.equal(tenantAMetrics.totalRequests, tenantAPage.pagination.total);
+});
+
 test('Concurrent medicine requests receive distinct request numbers', async () => {
     const testUser = {
         sub: 'user-test-request-number-sequence',
