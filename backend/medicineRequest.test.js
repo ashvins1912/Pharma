@@ -293,6 +293,17 @@ test('Medicine procurement requests are isolated between pharmacy tenants', asyn
     assert.equal(await dataStore.getMedicineRequestById(requestA._id, pharmacyB), null);
     assert.ok(await dataStore.getMedicineRequestById(requestA._id, pharmacyA));
     assert.ok(await dataStore.getMedicineRequestById(requestB._id, pharmacyB));
+
+    const tenantAPage = await dataStore.getMedicineRequestsPage({}, pharmacyA, 1, 50);
+    const tenantBPage = await dataStore.getMedicineRequestsPage({}, pharmacyB, 1, 50);
+    assert.ok(tenantAPage.requests.some(request => String(request._id) === String(requestA._id)));
+    assert.ok(!tenantAPage.requests.some(request => String(request._id) === String(requestB._id)));
+    assert.ok(tenantBPage.requests.some(request => String(request._id) === String(requestB._id)));
+    assert.ok(!tenantBPage.requests.some(request => String(request._id) === String(requestA._id)));
+    assert.equal(await dataStore.getPendingMedicineRequestCount(pharmacyA.tenantId), 1);
+    assert.equal(await dataStore.getPendingMedicineRequestCount(pharmacyB.tenantId), 1);
+    const tenantAMetrics = await dataStore.getMedicineRequestMetrics(pharmacyA);
+    assert.equal(tenantAMetrics.totalRequests, tenantAPage.pagination.total);
 });
 
 test('Concurrent medicine requests receive distinct request numbers', async () => {
