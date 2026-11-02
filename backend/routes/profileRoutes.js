@@ -43,13 +43,16 @@ const getAddressFields = (body) => {
 
     const isDefault = body.isDefault === undefined ? false : Boolean(body.isDefault);
 
-    const coordinates = body.coordinates || {};
-    let lat = coordinates.lat === undefined ? 12.9716 : Number(coordinates.lat);
-    let lng = coordinates.lng === undefined ? 77.5946 : Number(coordinates.lng);
-    if (!Number.isFinite(lat) || lat < -90 || lat > 90
-        || !Number.isFinite(lng) || lng < -180 || lng > 180) {
-        lat = 12.9716;
-        lng = 77.5946;
+    const coordinates = body.coordinates && typeof body.coordinates === 'object' ? body.coordinates : null;
+    let savedCoordinates = null;
+    if (coordinates && (coordinates.lat != null || coordinates.lng != null)) {
+        const lat = Number(coordinates.lat);
+        const lng = Number(coordinates.lng);
+        if (!Number.isFinite(lat) || lat < -90 || lat > 90
+            || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+            throw Object.assign(new Error('Provide a valid confirmed map pin.'), { statusCode: 400 });
+        }
+        savedCoordinates = { lat, lng };
     }
 
     const postalCode = String(body.postalCode ?? body.pincode ?? '').trim();
@@ -66,7 +69,7 @@ const getAddressFields = (body) => {
         country: String(body.country || 'India').trim(),
         landmark: String(body.landmark || '').trim(),
         addressLine: String(body.addressLine || addressLine1).trim(),
-        coordinates: { lat, lng },
+        coordinates: savedCoordinates,
         isDefault
     };
 };
