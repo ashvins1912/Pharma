@@ -3,46 +3,39 @@ import React, { createContext, useContext, useState } from 'react';
 const TenantContext = createContext(null);
 
 export const TenantProvider = ({ children }) => {
+  // A customer must explicitly select a pharmacy. This ID is a selector only;
+  // the backend revalidates tenant status, inventory and membership.
   const [tenantId, setTenantIdState] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('pharma_tenant_id') || '65a1234567890abcdef12345';
-    }
-    return '65a1234567890abcdef12345';
+    if (typeof window === 'undefined') return null;
+    const saved = localStorage.getItem('pharma_tenant_id');
+    return saved && saved !== 'null' && saved !== 'undefined' ? saved : null;
   });
-
   const [activeTenant, setActiveTenantState] = useState(null);
 
-  const setTenantId = (id) => {
-    const stringId = typeof id === 'object' && id !== null ? (id._id || id.id || String(id)) : String(id);
-    setTenantIdState(stringId);
+  const setTenantId = (value) => {
+    const id = value == null ? null
+      : typeof value === 'object' ? (value._id || value.id || null)
+      : String(value);
+    setTenantIdState(id);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('pharma_tenant_id', stringId);
+      if (id) localStorage.setItem('pharma_tenant_id', String(id));
+      else localStorage.removeItem('pharma_tenant_id');
     }
-    if (typeof id === 'object' && id !== null) {
-      setActiveTenantState(id);
-    }
+    if (value && typeof value === 'object') setActiveTenantState(value);
+    else if (!id) setActiveTenantState(null);
   };
 
   const setActiveTenant = (tenant) => {
-    setActiveTenantState(tenant);
-    if (tenant) {
-      const id = tenant._id || tenant.id || String(tenant);
-      setTenantId(id);
-    }
+    setActiveTenantState(tenant || null);
+    setTenantId(tenant ? (tenant._id || tenant.id) : null);
   };
 
-  return (
-    <TenantContext.Provider value={{ tenantId, setTenantId, activeTenant, setActiveTenant }}>
-      {children}
-    </TenantContext.Provider>
-  );
+  return <TenantContext.Provider value={{ tenantId, setTenantId, activeTenant, setActiveTenant }}>{children}</TenantContext.Provider>;
 };
 
 export const useTenant = () => {
   const context = useContext(TenantContext);
-  if (!context) {
-    throw new Error('useTenant must be used within a TenantProvider');
-  }
+  if (!context) throw new Error('useTenant must be used within a TenantProvider');
   return context;
 };
 
