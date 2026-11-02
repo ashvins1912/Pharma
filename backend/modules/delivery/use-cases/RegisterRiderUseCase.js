@@ -76,10 +76,7 @@ export class RegisterRiderUseCase {
 
         if (existingRider) {
             if (existingRider.tenantId !== String(tenantId)) throw new Error('Rider belongs to another pharmacy tenant.');
-            if (existingRider.tenantId !== String(tenantId)) throw new Error('Rider belongs to another pharmacy tenant.');
             return this.riderRepository.update(existingRider.id, {
-                tenantId: String(tenantId),
-                branchId,
                 tenantId: String(tenantId),
                 branchId,
                 name: name.trim(),
