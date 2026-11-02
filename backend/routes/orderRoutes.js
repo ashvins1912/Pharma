@@ -1196,7 +1196,9 @@ router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, async 
         }
         deliveryContainer.refreshDataLayer();
         const { riderId, maxRadiusKm, startLat, startLng } = req.body;
-        const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || req.body.tenantId || null;
+        const tenantId = isTenantOrderStaff(req)
+            ? getActorTenantId(req)
+            : (getActorTenantId(req) || req.body.tenantId || null);
         if (!tenantId) return res.status(400).json({ message: 'Select a pharmacy tenant before planning a route.' });
         if (!riderId) return res.status(400).json({ message: 'Select an onboarded rider before planning a route.' });
         const rider = await deliveryContainer.riderRepository.findById(riderId, tenantId);
@@ -1766,7 +1768,15 @@ router.post('/:id/verify-delivery', authenticateUser, async (req, res) => {
 // Notification logs audit
 router.get('/notifications/logs', authenticateUser, isAdmin, async (req, res) => {
     try {
-        res.json(await getNotificationLog());
+        const logs = await getNotificationLog();
+        if (isTenantOrderStaff(req)) {
+            const tenantId = getActorTenantId(req);
+            if (!tenantId) return res.status(403).json({ message: 'An active tenant context is required.' });
+            const tenantOrders = await Order.find({ tenantId: String(tenantId) }).select('_id orderNumber').lean();
+            const allowedOrderReferences = new Set(tenantOrders.flatMap(order => [String(order._id), String(order.orderNumber || '')]));
+            return res.json(logs.filter(log => allowedOrderReferences.has(String(log.orderId || ''))));
+        }
+        return res.json(logs);
     } catch (err) {
         console.error("Notification log retrieval failed:", err);
         res.status(500).json({ message: "Failed to retrieve notification logs" });
