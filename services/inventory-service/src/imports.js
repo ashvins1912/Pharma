@@ -161,8 +161,7 @@ async function executeBatchOperations(tenantId, branchId, stockMode, eligibleRow
     const filter = { tenantId, branchId, productId, batchNumber };
     if (stockMode === 'REPLACE') filter.$or = [{ reservedQuantity: { $lte: value.stockQuantity } }, { reservedQuantity: { $exists: false } }];
     const update = { $set: { tenantId, branchId, productId, sku: value.sku, price: value.price, batchNumber, expiryDate: value.expiryDate }, $setOnInsert: { reservedQuantity: 0, warehouse: 'default' } };
-    if (stockMode === 'ADD') update.$inc = { stockQuantity: value.stockQuantity };
-    else update.$set.stockQuantity = value.stockQuantity;
+    update.$set.stockQuantity = value.stockQuantity;
     inventoryOperations.push({ updateOne: { filter, update, upsert: !currentInventory } });
   }
 
@@ -504,7 +503,7 @@ export async function createImportJob({
   stockMode = 'REPLACE'
 }) {
   if (!tenantId || !branchId) { const error = new Error('Verified tenant and branch context are required.'); error.statusCode = 403; throw error; }
-  if (!['REPLACE', 'ADD'].includes(stockMode)) { const error = new Error('stockMode must be REPLACE or ADD.'); error.statusCode = 400; throw error; }
+  if (stockMode !== 'REPLACE') { const error = new Error('Only REPLACE stock mode is currently supported; additive imports are disabled until transaction-safe idempotency is enabled.'); error.statusCode = 400; throw error; }
   const normalizedKey = String(idempotencyKey || '').trim();
   const safeFileName = path.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, '_');
   const isConnected = mongoose.connection.readyState === 1;
