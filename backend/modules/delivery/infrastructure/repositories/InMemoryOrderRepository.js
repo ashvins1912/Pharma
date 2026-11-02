@@ -37,9 +37,11 @@ export class InMemoryOrderRepository extends IOrderRepository {
         });
     }
 
-    async findById(id) {
+    async findById(id, tenantId) {
+        if (!tenantId) return null;
         if (typeof dataStore.getOrderById === 'function') {
             const raw = await dataStore.getOrderById(id);
+            if (!raw || String(raw.tenantId || '') !== String(tenantId)) return null;
             return this._toDomain(raw);
         }
         const rawList = typeof dataStore.getAllOrders === 'function'
@@ -91,8 +93,9 @@ export class InMemoryOrderRepository extends IOrderRepository {
         return this._toDomain(raw);
     }
 
-    async findActiveOrdersInProximity(coordinates, maxDistanceInMeters = 2000, statuses = ['Ready to Dispatch', 'Dispatched']) {
-        const allOrders = await this.findAll();
+    async findActiveOrdersInProximity(coordinates, maxDistanceInMeters = 2000, statuses = ['Ready to Dispatch', 'Dispatched'], tenantId) {
+        if (!tenantId) return [];
+        const allOrders = (await this.findAll()).filter(order => String(order.tenantId || '') === String(tenantId));
         const activeWithRiders = allOrders.filter(o => 
             statuses.includes(o.orderStatus) && Boolean(o.assignedRiderId)
         );
