@@ -10,7 +10,8 @@ import {
   buildFailureWorkbook,
   createImportJob,
   getImportFailures,
-  retryImportJob
+  retryImportJob,
+  previewImportFile
 } from './imports.js';
 import {
   adjustInventory,
@@ -132,6 +133,16 @@ router.post('/adjust', requireServiceScope('inventory.adjust'), asyncHandler(asy
   return res.json(result);
 }));
 
+router.post('/imports/preview', requireServiceScope('inventory.import'), upload.single('excelFile'), asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'An Excel workbook is required.' });
+  if (!/\.(xlsx|xls)$/i.test(req.file.originalname)) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(400).json({ message: 'Upload an .xlsx or .xls workbook.' }); }
+  const isPlatformUser = req.service?.isPlatformUser === true;
+  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : String(req.service?.tenantId || '').trim();
+  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : String(req.service?.branchId || '').trim();
+  if (!tenantId || !branchId) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(403).json({ message: 'Verified tenant and branch selection is required.' }); }
+  try { return res.json(await previewImportFile({ filePath: req.file.path, tenantId, branchId })); }
+  finally { await fs.rm(req.file.path, { force: true }).catch(() => {}); }
+}));
 router.post('/imports', requireServiceScope('inventory.import'), upload.single('excelFile'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'An Excel workbook is required.' });
   if (!/\.(xlsx|xls)$/i.test(req.file.originalname)) {
