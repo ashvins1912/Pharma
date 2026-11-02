@@ -8,6 +8,8 @@ import { cacheService } from '../services/cache/CacheService.js';
 import WhatsAppMessage from '../models/WhatsAppMessage.js';
 import PaymentReminder from '../models/PaymentReminder.js';
 import Order from '../models/Order.js';
+import Tenant from '../models/Tenant.js';
+import Vendor from '../models/Vendor.js';
 import { createRiderDeliveryActionToken } from '../services/payment/SignedPaymentActionService.js';
 import { buildDeliveryActionMenu, getDeliveryActionFromListReply } from '../services/delivery/DeliveryWhatsAppMenu.js';
 
@@ -642,6 +644,14 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
     const orderId = order?._id?.toString() || order?.id?.toString() || 'UNKNOWN';
     const customerPhone = order.customerMobile || order.addressDetails?.mobile || '';
     const riderPhone = deliveryMobile || order.rider?.riderMobile || '';
+    let selectedTenantPhone = '';
+    if (normalizedStatus === 'Placed' && order.tenantId && getIsConnected()) {
+        const [vendor, tenant] = await Promise.all([
+            Vendor.findOne({ tenantId: String(order.tenantId), status: 'ACTIVE' }).select('mobile').lean(),
+            Tenant.findOne({ _id: String(order.tenantId), status: 'ACTIVE' }).select('contactPhone').lean()
+        ]);
+        selectedTenantPhone = vendor?.mobile || tenant?.contactPhone || '';
+    }
     const recipients = normalizedStatus === 'Assigned'
         ? [
             { audience: 'customer', phone: customerPhone },
@@ -652,8 +662,8 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
             ...(normalizedStatus === 'Dispatched' && riderPhone
                 ? [{ audience: 'rider', phone: riderPhone }]
                 : []),
-            ...(normalizedStatus === 'Placed' && whatsappState.isConnected && whatsappState.phone
-                ? [{ audience: 'admin', phone: whatsappState.phone }]
+            ...(normalizedStatus === 'Placed' && selectedTenantPhone
+                ? [{ audience: 'admin', phone: selectedTenantPhone }]
                 : [])
         ];
     const records = [];
