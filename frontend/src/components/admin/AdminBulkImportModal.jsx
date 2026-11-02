@@ -88,6 +88,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       const formData = new FormData();
       formData.append('excelFile', file);
       formData.append('stockMode', stockMode);
+      formData.append('previewFingerprint', previewData.previewFingerprint);
+      formData.append('confirmImport', 'true');
 
       const res = await apiClient.post('/api/v1/inventory/imports', formData, {
         headers: {
@@ -102,6 +104,19 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       addToast(err.response?.data?.message || err.message || 'Import could not be started.', 'error');
     } finally {
       setCommitting(false);
+    }
+  };
+
+  const rollbackImport = async () => {
+    if (!importJob?.batchId) return;
+    if (!window.confirm(`Revert inventory changes from batch ${importJob.batchId}? This is allowed only if affected stock and catalogue records have not changed since import.`)) return;
+    try {
+      const response = await apiClient.post(`/api/v1/inventory/imports/batches/${importJob.batchId}/rollback`, {});
+      setImportJob(previous => ({ ...previous, status: response.data.status, revertedAt: response.data.revertedAt }));
+      fetchMedicines();
+      addToast('Import batch reverted successfully.', 'success');
+    } catch (error) {
+      addToast(error.response?.data?.message || 'Batch rollback was blocked to protect newer inventory changes.', 'error');
     }
   };
 
@@ -237,7 +252,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   Drag & Drop your .xlsx spreadsheet here
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Instant local preview + resilient single-pass server ingestion
+                  Server-side read-only preview, explicit confirmation and reversible batch tracking
                 </p>
               </div>
 
@@ -358,6 +373,21 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                     📥 Download Failed Records (.xlsx)
                   </button>
                 )}
+                {importJob.batchId && ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'].includes(importJob.status) && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+                    <p className="text-xs text-amber-900 break-all">Import Batch ID: <strong>{importJob.batchId}</strong></p>
+                    <button
+                      type="button"
+                      onClick={rollbackImport}
+                      className="rounded-xl border border-rose-300 bg-white px-4 py-2.5 text-xs font-extrabold text-rose-700 hover:bg-rose-50 cursor-pointer"
+                    >
+                      Revert / Remove This Batch
+                    </button>
+                  </div>
+                )}
+                {importJob.status === 'REVERTED' && (
+                  <p className="text-xs font-bold text-emerald-800">This import batch has been reverted.</p>
+                )}
                 {importJob.status === 'FAILED' && (
                   <button
                     type="button"
@@ -446,7 +476,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
                 <button
                   onClick={handleConfirmImport}
-                  disabled={committing || previewData.rowsDetected === 0}
+                  disabled={committing || previewData.rowsDetected === 0 || !previewData.previewFingerprint}
                   className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md shadow-emerald-600/25 cursor-pointer transition flex items-center gap-1.5"
                 >
                   <span>{committing ? 'Starting Ingestion...' : `Import ${previewData.rowsDetected} Records`}</span>
