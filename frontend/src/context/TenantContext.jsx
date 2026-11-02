@@ -17,7 +17,13 @@ export const TenantProvider = ({ children }) => {
   const [tenantId, setTenantIdState] = useState(() => {
     if (typeof window === 'undefined') return null;
     const saved = localStorage.getItem('pharma_tenant_id');
-    return saved && saved !== 'null' && saved !== 'undefined' ? saved : null;
+    const legacyDefaults = new Set(['tenant-ashvin-main', 'tenant-default-1', '65a1234567890abcdef12345']);
+    if (!saved || saved === 'null' || saved === 'undefined' || legacyDefaults.has(saved)) {
+      localStorage.removeItem('pharma_tenant_id');
+      localStorage.removeItem('pharma_active_tenant');
+      return null;
+    }
+    return saved;
   });
   const [activeTenant, setActiveTenantState] = useState(readSavedTenant);
 
