@@ -7,6 +7,8 @@ const medicineItemSchema = new mongoose.Schema({
     price: { type: Number, required: true, min: 0 },
     baseCostPrice: { type: Number, min: 0, default: 0 },
     discountPercentage: { type: Number, min: 0, max: 100, default: 0 },
+    surplusSavingsCampaignId: { type: mongoose.Schema.Types.ObjectId, ref: 'SurplusSavingsCampaign', default: null },
+    surplusSavingsDiscount: { type: Number, min: 0, default: 0 },
     marginTier: { type: String, enum: ['LOW', 'MID', 'HIGH'], default: 'LOW' },
     name: { type: String, default: '' },
     sku: { type: String, default: '' }
@@ -62,6 +64,12 @@ const orderSchema = new mongoose.Schema({
         manualApprovalReason: { type: String, maxlength: 500, default: null }
     },
     couponCode: { type: String, default: null },
+    surplusSavingsDiscountApplied: { type: Number, min: 0, default: 0 },
+    surplusSavings: {
+        campaignIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'SurplusSavingsCampaign' }],
+        campaigns: [{ campaignId: mongoose.Schema.Types.ObjectId, name: String, discountAmount: { type: Number, min: 0 } }],
+        discountAmount: { type: Number, min: 0, default: 0 }
+    },
     subtotal: { type: Number, min: 0 },
     discountApplied: { type: Number, default: 0 },
     pointsRedeemed: { type: Number, default: 0, min: 0 },
