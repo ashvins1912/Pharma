@@ -66,10 +66,10 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
         };
         setSearchQuery('');
         if (hasCoordinates && !isLegacyPlaceholder) {
-          setUserLocation({ lat, lng, source: 'saved-address', label: defaultAddress.label || 'Saved address' });
+          setUserLocation({ lat, lng, source: 'saved-address', label: [defaultAddress.label || 'Saved address', defaultAddress.city, defaultAddress.pincode || defaultAddress.postalCode].filter(Boolean).join(' · ') });
           await fetchNearbyTenants({ lat, lng }, addressContext);
         } else {
-          setUserLocation({ source: 'saved-address', label: defaultAddress.label || 'Saved address' });
+          setUserLocation({ source: 'saved-address', label: [defaultAddress.label || 'Saved address', defaultAddress.city, defaultAddress.pincode || defaultAddress.postalCode].filter(Boolean).join(' · ') });
           await fetchNearbyTenants(null, addressContext);
         }
         return;
