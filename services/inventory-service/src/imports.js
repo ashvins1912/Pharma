@@ -164,10 +164,10 @@ async function executeBatchOperations(tenantId, branchId, stockMode, eligibleRow
             requiresPrescription: value.requiresPrescription,
             baseCostPrice: value.baseCostPrice,
             marginTier: value.marginTier,
-            active: true
+            active: true,
+            version: Number(currentProduct?.version || 0) + 1
           },
-          $setOnInsert: { _id: productId, tenantId, sku: value.sku, version: 0 },
-          $inc: { version: 1 }
+          $setOnInsert: { _id: productId, tenantId, sku: value.sku }
         },
         upsert: true
       }
