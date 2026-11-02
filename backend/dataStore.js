@@ -1226,8 +1226,10 @@ export const dataStore = {
                         if (!mongoose.isValidObjectId(medicineId)) {
                             throw inventoryError(`Invalid medicine ID: ${medicineId}`);
                         }
-                        const medicine = await Medicine.findById(medicineId).session(session);
-                        if (!medicine) throw inventoryError(`Medicine ${medicineId} was not found.`, 404);
+                        const medicineFilter = { _id: medicineId };
+                        if (orderData.tenantId) medicineFilter.tenantId = String(orderData.tenantId);
+                        const medicine = await Medicine.findOne(medicineFilter).session(session);
+                        if (!medicine) throw inventoryError('The selected pharmacy does not have this medicine in its catalogue.', 404);
                         if (medicine.expiryDate && new Date(medicine.expiryDate) <= now) {
                             throw inventoryError(`${medicine.name} is expired and cannot be ordered.`);
                         }
@@ -1237,9 +1239,10 @@ export const dataStore = {
                             throw inventoryError(`A prescription is required for ${medicine.name}.`);
                         }
 
-                        const reserved = await Medicine.findOneAndUpdate({
+                        const reservationFilter = {
                             _id: medicine._id,
                             expiryDate: { $gt: now },
+                            ...(orderData.tenantId ? { tenantId: String(orderData.tenantId) } : {}),
                             $expr: {
                                 $gte: [
                                     {
@@ -1251,7 +1254,8 @@ export const dataStore = {
                                     quantity
                                 ]
                             }
-                        }, {
+                        };
+                        const reserved = await Medicine.findOneAndUpdate(reservationFilter, {
                             $inc: { reservedQuantity: quantity }
                         }, { new: true, session });
 
@@ -1423,7 +1427,8 @@ export const dataStore = {
             let prescriptionRequired = false;
 
             for (const [medicineId, quantity] of quantities) {
-                const medicine = inMemoryMedicines.find(item => String(item._id) === medicineId);
+                const medicine = inMemoryMedicines.find(item => String(item._id) === medicineId
+                    && (!orderData.tenantId || String(item.tenantId) === String(orderData.tenantId)));
                 if (!medicine) throw inventoryError(`Medicine ${medicineId} was not found.`, 404);
                 if (medicine.expiryDate && new Date(medicine.expiryDate) <= now) {
                     throw inventoryError(`${medicine.name} is expired and cannot be ordered.`);
@@ -1474,6 +1479,8 @@ export const dataStore = {
                 _id: new mongoose.Types.ObjectId().toString(),
                 userId: orderData.userId,
                 customerId: orderData.userId,
+                tenantId: orderData.tenantId || null,
+                branchId: orderData.branchId || null,
                 customerName: orderData.customerName,
                 orderedByName: orderData.customerName || 'Valued Customer',
                 orderedForName: orderData.orderedForName || orderData.customerName || 'Valued Customer',
