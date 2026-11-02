@@ -63,6 +63,8 @@ const importJobSchema = new mongoose.Schema({
   branchId: { type: 'string', required: true, index: true },
   batchId: { type: 'string', required: true, index: true },
   previewFingerprint: { type: 'string', required: true },
+  previewInventorySnapshot: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  previewProductSnapshot: { type: [mongoose.Schema.Types.Mixed], default: [] },
   stockMode: { type: 'string', enum: ['REPLACE'], default: 'REPLACE' },
   fileName: { type: 'string', required: true },
   filePath: { type: 'string', required: true },
