@@ -39,7 +39,8 @@ const canTenantAccessOrder = (req, order) => {
         const tenantId = getActorTenantId(req);
         return isSameTenant(tenantId, order?.tenantId);
     }
-    return String(order?.userId || order?.customerId || '') === String(req.user?.sub || '');
+    const ownerIds = [order?.userId, order?.customerId].filter(Boolean).map(String);
+    return ownerIds.includes(String(req.user?.sub || ''));
 };
 
 const sanitizeTenantRiderReferences = async orders => {
@@ -625,10 +626,8 @@ router.get(['/prescriptions/:fileId/scan', '/:id/scan-prescription'], authentica
         const order = await dataStore.getOrderById(req.params.id || req.params.fileId);
         if (!order) return res.status(404).json({ success: false, message: 'Order not found.' });
 
-        const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
-        const admin = ['admin', 'pharmacy', 'SUPER_ADMIN', 'TENANT_ADMIN'].includes(role);
-        if (!admin && String(order.userId || order.customerId) !== String(req.user.sub)) {
-            return res.status(403).json({ success: false, message: 'Not authorized to inspect this order.' });
+        if (!canTenantAccessOrder(req, order)) {
+            return res.status(404).json({ success: false, message: 'Order not found.' });
         }
 
         if (!order.prescriptionRequired) {
@@ -1604,12 +1603,12 @@ router.get('/:id/reveal-otp', authenticateUser, async (req, res) => {
         if (!getIsConnected() || !mongoose.isValidObjectId(req.params.id)) {
             return res.status(503).json({ message: 'Service unavailable.' });
         }
+        const order = await Order.findById(req.params.id);
+        if (!order || !canTenantAccessOrder(req, order)) return res.status(404).json({ message: 'Order not found.' });
         let cachedOtp = await cacheService.get(`delivery_otp:${req.params.id}`);
         if (cachedOtp) {
             return res.json({ otp: cachedOtp, source: 'cache_service_1_day' });
         }
-        const order = await Order.findById(req.params.id);
-        if (!order) return res.status(404).json({ message: 'Order not found.' });
 
         cachedOtp = String(randomInt(0, 10000)).padStart(4, '0');
         order.deliveryVerification = {
@@ -1634,7 +1633,7 @@ router.post('/:id/resend-otp', authenticateUser, async (req, res) => {
             return res.status(503).json({ message: 'Service unavailable.' });
         }
         const order = await Order.findById(req.params.id);
-        if (!order) return res.status(404).json({ message: 'Order not found.' });
+        if (!order || !canTenantAccessOrder(req, order)) return res.status(404).json({ message: 'Order not found.' });
         if (order.orderStatus !== 'Dispatched') {
             return res.status(409).json({ message: 'Order must be out for delivery to resend OTP.' });
         }
