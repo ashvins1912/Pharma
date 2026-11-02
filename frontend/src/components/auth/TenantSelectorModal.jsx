@@ -161,7 +161,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
       setTenants(list);
       setError('');
       const preferred = preferredTenantId
-        ? list.find(tenant => String(tenant._id) === String(preferredTenantId))
+        ? (list.find(tenant => String(tenant._id) === String(preferredTenantId)) || list[0])
         : (list[0] || null);
       if (preferred) {
         setTenantId(preferred._id);
