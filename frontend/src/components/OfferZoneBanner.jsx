@@ -6,14 +6,14 @@ import { useTenant } from '../context/TenantContext';
 import { useToast } from '../context/ToastContext';
 
 const CACHE_PREFIX = 'pharma_surplus_savings_v1:';
-const CACHE_TTL_MS = 2 * 60 * 1000;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const readCampaignCache = key => {
   if (!key || typeof window === 'undefined') return null;
   try {
     const cached = JSON.parse(window.localStorage.getItem(key) || 'null');
     if (!cached || !Array.isArray(cached.items) || Date.now() - cached.savedAt > CACHE_TTL_MS) return null;
-    return cached.items;
+    return cached.items.filter(item => !item.endsAt || new Date(item.endsAt).getTime() > Date.now());
   } catch {
     return null;
   }
@@ -37,7 +37,9 @@ export default function OfferZoneBanner() {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [displayedTenantId, setDisplayedTenantId] = useState(null);
   const requestSequence = useRef(0);
+  const displayedCacheKeyRef = useRef(null);
   const itemsPerPage = 4;
   const cacheKey = user?.id && tenantId ? `${CACHE_PREFIX}${user.id}:${tenantId}` : null;
 
@@ -46,22 +48,39 @@ export default function OfferZoneBanner() {
     let active = true;
 
     if (authLoading) return () => { active = false; };
-    if (!user || !isFullyAuthenticated) {
+    if (!user) {
       setItems([]);
+      setDisplayedTenantId(null);
+      displayedCacheKeyRef.current = null;
       setLoading(false);
       setLoadError('');
       return () => { active = false; };
     }
 
     if (!tenantId) {
+      setDisplayedTenantId(null);
+      displayedCacheKeyRef.current = null;
       setItems([]);
       setLoading(false);
       setLoadError('');
       return () => { active = false; };
     }
 
+    // Keep the last known-good offers through short auth/token hydration gaps.
+    // Never show one pharmacy's offers under another pharmacy's heading.
+    if (displayedCacheKeyRef.current && displayedCacheKeyRef.current !== cacheKey) {
+      setItems([]);
+      setLoadError('');
+    }
+    if (!isFullyAuthenticated) {
+      setLoading(false);
+      return () => { active = false; };
+    }
+
     const cachedItems = readCampaignCache(cacheKey);
-    if (cachedItems) setItems(cachedItems);
+    setItems(cachedItems || []);
+    setDisplayedTenantId(tenantId);
+    displayedCacheKeyRef.current = cacheKey;
     setCurrentPage(1);
     setLoadError('');
     setLoading(true);
@@ -87,8 +106,7 @@ export default function OfferZoneBanner() {
     return () => { active = false; };
   }, [user?.id, authLoading, isFullyAuthenticated, tenantId, cacheKey]);
 
-  if (authLoading || !user || !isFullyAuthenticated || !tenantId) return null;
-  if (!loading && items.length === 0 && !loadError) return null;
+  if (authLoading || !user || !tenantId || (displayedTenantId && displayedTenantId !== tenantId)) return null;
 
   const totalPages = Math.max(1, Math.ceil(items.length / itemsPerPage));
   const currentOffers = items.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -137,7 +155,7 @@ export default function OfferZoneBanner() {
       {loading && <p className="relative z-10 text-xs font-semibold">{items.length ? 'Refreshing this pharmacy’s savings…' : 'Loading this pharmacy’s active savings…'}</p>}
       {loadError && <p role="alert" className="relative z-10 text-xs font-semibold">{loadError} {items.length > 0 ? 'Showing the last successfully loaded offers.' : ''}</p>}
       {!loading && !loadError && items.length === 0 && (
-        <p className="relative z-10 text-xs font-semibold">No active surplus campaigns at this pharmacy right now.</p>
+        <p className="relative z-10 text-xs font-semibold">No active surplus campaigns at this pharmacy right now. This section will update automatically when the pharmacy publishes an offer.</p>
       )}
 
       <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pt-1">
