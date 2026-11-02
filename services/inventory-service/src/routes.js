@@ -208,7 +208,7 @@ router.post('/imports', requireServiceScope('inventory.import'), requireImportsE
 router.get('/imports/:jobId', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
   const { tenantId, branchId } = getInventoryScope(req);
-  if (!isPlatformUser && (!tenantId || !branchId)) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
+  if (!tenantId || !branchId) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
   const filter = { _id: req.params.jobId };
   if (tenantId) filter.tenantId = tenantId;
   if (branchId) filter.branchId = branchId;
@@ -238,7 +238,7 @@ router.get('/imports/:jobId', requireServiceScope('inventory.import'), asyncHand
 router.get('/imports/:jobId/failures', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
   const { tenantId, branchId } = getInventoryScope(req);
-  if (!isPlatformUser && (!tenantId || !branchId)) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
+  if (!tenantId || !branchId) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
   const filter = { _id: req.params.jobId };
   if (tenantId) filter.tenantId = tenantId;
   if (branchId) filter.branchId = branchId;
@@ -252,7 +252,7 @@ router.get('/imports/:jobId/failures', requireServiceScope('inventory.import'), 
 router.get('/imports/:jobId/failures/download', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
   const { tenantId, branchId } = getInventoryScope(req);
-  if (!isPlatformUser && (!tenantId || !branchId)) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
+  if (!tenantId || !branchId) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
   const filter = { _id: req.params.jobId };
   if (tenantId) filter.tenantId = tenantId;
   if (branchId) filter.branchId = branchId;
@@ -286,7 +286,7 @@ router.post('/imports/batches/:batchId/rollback', requireServiceScope('inventory
 router.post('/imports/:jobId/retry', requireServiceScope('inventory.import'), requireImportsEnabled, asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
   const { tenantId, branchId } = getInventoryScope(req);
-  if (!isPlatformUser && (!tenantId || !branchId)) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
+  if (!tenantId || !branchId) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
   const job = await retryImportJob(
     req.params.jobId,
     req.service.userId || req.service.name,
