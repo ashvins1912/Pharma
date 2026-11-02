@@ -8,10 +8,13 @@ import { useAuth } from '../../context/AuthContext';
 export default function AdminBulkImportModal({ isOpen, onClose }) {
   const { addToast } = useToast();
   const { fetchMedicines } = useApp();
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isTenantAdmin, user } = useAuth();
+  const needsBranchSelection = Boolean(isTenantAdmin && !(user?.branchId || user?.app_metadata?.branchId));
   const [targetTenantId, setTargetTenantId] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('pharma_import_target_tenant_id') || localStorage.getItem('pharma_tenant_id') || '') : '');
   const [targetBranchId, setTargetBranchId] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('pharma_import_target_branch_id') || localStorage.getItem('pharma_branch_id') || '') : '');
-  const getImportScopeHeaders = () => isSuperAdmin ? { 'X-Tenant-Id': targetTenantId.trim(), 'X-Branch-Id': targetBranchId.trim() } : {};
+  const getImportScopeHeaders = () => isSuperAdmin
+    ? { 'X-Tenant-Id': targetTenantId.trim(), 'X-Branch-Id': targetBranchId.trim() }
+    : needsBranchSelection ? { 'X-Branch-Id': targetBranchId.trim() } : {};
 
   const [file, setFile] = useState(null);
   const [stockMode, setStockMode] = useState('REPLACE');
@@ -61,7 +64,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   const handleFileChange = async (selectedFile) => {
     if (!selectedFile) return;
     if (!/\.(xlsx|xls)$/i.test(selectedFile.name)) { addToast('Please select an .xlsx or .xls workbook.', 'warning'); return; }
-    if (isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) {
+    if ((isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) || (needsBranchSelection && !targetBranchId.trim())) {
       addToast('Platform administrators must select an explicit tenant ID and branch ID before previewing.', 'warning');
       return;
     }
@@ -84,7 +87,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
   // Authoritative Single Upload to /api/v1/inventory/imports with unique Idempotency-Key
   const handleConfirmImport = async () => {
-    if (isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) {
+    if ((isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) || (needsBranchSelection && !targetBranchId.trim())) {
       addToast('Select a tenant and branch before importing.', 'warning');
       return;
     }
@@ -270,6 +273,22 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 overscroll-contain">
+          {!isSuperAdmin && needsBranchSelection && (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 space-y-2">
+              <p className="text-xs font-extrabold text-sky-950">Select pharmacy branch</p>
+              <p className="text-[11px] text-sky-800">Your tenant identity comes from your signed session. The selected branch is checked against your active tenant membership.</p>
+              <input
+                value={targetBranchId}
+                onChange={event => {
+                  setTargetBranchId(event.target.value);
+                  localStorage.setItem('pharma_import_target_branch_id', event.target.value);
+                  setPreviewData(null);
+                }}
+                placeholder="Branch ID"
+                className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
+              />
+            </div>
+          )}
           {isSuperAdmin && (
             <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 space-y-2">
               <p className="text-xs font-extrabold text-sky-950">Platform import target</p>
