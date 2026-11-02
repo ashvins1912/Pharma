@@ -21,6 +21,7 @@ import { reinitiatePrescriptionProcessing } from '../../services/order-service/s
 import { customerService } from '../services/customer-service/CustomerService.js';
 import { domainEvents } from '../shared/events/DomainEvents.js';
 import { isSameTenant } from '../authorization/tenantScope.js';
+import { isAssignedRiderForOrder } from '../authorization/deliveryScope.js';
 
 const router = express.Router();
 
@@ -1617,7 +1618,7 @@ router.post('/:id/verify-delivery', authenticateUser, async (req, res) => {
             enabled: true
         }).lean();
         if (rider) {
-            if (String(order.rider?.riderId || order.riderId || '') !== String(rider._id)) {
+            if (!isAssignedRiderForOrder(rider, order)) {
                 return res.status(403).json({ message: 'This delivery is not assigned to your rider account.' });
             }
         } else {
@@ -1635,7 +1636,7 @@ router.post('/:id/verify-delivery', authenticateUser, async (req, res) => {
                 tenantId: String(order.tenantId),
                 enabled: true
             }).select('_id').lean();
-            if (!assignedRider) return res.status(404).json({ message: 'Assigned rider not found for this pharmacy.' });
+            if (!isAssignedRiderForOrder(assignedRider, order)) return res.status(404).json({ message: 'Assigned rider not found for this pharmacy.' });
         }
 
         const code = String(req.body?.otp || '').trim();
