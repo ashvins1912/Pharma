@@ -20,22 +20,23 @@ import prescriptionClient from '../services/prescription-service-client/Prescrip
 import { reinitiatePrescriptionProcessing } from '../../services/order-service/src/prescription-client.js';
 import { customerService } from '../services/customer-service/CustomerService.js';
 import { domainEvents } from '../shared/events/DomainEvents.js';
+import { isSameTenant } from '../authorization/tenantScope.js';
 
 const router = express.Router();
 
 const TENANT_STAFF_ROLES = new Set([
     'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF',
-    'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
+    'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN', 'PHARMACY'
 ]);
 const getActorRole = req => String(req.user?.role || req.user?.app_metadata?.role || '').toUpperCase();
-const getActorTenantId = req => req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
+const getActorTenantId = req => req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId || null;
 const isPlatformOrderAdmin = req => ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(getActorRole(req));
 const isTenantOrderStaff = req => TENANT_STAFF_ROLES.has(getActorRole(req));
 const canTenantAccessOrder = (req, order) => {
     if (isPlatformOrderAdmin(req)) return true;
     if (isTenantOrderStaff(req)) {
         const tenantId = getActorTenantId(req);
-        return Boolean(tenantId && order?.tenantId && String(tenantId) === String(order.tenantId));
+        return isSameTenant(tenantId, order?.tenantId);
     }
     return String(order?.userId || order?.customerId || '') === String(req.user?.sub || '');
 };
