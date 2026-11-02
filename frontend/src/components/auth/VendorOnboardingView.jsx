@@ -6,7 +6,7 @@ import { useToast } from '../../context/ToastContext';
 const initial = {
   firstName: '', lastName: '', dateOfBirth: '', gender: '', mobile: '',
   password: '', confirmPassword: '', companyName: '', gstNumber: '',
-  drugLicenseNumber: '', street: '', city: '', state: '', pincode: ''
+  drugLicenseNumber: '', street: '', city: '', state: '', pincode: '', latitude: '', longitude: ''
 };
 
 export default function VendorOnboardingView({ token, onClose, onSuccess }) {
@@ -67,6 +67,22 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
     return !Object.keys(e).length;
   };
 
+  const capturePharmacyLocation = () => {
+    if (!navigator.geolocation) {
+      setError('This browser does not support pharmacy location capture. Enter coordinates manually.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        set('latitude', String(position.coords.latitude));
+        set('longitude', String(position.coords.longitude));
+        addToast('Pharmacy coordinates captured.', 'success');
+      },
+      () => setError('Could not capture pharmacy location. Allow location access or enter coordinates manually.'),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
   const validateTenant = () => {
     const e = {};
     if (!form.companyName.trim()) e.companyName = 'Pharmacy / Company name is required.';
@@ -74,6 +90,10 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
     if (!form.city.trim()) e.city = 'City is required.';
     if (!form.state.trim()) e.state = 'State is required.';
     if (!/^\d{6}$/.test(form.pincode.replace(/\D/g, ''))) e.pincode = 'Enter a valid 6-digit pincode.';
+    const latitude = Number(form.latitude);
+    const longitude = Number(form.longitude);
+    if (!form.latitude.trim() || !Number.isFinite(latitude) || latitude < -90 || latitude > 90) e.latitude = 'Capture or enter a valid latitude.';
+    if (!form.longitude.trim() || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) e.longitude = 'Capture or enter a valid longitude.';
     setFieldErrors(e);
     return !Object.keys(e).length;
   };
@@ -89,7 +109,8 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
         dateOfBirth: form.dateOfBirth, gender: form.gender, mobile: form.mobile.trim(),
         password: form.password,
         company: { companyName: form.companyName.trim(), gstNumber: form.gstNumber.trim(), drugLicenseNumber: form.drugLicenseNumber.trim() },
-        address: { line1: form.street.trim(), city: form.city.trim(), state: form.state.trim(), pincode: form.pincode.replace(/\D/g, '') }
+        address: { line1: form.street.trim(), city: form.city.trim(), state: form.state.trim(), pincode: form.pincode.replace(/\D/g, '') },
+        location: { latitude: Number(form.latitude), longitude: Number(form.longitude) }
       });
       const result = res.data?.data || res.data;
       setTenant(result?.tenant || null);
@@ -162,6 +183,17 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
             <Section title="4. Pharmacy location">
               <Field label="Street address" value={form.street} onChange={x => set('street', x)} />
               <div className="grid md:grid-cols-3 gap-4 mt-4"><Field label="City *" value={form.city} onChange={x => set('city', x)} error={fieldErrors.city}/><Field label="State *" value={form.state} onChange={x => set('state', x)} error={fieldErrors.state}/><Field label="Pincode *" value={form.pincode} onChange={x => set('pincode', x)} error={fieldErrors.pincode}/></div>
+              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-extrabold text-emerald-900">Map location required for nearby discovery</p>
+                  <button type="button" onClick={capturePharmacyLocation} className="px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-bold">Use this device's location</button>
+                </div>
+                <p className="text-[11px] text-emerald-800">Capture coordinates while at the pharmacy, or enter the pharmacy's map coordinates manually.</p>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Field label="Latitude *" value={form.latitude} onChange={x => set('latitude', x)} error={fieldErrors.latitude}/>
+                  <Field label="Longitude *" value={form.longitude} onChange={x => set('longitude', x)} error={fieldErrors.longitude}/>
+                </div>
+              </div>
             </Section>
             <div className="flex justify-between border-t pt-4"><button type="button" onClick={() => setStep(1)} className="px-5 py-3 text-xs font-bold text-slate-600">← Back to Profile</button><button disabled={submitting} className="px-7 py-3 bg-blue-600 text-white rounded-xl font-black disabled:opacity-50">{submitting ? 'Activating Tenant...' : 'Complete Onboarding & Activate Tenant →'}</button></div>
           </>}
