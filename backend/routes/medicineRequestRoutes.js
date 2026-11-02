@@ -21,7 +21,7 @@ const requireDatabase = (res) => {
 
 const isStaff = (user) => [
     'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
-    'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF'
+    'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
 ].includes(user?.app_metadata?.role || user?.role);
 
 const requireCustomer = (req, res, next) => {
@@ -570,15 +570,23 @@ router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
     try {
         const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
         const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 3));
+        const staff = isStaff(req.user);
+        const platformAdmin = isPlatformRequestAdmin(req);
+        const actorTenantId = getRequestActorTenantId(req);
+        const expiryScope = platformAdmin
+            ? {}
+            : staff
+                ? (actorTenantId ? { tenantId: String(actorTenantId) } : { tenantId: '__NO_TENANT_ACCESS__' })
+                : { customerId: req.user.sub };
         await MedicineRequest.updateMany(
-            { status: 'converted', pharmacyProposal: { $ne: null } },
+            { ...expiryScope, status: 'converted', pharmacyProposal: { $ne: null } },
             { $set: { status: 'PROPOSAL_SENT' } }
         );
         await MedicineRequest.updateMany(
-            { status: 'PROPOSAL_SENT', expiresAt: { $lt: new Date() } },
+            { ...expiryScope, status: 'PROPOSAL_SENT', expiresAt: { $lt: new Date() } },
             { $set: { status: 'EXPIRED' } }
         );
-        if (req.baseUrl.startsWith('/api/admin/') || isStaff(req.user)) {
+        if (req.baseUrl.startsWith('/api/admin/') || staff) {
             return getAdminMedicineRequests(req, res);
         }
         const query = { customerId: req.user.sub };
@@ -653,7 +661,7 @@ router.get('/attachments/:fileId', authenticateUser, authorizeRequestDetails, as
         const role = req.user?.app_metadata?.role || req.user?.role;
         const platformAdmin = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
         const actorTenantId = getRequestActorTenantId(req);
-        const tenantStaff = ['pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF'].includes(role);
+        const tenantStaff = ['pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'].includes(role);
         const ownerAccess = String(file.ownerId || '') === String(req.user.sub);
         const tenantAccess = tenantStaff && actorTenantId && file.tenantId
             && String(actorTenantId) === String(file.tenantId);
@@ -817,7 +825,9 @@ router.delete('/:id', authenticateUser, requirePermission('medicine_requests.dec
 router.get('/metrics/overview', authenticateUser, requirePermission('medicine_requests.read'), async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
-        const metrics = await dataStore.getMedicineRequestMetrics();
+        const tenantId = isPlatformRequestAdmin(req) ? null : getRequestActorTenantId(req);
+        if (!isPlatformRequestAdmin(req) && !tenantId) return res.status(403).json({ message: 'An active pharmacy tenant is required.' });
+        const metrics = await dataStore.getMedicineRequestMetrics(req.user);
         res.json(metrics);
     } catch (err) {
         console.error('Failed to get medicine request metrics:', err);
