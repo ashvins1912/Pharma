@@ -88,9 +88,12 @@ export class OrderAssignmentEngine {
         if (existingRiderId) {
             const existingRider = await this.riderRepository.findById(existingRiderId, options.tenantId || order.tenantId);
             if (!existingRider) {
+                const safeOrder = order.toJSON ? order.toJSON() : { ...order };
+                safeOrder.rider = null;
+                safeOrder.assignedRiderId = null;
                 return {
                     success: false,
-                    order,
+                    order: safeOrder,
                     rider: null,
                     strategyUsed: 'INVALID_TENANT_RIDER',
                     reason: 'The assigned rider is not owned by the order pharmacy tenant.',
