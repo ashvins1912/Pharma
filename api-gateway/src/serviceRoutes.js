@@ -122,6 +122,7 @@ export function createServiceRouters(gatewayConfig = config) {
     ? next()
     : requireInventoryImportPermission(req, res, next);
   inventoryRouter.post('/adjust', inventoryAdmin, inventory('inventory.adjust'));
+  inventoryRouter.post('/imports/preview', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.post('/imports', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.get('/imports/:jobId/failures/download', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.get('/imports/:jobId/failures', inventoryImportAuth, inventory('inventory.import'));
