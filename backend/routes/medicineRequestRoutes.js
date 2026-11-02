@@ -47,7 +47,7 @@ const authorizeRequestList = (req, res, next) => {
 };
 
 const getRequestActorTenantId = req => req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
-const isPlatformRequestAdmin = req => ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN']
+const isPlatformRequestAdmin = req => ['admin', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN']
     .includes(req.user?.app_metadata?.role || req.user?.role);
 
 const authorizeRequestDetails = async (req, res, next) => {
@@ -532,8 +532,16 @@ router.get('/active', authenticateUser, authorizeRequestList, async (req, res) =
 
     try {
         const query = { status: { $nin: ['converted', 'CONVERTED_TO_ORDER'] } };
-        if (!staff) query.customerId = req.user.sub;
-        else if (req.query.customerId) query.customerId = String(req.query.customerId);
+        if (!staff) {
+            query.customerId = req.user.sub;
+        } else if (!isPlatformRequestAdmin(req)) {
+            const tenantId = getRequestActorTenantId(req);
+            if (!tenantId) return res.status(403).json({ message: 'An active pharmacy tenant is required.' });
+            query.tenantId = String(tenantId);
+            if (req.query.customerId) query.customerId = String(req.query.customerId);
+        } else if (req.query.tenantId) {
+            query.tenantId = String(req.query.tenantId);
+        }
         const requests = await MedicineRequest.find(query).sort({ createdAt: -1 }).lean();
         res.json({ requests });
     } catch (error) {
