@@ -733,3 +733,75 @@ export function buildFailureWorkbook(failures) {
   xlsx.utils.book_append_sheet(workbook, xlsx.utils.json_to_sheet(rows), 'Failed Records');
   return xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 }
+
+
+export async function previewImportFile({ filePath, tenantId, branchId }) {
+  if (!tenantId || !branchId) {
+    const error = new Error('Verified tenant and branch context are required for preview.');
+    error.statusCode = 403;
+    throw error;
+  }
+  const workbook = xlsx.readFile(filePath, { cellDates: true });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  if (!sheet) {
+    const error = new Error('Workbook does not contain a worksheet.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const rows = xlsx.utils.sheet_to_json(sheet, { defval: '', raw: false });
+  if (!rows.length) {
+    const error = new Error('Workbook contains no data rows.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const normalized = rows.map((row, index) => ({ rowNumber: index + 2, originalRecord: row, parsed: normalizeImportRow(row) }));
+  const seen = new Set();
+  const valid = [];
+  const errors = [];
+  for (const item of normalized) {
+    if (item.parsed.error) {
+      errors.push({ rowNumber: item.rowNumber, sku: String(valueOf(item.originalRecord, 'SKU', 'sku', 'Sku', 'Product SKU', 'Barcode') || ''), name: String(valueOf(item.originalRecord, 'Medicine Name', 'medicineName', 'name', 'Name') || ''), errors: [item.parsed.error] });
+      continue;
+    }
+    const value = item.parsed.value;
+    const key = `${value.sku}::${value.batchNumber || ''}`;
+    if (seen.has(key)) {
+      errors.push({ rowNumber: item.rowNumber, sku: value.sku, name: value.name, errors: ['Duplicate SKU + Batch Number in workbook.'] });
+      continue;
+    }
+    seen.add(key);
+    valid.push({ ...item, value });
+  }
+  const skus = [...new Set(valid.map(item => item.value.sku))];
+  const inventory = skus.length ? await Inventory.find({ tenantId, branchId, sku: { $in: skus } }).select('sku batchNumber stockQuantity reservedQuantity').lean() : [];
+  const byBatch = new Map(inventory.map(item => [`${item.sku}::${item.batchNumber || ''}`, item]));
+  const previewRows = valid.slice(0, 10).map(item => {
+    const current = byBatch.get(`${item.value.sku}::${item.value.batchNumber || ''}`);
+    const existingStock = Number(current?.stockQuantity || 0);
+    const reservedStock = Number(current?.reservedQuantity || 0);
+    return {
+      ...item.originalRecord,
+      'Source Row Number': item.rowNumber,
+      'Existing Stock': existingStock,
+      'Reserved Stock': reservedStock,
+      'New Stock': item.value.stockQuantity,
+      'Available After Import': Math.max(0, item.value.stockQuantity - reservedStock)
+    };
+  });
+  for (const item of valid) {
+    const current = byBatch.get(`${item.value.sku}::${item.value.batchNumber || ''}`);
+    if (Number(current?.reservedQuantity || 0) > item.value.stockQuantity) {
+      errors.push({ rowNumber: item.rowNumber, sku: item.value.sku, name: item.value.name, errors: ['New stock is below the quantity already reserved for this batch.'] });
+    }
+  }
+  const errorRows = new Set(errors.map(error => error.rowNumber));
+  return {
+    rowsDetected: rows.length,
+    validCount: rows.length - errorRows.size,
+    errorsCount: errorRows.size,
+    warningsCount: 0,
+    errors: errors.slice(0, 100),
+    previewRows,
+    stockMode: 'REPLACE'
+  };
+}
