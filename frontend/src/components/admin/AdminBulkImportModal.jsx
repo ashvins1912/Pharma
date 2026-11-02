@@ -282,6 +282,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   setPreviewData(null);
                 }}
                 placeholder="Target tenant ID"
+                disabled={Boolean(importJob)}
                 className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
               />
               <input
@@ -292,6 +293,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   setPreviewData(null);
                 }}
                 placeholder="Target branch ID"
+                disabled={Boolean(importJob)}
                 className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
               />
             </div>
@@ -460,6 +462,20 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                 )}
                 {importJob.status === 'REVERTED' && (
                   <p className="text-xs font-bold text-emerald-800">This import batch has been reverted.</p>
+                )}
+                {['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED', 'REVERTED'].includes(importJob.status) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportJob(null);
+                      setPreviewData(null);
+                      setFile(null);
+                      setPollError('');
+                    }}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    Prepare Another Import
+                  </button>
                 )}
                 {importJob.status === 'FAILED' && (
                   <button
