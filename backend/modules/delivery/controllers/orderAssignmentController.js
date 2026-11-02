@@ -177,7 +177,12 @@ export const manualAssignOrder = async (req, res) => {
 export const getEngineStatus = async (req, res) => {
     try {
         const strategies = deliveryContainer.assignmentEngine.getActiveStrategies();
-        const logs = deliveryContainer.assignmentEngine.getExecutionLogs(30);
+        const role = String(req.user?.role || req.user?.app_metadata?.role || req.context?.role || '').toUpperCase();
+        const isPlatform = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId || req.query?.tenantId || null;
+        if (!isPlatform && !tenantId) return res.status(403).json({ code: 'TENANT_CONTEXT_REQUIRED', message: 'A pharmacy tenant context is required.' });
+        const allLogs = deliveryContainer.assignmentEngine.getExecutionLogs(100);
+        const logs = allLogs.filter(log => isPlatform ? (!tenantId || String(log.tenantId || '') === String(tenantId)) : String(log.tenantId || '') === String(tenantId)).slice(0, 30);
 
         res.json({
             pipeline: strategies,
