@@ -120,15 +120,20 @@ async function executeBatchOperations(tenantId, branchId, stockMode, eligibleRow
 
   const productOperations = [];
   const inventoryOperations = [];
+  const pendingProductIds = new Map();
   let newCount = 0;
 
   for (const item of eligibleRows) {
     const { value } = item;
     const currentProduct = bySku.get(value.sku);
-    const productId = currentProduct?._id || new mongoose.Types.ObjectId();
-    if (!currentProduct) newCount += 1;
+    let productId = currentProduct?._id || pendingProductIds.get(value.sku);
+    if (!productId) {
+      productId = new mongoose.Types.ObjectId();
+      pendingProductIds.set(value.sku, productId);
+      newCount += 1;
+    }
 
-    productOperations.push({
+    if (!currentProduct && pendingProductIds.get(value.sku) === productId && !productOperations.some(op => op.updateOne.filter.sku === value.sku)) productOperations.push({
       updateOne: {
         filter: { tenantId, sku: value.sku },
         update: {
