@@ -10,7 +10,7 @@ const router = express.Router();
 
 const TENANT_DISPATCH_ROLES = new Set(['TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN', 'PHARMACY']);
 router.use(authenticateUser, (req, res, next) => {
-    const role = String(req.user?.role || req.user?.app_metadata?.role || '').toUpperCase();
+    const role = String(req.user?.role || req.user?.app_metadata?.role || req.context?.role || '').toUpperCase();
     const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId;
     if (['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return next();
     if (TENANT_DISPATCH_ROLES.has(role) && tenantId) return next();
