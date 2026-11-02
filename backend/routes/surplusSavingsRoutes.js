@@ -11,11 +11,11 @@ import { getIsConnected } from '../config/db.js';
 const router = express.Router();
 const TENANT_ROLES = new Set(['TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF', 'BRANCH_ADMIN', 'PHARMACY']);
 const PLATFORM_ROLES = new Set(['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN']);
-const roleOf = req => String(req.user?.role || req.user?.app_metadata?.role || '').toUpperCase();
+const roleOf = req => String(req.user?.role || req.user?.app_metadata?.role || req.context?.role || '').toUpperCase();
 const isPlatform = req => PLATFORM_ROLES.has(roleOf(req));
 const tenantOf = req => String((isPlatform(req) ? req.body?.tenantId || req.query?.tenantId : req.user?.tenantId || req.user?.app_metadata?.tenantId) || '').trim();
 const requireCampaignAdmin = (req, res, next) => {
-    if (isPlatform(req) || (TENANT_ROLES.has(roleOf(req)) && (req.user?.tenantId || req.user?.app_metadata?.tenantId))) return next();
+    if (isPlatform(req) || (TENANT_ROLES.has(roleOf(req)) && (req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId))) return next();
     return res.status(403).json({ code: 'SURPLUS_SAVINGS_FORBIDDEN', message: 'Pharmacy tenant administrator access is required.' });
 };
 const money = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
