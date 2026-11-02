@@ -21,7 +21,10 @@ export default function OfferZoneBanner() {
     setItems([]);
     setCurrentPage(1);
     setLoadError('');
-    if (!user || !tenantId) return () => { active = false; };
+    if (!user || !tenantId) {
+      setLoading(false);
+      return () => { active = false; };
+    }
     setLoading(true);
     apiClient.get('/api/surplus-savings', { params: { tenantId } })
       .then(({ data }) => {
