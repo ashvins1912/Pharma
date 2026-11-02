@@ -3160,7 +3160,7 @@ export const dataStore = {
         const role = user?.app_metadata?.role || user?.role;
         const isStaff = user && [
             'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
-            'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF'
+            'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
         ].includes(role);
         const isPlatformStaff = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
         const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
@@ -3992,8 +3992,9 @@ export const dataStore = {
         return this.approveMedicineProposalAndConvertToOrder(id, param2, param3);
     },
 
-    async getMedicineRequestMetrics() {
-        const requests = await this.getMedicineRequests({}, { app_metadata: { role: 'admin' } });
+    async getMedicineRequestMetrics(user = null) {
+        const actor = user || { app_metadata: { role: 'admin' } };
+        const requests = await this.getMedicineRequests({}, actor);
 
         const total = requests.length;
         const requested = requests.filter(r => r.status === 'REQUESTED').length;
