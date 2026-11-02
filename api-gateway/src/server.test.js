@@ -357,7 +357,15 @@ test('gateway requires admin role for Inventory adjustment and signs import scop
   let serviceIdempotencyKey;
   let serviceOrigin;
   let forwardedGatewayAssertion;
+  let validatedScopeClaims;
   const backend = await startMockServer((req, res) => {
+    if (req.url === '/internal/gateway/validate-tenant-branch') {
+      const assertion = String(req.headers['x-gateway-authorization'] || '').replace(/^Bearer /, '');
+      validatedScopeClaims = jwt.verify(assertion, testSecrets.gateway, { algorithms: ['HS256'], issuer: 'ashvin-pharmacy', audience: 'pharma-backend-auth', subject: 'api-gateway' });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ valid: true, tenantId: validatedScopeClaims.tenantId, branchId: validatedScopeClaims.branchId }));
+      return;
+    }
     const token = req.headers.authorization;
     const admin = token === 'Bearer admin-user-token';
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -410,6 +418,8 @@ test('gateway requires admin role for Inventory adjustment and signs import scop
         Cookie: 'access_token=admin-user-token',
         Origin: 'http://localhost:3000',
         'X-Gateway-Authorization': 'Bearer untrusted-client-value',
+        'X-Tenant-Id': 'tenant-ashvin-main',
+        'X-Branch-Id': 'branch-indore-central',
         'Content-Type': 'multipart/form-data; boundary=upload-boundary',
         'Idempotency-Key': 'inventory-import-1'
       },
@@ -419,6 +429,12 @@ test('gateway requires admin role for Inventory adjustment and signs import scop
     assert.equal(serviceClaims.scope, 'inventory.import');
     assert.equal(serviceClaims.userId, 'admin-1');
     assert.equal(serviceClaims.userRole, 'admin');
+    assert.equal(serviceClaims.tenantId, 'tenant-ashvin-main');
+    assert.equal(serviceClaims.branchId, 'branch-indore-central');
+    assert.equal(validatedScopeClaims.scope, 'tenant:branch:verify');
+    assert.equal(validatedScopeClaims.userId, 'admin-1');
+    assert.equal(validatedScopeClaims.tenantId, 'tenant-ashvin-main');
+    assert.equal(validatedScopeClaims.branchId, 'branch-indore-central');
     assert.equal(serviceClaims.email, undefined);
     assert.equal(serviceClaims.customerName, undefined);
     assert.equal(serviceClaims.customerMobile, undefined);
