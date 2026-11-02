@@ -667,10 +667,10 @@ router.get('/attachments/:fileId', authenticateUser, authorizeRequestDetails, as
         const file = await getPrescription(req.params.fileId);
         if (!file) return res.status(404).json({ message: 'Attachment file not found.' });
 
-        const role = req.user?.app_metadata?.role || req.user?.role;
-        const platformAdmin = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+        const platformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
         const actorTenantId = getRequestActorTenantId(req);
-        const tenantStaff = ['pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'].includes(role);
+        const tenantStaff = ['PHARMACY', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'].includes(role);
         const ownerAccess = String(file.ownerId || '') === String(req.user.sub);
         const tenantAccess = tenantStaff && actorTenantId && file.tenantId
             && String(actorTenantId) === String(file.tenantId);
