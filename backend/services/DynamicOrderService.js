@@ -188,6 +188,7 @@ export class DynamicOrderService {
         );
         return {
             items: pricedItems,
+            subtotal,
             availablePoints,
             earnedPoints: earning.pointsToAssign,
             revenue: earning.totalRevenue,
