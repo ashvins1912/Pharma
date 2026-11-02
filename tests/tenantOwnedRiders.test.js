@@ -4,6 +4,7 @@ import { InMemoryRiderRepository } from '../backend/modules/delivery/infrastruct
 import { RegisterRiderUseCase } from '../backend/modules/delivery/use-cases/RegisterRiderUseCase.js';
 import { ManualAssignOrderUseCase } from '../backend/modules/delivery/use-cases/ManualAssignOrderUseCase.js';
 import { isSameTenant, tenantScopedFilter } from '../backend/authorization/tenantScope.js';
+import { isAssignedRiderForOrder, isRiderOwnedByOrderTenant } from '../backend/authorization/deliveryScope.js';
 
 const storageService = { upload: async () => ({ publicUrl: 'https://example.invalid/rider.png' }) };
 
@@ -73,8 +74,6 @@ test('rider registration requires an explicit tenant', async () => {
         /authenticated tenant is required/
     );
 });
-
-import { isAssignedRiderForOrder, isRiderOwnedByOrderTenant } from '../backend/authorization/deliveryScope.js';
 
 test('delivery verification requires the assigned rider and the order tenant to match', () => {
     const order = { tenantId: 'tenant-a', rider: { riderId: 'rider-a' } };
