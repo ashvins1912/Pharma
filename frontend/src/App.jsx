@@ -293,7 +293,14 @@ function MainApp() {
     if (!authenticated) cancelRequestAuthentication();
   };
 
-  const displayName = user?.user_metadata?.name || user?.email?.split('@')[0] || "Friend";
+  const displayName = String(
+    user?.user_metadata?.first_name
+      || user?.user_metadata?.firstName
+      || user?.user_metadata?.name
+      || user?.name
+      || user?.email?.split('@')[0]
+      || "Friend"
+  ).trim().split(/\s+/)[0] || "Friend";
 
   const handleProceedToCheckout = () => {
     if (!user) {
