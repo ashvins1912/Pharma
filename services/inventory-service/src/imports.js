@@ -557,6 +557,7 @@ export async function createImportJob({
         _id: generatedId,
         tenantId,
         branchId,
+        stockMode,
         fileName: safeFileName,
         filePath: destination,
         uploadedBy,
