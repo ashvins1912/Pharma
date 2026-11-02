@@ -61,7 +61,7 @@ export default function RiderTerminal({ riderId, onClose }) {
         }
         return previous || activeDelivery || null;
       });
-      if (pending.length > 0 && !currentAlert && status === 'online') {
+      if (pending.length > 0 && !currentAlert && status === 'Available') {
         setCurrentAlert(pending[0]);
         setCountdown(30);
       }
@@ -80,7 +80,7 @@ export default function RiderTerminal({ riderId, onClose }) {
 
   // Handle geolocation tracking and 2dsphere GPS telemetry push
   useEffect(() => {
-    if (status !== 'online' && status !== 'busy') {
+    if (status !== 'Available' && status !== 'Busy') {
       setIsTracking(false);
       return;
     }
@@ -143,7 +143,7 @@ export default function RiderTerminal({ riderId, onClose }) {
   const handleAcceptOrder = (order) => {
     setActiveOrder(order);
     setCurrentAlert(null);
-    addToast(`Order #${order._id?.slice(-6)} accepted! Proceeding to Dark Store pickup.`, 'success');
+    addToast(`Opened order #${order._id?.slice(-6)} assigned to this rider.`, 'success');
   };
 
   const handleRejectOrder = () => {
@@ -151,7 +151,7 @@ export default function RiderTerminal({ riderId, onClose }) {
     setCurrentAlert(null);
     // Cycle to next pending order if available
     const remaining = pendingOrders.filter(o => o._id !== currentAlert?._id);
-    if (remaining.length > 0 && status === 'online') {
+    if (remaining.length > 0 && status === 'Available') {
       setCurrentAlert(remaining[0]);
       setCountdown(30);
     }
@@ -216,25 +216,25 @@ export default function RiderTerminal({ riderId, onClose }) {
         {/* Online / Offline Toggle */}
         <div className="flex items-center gap-2 bg-slate-800 p-1.5 rounded-2xl border border-slate-700">
           <button
-            onClick={() => handleToggleStatus('offline')}
+            onClick={() => handleToggleStatus('Off-duty')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
-              status === 'offline' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              status === 'Off-duty' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
-            🔴 Offline
+            🔴 Off-duty
           </button>
           <button
-            onClick={() => handleToggleStatus('online')}
+            onClick={() => handleToggleStatus('Available')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
-              status === 'online' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              status === 'Available' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
-            🟢 Online
+            🟢 Available
           </button>
           <button
-            onClick={() => handleToggleStatus('busy')}
+            onClick={() => handleToggleStatus('Busy')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
-              status === 'busy' ? 'bg-amber-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              status === 'Busy' ? 'bg-amber-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
             🟡 Busy
