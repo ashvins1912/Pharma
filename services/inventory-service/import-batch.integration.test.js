@@ -44,7 +44,10 @@ test('controlled import preview, chunked batch ledger and rollback restore the e
     const deadline = Date.now() + 30000;
     while (Date.now() < deadline) {
       const job = await models.ImportJob.findById(jobId).lean();
-      if (job && ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'].includes(job.status)) return job;
+      if (job && ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'].includes(job.status)) {
+        const batch = await models.ImportBatch.findOne({ batchId: job.batchId }).lean();
+        if (batch && ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'].includes(batch.status)) return job;
+      }
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     throw new Error('Import worker did not finish within 30 seconds.');
