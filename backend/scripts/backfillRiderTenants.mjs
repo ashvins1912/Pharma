@@ -29,7 +29,7 @@ const main = async () => {
     for (const rider of legacyRiders) {
         const riderId = String(rider._id);
         const assignedTenantIds = (await Order.distinct('tenantId', {
-            'rider.riderId': riderId,
+            $or: [{ 'rider.riderId': riderId }, { riderId }],
             tenantId: { $nin: [null, ''] }
         })).map(String);
         const uniqueAssignedTenants = [...new Set(assignedTenantIds)];
@@ -57,6 +57,24 @@ const main = async () => {
             migrated.push({ riderId, tenantId });
         } catch (error) {
             unresolved.push({ riderId, reason: error.code === 11000 ? 'Duplicate mobile within tenant; reconcile duplicate rider records.' : error.message });
+        }
+    }
+
+    if (unresolved.length === 0) {
+        const duplicateMobiles = await Rider.aggregate([
+            { $group: { _id: { tenantId: '$tenantId', mobile: '$mobile' }, count: { $sum: 1 } } },
+            { $match: { count: { $gt: 1 } } }
+        ]);
+        if (duplicateMobiles.length) {
+            unresolved.push(...duplicateMobiles.map(item => ({ riderId: null, reason: `Duplicate mobile within tenant ${item._id.tenantId}; reconcile records before indexing.` })));
+        } else {
+            const indexes = await Rider.collection.indexes();
+            for (const index of indexes) {
+                if (index.unique && Object.keys(index.key || {}).length === 1 && index.key.mobile === 1) {
+                    await Rider.collection.dropIndex(index.name);
+                }
+            }
+            await Rider.collection.createIndex({ tenantId: 1, mobile: 1 }, { unique: true, name: 'tenantId_1_mobile_1' });
         }
     }
 
