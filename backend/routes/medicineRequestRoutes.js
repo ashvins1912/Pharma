@@ -52,7 +52,7 @@ const isPlatformRequestAdmin = req => ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_A
 
 const authorizeRequestDetails = async (req, res, next) => {
     if (req.params.fileId) return next(); // Attachment ownership is checked against file metadata in its handler.
-    if (req.baseUrl.startsWith('/api/admin/') && !isPharmacyOrAdmin(req, res, () => {})) {
+    if (req.baseUrl.startsWith('/api/admin/') && !isStaff(req.user)) {
         return res.status(403).json({ message: 'You are not authorized to view this medicine request.' });
     }
     if (!requireDatabase(res)) return;
@@ -392,6 +392,13 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
         let prescriptionVerification = null;
         let savedPrescriptionUrl = null;
 
+        const selectedTenantId = String(req.body.tenantId || req.body.selectedTenantId || '').trim();
+        if (!selectedTenantId) {
+            return res.status(400).json({ message: 'Select a pharmacy before submitting a medicine procurement request.' });
+        }
+        const selectedTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!selectedTenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
+
         const presFile = req.files?.prescription?.[0];
         if (presFile) {
             savedPrescriptionUrl = await savePrescription(presFile, req.user.sub, selectedTenantId);
@@ -415,7 +422,7 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
                     contentType: presFile.mimetype,
                     idempotencyKey: req.get('idempotency-key') || `medicine-request:${customerId}:${Date.now()}`,
                     userId: customerId,
-                    tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null,
+                    tenantId: selectedTenantId,
                     branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
                     role: req.user.app_metadata?.role || req.user.role || 'customer',
                     patientPuid
@@ -458,7 +465,7 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
 
         const imgFile = req.files?.productImage?.[0];
         if (imgFile) {
-            productImageUrl = await savePrescription(imgFile, req.user.sub);
+            productImageUrl = await savePrescription(imgFile, req.user.sub, selectedTenantId);
         }
 
         const addressDetails = {
@@ -480,13 +487,6 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
             || [selectedAddress.addressLine1, selectedAddress.addressLine2, selectedAddress.city, selectedAddress.state, selectedAddress.pincode]
                 .filter(Boolean)
                 .join(', ');
-
-        const selectedTenantId = String(req.body.tenantId || req.body.selectedTenantId || '').trim();
-        if (!selectedTenantId) {
-            return res.status(400).json({ message: 'Select a pharmacy before submitting a medicine procurement request.' });
-        }
-        const selectedTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id').lean();
-        if (!selectedTenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
 
         const requestDoc = await dataStore.createMedicineRequest({
             tenantId: selectedTenantId,
