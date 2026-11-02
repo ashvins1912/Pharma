@@ -1,6 +1,7 @@
 import { Server } from 'socket.io';
 import http from 'node:http';
 import { cacheService } from '../cache/CacheService.js';
+import jwt from 'jsonwebtoken';
 
 export class DecoupledWebsocketServer {
     constructor(port = process.env.PORT || process.env.WS_PORT || 4000) {
@@ -28,16 +29,54 @@ export class DecoupledWebsocketServer {
             }
         });
 
+        const publicKey = String(process.env.PHARMA_JWT_PUBLIC_KEY || '').replace(/\\n/g, '\n').trim();
+        const issuer = process.env.PHARMA_JWT_ISSUER || 'pharma-auth';
+        const audience = process.env.PHARMA_JWT_AUDIENCE || 'pharma-api';
+        this.io.use((socket, next) => {
+            const authorization = socket.handshake.headers.authorization || '';
+            const token = socket.handshake.auth?.token
+                || (authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '');
+            if (!publicKey || !token) return next(new Error('Authentication is required for realtime connections.'));
+            try {
+                const claims = jwt.verify(token, publicKey, { algorithms: ['RS256'], issuer, audience });
+                if (claims.token_type !== 'pharma_access' || typeof claims.sub !== 'string' || !claims.sub) {
+                    return next(new Error('A valid Pharma access token is required.'));
+                }
+                socket.data.identity = {
+                    userId: claims.sub,
+                    tenantId: claims.tenantId || claims.app_metadata?.tenantId || null,
+                    branchId: claims.branchId || claims.app_metadata?.branchId || null,
+                    riderId: claims.riderId || null,
+                    role: claims.role || claims.app_metadata?.role || 'customer',
+                    permissions: Array.isArray(claims.permissions) ? claims.permissions : [],
+                    orderIds: Array.isArray(claims.orderIds) ? claims.orderIds : []
+                };
+                return next();
+            } catch {
+                return next(new Error('Realtime access token is invalid or expired.'));
+            }
+        });
+
         this.setupEventHandlers();
         this.setupCacheSubscription();
     }
 
     setupEventHandlers() {
         this.io.on('connection', (socket) => {
-            console.info(`[DecoupledWS] Client connected: ${socket.id}`);
+            const identity = socket.data.identity;
+            const role = String(identity.role || '').toUpperCase();
+            const elevated = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)
+                || identity.permissions.includes('orders.read.all');
+            socket.join(`bell_notifications_${identity.userId}`);
+            if (identity.tenantId) socket.join(`tenant_${identity.tenantId}`);
+            console.info(`[DecoupledWS] Authenticated client connected: ${socket.id}`);
 
             socket.on('join_rider_room', async (riderId) => {
-                if (!riderId) return;
+                const ownRiderId = identity.riderId || identity.userId;
+                if (typeof riderId !== 'string' || riderId !== ownRiderId) {
+                    socket.emit('authorization_error', { code: 'REALTIME_ROOM_FORBIDDEN' });
+                    return;
+                }
                 socket.join(`rider_${riderId}`);
                 await cacheService.flushPendingMessagesForUser(riderId, null, (channel, payload) => {
                     socket.emit(channel, payload);
@@ -45,16 +84,30 @@ export class DecoupledWebsocketServer {
             });
 
             socket.on('join_order_tracking', (orderId) => {
-                if (!orderId) return;
-                socket.join(`order_tracking_${orderId}`);
+                if (typeof orderId === 'string' && orderId.length > 0
+                    && (identity.orderIds.includes(orderId) || elevated)) {
+                    socket.join(`order_tracking_${orderId}`);
+                } else {
+                    socket.emit('authorization_error', { code: 'REALTIME_ROOM_FORBIDDEN' });
+                }
             });
 
             socket.on('join_bell_room', async ({ userId, tenantId } = {}) => {
                 const targetId = typeof userId === 'string' ? userId : userId?.userId || userId;
-                if (!targetId && !tenantId) return;
-                if (targetId) socket.join(`bell_notifications_${targetId}`);
-                if (tenantId) socket.join(`tenant_${tenantId}`);
-                await cacheService.flushPendingMessagesForUser(targetId, tenantId, (channel, payload) => {
+                if (targetId && (targetId === identity.userId || elevated)) {
+                    socket.join(`bell_notifications_${targetId}`);
+                } else if (targetId) {
+                    socket.emit('authorization_error', { code: 'REALTIME_ROOM_FORBIDDEN' });
+                }
+                if (tenantId && (String(tenantId) === String(identity.tenantId) || elevated)) {
+                    socket.join(`tenant_${tenantId}`);
+                } else if (tenantId) {
+                    socket.emit('authorization_error', { code: 'REALTIME_ROOM_FORBIDDEN' });
+                }
+                const authorizedTenantId = tenantId && (String(tenantId) === String(identity.tenantId) || elevated)
+                    ? tenantId
+                    : identity.tenantId;
+                await cacheService.flushPendingMessagesForUser(identity.userId, authorizedTenantId, (channel, payload) => {
                     socket.emit(channel, payload);
                 });
             });
@@ -73,11 +126,11 @@ export class DecoupledWebsocketServer {
     setupCacheSubscription() {
         this.unsubscribeCache = cacheService.subscribe((envelope) => {
             const { channel, payload } = envelope;
-            this.io.emit(channel, payload);
+            // Private user notifications must never be broadcast to every socket
+            // or to a tenant room shared with unrelated customers.
             if (payload?.userId) {
                 this.io.to(`bell_notifications_${payload.userId}`).emit(channel, payload);
-            }
-            if (payload?.tenantId) {
+            } else if (payload?.tenantId) {
                 this.io.to(`tenant_${payload.tenantId}`).emit(channel, payload);
             }
         });
