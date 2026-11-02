@@ -59,7 +59,7 @@ reservationSchema.index({ status: 1, expiresAt: 1 });
 const importJobSchema = new mongoose.Schema({
   tenantId: { type: 'string', required: true, index: true },
   branchId: { type: 'string', required: true, index: true },
-  stockMode: { type: 'string', enum: ['REPLACE', 'ADD'], default: 'REPLACE' },
+  stockMode: { type: 'string', enum: ['REPLACE'], default: 'REPLACE' },
   fileName: { type: 'string', required: true },
   filePath: { type: 'string', required: true },
   uploadedBy: { type: 'string', required: true },
