@@ -39,21 +39,24 @@ const canTenantAccessOrder = (req, order) => {
     return String(order?.userId || order?.customerId || '') === String(req.user?.sub || '');
 };
 
-router.use('/:id', async (req, res, next) => {
+const tenantOrderIdGuard = async (req, res, next) => {
     if (!isTenantOrderStaff(req)) return next();
-    const reserved = new Set(['admin', 'mine', 'history', 'checkout', 'dynamic-restock', 'prescriptions', 'notifications', 'all']);
-    if (reserved.has(String(req.params.id || '').toLowerCase())) return next();
-    if (!getActorTenantId(req) || !mongoose.isValidObjectId(req.params.id)) {
-        return res.status(404).json({ message: 'Order not found.' });
-    }
+    const orderId = req.params.id;
+    if (!getActorTenantId(req) || !mongoose.isValidObjectId(orderId)) return res.status(404).json({ message: 'Order not found.' });
     try {
-        const order = await Order.findById(req.params.id).select('_id tenantId').lean();
+        const order = await Order.findById(orderId).select('_id tenantId').lean();
         if (!order || !canTenantAccessOrder(req, order)) return res.status(404).json({ message: 'Order not found.' });
         return next();
     } catch {
         return res.status(503).json({ message: 'Tenant-scoped order authorization is temporarily unavailable.' });
     }
+};
+router.use('/:id', (req, res, next) => {
+    const reserved = new Set(['admin', 'mine', 'history', 'checkout', 'dynamic-restock', 'prescriptions', 'notifications', 'all']);
+    if (reserved.has(String(req.params.id || '').toLowerCase())) return next();
+    return tenantOrderIdGuard(req, res, next);
 });
+router.use('/admin/:id', tenantOrderIdGuard);
 const dynamicOrderService = new DynamicOrderService({
     couponValidator: (code, subtotal) => dataStore.validateCoupon(code, subtotal)
 });
@@ -1030,6 +1033,11 @@ router.post('/:id/cancel', authenticateUser, handleCustomerCancelOrder);
 router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => {
     try {
         const { orderId, newStatus, cashCollectionStatus } = req.body;
+        if (isTenantOrderStaff(req)) {
+            if (!getActorTenantId(req)) return res.status(403).json({ message: 'An active tenant context is required.' });
+            const scopedOrder = await Order.findOne({ _id: orderId, tenantId: String(getActorTenantId(req)) }).select('_id').lean();
+            if (!scopedOrder) return res.status(404).json({ message: 'Order not found.' });
+        }
         let { riderInfo } = req.body;
         if (!orderId || !newStatus) {
             return res.status(400).json({ message: "orderId and newStatus are required." });
@@ -1304,6 +1312,34 @@ router.post('/:id/notify-whatsapp', authenticateUser, isAdmin, handleNotifyWhats
 // Admin All Orders
 router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
     try {
+        if (isTenantOrderStaff(req)) {
+            const tenantId = getActorTenantId(req);
+            if (!tenantId) return res.status(403).json({ message: 'An active tenant context is required.' });
+            const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+            const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
+            if (req.query.fulfillmentSnapshot === 'true') {
+                return res.json(await dataStore.getFulfillmentSnapshot(page, limit, String(tenantId)));
+            }
+            if (req.query.search !== undefined) {
+                const { type, value } = classifyOrderSearch(req.query.search);
+                const result = await dataStore.searchOrders({ type, value, page, limit, tenantId: String(tenantId) });
+                return res.json({ ...paginationResult(result.items, result.total, result.page || 1, limit), searchType: type });
+            }
+            const filter = { tenantId: String(tenantId) };
+            if (req.query.status) filter.$or = [
+                { orderStatus: req.query.status },
+                { status: String(req.query.status).toLowerCase() }
+            ];
+            if (req.query.status === 'Delivered' || req.query.status === 'Cancelled') {
+                const [items, total] = await Promise.all([
+                    Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+                    Order.countDocuments(filter)
+                ]);
+                return res.json(paginationResult(items, total, page, limit));
+            }
+            const orders = await Order.find(filter).sort({ createdAt: -1, _id: -1 }).lean();
+            return res.json(orders);
+        }
         if (req.query.search !== undefined) {
             const { type, value } = classifyOrderSearch(req.query.search);
             const parsedPage = Number.parseInt(req.query.page, 10);
@@ -1320,23 +1356,17 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
             const requestedPage = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
             const limit = Number.isSafeInteger(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 50) : 10;
             let result;
-            if (req.query.status === 'Delivered') {
-                result = await dataStore.getDeliveredOrdersPage(requestedPage, limit, { startDate: req.query.startDate, endDate: req.query.endDate });
-            } else if (req.query.status === 'Cancelled') {
-                result = await dataStore.getCancelledOrdersPage(requestedPage, limit);
-            } else {
-                return res.status(400).json({ message: 'Only Delivered and Cancelled orders support pagination on this endpoint.' });
-            }
-            const page = result.page || 1;
-            return res.json(paginationResult(result.items, result.total, page, limit));
+            if (req.query.status === 'Delivered') result = await dataStore.getDeliveredOrdersPage(requestedPage, limit, { startDate: req.query.startDate, endDate: req.query.endDate });
+            else if (req.query.status === 'Cancelled') result = await dataStore.getCancelledOrdersPage(requestedPage, limit);
+            else return res.status(400).json({ message: 'Only Delivered and Cancelled orders support pagination on this endpoint.' });
+            return res.json(paginationResult(result.items, result.total, result.page || 1, limit));
         }
         if (req.query.fulfillmentSnapshot === 'true') {
             const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
             const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
             return res.json(await dataStore.getFulfillmentSnapshot(page, limit));
         }
-        const orders = await dataStore.getAllOrders();
-        res.json(orders);
+        return res.json(await dataStore.getAllOrders());
     } catch (err) {
         if (err.statusCode === 422) return res.status(422).json({ message: err.message });
         if (err.statusCode === 503) return res.status(503).json({ message: 'Order search is temporarily unavailable. Please try again.' });
