@@ -135,11 +135,12 @@ export class DecoupledWebsocketServer {
     setupCacheSubscription() {
         this.unsubscribeCache = cacheService.subscribe((envelope) => {
             const { channel, payload } = envelope;
-            // Private user notifications must never be broadcast to every socket
-            // or to a tenant room shared with unrelated customers.
+            // Never globally broadcast. User rooms and the matching tenant room
+            // are joined only after verifying the Pharma access token.
             if (payload?.userId) {
                 this.io.to(`bell_notifications_${payload.userId}`).emit(channel, payload);
-            } else if (payload?.tenantId) {
+            }
+            if (payload?.tenantId) {
                 this.io.to(`tenant_${payload.tenantId}`).emit(channel, payload);
             }
         });
