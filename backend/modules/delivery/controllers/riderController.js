@@ -54,9 +54,11 @@ export const listRiders = async (req, res) => {
     try {
         if (!await requireMongoConnection(res)) return;
         deliveryContainer.refreshDataLayer();
+        const tenantId = getRiderTenantId(req);
+        if (!tenantId) return res.status(400).json({ code: 'TENANT_CONTEXT_REQUIRED', message: 'Select a pharmacy tenant to list riders.' });
         const riders = await deliveryContainer.getRidersUseCase.execute({
             ...req.query,
-            tenantId: getRiderTenantId(req),
+            tenantId,
             includeDisabled: req.query.includeDisabled === 'true'
         });
         res.json(riders.map(r => r.toJSON()));
