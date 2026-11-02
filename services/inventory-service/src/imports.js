@@ -405,6 +405,12 @@ async function processJob(job) {
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
   if (!firstSheet) throw new Error('Workbook does not contain a worksheet.');
   const rows = xlsx.utils.sheet_to_json(firstSheet, { defval: '', raw: false });
+  const currentPreview = await previewImportFile({ filePath: job.filePath, tenantId: job.tenantId, branchId: job.branchId });
+  if (currentPreview.previewFingerprint !== job.previewFingerprint) {
+    const error = new Error('The workbook no longer matches the approved preview. No inventory changes were applied.');
+    error.code = 'PREVIEW_FINGERPRINT_MISMATCH';
+    throw error;
+  }
   await ImportJob.updateOne({ _id: job._id }, { $set: { totalRecords: rows.length } });
 
   let failedRecords = 0;
@@ -467,6 +473,7 @@ async function claimAndProcess() {
       { sort: { createdAt: 1 }, new: true }
     );
     if (!job) return;
+    await ImportBatch.updateOne({ batchId: job.batchId, tenantId: job.tenantId, branchId: job.branchId }, { $set: { status: 'PROCESSING' } });
     await processJob(job);
   } catch (error) {
     if (job) {
@@ -474,6 +481,7 @@ async function claimAndProcess() {
         await ImportJob.updateOne({ _id: job._id }, {
           $set: { status: 'FAILED', completedAt: new Date(), errorMessage: error.message || 'Import processing failed.' }
         });
+        await ImportBatch.updateOne({ batchId: job.batchId, tenantId: job.tenantId, branchId: job.branchId }, { $set: { status: 'FAILED' } });
       } catch (persistenceError) {
         console.error(JSON.stringify({
           serviceName: 'inventory-service',
@@ -550,7 +558,7 @@ export async function createImportJob({
 
   if (existing) {
     // If same file & branch, return existing job
-    if (existing.fileName === safeFileName && existing.branchId === branchId) {
+    if (existing.fileName === safeFileName && existing.branchId === branchId && existing.previewFingerprint === previewFingerprint) {
       if (file?.path) await fs.rm(file.path, { force: true }).catch(() => {});
       return existing;
     }
@@ -608,11 +616,12 @@ export async function createImportJob({
     startImportWorkers();
     return job;
   } catch (error) {
+    await ImportBatch.deleteOne({ batchId, tenantId, branchId, status: 'QUEUED' }).catch(() => {});
     await fs.rm(destination, { force: true }).catch(() => {});
     if (error.code === 11000) {
       const repeated = await ImportJob.findOne({ tenantId, idempotencyKey: normalizedKey });
       if (repeated) {
-        if (repeated.fileName === safeFileName && repeated.branchId === branchId) {
+        if (repeated.fileName === safeFileName && repeated.branchId === branchId && repeated.previewFingerprint === previewFingerprint) {
           return repeated;
         }
         const conflictError = new Error('Idempotency key has already been used for a different import.');
@@ -724,11 +733,12 @@ export async function retryImportJob(jobId, uploadedBy, requestIdempotencyKey, t
     await fs.mkdir(config.importStorage, { recursive: true });
     await fs.writeFile(filePath, xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
 
+    const retryPreview = await previewImportFile({ filePath, tenantId: original.tenantId, branchId: original.branchId });
     const retry = await ImportJob.create({
       tenantId: original.tenantId,
       branchId: original.branchId,
       batchId: original.batchId,
-      previewFingerprint: original.previewFingerprint,
+      previewFingerprint: retryPreview.previewFingerprint,
       stockMode: original.stockMode || 'REPLACE',
       fileName: `${original.fileName} retry`,
       filePath,
@@ -844,4 +854,89 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     previewRows,
     stockMode: 'REPLACE'
   };
+}
+
+
+const comparable = value => value instanceof Date ? value.toISOString() : value == null ? null : value;
+const sameFields = (current, expected, fields) => fields.every(field => comparable(current?.[field]) === comparable(expected?.[field]));
+
+export async function rollbackImportBatch({ batchId, tenantId, branchId, actor }) {
+  if (!batchId || !tenantId || !branchId) {
+    const error = new Error('Batch, tenant and branch identity are required for rollback.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const batch = await ImportBatch.findOne({ batchId, tenantId, branchId });
+  if (!batch) return null;
+  if (batch.status === 'REVERTED') return batch;
+  if (!['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'].includes(batch.status)) {
+    const error = new Error('Only completed or interrupted batches can be rolled back.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const session = await mongoose.startSession();
+  if (!session || typeof session.withTransaction !== 'function') {
+    await session?.endSession?.();
+    const error = new Error('Safe rollback requires MongoDB replica-set transactions.');
+    error.statusCode = 503;
+    throw error;
+  }
+  try {
+    await session.withTransaction(async () => {
+      const snapshots = await ImportBatchSnapshot.find({ batchId, tenantId, branchId, revertedAt: null })
+        .sort({ entityType: 1, entityKey: 1 }).session(session).lean();
+      const inventorySnapshots = snapshots.filter(snapshot => snapshot.entityType === 'INVENTORY');
+      const productSnapshots = snapshots.filter(snapshot => snapshot.entityType === 'PRODUCT');
+
+      for (const snapshot of inventorySnapshots) {
+        const expected = snapshot.after;
+        const current = await Inventory.findOne({ _id: expected._id, tenantId, branchId }).session(session).lean();
+        const fields = ['tenantId', 'branchId', 'productId', 'sku', 'stockQuantity', 'reservedQuantity', 'price', 'batchNumber', 'expiryDate', 'warehouse'];
+        if (!current || !sameFields(current, expected, fields)) {
+          const error = new Error(`Inventory ${snapshot.entityKey} changed after import; rollback was stopped to protect live orders and reservations.`);
+          error.statusCode = 409;
+          throw error;
+        }
+        if (snapshot.created) {
+          const deleted = await Inventory.deleteOne({ _id: current._id, tenantId, branchId, stockQuantity: expected.stockQuantity, reservedQuantity: expected.reservedQuantity, price: expected.price }).session(session);
+          if (deleted.deletedCount !== 1) throw Object.assign(new Error(`Could not safely remove imported inventory ${snapshot.entityKey}.`), { statusCode: 409 });
+        } else {
+          await Inventory.replaceOne({ _id: current._id, tenantId, branchId }, snapshot.before, { session, runValidators: true });
+        }
+      }
+
+      for (const snapshot of productSnapshots) {
+        const expected = snapshot.after;
+        const current = await Product.findOne({ _id: expected._id, tenantId }).session(session).lean();
+        const fields = ['tenantId', 'sku', 'name', 'genericName', 'strength', 'form', 'manufacturer', 'category', 'description', 'imageUrl', 'baseCostPrice', 'marginTier', 'requiresPrescription', 'version', 'active'];
+        if (!current || !sameFields(current, expected, fields)) {
+          const error = new Error(`Product ${snapshot.entityKey} changed after import; rollback was stopped to avoid overwriting newer catalogue changes.`);
+          error.statusCode = 409;
+          throw error;
+        }
+        if (snapshot.created) {
+          const referenced = await Inventory.exists({ tenantId, productId: current._id }).session(session);
+          if (referenced) {
+            const error = new Error(`Product ${snapshot.entityKey} is now referenced by inventory outside this batch and cannot be removed safely.`);
+            error.statusCode = 409;
+            throw error;
+          }
+          await Product.deleteOne({ _id: current._id, tenantId, version: expected.version }).session(session);
+        } else {
+          await Product.replaceOne({ _id: current._id, tenantId }, snapshot.before, { session, runValidators: true });
+        }
+      }
+
+      await ImportBatchSnapshot.updateMany({ batchId, tenantId, branchId, revertedAt: null }, { $set: { revertedAt: new Date() } }, { session });
+      await ImportBatch.updateOne({ batchId, tenantId, branchId, status: { $in: ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'] } }, {
+        $set: { status: 'REVERTED', revertedAt: new Date(), revertedBy: actor || 'unknown', rollbackReason: 'Explicit batch rollback' }
+      }, { session });
+    });
+  } finally {
+    await session.endSession().catch(() => {});
+  }
+
+  await Audit.create({ tenantId, branchId, actor: actor || 'unknown', operation: 'import.batch.reverted', details: { batchId } }).catch(() => {});
+  return ImportBatch.findOne({ batchId, tenantId, branchId }).lean();
 }
