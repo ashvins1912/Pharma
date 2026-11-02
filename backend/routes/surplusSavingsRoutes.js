@@ -1,6 +1,6 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import { authenticateUser } from '../middleware/auth.js';
+import { authenticateUser, requirePermission } from '../middleware/auth.js';
 import Tenant from '../models/Tenant.js';
 import Medicine from '../models/Medicine.js';
 import SurplusSavingsCampaign from '../models/SurplusSavingsCampaign.js';
@@ -8,7 +8,7 @@ import SurplusSavingsRedemption from '../models/SurplusSavingsRedemption.js';
 import { getIsConnected } from '../config/db.js';
 
 const router = express.Router();
-const TENANT_ROLES = new Set(['TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'BRANCH_ADMIN']);
+const TENANT_ROLES = new Set(['TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF', 'BRANCH_ADMIN', 'PHARMACY']);
 const PLATFORM_ROLES = new Set(['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN']);
 const roleOf = req => String(req.user?.role || req.user?.app_metadata?.role || '').toUpperCase();
 const isPlatform = req => PLATFORM_ROLES.has(roleOf(req));
@@ -39,14 +39,17 @@ router.get('/', async (req, res) => {
             tenantId, status: 'ACTIVE', startsAt: { $lte: now }, endsAt: { $gt: now },
             $or: [{ usageLimit: null }, { $expr: { $lt: ['$usageCount', '$usageLimit'] } }]
         }).sort({ createdAt: -1 }).lean();
-        const ids = [...new Set(campaigns.flatMap(c => c.medicineIds.map(String)))];
+        const redeemedRows = campaigns.length ? await SurplusSavingsRedemption.find({ campaignId: { $in: campaigns.map(c => c._id) }, customerId: String(req.user.sub) }).select('campaignId').lean() : [];
+        const redeemedCampaignIds = new Set(redeemedRows.map(row => String(row.campaignId)));
+        const visibleCampaigns = campaigns.filter(campaign => !redeemedCampaignIds.has(String(campaign._id)));
+        const ids = [...new Set(visibleCampaigns.flatMap(c => c.medicineIds.map(String)))];
         if (!ids.length) return res.json({ success: true, tenantId, items: [] });
         const medicines = await Medicine.find({ _id: { $in: ids }, tenantId, isActive: { $ne: false } })
             .select('_id name brand price imageUrl description stockQuantity stock quantity requiresPrescription isPrescriptionRequired')
             .lean();
         const items = [];
         for (const medicine of medicines) {
-            const eligible = campaigns.filter(c => c.medicineIds.some(id => String(id) === String(medicine._id)))
+            const eligible = visibleCampaigns.filter(c => c.medicineIds.some(id => String(id) === String(medicine._id)))
                 .map(c => ({ campaign: c, discount: computeDiscount(medicine.price, c) }))
                 .filter(x => x.discount > 0)
                 .sort((a, b) => b.discount - a.discount);
@@ -73,7 +76,7 @@ router.get('/', async (req, res) => {
     }
 });
 
-router.get('/admin', requireCampaignAdmin, async (req, res) => {
+router.get('/admin', requireCampaignAdmin, requirePermission('promotions.read'), async (req, res) => {
     if (!getIsConnected()) return res.status(503).json({ message: 'Campaign management is temporarily unavailable.' });
     try {
         const tenantId = tenantOf(req);
@@ -85,7 +88,7 @@ router.get('/admin', requireCampaignAdmin, async (req, res) => {
     }
 });
 
-router.post('/admin', requireCampaignAdmin, async (req, res) => {
+router.post('/admin', requireCampaignAdmin, requirePermission('promotions.manage'), async (req, res) => {
     if (!getIsConnected()) return res.status(503).json({ message: 'Campaign management is temporarily unavailable.' });
     try {
         const tenantId = tenantOf(req);
@@ -130,7 +133,7 @@ router.post('/admin', requireCampaignAdmin, async (req, res) => {
     }
 });
 
-router.patch('/admin/:campaignId', requireCampaignAdmin, async (req, res) => {
+router.patch('/admin/:campaignId', requireCampaignAdmin, requirePermission('promotions.manage'), async (req, res) => {
     if (!getIsConnected() || !mongoose.isValidObjectId(req.params.campaignId)) return res.status(400).json({ message: 'Invalid campaign.' });
     try {
         const tenantId = tenantOf(req);
@@ -152,7 +155,7 @@ router.patch('/admin/:campaignId', requireCampaignAdmin, async (req, res) => {
     }
 });
 
-router.delete('/admin/:campaignId', requireCampaignAdmin, async (req, res) => {
+router.delete('/admin/:campaignId', requireCampaignAdmin, requirePermission('promotions.manage'), async (req, res) => {
     if (!getIsConnected() || !mongoose.isValidObjectId(req.params.campaignId)) return res.status(400).json({ message: 'Invalid campaign.' });
     try {
         const tenantId = tenantOf(req);
