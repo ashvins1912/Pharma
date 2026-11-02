@@ -87,8 +87,11 @@ export class DynamicOrderService {
         }
 
         const medicineIds = [...normalized.keys()];
-        const query = this.medicineModel.find({ _id: { $in: medicineIds }, isActive: { $ne: false } })
-            .select('name sku price baseCostPrice marginTier discountPercentage');
+        const query = this.medicineModel.find({
+            _id: { $in: medicineIds },
+            isActive: { $ne: false },
+            ...(tenantId ? { tenantId: String(tenantId) } : {})
+        }).select('name sku price baseCostPrice marginTier discountPercentage');
         if (session) query.session(session);
         const medicines = await query.lean().exec();
         if (medicines.length !== medicineIds.length) {
