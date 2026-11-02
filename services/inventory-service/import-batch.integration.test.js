@@ -119,7 +119,7 @@ test('controlled import preview, chunked batch ledger and rollback restore the e
 
     const completed = await waitForJob(job._id);
     const importFailures = await models.ImportFailure.find({ batchId: job.batchId, tenantId, branchId }).lean();
-    assert.equal(completed.status, 'COMPLETED', JSON.stringify(importFailures.map(row => ({ rowNumber: row.rowNumber, reason: row.reason, code: row.technicalCode }))));
+    assert.equal(completed.status, 'COMPLETED', JSON.stringify({ errorMessage: completed.errorMessage, failures: importFailures.map(row => ({ rowNumber: row.rowNumber, reason: row.reason, code: row.technicalCode })) }));
 
     const importedLots = await models.Inventory.find({ tenantId, branchId }).sort({ sku: 1, batchNumber: 1 }).lean();
     assert.equal(importedLots.length, 3);
