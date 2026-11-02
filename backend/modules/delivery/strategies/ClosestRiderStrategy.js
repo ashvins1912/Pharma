@@ -18,14 +18,15 @@ export class ClosestRiderStrategy extends IAssignmentStrategy {
         return 20; // Fallback runs after clubbing
     }
 
-    async execute({ order, riderRepository }) {
+    async execute({ order, riderRepository, options = {} }) {
         const orderCoords = [order.location.longitude, order.location.latitude];
 
         // Search for closest available rider
         const nearbyRiders = await riderRepository.findAvailableNearby(
             orderCoords,
             this.maxSearchRadiusMeters,
-            1 // Nearest candidate
+            1, // Nearest candidate
+            options.tenantId || order.tenantId
         );
 
         if (!nearbyRiders || nearbyRiders.length === 0) {
