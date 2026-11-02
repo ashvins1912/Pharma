@@ -2,7 +2,7 @@ import express from 'express';
 import { authenticateUser, requireAdmin, requireInventoryImportPermission } from './authenticateUser.js';
 import { config } from './config.js';
 import { proxyRequest } from './proxy.js';
-import { createServiceToken } from './serviceAuth.js';
+import { createBackendAuthToken, createServiceToken } from './serviceAuth.js';
 
 function hasScopePermission(user, scope) {
   const role = user?.app_metadata?.role || user?.role || 'customer';
@@ -34,8 +34,8 @@ function hasScopePermission(user, scope) {
     && permissionNames.some(name => name.startsWith(grant.slice(0, -1))));
 }
 
-function createServiceHandler({ audience, getScope, target, includeCustomerProfile = false }, gatewayConfig) {
-  return (req, res) => {
+function createServiceHandler({ audience, getScope, target, includeCustomerProfile = false, validateTenantBranch = false }, gatewayConfig) {
+  return async (req, res) => {
     if (!target) {
       return res.status(503).json({
         success: false,
@@ -50,6 +50,41 @@ function createServiceHandler({ audience, getScope, target, includeCustomerProfi
         error: { code: 'FORBIDDEN', message: `Permission required: ${scope}` },
         requestId: req.requestId
       });
+    }
+    if (validateTenantBranch) {
+      const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
+      const isPlatformUser = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+      const tenantId = String((isPlatformUser ? req.get('x-tenant-id') : req.user?.tenantId || req.user?.app_metadata?.tenantId) || '').trim();
+      const branchId = String((isPlatformUser ? req.get('x-branch-id') : req.user?.branchId || req.user?.app_metadata?.branchId) || '').trim();
+      if (!tenantId || !branchId) {
+        return res.status(403).json({ success: false, error: { code: 'TENANT_BRANCH_REQUIRED', message: 'Select a valid tenant and branch before using inventory imports.' }, requestId: req.requestId });
+      }
+      if (!gatewayConfig.backendApiUrl) {
+        return res.status(503).json({ success: false, error: { code: 'TENANT_REGISTRY_UNAVAILABLE', message: 'Tenant and branch registry is unavailable.' }, requestId: req.requestId });
+      }
+      try {
+        const assertion = createBackendAuthToken(gatewayConfig, 'tenant:branch:verify', {
+          userId: String(req.user?.sub || ''),
+          role,
+          tenantId,
+          branchId
+        });
+        const validation = await fetch(`${gatewayConfig.backendApiUrl}/internal/gateway/validate-tenant-branch`, {
+          method: 'POST',
+          headers: { 'x-gateway-authorization': `Bearer ${assertion}`, 'content-type': 'application/json' }
+        });
+        if (!validation.ok) {
+          const body = await validation.json().catch(() => ({}));
+          return res.status(validation.status).json({
+            success: false,
+            error: { code: validation.status === 404 ? 'TENANT_BRANCH_NOT_FOUND' : validation.status === 403 ? 'TENANT_BRANCH_FORBIDDEN' : 'TENANT_REGISTRY_UNAVAILABLE', message: body.message || 'Tenant and branch could not be verified.' },
+            requestId: req.requestId
+          });
+        }
+      } catch (error) {
+        console.error('Gateway tenant/branch validation failed:', { requestId: req.requestId, code: error.code || error.name });
+        return res.status(503).json({ success: false, error: { code: 'TENANT_REGISTRY_UNAVAILABLE', message: 'Tenant and branch could not be verified.' }, requestId: req.requestId });
+      }
     }
     let token;
     try {
@@ -112,7 +147,8 @@ export function createServiceRouters(gatewayConfig = config) {
   const inventory = scope => createServiceHandler({
     audience: gatewayConfig.inventoryJwtAudience,
     getScope: () => scope,
-    target: gatewayConfig.inventoryServiceUrl
+    target: gatewayConfig.inventoryServiceUrl,
+    validateTenantBranch: scope === 'inventory.import'
   }, gatewayConfig);
   inventoryRouter.post('/bulk/lookup', inventory('inventory.read'));
   inventoryRouter.post('/check-availability', inventory('inventory.read'));
