@@ -27,6 +27,8 @@ export function useOrderDashboard() {
                 ? dataPayload
                 : Array.isArray(dataPayload?.orders)
                 ? dataPayload.orders
+                : Array.isArray(dataPayload?.items)
+                ? dataPayload.items
                 : Array.isArray(dataPayload?.data)
                 ? dataPayload.data
                 : [];
