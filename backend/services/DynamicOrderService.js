@@ -131,7 +131,7 @@ export class DynamicOrderService {
                 medicineIds: { $in: medicineIds }
             }).lean();
             const redemptions = campaigns.length ? await SurplusSavingsRedemption.find({
-                campaignId: { $in: campaigns.map(campaign => campaign._id) }, customerId: String(customerId)
+                tenantId: String(tenantId), campaignId: { $in: campaigns.map(campaign => campaign._id) }, customerId: String(customerId)
             }).select('campaignId').lean() : [];
             const redeemed = new Set(redemptions.map(item => String(item.campaignId)));
             for (const item of pricedItems) {
