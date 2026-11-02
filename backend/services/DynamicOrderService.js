@@ -5,6 +5,7 @@ import ProfitMarginRewardEngine from '../strategies/ProfitMarginRewardEngine.js'
 import Tenant from '../models/Tenant.js';
 import SurplusSavingsCampaign from '../models/SurplusSavingsCampaign.js';
 import SurplusSavingsRedemption from '../models/SurplusSavingsRedemption.js';
+import { calculateSurplusUnitDiscount, roundCurrency } from './surplusSavingsPricing.js';
 
 export class DynamicOrderService {
     constructor({
@@ -136,15 +137,12 @@ export class DynamicOrderService {
                     && (campaign.usageLimit == null || Number(campaign.usageCount || 0) < Number(campaign.usageLimit))
                     && !redeemed.has(String(campaign._id))
                 ).map(campaign => {
-                    const raw = campaign.discountType === 'fixed'
-                        ? Number(campaign.discountValue)
-                        : item.currentPrice * Number(campaign.discountValue) / 100;
-                    const cap = campaign.maxDiscountAmount == null ? Number.POSITIVE_INFINITY : Number(campaign.maxDiscountAmount);
-                    return { campaign, discount: Math.min(item.currentPrice, raw, cap / item.quantity) };
+                    const discount = calculateSurplusUnitDiscount(item.currentPrice, campaign, 0, item.quantity);
+                    return { campaign, discount };
                 }).filter(candidate => candidate.discount > 0).sort((a, b) => b.discount - a.discount);
                 if (!candidates.length) continue;
                 const { campaign, discount } = candidates[0];
-                const applied = Math.round(discount * item.quantity * 100) / 100;
+                const applied = roundCurrency(discount * item.quantity);
                 item.currentPrice = Math.max(0, Math.round((item.currentPrice - discount) * 100) / 100);
                 item.isDiscounted = true;
                 surplusSavingsDiscount += applied;
