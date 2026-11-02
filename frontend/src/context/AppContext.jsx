@@ -41,13 +41,15 @@ export function AppProvider({ children }) {
   const previousCartTenantId = useRef(tenantId);
   useEffect(() => {
     const previousTenantId = previousCartTenantId.current;
-    if (previousTenantId && tenantId && String(previousTenantId) !== String(tenantId)) {
+    if (String(previousTenantId || '') !== String(tenantId || '') && cart.length > 0) {
+      // A cart is bound to exactly one pharmacy. Clear it on every tenant
+      // transition, including tenant -> no selection -> another tenant.
       setCart([]);
       setAppliedCoupon(null);
       setCouponCode('');
     }
     previousCartTenantId.current = tenantId;
-  }, [tenantId]);
+  }, [tenantId, cart.length]);
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponCode, setCouponCode] = useState('');
   const [couponError, setCouponError] = useState('');
@@ -255,11 +257,20 @@ export function AppProvider({ children }) {
 
   // Fetch medicines catalog with pagination
   const fetchMedicines = useCallback(async () => {
+    if (!tenantId) {
+      setMedicines([]);
+      setTotalMedicines(0);
+      setTotalPages(1);
+      setMedicinesError('Select a pharmacy to view its medicine catalogue.');
+      setLoadingMedicines(false);
+      return;
+    }
     try {
       setLoadingMedicines(true);
       const params = {
         page,
-        limit
+        limit,
+        tenantId: String(tenantId)
       };
       if (searchQuery) params.search = searchQuery;
       if (hideRx) params.hideRx = 'true';
@@ -300,7 +311,7 @@ export function AppProvider({ children }) {
     } finally {
       setLoadingMedicines(false);
     }
-  }, [searchQuery, hideRx, selectedCategory, sortOption, page, limit]);
+  }, [searchQuery, hideRx, selectedCategory, sortOption, page, limit, tenantId]);
 
   useEffect(() => {
     fetchMedicines();
@@ -811,7 +822,12 @@ export function AppProvider({ children }) {
       return;
     }
 
-    const existing = cart.find(item => item._id === med._id);
+    if (med.tenantId && tenantId && String(med.tenantId) !== String(tenantId)) {
+      addToast('This medicine belongs to a different pharmacy. Refresh the catalogue before adding it.', 'warning');
+      return;
+    }
+
+    const existing = cart.find(item => item._id === med._id && String(item._cartTenantId || item.tenantId || tenantId || '') === String(tenantId || ''));
     if (existing) {
       if (existing.quantity >= stock) {
         addToast(`Maximum available stock reached for ${med.name} (${stock} units).`, 'warning');
@@ -825,7 +841,7 @@ export function AppProvider({ children }) {
       return;
     }
 
-    setCart([...cart, { ...med, quantity: 1, stock }]);
+    setCart([...cart, { ...med, quantity: 1, stock, _cartTenantId: tenantId || med.tenantId || null }]);
     addToast(`Added ${med.name} to cart`, 'success');
   };
 
