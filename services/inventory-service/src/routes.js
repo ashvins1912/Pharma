@@ -30,6 +30,9 @@ const asyncHandler = handler => (req, res, next) => {
 const getInventoryScope = (req, fallback = {}) => req.service?.name === 'api-gateway'
   ? { tenantId: req.service.tenantId, branchId: req.service.branchId }
   : { tenantId: req.service?.tenantId || fallback.tenantId || null, branchId: req.service?.branchId || fallback.branchId || null };
+const requireImportsEnabled = (_req, res, next) => config.importsEnabled
+  ? next()
+  : res.status(503).json({ code: 'INVENTORY_IMPORTS_DISABLED', message: 'Inventory import writes are disabled. Use preview only until a controlled test environment is explicitly enabled.' });
 await fs.mkdir(config.importStorage, { recursive: true });
 const upload = multer({
   storage: multer.diskStorage({
@@ -145,10 +148,13 @@ router.post('/imports/preview', requireServiceScope('inventory.import'), upload.
   if (!/\.(xlsx|xls)$/i.test(req.file.originalname)) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(400).json({ message: 'Upload an .xlsx or .xls workbook.' }); }
   const { tenantId, branchId } = getInventoryScope(req);
   if (!tenantId || !branchId) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(403).json({ message: 'Verified tenant and branch selection is required.' }); }
-  try { return res.json(await previewImportFile({ filePath: req.file.path, tenantId, branchId })); }
+  try {
+    const preview = await previewImportFile({ filePath: req.file.path, tenantId, branchId });
+    return res.json({ ...preview, importsEnabled: config.importsEnabled });
+  }
   finally { await fs.rm(req.file.path, { force: true }).catch(() => {}); }
 }));
-router.post('/imports', requireServiceScope('inventory.import'), upload.single('excelFile'), asyncHandler(async (req, res) => {
+router.post('/imports', requireServiceScope('inventory.import'), requireImportsEnabled, upload.single('excelFile'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'An Excel workbook is required.' });
   if (!/\.(xlsx|xls)$/i.test(req.file.originalname)) {
     await fs.rm(req.file.path, { force: true }).catch(() => {});
@@ -277,7 +283,7 @@ router.post('/imports/batches/:batchId/rollback', requireServiceScope('inventory
   return res.json({ success: true, batchId: batch.batchId, status: batch.status, revertedAt: batch.revertedAt || null });
 }));
 
-router.post('/imports/:jobId/retry', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
+router.post('/imports/:jobId/retry', requireServiceScope('inventory.import'), requireImportsEnabled, asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
   const { tenantId, branchId } = getInventoryScope(req);
   if (!isPlatformUser && (!tenantId || !branchId)) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
