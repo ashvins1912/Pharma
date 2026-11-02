@@ -40,7 +40,12 @@ export function requireServiceScope(scope) {
       if (!allowedScopes || !allowedScopes.has(scope) || !grantedScopes.includes(scope)) {
         return res.status(403).json({ message: 'Service identity is not authorized for this operation.' });
       }
-      req.service = { name: caller, scopes: grantedScopes, userId: payload.userId, userRole: payload.userRole || 'customer', roles: payload.roles || [], tenantId: payload.tenantId || null, branchId: payload.branchId || null, isPlatformUser: payload.isPlatformUser === true };
+      const tenantId = typeof payload.tenantId === 'string' ? payload.tenantId.trim() : '';
+      const branchId = typeof payload.branchId === 'string' ? payload.branchId.trim() : '';
+      if (caller === 'api-gateway' && scope.startsWith('inventory.') && (!tenantId || !branchId)) {
+        return res.status(403).json({ message: 'Signed tenant and branch identity is required for inventory access.' });
+      }
+      req.service = { name: caller, scopes: grantedScopes, userId: payload.userId, userRole: payload.userRole || 'customer', roles: payload.roles || [], tenantId: tenantId || null, branchId: branchId || null, isPlatformUser: payload.isPlatformUser === true };
       return next();
     } catch {
       return res.status(401).json({ message: 'Service credential is invalid or expired.' });
