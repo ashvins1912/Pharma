@@ -2,6 +2,9 @@ import Medicine from '../models/Medicine.js';
 import Order from '../models/Order.js';
 import CustomerPointsLedger from '../models/CustomerPointsLedger.js';
 import ProfitMarginRewardEngine from '../strategies/ProfitMarginRewardEngine.js';
+import Tenant from '../models/Tenant.js';
+import SurplusSavingsCampaign from '../models/SurplusSavingsCampaign.js';
+import SurplusSavingsRedemption from '../models/SurplusSavingsRedemption.js';
 
 export class DynamicOrderService {
     constructor({
@@ -113,9 +116,50 @@ export class DynamicOrderService {
         });
 
         const subtotal = pricedItems.reduce((total, item) => total + item.currentPrice * item.quantity, 0);
-        const coupon = await this.couponValidator(couponCode || '', subtotal, { customerId, tenantId });
+        let surplusSavingsDiscount = 0;
+        const surplusSavings = [];
+        if (tenantId) {
+            const now = new Date();
+            const campaigns = await SurplusSavingsCampaign.find({
+                tenantId: String(tenantId), status: 'ACTIVE',
+                startsAt: { $lte: now }, endsAt: { $gt: now },
+                medicineIds: { $in: medicineIds }
+            }).lean();
+            const redemptions = campaigns.length ? await SurplusSavingsRedemption.find({
+                campaignId: { $in: campaigns.map(campaign => campaign._id) }, customerId: String(customerId)
+            }).select('campaignId').lean() : [];
+            const redeemed = new Set(redemptions.map(item => String(item.campaignId)));
+            for (const item of pricedItems) {
+                const candidates = campaigns.filter(campaign =>
+                    campaign.medicineIds.some(id => String(id) === String(item.medicineId))
+                    && subtotal >= Number(campaign.minOrderAmount || 0)
+                    && (campaign.usageLimit == null || Number(campaign.usageCount || 0) < Number(campaign.usageLimit))
+                    && !redeemed.has(String(campaign._id))
+                ).map(campaign => {
+                    const raw = campaign.discountType === 'fixed'
+                        ? Number(campaign.discountValue)
+                        : item.currentPrice * Number(campaign.discountValue) / 100;
+                    const cap = campaign.maxDiscountAmount == null ? Number.POSITIVE_INFINITY : Number(campaign.maxDiscountAmount);
+                    return { campaign, discount: Math.min(item.currentPrice, raw, cap / item.quantity) };
+                }).filter(candidate => candidate.discount > 0).sort((a, b) => b.discount - a.discount);
+                if (!candidates.length) continue;
+                const { campaign, discount } = candidates[0];
+                const applied = Math.round(discount * item.quantity * 100) / 100;
+                item.currentPrice = Math.max(0, Math.round((item.currentPrice - discount) * 100) / 100);
+                item.isDiscounted = true;
+                surplusSavingsDiscount += applied;
+                surplusSavings.push({ campaignId: String(campaign._id), name: campaign.name, medicineId: String(item.medicineId), discountAmount: applied });
+            }
+        }
+        const couponBaseTotal = Math.max(0, subtotal - surplusSavingsDiscount);
+        const coupon = await this.couponValidator(couponCode || '', couponBaseTotal, { customerId, tenantId });
         if (!coupon.valid) throw new Error(coupon.message || 'Coupon is invalid.');
-        const couponRate = Number(coupon.discountPercentage || 0) / 100;
+        if (surplusSavingsDiscount > 0 && coupon.code) {
+            const tenant = await Tenant.findById(tenantId).select('settings.allowOfferWithCoupon').lean();
+            if (tenant?.settings?.allowOfferWithCoupon !== true) throw new Error('This pharmacy does not allow surplus savings to be combined with coupons.');
+        }
+        const couponDiscount = Number(coupon.discountAmount ?? (couponBaseTotal * Number(coupon.discountPercentage || 0) / 100));
+        const couponRate = couponBaseTotal > 0 ? couponDiscount / couponBaseTotal : 0;
         const rewardItems = pricedItems.map(item => ({
             ...item,
             currentPrice: item.currentPrice * (1 - couponRate),
@@ -146,7 +190,9 @@ export class DynamicOrderService {
             netMarginPercentage: earning.netMarginPercentage,
             couponCode: coupon.code || couponCode || null,
             couponLabel: coupon.promotionLabel || null,
-            couponDiscount: subtotal - earning.totalRevenue,
+            couponDiscount,
+            surplusSavingsDiscount,
+            surplusSavings,
             redemptionEligible: redemption.eligible && availablePoints > 0,
             redemptionBlockedReason: redemption.eligible ? null : redemption.reason,
             requestedPoints,
