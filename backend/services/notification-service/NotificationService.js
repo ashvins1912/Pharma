@@ -51,8 +51,8 @@ export class NotificationService {
 
     getDeliveryEvents(tenantId = null, branchId = null) {
         return this.deliveryEvents.filter(e => {
-            if (tenantId && e.tenantId && e.tenantId !== tenantId) return false;
-            if (branchId && e.branchId && e.branchId !== branchId) return false;
+            if (e.tenantId && String(e.tenantId) !== String(tenantId || '')) return false;
+            if (e.branchId && String(e.branchId) !== String(branchId || '')) return false;
             return true;
         });
     }
@@ -63,10 +63,12 @@ export class NotificationService {
 
         for (const [clientId, client] of this.sseClients.entries()) {
             try {
-                if (!client.context.isSuperAdmin && client.context.tenantId && eventData.tenantId && client.context.tenantId !== eventData.tenantId) {
+                if (!client.context.isSuperAdmin && eventData.tenantId
+                    && String(client.context.tenantId || '') !== String(eventData.tenantId)) {
                     continue;
                 }
-                if (client.context.branchId && eventData.branchId && client.context.branchId !== eventData.branchId) {
+                if (!client.context.isSuperAdmin && eventData.branchId
+                    && String(client.context.branchId || '') !== String(eventData.branchId)) {
                     continue;
                 }
                 client.res.write(`data: ${JSON.stringify(eventData)}\n\n`);
