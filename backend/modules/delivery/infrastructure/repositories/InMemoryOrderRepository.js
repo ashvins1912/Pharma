@@ -83,7 +83,9 @@ export class InMemoryOrderRepository extends IOrderRepository {
         const raw = rawList.find(o => String(o._id || o.id) === String(id) && String(o.tenantId || '') === String(tenantId));
         if (!raw) return null;
 
-        Object.assign(raw, updateData);
+        const safeUpdates = { ...updateData };
+        delete safeUpdates.tenantId;
+        Object.assign(raw, safeUpdates);
         raw.updatedAt = new Date();
 
         if (updateData.rider) {
