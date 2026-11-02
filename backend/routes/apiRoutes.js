@@ -1,6 +1,7 @@
 import express from 'express';
 import authRoutes from './authRoutes.js';
 import couponRoutes from './couponRoutes.js';
+import surplusSavingsRoutes from './surplusSavingsRoutes.js';
 import medicineRequestRoutes from './medicineRequestRoutes.js';
 import medicineRoutes from './medicineRoutes.js';
 import orderRoutes from './orderRoutes.js';
@@ -37,6 +38,7 @@ router.use('/riders', riderProfileRoutes);
 router.use('/profile', profileRoutes);
 router.use('/user', legacyProfileRoutes);
 router.use('/coupons', couponRoutes);
+router.use('/surplus-savings', surplusSavingsRoutes);
 router.use('/admin/whatsapp', whatsappRoutes);
 router.use('/admin', adminRoutes);
 router.use('/admin/riders', riderRoutes);
