@@ -471,6 +471,8 @@ class VendorService {
         const city = (submission.address?.city || '').trim();
         const state = (submission.address?.state || '').trim();
         const pincode = (submission.address?.pincode || '').trim();
+        const latitude = Number(submission.location?.latitude);
+        const longitude = Number(submission.location?.longitude);
         const gstNumber = (submission.company?.gstNumber || submission.gstNumber || vendor.gstNumber || '').trim().toUpperCase();
         const drugLicenseNumber = (submission.company?.drugLicenseNumber || submission.drugLicenseNumber || vendor.drugLicenseNumber || '').trim().toUpperCase();
         if (!companyName) {
@@ -480,6 +482,8 @@ class VendorService {
         if (!city) validationDetails.push({ field: 'address.city', code: 'REQUIRED', message: 'City is required.' });
         if (!state) validationDetails.push({ field: 'address.state', code: 'REQUIRED', message: 'State is required.' });
         if (!/^\d{6}$/.test(pincode)) validationDetails.push({ field: 'address.pincode', code: 'INVALID_PINCODE', message: 'Enter a valid 6-digit pincode.' });
+        if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) validationDetails.push({ field: 'latitude', code: 'INVALID_LATITUDE', message: 'Capture or enter a valid pharmacy latitude.' });
+        if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) validationDetails.push({ field: 'longitude', code: 'INVALID_LONGITUDE', message: 'Capture or enter a valid pharmacy longitude.' });
         if (!drugLicenseNumber) validationDetails.push({ field: 'drugLicenseNumber', code: 'REQUIRED', message: 'Drug licence number is required for pharmacy onboarding.' });
 
         if (validationDetails.length > 0) {
@@ -595,6 +599,8 @@ class VendorService {
                         $set: {
                             tenantId,
                             userId,
+                            latitude,
+                            longitude,
                             status: 'ACTIVE',
                             onboardingStatus: 'COMPLETED',
                             onboardingCompletedAt: new Date(),
@@ -617,6 +623,8 @@ class VendorService {
                         $set: {
                             tenantId,
                             userId,
+                            latitude,
+                            longitude,
                             status: 'ACTIVE',
                             onboardingStatus: 'COMPLETED',
                             onboardingCompletedAt: new Date(),
@@ -651,6 +659,8 @@ class VendorService {
         // Update in-memory collections
         vendor.tenantId = tenantId;
         vendor.userId = userId;
+        vendor.latitude = latitude;
+        vendor.longitude = longitude;
         vendor.status = 'ACTIVE';
         vendor.onboardingStatus = 'COMPLETED';
         vendor.onboardingCompletedAt = new Date();
