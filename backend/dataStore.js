@@ -2102,6 +2102,7 @@ export const dataStore = {
         }
 
         if (getIsConnected()) {
+            if (tenantId) filter = { $and: [filter, { tenantId: String(tenantId) }] };
             const total = await Order.countDocuments(filter);
             const safePage = Math.min(page, Math.max(Math.ceil(total / limit), 1));
             const items = await Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip((safePage - 1) * limit).limit(limit).lean();
@@ -3058,10 +3059,6 @@ export const dataStore = {
         ].includes(role);
         const isPlatformStaff = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
         const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
-        const isPlatformStaff = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
-        const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
-        const isPlatformStaff = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
-        const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
 
         if (getIsConnected()) {
             const now = new Date();
@@ -3161,6 +3158,8 @@ export const dataStore = {
             'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
             'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF'
         ].includes(role);
+        const isPlatformStaff = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
 
         if (getIsConnected()) {
             const query = {};
@@ -3222,10 +3221,23 @@ export const dataStore = {
 
     async getMedicineRequestById(id, user = null) {
         let request = null;
+        const role = user?.app_metadata?.role || user?.role;
+        const isStaff = user && [
+            'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
+            'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST',
+            'PHARMACY_STAFF', 'ORDER_MANAGER'
+        ].includes(role);
+        const isPlatformStaff = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
+        const ownerScope = user && !isStaff ? { customerId: user.sub || user.id } : {};
+        const tenantScope = user && isStaff && !isPlatformStaff
+            ? (actorTenantId ? { tenantId: String(actorTenantId) } : { tenantId: '__NO_TENANT_ACCESS__' })
+            : {};
+        const idScope = mongoose.isValidObjectId(id)
+            ? { _id: new mongoose.Types.ObjectId(id) }
+            : { $or: [{ _id: id }, { requestNumber: id }] };
         if (getIsConnected()) {
-            request = mongoose.isValidObjectId(id)
-                ? await MedicineRequest.findById(id).lean()
-                : await MedicineRequest.findOne({ $or: [{ _id: id }, { requestNumber: id }] }).lean();
+            request = await MedicineRequest.findOne({ $and: [idScope, ownerScope, tenantScope] }).lean();
         } else {
             request = inMemoryMedicineRequests.find(r =>
                 String(r._id) === String(id) || r.requestNumber === id
@@ -3234,19 +3246,8 @@ export const dataStore = {
 
         if (!request) return null;
 
-        const role = user?.app_metadata?.role || user?.role;
-        const isStaff = user && [
-            'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
-            'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST',
-            'PHARMACY_STAFF', 'ORDER_MANAGER'
-        ].includes(role);
-
-        if (user && !isStaff && request.customerId !== (user.sub || user.id)) {
-            return null;
-        }
-        if (user && isStaff && !isPlatformStaff) {
-            if (!actorTenantId || String(request.tenantId || '') !== String(actorTenantId)) return null;
-        }
+        if (user && !isStaff && request.customerId !== (user.sub || user.id)) return null;
+        if (user && isStaff && !isPlatformStaff && (!actorTenantId || String(request.tenantId || '') !== String(actorTenantId))) return null;
 
         // Auto expire check
         if (request.status === 'PROPOSAL_SENT' && request.expiresAt && new Date() > new Date(request.expiresAt)) {
