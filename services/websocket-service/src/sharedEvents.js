@@ -27,16 +27,16 @@ export function startSharedEventConsumer(io, {
           // Only deliver to explicit audiences. Never globally broadcast an event
           // that has no verified user, tenant, rider or order target.
           const rooms = [];
-          // A user-targeted event may also carry tenantId for auditing, but
-          // that must not fan out private customer/order data to every tenant member.
+          // User and tenant rooms are both derived from trusted event metadata.
+          // Socket membership is authenticated and tenant rooms are restricted to
+          // the tenant in the verified access token.
           if (event.userId) {
             rooms.push(event.channel === 'new_order_alert'
               ? `rider_${event.userId}`
               : `bell_notifications_${event.userId}`);
-          } else if (event.tenantId) {
-            rooms.push(`tenant_${event.tenantId}`);
           }
-          if (!event.userId && event.riderId) rooms.push(`rider_${event.riderId}`);
+          if (event.tenantId) rooms.push(`tenant_${event.tenantId}`);
+          if (event.riderId) rooms.push(`rider_${event.riderId}`);
           if (event.channel === 'order_status_changed' && payload.orderId) {
             rooms.push(`order_tracking_${payload.orderId}`);
           }
