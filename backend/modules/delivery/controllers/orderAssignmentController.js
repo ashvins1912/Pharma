@@ -30,8 +30,8 @@ const validateAssignmentEligibility = async (req, res, orderId) => {
         return null;
     }
 
-    const role = req.user?.app_metadata?.role || req.user?.role || req.context?.role || 'customer';
-    const globalAdmin = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+    const role = String(req.user?.app_metadata?.role || req.user?.role || req.context?.role || 'customer').toUpperCase();
+    const globalAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
     const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId || null;
     const branchId = req.user?.branchId || req.user?.app_metadata?.branchId || req.context?.branchId || null;
     if (!globalAdmin && (!tenantId || !order.tenantId || String(order.tenantId) !== String(tenantId))) {
@@ -83,7 +83,7 @@ export const autoAssignOrder = async (req, res) => {
         const eligibleOrder = await validateAssignmentEligibility(req, res, orderId);
         if (!eligibleOrder) return;
 
-        const result = await deliveryContainer.assignmentEngine.assignOrder(orderId, req.body || {});
+        const result = await deliveryContainer.assignmentEngine.assignOrder(orderId, { ...(req.body || {}), tenantId: eligibleOrder.tenantId });
 
         // If assigned, trigger WhatsApp alert if rider info is available
         if (result.success && result.order?.rider) {
@@ -138,7 +138,7 @@ export const manualAssignOrder = async (req, res) => {
             return res.status(400).json({ message: 'riderId is required for manual assignment.' });
         }
 
-        const result = await deliveryContainer.manualAssignOrderUseCase.execute(orderId, riderId, notes);
+        const result = await deliveryContainer.manualAssignOrderUseCase.execute(orderId, riderId, notes, eligibleOrder.tenantId);
 
         if (result.order?.rider) {
             try {
