@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
+import { useTenant } from '../../context/TenantContext';
 import { SpatialGridIndex, SimpleBloomFilter } from '../../utils/spatialProbUtils';
 
 export default function AdminRouteOptimizer({ onRefresh }) {
   const { addToast } = useToast();
+  const { tenantId } = useTenant();
 
   const [riders, setRiders] = useState([]);
   const [selectedRiderId, setSelectedRiderId] = useState('');
@@ -18,7 +20,7 @@ export default function AdminRouteOptimizer({ onRefresh }) {
 
   useEffect(() => {
     let isCurrentRequest = true;
-    apiClient.get('/api/admin/riders', { params: { status: 'Available' } })
+    apiClient.get('/api/admin/riders', { params: { status: 'Available', tenantId } })
       .then(({ data }) => {
         if (isCurrentRequest) {
           const list = Array.isArray(data) ? data : (data?.riders || data?.data || []);
@@ -37,7 +39,7 @@ export default function AdminRouteOptimizer({ onRefresh }) {
     return () => {
       isCurrentRequest = false;
     };
-  }, []);
+  }, [tenantId]);
 
   const riderList = Array.isArray(riders) ? riders : [];
 
@@ -58,6 +60,7 @@ export default function AdminRouteOptimizer({ onRefresh }) {
     try {
       const res = await apiClient.post('/api/orders/admin/optimize-and-club-routes', {
         riderId: selectedRiderId,
+        tenantId,
         maxRadiusKm: Number(radiusKm) || 5,
         startLat: 12.9716, // Bengaluru Dispensary Coordinates
         startLng: 77.5946
@@ -79,7 +82,8 @@ export default function AdminRouteOptimizer({ onRefresh }) {
       const orderIds = routeResult.orders.map(o => o._id);
       const res = await apiClient.post('/api/orders/admin/dispatch-batch', {
         orderIds,
-        riderId: selectedRiderId
+        riderId: selectedRiderId,
+        tenantId
       });
       addToast(res.data.message || 'Batch dispatched successfully!', 'success');
       if (res.data.dispatchErrors?.length) {
