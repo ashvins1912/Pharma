@@ -20,9 +20,10 @@ const requireDatabase = (res) => {
 };
 
 const isStaff = (user) => [
-    'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
-    'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
-].includes(user?.app_metadata?.role || user?.role);
+    'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'PHARMACY',
+    'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF',
+    'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
+].includes(String(user?.app_metadata?.role || user?.role || '').toUpperCase());
 
 const requireCustomer = (req, res, next) => {
     const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
@@ -47,8 +48,8 @@ const authorizeRequestList = (req, res, next) => {
 };
 
 const getRequestActorTenantId = req => req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
-const isPlatformRequestAdmin = req => ['admin', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN']
-    .includes(req.user?.app_metadata?.role || req.user?.role);
+const isPlatformRequestAdmin = req => ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN']
+    .includes(String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase());
 
 const authorizeRequestDetails = async (req, res, next) => {
     if (req.params.fileId) return next(); // Attachment ownership is checked against file metadata in its handler.
