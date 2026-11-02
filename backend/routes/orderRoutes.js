@@ -926,11 +926,12 @@ router.post('/admin/:id/prescription/manual-approve', authenticateUser, isAdmin,
 
 router.put('/:id/dispatch', authenticateUser, isAdmin, async (req, res) => {
     try {
-        if (isTenantOrderStaff(req)) return res.status(403).json({
-            code: 'TENANT_RIDER_SCOPE_REQUIRED',
-            message: 'Tenant dispatch is disabled until riders are assigned to the same tenant.'
-        });
-        const riderInfo = await resolveDispatchRider(req.body.riderInfo?.riderId, req.params.id);
+        const targetOrder = await Order.findById(req.params.id).select('_id tenantId').lean();
+        if (!targetOrder) return res.status(404).json({ message: 'Order not found.' });
+        if (isTenantOrderStaff(req) && String(targetOrder.tenantId || '') !== String(getActorTenantId(req) || '')) {
+            return res.status(404).json({ message: 'Order not found.' });
+        }
+        const riderInfo = await resolveDispatchRider(req.body.riderInfo?.riderId, req.params.id, targetOrder.tenantId);
         const order = await dataStore.dispatchOrder(
             req.params.id,
             req.user.user_metadata?.name || req.user.email || 'Admin',
@@ -946,16 +947,16 @@ router.put('/:id/dispatch', authenticateUser, isAdmin, async (req, res) => {
 
 router.post('/admin/:id/auto-assign', authenticateUser, isAdmin, async (req, res) => {
     try {
-        if (isTenantOrderStaff(req)) return res.status(403).json({
-            code: 'TENANT_RIDER_SCOPE_REQUIRED',
-            message: 'Automatic assignment is unavailable until riders are tenant-scoped.'
-        });
         if (!getIsConnected()) {
             return res.status(503).json({ message: 'Auto-assignment requires an active MongoDB connection.' });
         }
         deliveryContainer.refreshDataLayer();
         const orderId = req.params.id;
-        const result = await deliveryContainer.assignmentEngine.assignOrder(orderId);
+        const targetOrder = await Order.findById(orderId).select('_id tenantId').lean();
+        if (!targetOrder || (isTenantOrderStaff(req) && String(targetOrder.tenantId || '') !== String(getActorTenantId(req) || ''))) {
+            return res.status(404).json({ message: 'Order not found.' });
+        }
+        const result = await deliveryContainer.assignmentEngine.assignOrder(orderId, { tenantId: targetOrder.tenantId });
         if (!result.success) {
             return res.status(404).json({
                 success: false,
@@ -1066,10 +1067,6 @@ router.post('/:id/cancel', authenticateUser, handleCustomerCancelOrder);
 router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => {
     try {
         const { orderId, newStatus, cashCollectionStatus } = req.body;
-        if (isTenantOrderStaff(req) && newStatus === 'Dispatched') return res.status(403).json({
-            code: 'TENANT_RIDER_SCOPE_REQUIRED',
-            message: 'Dispatch is unavailable until riders are tenant-scoped.'
-        });
         if (isTenantOrderStaff(req)) {
             const tenantId = getActorTenantId(req);
             if (!tenantId) return res.status(403).json({ message: 'An active tenant context is required.' });
@@ -1085,12 +1082,17 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
         if (!orderId || !newStatus) {
             return res.status(400).json({ message: "orderId and newStatus are required." });
         }
+        const targetOrder = await Order.findById(orderId).select('_id tenantId').lean();
+        if (!targetOrder || (isTenantOrderStaff(req) && String(targetOrder.tenantId || '') !== String(getActorTenantId(req) || ''))) {
+            return res.status(404).json({ message: 'Order not found.' });
+        }
         if (newStatus === 'Dispatched') {
             deliveryContainer.refreshDataLayer();
-            const currentOrder = await deliveryContainer.orderRepository.findById(orderId);
+            const currentOrder = await deliveryContainer.orderRepository.findById(orderId, targetOrder.tenantId);
             riderInfo = await resolveDispatchRider(
                 riderInfo?.riderId || currentOrder?.rider?.riderId,
-                orderId
+                orderId,
+                targetOrder.tenantId
             );
         }
 
@@ -1100,10 +1102,10 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
         let notificationEvent = newStatus === 'Ready to Dispatch' ? 'Ready to Dispatch' : null;
         let notificationMobile = updatedOrder.rider?.riderMobile;
 
-        if (newStatus === 'Approved' || (newStatus === 'Ready to Dispatch' && !isTenantOrderStaff(req))) {
+        if (newStatus === 'Approved' || newStatus === 'Ready to Dispatch') {
             try {
                 deliveryContainer.refreshDataLayer();
-                const assignResult = await deliveryContainer.assignmentEngine.assignOrder(orderId);
+                const assignResult = await deliveryContainer.assignmentEngine.assignOrder(orderId, { tenantId: targetOrder.tenantId });
                 if (assignResult.success && assignResult.order) {
                     updatedOrder = assignResult.order.toJSON
                         ? assignResult.order.toJSON()
@@ -1154,17 +1156,13 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
 // Smart Delivery Route Clubbing & Google Maps link generation (Requirements 11, 12, 13, 14)
 router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, async (req, res) => {
     try {
-        if (isTenantOrderStaff(req)) return res.status(403).json({
-            code: 'TENANT_RIDER_SCOPE_REQUIRED',
-            message: 'Route optimization is unavailable until riders are tenant-scoped.'
-        });
         if (!getIsConnected()) {
             return res.status(503).json({ message: 'Route planning requires an active MongoDB connection.' });
         }
         deliveryContainer.refreshDataLayer();
         const { riderId, maxRadiusKm, startLat, startLng } = req.body;
         if (!riderId) return res.status(400).json({ message: 'Select an onboarded rider before planning a route.' });
-        const rider = await deliveryContainer.riderRepository.findById(riderId);
+        const rider = await deliveryContainer.riderRepository.findById(riderId, req.user?.tenantId || req.user?.app_metadata?.tenantId || null);
         if (!rider || !rider.enabled) {
             return res.status(404).json({ message: 'The selected onboarded rider is unavailable.' });
         }
@@ -1176,7 +1174,8 @@ router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, async 
             rider.mobile,
             maxRadiusKm,
             Number(startLat) || 12.9716,
-            Number(startLng) || 77.5946
+            Number(startLng) || 77.5946,
+            req.user?.tenantId || req.user?.app_metadata?.tenantId || null
         );
 
         res.json({ ...result, riderId: rider.id });
@@ -1189,10 +1188,6 @@ router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, async 
 // Dispatch batch of clubbed orders to rider
 router.post('/admin/dispatch-batch', authenticateUser, isAdmin, async (req, res) => {
     try {
-        if (isTenantOrderStaff(req)) return res.status(403).json({
-            code: 'TENANT_RIDER_SCOPE_REQUIRED',
-            message: 'Batch dispatch is unavailable until riders are tenant-scoped.'
-        });
         if (!getIsConnected()) {
             return res.status(503).json({ message: 'Batch dispatch requires an active MongoDB connection.' });
         }
@@ -1201,7 +1196,13 @@ router.post('/admin/dispatch-batch', authenticateUser, isAdmin, async (req, res)
         if (!Array.isArray(orderIds) || orderIds.length === 0) {
             return res.status(400).json({ message: "No order IDs provided for dispatch." });
         }
-        const riderInfo = await resolveDispatchRider(riderId);
+        const targetOrders = await Order.find({ _id: { $in: orderIds } }).select('_id tenantId').lean();
+        if (targetOrders.length !== new Set(orderIds.map(String)).size) return res.status(404).json({ message: 'One or more orders were not found.' });
+        const targetTenantIds = [...new Set(targetOrders.map(order => String(order.tenantId || '')))];
+        if (targetTenantIds.length !== 1 || !targetTenantIds[0]) return res.status(400).json({ message: 'A dispatch batch must contain orders from exactly one pharmacy tenant.' });
+        const targetTenantId = targetTenantIds[0];
+        if (isTenantOrderStaff(req) && targetTenantId !== String(getActorTenantId(req) || '')) return res.status(404).json({ message: 'Orders not found.' });
+        const riderInfo = await resolveDispatchRider(riderId, null, targetTenantId);
 
         const actor = req.user.user_metadata?.name || req.user.email || 'Logistics Admin';
 
@@ -1236,10 +1237,6 @@ router.post('/admin/dispatch-batch', authenticateUser, isAdmin, async (req, res)
 router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res) => {
     try {
         const { orderId, step } = req.params;
-        if (isTenantOrderStaff(req) && step === 'dispatch') return res.status(403).json({
-            code: 'TENANT_RIDER_SCOPE_REQUIRED',
-            message: 'Dispatch is unavailable until riders are tenant-scoped.'
-        });
         const actor = req.user.user_metadata?.name || req.user.email || 'Pharmacist Admin';
         let targetStatus = 'Processing Order';
         if (step === 'ready') targetStatus = 'Ready to Dispatch';
@@ -1247,10 +1244,14 @@ router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res
         if (step === 'deliver') targetStatus = 'Delivered';
 
         let riderInfo = null;
+        const targetOrder = await Order.findById(orderId).select('_id tenantId').lean();
+        if (!targetOrder || (isTenantOrderStaff(req) && String(targetOrder.tenantId || '') !== String(getActorTenantId(req) || ''))) {
+            return res.status(404).json({ message: 'Order not found.' });
+        }
         if (targetStatus === 'Dispatched') {
             deliveryContainer.refreshDataLayer();
-            const currentOrder = await deliveryContainer.orderRepository.findById(orderId);
-            riderInfo = await resolveDispatchRider(currentOrder?.rider?.riderId, orderId);
+            const currentOrder = await deliveryContainer.orderRepository.findById(orderId, targetOrder.tenantId);
+            riderInfo = await resolveDispatchRider(currentOrder?.rider?.riderId, orderId, targetOrder.tenantId);
         }
         let order = await dataStore.transitionOrderStatus(orderId, targetStatus, actor, riderInfo);
         let assignmentMessage = '';
@@ -1258,7 +1259,7 @@ router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res
         if (step === 'ready' && !isTenantOrderStaff(req)) {
             try {
                 deliveryContainer.refreshDataLayer();
-                const result = await deliveryContainer.assignmentEngine.assignOrder(orderId);
+                const result = await deliveryContainer.assignmentEngine.assignOrder(orderId, { tenantId: targetOrder.tenantId });
                 if (result.success) {
                     order = result.order.toJSON ? result.order.toJSON() : result.order;
                     notificationEvent = 'Assigned';
