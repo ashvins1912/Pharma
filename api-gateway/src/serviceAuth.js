@@ -18,7 +18,7 @@ export function createServiceToken(
     userRole: role,
     roles: Array.isArray(user.roles) ? user.roles : [role],
     tenantId: (isPlatformUser && targetTenantId ? String(targetTenantId).trim() : user.tenantId || user.app_metadata?.tenantId || null),
-    branchId: (isPlatformUser && targetBranchId ? String(targetBranchId).trim() : user.branchId || user.app_metadata?.branchId || null),
+    branchId: (isPlatformUser && targetBranchId ? String(targetBranchId).trim() : user.branchId || user.app_metadata?.branchId || (targetBranchId ? String(targetBranchId).trim() : null)),
     isPlatformUser
   };
   if (includeCustomerProfile) {
