@@ -70,3 +70,14 @@ test('rider registration requires an explicit tenant', async () => {
         /authenticated tenant is required/
     );
 });
+
+import { isAssignedRiderForOrder, isRiderOwnedByOrderTenant } from '../backend/authorization/deliveryScope.js';
+
+test('delivery verification requires the assigned rider and the order tenant to match', () => {
+    const order = { tenantId: 'tenant-a', rider: { riderId: 'rider-a' } };
+    assert.equal(isRiderOwnedByOrderTenant({ id: 'rider-a', tenantId: 'tenant-a' }, order), true);
+    assert.equal(isAssignedRiderForOrder({ id: 'rider-a', tenantId: 'tenant-a' }, order), true);
+    assert.equal(isAssignedRiderForOrder({ id: 'rider-b', tenantId: 'tenant-a' }, order), false);
+    assert.equal(isAssignedRiderForOrder({ id: 'rider-a', tenantId: 'tenant-b' }, order), false);
+    assert.equal(isAssignedRiderForOrder({ id: 'rider-a' }, order), false);
+});
