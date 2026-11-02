@@ -35,6 +35,7 @@ export function AppProvider({ children }) {
   const [totalPages, setTotalPages] = useState(1);
   const [totalMedicines, setTotalMedicines] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
+  const catalogRequestSequence = useRef(0);
 
   // Cart & Checkout State
   const [cart, setCart] = useState([]);
@@ -257,6 +258,7 @@ export function AppProvider({ children }) {
 
   // Fetch medicines catalog with pagination
   const fetchMedicines = useCallback(async () => {
+    const requestSequence = ++catalogRequestSequence.current;
     if (!tenantId) {
       setMedicines([]);
       setTotalMedicines(0);
@@ -288,6 +290,8 @@ export function AppProvider({ children }) {
       // catalog route stays read-only; protected APIs still use apiClient.
       const catalogUrl = '/api/medicines';
       const res = await getCachedPublicCatalog(apiClient, catalogUrl, params);
+      // Ignore a slower response for a pharmacy that is no longer selected.
+      if (requestSequence !== catalogRequestSequence.current) return;
 
       if (res.data && res.data.medicines) {
         setMedicines(res.data.medicines || []);
@@ -303,13 +307,14 @@ export function AppProvider({ children }) {
         setIsSearching(Boolean(searchQuery));
       }
     } catch (err) {
+      if (requestSequence !== catalogRequestSequence.current) return;
       console.error("Failed to load catalog:", err);
       setMedicines([]);
       setTotalMedicines(0);
       setTotalPages(1);
       setMedicinesError(err.message || 'The medicine catalog is temporarily unavailable. Please try again.');
     } finally {
-      setLoadingMedicines(false);
+      if (requestSequence === catalogRequestSequence.current) setLoadingMedicines(false);
     }
   }, [searchQuery, hideRx, selectedCategory, sortOption, page, limit, tenantId]);
 
