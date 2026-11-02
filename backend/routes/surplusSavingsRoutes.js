@@ -40,7 +40,7 @@ router.get('/', async (req, res) => {
             status: 'ACTIVE', startsAt: { $lte: now }, endsAt: { $gt: now },
             $or: [{ usageLimit: null }, { $expr: { $lt: ['$usageCount', '$usageLimit'] } }]
         })).sort({ createdAt: -1 }).lean();
-        const redeemedRows = campaigns.length ? await SurplusSavingsRedemption.find({ campaignId: { $in: campaigns.map(c => c._id) }, customerId: String(req.user.sub) }).select('campaignId').lean() : [];
+        const redeemedRows = campaigns.length ? await SurplusSavingsRedemption.find({ tenantId, campaignId: { $in: campaigns.map(c => c._id) }, customerId: String(req.user.sub) }).select('campaignId').lean() : [];
         const redeemedCampaignIds = new Set(redeemedRows.map(row => String(row.campaignId)));
         const visibleCampaigns = campaigns.filter(campaign => !redeemedCampaignIds.has(String(campaign._id)));
         const ids = [...new Set(visibleCampaigns.flatMap(c => c.medicineIds.map(String)))];
