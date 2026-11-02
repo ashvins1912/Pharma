@@ -816,7 +816,7 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     valid.push({ ...item, value });
   }
   const skus = [...new Set(valid.map(item => item.value.sku))];
-  const inventory = skus.length ? await Inventory.find({ tenantId, branchId, sku: { $in: skus } }).select('sku batchNumber stockQuantity reservedQuantity').lean() : [];
+  const inventory = skus.length ? await Inventory.find({ tenantId, branchId, sku: { $in: skus } }).select('sku batchNumber stockQuantity reservedQuantity price updatedAt').lean() : [];
   const byBatch = new Map(inventory.map(item => [`${item.sku}::${item.batchNumber || ''}`, item]));
   const previewRows = valid.slice(0, 10).map(item => {
     const current = byBatch.get(`${item.value.sku}::${item.value.batchNumber || ''}`);
