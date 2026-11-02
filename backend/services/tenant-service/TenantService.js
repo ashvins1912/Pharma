@@ -422,7 +422,7 @@ export class TenantService {
     }
 
     async updateBranch(branchId, updates, actor = null) {
-        const branch = this.branches.get(branchId);
+        const branch = await this.getBranchById(branchId);
         if (!branch) throw new Error('Branch not found');
 
         const updated = {
