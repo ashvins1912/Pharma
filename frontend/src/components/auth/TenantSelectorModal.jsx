@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../api/apiClient';
 import { useTenant } from '../../context/TenantContext';
+import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -17,6 +19,8 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 
 export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId = '' }) {
   const { tenantId, setTenantId, setActiveTenant } = useTenant();
+  const { addresses, loadAddresses } = useApp();
+  const { isFullyAuthenticated } = useAuth();
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -26,14 +30,50 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
 
   useEffect(() => {
     if (!isOpen) return;
+    let cancelled = false;
+
     const load = async () => {
-      const fetchWithoutLocation = (message = '') => {
-        setUserLocation(null);
-        if (message) setError(message);
-        fetchNearbyTenants(null);
-      };
+      let savedAddresses = Array.isArray(addresses) ? addresses : [];
+      if (isFullyAuthenticated && savedAddresses.length === 0) {
+        try {
+          const loaded = await loadAddresses({ force: true });
+          if (Array.isArray(loaded)) savedAddresses = loaded;
+        } catch (loadError) {
+          console.warn('[PharmacyDiscovery] Could not load saved addresses:', loadError?.message || loadError);
+        }
+      }
+      if (cancelled) return;
+
+      const defaultAddress = savedAddresses.find(address => address.isDefault) || savedAddresses[0] || null;
+      if (defaultAddress) {
+        const lat = Number(defaultAddress.coordinates?.lat);
+        const lng = Number(defaultAddress.coordinates?.lng);
+        const hasCoordinates = defaultAddress.coordinates?.lat != null
+          && defaultAddress.coordinates?.lng != null
+          && Number.isFinite(lat) && lat >= -90 && lat <= 90
+          && Number.isFinite(lng) && lng >= -180 && lng <= 180;
+        // Older addresses were silently assigned Bengaluru's city-centre coordinates.
+        // Treat that legacy placeholder as address-only, not as the customer's pin.
+        const isLegacyPlaceholder = Math.abs(lat - 12.9716) < 0.00001 && Math.abs(lng - 77.5946) < 0.00001;
+        const addressContext = {
+          city: defaultAddress.city || '',
+          pincode: defaultAddress.pincode || defaultAddress.postalCode || ''
+        };
+        setSearchQuery('');
+        if (hasCoordinates && !isLegacyPlaceholder) {
+          setUserLocation({ lat, lng, source: 'saved-address', label: defaultAddress.label || 'Saved address' });
+          await fetchNearbyTenants({ lat, lng }, addressContext);
+        } else {
+          setUserLocation({ source: 'saved-address', label: defaultAddress.label || 'Saved address' });
+          await fetchNearbyTenants(null, addressContext);
+        }
+        return;
+      }
+
+      // Ask for browser location only when there is no saved delivery address.
       if (!navigator.geolocation) {
-        fetchWithoutLocation('Location is not supported. You can still search and select a pharmacy.');
+        await fetchNearbyTenants(null);
+        if (!cancelled) setError('Add a delivery address to see pharmacies near you. You can still browse all available pharmacies.');
         return;
       }
       try {
@@ -41,27 +81,20 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
           ? await navigator.permissions.query({ name: 'geolocation' })
           : null;
         if (permission?.state === 'denied') {
-          fetchWithoutLocation('Location access is blocked. Enable it in browser settings or select a pharmacy manually.');
-          return;
-        }
-        if (permission?.state === 'prompt'
-          && localStorage.getItem('pharma_location_prompted_v1') === 'true') {
-          fetchWithoutLocation('Location was already requested. Select a pharmacy manually or change browser location permissions.');
+          await fetchNearbyTenants(null);
+          if (!cancelled) setError('Location access is blocked. Add a saved address or search pharmacies manually.');
           return;
         }
         if (permission?.state === 'prompt') localStorage.setItem('pharma_location_prompted_v1', 'true');
-        getUserLocationAndFetchTenants();
       } catch {
-        if (localStorage.getItem('pharma_location_prompted_v1') === 'true') {
-          fetchWithoutLocation('Location was already requested. Select a pharmacy manually.');
-        } else {
-          localStorage.setItem('pharma_location_prompted_v1', 'true');
-          getUserLocationAndFetchTenants();
-        }
+        // Continue with the browser's normal one-time permission prompt.
       }
+      if (!cancelled) getUserLocationAndFetchTenants();
     };
+
     load();
-  }, [isOpen]);
+    return () => { cancelled = true; };
+  }, [isOpen, isFullyAuthenticated, addresses, loadAddresses]); 
 
   const getUserLocationAndFetchTenants = () => {
     setLoading(true);
@@ -91,10 +124,14 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
     }
   };
 
-  const fetchNearbyTenants = async (coords) => {
+  const fetchNearbyTenants = async (coords, addressContext = {}) => {
     try {
       const response = await apiClient.get('/api/tenants/nearby', {
-        params: coords ? { lat: coords.lat, lng: coords.lng } : {}
+        params: {
+          ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
+          ...(addressContext.city ? { city: addressContext.city } : {}),
+          ...(addressContext.pincode ? { pincode: addressContext.pincode } : {})
+        }
       });
       let list = response.data?.tenants || [];
 
@@ -117,6 +154,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
       }
 
       setTenants(list);
+      setError('');
       const preferred = preferredTenantId ? list.find(tenant => String(tenant._id) === String(preferredTenantId)) : null;
       if (preferred) {
         setTenantId(preferred._id);
@@ -153,7 +191,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
       >
         <div className="flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Geolocation Proximity Engine</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Nearby Pharmacy Finder</span>
             <h3 id="tenant-modal-title" className="text-xl font-black text-gray-900 dark:text-white mt-1">Select Active Pharmacy Dispensary</h3>
           </div>
           <button
@@ -165,7 +203,11 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
         </div>
 
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          Based on your current GPS coordinates, verified dispensary branches are sorted by proximity. Search or select one to view its product catalogue and order flow.
+          {userLocation?.source === 'saved-address'
+            ? `Showing pharmacies near your saved ${userLocation.label || 'delivery'} address. Your address is used automatically; GPS permission is not needed.`
+            : userLocation?.lat != null
+              ? 'Showing pharmacies closest to your current location.'
+              : 'Search available pharmacies or add a delivery address to find pharmacies near you.'}
         </p>
 
         {/* Search Bar */}
@@ -191,7 +233,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
         {loading ? (
           <div className="py-12 text-center">
             <div className="inline-block w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mb-3" />
-            <p className="text-xs text-gray-400">Scanning GPS and sorting nearby dispensary networks...</p>
+            <p className="text-xs text-gray-400">Finding active pharmacies near your saved address...</p>
           </div>
         ) : (
           <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
@@ -222,7 +264,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
                     </p>
                     <div className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
                       <span>📍</span>
-                      <span>{tenant.calculatedDistance == null ? 'Distance unavailable — enable location to sort nearby' : `Distance: ${tenant.calculatedDistance} km away`}</span>
+                      <span>{tenant.calculatedDistance == null ? (userLocation?.source === 'saved-address' ? 'Matches your saved address area' : 'Location distance unavailable') : `Distance: ${tenant.calculatedDistance} km away`}</span>
                     </div>
                   </div>
                   {isSelected && (
@@ -235,7 +277,9 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
             })}
             {filteredTenants.length === 0 && (
               <div className="py-8 text-center text-sm text-gray-400">
-                No dispensaries found matching "{searchQuery}".
+                {searchQuery.trim()
+                  ? `No pharmacies match "${searchQuery}". Try another shop name, area or PIN code.`
+                  : 'No active pharmacies were returned for this area. Clear the search or try another address.'}
               </div>
             )}
           </div>
