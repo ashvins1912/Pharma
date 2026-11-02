@@ -1845,6 +1845,7 @@ export const dataStore = {
             filter.createdAt = { $gte: start, $lt: end };
         }
         if (getIsConnected()) {
+            if (tenantId) filter = { $and: [filter, { tenantId: String(tenantId) }] };
             const total = await Order.countDocuments(filter);
             const safePage = Math.min(page, Math.max(Math.ceil(total / limit), 1));
             const items = await Order.find(filter)
@@ -1906,9 +1907,10 @@ export const dataStore = {
         };
     },
 
-    async getFulfillmentSnapshot(page = 1, limit = 10) {
+    async getFulfillmentSnapshot(page = 1, limit = 10, tenantId = null) {
         const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
         const pipelineFilter = {
+            ...(tenantId ? { tenantId: String(tenantId) } : {}),
             $or: [
                 { orderStatus: { $nin: ['Delivered', 'delivered'] } },
                 {
@@ -1917,15 +1919,16 @@ export const dataStore = {
                 }
             ]
         };
+        const tenantFilter = tenantId ? { tenantId: String(tenantId) } : {};
         const parsedLimit = Math.min(50, Math.max(1, Number(limit) || 10));
         const parsedPage = Math.max(1, Number(page) || 1);
         if (getIsConnected()) {
             const [activeTotal, total, deliveredCount, items, recentOrders] = await Promise.all([
                 Order.countDocuments(pipelineFilter),
-                Order.countDocuments({}),
-                Order.countDocuments({ orderStatus: 'Delivered' }),
+                Order.countDocuments(tenantFilter),
+                Order.countDocuments({ ...tenantFilter, orderStatus: 'Delivered' }),
                 Order.find(pipelineFilter).sort({ createdAt: -1, _id: -1 }).skip((parsedPage - 1) * parsedLimit).limit(parsedLimit).lean(),
-                Order.find().sort({ createdAt: -1, _id: -1 }).limit(6).lean()
+                Order.find(tenantFilter).sort({ createdAt: -1, _id: -1 }).limit(6).lean()
             ]);
             const totalPages = Math.ceil(activeTotal / parsedLimit) || 1;
             const currentPage = Math.min(parsedPage, totalPages);
@@ -1935,7 +1938,9 @@ export const dataStore = {
             };
         }
         const twoDaysAgoTime = Date.now() - 48 * 60 * 60 * 1000;
-        const allOrders = [...inMemoryOrders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const allOrders = [...inMemoryOrders]
+            .filter(order => !tenantId || String(order.tenantId) === String(tenantId))
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         const pipelineOrders = allOrders.filter(order => {
             const status = String(order.orderStatus || '').trim().toLowerCase();
             if (status !== 'delivered') return true;
@@ -1955,7 +1960,7 @@ export const dataStore = {
         };
     },
 
-    async searchOrders({ type, value, page = 1, limit = 5 }) {
+    async searchOrders({ type, value, page = 1, limit = 5, tenantId = null }) {
         let filter;
         if (type === 'orderId') {
             const term = String(value.raw || value.orderNumber || value.objectId || '').trim();
@@ -2001,6 +2006,7 @@ export const dataStore = {
         }
 
         const matches = inMemoryOrders.filter(order => {
+            if (tenantId && String(order.tenantId) !== String(tenantId)) return false;
             if (type === 'orderId') {
                 const term = String(value.raw || value.orderNumber || value.objectId || '').trim().toLowerCase();
                 const ordNum = String(order.orderNumber || '').toLowerCase();
