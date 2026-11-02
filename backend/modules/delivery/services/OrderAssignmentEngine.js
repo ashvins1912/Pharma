@@ -80,14 +80,20 @@ export class OrderAssignmentEngine {
         const existingRiderId = order.rider?.riderId || order.assignedRiderId;
         if (existingRiderId) {
             const existingRider = await this.riderRepository.findById(existingRiderId, options.tenantId || order.tenantId);
+            if (!existingRider) {
+                return {
+                    success: false,
+                    order,
+                    rider: null,
+                    strategyUsed: 'INVALID_TENANT_RIDER',
+                    reason: 'The assigned rider is not owned by the order pharmacy tenant.',
+                    auditTrail: []
+                };
+            }
             return {
                 success: true,
                 order,
-                rider: existingRider || {
-                    id: existingRiderId,
-                    name: order.rider?.riderName || 'Assigned Rider',
-                    mobile: order.rider?.riderMobile || ''
-                },
+                rider: existingRider,
                 strategyUsed: 'AlreadyAssigned',
                 reason: 'Order already has an assigned rider.',
                 auditTrail: []
@@ -200,7 +206,7 @@ export class OrderAssignmentEngine {
                 note: 'All automated assignment strategies exhausted. Awaiting dispatcher.',
                 attemptedAt: new Date()
             }
-        });
+        }, options.tenantId || order.tenantId);
 
         const failedLogEntry = {
             id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
