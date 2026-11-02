@@ -1184,6 +1184,7 @@ export const dataStore = {
     async reserveOrder(orderData, actor = 'Customer') {
         const selectedTenantId = String(orderData.tenantId || '').trim();
         if (!selectedTenantId) throw inventoryError('Select an active pharmacy before creating an order.', 400);
+        if (!orderData.userId) throw inventoryError('An authenticated customer is required to create an order.', 401);
         if (!orderData.deliveryAddress?.trim() || !hasValidCoordinates(orderData.coordinates)) {
             throw inventoryError('A delivery address with a confirmed map pin is required to place an order.');
         }
@@ -1223,6 +1224,8 @@ export const dataStore = {
             let createdOrder;
             try {
                 await session.withTransaction(async () => {
+                    const activeTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id settings.allowOfferWithCoupon settings.allowOfferWithRewards').session(session).lean();
+                    if (!activeTenant) throw inventoryError('The selected pharmacy is not active.', 404);
                     const medicineItems = [];
                     const itemSnapshots = [];
                     let totalAmount = 0;
@@ -1366,8 +1369,7 @@ export const dataStore = {
                     const coupon = await this.validateCoupon(orderData.couponCode || '', couponBaseTotal, { customerId: orderData.userId, tenantId: selectedTenantId });
                     if (!coupon.valid) throw inventoryError(coupon.message || 'Coupon is invalid.');
                     if (surplusDiscountApplied > 0 && coupon.code) {
-                        const tenantSettings = await Tenant.findById(selectedTenantId).select('settings.allowOfferWithCoupon').session(session).lean();
-                        if (tenantSettings?.settings?.allowOfferWithCoupon !== true) {
+                        if (activeTenant?.settings?.allowOfferWithCoupon !== true) {
                             throw inventoryError('This pharmacy does not allow surplus savings to be combined with coupons.', 409);
                         }
                     }
@@ -1387,6 +1389,9 @@ export const dataStore = {
                     let allowedPoints = 0;
                     let pointsDiscount = 0;
                     let redemptionWarning = null;
+                    if (surplusDiscountApplied > 0 && requestedPoints > 0 && activeTenant?.settings?.allowOfferWithRewards !== true) {
+                        throw inventoryError('This pharmacy does not allow Surplus Savings to be combined with reward points.', 409);
+                    }
                     if (requestedPoints > 0) {
                         const ledger = await CustomerPointsLedger.findOne({
                             customerId: orderData.userId,
