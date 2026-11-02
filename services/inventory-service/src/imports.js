@@ -623,6 +623,8 @@ export async function createImportJob({
         branchId,
         batchId,
         previewFingerprint,
+        previewInventorySnapshot: freshPreview.inventorySnapshot,
+        previewProductSnapshot: freshPreview.productSnapshot,
         stockMode,
         fileName: safeFileName,
         filePath: destination,
@@ -779,6 +781,8 @@ export async function retryImportJob(jobId, uploadedBy, requestIdempotencyKey, t
       branchId: original.branchId,
       batchId: original.batchId,
       previewFingerprint: retryPreview.previewFingerprint,
+      previewInventorySnapshot: retryPreview.inventorySnapshot,
+      previewProductSnapshot: retryPreview.productSnapshot,
       stockMode: original.stockMode || 'REPLACE',
       fileName: `${original.fileName} retry`,
       filePath,
@@ -857,6 +861,11 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
   }
   const skus = [...new Set(valid.map(item => item.value.sku))];
   const inventory = skus.length ? await Inventory.find({ tenantId, branchId, sku: { $in: skus } }).select('sku batchNumber stockQuantity reservedQuantity price updatedAt').lean() : [];
+  const products = skus.length ? await Product.find({ tenantId, sku: { $in: skus } }).select('sku version updatedAt').lean() : [];
+  const inventorySnapshot = inventory.map(item => ({ sku: item.sku, batchNumber: item.batchNumber || '', stockQuantity: item.stockQuantity, reservedQuantity: item.reservedQuantity, price: item.price, updatedAt: item.updatedAt || null }))
+    .sort((a, b) => JSON.stringify([a.sku, a.batchNumber]).localeCompare(JSON.stringify([b.sku, b.batchNumber])));
+  const productSnapshot = products.map(item => ({ sku: item.sku, version: item.version, updatedAt: item.updatedAt || null }))
+    .sort((a, b) => a.sku.localeCompare(b.sku));
   const byBatch = new Map(inventory.map(item => [JSON.stringify([item.sku, item.batchNumber || '']), item]));
   const previewRows = valid.slice(0, 10).map(item => {
     const current = byBatch.get(JSON.stringify([item.value.sku, item.value.batchNumber || '']));
@@ -881,11 +890,13 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
   const previewFingerprint = createHash('sha256').update(JSON.stringify({
     tenantId, branchId,
     rows: normalized.map(item => ({ rowNumber: item.rowNumber, parsed: item.parsed.error ? { error: item.parsed.error, field: item.parsed.field } : item.parsed.value })),
-    existingInventory: inventory.map(item => ({ sku: item.sku, batchNumber: item.batchNumber || '', stockQuantity: item.stockQuantity, reservedQuantity: item.reservedQuantity, updatedAt: item.updatedAt || null }))
-      .sort((a, b) => JSON.stringify([a.sku, a.batchNumber]).localeCompare(JSON.stringify([b.sku, b.batchNumber])))
+    existingInventory: inventorySnapshot,
+    existingProducts: productSnapshot
   })).digest('hex');
   return {
     previewFingerprint,
+    inventorySnapshot,
+    productSnapshot,
     tenantId,
     branchId,
     rowsDetected: rows.length,
