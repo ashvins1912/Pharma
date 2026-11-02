@@ -3129,8 +3129,12 @@ export const dataStore = {
                 || (customerId?.startsWith('demo-customer') && String(r.customerId)?.startsWith('demo-customer'))
                 || (user?.email && r.customerEmail === user.email)
             );
-        } else if (filter.customerId) {
-            list = list.filter(r => r.customerId === filter.customerId);
+        } else {
+            if (!isPlatformStaff) {
+                if (!actorTenantId) throw inventoryError('An active pharmacy tenant is required.', 403);
+                list = list.filter(r => String(r.tenantId || '') === String(actorTenantId));
+            }
+            if (filter.customerId) list = list.filter(r => r.customerId === filter.customerId);
         }
 
         if (filter.status && filter.status !== 'ALL') {
