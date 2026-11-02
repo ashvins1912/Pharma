@@ -4,12 +4,15 @@ import * as xlsx from 'xlsx';
 import {
     classifyImportError,
     normalizeImportRow,
-    buildFailureWorkbook
+    buildFailureWorkbook,
+    rollbackImportBatch
 } from '../services/inventory-service/src/imports.js';
 import {
     Product,
     Inventory,
     ImportJob,
+    ImportBatch,
+    ImportBatchSnapshot,
     ImportFailure
 } from '../services/inventory-service/src/models.js';
 
@@ -210,4 +213,20 @@ test('Bulk Import: rejects expired batches and keeps separate batches for the sa
     assert.notEqual(firstBatch.value.batchNumber, secondBatch.value.batchNumber);
     assert.equal(ImportJob.schema.path('stockMode').enumValues.includes('REPLACE'), true);
     assert.equal(ImportJob.schema.path('stockMode').enumValues.includes('ADD'), false);
+    assert.equal(ImportJob.schema.path('batchId').isRequired, true);
+    assert.equal(ImportJob.schema.path('previewFingerprint').isRequired, true);
+});
+
+
+test('Bulk Import: persistent batch ledger is tenant/branch scoped and supports reversible snapshots', () => {
+    const batchIndexes = ImportBatch.schema.indexes();
+    assert.equal(batchIndexes.some(([fields, options]) => fields.batchId === 1 && options?.unique === true), true);
+    assert.equal(batchIndexes.some(([fields]) => fields.tenantId === 1 && fields.branchId === 1), true);
+
+    const snapshotIndexes = ImportBatchSnapshot.schema.indexes();
+    assert.equal(snapshotIndexes.some(([fields, options]) =>
+        fields.tenantId === 1 && fields.branchId === 1 && fields.batchId === 1
+        && fields.entityType === 1 && fields.entityKey === 1 && options?.unique === true
+    ), true);
+    assert.equal(typeof rollbackImportBatch, 'function');
 });
