@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import * as xlsx from 'xlsx';
+import xlsx from 'xlsx';
 import mongoose from 'mongoose';
 import { config } from './config.js';
 import { Audit, ImportBatch, ImportBatchSnapshot, ImportFailure, ImportJob, Inventory, Product } from './models.js';
