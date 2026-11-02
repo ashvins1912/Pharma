@@ -5,6 +5,8 @@
  * - Closed for modification: Core evaluation loop and state persistence remain unchanged.
  * - Open for extension: New strategies are added via `registerStrategy()`.
  */
+import { isSameTenant } from '../../../authorization/tenantScope.js';
+
 export class OrderAssignmentEngine {
     /**
      * @param {object} dependencies
@@ -76,6 +78,11 @@ export class OrderAssignmentEngine {
         } else {
             order = orderOrId;
         }
+
+        if (!order?.tenantId || (options.tenantId && !isSameTenant(options.tenantId, order.tenantId))) {
+            throw new Error('Order tenant ownership is required and must match the assignment context.');
+        }
+        options = { ...options, tenantId: String(order.tenantId) };
 
         const existingRiderId = order.rider?.riderId || order.assignedRiderId;
         if (existingRiderId) {
