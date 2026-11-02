@@ -9,7 +9,7 @@ const surplusSavingsRedemptionSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 surplusSavingsRedemptionSchema.index(
-    { campaignId: 1, customerId: 1, orderId: 1 },
+    { campaignId: 1, customerId: 1 },
     { unique: true }
 );
 surplusSavingsRedemptionSchema.index({ tenantId: 1, campaignId: 1, customerId: 1 });
