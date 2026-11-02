@@ -81,6 +81,7 @@ export class MongooseRiderRepository extends IRiderRepository {
     async update(id, updateData, tenantId) {
         if (!tenantId) return null;
         const updates = { ...updateData, updatedAt: new Date() };
+        delete updates.tenantId;
         if (updates.currentLocation?.coordinates) {
             updates.currentLocation = {
                 type: 'Point',
