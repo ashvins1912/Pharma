@@ -158,6 +158,8 @@ router.get('/tenants/nearby', async (req, res) => {
         const hasLng = req.query.lng !== undefined;
         const userLat = hasLat ? Number(req.query.lat) : null;
         const userLng = hasLng ? Number(req.query.lng) : null;
+        const requestedCity = String(req.query.city || '').trim().toLowerCase();
+        const requestedPincode = String(req.query.pincode || '').replace(/\\D/g, '').slice(0, 10);
         if (hasLat !== hasLng || (hasLat && (!Number.isFinite(userLat) || userLat < -90 || userLat > 90
             || !Number.isFinite(userLng) || userLng < -180 || userLng > 180))) {
             return res.status(400).json({ message: 'Provide valid latitude and longitude coordinates.' });
@@ -185,7 +187,13 @@ router.get('/tenants/nearby', async (req, res) => {
                 && Number.isFinite(lng) && lng >= -180 && lng <= 180
                 && (vendor.latitude != null || vendor.longitude != null || vendor.geoLocation?.coordinates?.length === 2);
             const distance = userLat != null && hasCoordinates ? distanceKm(userLat, userLng, lat, lng) : null;
-            if (userLat != null && (!hasCoordinates || distance > 100)) return [];
+            const vendorPincode = String(vendor.address?.pincode || '').replace(/\\D/g, '');
+            const vendorCity = String(vendor.address?.city || '').trim().toLowerCase();
+            const locationMatch = requestedPincode && vendorPincode === requestedPincode
+                ? 'PINCODE'
+                : requestedCity && vendorCity === requestedCity
+                    ? 'CITY'
+                    : null;
             return [{
                 _id: tenant._id,
                 shopName: tenant.name || vendor.companyName,
@@ -197,10 +205,24 @@ router.get('/tenants/nearby', async (req, res) => {
                 },
                 geoLocation: hasCoordinates ? { type: 'Point', coordinates: [lng, lat] } : null,
                 shopPhotoUrl: vendor.shopPhotoUrl || null,
-                distanceKm: distance == null ? null : Number(distance.toFixed(1))
+                distanceKm: distance == null ? null : Number(distance.toFixed(1)),
+                locationMatch
             }];
         });
-        if (userLat != null) tenants.sort((a, b) => a.distanceKm - b.distanceKm);
+        // Keep pharmacies without GPS pins visible. Older vendor records may have
+        // a complete postal address but no coordinates yet.
+        if (userLat != null) {
+            tenants.sort((a, b) => {
+                const distanceA = a.distanceKm == null ? Number.POSITIVE_INFINITY : a.distanceKm;
+                const distanceB = b.distanceKm == null ? Number.POSITIVE_INFINITY : b.distanceKm;
+                return distanceA - distanceB;
+            });
+        } else if (requestedPincode || requestedCity) {
+            tenants.sort((a, b) => {
+                const score = item => item.locationMatch === 'PINCODE' ? 0 : item.locationMatch === 'CITY' ? 1 : 2;
+                return score(a) - score(b);
+            });
+        }
         return res.json({ status: 'success', tenants });
     } catch (err) {
         console.error('[TenantDiscovery] Nearby pharmacy lookup failed:', err);
