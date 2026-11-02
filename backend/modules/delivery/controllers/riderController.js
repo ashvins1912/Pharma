@@ -127,7 +127,7 @@ export const updateRiderLocation = async (req, res) => {
         if (lng === undefined || lat === undefined) {
             return res.status(400).json({ message: 'Both lng and lat coordinates are required.' });
         }
-        const updated = await deliveryContainer.updateRiderLocationUseCase.execute(req.params.riderId, lng, lat, req.user?.tenantId || req.user?.app_metadata?.tenantId);
+        const updated = await deliveryContainer.updateRiderLocationUseCase.execute(req.params.riderId, lng, lat, getRiderTenantId(req));
         res.json({
             message: 'Rider GPS coordinates updated.',
             rider: updated.toJSON()
