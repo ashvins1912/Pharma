@@ -127,6 +127,10 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
   const rollbackImport = async () => {
     if (!importJob?.batchId) return;
+    if (isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) {
+      addToast('Select the original tenant and branch before rolling back this batch.', 'warning');
+      return;
+    }
     if (!window.confirm(`Revert inventory changes from batch ${importJob.batchId}? This is allowed only if affected stock and catalogue records have not changed since import.`)) return;
     try {
       const response = await apiClient.post(`/api/v1/inventory/imports/batches/${importJob.batchId}/rollback`, {}, { headers: getImportScopeHeaders() });
@@ -144,7 +148,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     try {
       const response = await apiClient.get(
         `/api/v1/inventory/imports/${importJob.jobId}/failures/download`,
-        { responseType: 'blob' }
+        { responseType: 'blob', headers: getImportScopeHeaders() }
       );
       const url = URL.createObjectURL(response.data);
       const link = document.createElement('a');
@@ -169,7 +173,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
         {},
         {
           headers: {
-            'Idempotency-Key': retryKey
+            'Idempotency-Key': retryKey,
+            ...getImportScopeHeaders()
           }
         }
       );
