@@ -145,8 +145,12 @@ router.patch('/admin/:campaignId', requireCampaignAdmin, requirePermission('prom
         if (req.body.endsAt !== undefined) {
             const endsAt = new Date(req.body.endsAt);
             if (Number.isNaN(endsAt.getTime())) return res.status(400).json({ message: 'Invalid campaign end date.' });
+            const current = await SurplusSavingsCampaign.findOne({ _id: req.params.campaignId, tenantId }).select('startsAt').lean();
+            if (!current) return res.status(404).json({ message: 'Campaign not found in this pharmacy.' });
+            if (endsAt <= new Date(current.startsAt)) return res.status(400).json({ message: 'Campaign end must be later than its start.' });
             updates.endsAt = endsAt;
         }
+        if (updates.name !== undefined && !updates.name) return res.status(400).json({ message: 'Campaign name cannot be empty.' });
         const campaign = await SurplusSavingsCampaign.findOneAndUpdate({ _id: req.params.campaignId, tenantId }, { $set: updates }, { new: true, runValidators: true });
         if (!campaign) return res.status(404).json({ message: 'Campaign not found in this pharmacy.' });
         return res.json({ success: true, campaign });
