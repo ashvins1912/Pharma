@@ -4,6 +4,7 @@ import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
 import Order from '../models/Order.js';
+import Tenant from '../models/Tenant.js';
 import Rider from '../models/Rider.js';
 import { authenticateUser, isAdmin } from '../middleware/auth.js';
 import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
@@ -20,6 +21,39 @@ import { customerService } from '../services/customer-service/CustomerService.js
 import { domainEvents } from '../shared/events/DomainEvents.js';
 
 const router = express.Router();
+
+const TENANT_STAFF_ROLES = new Set([
+    'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF',
+    'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
+]);
+const getActorRole = req => String(req.user?.role || req.user?.app_metadata?.role || '').toUpperCase();
+const getActorTenantId = req => req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
+const isPlatformOrderAdmin = req => ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(getActorRole(req));
+const isTenantOrderStaff = req => TENANT_STAFF_ROLES.has(getActorRole(req));
+const canTenantAccessOrder = (req, order) => {
+    if (isPlatformOrderAdmin(req)) return true;
+    if (isTenantOrderStaff(req)) {
+        const tenantId = getActorTenantId(req);
+        return Boolean(tenantId && order?.tenantId && String(tenantId) === String(order.tenantId));
+    }
+    return String(order?.userId || order?.customerId || '') === String(req.user?.sub || '');
+};
+
+router.use('/:id', async (req, res, next) => {
+    if (!isTenantOrderStaff(req)) return next();
+    const reserved = new Set(['admin', 'mine', 'history', 'checkout', 'dynamic-restock', 'prescriptions', 'notifications', 'all']);
+    if (reserved.has(String(req.params.id || '').toLowerCase())) return next();
+    if (!getActorTenantId(req) || !mongoose.isValidObjectId(req.params.id)) {
+        return res.status(404).json({ message: 'Order not found.' });
+    }
+    try {
+        const order = await Order.findById(req.params.id).select('_id tenantId').lean();
+        if (!order || !canTenantAccessOrder(req, order)) return res.status(404).json({ message: 'Order not found.' });
+        return next();
+    } catch {
+        return res.status(503).json({ message: 'Tenant-scoped order authorization is temporarily unavailable.' });
+    }
+});
 const dynamicOrderService = new DynamicOrderService({
     couponValidator: (code, subtotal) => dataStore.validateCoupon(code, subtotal)
 });
@@ -227,9 +261,15 @@ router.get('/', authenticateUser, async (req, res) => {
         if (riderId && !mongoose.isValidObjectId(riderId)) {
             return res.status(400).json({ error: 'riderId must be a valid rider ID.' });
         }
-        const isAdminUser = req.user?.app_metadata?.role === 'admin';
+        const isAdminUser = isPlatformOrderAdmin(req);
+        const tenantStaff = isTenantOrderStaff(req);
         const query = {};
         if (status) query.status = status;
+        if (tenantStaff) {
+            const tenantId = getActorTenantId(req);
+            if (!tenantId) return res.status(403).json({ error: 'An active tenant context is required to view fulfillment orders.' });
+            query.tenantId = String(tenantId);
+        }
         if (isAdminUser) {
             if (customerId) query.customerId = customerId;
             if (riderId) query.riderId = riderId;
@@ -256,6 +296,17 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             addressId, deliveryAddress, coordinates, paymentMethod, prescriptionUrl, couponCode
         } = req.body;
         const pointsToRedeem = Number(req.body.pointsToRedeem || 0);
+        const selectedTenantId = String(req.body.tenantId || '').trim();
+        if (!selectedTenantId) {
+            return res.status(400).json({ code: 'PHARMACY_SELECTION_REQUIRED', message: 'Select a pharmacy before placing your order.' });
+        }
+        if (!getIsConnected()) {
+            return res.status(503).json({ message: 'Pharmacy verification is unavailable. No order was created.' });
+        }
+        const selectedTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!selectedTenant) {
+            return res.status(404).json({ code: 'PHARMACY_UNAVAILABLE', message: 'The selected pharmacy is no longer available. Please choose another pharmacy.' });
+        }
         const cartItems = parseCheckoutItems(req.body.items || req.body.cartItems);
         if (!Array.isArray(cartItems) || !cartItems.length) {
             return res.status(400).json({ message: 'Add at least one medicine to your order.' });
@@ -346,7 +397,7 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
 
         const order = await dataStore.reserveOrder({
             userId: req.user.sub,
-            tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null,
+            tenantId: selectedTenantId,
             branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
             addressId: addressSnapshot?._id || addressId || null,
             customerName,
@@ -590,6 +641,10 @@ router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
 
         let order = await dataStore.getOrderById(req.params.id);
         if (!order) return res.status(404).json({ message: 'Order not found.' });
+
+        if (!canTenantAccessOrder(req, order)) {
+            return res.status(404).json({ message: 'Order not found.' });
+        }
 
         if (reviewDecision === 'Approved' && order.prescriptionRequired) {
             if (!order.prescriptionId) {
@@ -1353,15 +1408,8 @@ router.get('/:id', authenticateUser, async (req, res) => {
         const order = await Order.findById(req.params.id).lean();
         if (!order) return res.status(404).json({ message: 'Order not found.' });
         const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
-        const staff = ['admin','SUPER_ADMIN','PLATFORM_SUPER_ADMIN','TENANT_OWNER','TENANT_ADMIN','PHARMACIST','PHARMACY_STAFF','ORDER_MANAGER'].includes(role);
-        if (!staff && String(order.userId || order.customerId) !== String(req.user.sub)) {
-            return res.status(403).json({ message: 'You are not authorized to track this order.' });
-        }
-        if (staff && role !== 'admin' && !['SUPER_ADMIN','PLATFORM_SUPER_ADMIN'].includes(role)) {
-            const tenantId = req.user.tenantId || req.user.app_metadata?.tenantId || null;
-            if (tenantId && order.tenantId && String(order.tenantId) !== String(tenantId)) {
-                return res.status(403).json({ message: 'This order belongs to another pharmacy tenant.' });
-            }
+        if (!canTenantAccessOrder(req, order)) {
+            return res.status(404).json({ message: 'Order not found.' });
         }
         return res.json({ success: true, order });
     } catch (error) {
