@@ -17,6 +17,7 @@ test('tenant order repository only lists, reads and updates orders in its tenant
     assert.equal((await repository.findAll({ tenantId: 'tenant-a' })).length, 1);
     assert.equal((await repository.findAll({ tenantId: 'tenant-a' }))[0].tenantId, 'tenant-a');
     assert.equal(await repository.findById('order-b', 'tenant-a'), null);
+    assert.equal(await repository.findById('order-a'), null);
     assert.equal((await repository.findById('order-b', 'tenant-b')).tenantId, 'tenant-b');
     assert.equal(await repository.update('order-b', { orderStatus: 'Dispatched' }, 'tenant-a'), null);
     assert.equal(orders[1].orderStatus, 'Ready to Dispatch');
