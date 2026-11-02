@@ -35,11 +35,11 @@ export function createServiceToken(
   });
 }
 
-export function createBackendAuthToken(gatewayConfig = config) {
+export function createBackendAuthToken(gatewayConfig = config, scope = 'identity:verify', claims = {}) {
   if (!gatewayConfig.gatewayAuthSecret || gatewayConfig.gatewayAuthSecret.length < 32) {
     throw new Error('GATEWAY_AUTH_SECRET is not configured.');
   }
-  return jwt.sign({ scope: 'identity:verify'   }, gatewayConfig.gatewayAuthSecret, {
+  return jwt.sign({ scope, ...claims }, gatewayConfig.gatewayAuthSecret, {
     algorithm: 'HS256',
     subject: 'api-gateway',
     issuer: gatewayConfig.serviceJwtIssuer,
