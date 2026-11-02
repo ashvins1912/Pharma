@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../../api/apiClient';
 import { useToast } from '../../../context/ToastContext';
+import { useTenant } from '../../../context/TenantContext';
 
 export default function RiderTerminal({ riderId, onClose }) {
   const { addToast } = useToast();
+  const { tenantId } = useTenant();
   const [rider, setRider] = useState(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('offline');
@@ -20,7 +22,7 @@ export default function RiderTerminal({ riderId, onClose }) {
   const fetchRiderData = async () => {
     try {
       setLoading(true);
-      const res = await apiClient.get('/api/admin/riders');
+      const res = await apiClient.get('/api/admin/riders', { params: { tenantId } });
       const ridersRaw = res.data?.riders || res.data?.items || res.data?.data || res.data || [];
       const ridersList = Array.isArray(ridersRaw) ? ridersRaw : [];
       const currentRider = riderId ? ridersList.find(r => String(r._id || r.id) === String(riderId)) : ridersList[0];
@@ -36,9 +38,9 @@ export default function RiderTerminal({ riderId, onClose }) {
       }
 
       // Fetch pending orders for delivery dispatch
-      const ordersRes = await apiClient.get('/api/admin/orders');
+      const ordersRes = await apiClient.get('/api/orders/admin/all', { params: { tenantId } });
       const ordersRaw = ordersRes.data?.orders || ordersRes.data?.items || ordersRes.data?.data || ordersRes.data || [];
-      const allOrders = Array.isArray(ordersRaw) ? ordersRaw : (ordersRaw?.orders || []);
+      const allOrders = Array.isArray(ordersRaw) ? ordersRaw : (ordersRaw?.items || ordersRaw?.orders || ordersRaw?.data || []);
       const pending = Array.isArray(allOrders) ? allOrders.filter(o => o.status === 'pending' || o.status === 'assigned') : [];
       setPendingOrders(pending);
       const activeDelivery = Array.isArray(allOrders) ? allOrders.find(order =>
@@ -68,7 +70,7 @@ export default function RiderTerminal({ riderId, onClose }) {
     fetchRiderData();
     const interval = setInterval(fetchRiderData, 10000);
     return () => clearInterval(interval);
-  }, [riderId, status]);
+  }, [riderId, status, tenantId]);
 
   // Handle geolocation tracking and 2dsphere GPS telemetry push
   useEffect(() => {
@@ -87,6 +89,7 @@ export default function RiderTerminal({ riderId, onClose }) {
         if (rider?._id) {
           try {
             await apiClient.patch(`/api/admin/riders/${rider._id}/location`, {
+              tenantId,
               lat: latitude,
               lng: longitude
             });
@@ -122,7 +125,7 @@ export default function RiderTerminal({ riderId, onClose }) {
       return;
     }
     try {
-      await apiClient.patch(`/api/admin/riders/${rider._id}/status`, { status: newStatus });
+      await apiClient.patch(`/api/admin/riders/${rider._id}/status`, { status: newStatus, tenantId });
       setStatus(newStatus);
       addToast(`Rider duty status updated to ${newStatus.toUpperCase()}`, 'success');
       fetchRiderData();
@@ -162,7 +165,8 @@ export default function RiderTerminal({ riderId, onClose }) {
     try {
       const response = await apiClient.post(`/api/orders/${activeOrder._id}/verify-delivery`, {
         otp: otpCode,
-        riderId: assignedRiderId
+        riderId: assignedRiderId,
+        tenantId
       });
       addToast(response.data?.message || 'Delivery verified and order completed.', 'success');
       setActiveOrder(null);
