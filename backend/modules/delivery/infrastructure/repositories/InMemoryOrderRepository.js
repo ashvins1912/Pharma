@@ -16,6 +16,8 @@ export class InMemoryOrderRepository extends IOrderRepository {
 
         return new Order({
             id,
+            tenantId: rawOrder.tenantId,
+            branchId: rawOrder.branchId || null,
             customerName: rawOrder.customerName || rawOrder.addressDetails?.fullName || 'Customer',
             customerMobile: rawOrder.customerMobile || rawOrder.addressDetails?.mobile || rawOrder.addressDetails?.phone || '',
             deliveryAddress: rawOrder.deliveryAddress || 'Central Dispensary Area',
@@ -47,7 +49,7 @@ export class InMemoryOrderRepository extends IOrderRepository {
         const rawList = typeof dataStore.getAllOrders === 'function'
             ? await dataStore.getAllOrders()
             : [];
-        const raw = rawList.find(o => String(o._id || o.id) === String(id));
+        const raw = rawList.find(o => String(o._id || o.id) === String(id) && String(o.tenantId || '') === String(tenantId));
         return this._toDomain(raw);
     }
 
@@ -55,7 +57,8 @@ export class InMemoryOrderRepository extends IOrderRepository {
         const rawList = typeof dataStore.getAllOrders === 'function'
             ? await dataStore.getAllOrders(filter.orderStatus)
             : [];
-        let orders = rawList.map(o => this._toDomain(o));
+        if (!filter.tenantId) return [];
+        let orders = rawList.filter(o => String(o.tenantId || '') === String(filter.tenantId)).map(o => this._toDomain(o));
 
         if (filter.assignmentType) {
             orders = orders.filter(o => o.assignmentType === filter.assignmentType);
@@ -66,12 +69,13 @@ export class InMemoryOrderRepository extends IOrderRepository {
         return orders;
     }
 
-    async update(id, updateData) {
+    async update(id, updateData, tenantId) {
+        if (!tenantId) return null;
         // Deep-merge into dataStore order
         const rawList = typeof dataStore.getAllOrders === 'function'
             ? await dataStore.getAllOrders()
             : [];
-        const raw = rawList.find(o => String(o._id || o.id) === String(id));
+        const raw = rawList.find(o => String(o._id || o.id) === String(id) && String(o.tenantId || '') === String(tenantId));
         if (!raw) return null;
 
         Object.assign(raw, updateData);
@@ -95,7 +99,7 @@ export class InMemoryOrderRepository extends IOrderRepository {
 
     async findActiveOrdersInProximity(coordinates, maxDistanceInMeters = 2000, statuses = ['Ready to Dispatch', 'Dispatched'], tenantId) {
         if (!tenantId) return [];
-        const allOrders = (await this.findAll()).filter(order => String(order.tenantId || '') === String(tenantId));
+        const allOrders = await this.findAll({ tenantId });
         const activeWithRiders = allOrders.filter(o => 
             statuses.includes(o.orderStatus) && Boolean(o.assignedRiderId)
         );
