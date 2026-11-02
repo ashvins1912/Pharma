@@ -45,7 +45,7 @@ router.get('/delivery-history', authenticateUser, (req, res) => {
     // Platform Super Admin may explicitly filter a branch; tenant-wide users see their tenant.
     const branchId = isSuper ? (req.query.branchId || null) : (req.context?.branchId || null);
 
-    const events = notificationService.getDeliveryEvents(tenantId, branchId);
+    const events = notificationService.getDeliveryEvents(tenantId, branchId, isSuper);
     res.json({ success: true, data: events });
 });
 
