@@ -57,6 +57,8 @@ function createServiceHandler({ audience, getScope, target, includeCustomerProfi
         audience,
         scope,
         user: req.user,
+        targetTenantId: req.get('x-tenant-id'),
+        targetBranchId: req.get('x-branch-id'),
         includeCustomerProfile
       }, gatewayConfig);
     } catch (error) {
@@ -127,6 +129,7 @@ export function createServiceRouters(gatewayConfig = config) {
   inventoryRouter.get('/imports/:jobId/failures/download', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.get('/imports/:jobId/failures', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.post('/imports/:jobId/retry', inventoryImportAuth, inventory('inventory.import'));
+  inventoryRouter.post('/imports/batches/:batchId/rollback', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.get('/imports/:jobId', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.get('/:productId', inventory('inventory.read'));
   inventoryRouter.all('*', (req, res) => res.status(404).json({
