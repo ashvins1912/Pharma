@@ -3062,9 +3062,13 @@ export const dataStore = {
 
         if (getIsConnected()) {
             const now = new Date();
-            // Auto expire past proposals
+            // Expiry maintenance is scoped to the caller's own customer/tenant
+            // records; only explicitly privileged platform staff run it globally.
+            const expiryScope = isStaff
+                ? (isPlatformStaff ? {} : (actorTenantId ? { tenantId: String(actorTenantId) } : { tenantId: '__NO_TENANT_ACCESS__' }))
+                : (user ? { customerId: user.sub || user.id } : { customerId: '__NO_CUSTOMER_ACCESS__' });
             await MedicineRequest.updateMany(
-                { status: 'PROPOSAL_SENT', expiresAt: { $lt: now } },
+                { ...expiryScope, status: 'PROPOSAL_SENT', expiresAt: { $lt: now } },
                 {
                     $set: { status: 'EXPIRED' },
                     $push: {
@@ -3160,7 +3164,7 @@ export const dataStore = {
         const role = user?.app_metadata?.role || user?.role;
         const isStaff = user && [
             'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
-            'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
+            'pharmacy', 'PHARMACY', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
         ].includes(role);
         const isPlatformStaff = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
         const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
