@@ -77,6 +77,7 @@ export class DynamicOrderService {
         if (typeof customerId !== 'string' || !customerId.trim()) {
             throw new TypeError('Authenticated customer ID is required.');
         }
+        if (!tenantId) throw new TypeError('Selected pharmacy tenant is required for checkout pricing.');
         if (!Array.isArray(cartItems) || cartItems.length === 0) {
             throw new TypeError('Basket must contain at least one item.');
         }
@@ -94,7 +95,7 @@ export class DynamicOrderService {
         const query = this.medicineModel.find({
             _id: { $in: medicineIds },
             isActive: { $ne: false },
-            ...(tenantId ? { tenantId: String(tenantId) } : {})
+            tenantId: String(tenantId)
         }).select('name sku price baseCostPrice marginTier discountPercentage');
         if (session) query.session(session);
         const medicines = await query.lean().exec();
@@ -119,6 +120,7 @@ export class DynamicOrderService {
         const subtotal = pricedItems.reduce((total, item) => total + item.currentPrice * item.quantity, 0);
         let surplusSavingsDiscount = 0;
         const surplusSavings = [];
+        const campaignUsage = new Map();
         if (tenantId) {
             const now = new Date();
             const campaigns = await SurplusSavingsCampaign.find({
@@ -137,7 +139,7 @@ export class DynamicOrderService {
                     && (campaign.usageLimit == null || Number(campaign.usageCount || 0) < Number(campaign.usageLimit))
                     && !redeemed.has(String(campaign._id))
                 ).map(campaign => {
-                    const discount = calculateSurplusUnitDiscount(item.currentPrice, campaign, 0, item.quantity);
+                    const discount = calculateSurplusUnitDiscount(item.currentPrice, campaign, campaignUsage.get(String(campaign._id)) || 0, item.quantity);
                     return { campaign, discount };
                 }).filter(candidate => candidate.discount > 0).sort((a, b) => b.discount - a.discount);
                 if (!candidates.length) continue;
@@ -146,15 +148,21 @@ export class DynamicOrderService {
                 item.currentPrice = Math.max(0, Math.round((item.currentPrice - discount) * 100) / 100);
                 item.isDiscounted = true;
                 surplusSavingsDiscount += applied;
+                campaignUsage.set(String(campaign._id), (campaignUsage.get(String(campaign._id)) || 0) + applied);
                 surplusSavings.push({ campaignId: String(campaign._id), name: campaign.name, medicineId: String(item.medicineId), discountAmount: applied });
             }
         }
         const couponBaseTotal = Math.max(0, subtotal - surplusSavingsDiscount);
         const coupon = await this.couponValidator(couponCode || '', couponBaseTotal, { customerId, tenantId });
         if (!coupon.valid) throw new Error(coupon.message || 'Coupon is invalid.');
-        if (surplusSavingsDiscount > 0 && coupon.code) {
-            const tenant = await Tenant.findById(tenantId).select('settings.allowOfferWithCoupon').lean();
-            if (tenant?.settings?.allowOfferWithCoupon !== true) throw new Error('This pharmacy does not allow surplus savings to be combined with coupons.');
+        const tenantSettings = surplusSavingsDiscount > 0 && (coupon.code || Number(requestedPoints) > 0)
+            ? await Tenant.findById(tenantId).select('settings.allowOfferWithCoupon settings.allowOfferWithRewards').lean()
+            : null;
+        if (surplusSavingsDiscount > 0 && coupon.code && tenantSettings?.settings?.allowOfferWithCoupon !== true) {
+            throw new Error('This pharmacy does not allow surplus savings to be combined with coupons.');
+        }
+        if (surplusSavingsDiscount > 0 && Number(requestedPoints) > 0 && tenantSettings?.settings?.allowOfferWithRewards !== true) {
+            throw new Error('This pharmacy does not allow Surplus Savings to be combined with reward points.');
         }
         const couponDiscount = Number(coupon.discountAmount ?? (couponBaseTotal * Number(coupon.discountPercentage || 0) / 100));
         const couponRate = couponBaseTotal > 0 ? couponDiscount / couponBaseTotal : 0;
