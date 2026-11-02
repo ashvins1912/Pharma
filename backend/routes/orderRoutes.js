@@ -1376,6 +1376,31 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
             const orders = await Order.find(filter).sort({ createdAt: -1, _id: -1 }).lean();
             return res.json(orders);
         }
+        if (isPlatformOrderAdmin(req) && req.query.tenantId) {
+            const tenantId = String(req.query.tenantId);
+            const selectedTenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
+            if (!selectedTenant) return res.status(404).json({ message: 'Active pharmacy tenant not found.' });
+            const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+            const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
+            if (req.query.fulfillmentSnapshot === 'true') {
+                return res.json(await dataStore.getFulfillmentSnapshot(page, limit, tenantId));
+            }
+            if (req.query.search !== undefined) {
+                const { type, value } = classifyOrderSearch(req.query.search);
+                const result = await dataStore.searchOrders({ type, value, page, limit, tenantId });
+                return res.json({ ...paginationResult(result.items, result.total, result.page || 1, limit), searchType: type });
+            }
+            const filter = { tenantId };
+            if (req.query.status) filter.$or = [
+                { orderStatus: req.query.status },
+                { status: String(req.query.status).toLowerCase() }
+            ];
+            const [items, total] = await Promise.all([
+                Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+                Order.countDocuments(filter)
+            ]);
+            return res.json(paginationResult(items, total, page, limit));
+        }
         if (req.query.search !== undefined) {
             const { type, value } = classifyOrderSearch(req.query.search);
             const parsedPage = Number.parseInt(req.query.page, 10);
