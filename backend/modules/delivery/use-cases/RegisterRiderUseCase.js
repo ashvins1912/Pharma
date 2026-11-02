@@ -32,7 +32,8 @@ export class RegisterRiderUseCase {
      * @returns {Promise<Rider>}
      */
     async execute(command) {
-        const { name, mobile, vehicleType = 'Bike', coordinates, file } = command;
+        const { name, mobile, vehicleType = 'Bike', coordinates, file, tenantId, branchId = null } = command;
+        if (!tenantId) throw new Error('An authenticated tenant is required to onboard a rider.');
 
         if (!name?.trim()) {
             throw new Error('Rider full name is required.');
@@ -42,7 +43,7 @@ export class RegisterRiderUseCase {
         }
 
         // Reuse a disabled rider record so a returning rider keeps their history.
-        const existingRider = await this.riderRepository.findByMobile(mobile);
+        const existingRider = await this.riderRepository.findByMobile(mobile, tenantId);
         if (existingRider?.enabled) {
             throw new Error(`A rider with mobile number ${mobile} is already registered.`);
         }
@@ -74,7 +75,10 @@ export class RegisterRiderUseCase {
         }
 
         if (existingRider) {
+            if (existingRider.tenantId !== String(tenantId)) throw new Error('Rider belongs to another pharmacy tenant.');
             return this.riderRepository.update(existingRider.id, {
+                tenantId: String(tenantId),
+                branchId,
                 name: name.trim(),
                 mobile: mobile.trim(),
                 photoUrl,
@@ -87,11 +91,13 @@ export class RegisterRiderUseCase {
                 disabledAction: null,
                 disabledReason: null,
                 disabledAt: null
-            });
+            }, tenantId);
         }
 
         // Create domain entity
         const rider = new Rider({
+            tenantId,
+            branchId,
             name,
             mobile,
             photoUrl,
