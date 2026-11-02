@@ -198,7 +198,6 @@ router.post('/', authenticateUser, async (req, res) => {
             const medicine = medicineById.get(medicineId);
             return { ...item, medicineId, productId: medicineId, name: medicine.name, price: Number(medicine.price), unitPrice: Number(medicine.price), sku: medicine.sku || item.sku || '' };
         });
-        const amount = scopedItems.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
         let deliveryAddress = typeof req.body.deliveryAddress === 'string' ? req.body.deliveryAddress.trim() : '';
         let coordinates = req.body.coordinates;
         let addressSnapshot = null;
