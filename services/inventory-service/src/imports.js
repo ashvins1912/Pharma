@@ -469,7 +469,7 @@ async function processJob(job) {
     branchId: job.branchId,
     actor: job.uploadedBy,
     operation: 'import.completed',
-    details: { jobId: String(job._id), totalRecords: rows.length, failedRecords }
+    details: { jobId: String(job._id), batchId: job.batchId, totalRecords: rows.length, failedRecords }
   }).catch(() => {});
 }
 
