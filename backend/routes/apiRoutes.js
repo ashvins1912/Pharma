@@ -12,6 +12,9 @@ import testRoutes from './testRoutes.js';
 import whatsappRoutes from './whatsappRoutes.js';
 import versionedOrderRoutes from './versionedOrderRoutes.js';
 import adminRoutes from './adminRoutes.js';
+import { authenticateUser } from '../middleware/auth.js';
+import TenantMembership from '../models/TenantMembership.js';
+import UserProfile from '../models/UserProfile.js';
 import riderRoutes from '../modules/delivery/routes/riderRoutes.js';
 import assignmentRoutes from '../modules/delivery/routes/assignmentRoutes.js';
 import { GoogleGenAI } from '@google/genai';
@@ -47,27 +50,81 @@ router.use('/proposals', proposalRoutes);
 router.use('/v1/orders', versionedOrderRoutes);
 router.use('/test', testRoutes);
 
-router.get('/vendor/profile', async (req, res) => {
+router.get('/vendor/profile', authenticateUser, async (req, res) => {
     try {
-        const tenantId = req.headers['x-tenant-id'] || '65a1234567890abcdef12345';
-        res.json({
+        const role = String(req.user?.role || req.user?.app_metadata?.role || '').toUpperCase();
+        const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const tenantId = String(
+            (isPlatformAdmin ? req.query.tenantId : null)
+            || req.user?.tenantId
+            || req.user?.app_metadata?.tenantId
+            || ''
+        ).trim();
+        if (!tenantId) return res.status(403).json({ message: 'An active tenant context is required.' });
+        if (!isPlatformAdmin) {
+            const membership = await TenantMembership.findOne({
+                userId: req.user.sub, tenantId, status: 'ACTIVE'
+            }).select('_id').lean();
+            if (!membership) return res.status(403).json({ message: 'Active membership is required for this pharmacy.' });
+        }
+        const [tenant, vendor, memberships] = await Promise.all([
+            Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).lean(),
+            Vendor.findOne({ tenantId, status: 'ACTIVE' }).lean(),
+            TenantMembership.find({ tenantId, status: 'ACTIVE' }).select('userId role branchId').lean()
+        ]);
+        if (!tenant || !vendor) return res.status(404).json({ message: 'Pharmacy profile was not found.' });
+        const userIds = [...new Set(memberships.map(item => String(item.userId)))];
+        const profiles = userIds.length ? await UserProfile.find({
+            $or: [
+                { supabase_user_id: { $in: userIds } },
+                { supabaseId: { $in: userIds } },
+                { userId: { $in: userIds } }
+            ]
+        }).select('supabase_user_id supabaseId userId name email').lean() : [];
+        const profileById = new Map();
+        for (const profile of profiles) {
+            for (const id of [profile.supabase_user_id, profile.supabaseId, profile.userId].filter(Boolean)) {
+                profileById.set(String(id), profile);
+            }
+        }
+        const personnel = memberships.map(member => {
+            const profile = profileById.get(String(member.userId)) || {};
+            return {
+                _id: String(member.userId),
+                name: profile.name || 'Pharmacy Staff',
+                email: profile.email || '',
+                role: member.role,
+                branchId: member.branchId || null
+            };
+        });
+        const hasCoordinates = Number.isFinite(Number(vendor.latitude)) && Number.isFinite(Number(vendor.longitude));
+        return res.json({
             status: 'success',
             tenant: {
-                _id: tenantId,
-                shopName: 'City Health Pharmacy & Wellness',
-                address: { street: '123 Main Street', city: 'San Francisco', state: 'CA', zipCode: '94105' },
-                geoLocation: { type: 'Point', coordinates: [-122.4194, 37.7749] },
-                shopPhotoUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80',
-                ownerDetails: { name: 'Ashvin Singh', email: 'ashvinsingh25@gmail.com', phone: '+19876543210' }
+                _id: tenant._id,
+                shopName: tenant.name || vendor.companyName,
+                address: {
+                    street: vendor.address?.street || '',
+                    city: vendor.address?.city || '',
+                    state: vendor.address?.state || '',
+                    zipCode: vendor.address?.pincode || ''
+                },
+                geoLocation: hasCoordinates ? {
+                    type: 'Point',
+                    coordinates: [Number(vendor.longitude), Number(vendor.latitude)]
+                } : null,
+                shopPhotoUrl: vendor.shopPhotoUrl || null,
+                ownerDetails: {
+                    name: vendor.name || '',
+                    email: vendor.email || '',
+                    phone: vendor.mobile || ''
+                }
             },
-            personnel: [
-                { _id: 'user-1', name: 'Ashvin Singh', email: 'ashvinsingh25@gmail.com', role: 'OWNER' },
-                { _id: 'user-2', name: 'Jane Doe', email: 'jane.admin@pharmacy.com', role: 'TENANT_ADMIN' },
-                { _id: 'user-3', name: 'Bob Smith', email: 'bob.manager@pharmacy.com', role: 'MANAGER' }
-            ]
+            personnel
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('[TenantProfile] Scoped vendor profile lookup failed:', err);
+        res.status(503).json({ message: 'Pharmacy profile is temporarily unavailable.' });
     }
 });
 
