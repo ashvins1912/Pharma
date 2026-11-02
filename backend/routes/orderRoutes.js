@@ -101,7 +101,7 @@ router.use('/admin/:id', (req, res, next) => {
     return tenantOrderIdGuard(req, res, next);
 });
 const dynamicOrderService = new DynamicOrderService({
-    couponValidator: (code, subtotal) => dataStore.validateCoupon(code, subtotal)
+    couponValidator: (code, subtotal, context) => dataStore.validateCoupon(code, subtotal, context)
 });
 const getErrorStatus = (error) => {
     if (error.statusCode) return error.statusCode;
