@@ -714,7 +714,7 @@ router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
         if (reviewDecision === 'Approved') {
             try {
                 deliveryContainer.refreshDataLayer();
-                const result = await deliveryContainer.assignmentEngine.assignOrder(String(order._id));
+                const result = await deliveryContainer.assignmentEngine.assignOrder(String(order._id), { tenantId: order.tenantId });
                 if (result.success) {
                     order = result.order.toJSON ? result.order.toJSON() : result.order;
                     assignmentMessage = ` Rider ${result.rider.name} was assigned automatically.`;
