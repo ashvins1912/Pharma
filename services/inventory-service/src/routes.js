@@ -11,7 +11,8 @@ import {
   createImportJob,
   getImportFailures,
   retryImportJob,
-  previewImportFile
+  previewImportFile,
+  rollbackImportBatch
 } from './imports.js';
 import {
   adjustInventory,
@@ -161,6 +162,13 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
   if (!tenantId || !branchId) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(403).json({ message: 'Verified tenant and branch selection is required.' }); }
 
   try {
+    if (req.body?.confirmImport !== 'true' || typeof req.body?.previewFingerprint !== 'string' || !req.body.previewFingerprint.trim()) {
+      return res.status(400).json({ message: 'Review the server preview and explicitly confirm it before importing.' });
+    }
+    const approvedPreview = await previewImportFile({ filePath: req.file.path, tenantId, branchId });
+    if (approvedPreview.previewFingerprint !== req.body.previewFingerprint) {
+      return res.status(409).json({ message: 'The uploaded workbook or tenant/branch selection differs from the approved preview. Preview again before importing.' });
+    }
     const job = await createImportJob({
       file: req.file,
       fileName: req.file.originalname,
@@ -168,10 +176,12 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
       idempotencyKey: idempotencyKey.trim(),
       tenantId,
       branchId,
+      previewFingerprint: approvedPreview.previewFingerprint,
       stockMode: String(req.body?.stockMode || 'REPLACE').toUpperCase()
     });
     return res.status(202).json({
       jobId: String(job._id),
+      batchId: job.batchId,
       idempotencyKey: job.idempotencyKey,
       status: job.status,
       totalRecords: job.totalRecords || 0,
@@ -198,6 +208,7 @@ router.get('/imports/:jobId', requireServiceScope('inventory.import'), asyncHand
   if (!job) return res.status(404).json({ message: 'Import job was not found.' });
   return res.json({
     jobId: String(job._id),
+    batchId: job.batchId,
     fileName: job.fileName,
     status: job.status,
     totalRecords: job.totalRecords,
@@ -252,6 +263,22 @@ router.get('/imports/:jobId/failures/download', requireServiceScope('inventory.i
     'Cache-Control': 'private, no-store'
   });
   return res.send(buildFailureWorkbook(failures));
+}));
+
+router.post('/imports/batches/:batchId/rollback', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
+  if (!/^[0-9a-f-]{36}$/i.test(req.params.batchId)) return res.status(404).json({ message: 'Import batch was not found.' });
+  const isPlatformUser = req.service?.isPlatformUser === true;
+  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : String(req.service?.tenantId || '').trim();
+  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : String(req.service?.branchId || '').trim();
+  if (!tenantId || !branchId) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
+  const batch = await rollbackImportBatch({
+    batchId: req.params.batchId,
+    tenantId,
+    branchId,
+    actor: req.service.userId || req.service.name
+  });
+  if (!batch) return res.status(404).json({ message: 'Import batch was not found.' });
+  return res.json({ success: true, batchId: batch.batchId, status: batch.status, revertedAt: batch.revertedAt || null });
 }));
 
 router.post('/imports/:jobId/retry', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
