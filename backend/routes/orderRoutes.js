@@ -1041,8 +1041,13 @@ router.put('/:id/modify', authenticateUser, handlePrescriptionUpload, async (req
                 return res.status(403).json({ message: 'The uploaded prescription does not belong to this account.' });
             }
         }
+        const existingOrder = await Order.findOne({
+            _id: req.params.id,
+            $or: [{ userId: req.user.sub }, { customerId: req.user.sub }]
+        }).select('_id tenantId').lean();
+        if (!existingOrder) return res.status(404).json({ message: 'Order not found.' });
         if (req.file) {
-            uploadedPrescriptionUrl = await savePrescription(req.file, req.user.sub);
+            uploadedPrescriptionUrl = await savePrescription(req.file, req.user.sub, existingOrder.tenantId || null);
             newlyUploadedPrescriptionUrl = uploadedPrescriptionUrl;
         } else {
             uploadedPrescriptionUrl = previousPrescriptionUrl || undefined;
