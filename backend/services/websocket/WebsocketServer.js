@@ -113,8 +113,17 @@ export class DecoupledWebsocketServer {
             });
 
             socket.on('update_location', ({ riderId, lat, lng } = {}) => {
-                if (!riderId || lat === undefined || lng === undefined) return;
-                this.io.to(`order_tracking_${riderId}`).emit('location_changed', { lat, lng });
+                const ownRiderId = identity.riderId || identity.userId;
+                const actorRole = String(identity.role || '').toLowerCase();
+                if (riderId !== ownRiderId || !['rider', 'delivery', 'delivery_partner'].includes(actorRole)
+                    || !Number.isFinite(lat) || !Number.isFinite(lng)
+                    || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+                    socket.emit('authorization_error', { code: 'REALTIME_LOCATION_FORBIDDEN' });
+                    return;
+                }
+                this.io.to(`order_tracking_${riderId}`).emit('location_changed', {
+                    riderId, lat, lng, timestamp: new Date().toISOString()
+                });
             });
 
             socket.on('disconnect', () => {
