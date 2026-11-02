@@ -20,7 +20,10 @@ test('tenant order repository only lists, reads and updates orders in its tenant
     assert.equal((await repository.findById('order-b', 'tenant-b')).tenantId, 'tenant-b');
     assert.equal(await repository.update('order-b', { orderStatus: 'Dispatched' }, 'tenant-a'), null);
     assert.equal(orders[1].orderStatus, 'Ready to Dispatch');
-    assert.equal((await repository.update('order-a', { orderStatus: 'Dispatched' }, 'tenant-a')).orderStatus, 'Dispatched');
+    const updated = await repository.update('order-a', { orderStatus: 'Dispatched', tenantId: 'tenant-b' }, 'tenant-a');
+    assert.equal(updated.orderStatus, 'Dispatched');
+    assert.equal(updated.tenantId, 'tenant-a');
+    assert.equal(orders[0].tenantId, 'tenant-a');
 });
 
 test('tenant-scoped proximity queries exclude orders from other tenants', async () => {
