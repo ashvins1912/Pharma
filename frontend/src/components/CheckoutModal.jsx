@@ -397,12 +397,18 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             <div className="border-t border-slate-200 pt-3 space-y-1.5 text-xs">
               <div className="flex justify-between text-slate-600">
                 <span>Subtotal ({cart.reduce((s, i) => s + i.quantity, 0)} items)</span>
-                <span>₹{subtotal}</span>
+                <span>₹{Number(rewardQuote?.subtotal ?? subtotal).toFixed(2)}</span>
               </div>
+              {Number(rewardQuote?.surplusSavingsDiscount || 0) > 0 && (
+                <div className="flex justify-between text-emerald-700 font-bold">
+                  <span>Exclusive Surplus Savings</span>
+                  <span>−₹{Number(rewardQuote.surplusSavingsDiscount).toFixed(2)}</span>
+                </div>
+              )}
               {appliedCoupon && (
                 <div className="flex justify-between text-emerald-600 font-bold">
                   <span>{appliedCoupon.promotionLabel || `Discount Coupon (${appliedCoupon.code})`}</span>
-                  <span>−₹{discountAmount.toFixed(1)}</span>
+                  <span>−₹{Number(rewardQuote?.couponDiscount ?? discountAmount).toFixed(2)}</span>
                 </div>
               )}
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
