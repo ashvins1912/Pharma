@@ -223,11 +223,13 @@ router.get('/imports/:jobId/failures', requireServiceScope('inventory.import'), 
 
 router.get('/imports/:jobId/failures/download', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
-  const tenantId = req.get('x-tenant-id') || req.service?.tenantId;
-  const isPlatformUser = req.service?.isPlatformUser || req.service?.userRole === 'admin';
-
+  const isPlatformUser = req.service?.isPlatformUser === true;
+  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : req.service?.tenantId;
+  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : req.service?.branchId;
+  if (!isPlatformUser && (!tenantId || !branchId)) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
   const filter = { _id: req.params.jobId };
-  if (!isPlatformUser && tenantId) filter.tenantId = tenantId;
+  if (tenantId) filter.tenantId = tenantId;
+  if (branchId) filter.branchId = branchId;
   const job = await ImportJob.findOne(filter).lean();
   if (!job) return res.status(404).json({ message: 'Import job was not found.' });
 
@@ -243,9 +245,10 @@ router.get('/imports/:jobId/failures/download', requireServiceScope('inventory.i
 
 router.post('/imports/:jobId/retry', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
-  const tenantId = req.get('x-tenant-id') || req.service?.tenantId;
-  const isPlatformUser = req.service?.isPlatformUser || req.service?.userRole === 'admin';
-
+  const isPlatformUser = req.service?.isPlatformUser === true;
+  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : req.service?.tenantId;
+  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : req.service?.branchId;
+  if (!isPlatformUser && (!tenantId || !branchId)) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
   const job = await retryImportJob(
     req.params.jobId,
     req.service.userId || req.service.name,
