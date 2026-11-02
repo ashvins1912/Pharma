@@ -49,10 +49,10 @@ export class NotificationService {
         this.sseClients.delete(clientId);
     }
 
-    getDeliveryEvents(tenantId = null, branchId = null) {
+    getDeliveryEvents(tenantId = null, branchId = null, isSuperAdmin = false) {
         return this.deliveryEvents.filter(e => {
-            if (e.tenantId && String(e.tenantId) !== String(tenantId || '')) return false;
-            if (e.branchId && String(e.branchId) !== String(branchId || '')) return false;
+            if (!isSuperAdmin && e.tenantId && String(e.tenantId) !== String(tenantId || '')) return false;
+            if (branchId && e.branchId && String(e.branchId) !== String(branchId)) return false;
             return true;
         });
     }
@@ -67,8 +67,8 @@ export class NotificationService {
                     && String(client.context.tenantId || '') !== String(eventData.tenantId)) {
                     continue;
                 }
-                if (!client.context.isSuperAdmin && eventData.branchId
-                    && String(client.context.branchId || '') !== String(eventData.branchId)) {
+                if (!client.context.isSuperAdmin && client.context.branchId && eventData.branchId
+                    && String(client.context.branchId) !== String(eventData.branchId)) {
                     continue;
                 }
                 client.res.write(`data: ${JSON.stringify(eventData)}\n\n`);
