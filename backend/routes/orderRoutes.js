@@ -1056,11 +1056,6 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
             const scopedOrder = await Order.findOne({ _id: orderId, tenantId: String(tenantId) }).select('_id').lean();
             if (!scopedOrder) return res.status(404).json({ message: 'Order not found.' });
         }
-        if (isTenantOrderStaff(req)) {
-            if (!getActorTenantId(req)) return res.status(403).json({ message: 'An active tenant context is required.' });
-            const scopedOrder = await Order.findOne({ _id: orderId, tenantId: String(getActorTenantId(req)) }).select('_id').lean();
-            if (!scopedOrder) return res.status(404).json({ message: 'Order not found.' });
-        }
         let { riderInfo } = req.body;
         if (!orderId || !newStatus) {
             return res.status(400).json({ message: "orderId and newStatus are required." });
@@ -1144,8 +1139,10 @@ router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, async 
         }
         deliveryContainer.refreshDataLayer();
         const { riderId, maxRadiusKm, startLat, startLng } = req.body;
+        const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || req.body.tenantId || null;
+        if (!tenantId) return res.status(400).json({ message: 'Select a pharmacy tenant before planning a route.' });
         if (!riderId) return res.status(400).json({ message: 'Select an onboarded rider before planning a route.' });
-        const rider = await deliveryContainer.riderRepository.findById(riderId, req.user?.tenantId || req.user?.app_metadata?.tenantId || null);
+        const rider = await deliveryContainer.riderRepository.findById(riderId, tenantId);
         if (!rider || !rider.enabled) {
             return res.status(404).json({ message: 'The selected onboarded rider is unavailable.' });
         }
@@ -1158,7 +1155,7 @@ router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, async 
             maxRadiusKm,
             Number(startLat) || 12.9716,
             Number(startLng) || 77.5946,
-            req.user?.tenantId || req.user?.app_metadata?.tenantId || null
+            tenantId
         );
 
         res.json({ ...result, riderId: rider.id });
@@ -1239,7 +1236,7 @@ router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res
         let order = await dataStore.transitionOrderStatus(orderId, targetStatus, actor, riderInfo);
         let assignmentMessage = '';
         let notificationEvent = step === 'ready' ? 'Ready to Dispatch' : null;
-        if (step === 'ready' && !isTenantOrderStaff(req)) {
+        if (step === 'ready') {
             try {
                 deliveryContainer.refreshDataLayer();
                 const result = await deliveryContainer.assignmentEngine.assignOrder(orderId, { tenantId: targetOrder.tenantId });
