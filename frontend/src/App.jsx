@@ -372,20 +372,41 @@ function MainApp() {
             {/* Friendly Hero Banner */}
             <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl sm:rounded-3xl p-4 sm:p-8 text-white shadow-lg shadow-blue-600/15 relative overflow-hidden">
               <div className="relative z-10 max-w-xl space-y-2 sm:space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-block bg-white/20 backdrop-blur-md text-white text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                    Express 30-Min Prescription Delivery
-                  </span>
-                  {activeTenant && (
-                    <span className="inline-flex items-center gap-1 bg-emerald-500/30 border border-emerald-400/40 backdrop-blur-md text-emerald-50 text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full">
-                      <span>🏥</span>
-                      <span>{activeTenant.shopName || activeTenant.name || 'Selected Pharmacy'}</span>
-                    </span>
-                  )}
-                </div>
-                <h1 className="text-lg sm:text-3xl font-black tracking-tight leading-tight m-0 text-white">
-                  Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {displayName}!
-                </h1>
+                {(() => {
+                  const istDate = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+                  const istHours = istDate.getHours();
+                  const istGreeting = istHours < 12 ? 'Good morning' : istHours < 18 ? 'Good afternoon' : 'Good evening';
+                  const istTimeStr = istDate.toLocaleTimeString('en-IN', {
+                    timeZone: 'Asia/Kolkata',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true
+                  });
+                  return (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-block bg-white/20 backdrop-blur-md text-white text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                            Express 30-Min Prescription Delivery
+                          </span>
+                          {activeTenant && (
+                            <span className="inline-flex items-center gap-1 bg-emerald-500/30 border border-emerald-400/40 backdrop-blur-md text-emerald-50 text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full">
+                              <span>🏥</span>
+                              <span>{activeTenant.shopName || activeTenant.name || 'Selected Pharmacy'}</span>
+                            </span>
+                          )}
+                        </div>
+                        <span className="inline-flex items-center gap-1 bg-black/20 backdrop-blur-md text-white text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full">
+                          <span>🇮🇳</span>
+                          <span>IST: {istTimeStr}</span>
+                        </span>
+                      </div>
+                      <h1 className="text-lg sm:text-3xl font-black tracking-tight leading-tight m-0 text-white">
+                        {istGreeting}, {displayName}!
+                      </h1>
+                    </>
+                  );
+                })()}
                 <p className="text-xs sm:text-sm text-blue-100 font-medium leading-relaxed">
                   Welcome to <strong className="text-white">{activeTenant?.shopName || activeTenant?.name || 'Ashvin Pharmacy'}</strong>! Your trusted local dispensary brings you warm greetings and rapid door delivery for genuine pharmaceutical formulations, doctor-prescribed medications, and wellness care products.
                 </p>
