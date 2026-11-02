@@ -16,6 +16,7 @@ test('tenant ownership checks fail closed for missing and cross-tenant identifie
     assert.deepEqual(tenantScopedFilter('tenant-a', { enabled: true }), {
         enabled: true, tenantId: 'tenant-a'
     });
+    assert.deepEqual(tenantScopedFilter('tenant-a', { tenantId: 'tenant-b' }), { tenantId: 'tenant-a' });
 });
 
 test('rider list, lookup, nearby search and updates cannot cross tenant boundaries', async () => {
@@ -31,6 +32,8 @@ test('rider list, lookup, nearby search and updates cannot cross tenant boundari
     assert.equal((await repository.findById(riderB.id, 'tenant-b')).tenantId, 'tenant-b');
     assert.equal((await repository.findByMobile('+919876543210', 'tenant-a')).id, riderA.id);
     assert.equal(await repository.update(riderB.id, { name: 'Hijacked' }, 'tenant-a'), null);
+    const attemptedTenantMove = await repository.update(riderA.id, { tenantId: 'tenant-b' }, 'tenant-a');
+    assert.equal(attemptedTenantMove.tenantId, 'tenant-a');
 
     const nearbyA = await repository.findAvailableNearby([77.5946, 12.9716], 20000, 5, 'tenant-a');
     assert.deepEqual(nearbyA.map(item => item.rider.id), [riderA.id]);
