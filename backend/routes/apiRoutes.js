@@ -97,81 +97,57 @@ import { pharmacyLocationService } from '../services/PharmacyLocationService.js'
 
 router.get('/tenants/nearby', async (req, res) => {
     try {
-        const { lat, lng } = req.query;
-        const cacheKey = 'cache:api:tenants:nearby:dynamic';
-        let tenants = await cacheService.get(cacheKey);
-
-        if (!tenants) {
-            const dbTenants = await Tenant.find({ status: 'ACTIVE' }).lean();
-            const vendors = await Vendor.find({ status: 'ACTIVE' }).lean();
-
-            tenants = dbTenants.map((t, idx) => {
-                const vendor = vendors.find(v => String(v.tenantId) === String(t._id)) || vendors[idx] || {};
-                return {
-                    _id: t._id,
-                    shopName: t.name || vendor.companyName || 'Pharmacy Dispensary',
-                    address: {
-                        street: vendor.address?.street || 'Central Medical Hub',
-                        city: vendor.address?.city || 'San Francisco',
-                        state: vendor.address?.state || 'CA',
-                        zipCode: vendor.address?.pincode || '94105'
-                    },
-                    geoLocation: {
-                        type: 'Point',
-                        coordinates: [
-                            Number(vendor.longitude || -122.4194 + (idx * 0.01)),
-                            Number(vendor.latitude || 37.7749 + (idx * 0.01))
-                        ]
-                    },
-                    shopPhotoUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80',
-                    distanceKm: null
-                };
-            });
-
-            if (tenants.length === 0) {
-                tenants = [
-                    {
-                        _id: 'tenant-default-1',
-                        shopName: 'City Health Pharmacy & Wellness',
-                        address: { street: '123 Main Street', city: 'San Francisco', state: 'CA', zipCode: '94105' },
-                        geoLocation: { type: 'Point', coordinates: [-122.4194, 37.7749] },
-                        shopPhotoUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80'
-                    }
-                ];
-            }
-
-            // Build Quadtree spatial index and cache tenants
-            pharmacyLocationService.buildIndex(tenants);
-            await cacheService.set(cacheKey, tenants, 900);
+        const hasLat = req.query.lat !== undefined;
+        const hasLng = req.query.lng !== undefined;
+        const userLat = hasLat ? Number(req.query.lat) : null;
+        const userLng = hasLng ? Number(req.query.lng) : null;
+        if (hasLat !== hasLng || (hasLat && (!Number.isFinite(userLat) || userLat < -90 || userLat > 90
+            || !Number.isFinite(userLng) || userLng < -180 || userLng > 180))) {
+            return res.status(400).json({ message: 'Provide valid latitude and longitude coordinates.' });
         }
-
-        if (!pharmacyLocationService.isIndexed) {
-            pharmacyLocationService.buildIndex(tenants);
-        }
-
-        const userLat = lat != null ? Number(lat) : null;
-        const userLng = lng != null ? Number(lng) : null;
-
-        let results;
-        if (userLat != null && userLng != null) {
-            // O(log N) Quadtree spatial radius query
-            results = pharmacyLocationService.findNearby(userLat, userLng, 500);
-            const foundIds = new Set(results.map(r => String(r._id)));
-            const missing = tenants.filter(t => !foundIds.has(String(t._id))).map(t => ({
-                ...t,
-                distanceKm: 999.0
-            }));
-            results = [...results, ...missing];
-        } else {
-            results = tenants.map(t => ({ ...t, distanceKm: null }));
-        }
-
-        res.json({
-            status: 'success',
-            tenants: results
+        const dbTenants = await Tenant.find({ status: 'ACTIVE' }).lean();
+        const tenantIds = dbTenants.map(tenant => String(tenant._id));
+        const vendors = tenantIds.length
+            ? await Vendor.find({ status: 'ACTIVE', tenantId: { $in: tenantIds } }).lean()
+            : [];
+        const vendorByTenant = new Map(vendors.map(vendor => [String(vendor.tenantId), vendor]));
+        const radians = value => value * Math.PI / 180;
+        const distanceKm = (lat1, lng1, lat2, lng2) => {
+            const dLat = radians(lat2 - lat1);
+            const dLng = radians(lng2 - lng1);
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(radians(lat1))
+                * Math.cos(radians(lat2)) * Math.sin(dLng / 2) ** 2;
+            return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        };
+        let tenants = dbTenants.flatMap(tenant => {
+            const vendor = vendorByTenant.get(String(tenant._id));
+            if (!vendor) return [];
+            const lat = Number(vendor.latitude ?? vendor.geoLocation?.coordinates?.[1]);
+            const lng = Number(vendor.longitude ?? vendor.geoLocation?.coordinates?.[0]);
+            const hasCoordinates = Number.isFinite(lat) && lat >= -90 && lat <= 90
+                && Number.isFinite(lng) && lng >= -180 && lng <= 180
+                && (vendor.latitude != null || vendor.longitude != null || vendor.geoLocation?.coordinates?.length === 2);
+            const distance = userLat != null && hasCoordinates ? distanceKm(userLat, userLng, lat, lng) : null;
+            if (userLat != null && (!hasCoordinates || distance > 100)) return [];
+            return [{
+                _id: tenant._id,
+                shopName: tenant.name || vendor.companyName,
+                address: {
+                    street: vendor.address?.street || '',
+                    city: vendor.address?.city || '',
+                    state: vendor.address?.state || '',
+                    zipCode: vendor.address?.pincode || ''
+                },
+                geoLocation: hasCoordinates ? { type: 'Point', coordinates: [lng, lat] } : null,
+                shopPhotoUrl: vendor.shopPhotoUrl || null,
+                distanceKm: distance == null ? null : Number(distance.toFixed(1))
+            }];
         });
+        if (userLat != null) tenants.sort((a, b) => a.distanceKm - b.distanceKm);
+        return res.json({ status: 'success', tenants });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('[TenantDiscovery] Nearby pharmacy lookup failed:', err);
+        return res.status(503).json({ message: 'Nearby pharmacy discovery is temporarily unavailable.' });
     }
 });
 
