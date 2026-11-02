@@ -7,6 +7,7 @@ import { getPrescription, savePrescription } from '../config/prescriptionStorage
 import { getIsConnected } from '../config/db.js';
 import MedicineRequest from '../models/MedicineRequest.js';
 import UserAddress from '../models/UserAddress.js';
+import Tenant from '../models/Tenant.js';
 import { customerService } from '../services/customer-service/CustomerService.js';
 import prescriptionClient from '../services/prescription-service-client/PrescriptionClient.js';
 
@@ -45,11 +46,24 @@ const authorizeRequestList = (req, res, next) => {
     return requireCustomer(req, res, next);
 };
 
-const authorizeRequestDetails = (req, res, next) => {
-    if (req.baseUrl.startsWith('/api/admin/')) {
-        return isPharmacyOrAdmin(req, res, next);
+const getRequestActorTenantId = req => req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
+const isPlatformRequestAdmin = req => ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN']
+    .includes(req.user?.app_metadata?.role || req.user?.role);
+
+const authorizeRequestDetails = async (req, res, next) => {
+    if (req.params.fileId) return next(); // Attachment ownership is checked against file metadata in its handler.
+    if (req.baseUrl.startsWith('/api/admin/') && !isPharmacyOrAdmin(req, res, () => {})) {
+        return res.status(403).json({ message: 'You are not authorized to view this medicine request.' });
     }
-    return next();
+    if (!requireDatabase(res)) return;
+    try {
+        const request = await dataStore.getMedicineRequestById(req.params.id, req.user);
+        if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
+        req.authorizedMedicineRequest = request;
+        return next();
+    } catch (error) {
+        return res.status(error.statusCode || 503).json({ message: 'Unable to authorize medicine request access.' });
+    }
 };
 
 const allowedMimeTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
@@ -229,7 +243,7 @@ router.put('/:id/prescription', authenticateUser, requirePermission('medicine_re
         const presFile = req.files?.prescription?.[0];
         if (!presFile) return res.status(400).json({ message: 'A replacement prescription file is required.' });
         const oldUrl = request.prescriptionUrl || null;
-        const newUrl = await savePrescription(presFile, customerId);
+        const newUrl = await savePrescription(presFile, customerId, request.tenantId || null);
         try {
             let prescriptionId = request.prescriptionId;
             let result = null;
@@ -380,7 +394,7 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
 
         const presFile = req.files?.prescription?.[0];
         if (presFile) {
-            savedPrescriptionUrl = await savePrescription(presFile, req.user.sub);
+            savedPrescriptionUrl = await savePrescription(presFile, req.user.sub, selectedTenantId);
             prescriptionUrl = savedPrescriptionUrl;
 
             if (!prescriptionClient.isConfigured()) {
@@ -467,8 +481,15 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
                 .filter(Boolean)
                 .join(', ');
 
+        const selectedTenantId = String(req.body.tenantId || req.body.selectedTenantId || '').trim();
+        if (!selectedTenantId) {
+            return res.status(400).json({ message: 'Select a pharmacy before submitting a medicine procurement request.' });
+        }
+        const selectedTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!selectedTenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
+
         const requestDoc = await dataStore.createMedicineRequest({
-            tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null,
+            tenantId: selectedTenantId,
             branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
             urgencyLevel: req.body.urgencyLevel || 'Normal',
             requestedItems,
@@ -613,7 +634,9 @@ router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
 router.get('/pending-count', authenticateUser, requirePermission('medicine_requests.pending_count'), async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
-        const count = await dataStore.getPendingMedicineRequestCount();
+        const tenantId = isPlatformRequestAdmin(req) ? (req.query.tenantId || null) : getRequestActorTenantId(req);
+        if (!isPlatformRequestAdmin(req) && !tenantId) return res.status(403).json({ message: 'An active pharmacy tenant is required.' });
+        const count = await dataStore.getPendingMedicineRequestCount(tenantId);
         res.json({ count });
     } catch (error) {
         console.error('Pending medicine request count retrieval failed:', error);
@@ -628,8 +651,14 @@ router.get('/attachments/:fileId', authenticateUser, authorizeRequestDetails, as
         if (!file) return res.status(404).json({ message: 'Attachment file not found.' });
 
         const role = req.user?.app_metadata?.role || req.user?.role;
-        if (file.ownerId !== req.user.sub && role !== 'admin' && role !== 'pharmacy') {
-            return res.status(403).json({ message: 'You are not authorized to view this attachment.' });
+        const platformAdmin = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const actorTenantId = getRequestActorTenantId(req);
+        const tenantStaff = ['pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF'].includes(role);
+        const ownerAccess = String(file.ownerId || '') === String(req.user.sub);
+        const tenantAccess = tenantStaff && actorTenantId && file.tenantId
+            && String(actorTenantId) === String(file.tenantId);
+        if (!ownerAccess && !tenantAccess && !platformAdmin) {
+            return res.status(404).json({ message: 'Attachment file not found.' });
         }
 
         res.set('Content-Type', file.contentType || 'application/octet-stream');
@@ -797,7 +826,7 @@ router.get('/metrics/overview', authenticateUser, requirePermission('medicine_re
 });
 
 // Review request
-router.put('/:id/review', authenticateUser, requirePermission('medicine_requests.manage'), async (req, res) => {
+router.put('/:id/review', authenticateUser, requirePermission('medicine_requests.manage'), authorizeRequestDetails, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
@@ -810,7 +839,7 @@ router.put('/:id/review', authenticateUser, requirePermission('medicine_requests
 });
 
 // Create/Send proposal
-router.post('/:id/proposal', authenticateUser, requirePermission('medicine_requests.proposal'), async (req, res) => {
+router.post('/:id/proposal', authenticateUser, requirePermission('medicine_requests.proposal'), authorizeRequestDetails, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
@@ -824,7 +853,7 @@ router.post('/:id/proposal', authenticateUser, requirePermission('medicine_reque
 });
 
 // Update proposal
-router.put('/:id/proposal', authenticateUser, requirePermission('medicine_requests.proposal'), async (req, res) => {
+router.put('/:id/proposal', authenticateUser, requirePermission('medicine_requests.proposal'), authorizeRequestDetails, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
@@ -838,7 +867,7 @@ router.put('/:id/proposal', authenticateUser, requirePermission('medicine_reques
 });
 
 // Pharmacy rejects request
-router.post('/:id/reject-request', authenticateUser, requirePermission('medicine_requests.manage'), async (req, res) => {
+router.post('/:id/reject-request', authenticateUser, requirePermission('medicine_requests.manage'), authorizeRequestDetails, async (req, res) => {
     if (!requireDatabase(res)) return;
     try {
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
