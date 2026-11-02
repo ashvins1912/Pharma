@@ -39,6 +39,7 @@ export default function OfferZoneBanner() {
   const [loadError, setLoadError] = useState('');
   const [displayedTenantId, setDisplayedTenantId] = useState(null);
   const requestSequence = useRef(0);
+  const displayedCacheKeyRef = useRef(null);
   const itemsPerPage = 4;
   const cacheKey = user?.id && tenantId ? `${CACHE_PREFIX}${user.id}:${tenantId}` : null;
 
@@ -50,6 +51,7 @@ export default function OfferZoneBanner() {
     if (!user) {
       setItems([]);
       setDisplayedTenantId(null);
+      displayedCacheKeyRef.current = null;
       setLoading(false);
       setLoadError('');
       return () => { active = false; };
@@ -57,6 +59,7 @@ export default function OfferZoneBanner() {
 
     if (!tenantId) {
       setDisplayedTenantId(null);
+      displayedCacheKeyRef.current = null;
       setItems([]);
       setLoading(false);
       setLoadError('');
@@ -65,7 +68,7 @@ export default function OfferZoneBanner() {
 
     // Keep the last known-good offers through short auth/token hydration gaps.
     // Never show one pharmacy's offers under another pharmacy's heading.
-    if (displayedTenantId && displayedTenantId !== tenantId) {
+    if (displayedCacheKeyRef.current && displayedCacheKeyRef.current !== cacheKey) {
       setItems([]);
       setLoadError('');
     }
@@ -77,6 +80,7 @@ export default function OfferZoneBanner() {
     const cachedItems = readCampaignCache(cacheKey);
     setItems(cachedItems || []);
     setDisplayedTenantId(tenantId);
+    displayedCacheKeyRef.current = cacheKey;
     setCurrentPage(1);
     setLoadError('');
     setLoading(true);
