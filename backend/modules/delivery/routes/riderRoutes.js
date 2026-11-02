@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { authenticateUser, isAdmin } from '../../../middleware/auth.js';
+import { authenticateUser } from '../../../middleware/auth.js';
 import {
     registerRider,
     listRiders,
@@ -16,7 +16,15 @@ const uploadPhoto = multer({
 });
 
 // All rider operations are protected for administrators
-router.use(authenticateUser, isAdmin);
+const TENANT_RIDER_ROLES = new Set(['TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN']);
+const PLATFORM_ROLES = new Set(['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN']);
+router.use(authenticateUser, (req, res, next) => {
+    const role = String(req.user?.role || req.user?.app_metadata?.role || '').toUpperCase();
+    const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId;
+    if (PLATFORM_ROLES.has(role)) return next();
+    if (TENANT_RIDER_ROLES.has(role) && tenantId) return next();
+    return res.status(403).json({ code: 'RIDER_MANAGEMENT_FORBIDDEN', message: 'Tenant rider management permission and an active tenant context are required.' });
+});
 
 // GET /api/admin/riders - List all riders
 router.get('/', listRiders);
