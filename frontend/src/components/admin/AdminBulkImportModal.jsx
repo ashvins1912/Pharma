@@ -55,75 +55,17 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   // Single-Upload Architecture: Read workbook locally in browser for instant preview
   const handleFileChange = async (selectedFile) => {
     if (!selectedFile) return;
-    setFile(selectedFile);
-    setAnalyzing(true);
-    setPreviewData(null);
-    setImportJob(null);
-    setPollError('');
-
+    if (!/\.(xlsx|xls)$/i.test(selectedFile.name)) { addToast('Please select an .xlsx or .xls workbook.', 'warning'); return; }
+    setFile(selectedFile); setAnalyzing(true); setPreviewData(null); setImportJob(null); setPollError('');
     try {
-      const buffer = await selectedFile.arrayBuffer();
-      const workbook = xlsx.read(buffer, { type: 'array', cellDates: true });
-      const firstSheetName = workbook.SheetNames[0];
-      if (!firstSheetName) {
-        throw new Error('Workbook contains no sheets.');
-      }
-      const sheet = workbook.Sheets[firstSheetName];
-      const rows = xlsx.utils.sheet_to_json(sheet, { defval: '', raw: false });
-
-      if (!rows.length) {
-        throw new Error('Workbook contains no data rows.');
-      }
-
-      const sampleRows = rows.slice(0, 10);
-      let validCount = 0;
-      let errorsCount = 0;
-      const errors = [];
-
-      rows.forEach((row, idx) => {
-        const sku = row.SKU || row.sku || row['Product SKU'] || row.Barcode;
-        const name = row['Medicine Name'] || row.medicineName || row.name || row.Name;
-        const price = Number(row.Price || row.price || row.MRP || row.mrp);
-        const stock = Number(row.Stock || row.stock || row.Quantity || row.quantity);
-
-        const rowErrors = [];
-        if (!sku || String(sku).trim() === '') rowErrors.push('Missing SKU');
-        if (!name || String(name).trim() === '') rowErrors.push('Missing Medicine Name');
-        if (isNaN(price) || price < 0) rowErrors.push('Invalid Price');
-        if (isNaN(stock) || stock < 0 || !Number.isInteger(stock)) rowErrors.push('Invalid Stock');
-
-        if (rowErrors.length > 0) {
-          errorsCount++;
-          if (errors.length < 50) {
-            errors.push({
-              rowNumber: idx + 2,
-              sku: String(sku || 'N/A'),
-              name: String(name || 'N/A'),
-              errors: rowErrors
-            });
-          }
-        } else {
-          validCount++;
-        }
-      });
-
-      setPreviewData({
-        rowsDetected: rows.length,
-        validCount,
-        warningsCount: 0,
-        errorsCount,
-        errors,
-        previewRows: sampleRows
-      });
-
-      addToast(`Analyzed ${rows.length} rows (${validCount} valid)`, 'info');
-    } catch (err) {
-      addToast(err.message || 'Validation failed', 'error');
-    } finally {
-      setAnalyzing(false);
-    }
+      const formData = new FormData(); formData.append('excelFile', selectedFile);
+      const response = await apiClient.post('/api/v1/inventory/imports/preview', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setPreviewData(response.data);
+      addToast('Server validated ' + response.data.rowsDetected + ' rows (' + response.data.validCount + ' valid)', 'info');
+    } catch (error) {
+      setFile(null); addToast(error.response?.data?.message || error.message || 'Server-side validation failed.', 'error');
+    } finally { setAnalyzing(false); }
   };
-
   const handleDrop = (e) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
@@ -456,7 +398,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
             {!showErrorsOnly && (
               <div className="border border-slate-200 rounded-2xl overflow-hidden">
                 <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 text-xs font-bold text-slate-700 flex justify-between">
-                  <span>Import Preview (First 5 Rows)</span>
+                  <span>Server Inventory Preview (First 5 Rows)</span>
                   <span className="min-w-0 max-w-full truncate text-slate-400">{file?.name}</span>
                 </div>
                 <div className="max-h-48 overflow-auto">
@@ -466,7 +408,9 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                         <th className="py-2 px-2.5">SKU</th>
                         <th className="py-2 px-2.5">Name</th>
                         <th className="py-2 px-2.5">Price</th>
-                        <th className="py-2 px-2.5">Stock</th>
+                        <th className="py-2 px-2.5">Existing</th>
+                        <th className="py-2 px-2.5">New Stock</th>
+                        <th className="py-2 px-2.5">Available</th>
                         <th className="py-2 px-2.5">Expiry</th>
                         <th className="py-2 px-2.5">Batch</th>
                       </tr>
@@ -477,7 +421,9 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                           <td className="py-2 px-2.5 font-mono text-slate-600">{row.SKU || row.sku || 'AUTO'}</td>
                           <td className="py-2 px-2.5 font-bold text-slate-900">{row['Medicine Name'] || row.name}</td>
                           <td className="py-2 px-2.5 text-emerald-600 font-black">₹{row.Price || row.price}</td>
-                          <td className="py-2 px-2.5 font-bold">{row.Stock || row.stock}</td>
+                          <td className="py-2 px-2.5 font-bold">{row['Existing Stock'] ?? 0}</td>
+                          <td className="py-2 px-2.5 font-bold">{row['New Stock'] ?? row.Stock ?? row.stock}</td>
+                          <td className="py-2 px-2.5 font-bold">{row['Available After Import'] ?? '—'}</td>
                           <td className="py-2 px-2.5 text-slate-500">{row['Expiry Date'] || row.expiryDate || 'Default'}</td>
                           <td className="py-2 px-2.5 font-mono text-slate-500">{row['Batch Number'] || row.batchNumber || 'N/A'}</td>
                         </tr>
