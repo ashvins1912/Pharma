@@ -148,7 +148,7 @@ async function executeBatchOperations(tenantId, branchId, stockMode, eligibleRow
       newCount += 1;
     }
 
-    if (!currentProduct && pendingProductIds.get(value.sku) === productId && !productOperations.some(op => op.updateOne.filter.sku === value.sku)) productOperations.push({
+    if (!productOperations.some(op => op.updateOne.filter.sku === value.sku)) productOperations.push({
       updateOne: {
         filter: { tenantId, sku: value.sku },
         update: {
@@ -571,6 +571,7 @@ export async function createImportJob({
   if (!previewFingerprint) { const error = new Error('A server-generated preview fingerprint and explicit confirmation are required.'); error.statusCode = 400; throw error; }
   const freshPreview = await previewImportFile({ filePath: file.path, tenantId, branchId });
   if (freshPreview.previewFingerprint !== previewFingerprint) {
+    await fs.rm(file.path, { force: true }).catch(() => {});
     const error = new Error('The approved preview is stale. Re-preview the workbook before importing.');
     error.statusCode = 409;
     error.code = 'PREVIEW_FINGERPRINT_MISMATCH';
