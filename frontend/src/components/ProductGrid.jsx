@@ -70,8 +70,8 @@ export default function ProductGrid() {
   if (medicines.length === 0) {
     return (
       <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-6 sm:p-10 text-center space-y-4 my-4 shadow-xs">
-        <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto bg-slate-100 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">
-          🔍
+        <div className="w-28 h-28 sm:w-36 sm:h-36 mx-auto rounded-3xl overflow-hidden shadow-md border border-slate-200">
+          <img src="/src/assets/images/no_inventory_illustration_1793636345826.jpg" alt="No inventory data" className="w-full h-full object-cover" />
         </div>
         <div className="max-w-md mx-auto space-y-1.5">
           <h3 className="font-extrabold text-slate-800 text-sm sm:text-base">No medicines found in catalog</h3>

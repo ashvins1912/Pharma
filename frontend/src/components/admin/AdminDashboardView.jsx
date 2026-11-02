@@ -16,6 +16,7 @@ import PlatformTenantsView from './PlatformTenantsView';
 import PlatformAccessControl from './PlatformAccessControl';
 import LiveTelemetryTab from './LiveTelemetryTab';
 import RoleFeatureMatrixTab from './RoleFeatureMatrixTab';
+import TenantProfileDashboard from './TenantProfileDashboard';
 import { getAdminMedicineRequests, getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -598,6 +599,18 @@ export default function AdminDashboardView() {
               <span>Role-Feature Matrix</span>
             </button>
           )}
+
+          <button
+            onClick={() => setAdminTab('tenantProfile')}
+            className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+              adminTab === 'tenantProfile'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-slate-50 dark:bg-gray-800 text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-blue-200 dark:border-gray-700'
+            }`}
+          >
+            <span>🏢</span>
+            <span>Tenant Profile &amp; Branches</span>
+          </button>
         </div>
       </div>
 
@@ -613,6 +626,9 @@ export default function AdminDashboardView() {
       )}
       {adminTab === 'matrix' && isSuperAdmin && (
         <RoleFeatureMatrixTab />
+      )}
+      {adminTab === 'tenantProfile' && (
+        <TenantProfileDashboard />
       )}
       {adminTab === 'csquare' && canViewCSquare && <AdminCSquareTab />}
       {adminTab === 'promotions' && canViewPromotions && <CustomerPromotionsView canManage={hasPermission('promotions.manage')} />}

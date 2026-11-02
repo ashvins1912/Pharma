@@ -197,6 +197,8 @@ apiClient.interceptors.request.use(async (config) => {
         config.headers['X-Branch-Id'] = activeBranchId;
     }
 
+
+
     if (!config.headers['X-Request-ID']) {
         config.headers['X-Request-ID'] = globalThis.crypto?.randomUUID?.()
             || `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
+import { useTenant } from '../context/TenantContext';
 import NotificationBell from './NotificationBell';
 import AdminAlertBell from './admin/AdminAlertBell';
 
@@ -19,6 +20,12 @@ export default function Header({
   const { cart, whatsappStatus, setWhatsappModalOpen, medicineRequests } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const { branchId, setBranchId } = useTenant();
+  const branchOptions = [
+    { id: 'branch-1', name: 'Downtown Flagship' },
+    { id: 'branch-2', name: 'Northside Express' },
+    { id: 'branch-3', name: 'Westend Wellness' }
+  ];
 
   const cartItemCount = cart.reduce((total, item) => total + item.quantity, 0);
   const proposalsWaitingCount = (medicineRequests || []).filter(r => r.status === 'PROPOSAL_SENT').length;
@@ -181,6 +188,20 @@ export default function Header({
           {/* Right: Actions Bar */}
           <div className="flex items-center gap-1 sm:gap-2 shrink-0 max-w-[58vw] sm:max-w-none">
             
+            {/* Branch Quick-Switcher Dropdown */}
+            <div className="hidden sm:flex items-center gap-1 bg-slate-100 hover:bg-slate-200/70 px-2.5 py-1.5 rounded-xl border border-slate-200 transition shrink-0" title="Toggle active branch context (X-Branch-Id)">
+              <span className="text-xs">🏢</span>
+              <select
+                value={branchId}
+                onChange={(e) => setBranchId(e.target.value)}
+                className="bg-transparent text-[11px] font-black text-slate-800 outline-none cursor-pointer max-w-[130px] truncate"
+              >
+                {branchOptions.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Customer notifications */}
             {user && canViewCustomerWorkspace && hasPermission('profile.read') && (
               <NotificationBell
