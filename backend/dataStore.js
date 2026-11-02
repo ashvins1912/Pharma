@@ -1985,6 +1985,7 @@ export const dataStore = {
         const safeLimit = Math.min(50, Math.max(1, Number(limit) || 10));
         const requestedPage = Math.max(1, Number(page) || 1);
         if (getIsConnected()) {
+            if (tenantId) filter = { $and: [filter, { tenantId: String(tenantId) }] };
             const total = await Order.countDocuments(filter);
             const safePage = Math.min(requestedPage, Math.max(Math.ceil(total / safeLimit), 1));
             const items = await Order.find(filter)
@@ -2134,9 +2135,9 @@ export const dataStore = {
 
     async getUserOrders(userId) {
         if (getIsConnected()) {
-            return Order.find({ userId }).sort({ createdAt: -1 }).lean();
+            return Order.find({ $or: [{ userId }, { customerId: userId }] }).sort({ createdAt: -1 }).lean();
         }
-        return inMemoryOrders.filter(o => o.userId === userId)
+        return inMemoryOrders.filter(o => o.userId === userId || o.customerId === userId)
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     },
 
@@ -3052,8 +3053,15 @@ export const dataStore = {
         const role = user?.app_metadata?.role || user?.role;
         const isStaff = user && [
             'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
-            'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF'
+            'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST',
+            'PHARMACY_STAFF', 'ORDER_MANAGER'
         ].includes(role);
+        const isPlatformStaff = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
+        const isPlatformStaff = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
+        const isPlatformStaff = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
 
         if (getIsConnected()) {
             const now = new Date();
@@ -3077,8 +3085,12 @@ export const dataStore = {
             const query = {};
             if (!isStaff) {
                 query.customerId = user ? user.sub : 'unauthenticated';
-            } else if (filter.customerId) {
-                query.customerId = filter.customerId;
+            } else {
+                if (!isPlatformStaff) {
+                    if (!actorTenantId) throw inventoryError('An active pharmacy tenant is required.', 403);
+                    query.tenantId = String(actorTenantId);
+                }
+                if (filter.customerId) query.customerId = filter.customerId;
             }
 
             if (filter.status && filter.status !== 'ALL') {
@@ -3154,8 +3166,12 @@ export const dataStore = {
             const query = {};
             if (!isStaff) {
                 query.customerId = user ? user.sub : 'unauthenticated';
-            } else if (filter.customerId) {
-                query.customerId = filter.customerId;
+            } else {
+                if (!isPlatformStaff) {
+                    if (!actorTenantId) throw inventoryError('An active pharmacy tenant is required.', 403);
+                    query.tenantId = String(actorTenantId);
+                }
+                if (filter.customerId) query.customerId = filter.customerId;
             }
             if (filter.status && filter.status !== 'ALL') query.status = filter.status;
             if (filter.search?.trim()) {
@@ -3228,6 +3244,9 @@ export const dataStore = {
         if (user && !isStaff && request.customerId !== (user.sub || user.id)) {
             return null;
         }
+        if (user && isStaff && !isPlatformStaff) {
+            if (!actorTenantId || String(request.tenantId || '') !== String(actorTenantId)) return null;
+        }
 
         // Auto expire check
         if (request.status === 'PROPOSAL_SENT' && request.expiresAt && new Date() > new Date(request.expiresAt)) {
@@ -3252,11 +3271,13 @@ export const dataStore = {
         return request;
     },
 
-    async getPendingMedicineRequestCount() {
-        if (getIsConnected()) {
-            return MedicineRequest.countDocuments({ status: { $in: ['REQUESTED', 'UNDER_REVIEW'] } });
-        }
-        return inMemoryMedicineRequests.filter(r => ['REQUESTED', 'UNDER_REVIEW'].includes(r.status)).length;
+    async getPendingMedicineRequestCount(tenantId = null) {
+        const filter = { status: { $in: ['REQUESTED', 'UNDER_REVIEW'] }, ...(tenantId ? { tenantId: String(tenantId) } : {}) };
+        if (getIsConnected()) return MedicineRequest.countDocuments(filter);
+        return inMemoryMedicineRequests.filter(r =>
+            ['REQUESTED', 'UNDER_REVIEW'].includes(r.status)
+            && (!tenantId || String(r.tenantId || '') === String(tenantId))
+        ).length;
     },
 
     async reviewMedicineRequest(id, actor = 'Pharmacist', actorRole = 'Pharmacist') {
