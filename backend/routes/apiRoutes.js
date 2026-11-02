@@ -92,8 +92,6 @@ router.get('/tenant/branches', async (req, res) => {
 
 import Tenant from '../models/Tenant.js';
 import Vendor from '../models/Vendor.js';
-import { cacheService } from '../services/cache/CacheService.js';
-import { pharmacyLocationService } from '../services/PharmacyLocationService.js';
 
 router.get('/tenants/nearby', async (req, res) => {
     try {
