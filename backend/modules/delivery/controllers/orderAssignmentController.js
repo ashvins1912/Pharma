@@ -2,6 +2,7 @@ import deliveryContainer from '../container.js';
 import { sendCustomWhatsAppAlert } from '../../../config/whatsapp.js';
 import mongoose from 'mongoose';
 import OrderModel from '../../../models/Order.js';
+import { isSameTenant } from '../../../authorization/tenantScope.js';
 
 const validOrderId = value => typeof value === 'string'
     && value !== 'undefined'
@@ -34,17 +35,17 @@ const validateAssignmentEligibility = async (req, res, orderId) => {
     const globalAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
     const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId || null;
     const branchId = req.user?.branchId || req.user?.app_metadata?.branchId || req.context?.branchId || null;
-    if (!globalAdmin && (!tenantId || !order.tenantId || String(order.tenantId) !== String(tenantId))) {
+    if (!globalAdmin && !isSameTenant(tenantId, order.tenantId)) {
         res.status(403).json({
             success: false,
-            error: { code: 'TENANT_SCOPE_VIOLATION', message: 'This order is outside your tenant scope.', retryable: false, requestId: req.requestId || null }
+            error: { code: 'NOT_FOUND', message: 'Order not found.', retryable: false, requestId: req.requestId || null }
         });
         return null;
     }
     if (!globalAdmin && branchId && (!order.branchId || String(order.branchId) !== String(branchId))) {
         res.status(403).json({
             success: false,
-            error: { code: 'BRANCH_SCOPE_VIOLATION', message: 'This order is outside your branch scope.', retryable: false, requestId: req.requestId || null }
+            error: { code: 'NOT_FOUND', message: 'Order not found.', retryable: false, requestId: req.requestId || null }
         });
         return null;
     }
