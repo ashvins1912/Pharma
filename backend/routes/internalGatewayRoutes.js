@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { authenticateUser } from '../middleware/auth.js';
 import { env } from '../config/env.js';
 import Tenant from '../models/Tenant.js';
+import TenantMembership from '../models/TenantMembership.js';
 import { getIsConnected } from '../config/db.js';
 import tenantService from '../services/tenant-service/TenantService.js';
 
@@ -51,10 +52,14 @@ router.post('/validate-tenant-branch', async (req, res) => {
 
         const isPlatformUser = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
         if (!isPlatformUser) {
-            if (!getIsConnected() && process.env.NODE_ENV === 'production') {
+            let memberships;
+            if (getIsConnected()) {
+                memberships = await TenantMembership.find({ userId, tenantId, status: 'ACTIVE' }).lean();
+            } else if (process.env.NODE_ENV !== 'production') {
+                memberships = await tenantService.getMembershipsForUser(userId);
+            } else {
                 return res.status(503).json({ message: 'Tenant membership registry is unavailable.' });
             }
-            const memberships = await tenantService.getMembershipsForUser(userId);
             const allowed = memberships.some(membership =>
                 String(membership.tenantId) === tenantId
                 && membership.status === 'ACTIVE'
