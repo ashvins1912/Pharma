@@ -446,7 +446,7 @@ async function processJob(job) {
 let workerTimer;
 let activeWorkers = 0;
 export function startImportWorkers() {
-  if (workerTimer) return;
+  if (!config.importsEnabled || workerTimer) return;
   workerTimer = setInterval(() => {
     while (activeWorkers < (config.workerConcurrency || 2)) {
       activeWorkers += 1;
@@ -535,6 +535,7 @@ export async function createImportJob({
   stockMode = 'REPLACE',
   previewFingerprint
 }) {
+  if (!config.importsEnabled) { const error = new Error('Inventory import writes are disabled. Enable INVENTORY_IMPORTS_ENABLED only in an isolated test environment after review.'); error.statusCode = 503; throw error; }
   if (!tenantId || !branchId) { const error = new Error('Verified tenant and branch context are required.'); error.statusCode = 403; throw error; }
   if (stockMode !== 'REPLACE') { const error = new Error('Only REPLACE stock mode is currently supported; additive imports are disabled.'); error.statusCode = 400; throw error; }
   if (!previewFingerprint) { const error = new Error('A server-generated preview fingerprint and explicit confirmation are required.'); error.statusCode = 400; throw error; }
