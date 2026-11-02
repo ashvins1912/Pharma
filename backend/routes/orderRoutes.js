@@ -6,6 +6,7 @@ import dataStore from '../dataStore.js';
 import Order from '../models/Order.js';
 import Tenant from '../models/Tenant.js';
 import Rider from '../models/Rider.js';
+import Medicine from '../models/Medicine.js';
 import { authenticateUser, isAdmin } from '../middleware/auth.js';
 import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
 import { getPrescription, removePrescription, savePrescription } from '../config/prescriptionStorage.js';
@@ -70,7 +71,7 @@ const getErrorStatus = (error) => {
     if (['MongoServerError', 'MongoNetworkError', 'MongooseError'].includes(error.name)) return 503;
     return 500;
 };
-const resolveDispatchRider = async (riderId, orderId = null) => {
+const resolveDispatchRider = async (riderId, orderId = null, tenantId) => {
     if (!getIsConnected()) {
         throw Object.assign(new Error('Dispatch requires an active MongoDB connection.'), { statusCode: 503 });
     }
@@ -78,7 +79,8 @@ const resolveDispatchRider = async (riderId, orderId = null) => {
         throw Object.assign(new Error('Select an onboarded rider before dispatching.'), { statusCode: 400 });
     }
     deliveryContainer.refreshDataLayer();
-    const rider = await deliveryContainer.riderRepository.findById(riderId);
+    if (!tenantId) throw Object.assign(new Error('The order tenant is required to select a delivery rider.'), { statusCode: 403 });
+    const rider = await deliveryContainer.riderRepository.findById(riderId, tenantId);
     if (!rider || !rider.enabled) {
         throw Object.assign(new Error('The selected onboarded rider is unavailable.'), { statusCode: 404 });
     }
@@ -173,14 +175,29 @@ router.post('/', authenticateUser, async (req, res) => {
         )) {
             return res.status(400).json({ error: 'Order items must be a non-empty list with a positive whole-number quantity per item.' });
         }
-        let totalAmount = req.body?.totalAmount ?? req.body?.finalTotal ?? req.body?.finalAmount;
-        if (totalAmount === undefined && Array.isArray(items)) {
-            totalAmount = items.reduce((sum, item) => sum + (Number(item.price || item.unitPrice || 0) * Number(item.quantity || 1)), 0);
+        const selectedTenantId = String(req.body?.tenantId || '').trim();
+        if (!selectedTenantId) return res.status(400).json({ code: 'PHARMACY_SELECTION_REQUIRED', message: 'Select a pharmacy before placing an order.' });
+        const selectedTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!selectedTenant) return res.status(404).json({ code: 'PHARMACY_UNAVAILABLE', message: 'The selected pharmacy is not available.' });
+        const medicineIds = [...new Set(items.map(item => String(item.medicineId || item.productId || item._id || item.id || '')).filter(Boolean))];
+        if (medicineIds.length === 0 || medicineIds.some(id => !mongoose.isValidObjectId(id))) {
+            return res.status(400).json({ message: 'Every order item must reference a valid medicine in the selected pharmacy catalogue.' });
         }
-        const amount = Number(totalAmount);
-        if (!Number.isFinite(amount) || amount < 0) {
-            return res.status(400).json({ error: 'totalAmount must be a non-negative number.' });
+        const medicines = await Medicine.find({
+            _id: { $in: medicineIds },
+            tenantId: selectedTenantId,
+            isActive: { $ne: false }
+        }).select('_id name price sku').lean();
+        if (medicines.length !== medicineIds.length) {
+            return res.status(404).json({ code: 'MEDICINE_NOT_IN_SELECTED_PHARMACY', message: 'One or more medicines are not available from the selected pharmacy.' });
         }
+        const medicineById = new Map(medicines.map(medicine => [String(medicine._id), medicine]));
+        const scopedItems = items.map(item => {
+            const medicineId = String(item.medicineId || item.productId || item._id || item.id);
+            const medicine = medicineById.get(medicineId);
+            return { ...item, medicineId, productId: medicineId, name: medicine.name, price: Number(medicine.price), unitPrice: Number(medicine.price), sku: medicine.sku || item.sku || '' };
+        });
+        const amount = scopedItems.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
         let deliveryAddress = typeof req.body.deliveryAddress === 'string' ? req.body.deliveryAddress.trim() : '';
         let coordinates = req.body.coordinates;
         let addressSnapshot = null;
@@ -215,8 +232,10 @@ router.post('/', authenticateUser, async (req, res) => {
         const order = await Order.create({
             customerId: req.user.sub,
             userId: req.user.sub,
+            tenantId: selectedTenantId,
             riderId: null,
-            items,
+            items: scopedItems,
+            subtotal: amount,
             totalAmount: amount,
             finalTotal: amount,
             deliveryAddress,
