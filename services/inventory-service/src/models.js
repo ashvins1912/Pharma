@@ -141,6 +141,7 @@ const importFailureSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 importFailureSchema.index({ tenantId: 1, branchId: 1, jobId: 1, rowNumber: 1 });
+importFailureSchema.index({ tenantId: 1, branchId: 1, batchId: 1, rowNumber: 1 }, { unique: true });
 
 const auditSchema = new mongoose.Schema({
   tenantId: { type: 'string', required: true, index: true },
