@@ -63,7 +63,15 @@ function publicCatalogCacheKey(version, tenantId, query) {
 router.get('/admin/inventory', authenticateUser, async (req, res) => {
     try {
         const { search, category, sort, page, limit } = req.query;
-        res.json(await dataStore.getMedicines(search, false, category, sort, page, limit, true));
+        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+        const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const tenantId = isPlatformAdmin
+            ? String(req.query.tenantId || '').trim() || null
+            : String(req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
+        if (!isPlatformAdmin && !tenantId) {
+            return res.status(403).json({ message: 'An active pharmacy tenant is required to view inventory.' });
+        }
+        res.json(await dataStore.getMedicines(search, false, category, sort, page, limit, true, tenantId));
     } catch (error) {
         console.error('Admin inventory retrieval failed:', error);
         res.status(500).json({ message: 'Failed to retrieve admin inventory.' });
@@ -107,11 +115,17 @@ router.delete('/:medicineId', authenticateUser, async (req, res) => {
 router.get('/', async (req, res) => {
     try {
         const { search, hideRx, category, sort, page, limit, paginate } = req.query;
+        const tenantId = String(req.query.tenantId || '').trim();
+        if (!tenantId) {
+            return res.status(400).json({
+                code: 'PHARMACY_SELECTION_REQUIRED',
+                message: 'Select a pharmacy to view its medicine catalogue.'
+            });
+        }
         // Only cache non-search public catalog reads. Search requests have impression
         // ingestion side effects and should continue to execute normally.
         const cacheEligible = !(typeof search === 'string' && search.trim())
             && paginate !== 'false';
-        const tenantId = String(req.headers['x-tenant-id'] || 'public').slice(0, 128);
         let cacheKey = null;
         if (cacheEligible) {
             const version = await getPublicCatalogVersion();
@@ -130,7 +144,8 @@ router.get('/', async (req, res) => {
             sort,
             page,
             limit,
-            false
+            false,
+            tenantId
         );
         const medicines = result.medicines.map(publicMedicine);
         if (typeof search === 'string' && search.trim() && getIsConnected()) {
