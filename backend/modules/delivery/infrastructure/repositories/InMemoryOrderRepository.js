@@ -51,16 +51,16 @@ export class InMemoryOrderRepository extends IOrderRepository {
             if (!raw || String(raw.tenantId || '') !== String(tenantId)) return null;
             return this._toDomain(raw);
         }
-        const rawList = typeof this.this.dataStore.getAllOrders === 'function'
-            ? await this.this.dataStore.getAllOrders()
+        const rawList = typeof this.dataStore.getAllOrders === 'function'
+            ? await this.dataStore.getAllOrders()
             : [];
         const raw = rawList.find(o => String(o._id || o.id) === String(id) && String(o.tenantId || '') === String(tenantId));
         return this._toDomain(raw);
     }
 
     async findAll(filter = {}) {
-        const rawList = typeof this.this.dataStore.getAllOrders === 'function'
-            ? await this.this.dataStore.getAllOrders(filter.orderStatus)
+        const rawList = typeof this.dataStore.getAllOrders === 'function'
+            ? await this.dataStore.getAllOrders(filter.orderStatus)
             : [];
         if (!filter.tenantId) return [];
         let orders = rawList.filter(o => String(o.tenantId || '') === String(filter.tenantId)).map(o => this._toDomain(o));
@@ -77,8 +77,8 @@ export class InMemoryOrderRepository extends IOrderRepository {
     async update(id, updateData, tenantId) {
         if (!tenantId) return null;
         // Deep-merge into dataStore order
-        const rawList = typeof this.this.dataStore.getAllOrders === 'function'
-            ? await this.this.dataStore.getAllOrders()
+        const rawList = typeof this.dataStore.getAllOrders === 'function'
+            ? await this.dataStore.getAllOrders()
             : [];
         const raw = rawList.find(o => String(o._id || o.id) === String(id) && String(o.tenantId || '') === String(tenantId));
         if (!raw) return null;
