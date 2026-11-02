@@ -919,10 +919,10 @@ export async function rollbackImportBatch({ batchId, tenantId, branchId, actor }
           throw error;
         }
         if (snapshot.created) {
-          const deleted = await Inventory.deleteOne({ _id: current._id, tenantId, branchId, stockQuantity: expected.stockQuantity, reservedQuantity: expected.reservedQuantity, price: expected.price }).session(session);
+          const deleted = await Inventory.deleteOne({ _id: current._id, tenantId, branchId, sku: expected.sku, batchNumber: expected.batchNumber, stockQuantity: expected.stockQuantity, reservedQuantity: expected.reservedQuantity, price: expected.price, updatedAt: expected.updatedAt }).session(session);
           if (deleted.deletedCount !== 1) throw Object.assign(new Error(`Could not safely remove imported inventory ${snapshot.entityKey}.`), { statusCode: 409 });
         } else {
-          await Inventory.replaceOne({ _id: current._id, tenantId, branchId }, snapshot.before, { session, runValidators: true });
+          await Inventory.replaceOne({ _id: current._id, tenantId, branchId, updatedAt: expected.updatedAt }, snapshot.before, { session, runValidators: true, timestamps: false });
         }
       }
 
@@ -942,9 +942,9 @@ export async function rollbackImportBatch({ batchId, tenantId, branchId, actor }
             error.statusCode = 409;
             throw error;
           }
-          await Product.deleteOne({ _id: current._id, tenantId, version: expected.version }).session(session);
+          await Product.deleteOne({ _id: current._id, tenantId, version: expected.version, updatedAt: expected.updatedAt }).session(session);
         } else {
-          await Product.replaceOne({ _id: current._id, tenantId }, snapshot.before, { session, runValidators: true });
+          await Product.replaceOne({ _id: current._id, tenantId, updatedAt: expected.updatedAt }, snapshot.before, { session, runValidators: true, timestamps: false });
         }
       }
 
