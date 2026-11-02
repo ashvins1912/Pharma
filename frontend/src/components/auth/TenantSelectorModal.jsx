@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import apiClient from '../../api/apiClient';
 import { useTenant } from '../../context/TenantContext';
 import { useApp } from '../../context/AppContext';
@@ -27,14 +27,19 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
   const [userLocation, setUserLocation] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const modalRef = useFocusTrap(isOpen, onClose);
+  const addressLoadAttemptedRef = useRef(false);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      addressLoadAttemptedRef.current = false;
+      return undefined;
+    }
     let cancelled = false;
 
     const load = async () => {
       let savedAddresses = Array.isArray(addresses) ? addresses : [];
-      if (isFullyAuthenticated && savedAddresses.length === 0) {
+      if (isFullyAuthenticated && savedAddresses.length === 0 && !addressLoadAttemptedRef.current) {
+        addressLoadAttemptedRef.current = true;
         try {
           const loaded = await loadAddresses({ force: true });
           if (Array.isArray(loaded)) savedAddresses = loaded;
