@@ -60,8 +60,18 @@ router.post('/', authenticateUser, async (req, res, next) => {
             phone: req.body.customerPhone || req.user.user_metadata?.mobile
         });
 
-        const targetTenantId = req.body.tenantId || req.context.tenantId || 'tenant-ashvin-main';
-        const targetBranchId = req.body.branchId || req.context.branchId || 'branch-indore-central';
+        const requestedTenantId = String(req.body.tenantId || '').trim();
+        const membershipTenantId = req.context.tenantMembership ? String(req.context.tenantId || '') : null;
+        if (membershipTenantId && requestedTenantId && requestedTenantId !== membershipTenantId) {
+            return res.status(403).json({ success: false, message: 'Your pharmacy membership does not authorize this tenant.' });
+        }
+        const targetTenantId = membershipTenantId || requestedTenantId;
+        if (!targetTenantId) {
+            return res.status(400).json({ success: false, message: 'Select a pharmacy before submitting a medicine request.' });
+        }
+        const targetBranchId = req.context.tenantMembership
+            ? (req.context.branchId || null)
+            : (req.body.branchId || null);
 
         const request = await medicineRequestService.createRequest({
             tenantId: targetTenantId,
