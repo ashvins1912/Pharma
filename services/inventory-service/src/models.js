@@ -11,6 +11,8 @@ const productSchema = new mongoose.Schema({
   category: { type: 'string', default: 'General Medicine' },
   description: { type: 'string', default: '' },
   imageUrl: { type: 'string', default: '' },
+  baseCostPrice: { type: 'number', min: 0 },
+  marginTier: { type: 'string', enum: ['LOW', 'MID', 'HIGH'], default: 'LOW' },
   requiresPrescription: { type: 'boolean', default: false },
   version: { type: 'number', default: 1 },
   active: { type: 'boolean', default: true }
