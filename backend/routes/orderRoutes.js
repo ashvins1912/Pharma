@@ -330,7 +330,7 @@ router.get('/', authenticateUser, async (req, res) => {
             query.tenantId = String(rider.tenantId);
             query.$or = [{ riderId: rider._id }, { 'rider.riderId': String(rider._id) }];
         } else {
-            query.customerId = req.user.sub;
+            query.$or = [{ customerId: req.user.sub }, { userId: req.user.sub }];
         }
         const orders = await Order.find(query).sort({ createdAt: -1 }).lean();
         if (!isPlatformOrderAdmin(req)) await sanitizeTenantRiderReferences(orders);
@@ -415,7 +415,7 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             }
         }
         if (req.file) {
-            uploadedPrescriptionUrl = await savePrescription(req.file, req.user.sub);
+            uploadedPrescriptionUrl = await savePrescription(req.file, req.user.sub, selectedTenantId);
             if (prescriptionClient.isConfigured()) {
                 try {
                     const uploaded = await prescriptionClient.upload({
@@ -592,8 +592,9 @@ router.get('/prescriptions/:fileId', authenticateUser, async (req, res) => {
                 ) || null;
             }
         }
-        const tenantMatches = !tenantId || !relatedOrder?.tenantId || String(tenantId) === String(relatedOrder.tenantId);
-        const branchMatches = !branchId || !relatedOrder?.branchId || String(branchId) === String(relatedOrder.branchId);
+        const tenantMatches = Boolean(tenantId && prescription.tenantId && String(tenantId) === String(prescription.tenantId)
+            && relatedOrder?.tenantId && String(tenantId) === String(relatedOrder.tenantId));
+        const branchMatches = !branchId || Boolean(relatedOrder?.branchId && String(branchId) === String(relatedOrder.branchId));
         const isAuthorizedStaff = globalAdmin || (tenantStaff && tenantMatches && branchMatches);
 
         if (prescription.ownerId !== req.user.sub && !isAuthorizedStaff) {
