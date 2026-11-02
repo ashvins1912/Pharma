@@ -8,14 +8,17 @@ export class InMemoryRiderRepository extends IRiderRepository {
         this.riders = new Map();
     }
 
-    async findById(id) {
-        return this.riders.get(String(id)) || null;
+    async findById(id, tenantId) {
+        const rider = this.riders.get(String(id)) || null;
+        return rider && tenantId && rider.tenantId === String(tenantId) ? rider : null;
     }
 
-    async findByMobile(mobile) {
+    async findByMobile(mobile, tenantId) {
+        if (!tenantId) return null;
         const cleanMobile = String(mobile).trim();
         const digits = cleanMobile.replace(/\D/g, '');
         for (const rider of this.riders.values()) {
+            if (rider.tenantId !== String(tenantId)) continue;
             if (rider.mobile === cleanMobile || (
                 digits && rider.mobile.replace(/\D/g, '') === digits
             )) return rider;
@@ -24,7 +27,8 @@ export class InMemoryRiderRepository extends IRiderRepository {
     }
 
     async findAll(filter = {}) {
-        let result = Array.from(this.riders.values());
+        if (!filter.tenantId) return [];
+        let result = Array.from(this.riders.values()).filter(r => r.tenantId === String(filter.tenantId));
         if (!filter.includeDisabled) {
             result = result.filter(r => r.enabled);
         }
@@ -51,9 +55,9 @@ export class InMemoryRiderRepository extends IRiderRepository {
         return clone;
     }
 
-    async update(id, updateData) {
+    async update(id, updateData, tenantId) {
         const existing = this.riders.get(String(id));
-        if (!existing) return null;
+        if (!existing || !tenantId || existing.tenantId !== String(tenantId)) return null;
 
         const currentJson = existing.toJSON();
         const updatedJson = { ...currentJson, ...updateData, updatedAt: new Date() };
@@ -65,10 +69,11 @@ export class InMemoryRiderRepository extends IRiderRepository {
         return updated;
     }
 
-    async findAvailableNearby(coordinates, maxDistanceInMeters = 15000, limit = 5) {
+    async findAvailableNearby(coordinates, maxDistanceInMeters = 15000, limit = 5, tenantId) {
+        if (!tenantId) return [];
         const target = new Location(coordinates[0], coordinates[1]);
         const available = Array.from(this.riders.values())
-            .filter(r => r.isAvailable());
+            .filter(r => r.isAvailable() && r.tenantId === String(tenantId));
 
         const withDistances = available.map(rider => ({
             rider,
