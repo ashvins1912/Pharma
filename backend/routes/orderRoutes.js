@@ -1034,6 +1034,12 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
     try {
         const { orderId, newStatus, cashCollectionStatus } = req.body;
         if (isTenantOrderStaff(req)) {
+            const tenantId = getActorTenantId(req);
+            if (!tenantId) return res.status(403).json({ message: 'An active tenant context is required.' });
+            const scopedOrder = await Order.findOne({ _id: orderId, tenantId: String(tenantId) }).select('_id').lean();
+            if (!scopedOrder) return res.status(404).json({ message: 'Order not found.' });
+        }
+        if (isTenantOrderStaff(req)) {
             if (!getActorTenantId(req)) return res.status(403).json({ message: 'An active tenant context is required.' });
             const scopedOrder = await Order.findOne({ _id: orderId, tenantId: String(getActorTenantId(req)) }).select('_id').lean();
             if (!scopedOrder) return res.status(404).json({ message: 'Order not found.' });
