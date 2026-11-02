@@ -9,6 +9,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   const { fetchMedicines } = useApp();
 
   const [file, setFile] = useState(null);
+  const [stockMode, setStockMode] = useState('REPLACE');
   const [analyzing, setAnalyzing] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [previewData, setPreviewData] = useState(null);
@@ -144,6 +145,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
       const formData = new FormData();
       formData.append('excelFile', file);
+      formData.append('stockMode', stockMode);
 
       const res = await apiClient.post('/api/v1/inventory/imports', formData, {
         headers: {
@@ -322,6 +324,14 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
               >
                 📥 Download Sample Template (.xlsx)
               </button>
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+              <label htmlFor="inventory-stock-mode" className="block text-xs font-bold text-amber-900">Stock update behaviour</label>
+              <select id="inventory-stock-mode" value={stockMode} onChange={event => setStockMode(event.target.value)} className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-slate-800">
+                <option value="REPLACE">Replace existing batch quantity (safe default)</option>
+                <option value="ADD">Add uploaded quantity to existing batch</option>
+              </select>
+              <p className="text-[11px] text-amber-900">Rows are matched by SKU + Batch Number. Different batches remain separate. Expired batches are rejected.</p>
             </div>
           </div>
         )}
