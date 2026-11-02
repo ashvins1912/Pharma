@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
 import Medicine from '../models/Medicine.js';
 import Order from '../models/Order.js';
+import Tenant from '../models/Tenant.js';
 import { authenticateUser } from '../middleware/auth.js';
 import { getIsConnected } from '../config/db.js';
 import { publishOrderEvent } from '../services/OrderEventService.js';
@@ -94,9 +95,15 @@ router.post('/', authenticateUser, async (req, res) => {
             return res.status(400).json({ message: 'pointsToRedeem must be a non-negative integer.' });
         }
 
+        const selectedTenantId = String(body.tenantId || '').trim();
+        if (!selectedTenantId) return res.status(400).json({ code: 'PHARMACY_SELECTION_REQUIRED', message: 'Select a pharmacy before creating an order.' });
+        const selectedTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!selectedTenant) return res.status(404).json({ code: 'PHARMACY_UNAVAILABLE', message: 'Selected pharmacy is unavailable.' });
+
         const productReferences = body.items.map(item => String(item.productId || item.sku).trim());
         const objectIds = productReferences.filter(mongoose.isValidObjectId);
         const products = await Medicine.find({
+            tenantId: selectedTenantId,
             $or: [
                 { sku: { $in: productReferences.map(id => id.toUpperCase()) } },
                 { code: { $in: productReferences.map(id => id.toUpperCase()) } },
@@ -146,6 +153,7 @@ router.post('/', authenticateUser, async (req, res) => {
 
         const order = await dataStore.reserveOrder({
             userId: req.user.sub,
+            tenantId: selectedTenantId,
             customerName: body.addressDetails?.fullName || req.user.user_metadata?.name || req.user.email || 'Customer',
             customerMobile: String(body.mobile || body.addressDetails?.mobile || body.addressDetails?.phone || req.user.user_metadata?.mobile || '').trim(),
             items: resolvedItems,
