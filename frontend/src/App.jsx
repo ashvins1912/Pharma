@@ -661,9 +661,9 @@ function MainApp() {
         preferredTenantId={new URLSearchParams(window.location.search).get('tenantId') || ''}
         onClose={() => {
           setTenantSelectorOpen(false);
-          if (checkoutAfterTenantSelection && tenantId) {
+          if (checkoutAfterTenantSelection) {
             setCheckoutAfterTenantSelection(false);
-            setCheckoutOpen(true);
+            if (tenantId) setCheckoutOpen(true);
           }
         }}
       />
