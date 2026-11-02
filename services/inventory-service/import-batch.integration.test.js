@@ -168,6 +168,35 @@ test('controlled import preview, chunked batch ledger and rollback restore the e
     assert.equal(await models.ImportJob.countDocuments({ tenantId, branchId }), 1);
     const unchangedAfterRejection = await models.Inventory.findOne({ tenantId, branchId, sku: 'TEST-MED-001', batchNumber: 'TEST-LOT-A' }).lean();
     assert.equal(unchangedAfterRejection.stockQuantity, 5);
+
+    const laterRows = [{ ...controlledRows[0], Stock: 8 }];
+    const laterFilePath = await writeWorkbook('later-import.xlsx', laterRows);
+    const laterPreview = await imports.previewImportFile({ filePath: laterFilePath, tenantId, branchId });
+    const laterJob = await imports.createImportJob({
+      file: { path: laterFilePath },
+      fileName: 'later-import.xlsx',
+      uploadedBy: 'controlled-test-runner',
+      idempotencyKey: randomUUID(),
+      tenantId,
+      branchId,
+      stockMode: 'REPLACE',
+      previewFingerprint: laterPreview.previewFingerprint
+    });
+    assert.equal((await waitForJob(laterJob._id)).status, 'COMPLETED');
+    await models.Inventory.updateOne(
+      { tenantId, branchId, sku: 'TEST-MED-001', batchNumber: 'TEST-LOT-A' },
+      { $set: { stockQuantity: 9 } }
+    );
+    await assert.rejects(
+      imports.rollbackImportBatch({ batchId: laterJob.batchId, tenantId, branchId, actor: 'controlled-test-runner' }),
+      error => error.statusCode === 409
+    );
+    const protectedStock = await models.Inventory.findOne({
+      tenantId, branchId, sku: 'TEST-MED-001', batchNumber: 'TEST-LOT-A'
+    }).lean();
+    assert.equal(protectedStock.stockQuantity, 9);
+    const protectedBatch = await models.ImportBatch.findOne({ batchId: laterJob.batchId, tenantId, branchId }).lean();
+    assert.equal(protectedBatch.status, 'COMPLETED');
   } finally {
     await mongoose.disconnect().catch(() => {});
     await fs.rm(storage, { recursive: true, force: true }).catch(() => {});
