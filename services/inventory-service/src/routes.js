@@ -27,6 +27,9 @@ const router = express.Router();
 const asyncHandler = handler => (req, res, next) => {
   Promise.resolve(handler(req, res, next)).catch(next);
 };
+const getInventoryScope = (req, fallback = {}) => req.service?.name === 'api-gateway'
+  ? { tenantId: req.service.tenantId, branchId: req.service.branchId }
+  : { tenantId: req.service?.tenantId || fallback.tenantId || null, branchId: req.service?.branchId || fallback.branchId || null };
 await fs.mkdir(config.importStorage, { recursive: true });
 const upload = multer({
   storage: multer.diskStorage({
@@ -38,8 +41,7 @@ const upload = multer({
 
 router.get('/products/search', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
   const result = await searchInventoryProducts({
-    tenantId: req.query.tenantId || null,
-    branchId: req.query.branchId || null,
+    ...getInventoryScope(req, req.query),
     query: req.query.q || '',
     category: req.query.category || '',
     page: req.query.page || 1,
@@ -49,7 +51,7 @@ router.get('/products/search', requireServiceScope('inventory.read'), asyncHandl
 }));
 
 router.get('/products/:productId', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
-  const result = await lookupInventory({ productIds: [req.params.productId] });
+  const result = await lookupInventory({ productIds: [req.params.productId], ...getInventoryScope(req) });
   if (!result.length) return res.status(404).json({ message: 'Product was not found.' });
   return res.json(result[0]);
 }));
@@ -61,7 +63,7 @@ router.get('/:productId', requireServiceScope('inventory.read'), asyncHandler(as
 }));
 
 router.post('/bulk/lookup', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
-  return res.json({ items: await lookupInventory(req.body || {}) });
+  return res.json({ items: await lookupInventory({ ...(req.body || {}), ...getInventoryScope(req, req.body || {}) }) });
 }));
 
 router.post('/check-availability', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
@@ -79,7 +81,7 @@ router.post('/check-availability', requireServiceScope('inventory.read'), asyncH
     }
     requested.set(productId, quantity);
   }
-  const inventory = await lookupInventory({ productIds: [...requested.keys()] });
+  const inventory = await lookupInventory({ productIds: [...requested.keys()], ...getInventoryScope(req, req.body || {}) });
   const byProductId = new Map(inventory.map(item => [item.productId, item]));
   const availability = [...requested].map(([productId, quantity]) => {
     const current = byProductId.get(productId);
@@ -97,6 +99,7 @@ router.post('/reservations', requireServiceScope('inventory.reserve'), asyncHand
   const idempotencyKey = req.get('idempotency-key') || req.body?.idempotencyKey;
   const result = await reserveInventory({
     ...req.body,
+    ...getInventoryScope(req, req.body || {}),
     idempotencyKey,
     actor: req.service.name,
     requestId: req.requestId,
@@ -107,6 +110,7 @@ router.post('/reservations', requireServiceScope('inventory.reserve'), asyncHand
 
 router.post('/reservations/:reservationId/release', requireServiceScope('inventory.release'), asyncHandler(async (req, res) => {
   const result = await transitionReservation(req.params.reservationId, 'RELEASED', {
+    ...getInventoryScope(req),
     actor: req.service.name,
     requestId: req.requestId,
     correlationId: req.correlationId
@@ -116,6 +120,7 @@ router.post('/reservations/:reservationId/release', requireServiceScope('invento
 
 router.post('/reservations/:reservationId/deduct', requireServiceScope('inventory.deduct'), asyncHandler(async (req, res) => {
   const result = await transitionReservation(req.params.reservationId, 'DEDUCTED', {
+    ...getInventoryScope(req),
     actor: req.service.name,
     requestId: req.requestId,
     correlationId: req.correlationId
@@ -126,6 +131,7 @@ router.post('/reservations/:reservationId/deduct', requireServiceScope('inventor
 router.post('/adjust', requireServiceScope('inventory.adjust'), asyncHandler(async (req, res) => {
   const result = await adjustInventory({
     ...req.body,
+    ...getInventoryScope(req, req.body || {}),
     operationKey: req.get('idempotency-key') || req.body?.operationKey,
     actor: req.service.userId || req.service.name,
     requestId: req.requestId,
@@ -137,9 +143,7 @@ router.post('/adjust', requireServiceScope('inventory.adjust'), asyncHandler(asy
 router.post('/imports/preview', requireServiceScope('inventory.import'), upload.single('excelFile'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'An Excel workbook is required.' });
   if (!/\.(xlsx|xls)$/i.test(req.file.originalname)) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(400).json({ message: 'Upload an .xlsx or .xls workbook.' }); }
-  const isPlatformUser = req.service?.isPlatformUser === true;
-  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : String(req.service?.tenantId || '').trim();
-  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : String(req.service?.branchId || '').trim();
+  const { tenantId, branchId } = getInventoryScope(req);
   if (!tenantId || !branchId) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(403).json({ message: 'Verified tenant and branch selection is required.' }); }
   try { return res.json(await previewImportFile({ filePath: req.file.path, tenantId, branchId })); }
   finally { await fs.rm(req.file.path, { force: true }).catch(() => {}); }
@@ -156,9 +160,7 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
     return res.status(400).json({ message: 'A valid Idempotency-Key header is required.' });
   }
 
-  const isPlatformUser = req.service?.isPlatformUser === true;
-  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : String(req.service?.tenantId || '').trim();
-  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : String(req.service?.branchId || '').trim();
+  const { tenantId, branchId } = getInventoryScope(req);
   if (!tenantId || !branchId) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(403).json({ message: 'Verified tenant and branch selection is required.' }); }
 
   try {
@@ -199,9 +201,7 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
 
 router.get('/imports/:jobId', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
-  const isPlatformUser = req.service?.isPlatformUser === true;
-  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : req.service?.tenantId;
-  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : req.service?.branchId;
+  const { tenantId, branchId } = getInventoryScope(req);
   if (!isPlatformUser && (!tenantId || !branchId)) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
   const filter = { _id: req.params.jobId };
   if (tenantId) filter.tenantId = tenantId;
@@ -231,9 +231,7 @@ router.get('/imports/:jobId', requireServiceScope('inventory.import'), asyncHand
 
 router.get('/imports/:jobId/failures', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
-  const isPlatformUser = req.service?.isPlatformUser === true;
-  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : req.service?.tenantId;
-  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : req.service?.branchId;
+  const { tenantId, branchId } = getInventoryScope(req);
   if (!isPlatformUser && (!tenantId || !branchId)) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
   const filter = { _id: req.params.jobId };
   if (tenantId) filter.tenantId = tenantId;
@@ -247,9 +245,7 @@ router.get('/imports/:jobId/failures', requireServiceScope('inventory.import'), 
 
 router.get('/imports/:jobId/failures/download', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
-  const isPlatformUser = req.service?.isPlatformUser === true;
-  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : req.service?.tenantId;
-  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : req.service?.branchId;
+  const { tenantId, branchId } = getInventoryScope(req);
   if (!isPlatformUser && (!tenantId || !branchId)) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
   const filter = { _id: req.params.jobId };
   if (tenantId) filter.tenantId = tenantId;
@@ -269,9 +265,7 @@ router.get('/imports/:jobId/failures/download', requireServiceScope('inventory.i
 
 router.post('/imports/batches/:batchId/rollback', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!/^[0-9a-f-]{36}$/i.test(req.params.batchId)) return res.status(404).json({ message: 'Import batch was not found.' });
-  const isPlatformUser = req.service?.isPlatformUser === true;
-  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : String(req.service?.tenantId || '').trim();
-  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : String(req.service?.branchId || '').trim();
+  const { tenantId, branchId } = getInventoryScope(req);
   if (!tenantId || !branchId) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
   const batch = await rollbackImportBatch({
     batchId: req.params.batchId,
@@ -285,9 +279,7 @@ router.post('/imports/batches/:batchId/rollback', requireServiceScope('inventory
 
 router.post('/imports/:jobId/retry', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
-  const isPlatformUser = req.service?.isPlatformUser === true;
-  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : req.service?.tenantId;
-  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : req.service?.branchId;
+  const { tenantId, branchId } = getInventoryScope(req);
   if (!isPlatformUser && (!tenantId || !branchId)) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
   const job = await retryImportJob(
     req.params.jobId,
