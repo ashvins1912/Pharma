@@ -368,7 +368,9 @@ export class TenantService {
             }
             const seeded = this.branches.get(id);
             if (!seeded) return null;
-            const { id: _id, ...branchData } = seeded;
+            const branchData = { ...seeded };
+            delete branchData.id;
+            delete branchData._id;
             const created = await TenantBranch.findOneAndUpdate(
                 { _id: id },
                 { $setOnInsert: { ...branchData, tenantId: String(seeded.tenantId) } },
@@ -432,7 +434,9 @@ export class TenantService {
             updatedAt: new Date().toISOString()
         };
         if (getIsConnected()) {
-            const { id: _id, _id: ignoredId, ...persistedFields } = updated;
+            const persistedFields = { ...updated };
+            delete persistedFields.id;
+            delete persistedFields._id;
             const persisted = await TenantBranch.findOneAndUpdate(
                 { _id: String(branchId), tenantId: String(branch.tenantId) },
                 { $set: persistedFields },
