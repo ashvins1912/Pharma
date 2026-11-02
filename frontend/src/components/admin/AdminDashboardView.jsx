@@ -57,7 +57,7 @@ export default function AdminDashboardView() {
     loading: authLoading
   } = useAuth();
   const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen, setAdminBulkImportModalOpen, setAdminNewStockModalOpen } = useApp();
-  const [adminTab, setAdminTab] = useState('fulfillment');
+  const [adminTab, setAdminTab] = useState('tenantProfile');
 
   // Navigation visibility and component rendering share these exact permission gates.
   const canViewFulfillment = hasPermission('orders.read') && hasPermission('orders.manage');
@@ -69,8 +69,8 @@ export default function AdminDashboardView() {
   const canViewSurplusSavings = hasPermission('promotions.read');
   const canViewPayments = hasPermission('billing.read');
   const canManagePayments = hasPermission('billing.write');
-  const canViewInventory = hasPermission('inventory.read');
-  const canImportInventory = hasPermission('inventory.import');
+  const canViewInventory = canAccessOperations || isSuperAdmin || hasPermission('inventory.read');
+  const canImportInventory = canAccessOperations || isSuperAdmin || hasPermission('inventory.import');
   const canManageRoutes = hasPermission('delivery.manage') && hasPermission('orders.manage');
   const canViewAudits = hasPermission('inventory.read');
   const canViewTenants = isSuperAdmin && hasPermission('tenants.read');
@@ -713,7 +713,7 @@ export default function AdminDashboardView() {
       {adminTab === 'inventory' && canViewInventory && (
         <AdminInventoryTable
           onOpenBulkImport={() => setImportModalOpen(true)}
-          canManage={hasPermission('inventory.write')}
+          canManage={canAccessOperations || isSuperAdmin || hasPermission('inventory.write') || hasPermission('*')}
           canImport={canImportInventory}
         />
       )}

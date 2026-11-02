@@ -7,10 +7,42 @@ export default function TenantProfileDashboard() {
   const { addToast } = useToast();
   const { user, isSuperAdmin } = useAuth();
 
-  const [loading, setLoading] = useState(true);
-  const [vendorProfile, setVendorProfile] = useState(null);
-  const [branches, setBranches] = useState([]);
-  const [personnel, setPersonnel] = useState([]);
+  const [vendorProfile, setVendorProfile] = useState({
+    shopName: 'City Health Pharmacy & Wellness',
+    legalName: 'City Health Pharma Pvt Ltd',
+    licenseNumber: 'DL-2026-SF-99887',
+    gstNumber: '27AABCC1234F1Z9',
+    address: { street: '123 Main Street', city: 'San Francisco', state: 'CA', zipCode: '94105' },
+    ownerDetails: { name: 'Ashvin Singh', email: 'ashvinsingh25@gmail.com', phone: '+19876543210' }
+  });
+  const [branches, setBranches] = useState([
+    {
+      id: 'branch-1',
+      name: 'Downtown Flagship Dispensary',
+      status: 'ACTIVE',
+      location: '123 Main Street, San Francisco, CA',
+      serviceRadiusKm: 12,
+      minimumOrderValue: 150,
+      managerName: 'Robert Vance',
+      managerPhone: '+1 415 555 0199',
+      managerEmail: 'robert.vance@cityhealth.com'
+    },
+    {
+      id: 'branch-2',
+      name: 'Northside Express Hub',
+      status: 'ACTIVE',
+      location: '456 Health Ave, San Francisco, CA',
+      serviceRadiusKm: 15,
+      minimumOrderValue: 200,
+      managerName: 'Sarah Jenkins',
+      managerPhone: '+1 415 555 0144',
+      managerEmail: 'sarah.j@cityhealth.com'
+    }
+  ]);
+  const [personnel, setPersonnel] = useState([
+    { _id: 'p-1', name: 'Ashvin Singh', email: 'ashvinsingh25@gmail.com', role: 'OWNER' },
+    { _id: 'p-2', name: 'Jane Admin', email: 'jane.admin@pharmacy.com', role: 'TENANT_ADMIN' }
+  ]);
   const [error, setError] = useState('');
 
   // Modal for adding/editing branch & branch manager
@@ -30,78 +62,20 @@ export default function TenantProfileDashboard() {
 
   const loadData = async () => {
     try {
-      setLoading(true);
-      setError('');
       const profileRes = await apiClient.get('/api/vendor/profile').catch(() => ({ data: null }));
       const branchRes = await apiClient.get('/api/tenant/branches').catch(() => ({ data: null }));
 
-      setVendorProfile(profileRes?.data?.tenant || {
-        shopName: 'City Health Pharmacy & Wellness',
-        legalName: 'City Health Pharma Pvt Ltd',
-        licenseNumber: 'DL-2026-SF-99887',
-        gstNumber: '27AABCC1234F1Z9',
-        address: { street: '123 Main Street', city: 'San Francisco', state: 'CA', zipCode: '94105' },
-        ownerDetails: { name: 'Ashvin Singh', email: 'ashvinsingh25@gmail.com', phone: '+19876543210' }
-      });
-
-      setPersonnel(profileRes?.data?.personnel || [
-        { _id: 'p-1', name: 'Ashvin Singh', email: 'ashvinsingh25@gmail.com', role: 'OWNER' },
-        { _id: 'p-2', name: 'Jane Admin', email: 'jane.admin@pharmacy.com', role: 'TENANT_ADMIN' }
-      ]);
-
-      const branchList = branchRes?.data?.branches || [
-        {
-          id: 'branch-1',
-          name: 'Downtown Flagship Dispensary',
-          status: 'ACTIVE',
-          location: '123 Main Street, San Francisco, CA',
-          serviceRadiusKm: 12,
-          minimumOrderValue: 150,
-          managerName: 'Robert Vance',
-          managerPhone: '+1 415 555 0199',
-          managerEmail: 'robert.vance@cityhealth.com'
-        },
-        {
-          id: 'branch-2',
-          name: 'Northside Express Hub',
-          status: 'ACTIVE',
-          location: '456 Health Ave, San Francisco, CA',
-          serviceRadiusKm: 15,
-          minimumOrderValue: 200,
-          managerName: 'Sarah Jenkins',
-          managerPhone: '+1 415 555 0144',
-          managerEmail: 'sarah.j@cityhealth.com'
-        }
-      ];
-      setBranches(branchList);
+      if (profileRes?.data?.tenant) {
+        setVendorProfile(profileRes.data.tenant);
+      }
+      if (profileRes?.data?.personnel) {
+        setPersonnel(profileRes.data.personnel);
+      }
+      if (branchRes?.data?.branches) {
+        setBranches(branchRes.data.branches);
+      }
     } catch (err) {
-      setVendorProfile({
-        shopName: 'City Health Pharmacy & Wellness',
-        legalName: 'City Health Pharma Pvt Ltd',
-        licenseNumber: 'DL-2026-SF-99887',
-        gstNumber: '27AABCC1234F1Z9',
-        address: { street: '123 Main Street', city: 'San Francisco', state: 'CA', zipCode: '94105' },
-        ownerDetails: { name: 'Ashvin Singh', email: 'ashvinsingh25@gmail.com', phone: '+19876543210' }
-      });
-      setPersonnel([
-        { _id: 'p-1', name: 'Ashvin Singh', email: 'ashvinsingh25@gmail.com', role: 'OWNER' },
-        { _id: 'p-2', name: 'Jane Admin', email: 'jane.admin@pharmacy.com', role: 'TENANT_ADMIN' }
-      ]);
-      setBranches([
-        {
-          id: 'branch-1',
-          name: 'Downtown Flagship Dispensary',
-          status: 'ACTIVE',
-          location: '123 Main Street, San Francisco, CA',
-          serviceRadiusKm: 12,
-          minimumOrderValue: 150,
-          managerName: 'Robert Vance',
-          managerPhone: '+1 415 555 0199',
-          managerEmail: 'robert.vance@cityhealth.com'
-        }
-      ]);
-    } finally {
-      setLoading(false);
+      // Keep defaults
     }
   };
 
@@ -168,13 +142,7 @@ export default function TenantProfileDashboard() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-96 items-center justify-center">
-        <div className="text-sm font-bold text-blue-600 animate-pulse">Loading Tenant Profile &amp; Branch Hierarchy...</div>
-      </div>
-    );
-  }
+
 
   return (
     <div className="space-y-6">

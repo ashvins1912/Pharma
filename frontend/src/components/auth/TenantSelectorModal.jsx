@@ -160,11 +160,12 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
 
       setTenants(list);
       setError('');
-      const preferred = preferredTenantId ? list.find(tenant => String(tenant._id) === String(preferredTenantId)) : null;
+      const preferred = preferredTenantId
+        ? list.find(tenant => String(tenant._id) === String(preferredTenantId))
+        : (list[0] || null);
       if (preferred) {
         setTenantId(preferred._id);
         setActiveTenant(preferred);
-        setSearchQuery(preferred.shopName || '');
       }
     } catch (err) {
       setError(err?.response?.data?.message || err.message || 'Failed to fetch nearby pharmacies');

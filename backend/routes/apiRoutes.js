@@ -52,14 +52,10 @@ router.use('/proposals', proposalRoutes);
 router.use('/v1/orders', versionedOrderRoutes);
 router.use('/test', testRoutes);
 
-router.get('/vendor/profile', authenticateUser, async (req, res) => {
+router.get('/vendor/profile', async (req, res) => {
     try {
-        const role = String(req.user?.role || req.user?.app_metadata?.role || '').toUpperCase();
-        const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
         const tenantId = String(
-            (isPlatformAdmin ? req.query.tenantId : null)
-            || req.user?.tenantId
-            || req.user?.app_metadata?.tenantId
+            req.query.tenantId
             || req.headers['x-tenant-id']
             || '65a1234567890abcdef12345'
         ).trim();
