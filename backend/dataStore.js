@@ -3052,12 +3052,13 @@ export const dataStore = {
 
     async getMedicineRequests(filter = {}, user = null) {
         const role = user?.app_metadata?.role || user?.role;
-        const isStaff = user && [
-            'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
-            'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST',
-            'PHARMACY_STAFF', 'ORDER_MANAGER'
-        ].includes(role);
-        const isPlatformStaff = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const normalizedRole = String(role || '').toUpperCase();
+        const isStaff = Boolean(user) && [
+            'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'PHARMACY',
+            'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF',
+            'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
+        ].includes(normalizedRole);
+        const isPlatformStaff = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(normalizedRole);
         const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
 
         if (getIsConnected()) {
@@ -3162,11 +3163,13 @@ export const dataStore = {
         const safePage = Math.max(1, Number.parseInt(page, 10) || 1);
         const safeLimit = Math.min(50, Math.max(1, Number.parseInt(limit, 10) || 8));
         const role = user?.app_metadata?.role || user?.role;
-        const isStaff = user && [
-            'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
-            'pharmacy', 'PHARMACY', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
-        ].includes(role);
-        const isPlatformStaff = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const normalizedRole = String(role || '').toUpperCase();
+        const isStaff = Boolean(user) && [
+            'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'PHARMACY',
+            'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF',
+            'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
+        ].includes(normalizedRole);
+        const isPlatformStaff = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(normalizedRole);
         const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
 
         if (getIsConnected()) {
@@ -3230,12 +3233,13 @@ export const dataStore = {
     async getMedicineRequestById(id, user = null) {
         let request = null;
         const role = user?.app_metadata?.role || user?.role;
-        const isStaff = user && [
-            'admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN',
-            'pharmacy', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST',
-            'PHARMACY_STAFF', 'ORDER_MANAGER'
-        ].includes(role);
-        const isPlatformStaff = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const normalizedRole = String(role || '').toUpperCase();
+        const isStaff = Boolean(user) && [
+            'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'PHARMACY',
+            'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF',
+            'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
+        ].includes(normalizedRole);
+        const isPlatformStaff = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(normalizedRole);
         const actorTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
         const ownerScope = user && !isStaff ? { customerId: user.sub || user.id } : {};
         const tenantScope = user && isStaff && !isPlatformStaff
