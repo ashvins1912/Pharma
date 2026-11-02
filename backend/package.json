@@ -7,7 +7,8 @@
     "dev": "node --watch dev.js",
     "start": "node server-entry.js",
     "test": "node --test",
-    "admin:promote": "node scripts/promote-admin.mjs"
+    "admin:promote": "node scripts/promote-admin.mjs",
+    "rider:migrate-tenants": "node scripts/backfillRiderTenants.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
