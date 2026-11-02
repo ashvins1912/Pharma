@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import apiClient from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
+import { useTenant } from '../context/TenantContext';
 
 /**
  * Custom Hook: useRiderManagement
@@ -8,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
  */
 export function useRiderManagement({ includeDisabled = false } = {}) {
     const { hasPermission, loading: authLoading } = useAuth();
+    const { tenantId } = useTenant();
     const [riders, setRiders] = useState([]);
     const [loadingRiders, setLoadingRiders] = useState(false);
     const [ridersError, setRidersError] = useState(null);
@@ -25,6 +27,7 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
         setRidersError(null);
         try {
             const params = {};
+            if (tenantId) params.tenantId = tenantId;
             if (filter.status) params.status = filter.status;
             if (filter.search) params.search = filter.search;
             if (filter.includeDisabled ?? includeDisabled) params.includeDisabled = true;
@@ -43,25 +46,25 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
         } finally {
             setLoadingRiders(false);
         }
-    }, [authLoading, includeDisabled, hasPermission]);
+    }, [authLoading, includeDisabled, hasPermission, tenantId]);
 
     const fetchEngineStatus = useCallback(async () => {
         if (authLoading || !hasPermission('delivery.read')) return;
         setLoadingEngine(true);
         try {
-            const res = await apiClient.get('/api/admin/assignment/engine-status');
+            const res = await apiClient.get('/api/admin/assignment/engine-status', { params: tenantId ? { tenantId } : {} });
             setEngineStatus(res.data || { pipeline: [], logs: [], totalEvaluations: 0 });
         } catch (err) {
             console.warn('Failed to load assignment engine telemetry:', err.message);
         } finally {
             setLoadingEngine(false);
         }
-    }, [authLoading, hasPermission]);
+    }, [authLoading, hasPermission, tenantId]);
 
     const updateStatus = async (riderId, newStatus) => {
         if (!hasPermission('delivery.manage')) throw new Error('Your account cannot update rider status.');
         try {
-            const res = await apiClient.patch(`/api/admin/riders/${riderId}/status`, { status: newStatus });
+            const res = await apiClient.patch(`/api/admin/riders/${riderId}/status`, { status: newStatus, tenantId });
             setRiders((prev) => prev.map((r) => (r.id === riderId ? res.data.rider : r)));
             return res.data;
         } catch (err) {
@@ -75,7 +78,8 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
             const res = await apiClient.patch(`/api/admin/riders/${riderId}/enabled`, {
                 enabled,
                 action,
-                remark
+                remark,
+                tenantId
             });
             setRiders((prev) => prev.map((r) => (r.id === riderId ? res.data.rider : r)));
             return res.data;
