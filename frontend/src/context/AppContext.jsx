@@ -38,6 +38,16 @@ export function AppProvider({ children }) {
 
   // Cart & Checkout State
   const [cart, setCart] = useState([]);
+  const previousCartTenantId = useRef(tenantId);
+  useEffect(() => {
+    const previousTenantId = previousCartTenantId.current;
+    if (previousTenantId && tenantId && String(previousTenantId) !== String(tenantId)) {
+      setCart([]);
+      setAppliedCoupon(null);
+      setCouponCode('');
+    }
+    previousCartTenantId.current = tenantId;
+  }, [tenantId]);
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponCode, setCouponCode] = useState('');
   const [couponError, setCouponError] = useState('');
