@@ -83,7 +83,7 @@ function MainApp() {
     setAdminBulkImportModalOpen
   } = useApp();
   const { addToast } = useToast();
-  const { activeTenant } = useTenant();
+  const { activeTenant, tenantId } = useTenant();
 
   // Tab State: 'store' | 'orders' | 'requests' | 'addresses' | 'admin'
   const [activeTab, setActiveTab] = useState('store');
@@ -99,6 +99,7 @@ function MainApp() {
   const [vendorOnboardingToken, setVendorOnboardingToken] = useState(null);
   const [verifyEmailToken, setVerifyEmailToken] = useState(null);
   const [tenantSelectorOpen, setTenantSelectorOpen] = useState(false);
+  const [checkoutAfterTenantSelection, setCheckoutAfterTenantSelection] = useState(false);
 
   // Check URL query parameters for onboarding or verification tokens
   useEffect(() => {
@@ -124,6 +125,13 @@ function MainApp() {
   useEffect(() => {
     if (passwordRecoveryRequired) setAuthOpen(true);
   }, [passwordRecoveryRequired]);
+
+  useEffect(() => {
+    if (!tenantId && typeof window !== 'undefined'
+      && localStorage.getItem('pharma_location_prompted_v1') !== 'true') {
+      setTenantSelectorOpen(true);
+    }
+  }, [tenantId]);
 
   // Navigation is permission-first. Staff workspace capabilities are separate
   // from customer self-service permissions, even when they share a domain.
@@ -291,6 +299,12 @@ function MainApp() {
     if (!user) {
       addToast("Please sign in or use demo access to proceed with delivery checkout.", "info");
       setAuthOpen(true);
+      return;
+    }
+    if (!tenantId) {
+      setCheckoutAfterTenantSelection(true);
+      setTenantSelectorOpen(true);
+      addToast('Choose a pharmacy before checkout. Your order will be sent only to that pharmacy.', 'info');
       return;
     }
     setCheckoutOpen(true);
@@ -645,7 +659,13 @@ function MainApp() {
       <TenantSelectorModal
         isOpen={tenantSelectorOpen}
         preferredTenantId={new URLSearchParams(window.location.search).get('tenantId') || ''}
-        onClose={() => setTenantSelectorOpen(false)}
+        onClose={() => {
+          setTenantSelectorOpen(false);
+          if (checkoutAfterTenantSelection && tenantId) {
+            setCheckoutAfterTenantSelection(false);
+            setCheckoutOpen(true);
+          }
+        }}
       />
 
       {/* Global Admin New Stock Modal */}
