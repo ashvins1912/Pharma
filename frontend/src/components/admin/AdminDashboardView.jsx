@@ -231,6 +231,9 @@ export default function AdminDashboardView() {
         <div id="admin-medicine-requests">
           <AdminMedicineRequestsTab initialData={initialMedicineRequests} initialLoading={medicinePreloadLoading} onPendingCountRefresh={loadPendingMedicineRequestCount} />
         </div>
+        {canViewSurplusSavings && (
+          <SurplusSavingsManager canManage={hasPermission('promotions.manage')} />
+        )}
       </div>
     );
   }
