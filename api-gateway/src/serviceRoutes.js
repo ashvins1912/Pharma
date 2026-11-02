@@ -55,7 +55,8 @@ function createServiceHandler({ audience, getScope, target, includeCustomerProfi
       const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
       const isPlatformUser = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
       const tenantId = String((isPlatformUser ? req.get('x-tenant-id') : req.user?.tenantId || req.user?.app_metadata?.tenantId) || '').trim();
-      const branchId = String((isPlatformUser ? req.get('x-branch-id') : req.user?.branchId || req.user?.app_metadata?.branchId) || '').trim();
+      const signedBranchId = req.user?.branchId || req.user?.app_metadata?.branchId;
+      const branchId = String((isPlatformUser ? req.get('x-branch-id') : signedBranchId || req.get('x-branch-id')) || '').trim();
       if (!tenantId || !branchId) {
         return res.status(403).json({ success: false, error: { code: 'TENANT_BRANCH_REQUIRED', message: 'Select a valid tenant and branch before using inventory imports.' }, requestId: req.requestId });
       }
