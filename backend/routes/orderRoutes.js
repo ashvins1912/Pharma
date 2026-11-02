@@ -1597,8 +1597,9 @@ router.post('/:id/resend-otp', authenticateUser, async (req, res) => {
 });
 
 router.post('/:id/verify-delivery', authenticateUser, async (req, res) => {
-    const role = String(req.user?.app_metadata?.role || req.user?.role || 'customer');
-    const staffRoles = new Set(['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER']);
+    const role = String(req.user?.app_metadata?.role || req.user?.role || req.context?.role || 'customer').toUpperCase();
+    const staffRoles = new Set(['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'PHARMACY']);
+    const platformStaff = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
     try {
         if (!getIsConnected() || !mongoose.isValidObjectId(req.params.id)) {
             return res.status(503).json({ message: 'Delivery verification is temporarily unavailable.' });
@@ -1609,22 +1610,32 @@ router.post('/:id/verify-delivery', authenticateUser, async (req, res) => {
             return res.status(409).json({ message: 'The order must be out for delivery before it can be completed.' });
         }
 
-        const rider = await Rider.findOne({ supabaseId: req.user.sub, enabled: true }).lean();
+        if (!order.tenantId) return res.status(404).json({ message: 'Order not found.' });
+        const rider = await Rider.findOne({
+            supabaseId: req.user.sub,
+            tenantId: String(order.tenantId),
+            enabled: true
+        }).lean();
         if (rider) {
             if (String(order.rider?.riderId || order.riderId || '') !== String(rider._id)) {
                 return res.status(403).json({ message: 'This delivery is not assigned to your rider account.' });
             }
         } else {
             if (!staffRoles.has(role)) return res.status(403).json({ message: 'Only the assigned rider can verify delivery.' });
+            if (!platformStaff && !isSameTenant(getActorTenantId(req), order.tenantId)) {
+                return res.status(404).json({ message: 'Order not found.' });
+            }
             const requestedRiderId = String(req.body?.riderId || order.rider?.riderId || order.riderId || '');
-            if (!requestedRiderId) {
-                return res.status(403).json({ message: 'Select the rider assigned to this order before verifying delivery.' });
+            const assignedRiderId = String(order.rider?.riderId || order.riderId || '');
+            if (!requestedRiderId || requestedRiderId !== assignedRiderId) {
+                return res.status(403).json({ message: 'Only the rider assigned to this order can verify delivery.' });
             }
-            const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
-            if (!['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)
-                && tenantId && order.tenantId && String(tenantId) !== String(order.tenantId)) {
-                return res.status(403).json({ message: 'This order belongs to another pharmacy tenant.' });
-            }
+            const assignedRider = await Rider.findOne({
+                _id: requestedRiderId,
+                tenantId: String(order.tenantId),
+                enabled: true
+            }).select('_id').lean();
+            if (!assignedRider) return res.status(404).json({ message: 'Assigned rider not found for this pharmacy.' });
         }
 
         const code = String(req.body?.otp || '').trim();
