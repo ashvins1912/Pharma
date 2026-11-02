@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { config } from './config.js';
 
 export function createServiceToken(
-  { audience, scope, user, includeCustomerProfile = false },
+  { audience, scope, user, includeCustomerProfile = false, targetTenantId = null, targetBranchId = null },
   gatewayConfig = config
 ) {
   const userId = typeof user?.sub === 'string' ? user.sub : '';
@@ -11,14 +11,15 @@ export function createServiceToken(
     throw new Error('SERVICE_AUTH_SECRET is not configured.');
   }
   const role = user.app_metadata?.role || user.role || 'customer';
+  const isPlatformUser = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
   const claims = {
     scope,
     userId,
     userRole: role,
     roles: Array.isArray(user.roles) ? user.roles : [role],
-    tenantId: user.tenantId || user.app_metadata?.tenantId || null,
-    branchId: user.branchId || user.app_metadata?.branchId || null,
-    isPlatformUser: ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)
+    tenantId: (isPlatformUser && targetTenantId ? String(targetTenantId).trim() : user.tenantId || user.app_metadata?.tenantId || null),
+    branchId: (isPlatformUser && targetBranchId ? String(targetBranchId).trim() : user.branchId || user.app_metadata?.branchId || null),
+    isPlatformUser
   };
   if (includeCustomerProfile) {
     claims.email = typeof user.email === 'string' ? user.email : '';
