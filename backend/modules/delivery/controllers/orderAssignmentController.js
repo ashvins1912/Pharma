@@ -36,7 +36,7 @@ const validateAssignmentEligibility = async (req, res, orderId) => {
     const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId || null;
     const branchId = req.user?.branchId || req.user?.app_metadata?.branchId || req.context?.branchId || null;
     if (!globalAdmin && !isSameTenant(tenantId, order.tenantId)) {
-        res.status(403).json({
+        res.status(404).json({
             success: false,
             error: { code: 'NOT_FOUND', message: 'Order not found.', retryable: false, requestId: req.requestId || null }
         });
