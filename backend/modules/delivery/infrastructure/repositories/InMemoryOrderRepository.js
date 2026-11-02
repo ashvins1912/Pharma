@@ -3,6 +3,11 @@ import { Order } from '../../domain/entities/Order.js';
 import dataStore from '../../../../dataStore.js';
 
 export class InMemoryOrderRepository extends IOrderRepository {
+    constructor(store = dataStore) {
+        super();
+        this.dataStore = store;
+    }
+
     _toDomain(rawOrder) {
         if (!rawOrder) return null;
         const id = rawOrder._id?.toString() || rawOrder.id;
@@ -41,13 +46,13 @@ export class InMemoryOrderRepository extends IOrderRepository {
 
     async findById(id, tenantId) {
         if (!tenantId) return null;
-        if (typeof dataStore.getOrderById === 'function') {
-            const raw = await dataStore.getOrderById(id);
+        if (typeof this.dataStore.getOrderById === 'function') {
+            const raw = await this.dataStore.getOrderById(id);
             if (!raw || String(raw.tenantId || '') !== String(tenantId)) return null;
             return this._toDomain(raw);
         }
-        const rawList = typeof dataStore.getAllOrders === 'function'
-            ? await dataStore.getAllOrders()
+        const rawList = typeof this.dataStore.getAllOrders === 'function'
+            ? await this.dataStore.getAllOrders()
             : [];
         const raw = rawList.find(o => String(o._id || o.id) === String(id) && String(o.tenantId || '') === String(tenantId));
         return this._toDomain(raw);
