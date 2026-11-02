@@ -3,10 +3,18 @@ import * as xlsx from 'xlsx';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 
 export default function AdminBulkImportModal({ isOpen, onClose }) {
   const { addToast } = useToast();
   const { fetchMedicines } = useApp();
+  const { isSuperAdmin, isTenantAdmin, user } = useAuth();
+  const needsBranchSelection = Boolean(isTenantAdmin && !(user?.branchId || user?.app_metadata?.branchId));
+  const [targetTenantId, setTargetTenantId] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('pharma_import_target_tenant_id') || localStorage.getItem('pharma_tenant_id') || '') : '');
+  const [targetBranchId, setTargetBranchId] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('pharma_import_target_branch_id') || localStorage.getItem('pharma_branch_id') || '') : '');
+  const getImportScopeHeaders = () => isSuperAdmin
+    ? { 'X-Tenant-Id': targetTenantId.trim(), 'X-Branch-Id': targetBranchId.trim() }
+    : needsBranchSelection ? { 'X-Branch-Id': targetBranchId.trim() } : {};
 
   const [file, setFile] = useState(null);
   const [stockMode, setStockMode] = useState('REPLACE');
@@ -24,7 +32,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
     const pollStatus = async () => {
       try {
-        const response = await apiClient.get(`/api/v1/inventory/imports/${importJob.jobId}`);
+        const response = await apiClient.get(`/api/v1/inventory/imports/${importJob.jobId}`, { headers: getImportScopeHeaders() });
         if (cancelled) return;
         setPollError('');
         setImportJob(response.data);
@@ -48,7 +56,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [importJob?.jobId, importJob?.status, fetchMedicines, addToast, pollError]);
+  }, [importJob?.jobId, importJob?.status, fetchMedicines, addToast, pollError, isSuperAdmin, targetTenantId, targetBranchId]);
 
   if (!isOpen) return null;
 
@@ -56,10 +64,14 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   const handleFileChange = async (selectedFile) => {
     if (!selectedFile) return;
     if (!/\.(xlsx|xls)$/i.test(selectedFile.name)) { addToast('Please select an .xlsx or .xls workbook.', 'warning'); return; }
+    if ((isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) || (needsBranchSelection && !targetBranchId.trim())) {
+      addToast('Select the required tenant and branch context before previewing.', 'warning');
+      return;
+    }
     setFile(selectedFile); setAnalyzing(true); setPreviewData(null); setImportJob(null); setPollError('');
     try {
       const formData = new FormData(); formData.append('excelFile', selectedFile);
-      const response = await apiClient.post('/api/v1/inventory/imports/preview', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const response = await apiClient.post('/api/v1/inventory/imports/preview', formData, { headers: { 'Content-Type': 'multipart/form-data', ...getImportScopeHeaders() } });
       setPreviewData(response.data);
       addToast('Server validated ' + response.data.rowsDetected + ' rows (' + response.data.validCount + ' valid)', 'info');
     } catch (error) {
@@ -75,6 +87,14 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
   // Authoritative Single Upload to /api/v1/inventory/imports with unique Idempotency-Key
   const handleConfirmImport = async () => {
+    if ((isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) || (needsBranchSelection && !targetBranchId.trim())) {
+      addToast('Select the required tenant and branch context before importing.', 'warning');
+      return;
+    }
+    if (!previewData?.importsEnabled) {
+      addToast('Inventory writes are disabled. Preview is available, but import must wait for an isolated controlled test environment.', 'warning');
+      return;
+    }
     if (!previewData || previewData.rowsDetected === 0 || !file) {
       addToast('No records available to import', 'warning');
       return;
@@ -88,11 +108,14 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       const formData = new FormData();
       formData.append('excelFile', file);
       formData.append('stockMode', stockMode);
+      formData.append('previewFingerprint', previewData.previewFingerprint);
+      formData.append('confirmImport', 'true');
 
       const res = await apiClient.post('/api/v1/inventory/imports', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
-          'Idempotency-Key': idempotencyKey
+          'Idempotency-Key': idempotencyKey,
+          ...getImportScopeHeaders()
         }
       });
 
@@ -105,13 +128,30 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     }
   };
 
+  const rollbackImport = async () => {
+    if (!importJob?.batchId) return;
+    if ((isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) || (needsBranchSelection && !targetBranchId.trim())) {
+      addToast('Select the original tenant and branch before rolling back this batch.', 'warning');
+      return;
+    }
+    if (!window.confirm(`Revert inventory changes from batch ${importJob.batchId}? This is allowed only if affected stock and catalogue records have not changed since import.`)) return;
+    try {
+      const response = await apiClient.post(`/api/v1/inventory/imports/batches/${importJob.batchId}/rollback`, {}, { headers: getImportScopeHeaders() });
+      setImportJob(previous => ({ ...previous, status: response.data.status, revertedAt: response.data.revertedAt }));
+      fetchMedicines();
+      addToast('Import batch reverted successfully.', 'success');
+    } catch (error) {
+      addToast(error.response?.data?.message || 'Batch rollback was blocked to protect newer inventory changes.', 'error');
+    }
+  };
+
   // Download Row-Level Failure Excel Workbook from Inventory Service
   const downloadFailedRows = async () => {
     if (!importJob?.jobId) return;
     try {
       const response = await apiClient.get(
         `/api/v1/inventory/imports/${importJob.jobId}/failures/download`,
-        { responseType: 'blob' }
+        { responseType: 'blob', headers: getImportScopeHeaders() }
       );
       const url = URL.createObjectURL(response.data);
       const link = document.createElement('a');
@@ -136,7 +176,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
         {},
         {
           headers: {
-            'Idempotency-Key': retryKey
+            'Idempotency-Key': retryKey,
+            ...getImportScopeHeaders()
           }
         }
       );
@@ -150,34 +191,46 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   const downloadSampleTemplate = async () => {
     const sampleRows = [
       {
-        SKU: "MED-DLO-650",
-        "Medicine Name": "Dolo 650mg",
-        Category: "Pain & Fever",
-        Description: "Anti-pyretic formulation for severe fever and headache.",
-        Price: 32,
-        Stock: 150,
-        "Base Cost Price": 22,
-        "Margin Tier": "MID",
-        "Expiry Date": "2027-12-31",
-        "Batch Number": "BTH-DLO-2401",
+        SKU: "TEST-MED-001",
+        "Medicine Name": "Synthetic Test Medicine Alpha",
+        Category: "IMPORT TEST DATA",
+        Description: "Synthetic record for controlled inventory import verification only.",
+        Price: 10,
+        Stock: 5,
+        "Base Cost Price": 6,
+        "Margin Tier": "LOW",
+        "Expiry Date": "2030-12-31",
+        "Batch Number": "TEST-LOT-A",
         "Requires Prescription": "false",
-        "Cloudinary Image URL": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80",
-        Manufacturer: "Micro Labs Ltd"
+        Manufacturer: "Synthetic Test Supplier"
       },
       {
-        SKU: "MED-AUG-625",
-        "Medicine Name": "Augmentin 625 Duo",
-        Category: "Antibiotics",
-        Description: "Amoxicillin and Potassium Clavulanate Tablets IP.",
-        Price: 205,
-        Stock: 50,
-        "Base Cost Price": 150,
-        "Margin Tier": "HIGH",
-        "Expiry Date": "2027-09-15",
-        "Batch Number": "BTH-AUG-2390",
-        "Requires Prescription": "true",
-        "Cloudinary Image URL": "https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=500&q=80",
-        Manufacturer: "GlaxoSmithKline"
+        SKU: "TEST-MED-001",
+        "Medicine Name": "Synthetic Test Medicine Alpha",
+        Category: "IMPORT TEST DATA",
+        Description: "Second synthetic batch for the same SKU.",
+        Price: 11,
+        Stock: 7,
+        "Base Cost Price": 6,
+        "Margin Tier": "LOW",
+        "Expiry Date": "2031-06-30",
+        "Batch Number": "TEST-LOT-B",
+        "Requires Prescription": "false",
+        Manufacturer: "Synthetic Test Supplier"
+      },
+      {
+        SKU: "TEST-MED-002",
+        "Medicine Name": "Synthetic Test Medicine Beta",
+        Category: "IMPORT TEST DATA",
+        Description: "Synthetic record for controlled rollback verification.",
+        Price: 15,
+        Stock: 3,
+        "Base Cost Price": 8,
+        "Margin Tier": "MID",
+        "Expiry Date": "2030-09-30",
+        "Batch Number": "TEST-LOT-C",
+        "Requires Prescription": "false",
+        Manufacturer: "Synthetic Test Supplier"
       }
     ];
 
@@ -185,8 +238,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       const ws = xlsx.utils.json_to_sheet(sampleRows);
       const wb = xlsx.utils.book_new();
       xlsx.utils.book_append_sheet(wb, ws, "Inventory");
-      xlsx.writeFile(wb, "Ashvin_Pharmacy_Inventory_Template.xlsx");
-      addToast("Sample Excel template downloaded!", "success");
+      xlsx.writeFile(wb, "Pharma_Controlled_Test_Inventory_Template.xlsx");
+      addToast("Synthetic controlled-test template downloaded. Do not use it for live inventory.", "success");
     } catch (error) {
       console.error('Sample inventory workbook generation failed:', error);
       addToast('Could not generate the sample Excel template.', 'error');
@@ -220,6 +273,51 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 overscroll-contain">
+          {!isSuperAdmin && needsBranchSelection && (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 space-y-2">
+              <p className="text-xs font-extrabold text-sky-950">Select pharmacy branch</p>
+              <p className="text-[11px] text-sky-800">Your tenant identity comes from your signed session. The selected branch is checked against your active tenant membership.</p>
+              <input
+                value={targetBranchId}
+                onChange={event => {
+                  setTargetBranchId(event.target.value);
+                  localStorage.setItem('pharma_import_target_branch_id', event.target.value);
+                  setPreviewData(null);
+                }}
+                placeholder="Branch ID"
+                disabled={Boolean(importJob)}
+                className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
+              />
+            </div>
+          )}
+          {isSuperAdmin && (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 space-y-2">
+              <p className="text-xs font-extrabold text-sky-950">Platform import target</p>
+              <p className="text-[11px] text-sky-800">Select the exact active tenant and branch. The backend verifies the branch belongs to the tenant before preview, import, status lookup or rollback.</p>
+              <input
+                value={targetTenantId}
+                onChange={event => {
+                  setTargetTenantId(event.target.value);
+                  localStorage.setItem('pharma_import_target_tenant_id', event.target.value);
+                  setPreviewData(null);
+                }}
+                placeholder="Target tenant ID"
+                disabled={Boolean(importJob)}
+                className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
+              />
+              <input
+                value={targetBranchId}
+                onChange={event => {
+                  setTargetBranchId(event.target.value);
+                  localStorage.setItem('pharma_import_target_branch_id', event.target.value);
+                  setPreviewData(null);
+                }}
+                placeholder="Target branch ID"
+                disabled={Boolean(importJob)}
+                className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
+              />
+            </div>
+          )}
           {/* Upload Zone */}
           {!previewData && (
           <div className="py-6 space-y-4">
@@ -237,7 +335,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   Drag & Drop your .xlsx spreadsheet here
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Instant local preview + resilient single-pass server ingestion
+                  Server-side read-only preview, explicit confirmation and reversible batch tracking
                 </p>
               </div>
 
@@ -280,6 +378,16 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
         {/* Preview & Validation Report */}
         {previewData && (
           <div className="py-4 space-y-4 animate-fade-in">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs space-y-1">
+              <p className="font-bold text-slate-800">Target inventory scope</p>
+              <p className="break-all text-slate-600">Tenant: <strong>{previewData.tenantId || 'Missing'}</strong></p>
+              <p className="break-all text-slate-600">Branch: <strong>{previewData.branchId || 'Missing'}</strong></p>
+            </div>
+            {!previewData.importsEnabled && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-900">
+                Production inventory writes are disabled. You can review this preview, but no stock will be changed.
+              </div>
+            )}
             {/* Metric Summary Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <div className="bg-slate-50 border border-slate-200 p-3 rounded-2xl text-center">
@@ -307,9 +415,11 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   <h3 className="text-sm font-black text-slate-900">
                     {['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(importJob.status)
                       ? '✓ Import Completed'
-                      : importJob.status === 'FAILED'
-                        ? 'Import Paused / Failed'
-                        : 'Inventory Import Processing...'}
+                      : importJob.status === 'REVERTED'
+                        ? 'Import Batch Reverted'
+                        : importJob.status === 'FAILED'
+                          ? 'Import Paused / Failed'
+                          : 'Inventory Import Processing...'}
                   </h3>
                   <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-blue-800 uppercase">
                     {(importJob.status || 'QUEUED').replaceAll('_', ' ')}
@@ -356,6 +466,35 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                     className="w-full rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-rose-700 sm:w-auto cursor-pointer"
                   >
                     📥 Download Failed Records (.xlsx)
+                  </button>
+                )}
+                {importJob.batchId && ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'].includes(importJob.status) && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+                    <p className="text-xs text-amber-900 break-all">Import Batch ID: <strong>{importJob.batchId}</strong></p>
+                    <button
+                      type="button"
+                      onClick={rollbackImport}
+                      className="rounded-xl border border-rose-300 bg-white px-4 py-2.5 text-xs font-extrabold text-rose-700 hover:bg-rose-50 cursor-pointer"
+                    >
+                      Revert / Remove This Batch
+                    </button>
+                  </div>
+                )}
+                {importJob.status === 'REVERTED' && (
+                  <p className="text-xs font-bold text-emerald-800">This import batch has been reverted.</p>
+                )}
+                {['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED', 'REVERTED'].includes(importJob.status) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportJob(null);
+                      setPreviewData(null);
+                      setFile(null);
+                      setPollError('');
+                    }}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    Prepare Another Import
                   </button>
                 )}
                 {importJob.status === 'FAILED' && (
@@ -446,10 +585,10 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
                 <button
                   onClick={handleConfirmImport}
-                  disabled={committing || previewData.rowsDetected === 0}
+                  disabled={!previewData.importsEnabled || committing || previewData.rowsDetected === 0 || !previewData.previewFingerprint}
                   className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md shadow-emerald-600/25 cursor-pointer transition flex items-center gap-1.5"
                 >
-                  <span>{committing ? 'Starting Ingestion...' : `Import ${previewData.rowsDetected} Records`}</span>
+                  <span>{!previewData.importsEnabled ? 'Import Writes Disabled' : committing ? 'Starting Ingestion...' : `Import ${previewData.rowsDetected} Records`}</span>
                   <span>✓</span>
                 </button>
               </div>

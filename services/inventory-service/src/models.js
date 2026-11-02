@@ -61,6 +61,10 @@ reservationSchema.index({ status: 1, expiresAt: 1 });
 const importJobSchema = new mongoose.Schema({
   tenantId: { type: 'string', required: true, index: true },
   branchId: { type: 'string', required: true, index: true },
+  batchId: { type: 'string', required: true, index: true },
+  previewFingerprint: { type: 'string', required: true },
+  previewInventorySnapshot: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  previewProductSnapshot: { type: [mongoose.Schema.Types.Mixed], default: [] },
   stockMode: { type: 'string', enum: ['REPLACE'], default: 'REPLACE' },
   fileName: { type: 'string', required: true },
   filePath: { type: 'string', required: true },
@@ -87,7 +91,36 @@ const importJobSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 importJobSchema.index({ tenantId: 1, idempotencyKey: 1 }, { unique: true });
+importJobSchema.index({ tenantId: 1, branchId: 1, batchId: 1 });
 importJobSchema.index({ tenantId: 1, branchId: 1, createdAt: -1 });
+
+
+const importBatchSchema = new mongoose.Schema({
+  batchId: { type: 'string', required: true, unique: true, index: true },
+  tenantId: { type: 'string', required: true, index: true },
+  branchId: { type: 'string', required: true, index: true },
+  uploadedBy: { type: 'string', required: true },
+  status: { type: 'string', enum: ['QUEUED', 'PROCESSING', 'COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED', 'REVERTED'], default: 'QUEUED', index: true },
+  totalRecords: { type: 'number', default: 0 },
+  appliedRecords: { type: 'number', default: 0 },
+  revertedAt: 'date',
+  revertedBy: 'string',
+  rollbackReason: 'string'
+}, { timestamps: true });
+importBatchSchema.index({ tenantId: 1, branchId: 1, createdAt: -1 });
+
+const importBatchSnapshotSchema = new mongoose.Schema({
+  batchId: { type: 'string', required: true, index: true },
+  tenantId: { type: 'string', required: true, index: true },
+  branchId: { type: 'string', required: true, index: true },
+  entityType: { type: 'string', enum: ['PRODUCT', 'INVENTORY'], required: true },
+  entityKey: { type: 'string', required: true },
+  before: { type: mongoose.Schema.Types.Mixed, default: null },
+  after: { type: mongoose.Schema.Types.Mixed, required: true },
+  created: { type: 'boolean', required: true, default: false },
+  revertedAt: 'date'
+}, { timestamps: true });
+importBatchSnapshotSchema.index({ tenantId: 1, branchId: 1, batchId: 1, entityType: 1, entityKey: 1 }, { unique: true });
 
 const importFailureSchema = new mongoose.Schema({
   tenantId: { type: 'string', required: true, index: true },
@@ -110,6 +143,7 @@ const importFailureSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 importFailureSchema.index({ tenantId: 1, branchId: 1, jobId: 1, rowNumber: 1 });
+importFailureSchema.index({ tenantId: 1, branchId: 1, batchId: 1, rowNumber: 1 }, { unique: true });
 
 const auditSchema = new mongoose.Schema({
   tenantId: { type: 'string', required: true, index: true },
@@ -128,5 +162,7 @@ export const Product = mongoose.models.InventoryProduct || mongoose.model('Inven
 export const Inventory = mongoose.models.Inventory || mongoose.model('Inventory', inventorySchema);
 export const Reservation = mongoose.models.InventoryReservation || mongoose.model('InventoryReservation', reservationSchema);
 export const ImportJob = mongoose.models.InventoryImportJob || mongoose.model('InventoryImportJob', importJobSchema);
+export const ImportBatch = mongoose.models.InventoryImportBatch || mongoose.model('InventoryImportBatch', importBatchSchema);
+export const ImportBatchSnapshot = mongoose.models.InventoryImportBatchSnapshot || mongoose.model('InventoryImportBatchSnapshot', importBatchSnapshotSchema);
 export const ImportFailure = mongoose.models.InventoryImportFailure || mongoose.model('InventoryImportFailure', importFailureSchema);
 export const Audit = mongoose.models.InventoryAudit || mongoose.model('InventoryAudit', auditSchema);

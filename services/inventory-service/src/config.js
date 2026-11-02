@@ -27,6 +27,8 @@ export const config = {
   maxRetries: positiveInteger(process.env.INVENTORY_MAX_RETRIES, 3, 5),
   maxFileBytes: positiveInteger(process.env.INVENTORY_IMPORT_MAX_FILE_BYTES, 104857600, 104857600),
   importStorage: process.env.INVENTORY_IMPORT_STORAGE || './data/imports',
+  // Import writes remain disabled unless explicitly enabled in an isolated test or approved rollout environment.
+  importsEnabled: process.env.INVENTORY_IMPORTS_ENABLED === 'true',
   reservationTTLHours: positiveInteger(process.env.INVENTORY_RESERVATION_TTL_HOURS, 24, 168),
   corsOrigin: process.env.INVENTORY_CORS_ORIGIN || ''
 };

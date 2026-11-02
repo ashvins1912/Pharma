@@ -1,12 +1,27 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import * as xlsx from 'xlsx';
+import xlsx from 'xlsx';
 import mongoose from 'mongoose';
 import { config } from './config.js';
-import { Audit, ImportFailure, ImportJob, Inventory, Product } from './models.js';
+import { Audit, ImportBatch, ImportBatchSnapshot, ImportFailure, ImportJob, Inventory, Product } from './models.js';
 
 const pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+async function assertMongoTransactionsAvailable() {
+  if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
+    const error = new Error('Inventory database is unavailable.');
+    error.statusCode = 503;
+    throw error;
+  }
+  const hello = await mongoose.connection.db.admin().command({ hello: 1 });
+  if (!hello.setName && hello.msg !== 'isdbgrid') {
+    const error = new Error('Inventory imports and rollback require MongoDB replica-set or sharded-cluster transactions.');
+    error.statusCode = 503;
+    error.code = 'IMPORT_TRANSACTIONS_REQUIRED';
+    throw error;
+  }
+}
 
 const valueOf = (row, ...keys) => {
   for (const key of keys) {
@@ -115,7 +130,7 @@ export const classifyImportError = error => {
 
 async function executeBatchOperations(tenantId, branchId, stockMode, eligibleRows, seenExistingProducts, seenExistingInventory, session = null) {
   const bySku = new Map(seenExistingProducts.map(p => [p.sku, p]));
-  const batchKey = (sku, batch = '') => `${sku}::${batch || ''}`;
+  const batchKey = (sku, batch = '') => JSON.stringify([sku, batch || '']);
   const inventoryByBatch = new Map(seenExistingInventory.map(i => [batchKey(i.sku, i.batchNumber), i]));
 
   const productOperations = [];
@@ -133,7 +148,7 @@ async function executeBatchOperations(tenantId, branchId, stockMode, eligibleRow
       newCount += 1;
     }
 
-    if (!currentProduct && pendingProductIds.get(value.sku) === productId && !productOperations.some(op => op.updateOne.filter.sku === value.sku)) productOperations.push({
+    if (!productOperations.some(op => op.updateOne.filter.sku === value.sku)) productOperations.push({
       updateOne: {
         filter: { tenantId, sku: value.sku },
         update: {
@@ -149,10 +164,10 @@ async function executeBatchOperations(tenantId, branchId, stockMode, eligibleRow
             requiresPrescription: value.requiresPrescription,
             baseCostPrice: value.baseCostPrice,
             marginTier: value.marginTier,
-            active: true
+            active: true,
+            version: Number(currentProduct?.version || 0) + 1
           },
-          $setOnInsert: { _id: productId, tenantId, sku: value.sku, version: 0 },
-          $inc: { version: 1 }
+          $setOnInsert: { _id: productId, tenantId, sku: value.sku }
         },
         upsert: true
       }
@@ -179,6 +194,12 @@ async function executeBatchOperations(tenantId, branchId, stockMode, eligibleRow
 
   return { newCount };
 }
+
+const matchesPreviewSnapshot = (current, expected, fields) => {
+  if (!current && !expected) return true;
+  if (!current || !expected) return false;
+  return sameFields(current, expected, fields);
+};
 
 async function saveBatch(job, batch, batchId, seenSkus) {
   const failures = [];
@@ -208,7 +229,7 @@ async function saveBatch(job, batch, batchId, seenSkus) {
       continue;
     }
 
-    const importKey = `${normalized.value.sku}::${normalized.value.batchNumber || ''}`;
+    const importKey = JSON.stringify([normalized.value.sku, normalized.value.batchNumber || '']);
     if (seenSkus.has(importKey) || batchSkus.has(importKey)) {
       failures.push({
         tenantId,
@@ -259,14 +280,38 @@ async function saveBatch(job, batch, batchId, seenSkus) {
           eligibleRows = [];
 
           const invQuery = { tenantId, branchId, sku: { $in: skus } };
-          const existingInventory = sess
-            ? await Inventory.find(invQuery).select('productId sku batchNumber reservedQuantity').session(sess).lean()
-            : await Inventory.find(invQuery).select('productId sku reservedQuantity').lean();
-
-          const inventoryByBatch = new Map(existingInventory.map(inv => [`${inv.sku}::${inv.batchNumber || ''}`, inv]));
+          const existingInventory = await Inventory.find(invQuery).session(sess).lean();
+          const prodQuery = { tenantId, sku: { $in: skus } };
+          const existingProducts = await Product.find(prodQuery).session(sess).lean();
+          const inventoryByBatch = new Map(existingInventory.map(inv => [JSON.stringify([inv.sku, inv.batchNumber || '']), inv]));
+          const productBySku = new Map(existingProducts.map(product => [product.sku, product]));
+          const expectedInventoryByKey = new Map((job.previewInventorySnapshot || []).map(item => [JSON.stringify([item.sku, item.batchNumber || '']), item]));
+          const expectedProductBySku = new Map((job.previewProductSnapshot || []).map(item => [item.sku, item]));
 
           for (const item of valid) {
-            const current = inventoryByBatch.get(`${item.value.sku}::${item.value.batchNumber || ''}`);
+            const key = JSON.stringify([item.value.sku, item.value.batchNumber || '']);
+            const current = inventoryByBatch.get(key) || null;
+            const expectedInventory = expectedInventoryByKey.get(key) || null;
+            if (!matchesPreviewSnapshot(current, expectedInventory, ['stockQuantity', 'reservedQuantity', 'price', 'updatedAt'])) {
+              businessFailures.push({
+                tenantId, branchId, jobId: job._id, batchId, rowNumber: item.rowNumber,
+                sku: item.value.sku, productName: item.value.name, originalRecord: item.originalRecord,
+                reason: 'Inventory changed after preview. Preview the workbook again before importing this row.',
+                errorType: 'BUSINESS_RULE_ERROR', technicalCode: 'PREVIEW_INVENTORY_CHANGED', retryable: false
+              });
+              continue;
+            }
+            const currentProduct = productBySku.get(item.value.sku) || null;
+            const expectedProduct = expectedProductBySku.get(item.value.sku) || null;
+            if (!matchesPreviewSnapshot(currentProduct, expectedProduct, ['version', 'updatedAt'])) {
+              businessFailures.push({
+                tenantId, branchId, jobId: job._id, batchId, rowNumber: item.rowNumber,
+                sku: item.value.sku, productName: item.value.name, originalRecord: item.originalRecord,
+                reason: 'Product catalogue changed after preview. Preview the workbook again before importing this row.',
+                errorType: 'BUSINESS_RULE_ERROR', technicalCode: 'PREVIEW_PRODUCT_CHANGED', retryable: false
+              });
+              continue;
+            }
             if (stockMode === 'REPLACE' && Number(current?.reservedQuantity || 0) > item.value.stockQuantity) {
               businessFailures.push({
                 tenantId,
@@ -289,32 +334,83 @@ async function saveBatch(job, batch, batchId, seenSkus) {
 
           if (!eligibleRows.length) return { newCount: 0 };
 
-          const prodQuery = { tenantId, sku: { $in: eligibleRows.map(i => i.value.sku) } };
-          const existingProducts = sess
-            ? await Product.find(prodQuery).select('_id sku').session(sess).lean()
-            : await Product.find(prodQuery).select('_id sku').lean();
-
-          return executeBatchOperations(tenantId, branchId, stockMode, eligibleRows, existingProducts, existingInventory, sess);
+          const changedSkus = new Set(eligibleRows.map(item => item.value.sku));
+          const changedProductQuery = { tenantId, sku: { $in: [...changedSkus] } };
+          const result = await executeBatchOperations(tenantId, branchId, stockMode, eligibleRows, existingProducts, existingInventory, sess);
+          const productAfterRows = await Product.find(changedProductQuery).session(sess).lean();
+          const inventoryAfterRows = await Inventory.find(invQuery).session(sess).lean();
+          const productBeforeBySku = new Map(existingProducts.map(row => [row.sku, row]));
+          const productAfterBySku = new Map(productAfterRows.map(row => [row.sku, row]));
+          const inventoryKey = row => JSON.stringify([row.sku, row.batchNumber || '']);
+          const inventoryBeforeByKey = new Map(existingInventory.map(row => [inventoryKey(row), row]));
+          const inventoryAfterByKey = new Map(inventoryAfterRows.map(row => [inventoryKey(row), row]));
+          const snapshotOperations = [];
+          for (const sku of new Set(eligibleRows.map(row => row.value.sku))) {
+            const before = productBeforeBySku.get(sku) || null;
+            const after = productAfterBySku.get(sku);
+            if (!after) throw new Error(`Product snapshot could not be captured for SKU ${sku}.`);
+            snapshotOperations.push({
+              updateOne: {
+                filter: { tenantId, branchId, batchId, entityType: 'PRODUCT', entityKey: sku },
+                update: {
+                  $set: { after },
+                  $setOnInsert: { tenantId, branchId, batchId, entityType: 'PRODUCT', entityKey: sku, before, created: !before }
+                },
+                upsert: true
+              }
+            });
+          }
+          for (const item of eligibleRows) {
+            const key = JSON.stringify([item.value.sku, item.value.batchNumber || '']);
+            const before = inventoryBeforeByKey.get(key) || null;
+            const after = inventoryAfterByKey.get(key);
+            if (!after) throw new Error(`Inventory snapshot could not be captured for ${key}.`);
+            snapshotOperations.push({
+              updateOne: {
+                filter: { tenantId, branchId, batchId, entityType: 'INVENTORY', entityKey: key },
+                update: {
+                  $set: { after },
+                  $setOnInsert: { tenantId, branchId, batchId, entityType: 'INVENTORY', entityKey: key, before, created: !before }
+                },
+                upsert: true
+              }
+            });
+          }
+          if (snapshotOperations.length) await ImportBatchSnapshot.bulkWrite(snapshotOperations, { ordered: true, session: sess });
+          const nextInventorySnapshot = [
+            ...(job.previewInventorySnapshot || []).filter(item => !changedSkus.has(item.sku)),
+            ...inventoryAfterRows.filter(item => changedSkus.has(item.sku)).map(item => ({
+              sku: item.sku, batchNumber: item.batchNumber || '', stockQuantity: item.stockQuantity,
+              reservedQuantity: item.reservedQuantity, price: item.price, updatedAt: item.updatedAt || null
+            }))
+          ];
+          const nextProductSnapshot = [
+            ...(job.previewProductSnapshot || []).filter(item => !changedSkus.has(item.sku)),
+            ...productAfterRows.map(item => ({ sku: item.sku, version: item.version, updatedAt: item.updatedAt || null }))
+          ];
+          await ImportJob.updateOne({ _id: job._id }, {
+            $set: { previewInventorySnapshot: nextInventorySnapshot, previewProductSnapshot: nextProductSnapshot }
+          }, { session: sess });
+          await ImportBatch.updateOne({ batchId, tenantId, branchId }, { $inc: { appliedRecords: eligibleRows.length } }, { session: sess });
+          return { ...result, previewBaseline: { inventory: nextInventorySnapshot, products: nextProductSnapshot } };
         };
 
-        if (transactionSupported && session) {
-          try {
-            await session.withTransaction(async () => {
-              const res = await executeLogic(session);
-              insertedCount = res.newCount;
-            });
-          } catch (txError) {
-            // If standalone mongo doesn't support replica set transactions (code 20 or similar message)
-            if (txError.code === 20 || /transaction/i.test(txError.message)) {
-              const res = await executeLogic(null);
-              insertedCount = res.newCount;
-            } else {
-              throw txError;
-            }
-          }
-        } else {
-          const res = await executeLogic(null);
+        if (!transactionSupported || !session) {
+          const unavailable = new Error('Inventory imports require MongoDB replica-set transactions; no writes were applied.');
+          unavailable.statusCode = 503;
+          unavailable.code = 'IMPORT_TRANSACTIONS_REQUIRED';
+          throw unavailable;
+        }
+        let committedPreviewBaseline = null;
+        await session.withTransaction(async () => {
+          committedPreviewBaseline = null;
+          const res = await executeLogic(session);
           insertedCount = res.newCount;
+          committedPreviewBaseline = res.previewBaseline || null;
+        });
+        if (committedPreviewBaseline) {
+          job.previewInventorySnapshot = committedPreviewBaseline.inventory;
+          job.previewProductSnapshot = committedPreviewBaseline.products;
         }
 
         lastError = null;
@@ -354,7 +450,20 @@ async function saveBatch(job, batch, batchId, seenSkus) {
   }
 
   if (failures.length) {
-    await ImportFailure.insertMany(failures, { ordered: false }).catch(() => {});
+    await ImportFailure.bulkWrite(failures.map(failure => ({
+      updateOne: {
+        filter: { tenantId, branchId, batchId, rowNumber: failure.rowNumber },
+        update: { $set: failure },
+        upsert: true
+      }
+    })), { ordered: false }).catch(() => {});
+  }
+  if (!lastError && eligibleRows.length) {
+    await ImportFailure.deleteMany({
+      tenantId, branchId, batchId,
+      rowNumber: { $in: eligibleRows.map(item => item.rowNumber) },
+      retryable: true
+    }).catch(() => {});
   }
 
   const failedInBatch = failures.length;
@@ -377,6 +486,12 @@ async function processJob(job) {
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
   if (!firstSheet) throw new Error('Workbook does not contain a worksheet.');
   const rows = xlsx.utils.sheet_to_json(firstSheet, { defval: '', raw: false });
+  const currentPreview = await previewImportFile({ filePath: job.filePath, tenantId: job.tenantId, branchId: job.branchId });
+  if (currentPreview.previewFingerprint !== job.previewFingerprint) {
+    const error = new Error('The workbook no longer matches the approved preview. No inventory changes were applied.');
+    error.code = 'PREVIEW_FINGERPRINT_MISMATCH';
+    throw error;
+  }
   await ImportJob.updateOne({ _id: job._id }, { $set: { totalRecords: rows.length } });
 
   let failedRecords = 0;
@@ -388,15 +503,18 @@ async function processJob(job) {
       rowNumber: Number(originalRecord['Source Row Number'] || originalRecord['RowNumber'] || originalRecord['Import Row Number']) || start + index + 2,
       originalRecord
     }));
-    const result = await saveBatch(job, batch, `${job._id}-${Math.floor(start / batchSize) + 1}`, seenSkus);
+    const result = await saveBatch(job, batch, job.batchId, seenSkus);
     failedRecords += result.failedInBatch;
   }
 
+  const remainingFailures = await ImportFailure.countDocuments({ batchId: job.batchId, tenantId: job.tenantId, branchId: job.branchId });
+  const finalStatus = remainingFailures ? 'COMPLETED_WITH_ERRORS' : 'COMPLETED';
   await ImportJob.updateOne({ _id: job._id }, {
-    $set: {
-      status: failedRecords ? 'COMPLETED_WITH_ERRORS' : 'COMPLETED',
-      completedAt: new Date()
-    }
+    $set: { status: finalStatus, completedAt: new Date() }
+  });
+  await ImportBatch.updateOne({ batchId: job.batchId, tenantId: job.tenantId, branchId: job.branchId }, {
+    $set: { status: finalStatus },
+    $max: { totalRecords: rows.length }
   });
 
   await Audit.create({
@@ -404,14 +522,14 @@ async function processJob(job) {
     branchId: job.branchId,
     actor: job.uploadedBy,
     operation: 'import.completed',
-    details: { jobId: String(job._id), totalRecords: rows.length, failedRecords }
+    details: { jobId: String(job._id), batchId: job.batchId, totalRecords: rows.length, failedRecords }
   }).catch(() => {});
 }
 
 let workerTimer;
 let activeWorkers = 0;
 export function startImportWorkers() {
-  if (workerTimer) return;
+  if (!config.importsEnabled || workerTimer) return;
   workerTimer = setInterval(() => {
     while (activeWorkers < (config.workerConcurrency || 2)) {
       activeWorkers += 1;
@@ -438,6 +556,7 @@ async function claimAndProcess() {
       { sort: { createdAt: 1 }, new: true }
     );
     if (!job) return;
+    await ImportBatch.updateOne({ batchId: job.batchId, tenantId: job.tenantId, branchId: job.branchId }, { $set: { status: 'PROCESSING' } });
     await processJob(job);
   } catch (error) {
     if (job) {
@@ -445,6 +564,7 @@ async function claimAndProcess() {
         await ImportJob.updateOne({ _id: job._id }, {
           $set: { status: 'FAILED', completedAt: new Date(), errorMessage: error.message || 'Import processing failed.' }
         });
+        await ImportBatch.updateOne({ batchId: job.batchId, tenantId: job.tenantId, branchId: job.branchId }, { $set: { status: 'FAILED' } });
       } catch (persistenceError) {
         console.error(JSON.stringify({
           serviceName: 'inventory-service',
@@ -461,7 +581,8 @@ async function claimAndProcess() {
       error: error.message
     }));
   } finally {
-    if (job?.filePath) {
+    const latest = job ? await ImportJob.findById(job._id).select('status').lean().catch(() => null) : null;
+    if (job?.filePath && ['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(latest?.status)) {
       await fs.rm(job.filePath, { force: true }).catch(error => {
         console.error(JSON.stringify({
           serviceName: 'inventory-service',
@@ -475,22 +596,14 @@ async function claimAndProcess() {
 }
 
 export async function recoverImportJobs() {
-  const interruptedJobs = await ImportJob.find({ status: 'PROCESSING' }).select('_id').lean();
+  const interruptedJobs = await ImportJob.find({ status: 'PROCESSING' }).select('_id batchId tenantId branchId').lean();
   if (interruptedJobs.length) {
     const jobIds = interruptedJobs.map(job => job._id);
-    await ImportFailure.deleteMany({ jobId: { $in: jobIds } });
-    await ImportJob.updateMany({ _id: { $in: jobIds } }, {
-      $set: {
-        status: 'QUEUED',
-        processedRecords: 0,
-        successfulRecords: 0,
-        insertedRecords: 0,
-        updatedRecords: 0,
-        failedRecords: 0,
-        startedAt: null,
-        completedAt: null
-      }
+    const batchIds = [...new Set(interruptedJobs.map(job => job.batchId).filter(Boolean))];
+    await ImportJob.updateMany({ _id: { $in: jobIds }, status: 'PROCESSING' }, {
+      $set: { status: 'FAILED', completedAt: new Date(), errorMessage: 'Worker interrupted. Automatic replay was blocked; inspect or roll back this import batch.' }
     });
+    await ImportBatch.updateMany({ batchId: { $in: batchIds }, status: 'PROCESSING' }, { $set: { status: 'FAILED' } });
   }
   startImportWorkers();
 }
@@ -502,13 +615,27 @@ export async function createImportJob({
   idempotencyKey,
   tenantId,
   branchId,
-  stockMode = 'REPLACE'
+  stockMode = 'REPLACE',
+  previewFingerprint
 }) {
+  if (!config.importsEnabled) { const error = new Error('Inventory import writes are disabled. Enable INVENTORY_IMPORTS_ENABLED only in an isolated test environment after review.'); error.statusCode = 503; throw error; }
   if (!tenantId || !branchId) { const error = new Error('Verified tenant and branch context are required.'); error.statusCode = 403; throw error; }
-  if (stockMode !== 'REPLACE') { const error = new Error('Only REPLACE stock mode is currently supported; additive imports are disabled until transaction-safe idempotency is enabled.'); error.statusCode = 400; throw error; }
+  if (stockMode !== 'REPLACE') { const error = new Error('Only REPLACE stock mode is currently supported; additive imports are disabled.'); error.statusCode = 400; throw error; }
+  if (!previewFingerprint) { const error = new Error('A server-generated preview fingerprint and explicit confirmation are required.'); error.statusCode = 400; throw error; }
+  const freshPreview = await previewImportFile({ filePath: file.path, tenantId, branchId });
+  if (freshPreview.previewFingerprint !== previewFingerprint) {
+    await fs.rm(file.path, { force: true }).catch(() => {});
+    const error = new Error('The approved preview is stale. Re-preview the workbook before importing.');
+    error.statusCode = 409;
+    error.code = 'PREVIEW_FINGERPRINT_MISMATCH';
+    throw error;
+  }
   const normalizedKey = String(idempotencyKey || '').trim();
   const safeFileName = path.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, '_');
   const isConnected = mongoose.connection.readyState === 1;
+  if (!isConnected) { const error = new Error('Inventory database is unavailable; import was not queued.'); error.statusCode = 503; throw error; }
+  await assertMongoTransactionsAvailable();
+  const batchId = randomUUID();
 
   // Idempotency check with tenant isolation
   let existing = null;
@@ -524,7 +651,7 @@ export async function createImportJob({
 
   if (existing) {
     // If same file & branch, return existing job
-    if (existing.fileName === safeFileName && existing.branchId === branchId) {
+    if (existing.fileName === safeFileName && existing.branchId === branchId && existing.previewFingerprint === previewFingerprint) {
       if (file?.path) await fs.rm(file.path, { force: true }).catch(() => {});
       return existing;
     }
@@ -543,9 +670,14 @@ export async function createImportJob({
   try {
     let job;
     if (isConnected) {
+      await ImportBatch.create({ batchId, tenantId, branchId, uploadedBy, status: 'QUEUED' });
       job = await ImportJob.create({
         tenantId,
         branchId,
+        batchId,
+        previewFingerprint,
+        previewInventorySnapshot: freshPreview.inventorySnapshot,
+        previewProductSnapshot: freshPreview.productSnapshot,
         stockMode,
         fileName: safeFileName,
         filePath: destination,
@@ -579,11 +711,12 @@ export async function createImportJob({
     startImportWorkers();
     return job;
   } catch (error) {
+    await ImportBatch.deleteOne({ batchId, tenantId, branchId, status: 'QUEUED' }).catch(() => {});
     await fs.rm(destination, { force: true }).catch(() => {});
     if (error.code === 11000) {
       const repeated = await ImportJob.findOne({ tenantId, idempotencyKey: normalizedKey });
       if (repeated) {
-        if (repeated.fileName === safeFileName && repeated.branchId === branchId) {
+        if (repeated.fileName === safeFileName && repeated.branchId === branchId && repeated.previewFingerprint === previewFingerprint) {
           return repeated;
         }
         const conflictError = new Error('Idempotency key has already been used for a different import.');
@@ -695,9 +828,14 @@ export async function retryImportJob(jobId, uploadedBy, requestIdempotencyKey, t
     await fs.mkdir(config.importStorage, { recursive: true });
     await fs.writeFile(filePath, xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
 
+    const retryPreview = await previewImportFile({ filePath, tenantId: original.tenantId, branchId: original.branchId });
     const retry = await ImportJob.create({
       tenantId: original.tenantId,
       branchId: original.branchId,
+      batchId: original.batchId,
+      previewFingerprint: retryPreview.previewFingerprint,
+      previewInventorySnapshot: retryPreview.inventorySnapshot,
+      previewProductSnapshot: retryPreview.productSnapshot,
       stockMode: original.stockMode || 'REPLACE',
       fileName: `${original.fileName} retry`,
       filePath,
@@ -766,7 +904,7 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
       continue;
     }
     const value = item.parsed.value;
-    const key = `${value.sku}::${value.batchNumber || ''}`;
+    const key = JSON.stringify([value.sku, value.batchNumber || '']);
     if (seen.has(key)) {
       errors.push({ rowNumber: item.rowNumber, sku: value.sku, name: value.name, errors: ['Duplicate SKU + Batch Number in workbook.'] });
       continue;
@@ -775,10 +913,15 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     valid.push({ ...item, value });
   }
   const skus = [...new Set(valid.map(item => item.value.sku))];
-  const inventory = skus.length ? await Inventory.find({ tenantId, branchId, sku: { $in: skus } }).select('sku batchNumber stockQuantity reservedQuantity').lean() : [];
-  const byBatch = new Map(inventory.map(item => [`${item.sku}::${item.batchNumber || ''}`, item]));
+  const inventory = skus.length ? await Inventory.find({ tenantId, branchId, sku: { $in: skus } }).select('sku batchNumber stockQuantity reservedQuantity price updatedAt').lean() : [];
+  const products = skus.length ? await Product.find({ tenantId, sku: { $in: skus } }).select('sku version updatedAt').lean() : [];
+  const inventorySnapshot = inventory.map(item => ({ sku: item.sku, batchNumber: item.batchNumber || '', stockQuantity: item.stockQuantity, reservedQuantity: item.reservedQuantity, price: item.price, updatedAt: item.updatedAt || null }))
+    .sort((a, b) => JSON.stringify([a.sku, a.batchNumber]).localeCompare(JSON.stringify([b.sku, b.batchNumber])));
+  const productSnapshot = products.map(item => ({ sku: item.sku, version: item.version, updatedAt: item.updatedAt || null }))
+    .sort((a, b) => a.sku.localeCompare(b.sku));
+  const byBatch = new Map(inventory.map(item => [JSON.stringify([item.sku, item.batchNumber || '']), item]));
   const previewRows = valid.slice(0, 10).map(item => {
-    const current = byBatch.get(`${item.value.sku}::${item.value.batchNumber || ''}`);
+    const current = byBatch.get(JSON.stringify([item.value.sku, item.value.batchNumber || '']));
     const existingStock = Number(current?.stockQuantity || 0);
     const reservedStock = Number(current?.reservedQuantity || 0);
     return {
@@ -791,13 +934,24 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     };
   });
   for (const item of valid) {
-    const current = byBatch.get(`${item.value.sku}::${item.value.batchNumber || ''}`);
+    const current = byBatch.get(JSON.stringify([item.value.sku, item.value.batchNumber || '']));
     if (Number(current?.reservedQuantity || 0) > item.value.stockQuantity) {
       errors.push({ rowNumber: item.rowNumber, sku: item.value.sku, name: item.value.name, errors: ['New stock is below the quantity already reserved for this batch.'] });
     }
   }
   const errorRows = new Set(errors.map(error => error.rowNumber));
+  const previewFingerprint = createHash('sha256').update(JSON.stringify({
+    tenantId, branchId,
+    rows: normalized.map(item => ({ rowNumber: item.rowNumber, parsed: item.parsed.error ? { error: item.parsed.error, field: item.parsed.field } : item.parsed.value })),
+    existingInventory: inventorySnapshot,
+    existingProducts: productSnapshot
+  })).digest('hex');
   return {
+    previewFingerprint,
+    inventorySnapshot,
+    productSnapshot,
+    tenantId,
+    branchId,
     rowsDetected: rows.length,
     validCount: rows.length - errorRows.size,
     errorsCount: errorRows.size,
@@ -806,4 +960,92 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     previewRows,
     stockMode: 'REPLACE'
   };
+}
+
+
+const comparable = value => value instanceof Date ? value.toISOString()
+  : value && typeof value.toHexString === 'function' ? value.toHexString()
+    : value == null ? null : value;
+const sameFields = (current, expected, fields) => fields.every(field => comparable(current?.[field]) === comparable(expected?.[field]));
+
+export async function rollbackImportBatch({ batchId, tenantId, branchId, actor }) {
+  if (!batchId || !tenantId || !branchId) {
+    const error = new Error('Batch, tenant and branch identity are required for rollback.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const batch = await ImportBatch.findOne({ batchId, tenantId, branchId });
+  if (!batch) return null;
+  if (batch.status === 'REVERTED') return batch;
+  if (!['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'].includes(batch.status)) {
+    const error = new Error('Only completed or interrupted batches can be rolled back.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  await assertMongoTransactionsAvailable();
+  const session = await mongoose.startSession();
+  if (!session || typeof session.withTransaction !== 'function') {
+    await session?.endSession?.();
+    const error = new Error('Safe rollback requires MongoDB replica-set transactions.');
+    error.statusCode = 503;
+    throw error;
+  }
+  try {
+    await session.withTransaction(async () => {
+      const snapshots = await ImportBatchSnapshot.find({ batchId, tenantId, branchId, revertedAt: null })
+        .sort({ entityType: 1, entityKey: 1 }).session(session).lean();
+      const inventorySnapshots = snapshots.filter(snapshot => snapshot.entityType === 'INVENTORY');
+      const productSnapshots = snapshots.filter(snapshot => snapshot.entityType === 'PRODUCT');
+
+      for (const snapshot of inventorySnapshots) {
+        const expected = snapshot.after;
+        const current = await Inventory.findOne({ _id: expected._id, tenantId, branchId }).session(session).lean();
+        const fields = ['tenantId', 'branchId', 'productId', 'sku', 'stockQuantity', 'reservedQuantity', 'price', 'batchNumber', 'expiryDate', 'warehouse', 'updatedAt'];
+        if (!current || !sameFields(current, expected, fields)) {
+          const error = new Error(`Inventory ${snapshot.entityKey} changed after import; rollback was stopped to protect live orders and reservations.`);
+          error.statusCode = 409;
+          throw error;
+        }
+        if (snapshot.created) {
+          const deleted = await Inventory.deleteOne({ _id: current._id, tenantId, branchId, sku: expected.sku, batchNumber: expected.batchNumber, stockQuantity: expected.stockQuantity, reservedQuantity: expected.reservedQuantity, price: expected.price, updatedAt: expected.updatedAt }).session(session);
+          if (deleted.deletedCount !== 1) throw Object.assign(new Error(`Could not safely remove imported inventory ${snapshot.entityKey}.`), { statusCode: 409 });
+        } else {
+          await Inventory.replaceOne({ _id: current._id, tenantId, branchId, updatedAt: expected.updatedAt }, snapshot.before, { session, runValidators: true, timestamps: false });
+        }
+      }
+
+      for (const snapshot of productSnapshots) {
+        const expected = snapshot.after;
+        const current = await Product.findOne({ _id: expected._id, tenantId }).session(session).lean();
+        const fields = ['tenantId', 'sku', 'name', 'genericName', 'strength', 'form', 'manufacturer', 'category', 'description', 'imageUrl', 'baseCostPrice', 'marginTier', 'requiresPrescription', 'version', 'active', 'updatedAt'];
+        if (!current || !sameFields(current, expected, fields)) {
+          const error = new Error(`Product ${snapshot.entityKey} changed after import; rollback was stopped to avoid overwriting newer catalogue changes.`);
+          error.statusCode = 409;
+          throw error;
+        }
+        if (snapshot.created) {
+          const referenced = await Inventory.exists({ tenantId, productId: current._id }).session(session);
+          if (referenced) {
+            const error = new Error(`Product ${snapshot.entityKey} is now referenced by inventory outside this batch and cannot be removed safely.`);
+            error.statusCode = 409;
+            throw error;
+          }
+          await Product.deleteOne({ _id: current._id, tenantId, version: expected.version, updatedAt: expected.updatedAt }).session(session);
+        } else {
+          await Product.replaceOne({ _id: current._id, tenantId, updatedAt: expected.updatedAt }, snapshot.before, { session, runValidators: true, timestamps: false });
+        }
+      }
+
+      await ImportBatchSnapshot.updateMany({ batchId, tenantId, branchId, revertedAt: null }, { $set: { revertedAt: new Date() } }, { session });
+      await ImportBatch.updateOne({ batchId, tenantId, branchId, status: { $in: ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'] } }, {
+        $set: { status: 'REVERTED', revertedAt: new Date(), revertedBy: actor || 'unknown', rollbackReason: 'Explicit batch rollback' }
+      }, { session });
+    });
+  } finally {
+    await session.endSession().catch(() => {});
+  }
+
+  await Audit.create({ tenantId, branchId, actor: actor || 'unknown', operation: 'import.batch.reverted', details: { batchId } }).catch(() => {});
+  return ImportBatch.findOne({ batchId, tenantId, branchId }).lean();
 }

@@ -28,7 +28,7 @@ const start = async () => {
   };
 };
 
-const createGatewayToken = (scope = 'identity:verify') => jwt.sign({ scope }, process.env.GATEWAY_AUTH_SECRET, {
+const createGatewayToken = (scope = 'identity:verify', claims = {}) => jwt.sign({ scope, ...claims }, process.env.GATEWAY_AUTH_SECRET, {
   algorithm: 'HS256',
   subject: 'api-gateway',
   issuer: 'ashvin-pharmacy',
@@ -81,6 +81,69 @@ test('internal identity endpoint rejects a valid Gateway token with the wrong sc
         Authorization: `Bearer ${userToken}`,
         'X-Gateway-Authorization': `Bearer ${createGatewayToken('orders.create')}`
       }
+    });
+    assert.equal(response.status, 403);
+  } finally {
+    await server.close();
+  }
+});
+
+
+test('internal tenant scope endpoint verifies active tenant branch and tenant-wide membership', async () => {
+  const server = await start();
+  try {
+    const assertion = createGatewayToken('tenant:branch:verify', {
+      userId: 'demo-admin-id',
+      role: 'TENANT_OWNER',
+      tenantId: 'tenant-ashvin-main',
+      branchId: 'branch-indore-central'
+    });
+    const response = await fetch(`${server.url}/internal/gateway/validate-tenant-branch`, {
+      method: 'POST',
+      headers: { 'X-Gateway-Authorization': `Bearer ${assertion}` }
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      valid: true,
+      tenantId: 'tenant-ashvin-main',
+      branchId: 'branch-indore-central'
+    });
+  } finally {
+    await server.close();
+  }
+});
+
+test('internal tenant scope endpoint rejects a branch belonging to another tenant', async () => {
+  const server = await start();
+  try {
+    const assertion = createGatewayToken('tenant:branch:verify', {
+      userId: 'demo-admin-id',
+      role: 'TENANT_OWNER',
+      tenantId: 'tenant-ashvin-main',
+      branchId: 'branch-bhopal-mpnagar'
+    });
+    const response = await fetch(`${server.url}/internal/gateway/validate-tenant-branch`, {
+      method: 'POST',
+      headers: { 'X-Gateway-Authorization': `Bearer ${assertion}` }
+    });
+    assert.equal(response.status, 404);
+  } finally {
+    await server.close();
+  }
+});
+
+test('internal tenant scope endpoint rejects users without active tenant membership', async () => {
+  const server = await start();
+  try {
+    const assertion = createGatewayToken('tenant:branch:verify', {
+      userId: 'unassigned-user',
+      role: 'TENANT_ADMIN',
+      tenantId: 'tenant-ashvin-main',
+      branchId: 'branch-indore-central'
+    });
+    const response = await fetch(`${server.url}/internal/gateway/validate-tenant-branch`, {
+      method: 'POST',
+      headers: { 'X-Gateway-Authorization': `Bearer ${assertion}` }
     });
     assert.equal(response.status, 403);
   } finally {

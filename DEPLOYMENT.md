@@ -81,6 +81,30 @@ SERVICE_AUTH_SECRET
 ~~~
 The Render disk is for import/work files, not the authoritative inventory database.
 
+### Inventory import safety gate (default OFF)
+- `INVENTORY_IMPORTS_ENABLED` defaults to `false`. Do not enable it on production while validating the workflow.
+- The preview endpoint remains read-only and displays the signed tenant + branch target.
+- Import preview, write, status, retry and rollback requests validate the active tenant, persisted branch-to-tenant relationship and current user membership through the backend internal gateway.
+- Branch records are persisted in the TenantBranch registry; seeded branches are safely materialized into the registry and new/updated branches are persisted.
+- A write requires an explicit preview fingerprint confirmation. The fingerprint includes the workbook rows, tenant/branch identity and current stock snapshot; stale previews are rejected.
+- Writes require MongoDB replica-set transactions. Standalone MongoDB deployments fail closed; there is no non-transactional fallback.
+- Every import gets one persistent UUID batch ID. Inventory and product before/after snapshots are recorded in the same transaction as each applied chunk.
+- Batch rollback is tenant/branch scoped and refuses to overwrite stock, reservations or catalogue records changed after the import.
+- Interrupted workers are marked FAILED, never automatically replayed. Their committed chunks remain available for explicit rollback.
+- Retries share the original batch ID so the whole import can be reverted together.
+
+Controlled test procedure:
+1. Deploy the code to an isolated test environment with a dedicated test tenant, branch and inventory database.
+2. Keep `INVENTORY_IMPORTS_ENABLED=false`; upload the synthetic template and verify the preview only.
+3. Verify tenant and branch IDs in the preview are the intended test scope.
+4. Only in that isolated test environment, set `INVENTORY_IMPORTS_ENABLED=true` and restart Inventory Service.
+5. Import the synthetic 3-row template (two lots for the same SKU and one second SKU); record the returned batch ID.
+6. Verify inventory by tenant + branch + SKU + batch number, then test rollback by that batch ID.
+7. Confirm original stock/prices are restored and the batch status is REVERTED. Try rollback from a different tenant/branch and expect 404.
+8. Keep the production setting disabled until all tests pass and a separate production upload is explicitly approved.
+
+Never use the synthetic template against live inventory. Do not upload a live inventory workbook as part of this validation.
+
 ## 5. Order Render
 File: services/order-service/render.yaml
 

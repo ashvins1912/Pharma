@@ -7,6 +7,7 @@ import { logger } from '../../shared/observability/logger.js';
 import { registerMembership } from '../../middleware/context.js';
 import { TenantRoles, PlatformRoles } from '../../shared/contracts/index.js';
 import Tenant from '../../models/Tenant.js';
+import TenantBranch from '../../models/TenantBranch.js';
 import TenantMembership from '../../models/TenantMembership.js';
 import { getIsConnected } from '../../config/db.js';
 
@@ -356,7 +357,30 @@ export class TenantService {
     }
 
     async getBranchById(branchId) {
-        return this.branches.get(String(branchId)) || null;
+        const id = String(branchId || '').trim();
+        if (!id) return null;
+        if (getIsConnected()) {
+            const persisted = await TenantBranch.findById(id).lean();
+            if (persisted) {
+                const branch = { ...persisted, id: persisted._id };
+                this.branches.set(id, branch);
+                return branch;
+            }
+            const seeded = this.branches.get(id);
+            if (!seeded) return null;
+            const branchData = { ...seeded };
+            delete branchData.id;
+            delete branchData._id;
+            const created = await TenantBranch.findOneAndUpdate(
+                { _id: id },
+                { $setOnInsert: { ...branchData, tenantId: String(seeded.tenantId) } },
+                { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
+            ).lean();
+            const branch = { ...created, id: created._id };
+            this.branches.set(id, branch);
+            return branch;
+        }
+        return this.branches.get(id) || null;
     }
 
     async createBranch(tenantId, data, actor = null) {
@@ -390,13 +414,17 @@ export class TenantService {
             status: 'ACTIVE',
             createdAt: new Date().toISOString()
         };
+        if (getIsConnected()) {
+            const persisted = await TenantBranch.create({ _id: id, ...newBranch });
+            Object.assign(newBranch, persisted.toObject(), { id });
+        }
         this.branches.set(id, newBranch);
         domainEvents.emitDomainEvent('BRANCH_CREATED', id, newBranch, actor, tenantId, id);
         return newBranch;
     }
 
     async updateBranch(branchId, updates, actor = null) {
-        const branch = this.branches.get(branchId);
+        const branch = await this.getBranchById(branchId);
         if (!branch) throw new Error('Branch not found');
 
         const updated = {
@@ -405,7 +433,19 @@ export class TenantService {
             address: { ...branch.address, ...(updates.address || {}) },
             updatedAt: new Date().toISOString()
         };
-        this.branches.set(branchId, updated);
+        if (getIsConnected()) {
+            const persistedFields = { ...updated };
+            delete persistedFields.id;
+            delete persistedFields._id;
+            const persisted = await TenantBranch.findOneAndUpdate(
+                { _id: String(branchId), tenantId: String(branch.tenantId) },
+                { $set: persistedFields },
+                { new: true, runValidators: true }
+            ).lean();
+            if (!persisted) throw new Error('Branch not found in the persistent tenant registry.');
+            Object.assign(updated, persisted, { id: persisted._id });
+        }
+        this.branches.set(String(branchId), updated);
         domainEvents.emitDomainEvent('BRANCH_SETTINGS_UPDATED', branchId, updated, actor, branch.tenantId, branchId);
         return updated;
     }
