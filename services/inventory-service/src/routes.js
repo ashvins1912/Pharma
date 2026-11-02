@@ -163,10 +163,12 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
 
   try {
     if (req.body?.confirmImport !== 'true' || typeof req.body?.previewFingerprint !== 'string' || !req.body.previewFingerprint.trim()) {
+      await fs.rm(req.file.path, { force: true }).catch(() => {});
       return res.status(400).json({ message: 'Review the server preview and explicitly confirm it before importing.' });
     }
     const approvedPreview = await previewImportFile({ filePath: req.file.path, tenantId, branchId });
     if (approvedPreview.previewFingerprint !== req.body.previewFingerprint) {
+      await fs.rm(req.file.path, { force: true }).catch(() => {});
       return res.status(409).json({ message: 'The uploaded workbook or tenant/branch selection differs from the approved preview. Preview again before importing.' });
     }
     const job = await createImportJob({
