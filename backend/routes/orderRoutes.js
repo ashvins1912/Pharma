@@ -29,7 +29,7 @@ const TENANT_STAFF_ROLES = new Set([
     'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF',
     'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN', 'PHARMACY'
 ]);
-const getActorRole = req => String(req.user?.role || req.user?.app_metadata?.role || '').toUpperCase();
+const getActorRole = req => String(req.user?.role || req.user?.app_metadata?.role || req.context?.role || '').toUpperCase();
 const getActorTenantId = req => req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId || null;
 const isPlatformOrderAdmin = req => ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(getActorRole(req));
 const isTenantOrderStaff = req => TENANT_STAFF_ROLES.has(getActorRole(req));
