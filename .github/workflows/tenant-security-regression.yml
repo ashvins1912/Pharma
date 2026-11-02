@@ -19,8 +19,28 @@ jobs:
           node-version: 22
       - name: Install workspace dependencies
         run: npm install --no-audit --no-fund
+      - name: Start isolated MongoDB replica set for inventory import integration tests
+        run: |
+          docker run -d --name pharma-mongo-rs -p 27017:27017 mongo:7.0 --replSet rs0 --bind_ip_all
+          for attempt in {1..30}; do
+            if docker exec pharma-mongo-rs mongosh --quiet --eval "db.adminCommand({ ping: 1 }).ok" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+          docker exec pharma-mongo-rs mongosh --quiet --eval "rs.initiate()"
+          for attempt in {1..30}; do
+            if docker exec pharma-mongo-rs mongosh --quiet --eval "db.hello().isWritablePrimary" | grep -q true; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "MongoDB replica set did not become primary." >&2
+          exit 1
       - name: Run full repository tests
         run: npm test
+        env:
+          INVENTORY_TEST_MONGO_URI: mongodb://127.0.0.1:27017/?replicaSet=rs0
       - name: Build frontend
         run: npm run build
       - name: Type-check frontend
