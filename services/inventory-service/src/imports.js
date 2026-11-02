@@ -68,9 +68,8 @@ export function normalizeImportRow(row) {
   if (rawMarginTier && !['LOW', 'MID', 'HIGH'].includes(marginTier)) {
     return { error: 'Margin tier must be LOW, MID, or HIGH.', errorType: 'VALIDATION_ERROR', field: 'Margin Tier' };
   }
-  if (expiryDate && !Number.isFinite(expiryDate.getTime())) {
-    return { error: 'Expiry date is invalid.', errorType: 'VALIDATION_ERROR', field: 'Expiry Date' };
-  }
+  if (expiryDate && !Number.isFinite(expiryDate.getTime())) return { error: 'Expiry date is invalid. Use an Excel date or ISO YYYY-MM-DD.', errorType: 'VALIDATION_ERROR', field: 'Expiry Date' };
+  if (expiryDate) { const d = Date.UTC(expiryDate.getUTCFullYear(), expiryDate.getUTCMonth(), expiryDate.getUTCDate()); const n = new Date(); const today = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()); if (d < today) return { error: 'Expired medicine batches cannot be imported.', errorType: 'VALIDATION_ERROR', field: 'Expiry Date' }; }
 
   const rawPrescription = valueOf(row, 'Requires Prescription', 'requiresPrescription', 'Prescription Required', 'isPrescriptionRequired');
   const requiresPrescription = typeof rawPrescription === 'boolean'
@@ -114,21 +113,27 @@ export const classifyImportError = error => {
   return { errorType: 'DATABASE_ERROR', retryable: false };
 };
 
-async function executeBatchOperations(tenantId, branchId, eligibleRows, seenExistingProducts, seenExistingInventory, session = null) {
+async function executeBatchOperations(tenantId, branchId, stockMode, eligibleRows, seenExistingProducts, seenExistingInventory, session = null) {
   const bySku = new Map(seenExistingProducts.map(p => [p.sku, p]));
-  const inventoryBySku = new Map(seenExistingInventory.map(i => [i.sku, i]));
+  const batchKey = (sku, batch = '') => `${sku}::${batch || ''}`;
+  const inventoryByBatch = new Map(seenExistingInventory.map(i => [batchKey(i.sku, i.batchNumber), i]));
 
   const productOperations = [];
   const inventoryOperations = [];
+  const pendingProductIds = new Map();
   let newCount = 0;
 
   for (const item of eligibleRows) {
     const { value } = item;
     const currentProduct = bySku.get(value.sku);
-    const productId = currentProduct?._id || new mongoose.Types.ObjectId();
-    if (!currentProduct) newCount += 1;
+    let productId = currentProduct?._id || pendingProductIds.get(value.sku);
+    if (!productId) {
+      productId = new mongoose.Types.ObjectId();
+      pendingProductIds.set(value.sku, productId);
+      newCount += 1;
+    }
 
-    productOperations.push({
+    if (!currentProduct && pendingProductIds.get(value.sku) === productId && !productOperations.some(op => op.updateOne.filter.sku === value.sku)) productOperations.push({
       updateOne: {
         filter: { tenantId, sku: value.sku },
         update: {
@@ -142,6 +147,8 @@ async function executeBatchOperations(tenantId, branchId, eligibleRows, seenExis
             description: value.description,
             imageUrl: value.imageUrl,
             requiresPrescription: value.requiresPrescription,
+            baseCostPrice: value.baseCostPrice,
+            marginTier: value.marginTier,
             active: true
           },
           $setOnInsert: { _id: productId, tenantId, sku: value.sku, version: 0 },
@@ -151,39 +158,13 @@ async function executeBatchOperations(tenantId, branchId, eligibleRows, seenExis
       }
     });
 
-    const currentInventory = inventoryBySku.get(value.sku);
-    inventoryOperations.push({
-      updateOne: {
-        filter: currentInventory
-          ? {
-              tenantId,
-              branchId,
-              productId,
-              $or: [
-                { reservedQuantity: { $lte: value.stockQuantity } },
-                { reservedQuantity: { $exists: false } }
-              ]
-            }
-          : { tenantId, branchId, productId },
-        update: {
-          $set: {
-            tenantId,
-            branchId,
-            productId,
-            sku: value.sku,
-            stockQuantity: value.stockQuantity,
-            price: value.price,
-            batchNumber: value.batchNumber,
-            expiryDate: value.expiryDate
-          },
-          $setOnInsert: {
-            reservedQuantity: 0,
-            warehouse: 'default'
-          }
-        },
-        upsert: !currentInventory
-      }
-    });
+    const batchNumber = value.batchNumber || '';
+    const currentInventory = inventoryByBatch.get(batchKey(value.sku, batchNumber));
+    const filter = { tenantId, branchId, productId, batchNumber };
+    if (stockMode === 'REPLACE') filter.$or = [{ reservedQuantity: { $lte: value.stockQuantity } }, { reservedQuantity: { $exists: false } }];
+    const update = { $set: { tenantId, branchId, productId, sku: value.sku, price: value.price, batchNumber, expiryDate: value.expiryDate }, $setOnInsert: { reservedQuantity: 0, warehouse: 'default' } };
+    update.$set.stockQuantity = value.stockQuantity;
+    inventoryOperations.push({ updateOne: { filter, update, upsert: !currentInventory } });
   }
 
   const options = session ? { ordered: true, session } : { ordered: true };
@@ -203,8 +184,9 @@ async function saveBatch(job, batch, batchId, seenSkus) {
   const failures = [];
   const valid = [];
   const batchSkus = new Set();
-  const tenantId = job.tenantId || 'tenant-ashvin-main';
-  const branchId = job.branchId || 'branch-indore-central';
+  const tenantId = job.tenantId;
+  const branchId = job.branchId;
+  const stockMode = job.stockMode || 'REPLACE';
 
   for (const record of batch) {
     const normalized = normalizeImportRow(record.originalRecord);
@@ -226,7 +208,8 @@ async function saveBatch(job, batch, batchId, seenSkus) {
       continue;
     }
 
-    if (seenSkus.has(normalized.value.sku) || batchSkus.has(normalized.value.sku)) {
+    const importKey = `${normalized.value.sku}::${normalized.value.batchNumber || ''}`;
+    if (seenSkus.has(importKey) || batchSkus.has(importKey)) {
       failures.push({
         tenantId,
         branchId,
@@ -236,16 +219,16 @@ async function saveBatch(job, batch, batchId, seenSkus) {
         sku: normalized.value.sku,
         productName: normalized.value.name,
         originalRecord: record.originalRecord,
-        reason: 'Duplicate SKU appears more than once in this import.',
+        reason: 'Duplicate SKU + Batch Number appears more than once in this import.',
         errorType: 'DUPLICATE_ERROR',
-        technicalCode: 'DUPLICATE_SKU_IN_FILE',
+        technicalCode: 'DUPLICATE_SKU_BATCH_IN_FILE',
         retryable: false
       });
       continue;
     }
 
-    seenSkus.add(normalized.value.sku);
-    batchSkus.add(normalized.value.sku);
+    seenSkus.add(importKey);
+    batchSkus.add(importKey);
     valid.push({ ...record, value: normalized.value });
   }
 
@@ -277,14 +260,14 @@ async function saveBatch(job, batch, batchId, seenSkus) {
 
           const invQuery = { tenantId, branchId, sku: { $in: skus } };
           const existingInventory = sess
-            ? await Inventory.find(invQuery).select('productId sku reservedQuantity').session(sess).lean()
+            ? await Inventory.find(invQuery).select('productId sku batchNumber reservedQuantity').session(sess).lean()
             : await Inventory.find(invQuery).select('productId sku reservedQuantity').lean();
 
-          const inventoryBySku = new Map(existingInventory.map(inv => [inv.sku, inv]));
+          const inventoryByBatch = new Map(existingInventory.map(inv => [`${inv.sku}::${inv.batchNumber || ''}`, inv]));
 
           for (const item of valid) {
-            const current = inventoryBySku.get(item.value.sku);
-            if (Number(current?.reservedQuantity || 0) > item.value.stockQuantity) {
+            const current = inventoryByBatch.get(`${item.value.sku}::${item.value.batchNumber || ''}`);
+            if (stockMode === 'REPLACE' && Number(current?.reservedQuantity || 0) > item.value.stockQuantity) {
               businessFailures.push({
                 tenantId,
                 branchId,
@@ -311,7 +294,7 @@ async function saveBatch(job, batch, batchId, seenSkus) {
             ? await Product.find(prodQuery).select('_id sku').session(sess).lean()
             : await Product.find(prodQuery).select('_id sku').lean();
 
-          return executeBatchOperations(tenantId, branchId, eligibleRows, existingProducts, existingInventory, sess);
+          return executeBatchOperations(tenantId, branchId, stockMode, eligibleRows, existingProducts, existingInventory, sess);
         };
 
         if (transactionSupported && session) {
@@ -417,8 +400,8 @@ async function processJob(job) {
   });
 
   await Audit.create({
-    tenantId: job.tenantId || 'tenant-ashvin-main',
-    branchId: job.branchId || 'branch-indore-central',
+    tenantId: job.tenantId,
+    branchId: job.branchId,
     actor: job.uploadedBy,
     operation: 'import.completed',
     details: { jobId: String(job._id), totalRecords: rows.length, failedRecords }
@@ -517,9 +500,12 @@ export async function createImportJob({
   fileName,
   uploadedBy,
   idempotencyKey,
-  tenantId = 'tenant-ashvin-main',
-  branchId = 'branch-indore-central'
+  tenantId,
+  branchId,
+  stockMode = 'REPLACE'
 }) {
+  if (!tenantId || !branchId) { const error = new Error('Verified tenant and branch context are required.'); error.statusCode = 403; throw error; }
+  if (stockMode !== 'REPLACE') { const error = new Error('Only REPLACE stock mode is currently supported; additive imports are disabled until transaction-safe idempotency is enabled.'); error.statusCode = 400; throw error; }
   const normalizedKey = String(idempotencyKey || '').trim();
   const safeFileName = path.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, '_');
   const isConnected = mongoose.connection.readyState === 1;
@@ -560,6 +546,7 @@ export async function createImportJob({
       job = await ImportJob.create({
         tenantId,
         branchId,
+        stockMode,
         fileName: safeFileName,
         filePath: destination,
         uploadedBy,
@@ -571,6 +558,7 @@ export async function createImportJob({
         _id: generatedId,
         tenantId,
         branchId,
+        stockMode,
         fileName: safeFileName,
         filePath: destination,
         uploadedBy,
@@ -710,6 +698,7 @@ export async function retryImportJob(jobId, uploadedBy, requestIdempotencyKey, t
     const retry = await ImportJob.create({
       tenantId: original.tenantId,
       branchId: original.branchId,
+      stockMode: original.stockMode || 'REPLACE',
       fileName: `${original.fileName} retry`,
       filePath,
       uploadedBy,
@@ -745,4 +734,76 @@ export function buildFailureWorkbook(failures) {
   const workbook = xlsx.utils.book_new();
   xlsx.utils.book_append_sheet(workbook, xlsx.utils.json_to_sheet(rows), 'Failed Records');
   return xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+}
+
+
+export async function previewImportFile({ filePath, tenantId, branchId }) {
+  if (!tenantId || !branchId) {
+    const error = new Error('Verified tenant and branch context are required for preview.');
+    error.statusCode = 403;
+    throw error;
+  }
+  const workbook = xlsx.readFile(filePath, { cellDates: true });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  if (!sheet) {
+    const error = new Error('Workbook does not contain a worksheet.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const rows = xlsx.utils.sheet_to_json(sheet, { defval: '', raw: false });
+  if (!rows.length) {
+    const error = new Error('Workbook contains no data rows.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const normalized = rows.map((row, index) => ({ rowNumber: index + 2, originalRecord: row, parsed: normalizeImportRow(row) }));
+  const seen = new Set();
+  const valid = [];
+  const errors = [];
+  for (const item of normalized) {
+    if (item.parsed.error) {
+      errors.push({ rowNumber: item.rowNumber, sku: String(valueOf(item.originalRecord, 'SKU', 'sku', 'Sku', 'Product SKU', 'Barcode') || ''), name: String(valueOf(item.originalRecord, 'Medicine Name', 'medicineName', 'name', 'Name') || ''), errors: [item.parsed.error] });
+      continue;
+    }
+    const value = item.parsed.value;
+    const key = `${value.sku}::${value.batchNumber || ''}`;
+    if (seen.has(key)) {
+      errors.push({ rowNumber: item.rowNumber, sku: value.sku, name: value.name, errors: ['Duplicate SKU + Batch Number in workbook.'] });
+      continue;
+    }
+    seen.add(key);
+    valid.push({ ...item, value });
+  }
+  const skus = [...new Set(valid.map(item => item.value.sku))];
+  const inventory = skus.length ? await Inventory.find({ tenantId, branchId, sku: { $in: skus } }).select('sku batchNumber stockQuantity reservedQuantity').lean() : [];
+  const byBatch = new Map(inventory.map(item => [`${item.sku}::${item.batchNumber || ''}`, item]));
+  const previewRows = valid.slice(0, 10).map(item => {
+    const current = byBatch.get(`${item.value.sku}::${item.value.batchNumber || ''}`);
+    const existingStock = Number(current?.stockQuantity || 0);
+    const reservedStock = Number(current?.reservedQuantity || 0);
+    return {
+      ...item.originalRecord,
+      'Source Row Number': item.rowNumber,
+      'Existing Stock': existingStock,
+      'Reserved Stock': reservedStock,
+      'New Stock': item.value.stockQuantity,
+      'Available After Import': Math.max(0, item.value.stockQuantity - reservedStock)
+    };
+  });
+  for (const item of valid) {
+    const current = byBatch.get(`${item.value.sku}::${item.value.batchNumber || ''}`);
+    if (Number(current?.reservedQuantity || 0) > item.value.stockQuantity) {
+      errors.push({ rowNumber: item.rowNumber, sku: item.value.sku, name: item.value.name, errors: ['New stock is below the quantity already reserved for this batch.'] });
+    }
+  }
+  const errorRows = new Set(errors.map(error => error.rowNumber));
+  return {
+    rowsDetected: rows.length,
+    validCount: rows.length - errorRows.size,
+    errorsCount: errorRows.size,
+    warningsCount: 0,
+    errors: errors.slice(0, 100),
+    previewRows,
+    stockMode: 'REPLACE'
+  };
 }

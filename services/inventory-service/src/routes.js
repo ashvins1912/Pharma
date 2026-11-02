@@ -10,7 +10,8 @@ import {
   buildFailureWorkbook,
   createImportJob,
   getImportFailures,
-  retryImportJob
+  retryImportJob,
+  previewImportFile
 } from './imports.js';
 import {
   adjustInventory,
@@ -132,6 +133,16 @@ router.post('/adjust', requireServiceScope('inventory.adjust'), asyncHandler(asy
   return res.json(result);
 }));
 
+router.post('/imports/preview', requireServiceScope('inventory.import'), upload.single('excelFile'), asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'An Excel workbook is required.' });
+  if (!/\.(xlsx|xls)$/i.test(req.file.originalname)) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(400).json({ message: 'Upload an .xlsx or .xls workbook.' }); }
+  const isPlatformUser = req.service?.isPlatformUser === true;
+  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : String(req.service?.tenantId || '').trim();
+  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : String(req.service?.branchId || '').trim();
+  if (!tenantId || !branchId) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(403).json({ message: 'Verified tenant and branch selection is required.' }); }
+  try { return res.json(await previewImportFile({ filePath: req.file.path, tenantId, branchId })); }
+  finally { await fs.rm(req.file.path, { force: true }).catch(() => {}); }
+}));
 router.post('/imports', requireServiceScope('inventory.import'), upload.single('excelFile'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'An Excel workbook is required.' });
   if (!/\.(xlsx|xls)$/i.test(req.file.originalname)) {
@@ -144,8 +155,10 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
     return res.status(400).json({ message: 'A valid Idempotency-Key header is required.' });
   }
 
-  const tenantId = String(req.get('x-tenant-id') || req.service?.tenantId || 'tenant-ashvin-main').trim();
-  const branchId = String(req.get('x-branch-id') || req.service?.branchId || 'branch-indore-central').trim();
+  const isPlatformUser = req.service?.isPlatformUser === true;
+  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : String(req.service?.tenantId || '').trim();
+  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : String(req.service?.branchId || '').trim();
+  if (!tenantId || !branchId) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(403).json({ message: 'Verified tenant and branch selection is required.' }); }
 
   try {
     const job = await createImportJob({
@@ -154,7 +167,8 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
       uploadedBy: req.service.userId || req.service.name,
       idempotencyKey: idempotencyKey.trim(),
       tenantId,
-      branchId
+      branchId,
+      stockMode: String(req.body?.stockMode || 'REPLACE').toUpperCase()
     });
     return res.status(202).json({
       jobId: String(job._id),
@@ -173,13 +187,13 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
 
 router.get('/imports/:jobId', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
-  const tenantId = req.get('x-tenant-id') || req.service?.tenantId;
-  const isPlatformUser = req.service?.isPlatformUser || req.service?.userRole === 'admin';
-
+  const isPlatformUser = req.service?.isPlatformUser === true;
+  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : req.service?.tenantId;
+  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : req.service?.branchId;
+  if (!isPlatformUser && (!tenantId || !branchId)) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
   const filter = { _id: req.params.jobId };
-  if (!isPlatformUser && tenantId) {
-    filter.tenantId = tenantId;
-  }
+  if (tenantId) filter.tenantId = tenantId;
+  if (branchId) filter.branchId = branchId;
   const job = await ImportJob.findOne(filter).lean();
   if (!job) return res.status(404).json({ message: 'Import job was not found.' });
   return res.json({
@@ -204,29 +218,33 @@ router.get('/imports/:jobId', requireServiceScope('inventory.import'), asyncHand
 
 router.get('/imports/:jobId/failures', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
-  const tenantId = req.get('x-tenant-id') || req.service?.tenantId;
-  const isPlatformUser = req.service?.isPlatformUser || req.service?.userRole === 'admin';
-
+  const isPlatformUser = req.service?.isPlatformUser === true;
+  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : req.service?.tenantId;
+  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : req.service?.branchId;
+  if (!isPlatformUser && (!tenantId || !branchId)) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
   const filter = { _id: req.params.jobId };
-  if (!isPlatformUser && tenantId) filter.tenantId = tenantId;
+  if (tenantId) filter.tenantId = tenantId;
+  if (branchId) filter.branchId = branchId;
   const job = await ImportJob.findOne(filter).lean();
   if (!job) return res.status(404).json({ message: 'Import job was not found.' });
 
-  const failures = await getImportFailures(req.params.jobId, !isPlatformUser ? tenantId : null);
+  const failures = await getImportFailures(req.params.jobId, tenantId || null, branchId || null);
   return res.json({ failures });
 }));
 
 router.get('/imports/:jobId/failures/download', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
-  const tenantId = req.get('x-tenant-id') || req.service?.tenantId;
-  const isPlatformUser = req.service?.isPlatformUser || req.service?.userRole === 'admin';
-
+  const isPlatformUser = req.service?.isPlatformUser === true;
+  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : req.service?.tenantId;
+  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : req.service?.branchId;
+  if (!isPlatformUser && (!tenantId || !branchId)) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
   const filter = { _id: req.params.jobId };
-  if (!isPlatformUser && tenantId) filter.tenantId = tenantId;
+  if (tenantId) filter.tenantId = tenantId;
+  if (branchId) filter.branchId = branchId;
   const job = await ImportJob.findOne(filter).lean();
   if (!job) return res.status(404).json({ message: 'Import job was not found.' });
 
-  const failures = await getImportFailures(req.params.jobId, !isPlatformUser ? tenantId : null);
+  const failures = await getImportFailures(req.params.jobId, tenantId || null, branchId || null);
   if (!failures.length) return res.status(404).json({ message: 'This import has no failed records.' });
   res.set({
     'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -238,14 +256,16 @@ router.get('/imports/:jobId/failures/download', requireServiceScope('inventory.i
 
 router.post('/imports/:jobId/retry', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.jobId)) return res.status(404).json({ message: 'Import job was not found.' });
-  const tenantId = req.get('x-tenant-id') || req.service?.tenantId;
-  const isPlatformUser = req.service?.isPlatformUser || req.service?.userRole === 'admin';
-
+  const isPlatformUser = req.service?.isPlatformUser === true;
+  const tenantId = isPlatformUser ? String(req.get('x-tenant-id') || '').trim() : req.service?.tenantId;
+  const branchId = isPlatformUser ? String(req.get('x-branch-id') || '').trim() : req.service?.branchId;
+  if (!isPlatformUser && (!tenantId || !branchId)) return res.status(403).json({ message: 'Verified tenant and branch context is required.' });
   const job = await retryImportJob(
     req.params.jobId,
     req.service.userId || req.service.name,
     req.get('idempotency-key'),
-    !isPlatformUser ? tenantId : null
+    tenantId || null,
+    branchId || null
   );
   if (!job) return res.status(404).json({ message: 'Import job was not found.' });
   return res.status(202).json({ jobId: String(job._id), status: job.status });

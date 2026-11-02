@@ -40,7 +40,7 @@ export function requireServiceScope(scope) {
       if (!allowedScopes || !allowedScopes.has(scope) || !grantedScopes.includes(scope)) {
         return res.status(403).json({ message: 'Service identity is not authorized for this operation.' });
       }
-      req.service = { name: caller, scopes: grantedScopes, userId: payload.userId };
+      req.service = { name: caller, scopes: grantedScopes, userId: payload.userId, userRole: payload.userRole || 'customer', roles: payload.roles || [], tenantId: payload.tenantId || null, branchId: payload.branchId || null, isPlatformUser: payload.isPlatformUser === true };
       return next();
     } catch {
       return res.status(401).json({ message: 'Service credential is invalid or expired.' });

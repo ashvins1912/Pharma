@@ -175,3 +175,39 @@ test('Bulk Import: Failure Workbook Generation preserves original columns and ad
     assert.equal(row['Retryable'], 'NO');
     assert.equal(row.Manufacturer, 'Sample Labs');
 });
+
+
+test('Bulk Import: rejects expired batches and keeps separate batches for the same SKU', () => {
+    const expired = normalizeImportRow({
+        SKU: 'MED-EXP-01',
+        'Medicine Name': 'Expired Medicine',
+        Price: 10,
+        Stock: 4,
+        'Batch Number': 'OLD-LOT',
+        'Expiry Date': '2020-01-01'
+    });
+    assert.equal(expired.errorType, 'VALIDATION_ERROR');
+    assert.match(expired.error, /expired/i);
+
+    const firstBatch = normalizeImportRow({
+        SKU: 'MED-MULTI-01',
+        'Medicine Name': 'Multi Batch Medicine',
+        Price: 20,
+        Stock: 5,
+        'Batch Number': 'LOT-A',
+        'Expiry Date': '2028-01-01'
+    });
+    const secondBatch = normalizeImportRow({
+        SKU: 'MED-MULTI-01',
+        'Medicine Name': 'Multi Batch Medicine',
+        Price: 20,
+        Stock: 8,
+        'Batch Number': 'LOT-B',
+        'Expiry Date': '2028-06-01'
+    });
+    assert.equal(firstBatch.error, undefined);
+    assert.equal(secondBatch.error, undefined);
+    assert.notEqual(firstBatch.value.batchNumber, secondBatch.value.batchNumber);
+    assert.equal(ImportJob.schema.path('stockMode').enumValues.includes('REPLACE'), true);
+    assert.equal(ImportJob.schema.path('stockMode').enumValues.includes('ADD'), false);
+});

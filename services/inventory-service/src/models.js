@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const productSchema = new mongoose.Schema({
-  tenantId: { type: 'string', required: true, default: 'tenant-ashvin-main', index: true },
+  tenantId: { type: 'string', required: true, index: true },
   sku: { type: 'string', required: true, trim: true, uppercase: true },
   name: { type: 'string', required: true, trim: true },
   genericName: { type: 'string', default: '' },
@@ -11,6 +11,8 @@ const productSchema = new mongoose.Schema({
   category: { type: 'string', default: 'General Medicine' },
   description: { type: 'string', default: '' },
   imageUrl: { type: 'string', default: '' },
+  baseCostPrice: { type: 'number', min: 0 },
+  marginTier: { type: 'string', enum: ['LOW', 'MID', 'HIGH'], default: 'LOW' },
   requiresPrescription: { type: 'boolean', default: false },
   version: { type: 'number', default: 1 },
   active: { type: 'boolean', default: true }
@@ -19,8 +21,8 @@ const productSchema = new mongoose.Schema({
 productSchema.index({ tenantId: 1, sku: 1 }, { unique: true });
 
 const inventorySchema = new mongoose.Schema({
-  tenantId: { type: 'string', required: true, default: 'tenant-ashvin-main', index: true },
-  branchId: { type: 'string', required: true, default: 'branch-indore-central', index: true },
+  tenantId: { type: 'string', required: true, index: true },
+  branchId: { type: 'string', required: true, index: true },
   productId: { type: mongoose.Schema.Types.ObjectId, ref: 'InventoryProduct', required: true },
   sku: { type: 'string', required: true, trim: true, uppercase: true },
   stockQuantity: { type: 'number', required: true, min: 0, default: 0 },
@@ -39,8 +41,8 @@ inventorySchema.virtual('availableQuantity').get(function () {
 });
 
 const reservationSchema = new mongoose.Schema({
-  tenantId: { type: 'string', required: true, default: 'tenant-ashvin-main', index: true },
-  branchId: { type: 'string', required: true, default: 'branch-indore-central', index: true },
+  tenantId: { type: 'string', required: true, index: true },
+  branchId: { type: 'string', required: true, index: true },
   reservationId: { type: 'string', required: true, unique: true },
   idempotencyKey: { type: 'string', required: true, unique: true },
   parentJobId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
@@ -57,8 +59,9 @@ const reservationSchema = new mongoose.Schema({
 reservationSchema.index({ status: 1, expiresAt: 1 });
 
 const importJobSchema = new mongoose.Schema({
-  tenantId: { type: 'string', required: true, default: 'tenant-ashvin-main', index: true },
-  branchId: { type: 'string', required: true, default: 'branch-indore-central', index: true },
+  tenantId: { type: 'string', required: true, index: true },
+  branchId: { type: 'string', required: true, index: true },
+  stockMode: { type: 'string', enum: ['REPLACE'], default: 'REPLACE' },
   fileName: { type: 'string', required: true },
   filePath: { type: 'string', required: true },
   uploadedBy: { type: 'string', required: true },
@@ -87,8 +90,8 @@ importJobSchema.index({ tenantId: 1, idempotencyKey: 1 }, { unique: true });
 importJobSchema.index({ tenantId: 1, branchId: 1, createdAt: -1 });
 
 const importFailureSchema = new mongoose.Schema({
-  tenantId: { type: 'string', required: true, default: 'tenant-ashvin-main', index: true },
-  branchId: { type: 'string', required: true, default: 'branch-indore-central', index: true },
+  tenantId: { type: 'string', required: true, index: true },
+  branchId: { type: 'string', required: true, index: true },
   jobId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
   batchId: { type: 'string', required: true },
   rowNumber: { type: 'number', required: true },
@@ -109,8 +112,8 @@ const importFailureSchema = new mongoose.Schema({
 importFailureSchema.index({ tenantId: 1, branchId: 1, jobId: 1, rowNumber: 1 });
 
 const auditSchema = new mongoose.Schema({
-  tenantId: { type: 'string', required: true, default: 'tenant-ashvin-main', index: true },
-  branchId: { type: 'string', required: true, default: 'branch-indore-central', index: true },
+  tenantId: { type: 'string', required: true, index: true },
+  branchId: { type: 'string', required: true, index: true },
   actor: { type: 'string', required: true },
   operation: { type: 'string', required: true },
   operationKey: { type: 'string', unique: true, sparse: true },
