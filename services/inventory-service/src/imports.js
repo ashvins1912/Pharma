@@ -840,7 +840,9 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
   const errorRows = new Set(errors.map(error => error.rowNumber));
   const previewFingerprint = createHash('sha256').update(JSON.stringify({
     tenantId, branchId,
-    rows: normalized.map(item => ({ rowNumber: item.rowNumber, parsed: item.parsed.error ? { error: item.parsed.error, field: item.parsed.field } : item.parsed.value }))
+    rows: normalized.map(item => ({ rowNumber: item.rowNumber, parsed: item.parsed.error ? { error: item.parsed.error, field: item.parsed.field } : item.parsed.value })),
+    existingInventory: inventory.map(item => ({ sku: item.sku, batchNumber: item.batchNumber || '', stockQuantity: item.stockQuantity, reservedQuantity: item.reservedQuantity, updatedAt: item.updatedAt || null }))
+      .sort((a, b) => `${a.sku}::${a.batchNumber}`.localeCompare(`${b.sku}::${b.batchNumber}`))
   })).digest('hex');
   return {
     previewFingerprint,
@@ -857,7 +859,9 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
 }
 
 
-const comparable = value => value instanceof Date ? value.toISOString() : value == null ? null : value;
+const comparable = value => value instanceof Date ? value.toISOString()
+  : value && typeof value.toHexString === 'function' ? value.toHexString()
+    : value == null ? null : value;
 const sameFields = (current, expected, fields) => fields.every(field => comparable(current?.[field]) === comparable(expected?.[field]));
 
 export async function rollbackImportBatch({ batchId, tenantId, branchId, actor }) {
@@ -892,7 +896,7 @@ export async function rollbackImportBatch({ batchId, tenantId, branchId, actor }
       for (const snapshot of inventorySnapshots) {
         const expected = snapshot.after;
         const current = await Inventory.findOne({ _id: expected._id, tenantId, branchId }).session(session).lean();
-        const fields = ['tenantId', 'branchId', 'productId', 'sku', 'stockQuantity', 'reservedQuantity', 'price', 'batchNumber', 'expiryDate', 'warehouse'];
+        const fields = ['tenantId', 'branchId', 'productId', 'sku', 'stockQuantity', 'reservedQuantity', 'price', 'batchNumber', 'expiryDate', 'warehouse', 'updatedAt'];
         if (!current || !sameFields(current, expected, fields)) {
           const error = new Error(`Inventory ${snapshot.entityKey} changed after import; rollback was stopped to protect live orders and reservations.`);
           error.statusCode = 409;
@@ -909,7 +913,7 @@ export async function rollbackImportBatch({ batchId, tenantId, branchId, actor }
       for (const snapshot of productSnapshots) {
         const expected = snapshot.after;
         const current = await Product.findOne({ _id: expected._id, tenantId }).session(session).lean();
-        const fields = ['tenantId', 'sku', 'name', 'genericName', 'strength', 'form', 'manufacturer', 'category', 'description', 'imageUrl', 'baseCostPrice', 'marginTier', 'requiresPrescription', 'version', 'active'];
+        const fields = ['tenantId', 'sku', 'name', 'genericName', 'strength', 'form', 'manufacturer', 'category', 'description', 'imageUrl', 'baseCostPrice', 'marginTier', 'requiresPrescription', 'version', 'active', 'updatedAt'];
         if (!current || !sameFields(current, expected, fields)) {
           const error = new Error(`Product ${snapshot.entityKey} changed after import; rollback was stopped to avoid overwriting newer catalogue changes.`);
           error.statusCode = 409;
