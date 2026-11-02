@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import apiClient from '../api/apiClient';
+import { useTenant } from '../context/TenantContext';
 
 /**
  * Custom Hook: useRiderOnboarding
@@ -7,6 +8,7 @@ import apiClient from '../api/apiClient';
  * Open for UI redesigns: Any form layout or modal can consume this hook without changes.
  */
 export function useRiderOnboarding({ onSuccess, onError } = {}) {
+    const { tenantId } = useTenant();
     const initialValues = {
         name: '',
         mobile: '',
@@ -92,7 +94,9 @@ export function useRiderOnboarding({ onSuccess, onError } = {}) {
 
         setIsSubmitting(true);
         try {
+            if (!tenantId) throw new Error('Select a pharmacy tenant before onboarding a rider.');
             const formData = new FormData();
+            formData.append('tenantId', tenantId);
             formData.append('name', values.name.trim());
             formData.append('mobile', values.mobile.trim());
             formData.append('vehicleType', values.vehicleType);
