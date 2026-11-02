@@ -13,10 +13,10 @@ const getBucket = () => {
     return new GridFSBucket(mongoose.connection.db, { bucketName });
 };
 
-export const savePrescription = async (file, ownerId) => {
+export const savePrescription = async (file, ownerId, tenantId = null) => {
     if (!file) return null;
     const fileId = new mongoose.Types.ObjectId();
-    const metadata = { ownerId, contentType: file.mimetype };
+    const metadata = { ownerId, ...(tenantId ? { tenantId: String(tenantId) } : {}), contentType: file.mimetype };
 
     if (!getIsConnected()) {
         const id = randomUUID();
@@ -51,7 +51,7 @@ export const removePrescription = async (prescriptionUrl) => {
 export const getPrescription = async (fileId) => {
     if (!getIsConnected()) {
         const file = memoryFiles.get(fileId);
-        return file ? { ...file, stream: null } : null;
+        return file ? { ...file, tenantId: file.tenantId || null, stream: null } : null;
     }
     if (!mongoose.isValidObjectId(fileId)) return null;
     const bucket = getBucket();
@@ -59,6 +59,7 @@ export const getPrescription = async (fileId) => {
     if (!files.length) return null;
     return {
         ownerId: files[0].metadata?.ownerId,
+        tenantId: files[0].metadata?.tenantId || null,
         contentType: files[0].contentType,
         stream: bucket.openDownloadStream(files[0]._id)
     };
