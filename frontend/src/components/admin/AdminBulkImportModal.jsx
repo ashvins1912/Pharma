@@ -65,7 +65,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     if (!selectedFile) return;
     if (!/\.(xlsx|xls)$/i.test(selectedFile.name)) { addToast('Please select an .xlsx or .xls workbook.', 'warning'); return; }
     if ((isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) || (needsBranchSelection && !targetBranchId.trim())) {
-      addToast('Platform administrators must select an explicit tenant ID and branch ID before previewing.', 'warning');
+      addToast('Select the required tenant and branch context before previewing.', 'warning');
       return;
     }
     setFile(selectedFile); setAnalyzing(true); setPreviewData(null); setImportJob(null); setPollError('');
@@ -88,7 +88,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   // Authoritative Single Upload to /api/v1/inventory/imports with unique Idempotency-Key
   const handleConfirmImport = async () => {
     if ((isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) || (needsBranchSelection && !targetBranchId.trim())) {
-      addToast('Select a tenant and branch before importing.', 'warning');
+      addToast('Select the required tenant and branch context before importing.', 'warning');
       return;
     }
     if (!previewData?.importsEnabled) {
@@ -130,7 +130,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
   const rollbackImport = async () => {
     if (!importJob?.batchId) return;
-    if (isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) {
+    if ((isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) || (needsBranchSelection && !targetBranchId.trim())) {
       addToast('Select the original tenant and branch before rolling back this batch.', 'warning');
       return;
     }
@@ -285,6 +285,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   setPreviewData(null);
                 }}
                 placeholder="Branch ID"
+                disabled={Boolean(importJob)}
                 className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
               />
             </div>
