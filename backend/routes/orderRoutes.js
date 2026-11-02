@@ -56,7 +56,11 @@ router.use('/:id', (req, res, next) => {
     if (reserved.has(String(req.params.id || '').toLowerCase())) return next();
     return tenantOrderIdGuard(req, res, next);
 });
-router.use('/admin/:id', tenantOrderIdGuard);
+router.use('/admin/:id', (req, res, next) => {
+    const reserved = new Set(['all', 'transition', 'dispatch-batch', 'optimize-and-club-routes', 'medicine-requests', 'riders', 'assignment', 'whatsapp']);
+    if (reserved.has(String(req.params.id || '').toLowerCase())) return next();
+    return tenantOrderIdGuard(req, res, next);
+});
 const dynamicOrderService = new DynamicOrderService({
     couponValidator: (code, subtotal) => dataStore.validateCoupon(code, subtotal)
 });
@@ -275,6 +279,8 @@ router.get('/', authenticateUser, async (req, res) => {
         }
         if (isAdminUser) {
             if (customerId) query.customerId = customerId;
+            if (riderId) query.riderId = riderId;
+        } else if (tenantStaff) {
             if (riderId) query.riderId = riderId;
         } else if (riderId) {
             const rider = await Rider.findOne({ supabaseId: req.user.sub, _id: riderId }).select('_id').lean();
