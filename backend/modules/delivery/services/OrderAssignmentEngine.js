@@ -69,7 +69,7 @@ export class OrderAssignmentEngine {
         // 1. Resolve order domain entity
         let order;
         if (typeof orderOrId === 'string') {
-            order = await this.orderRepository.findById(orderOrId);
+            order = await this.orderRepository.findById(orderOrId, options.tenantId);
             if (!order) {
                 throw new Error(`Order #${orderOrId} not found in database.`);
             }
@@ -79,7 +79,7 @@ export class OrderAssignmentEngine {
 
         const existingRiderId = order.rider?.riderId || order.assignedRiderId;
         if (existingRiderId) {
-            const existingRider = await this.riderRepository.findById(existingRiderId);
+            const existingRider = await this.riderRepository.findById(existingRiderId, options.tenantId || order.tenantId);
             return {
                 success: true,
                 order,
@@ -105,7 +105,7 @@ export class OrderAssignmentEngine {
                     order,
                     riderRepository: this.riderRepository,
                     orderRepository: this.orderRepository,
-                    options
+                    options: { ...options, tenantId: options.tenantId || order.tenantId }
                 });
 
                 const stepDuration = Date.now() - stepStart;
@@ -152,14 +152,14 @@ export class OrderAssignmentEngine {
                     status: assignedRider.status,
                     activeOrderIds: assignedRider.activeOrderIds,
                     updatedAt: new Date()
-                }),
+                }, options.tenantId || order.tenantId),
                 this.orderRepository.update(order.id, {
                     orderStatus: order.orderStatus,
                     assignmentType: order.assignmentType,
                     rider: order.rider,
                     assignmentDetails: order.assignmentDetails,
                     updatedAt: new Date()
-                })
+                }, options.tenantId || order.tenantId)
             ]);
 
             const logEntry = {
