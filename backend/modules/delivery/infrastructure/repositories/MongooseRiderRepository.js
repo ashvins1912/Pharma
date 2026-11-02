@@ -8,6 +8,8 @@ export class MongooseRiderRepository extends IRiderRepository {
         const obj = doc.toObject ? doc.toObject() : doc;
         return new Rider({
             id: obj._id?.toString() || obj.id,
+            tenantId: obj.tenantId,
+            branchId: obj.branchId || null,
             name: obj.name,
             mobile: obj.mobile,
             photoUrl: obj.photoUrl,
@@ -26,19 +28,21 @@ export class MongooseRiderRepository extends IRiderRepository {
         });
     }
 
-    async findById(id) {
-        const doc = await RiderModel.findById(id);
+    async findById(id, tenantId) {
+        if (!tenantId) return null;
+        const doc = await RiderModel.findOne({ _id: id, tenantId: String(tenantId) });
         return this._toDomain(doc);
     }
 
-    async findByMobile(mobile) {
+    async findByMobile(mobile, tenantId) {
+        if (!tenantId) return null;
         const cleanMobile = String(mobile).trim();
-        let doc = await RiderModel.findOne({ mobile: cleanMobile });
+        let doc = await RiderModel.findOne({ mobile: cleanMobile, tenantId: String(tenantId) });
         if (!doc) {
             const digits = cleanMobile.replace(/\D/g, '');
             if (digits) {
                 const formattedMobile = new RegExp(`^\\D*${digits.split('').join('\\D*')}\\D*$`);
-                doc = await RiderModel.findOne({ mobile: formattedMobile });
+                doc = await RiderModel.findOne({ mobile: formattedMobile, tenantId: String(tenantId) });
             }
         }
         return this._toDomain(doc);
@@ -46,6 +50,8 @@ export class MongooseRiderRepository extends IRiderRepository {
 
     async findAll(filter = {}) {
         const query = {};
+        if (!filter.tenantId) return [];
+        query.tenantId = String(filter.tenantId);
         if (!filter.includeDisabled) query.enabled = { $ne: false };
         if (filter.status) {
             const compatibleStatuses = {
@@ -72,19 +78,22 @@ export class MongooseRiderRepository extends IRiderRepository {
         return this._toDomain(created);
     }
 
-    async update(id, updateData) {
+    async update(id, updateData, tenantId) {
+        if (!tenantId) return null;
         const updates = { ...updateData, updatedAt: new Date() };
+        delete updates.tenantId;
         if (updates.currentLocation?.coordinates) {
             updates.currentLocation = {
                 type: 'Point',
                 coordinates: updates.currentLocation.coordinates
             };
         }
-        const doc = await RiderModel.findByIdAndUpdate(id, { $set: updates }, { new: true });
+        const doc = await RiderModel.findOneAndUpdate({ _id: id, tenantId: String(tenantId) }, { $set: updates }, { new: true });
         return this._toDomain(doc);
     }
 
-    async findAvailableNearby(coordinates, maxDistanceInMeters = 15000, limit = 5) {
+    async findAvailableNearby(coordinates, maxDistanceInMeters = 15000, limit = 5, tenantId) {
+        if (!tenantId) return [];
         const targetLng = Number(coordinates?.[0]);
         const targetLat = Number(coordinates?.[1]);
         const maxDistance = Number(maxDistanceInMeters) || 15000;
@@ -103,6 +112,7 @@ export class MongooseRiderRepository extends IRiderRepository {
 
         try {
             const docs = await RiderModel.find({
+                tenantId: String(tenantId),
                 enabled: { $ne: false },
                 status: { $in: [Rider.STATUSES.AVAILABLE, 'available'] },
                 currentLocation: {
@@ -121,6 +131,7 @@ export class MongooseRiderRepository extends IRiderRepository {
             // Fall back to an application-side distance calculation.
             console.warn('[RiderRepository] Geo-near query failed; using distance fallback:', error.message);
             const docs = await RiderModel.find({
+                tenantId: String(tenantId),
                 enabled: { $ne: false },
                 status: { $in: [Rider.STATUSES.AVAILABLE, 'available'] }
             }).limit(100).lean();

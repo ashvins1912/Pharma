@@ -8,6 +8,10 @@ import UserProfile from './models/UserProfile.js';
 import UserAddress from './models/UserAddress.js';
 import CustomerPointsLedger from './models/CustomerPointsLedger.js';
 import Rider from './models/Rider.js';
+import Tenant from './models/Tenant.js';
+import SurplusSavingsCampaign from './models/SurplusSavingsCampaign.js';
+import SurplusSavingsRedemption from './models/SurplusSavingsRedemption.js';
+import { calculateSurplusUnitDiscount, roundCurrency } from './services/surplusSavingsPricing.js';
 import MedicineRequest from './models/MedicineRequest.js';
 import { normalizeWhatsAppNumber, sendWhatsAppMedicineRequestAlert, sendCustomWhatsAppAlert } from './config/whatsapp.js';
 import ProfitMarginRewardEngine from './strategies/ProfitMarginRewardEngine.js';
@@ -1178,6 +1182,9 @@ export const dataStore = {
     },
 
     async reserveOrder(orderData, actor = 'Customer') {
+        const selectedTenantId = String(orderData.tenantId || '').trim();
+        if (!selectedTenantId) throw inventoryError('Select an active pharmacy before creating an order.', 400);
+        if (!orderData.userId) throw inventoryError('An authenticated customer is required to create an order.', 401);
         if (!orderData.deliveryAddress?.trim() || !hasValidCoordinates(orderData.coordinates)) {
             throw inventoryError('A delivery address with a confirmed map pin is required to place an order.');
         }
@@ -1217,6 +1224,8 @@ export const dataStore = {
             let createdOrder;
             try {
                 await session.withTransaction(async () => {
+                    const activeTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id settings.allowOfferWithCoupon settings.allowOfferWithRewards').session(session).lean();
+                    if (!activeTenant) throw inventoryError('The selected pharmacy is not active.', 404);
                     const medicineItems = [];
                     const itemSnapshots = [];
                     let totalAmount = 0;
@@ -1226,8 +1235,9 @@ export const dataStore = {
                         if (!mongoose.isValidObjectId(medicineId)) {
                             throw inventoryError(`Invalid medicine ID: ${medicineId}`);
                         }
-                        const medicine = await Medicine.findById(medicineId).session(session);
-                        if (!medicine) throw inventoryError(`Medicine ${medicineId} was not found.`, 404);
+                        const medicineFilter = { _id: medicineId, tenantId: selectedTenantId };
+                        const medicine = await Medicine.findOne(medicineFilter).session(session);
+                        if (!medicine) throw inventoryError('The selected pharmacy does not have this medicine in its catalogue.', 404);
                         if (medicine.expiryDate && new Date(medicine.expiryDate) <= now) {
                             throw inventoryError(`${medicine.name} is expired and cannot be ordered.`);
                         }
@@ -1237,9 +1247,10 @@ export const dataStore = {
                             throw inventoryError(`A prescription is required for ${medicine.name}.`);
                         }
 
-                        const reserved = await Medicine.findOneAndUpdate({
+                        const reservationFilter = {
                             _id: medicine._id,
                             expiryDate: { $gt: now },
+                            tenantId: selectedTenantId,
                             $expr: {
                                 $gte: [
                                     {
@@ -1251,7 +1262,8 @@ export const dataStore = {
                                     quantity
                                 ]
                             }
-                        }, {
+                        };
+                        const reserved = await Medicine.findOneAndUpdate(reservationFilter, {
                             $inc: { reservedQuantity: quantity }
                         }, { new: true, session });
 
@@ -1289,23 +1301,98 @@ export const dataStore = {
                         });
                     }
 
-                    const coupon = await this.validateCoupon(orderData.couponCode || '', totalAmount, { customerId: orderData.userId, tenantId: orderData.tenantId });
+                    let surplusDiscountApplied = 0;
+                    const appliedSurplusCampaigns = [];
+                    const campaignUsage = new Map();
+                    const activeCampaigns = await SurplusSavingsCampaign.find({
+                        tenantId: selectedTenantId,
+                        status: 'ACTIVE',
+                        startsAt: { $lte: now },
+                        endsAt: { $gt: now },
+                        medicineIds: { $in: medicineItems.map(item => item.medicineId) }
+                    }).session(session).lean();
+                    const priorRedemptions = activeCampaigns.length
+                        ? await SurplusSavingsRedemption.find({
+                            tenantId: selectedTenantId,
+                            campaignId: { $in: activeCampaigns.map(campaign => campaign._id) },
+                            customerId: String(orderData.userId)
+                        }).session(session).select('campaignId').lean()
+                        : [];
+                    const alreadyRedeemed = new Set(priorRedemptions.map(item => String(item.campaignId)));
+                    for (const item of medicineItems) {
+                        const candidates = activeCampaigns.filter(campaign =>
+                            campaign.medicineIds.some(id => String(id) === String(item.medicineId))
+                            && Number(totalAmount) >= Number(campaign.minOrderAmount || 0)
+                            && (campaign.usageLimit == null || Number(campaign.usageCount || 0) < Number(campaign.usageLimit))
+                            && !alreadyRedeemed.has(String(campaign._id))
+                        ).map(campaign => {
+                            const used = campaignUsage.get(String(campaign._id)) || 0;
+                            const discount = calculateSurplusUnitDiscount(item.price, campaign, used, item.quantity);
+                            return { campaign, discount };
+                        }).filter(candidate => candidate.discount > 0)
+                          .sort((a, b) => b.discount - a.discount);
+                        if (!candidates.length) continue;
+                        const { campaign, discount } = candidates[0];
+                        const itemSavings = roundCurrency(discount * Number(item.quantity));
+                        const campaignId = String(campaign._id);
+                        const itemSnapshot = itemSnapshots.find(snapshot => String(snapshot.medicineId) === String(item.medicineId));
+                        item.price = Math.max(0, Math.round((Number(item.price) - discount) * 100) / 100);
+                        item.surplusSavingsCampaignId = campaign._id;
+                        item.surplusSavingsDiscount = itemSavings;
+                        if (itemSnapshot) {
+                            itemSnapshot.price = item.price;
+                            itemSnapshot.surplusSavingsCampaignId = campaign._id;
+                            itemSnapshot.surplusSavingsDiscount = itemSavings;
+                            itemSnapshot.originalPrice = Number(itemSnapshot.originalPrice || (item.price + discount));
+                        }
+                        surplusDiscountApplied += itemSavings;
+                        campaignUsage.set(campaignId, (campaignUsage.get(campaignId) || 0) + itemSavings);
+                    }
+                    for (const [campaignId, discountAmount] of campaignUsage.entries()) {
+                        const campaign = activeCampaigns.find(item => String(item._id) === campaignId);
+                        if (!campaign) continue;
+                        const claimed = await SurplusSavingsCampaign.findOneAndUpdate({
+                            _id: campaign._id,
+                            tenantId: selectedTenantId,
+                            status: 'ACTIVE',
+                            startsAt: { $lte: now },
+                            endsAt: { $gt: now },
+                            $or: [{ usageLimit: null }, { $expr: { $lt: ['$usageCount', '$usageLimit'] } }]
+                        }, { $inc: { usageCount: 1 } }, { new: true, session });
+                        if (!claimed) throw inventoryError('A selected surplus offer has just reached its usage limit. Please retry checkout.', 409);
+                        appliedSurplusCampaigns.push({
+                            campaignId: campaign._id,
+                            name: campaign.name,
+                            discountAmount
+                        });
+                    }
+                    const couponBaseTotal = Math.max(0, totalAmount - surplusDiscountApplied);
+                    const coupon = await this.validateCoupon(orderData.couponCode || '', couponBaseTotal, { customerId: orderData.userId, tenantId: selectedTenantId });
                     if (!coupon.valid) throw inventoryError(coupon.message || 'Coupon is invalid.');
-                    const discountApplied = Number(coupon.discountAmount
-                        ?? (totalAmount * (coupon.discountPercentage || 0) / 100));
-                    const couponRate = totalAmount > 0 ? discountApplied / totalAmount : 0;
+                    if (surplusDiscountApplied > 0 && coupon.code) {
+                        if (activeTenant?.settings?.allowOfferWithCoupon !== true) {
+                            throw inventoryError('This pharmacy does not allow surplus savings to be combined with coupons.', 409);
+                        }
+                    }
+                    const couponDiscountApplied = Number(coupon.discountAmount
+                        ?? (couponBaseTotal * (coupon.discountPercentage || 0) / 100));
+                    const discountApplied = surplusDiscountApplied + couponDiscountApplied;
+                    const couponRate = couponBaseTotal > 0 ? couponDiscountApplied / couponBaseTotal : 0;
                     const rewardItems = medicineItems.map(item => ({
                         currentPrice: item.price * (1 - couponRate),
                         baseCostPrice: item.baseCostPrice,
                         marginTier: item.marginTier,
                         quantity: item.quantity,
-                        isDiscounted: couponRate > 0 || Number(item.discountPercentage || 0) > 0
+                        isDiscounted: couponRate > 0 || Number(item.discountPercentage || 0) > 0 || Number(item.surplusSavingsDiscount || 0) > 0
                     }));
                     const earnedPoints = profitMarginRewardEngine.calculateEarnedPoints(rewardItems);
                     const orderId = new mongoose.Types.ObjectId();
                     let allowedPoints = 0;
                     let pointsDiscount = 0;
                     let redemptionWarning = null;
+                    if (surplusDiscountApplied > 0 && requestedPoints > 0 && activeTenant?.settings?.allowOfferWithRewards !== true) {
+                        throw inventoryError('This pharmacy does not allow Surplus Savings to be combined with reward points.', 409);
+                    }
                     if (requestedPoints > 0) {
                         const ledger = await CustomerPointsLedger.findOne({
                             customerId: orderData.userId,
@@ -1352,11 +1439,20 @@ export const dataStore = {
                     if (coupon.code) {
                         await consumeCouponUsage(coupon.code, session);
                     }
+                    if (appliedSurplusCampaigns.length) {
+                        await SurplusSavingsRedemption.create(appliedSurplusCampaigns.map(campaign => ({
+                            campaignId: campaign.campaignId,
+                            tenantId: selectedTenantId,
+                            customerId: String(orderData.userId),
+                            orderId,
+                            discountAmount: campaign.discountAmount
+                        })), { session });
+                    }
                     const [order] = await Order.create([{
                         _id: orderId,
                         userId: orderData.userId,
                         customerId: orderData.userId,
-                        tenantId: orderData.tenantId || null,
+                        tenantId: selectedTenantId,
                         branchId: orderData.branchId || null,
                         addressId: orderData.addressId || null,
                         customerName: orderData.customerName,
@@ -1373,6 +1469,12 @@ export const dataStore = {
                         couponCode: coupon.code || orderData.couponCode || null,
                         subtotal: totalAmount,
                         discountApplied,
+                        surplusSavingsDiscountApplied: surplusDiscountApplied,
+                        surplusSavings: {
+                            campaignIds: appliedSurplusCampaigns.map(campaign => campaign.campaignId),
+                            campaigns: appliedSurplusCampaigns,
+                            discountAmount: surplusDiscountApplied
+                        },
                         pointsRedeemed: allowedPoints,
                         rewardPointsEarned: earnedPoints.pointsToAssign,
                         pointsDiscountApplied: pointsDiscount,
@@ -1423,7 +1525,8 @@ export const dataStore = {
             let prescriptionRequired = false;
 
             for (const [medicineId, quantity] of quantities) {
-                const medicine = inMemoryMedicines.find(item => String(item._id) === medicineId);
+                const medicine = inMemoryMedicines.find(item => String(item._id) === medicineId
+                    && String(item.tenantId || '') === selectedTenantId);
                 if (!medicine) throw inventoryError(`Medicine ${medicineId} was not found.`, 404);
                 if (medicine.expiryDate && new Date(medicine.expiryDate) <= now) {
                     throw inventoryError(`${medicine.name} is expired and cannot be ordered.`);
@@ -1474,6 +1577,8 @@ export const dataStore = {
                 _id: new mongoose.Types.ObjectId().toString(),
                 userId: orderData.userId,
                 customerId: orderData.userId,
+                tenantId: selectedTenantId,
+                branchId: orderData.branchId || null,
                 customerName: orderData.customerName,
                 orderedByName: orderData.customerName || 'Valued Customer',
                 orderedForName: orderData.orderedForName || orderData.customerName || 'Valued Customer',
@@ -1484,7 +1589,6 @@ export const dataStore = {
                 prescriptionUrl: orderData.prescriptionUrl || null,
                 prescriptionRequired,
                 couponCode: coupon.code || orderData.couponCode || null,
-                tenantId: orderData.tenantId || null,
                 subtotal: totalAmount,
                 discountApplied,
                 totalAmount: finalTotal,
@@ -1838,6 +1942,7 @@ export const dataStore = {
             filter.createdAt = { $gte: start, $lt: end };
         }
         if (getIsConnected()) {
+            if (tenantId) filter = { $and: [filter, { tenantId: String(tenantId) }] };
             const total = await Order.countDocuments(filter);
             const safePage = Math.min(page, Math.max(Math.ceil(total / limit), 1));
             const items = await Order.find(filter)
@@ -1899,9 +2004,10 @@ export const dataStore = {
         };
     },
 
-    async getFulfillmentSnapshot(page = 1, limit = 10) {
+    async getFulfillmentSnapshot(page = 1, limit = 10, tenantId = null) {
         const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
         const pipelineFilter = {
+            ...(tenantId ? { tenantId: String(tenantId) } : {}),
             $or: [
                 { orderStatus: { $nin: ['Delivered', 'delivered'] } },
                 {
@@ -1910,15 +2016,16 @@ export const dataStore = {
                 }
             ]
         };
+        const tenantFilter = tenantId ? { tenantId: String(tenantId) } : {};
         const parsedLimit = Math.min(50, Math.max(1, Number(limit) || 10));
         const parsedPage = Math.max(1, Number(page) || 1);
         if (getIsConnected()) {
             const [activeTotal, total, deliveredCount, items, recentOrders] = await Promise.all([
                 Order.countDocuments(pipelineFilter),
-                Order.countDocuments({}),
-                Order.countDocuments({ orderStatus: 'Delivered' }),
+                Order.countDocuments(tenantFilter),
+                Order.countDocuments({ ...tenantFilter, orderStatus: 'Delivered' }),
                 Order.find(pipelineFilter).sort({ createdAt: -1, _id: -1 }).skip((parsedPage - 1) * parsedLimit).limit(parsedLimit).lean(),
-                Order.find().sort({ createdAt: -1, _id: -1 }).limit(6).lean()
+                Order.find(tenantFilter).sort({ createdAt: -1, _id: -1 }).limit(6).lean()
             ]);
             const totalPages = Math.ceil(activeTotal / parsedLimit) || 1;
             const currentPage = Math.min(parsedPage, totalPages);
@@ -1928,7 +2035,9 @@ export const dataStore = {
             };
         }
         const twoDaysAgoTime = Date.now() - 48 * 60 * 60 * 1000;
-        const allOrders = [...inMemoryOrders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const allOrders = [...inMemoryOrders]
+            .filter(order => !tenantId || String(order.tenantId) === String(tenantId))
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         const pipelineOrders = allOrders.filter(order => {
             const status = String(order.orderStatus || '').trim().toLowerCase();
             if (status !== 'delivered') return true;
@@ -1948,7 +2057,7 @@ export const dataStore = {
         };
     },
 
-    async searchOrders({ type, value, page = 1, limit = 5 }) {
+    async searchOrders({ type, value, page = 1, limit = 5, tenantId = null }) {
         let filter;
         if (type === 'orderId') {
             const term = String(value.raw || value.orderNumber || value.objectId || '').trim();
@@ -1994,6 +2103,7 @@ export const dataStore = {
         }
 
         const matches = inMemoryOrders.filter(order => {
+            if (tenantId && String(order.tenantId) !== String(tenantId)) return false;
             if (type === 'orderId') {
                 const term = String(value.raw || value.orderNumber || value.objectId || '').trim().toLowerCase();
                 const ordNum = String(order.orderNumber || '').toLowerCase();
@@ -2477,10 +2587,11 @@ export const dataStore = {
         return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
     },
 
-    async clubDeliveryRoute(riderName, riderMobile, radiusKm = 5, startLat = 12.9716, startLng = 77.5946) {
+    async clubDeliveryRoute(riderName, riderMobile, radiusKm = 5, startLat = 12.9716, startLng = 77.5946, tenantId) {
+        if (!tenantId) throw inventoryError('A pharmacy tenant is required to optimize delivery routes.', 403);
         const eligibleOrders = getIsConnected()
-            ? await Order.find({ orderStatus: 'Ready to Dispatch' }).sort({ createdAt: 1 }).lean()
-            : inMemoryOrders.filter(o => o.orderStatus === 'Ready to Dispatch');
+            ? await Order.find({ tenantId: String(tenantId), orderStatus: 'Ready to Dispatch' }).sort({ createdAt: 1 }).lean()
+            : inMemoryOrders.filter(o => String(o.tenantId || '') === String(tenantId) && o.orderStatus === 'Ready to Dispatch');
         const radius = Number(radiusKm) || 5;
 
         const matchingOrders = [];

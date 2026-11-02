@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import apiClient from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
+import { useTenant } from '../context/TenantContext';
 
 /**
  * Custom Hook: useOrderDashboard
@@ -8,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
  */
 export function useOrderDashboard() {
     const { hasPermission, loading: authLoading } = useAuth();
+    const { tenantId } = useTenant();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -19,12 +21,14 @@ export function useOrderDashboard() {
         setLoading(true);
         setError(null);
         try {
-            const res = await apiClient.get('/api/orders/admin/all');
+            const res = await apiClient.get('/api/orders/admin/all', { params: tenantId ? { tenantId } : {} });
             const dataPayload = res.data;
             const orderArray = Array.isArray(dataPayload)
                 ? dataPayload
                 : Array.isArray(dataPayload?.orders)
                 ? dataPayload.orders
+                : Array.isArray(dataPayload?.items)
+                ? dataPayload.items
                 : Array.isArray(dataPayload?.data)
                 ? dataPayload.data
                 : [];
@@ -34,7 +38,7 @@ export function useOrderDashboard() {
         } finally {
             setLoading(false);
         }
-    }, [authLoading, hasPermission]);
+    }, [authLoading, hasPermission, tenantId]);
 
     useEffect(() => {
         if (!authLoading && hasPermission('orders.manage')) loadOrders();

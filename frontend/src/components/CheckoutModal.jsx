@@ -5,9 +5,11 @@ import { useToast } from '../context/ToastContext';
 import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
 import apiClient from '../api/apiClient';
 import AddressManager from './AddressManager';
+import { useTenant } from '../context/TenantContext';
 
 export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const { user } = useAuth();
+  const { tenantId, activeTenant } = useTenant();
   const { cart, subtotal, discountAmount, deliveryFee, finalTotal, appliedCoupon, selectedAddressId, addresses, clearCart, addToCart } = useApp();
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
@@ -60,6 +62,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     const timeout = window.setTimeout(async () => {
       try {
         const response = await apiClient.post('/api/orders/checkout/quote', {
+          tenantId: tenantId || '',
           items: JSON.parse(cartForQuote),
           pointsToRedeem: usePoints ? Number(pointsRequested) || 0 : 0,
           couponCode: appliedCoupon?.code || ''
@@ -78,7 +81,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       }
     }, 250);
     return () => window.clearTimeout(timeout);
-  }, [isOpen, cartForQuote, cart.length, usePoints, pointsRequested, appliedCoupon?.code]);
+  }, [isOpen, cartForQuote, cart.length, usePoints, pointsRequested, appliedCoupon?.code, tenantId]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -112,6 +115,11 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const selectedAddress = addresses.find(a => a._id === selectedAddressId) || addresses[0];
 
   const handlePlaceOrder = async () => {
+    if (!tenantId) {
+      setErrorMsg('Please select a pharmacy before placing this order.');
+      addToast('Select a pharmacy to continue.', 'warning');
+      return;
+    }
     if (!selectedAddress) {
       setErrorMsg("Please select or add a delivery destination address first.");
       addToast("Please select a delivery address", "warning");
@@ -136,6 +144,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     const result = await runAction(LOADING_ACTIONS.CREATE_ORDER, async () => {
       try {
       const checkoutData = {
+        tenantId: String(tenantId),
         items: JSON.stringify(cart.map(item => ({
           medicineId: item._id || item.id,
           quantity: item.quantity
@@ -233,6 +242,11 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
         {/* Scrollable Form Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 overscroll-contain">
+          <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">Fulfillment pharmacy</p>
+            <p className="mt-1 text-sm font-extrabold text-emerald-950">{activeTenant?.shopName || 'Selected pharmacy'}</p>
+            <p className="mt-1 text-[11px] text-emerald-800">This order and its notifications will be routed only to this pharmacy.</p>
+          </section>
           {errorMsg && (
             <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2">
               <span>⚠️</span>
@@ -322,15 +336,25 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
               </>}
             </div>
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 max-h-48 overflow-y-auto space-y-2">
-              {cart.map((item) => (
-                <div key={item._id} className="flex justify-between items-center text-xs">
-                  <div>
-                    <span className="font-bold text-slate-900">{item.name}</span>
-                    <span className="text-slate-400 ml-2">x{item.quantity}</span>
+              {cart.map((item) => {
+                const quotedItem = rewardQuote?.items?.find(quoted =>
+                  String(quoted.medicineId || quoted._id || quoted.id) === String(item.medicineId || item._id)
+                );
+                const verifiedUnitPrice = Number(quotedItem?.currentPrice ?? item.price);
+                const originalUnitPrice = Number(item.originalPrice ?? item.price);
+                return (
+                  <div key={item._id} className="flex justify-between items-center gap-3 text-xs">
+                    <div className="min-w-0">
+                      <span className="font-bold text-slate-900">{item.name}</span>
+                      <span className="text-slate-400 ml-2">x{item.quantity}</span>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      {verifiedUnitPrice < originalUnitPrice && <div className="text-[10px] text-slate-400 line-through">₹{(originalUnitPrice * item.quantity).toFixed(2)}</div>}
+                      <span className="font-extrabold text-slate-800">₹{(verifiedUnitPrice * item.quantity).toFixed(2)}</span>
+                    </div>
                   </div>
-                  <span className="font-extrabold text-slate-800">₹{item.price * item.quantity}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -383,12 +407,18 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             <div className="border-t border-slate-200 pt-3 space-y-1.5 text-xs">
               <div className="flex justify-between text-slate-600">
                 <span>Subtotal ({cart.reduce((s, i) => s + i.quantity, 0)} items)</span>
-                <span>₹{subtotal}</span>
+                <span>₹{Number(rewardQuote?.subtotal ?? subtotal).toFixed(2)}</span>
               </div>
+              {Number(rewardQuote?.surplusSavingsDiscount || 0) > 0 && (
+                <div className="flex justify-between text-emerald-700 font-bold">
+                  <span>Exclusive Surplus Savings</span>
+                  <span>−₹{Number(rewardQuote.surplusSavingsDiscount).toFixed(2)}</span>
+                </div>
+              )}
               {appliedCoupon && (
                 <div className="flex justify-between text-emerald-600 font-bold">
                   <span>{appliedCoupon.promotionLabel || `Discount Coupon (${appliedCoupon.code})`}</span>
-                  <span>−₹{discountAmount.toFixed(1)}</span>
+                  <span>−₹{Number(rewardQuote?.couponDiscount ?? discountAmount).toFixed(2)}</span>
                 </div>
               )}
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
@@ -474,7 +504,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           </button>
           <button
             onClick={handlePlaceOrder}
-            disabled={loading || !selectedAddress || cart.length === 0}
+            disabled={loading || !tenantId || !selectedAddress || cart.length === 0}
             className="w-full sm:w-2/3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold py-3 rounded-2xl text-xs shadow-lg shadow-emerald-600/25 transition cursor-pointer flex items-center justify-center gap-2"
           >
             {loading && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}

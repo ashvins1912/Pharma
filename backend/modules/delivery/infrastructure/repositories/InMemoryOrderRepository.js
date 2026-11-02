@@ -3,6 +3,11 @@ import { Order } from '../../domain/entities/Order.js';
 import dataStore from '../../../../dataStore.js';
 
 export class InMemoryOrderRepository extends IOrderRepository {
+    constructor(store = dataStore) {
+        super();
+        this.dataStore = store;
+    }
+
     _toDomain(rawOrder) {
         if (!rawOrder) return null;
         const id = rawOrder._id?.toString() || rawOrder.id;
@@ -16,6 +21,8 @@ export class InMemoryOrderRepository extends IOrderRepository {
 
         return new Order({
             id,
+            tenantId: rawOrder.tenantId,
+            branchId: rawOrder.branchId || null,
             customerName: rawOrder.customerName || rawOrder.addressDetails?.fullName || 'Customer',
             customerMobile: rawOrder.customerMobile || rawOrder.addressDetails?.mobile || rawOrder.addressDetails?.phone || '',
             deliveryAddress: rawOrder.deliveryAddress || 'Central Dispensary Area',
@@ -37,23 +44,26 @@ export class InMemoryOrderRepository extends IOrderRepository {
         });
     }
 
-    async findById(id) {
-        if (typeof dataStore.getOrderById === 'function') {
-            const raw = await dataStore.getOrderById(id);
+    async findById(id, tenantId) {
+        if (!tenantId) return null;
+        if (typeof this.dataStore.getOrderById === 'function') {
+            const raw = await this.dataStore.getOrderById(id);
+            if (!raw || String(raw.tenantId || '') !== String(tenantId)) return null;
             return this._toDomain(raw);
         }
-        const rawList = typeof dataStore.getAllOrders === 'function'
-            ? await dataStore.getAllOrders()
+        const rawList = typeof this.dataStore.getAllOrders === 'function'
+            ? await this.dataStore.getAllOrders()
             : [];
-        const raw = rawList.find(o => String(o._id || o.id) === String(id));
+        const raw = rawList.find(o => String(o._id || o.id) === String(id) && String(o.tenantId || '') === String(tenantId));
         return this._toDomain(raw);
     }
 
     async findAll(filter = {}) {
-        const rawList = typeof dataStore.getAllOrders === 'function'
-            ? await dataStore.getAllOrders(filter.orderStatus)
+        const rawList = typeof this.dataStore.getAllOrders === 'function'
+            ? await this.dataStore.getAllOrders(filter.orderStatus)
             : [];
-        let orders = rawList.map(o => this._toDomain(o));
+        if (!filter.tenantId) return [];
+        let orders = rawList.filter(o => String(o.tenantId || '') === String(filter.tenantId)).map(o => this._toDomain(o));
 
         if (filter.assignmentType) {
             orders = orders.filter(o => o.assignmentType === filter.assignmentType);
@@ -64,15 +74,18 @@ export class InMemoryOrderRepository extends IOrderRepository {
         return orders;
     }
 
-    async update(id, updateData) {
+    async update(id, updateData, tenantId) {
+        if (!tenantId) return null;
         // Deep-merge into dataStore order
-        const rawList = typeof dataStore.getAllOrders === 'function'
-            ? await dataStore.getAllOrders()
+        const rawList = typeof this.dataStore.getAllOrders === 'function'
+            ? await this.dataStore.getAllOrders()
             : [];
-        const raw = rawList.find(o => String(o._id || o.id) === String(id));
+        const raw = rawList.find(o => String(o._id || o.id) === String(id) && String(o.tenantId || '') === String(tenantId));
         if (!raw) return null;
 
-        Object.assign(raw, updateData);
+        const safeUpdates = { ...updateData };
+        delete safeUpdates.tenantId;
+        Object.assign(raw, safeUpdates);
         raw.updatedAt = new Date();
 
         if (updateData.rider) {
@@ -91,8 +104,9 @@ export class InMemoryOrderRepository extends IOrderRepository {
         return this._toDomain(raw);
     }
 
-    async findActiveOrdersInProximity(coordinates, maxDistanceInMeters = 2000, statuses = ['Ready to Dispatch', 'Dispatched']) {
-        const allOrders = await this.findAll();
+    async findActiveOrdersInProximity(coordinates, maxDistanceInMeters = 2000, statuses = ['Ready to Dispatch', 'Dispatched'], tenantId) {
+        if (!tenantId) return [];
+        const allOrders = await this.findAll({ tenantId });
         const activeWithRiders = allOrders.filter(o => 
             statuses.includes(o.orderStatus) && Boolean(o.assignedRiderId)
         );

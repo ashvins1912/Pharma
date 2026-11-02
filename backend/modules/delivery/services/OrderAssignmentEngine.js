@@ -5,6 +5,8 @@
  * - Closed for modification: Core evaluation loop and state persistence remain unchanged.
  * - Open for extension: New strategies are added via `registerStrategy()`.
  */
+import { isSameTenant } from '../../../authorization/tenantScope.js';
+
 export class OrderAssignmentEngine {
     /**
      * @param {object} dependencies
@@ -69,7 +71,7 @@ export class OrderAssignmentEngine {
         // 1. Resolve order domain entity
         let order;
         if (typeof orderOrId === 'string') {
-            order = await this.orderRepository.findById(orderOrId);
+            order = await this.orderRepository.findById(orderOrId, options.tenantId);
             if (!order) {
                 throw new Error(`Order #${orderOrId} not found in database.`);
             }
@@ -77,17 +79,31 @@ export class OrderAssignmentEngine {
             order = orderOrId;
         }
 
+        if (!order?.tenantId || (options.tenantId && !isSameTenant(options.tenantId, order.tenantId))) {
+            throw new Error('Order tenant ownership is required and must match the assignment context.');
+        }
+        options = { ...options, tenantId: String(order.tenantId) };
+
         const existingRiderId = order.rider?.riderId || order.assignedRiderId;
         if (existingRiderId) {
-            const existingRider = await this.riderRepository.findById(existingRiderId);
+            const existingRider = await this.riderRepository.findById(existingRiderId, options.tenantId || order.tenantId);
+            if (!existingRider) {
+                const safeOrder = order.toJSON ? order.toJSON() : { ...order };
+                safeOrder.rider = null;
+                safeOrder.assignedRiderId = null;
+                return {
+                    success: false,
+                    order: safeOrder,
+                    rider: null,
+                    strategyUsed: 'INVALID_TENANT_RIDER',
+                    reason: 'The assigned rider is not owned by the order pharmacy tenant.',
+                    auditTrail: []
+                };
+            }
             return {
                 success: true,
                 order,
-                rider: existingRider || {
-                    id: existingRiderId,
-                    name: order.rider?.riderName || 'Assigned Rider',
-                    mobile: order.rider?.riderMobile || ''
-                },
+                rider: existingRider,
                 strategyUsed: 'AlreadyAssigned',
                 reason: 'Order already has an assigned rider.',
                 auditTrail: []
@@ -105,7 +121,7 @@ export class OrderAssignmentEngine {
                     order,
                     riderRepository: this.riderRepository,
                     orderRepository: this.orderRepository,
-                    options
+                    options: { ...options, tenantId: options.tenantId || order.tenantId }
                 });
 
                 const stepDuration = Date.now() - stepStart;
@@ -152,19 +168,20 @@ export class OrderAssignmentEngine {
                     status: assignedRider.status,
                     activeOrderIds: assignedRider.activeOrderIds,
                     updatedAt: new Date()
-                }),
+                }, options.tenantId || order.tenantId),
                 this.orderRepository.update(order.id, {
                     orderStatus: order.orderStatus,
                     assignmentType: order.assignmentType,
                     rider: order.rider,
                     assignmentDetails: order.assignmentDetails,
                     updatedAt: new Date()
-                })
+                }, options.tenantId || order.tenantId)
             ]);
 
             const logEntry = {
                 id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
                 orderId: order.id,
+                tenantId: order.tenantId || options.tenantId || null,
                 customerName: order.customerName,
                 status: 'ASSIGNED',
                 strategyUsed: matchedResult.strategyName,
@@ -200,11 +217,12 @@ export class OrderAssignmentEngine {
                 note: 'All automated assignment strategies exhausted. Awaiting dispatcher.',
                 attemptedAt: new Date()
             }
-        });
+        }, options.tenantId || order.tenantId);
 
         const failedLogEntry = {
             id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
             orderId: order.id,
+            tenantId: order.tenantId || options.tenantId || null,
             customerName: order.customerName,
             status: 'UNASSIGNED',
             strategyUsed: 'NONE',

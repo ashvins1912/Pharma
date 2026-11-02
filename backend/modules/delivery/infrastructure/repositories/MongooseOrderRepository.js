@@ -18,6 +18,8 @@ export class MongooseOrderRepository extends IOrderRepository {
 
         return new Order({
             id: obj._id?.toString() || obj.id,
+            tenantId: obj.tenantId,
+            branchId: obj.branchId || null,
             customerName: obj.customerName,
             customerMobile: obj.customerMobile || obj.addressDetails?.mobile || obj.addressDetails?.phone || '',
             deliveryAddress: obj.deliveryAddress,
@@ -39,14 +41,16 @@ export class MongooseOrderRepository extends IOrderRepository {
         });
     }
 
-    async findById(id) {
-        if (id == null || String(id) === 'undefined' || String(id) === 'null' || !mongoose.isValidObjectId(id)) return null;
-        const doc = await OrderModel.findById(String(id));
+    async findById(id, tenantId) {
+        if (!tenantId || id == null || String(id) === 'undefined' || String(id) === 'null' || !mongoose.isValidObjectId(id)) return null;
+        const doc = await OrderModel.findOne({ _id: String(id), tenantId: String(tenantId) });
         return this._toDomain(doc);
     }
 
     async findAll(filter = {}) {
         const query = {};
+        if (!filter.tenantId) return [];
+        query.tenantId = String(filter.tenantId);
         if (filter.orderStatus) query.orderStatus = filter.orderStatus;
         if (filter.assignmentType) query.assignmentType = filter.assignmentType;
         if (filter.assignedRiderId) query['rider.riderId'] = filter.assignedRiderId;
@@ -55,8 +59,10 @@ export class MongooseOrderRepository extends IOrderRepository {
         return docs.map(d => this._toDomain(d));
     }
 
-    async update(id, updateData) {
+    async update(id, updateData, tenantId) {
+        if (!tenantId) return null;
         const updates = { ...updateData, updatedAt: new Date() };
+        delete updates.tenantId;
 
         if (updates.rider) {
             updates.rider = {
@@ -78,12 +84,14 @@ export class MongooseOrderRepository extends IOrderRepository {
             };
         }
 
-        const doc = await OrderModel.findByIdAndUpdate(id, { $set: updates }, { new: true });
+        const doc = await OrderModel.findOneAndUpdate({ _id: id, tenantId: String(tenantId) }, { $set: updates }, { new: true });
         return this._toDomain(doc);
     }
 
-    async findActiveOrdersInProximity(coordinates, maxDistanceInMeters = 2000, statuses = ['Ready to Dispatch', 'Dispatched']) {
+    async findActiveOrdersInProximity(coordinates, maxDistanceInMeters = 2000, statuses = ['Ready to Dispatch', 'Dispatched'], tenantId) {
+        if (!tenantId) return [];
         const docs = await OrderModel.find({
+            tenantId: String(tenantId),
             orderStatus: { $in: statuses },
             'rider.riderId': { $exists: true, $ne: null }
         });

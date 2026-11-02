@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../../api/apiClient';
 import { useToast } from '../../../context/ToastContext';
+import { useTenant } from '../../../context/TenantContext';
 
 export default function RiderTerminal({ riderId, onClose }) {
   const { addToast } = useToast();
+  const { tenantId } = useTenant();
   const [rider, setRider] = useState(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('offline');
@@ -20,7 +22,7 @@ export default function RiderTerminal({ riderId, onClose }) {
   const fetchRiderData = async () => {
     try {
       setLoading(true);
-      const res = await apiClient.get('/api/admin/riders');
+      const res = await apiClient.get('/api/admin/riders', { params: { tenantId } });
       const ridersRaw = res.data?.riders || res.data?.items || res.data?.data || res.data || [];
       const ridersList = Array.isArray(ridersRaw) ? ridersRaw : [];
       const currentRider = riderId ? ridersList.find(r => String(r._id || r.id) === String(riderId)) : ridersList[0];
@@ -36,10 +38,16 @@ export default function RiderTerminal({ riderId, onClose }) {
       }
 
       // Fetch pending orders for delivery dispatch
-      const ordersRes = await apiClient.get('/api/admin/orders');
+      const ordersRes = await apiClient.get('/api/orders/admin/all', { params: { tenantId } });
       const ordersRaw = ordersRes.data?.orders || ordersRes.data?.items || ordersRes.data?.data || ordersRes.data || [];
-      const allOrders = Array.isArray(ordersRaw) ? ordersRaw : (ordersRaw?.orders || []);
-      const pending = Array.isArray(allOrders) ? allOrders.filter(o => o.status === 'pending' || o.status === 'assigned') : [];
+      const allOrders = Array.isArray(ordersRaw) ? ordersRaw : (ordersRaw?.items || ordersRaw?.orders || ordersRaw?.data || []);
+      const currentRiderId = String(currentRider?._id || currentRider?.id || '');
+      const pending = Array.isArray(allOrders) ? allOrders.filter(order => {
+        const assignedRiderId = String(order.rider?.riderId || order.riderId || order.assignedRiderId || '');
+        const orderStatus = String(order.orderStatus || order.status || '').toLowerCase();
+        return currentRiderId && assignedRiderId === currentRiderId
+          && ['ready to dispatch', 'dispatched', 'out_for_delivery', 'out for delivery'].includes(orderStatus);
+      }) : [];
       setPendingOrders(pending);
       const activeDelivery = Array.isArray(allOrders) ? allOrders.find(order =>
         ['dispatched', 'out_for_delivery'].includes(String(order.orderStatus || order.status || '').toLowerCase())
@@ -53,7 +61,7 @@ export default function RiderTerminal({ riderId, onClose }) {
         }
         return previous || activeDelivery || null;
       });
-      if (pending.length > 0 && !currentAlert && status === 'online') {
+      if (pending.length > 0 && !currentAlert && status === 'Available') {
         setCurrentAlert(pending[0]);
         setCountdown(30);
       }
@@ -68,11 +76,11 @@ export default function RiderTerminal({ riderId, onClose }) {
     fetchRiderData();
     const interval = setInterval(fetchRiderData, 10000);
     return () => clearInterval(interval);
-  }, [riderId, status]);
+  }, [riderId, status, tenantId]);
 
   // Handle geolocation tracking and 2dsphere GPS telemetry push
   useEffect(() => {
-    if (status !== 'online' && status !== 'busy') {
+    if (status !== 'Available' && status !== 'Busy') {
       setIsTracking(false);
       return;
     }
@@ -87,6 +95,7 @@ export default function RiderTerminal({ riderId, onClose }) {
         if (rider?._id) {
           try {
             await apiClient.patch(`/api/admin/riders/${rider._id}/location`, {
+              tenantId,
               lat: latitude,
               lng: longitude
             });
@@ -102,13 +111,13 @@ export default function RiderTerminal({ riderId, onClose }) {
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [status, rider?._id]);
+  }, [status, rider?._id, tenantId]);
 
   // Countdown timer ticker for incoming alert
   useEffect(() => {
     if (!currentAlert || countdown <= 0) {
       if (countdown <= 0 && currentAlert) {
-        handleRejectOrder();
+        handleDismissOrder();
       }
       return;
     }
@@ -122,7 +131,7 @@ export default function RiderTerminal({ riderId, onClose }) {
       return;
     }
     try {
-      await apiClient.patch(`/api/admin/riders/${rider._id}/status`, { status: newStatus });
+      await apiClient.patch(`/api/admin/riders/${rider._id}/status`, { status: newStatus, tenantId });
       setStatus(newStatus);
       addToast(`Rider duty status updated to ${newStatus.toUpperCase()}`, 'success');
       fetchRiderData();
@@ -134,7 +143,7 @@ export default function RiderTerminal({ riderId, onClose }) {
   const handleAcceptOrder = (order) => {
     setActiveOrder(order);
     setCurrentAlert(null);
-    addToast(`Order #${order._id?.slice(-6)} accepted! Proceeding to Dark Store pickup.`, 'success');
+    addToast(`Opened order #${order._id?.slice(-6)} assigned to this rider.`, 'success');
   };
 
   const handleRejectOrder = () => {
@@ -142,7 +151,7 @@ export default function RiderTerminal({ riderId, onClose }) {
     setCurrentAlert(null);
     // Cycle to next pending order if available
     const remaining = pendingOrders.filter(o => o._id !== currentAlert?._id);
-    if (remaining.length > 0 && status === 'online') {
+    if (remaining.length > 0 && status === 'Available') {
       setCurrentAlert(remaining[0]);
       setCountdown(30);
     }
@@ -162,7 +171,8 @@ export default function RiderTerminal({ riderId, onClose }) {
     try {
       const response = await apiClient.post(`/api/orders/${activeOrder._id}/verify-delivery`, {
         otp: otpCode,
-        riderId: assignedRiderId
+        riderId: assignedRiderId,
+        tenantId
       });
       addToast(response.data?.message || 'Delivery verified and order completed.', 'success');
       setActiveOrder(null);
@@ -206,25 +216,25 @@ export default function RiderTerminal({ riderId, onClose }) {
         {/* Online / Offline Toggle */}
         <div className="flex items-center gap-2 bg-slate-800 p-1.5 rounded-2xl border border-slate-700">
           <button
-            onClick={() => handleToggleStatus('offline')}
+            onClick={() => handleToggleStatus('Off-duty')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
-              status === 'offline' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              status === 'Off-duty' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
-            🔴 Offline
+            🔴 Off-duty
           </button>
           <button
-            onClick={() => handleToggleStatus('online')}
+            onClick={() => handleToggleStatus('Available')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
-              status === 'online' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              status === 'Available' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
-            🟢 Online
+            🟢 Available
           </button>
           <button
-            onClick={() => handleToggleStatus('busy')}
+            onClick={() => handleToggleStatus('Busy')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
-              status === 'busy' ? 'bg-amber-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              status === 'Busy' ? 'bg-amber-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
             🟡 Busy
@@ -238,7 +248,7 @@ export default function RiderTerminal({ riderId, onClose }) {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-sm font-black uppercase tracking-wider text-slate-300 flex items-center gap-2">
-              <span>📦 Pending Orders (2dsphere 3km Match)</span>
+              <span>📦 Orders Assigned to This Rider</span>
               <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-xs">
                 {pendingOrders.length}
               </span>
@@ -247,7 +257,7 @@ export default function RiderTerminal({ riderId, onClose }) {
 
           {pendingOrders.length === 0 ? (
             <div className="bg-slate-800/50 border border-slate-800 rounded-2xl p-6 text-center text-slate-400 text-xs">
-              No pending orders in your immediate 3km radius. Stay online for instant broadcast alerts!
+              No orders are currently assigned to this rider in the selected pharmacy.
             </div>
           ) : (
             <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
@@ -271,13 +281,13 @@ export default function RiderTerminal({ riderId, onClose }) {
                       onClick={() => handleAcceptOrder(ord)}
                       className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs py-2 rounded-xl transition shadow-md shadow-emerald-600/20 cursor-pointer"
                     >
-                      Accept Order
+                      Open Delivery
                     </button>
                     <button
                       onClick={() => handleRejectOrder()}
                       className="px-3 bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold text-xs py-2 rounded-xl transition cursor-pointer"
                     >
-                      Decline
+                      Dismiss
                     </button>
                   </div>
                 </div>
@@ -358,7 +368,7 @@ export default function RiderTerminal({ riderId, onClose }) {
           <div className="bg-slate-900 border border-amber-500/50 w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <span className="bg-amber-500/20 text-amber-400 font-black px-3 py-1 rounded-full text-xs">
-                🚨 NEW ORDER ALERT
+                🚨 ASSIGNED DELIVERY ALERT
               </span>
               <span className="text-red-400 font-black text-lg bg-red-950/50 border border-red-800 px-3 py-1 rounded-xl">
                 {countdown}s
@@ -377,7 +387,7 @@ export default function RiderTerminal({ riderId, onClose }) {
                 onClick={() => handleAcceptOrder(currentAlert)}
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm py-3 rounded-2xl shadow-lg transition cursor-pointer"
               >
-                Accept Delivery
+                Open Assigned Delivery
               </button>
               <button
                 onClick={() => handleRejectOrder()}

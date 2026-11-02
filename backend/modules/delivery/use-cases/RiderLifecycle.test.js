@@ -6,38 +6,42 @@ import { SetRiderEnabledUseCase } from './SetRiderEnabledUseCase.js';
 
 test('in-memory rider repository starts empty and excludes disabled riders from active listings', async () => {
     const repository = new InMemoryRiderRepository();
-    assert.deepEqual(await repository.findAll(), []);
+    const tenantId = 'tenant-a';
+    assert.deepEqual(await repository.findAll({ tenantId }), []);
 
     const registerRider = new RegisterRiderUseCase({
         riderRepository: repository,
         storageService: { upload: async () => ({ publicUrl: 'photo-url' }) }
     });
-    const rider = await registerRider.execute({ name: 'Test Rider', mobile: '1234567890' });
+    const rider = await registerRider.execute({ tenantId, name: 'Test Rider', mobile: '1234567890' });
     const setRiderEnabled = new SetRiderEnabledUseCase({ riderRepository: repository });
-    const disabled = await setRiderEnabled.execute(rider.id, false, 'Suspended', 'Review required.');
+    const disabled = await setRiderEnabled.execute(rider.id, false, 'Suspended', 'Review required.', tenantId);
 
     assert.equal(disabled.enabled, false);
     assert.equal(disabled.disabledReason, 'Review required.');
-    assert.deepEqual(await repository.findAll(), []);
-    assert.equal((await repository.findAll({ includeDisabled: true })).length, 1);
-    assert.deepEqual(await repository.findAvailableNearby([77.5946, 12.9716]), []);
+    assert.deepEqual(await repository.findAll({ tenantId }), []);
+    assert.equal((await repository.findAll({ tenantId, includeDisabled: true })).length, 1);
+    assert.deepEqual(await repository.findAvailableNearby([77.5946, 12.9716], 15000, 5, tenantId), []);
 });
 
 test('registering a disabled rider with the same mobile re-enables their existing record', async () => {
     const repository = new InMemoryRiderRepository();
+    const tenantId = 'tenant-a';
     const registerRider = new RegisterRiderUseCase({
         riderRepository: repository,
         storageService: { upload: async () => ({ publicUrl: 'photo-url' }) }
     });
     const original = await registerRider.execute({
+        tenantId,
         name: 'Returning Rider',
         mobile: '+91 98765 43210'
     });
-    await repository.update(original.id, { totalDeliveries: 12 });
+    await repository.update(original.id, { totalDeliveries: 12 }, tenantId);
     const setRiderEnabled = new SetRiderEnabledUseCase({ riderRepository: repository });
-    await setRiderEnabled.execute(original.id, false, 'Removed', 'Contract ended.');
+    await setRiderEnabled.execute(original.id, false, 'Removed', 'Contract ended.', tenantId);
 
     const reactivated = await registerRider.execute({
+        tenantId,
         name: 'Returning Rider Updated',
         mobile: '+919876543210'
     });
@@ -49,24 +53,25 @@ test('registering a disabled rider with the same mobile re-enables their existin
     assert.equal(reactivated.disabledAction, null);
     assert.equal(reactivated.disabledReason, null);
     assert.equal(reactivated.totalDeliveries, 12);
-    assert.equal((await repository.findAll()).length, 1);
+    assert.equal((await repository.findAll({ tenantId })).length, 1);
 });
 
 test('rider suspension requires a supported action and non-empty remark', async () => {
     const repository = new InMemoryRiderRepository();
+    const tenantId = 'tenant-a';
     const registerRider = new RegisterRiderUseCase({
         riderRepository: repository,
         storageService: { upload: async () => ({ publicUrl: 'photo-url' }) }
     });
-    const rider = await registerRider.execute({ name: 'Test Rider', mobile: '1234567890' });
+    const rider = await registerRider.execute({ tenantId, name: 'Test Rider', mobile: '1234567890' });
     const setRiderEnabled = new SetRiderEnabledUseCase({ riderRepository: repository });
 
     await assert.rejects(
-        setRiderEnabled.execute(rider.id, false, 'Suspended', '  '),
+        setRiderEnabled.execute(rider.id, false, 'Suspended', '  ', tenantId),
         /remark is required/
     );
     await assert.rejects(
-        setRiderEnabled.execute(rider.id, false, 'Deleted', 'Invalid action'),
+        setRiderEnabled.execute(rider.id, false, 'Deleted', 'Invalid action', tenantId),
         /must be Suspended or Removed/
     );
 });

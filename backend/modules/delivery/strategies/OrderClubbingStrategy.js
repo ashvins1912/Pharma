@@ -20,7 +20,7 @@ export class OrderClubbingStrategy extends IAssignmentStrategy {
         return 10; // Executes first
     }
 
-    async execute({ order, riderRepository, orderRepository }) {
+    async execute({ order, riderRepository, orderRepository, options = {} }) {
         // Step 1: Evaluate if expected Out-for-Delivery is within time window (< 15 mins)
         const isUrgentWindow = order.isExpectedWithinMinutes(this.timeWindowMinutes);
         if (!isUrgentWindow) {
@@ -35,7 +35,8 @@ export class OrderClubbingStrategy extends IAssignmentStrategy {
         const nearbyAssignedOrders = await orderRepository.findActiveOrdersInProximity(
             orderCoords,
             this.maxProximityMeters,
-            ['Ready to Dispatch', 'Dispatched']
+            ['Ready to Dispatch', 'Dispatched'],
+            options.tenantId || order.tenantId
         );
 
         if (!nearbyAssignedOrders || nearbyAssignedOrders.length === 0) {
@@ -51,7 +52,7 @@ export class OrderClubbingStrategy extends IAssignmentStrategy {
             const riderId = clubbedOrder.assignedRiderId;
             if (!riderId) continue;
 
-            const activeRider = await riderRepository.findById(riderId);
+            const activeRider = await riderRepository.findById(riderId, options.tenantId || order.tenantId);
             if (!activeRider || activeRider.isOffDuty()) continue;
 
             // Maximum orders a rider can carry simultaneously in clubbing (e.g. up to 4 orders)

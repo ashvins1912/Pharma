@@ -23,6 +23,8 @@ export class Order {
 
     constructor({
         id,
+        tenantId = null,
+        branchId = null,
         customerName = 'Customer',
         customerMobile = '',
         deliveryAddress = '',
@@ -44,6 +46,8 @@ export class Order {
         updatedAt = new Date()
     }) {
         this.id = id ? String(id) : null;
+        this.tenantId = tenantId ? String(tenantId) : null;
+        this.branchId = branchId ? String(branchId) : null;
         this.customerName = customerName;
         this.customerMobile = customerMobile;
         this.deliveryAddress = deliveryAddress;
@@ -117,6 +121,8 @@ export class Order {
     toJSON() {
         return {
             id: this.id,
+            tenantId: this.tenantId,
+            branchId: this.branchId,
             customerName: this.customerName,
             customerMobile: this.customerMobile,
             deliveryAddress: this.deliveryAddress,

@@ -13,6 +13,8 @@ export class Rider {
 
     constructor({
         id,
+        tenantId,
+        branchId = null,
         name,
         mobile,
         photoUrl = null,
@@ -46,7 +48,10 @@ export class Rider {
             throw new Error(`Invalid rider status: ${status}. Must be one of: ${validStatuses.join(', ')}`);
         }
 
+        if (!tenantId || !String(tenantId).trim()) throw new Error('Rider tenant is required.');
         this.id = id ? String(id) : null;
+        this.tenantId = String(tenantId);
+        this.branchId = branchId ? String(branchId) : null;
         this.name = name.trim();
         this.mobile = mobile.trim();
         this.photoUrl = photoUrl;
@@ -160,6 +165,8 @@ export class Rider {
     toJSON() {
         return {
             id: this.id,
+            tenantId: this.tenantId,
+            branchId: this.branchId,
             name: this.name,
             mobile: this.mobile,
             photoUrl: this.photoUrl,

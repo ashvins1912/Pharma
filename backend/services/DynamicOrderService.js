@@ -2,6 +2,10 @@ import Medicine from '../models/Medicine.js';
 import Order from '../models/Order.js';
 import CustomerPointsLedger from '../models/CustomerPointsLedger.js';
 import ProfitMarginRewardEngine from '../strategies/ProfitMarginRewardEngine.js';
+import Tenant from '../models/Tenant.js';
+import SurplusSavingsCampaign from '../models/SurplusSavingsCampaign.js';
+import SurplusSavingsRedemption from '../models/SurplusSavingsRedemption.js';
+import { calculateSurplusUnitDiscount, roundCurrency } from './surplusSavingsPricing.js';
 
 export class DynamicOrderService {
     constructor({
@@ -73,6 +77,9 @@ export class DynamicOrderService {
         if (typeof customerId !== 'string' || !customerId.trim()) {
             throw new TypeError('Authenticated customer ID is required.');
         }
+        if (!tenantId) throw new TypeError('Selected pharmacy tenant is required for checkout pricing.');
+        const activeTenant = await Tenant.findOne({ _id: String(tenantId), status: 'ACTIVE' }).select('_id settings.allowOfferWithCoupon settings.allowOfferWithRewards').lean();
+        if (!activeTenant) throw new Error('The selected pharmacy is not active.');
         if (!Array.isArray(cartItems) || cartItems.length === 0) {
             throw new TypeError('Basket must contain at least one item.');
         }
@@ -87,8 +94,11 @@ export class DynamicOrderService {
         }
 
         const medicineIds = [...normalized.keys()];
-        const query = this.medicineModel.find({ _id: { $in: medicineIds }, isActive: { $ne: false } })
-            .select('name sku price baseCostPrice marginTier discountPercentage');
+        const query = this.medicineModel.find({
+            _id: { $in: medicineIds },
+            isActive: { $ne: false },
+            tenantId: String(tenantId)
+        }).select('name sku price baseCostPrice marginTier discountPercentage');
         if (session) query.session(session);
         const medicines = await query.lean().exec();
         if (medicines.length !== medicineIds.length) {
@@ -110,9 +120,52 @@ export class DynamicOrderService {
         });
 
         const subtotal = pricedItems.reduce((total, item) => total + item.currentPrice * item.quantity, 0);
-        const coupon = await this.couponValidator(couponCode || '', subtotal, { customerId, tenantId });
+        let surplusSavingsDiscount = 0;
+        const surplusSavings = [];
+        const campaignUsage = new Map();
+        if (tenantId) {
+            const now = new Date();
+            const campaigns = await SurplusSavingsCampaign.find({
+                tenantId: String(tenantId), status: 'ACTIVE',
+                startsAt: { $lte: now }, endsAt: { $gt: now },
+                medicineIds: { $in: medicineIds }
+            }).lean();
+            const redemptions = campaigns.length ? await SurplusSavingsRedemption.find({
+                tenantId: String(tenantId), campaignId: { $in: campaigns.map(campaign => campaign._id) }, customerId: String(customerId)
+            }).select('campaignId').lean() : [];
+            const redeemed = new Set(redemptions.map(item => String(item.campaignId)));
+            for (const item of pricedItems) {
+                const candidates = campaigns.filter(campaign =>
+                    campaign.medicineIds.some(id => String(id) === String(item.medicineId))
+                    && subtotal >= Number(campaign.minOrderAmount || 0)
+                    && (campaign.usageLimit == null || Number(campaign.usageCount || 0) < Number(campaign.usageLimit))
+                    && !redeemed.has(String(campaign._id))
+                ).map(campaign => {
+                    const discount = calculateSurplusUnitDiscount(item.currentPrice, campaign, campaignUsage.get(String(campaign._id)) || 0, item.quantity);
+                    return { campaign, discount };
+                }).filter(candidate => candidate.discount > 0).sort((a, b) => b.discount - a.discount);
+                if (!candidates.length) continue;
+                const { campaign, discount } = candidates[0];
+                const applied = roundCurrency(discount * item.quantity);
+                item.currentPrice = Math.max(0, Math.round((item.currentPrice - discount) * 100) / 100);
+                item.isDiscounted = true;
+                surplusSavingsDiscount += applied;
+                campaignUsage.set(String(campaign._id), (campaignUsage.get(String(campaign._id)) || 0) + applied);
+                surplusSavings.push({ campaignId: String(campaign._id), name: campaign.name, medicineId: String(item.medicineId), discountAmount: applied });
+            }
+        }
+        const couponBaseTotal = Math.max(0, subtotal - surplusSavingsDiscount);
+        const coupon = await this.couponValidator(couponCode || '', couponBaseTotal, { customerId, tenantId });
         if (!coupon.valid) throw new Error(coupon.message || 'Coupon is invalid.');
-        const couponRate = Number(coupon.discountPercentage || 0) / 100;
+        const tenantSettings = activeTenant;
+        if (surplusSavingsDiscount > 0 && coupon.code && tenantSettings?.settings?.allowOfferWithCoupon !== true) {
+            throw new Error('This pharmacy does not allow surplus savings to be combined with coupons.');
+        }
+        if (surplusSavingsDiscount > 0 && Number(requestedPoints) > 0 && tenantSettings?.settings?.allowOfferWithRewards !== true) {
+            throw new Error('This pharmacy does not allow Surplus Savings to be combined with reward points.');
+        }
+        const couponDiscount = Number(coupon.discountAmount ?? (couponBaseTotal * Number(coupon.discountPercentage || 0) / 100));
+        const couponRate = couponBaseTotal > 0 ? couponDiscount / couponBaseTotal : 0;
         const rewardItems = pricedItems.map(item => ({
             ...item,
             currentPrice: item.currentPrice * (1 - couponRate),
@@ -135,6 +188,7 @@ export class DynamicOrderService {
         );
         return {
             items: pricedItems,
+            subtotal,
             availablePoints,
             earnedPoints: earning.pointsToAssign,
             revenue: earning.totalRevenue,
@@ -143,7 +197,9 @@ export class DynamicOrderService {
             netMarginPercentage: earning.netMarginPercentage,
             couponCode: coupon.code || couponCode || null,
             couponLabel: coupon.promotionLabel || null,
-            couponDiscount: subtotal - earning.totalRevenue,
+            couponDiscount,
+            surplusSavingsDiscount,
+            surplusSavings,
             redemptionEligible: redemption.eligible && availablePoints > 0,
             redemptionBlockedReason: redemption.eligible ? null : redemption.reason,
             requestedPoints,

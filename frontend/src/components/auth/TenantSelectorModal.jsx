@@ -25,9 +25,42 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
   const modalRef = useFocusTrap(isOpen, onClose);
 
   useEffect(() => {
-    if (isOpen) {
-      getUserLocationAndFetchTenants();
-    }
+    if (!isOpen) return;
+    const load = async () => {
+      const fetchWithoutLocation = (message = '') => {
+        setUserLocation(null);
+        if (message) setError(message);
+        fetchNearbyTenants(null);
+      };
+      if (!navigator.geolocation) {
+        fetchWithoutLocation('Location is not supported. You can still search and select a pharmacy.');
+        return;
+      }
+      try {
+        const permission = navigator.permissions?.query
+          ? await navigator.permissions.query({ name: 'geolocation' })
+          : null;
+        if (permission?.state === 'denied') {
+          fetchWithoutLocation('Location access is blocked. Enable it in browser settings or select a pharmacy manually.');
+          return;
+        }
+        if (permission?.state === 'prompt'
+          && localStorage.getItem('pharma_location_prompted_v1') === 'true') {
+          fetchWithoutLocation('Location was already requested. Select a pharmacy manually or change browser location permissions.');
+          return;
+        }
+        if (permission?.state === 'prompt') localStorage.setItem('pharma_location_prompted_v1', 'true');
+        getUserLocationAndFetchTenants();
+      } catch {
+        if (localStorage.getItem('pharma_location_prompted_v1') === 'true') {
+          fetchWithoutLocation('Location was already requested. Select a pharmacy manually.');
+        } else {
+          localStorage.setItem('pharma_location_prompted_v1', 'true');
+          getUserLocationAndFetchTenants();
+        }
+      }
+    };
+    load();
   }, [isOpen]);
 
   const getUserLocationAndFetchTenants = () => {
@@ -89,9 +122,6 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
         setTenantId(preferred._id);
         setActiveTenant(preferred);
         setSearchQuery(preferred.shopName || '');
-      } else if (!tenantId && list.length > 0) {
-        setTenantId(list[0]._id);
-        setActiveTenant(list[0]);
       }
     } catch (err) {
       setError(err?.response?.data?.message || err.message || 'Failed to fetch nearby pharmacies');
@@ -214,7 +244,8 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
         <div className="pt-2 border-t border-gray-100 dark:border-gray-800 flex justify-end">
           <button
             onClick={onClose}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-2xl shadow transition"
+            disabled={!tenantId || !tenants.some(tenant => String(tenant._id) === String(tenantId))}
+            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold rounded-2xl shadow transition"
           >
             Confirm & View Product Catalogue
           </button>

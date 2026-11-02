@@ -2,47 +2,60 @@ import React, { createContext, useContext, useState } from 'react';
 
 const TenantContext = createContext(null);
 
+const readSavedTenant = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const value = localStorage.getItem('pharma_active_tenant');
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+};
+
 export const TenantProvider = ({ children }) => {
+  // The saved tenant is a customer preference, never authorization evidence.
   const [tenantId, setTenantIdState] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('pharma_tenant_id') || '65a1234567890abcdef12345';
+    if (typeof window === 'undefined') return null;
+    const saved = localStorage.getItem('pharma_tenant_id');
+    const legacyDefaults = new Set(['tenant-ashvin-main', 'tenant-default-1', '65a1234567890abcdef12345']);
+    if (!saved || saved === 'null' || saved === 'undefined' || legacyDefaults.has(saved)) {
+      localStorage.removeItem('pharma_tenant_id');
+      localStorage.removeItem('pharma_active_tenant');
+      return null;
     }
-    return '65a1234567890abcdef12345';
+    return saved;
   });
+  const [activeTenant, setActiveTenantState] = useState(readSavedTenant);
 
-  const [activeTenant, setActiveTenantState] = useState(null);
-
-  const setTenantId = (id) => {
-    const stringId = typeof id === 'object' && id !== null ? (id._id || id.id || String(id)) : String(id);
-    setTenantIdState(stringId);
+  const setTenantId = (value) => {
+    const id = value == null ? null
+      : typeof value === 'object' ? (value._id || value.id || null)
+      : String(value);
+    setTenantIdState(id);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('pharma_tenant_id', stringId);
+      if (id) localStorage.setItem('pharma_tenant_id', String(id));
+      else localStorage.removeItem('pharma_tenant_id');
     }
-    if (typeof id === 'object' && id !== null) {
-      setActiveTenantState(id);
+    if (value && typeof value === 'object') {
+      setActiveTenantState(value);
+      if (typeof window !== 'undefined') localStorage.setItem('pharma_active_tenant', JSON.stringify(value));
+    } else if (!id || (activeTenant && String(activeTenant._id || activeTenant.id) !== String(id))) {
+      setActiveTenantState(null);
+      if (typeof window !== 'undefined') localStorage.removeItem('pharma_active_tenant');
     }
   };
 
   const setActiveTenant = (tenant) => {
-    setActiveTenantState(tenant);
-    if (tenant) {
-      const id = tenant._id || tenant.id || String(tenant);
-      setTenantId(id);
-    }
+    setActiveTenantState(tenant || null);
+    setTenantId(tenant ? (tenant._id || tenant.id) : null);
   };
 
-  return (
-    <TenantContext.Provider value={{ tenantId, setTenantId, activeTenant, setActiveTenant }}>
-      {children}
-    </TenantContext.Provider>
-  );
+  return <TenantContext.Provider value={{ tenantId, setTenantId, activeTenant, setActiveTenant }}>{children}</TenantContext.Provider>;
 };
 
 export const useTenant = () => {
   const context = useContext(TenantContext);
-  if (!context) {
-    throw new Error('useTenant must be used within a TenantProvider');
-  }
+  if (!context) throw new Error('useTenant must be used within a TenantProvider');
   return context;
 };
 

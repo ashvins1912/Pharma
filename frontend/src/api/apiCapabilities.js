@@ -98,6 +98,31 @@ export const API_CAPABILITIES = [
   },
   {
     method: 'GET',
+    pattern: /^\/api\/surplus-savings\/?$/,
+    permission: 'orders.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/surplus-savings\/admin\/?$/,
+    permission: 'promotions.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/surplus-savings\/admin\/?$/,
+    permission: 'promotions.manage'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/surplus-savings\/admin\/[^/]+(?:\/|$)/,
+    permission: 'promotions.manage'
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/surplus-savings\/admin\/[^/]+(?:\/|$)/,
+    permission: 'promotions.manage'
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/profile(?:\/|$)/,
     permission: 'profile.read'
   },

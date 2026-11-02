@@ -1,6 +1,14 @@
 import deliveryContainer from '../container.js';
 import { connectDB, getIsConnected } from '../../../config/db.js';
 
+const getRiderTenantId = req => {
+    const role = String(req.user?.role || req.user?.app_metadata?.role || req.context?.role || '').toUpperCase();
+    const platform = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+    return (req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId)
+        || (platform ? req.body?.tenantId || req.query?.tenantId : null)
+        || null;
+};
+
 const requireMongoConnection = async (res) => {
     if (getIsConnected() || await connectDB()) return true;
     res.status(503).json({
@@ -14,6 +22,8 @@ export const registerRider = async (req, res) => {
         if (!await requireMongoConnection(res)) return;
         deliveryContainer.refreshDataLayer();
         const { name, mobile, vehicleType, longitude, latitude } = req.body;
+        const tenantId = getRiderTenantId(req);
+        if (!tenantId) return res.status(403).json({ code: 'TENANT_CONTEXT_REQUIRED', message: 'A pharmacy tenant context is required.' });
 
         let coordinates = [77.5946, 12.9716];
         if (longitude !== undefined && latitude !== undefined) {
@@ -21,6 +31,8 @@ export const registerRider = async (req, res) => {
         }
 
         const rider = await deliveryContainer.registerRiderUseCase.execute({
+            tenantId,
+            branchId: req.user?.branchId || req.user?.app_metadata?.branchId || req.context?.branchId || null,
             name,
             mobile,
             vehicleType,
@@ -42,8 +54,11 @@ export const listRiders = async (req, res) => {
     try {
         if (!await requireMongoConnection(res)) return;
         deliveryContainer.refreshDataLayer();
+        const tenantId = getRiderTenantId(req);
+        if (!tenantId) return res.status(400).json({ code: 'TENANT_CONTEXT_REQUIRED', message: 'Select a pharmacy tenant to list riders.' });
         const riders = await deliveryContainer.getRidersUseCase.execute({
             ...req.query,
+            tenantId,
             includeDisabled: req.query.includeDisabled === 'true'
         });
         res.json(riders.map(r => r.toJSON()));
@@ -75,7 +90,8 @@ export const setRiderEnabled = async (req, res) => {
             req.params.riderId,
             enabled,
             action,
-            remark
+            remark,
+            getRiderTenantId(req)
         );
         res.json({
             message: enabled
@@ -94,7 +110,7 @@ export const updateRiderStatus = async (req, res) => {
         if (!await requireMongoConnection(res)) return;
         deliveryContainer.refreshDataLayer();
         const { status } = req.body;
-        const updated = await deliveryContainer.updateRiderStatusUseCase.execute(req.params.riderId, status);
+        const updated = await deliveryContainer.updateRiderStatusUseCase.execute(req.params.riderId, status, getRiderTenantId(req));
         res.json({
             message: `Rider status updated to ${status}.`,
             rider: updated.toJSON()
@@ -113,7 +129,7 @@ export const updateRiderLocation = async (req, res) => {
         if (lng === undefined || lat === undefined) {
             return res.status(400).json({ message: 'Both lng and lat coordinates are required.' });
         }
-        const updated = await deliveryContainer.updateRiderLocationUseCase.execute(req.params.riderId, lng, lat);
+        const updated = await deliveryContainer.updateRiderLocationUseCase.execute(req.params.riderId, lng, lat, getRiderTenantId(req));
         res.json({
             message: 'Rider GPS coordinates updated.',
             rider: updated.toJSON()

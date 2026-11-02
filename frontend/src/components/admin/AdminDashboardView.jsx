@@ -10,6 +10,7 @@ import AdminMedicineRequestsTab from './requests/AdminMedicineRequestsTab';
 import AdminPaymentReminders from './AdminPaymentReminders';
 import AdminCSquareTab from './AdminCSquareTab';
 import CustomerPromotionsView from './CustomerPromotionsView';
+import SurplusSavingsManager from './SurplusSavingsManager';
 import AdminOfferZoneManager from './AdminOfferZoneManager';
 import PlatformTenantsView from './PlatformTenantsView';
 import PlatformAccessControl from './PlatformAccessControl';
@@ -64,6 +65,7 @@ export default function AdminDashboardView() {
   const canViewCSquare = hasPermission('csquare.read');
   const canManageRiders = hasPermission('delivery.read') && hasPermission('delivery.manage');
   const canViewPromotions = hasPermission('promotions.read');
+  const canViewSurplusSavings = hasPermission('promotions.read');
   const canViewPayments = hasPermission('billing.read');
   const canManagePayments = hasPermission('billing.write');
   const canViewInventory = hasPermission('inventory.read');
@@ -172,6 +174,7 @@ export default function AdminDashboardView() {
       canViewAdminRequests && 'requests',
       canManageRiders && 'riders',
       canViewPromotions && 'promotions',
+      canViewSurplusSavings && 'surplusSavings',
       canViewPromotions && 'offerZone',
       canViewPayments && 'payments',
       canViewInventory && 'inventory',
@@ -185,7 +188,7 @@ export default function AdminDashboardView() {
     if (!allowedTabs.includes(adminTab)) setAdminTab(allowedTabs[0] || '');
   }, [
     adminTab, canViewFulfillment, canViewCSquare, canViewAdminRequests,
-    canManageRiders, canViewPromotions, canViewPayments, canViewInventory,
+    canManageRiders, canViewPromotions, canViewSurplusSavings, canViewPayments, canViewInventory,
     canManageRoutes, canViewAudits, canViewTenants, canManagePlatformAccess, isSuperAdmin
   ]);
 
@@ -228,6 +231,9 @@ export default function AdminDashboardView() {
         <div id="admin-medicine-requests">
           <AdminMedicineRequestsTab initialData={initialMedicineRequests} initialLoading={medicinePreloadLoading} onPendingCountRefresh={loadPendingMedicineRequestCount} />
         </div>
+        {canViewSurplusSavings && (
+          <SurplusSavingsManager canManage={hasPermission('promotions.manage')} />
+        )}
       </div>
     );
   }
@@ -455,6 +461,18 @@ export default function AdminDashboardView() {
             </button>
           )}
 
+          {canViewSurplusSavings && (
+            <button
+              onClick={() => setAdminTab('surplusSavings')}
+              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${adminTab === 'surplusSavings'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'}`}
+            >
+              <span>⚡</span>
+              <span>Exclusive Surplus Savings</span>
+            </button>
+          )}
+
           {canViewPromotions && (
             <button
               onClick={() => setAdminTab('offerZone')}
@@ -598,6 +616,7 @@ export default function AdminDashboardView() {
       )}
       {adminTab === 'csquare' && canViewCSquare && <AdminCSquareTab />}
       {adminTab === 'promotions' && canViewPromotions && <CustomerPromotionsView canManage={hasPermission('promotions.manage')} />}
+      {adminTab === 'surplusSavings' && canViewSurplusSavings && <SurplusSavingsManager canManage={hasPermission('promotions.manage')} />}
 
       {adminTab === 'fulfillment' && canViewFulfillment && (
         <div className="space-y-3">

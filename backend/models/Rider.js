@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 
 const riderSchema = new mongoose.Schema({
+    tenantId: { type: String, required: true, index: true },
+    branchId: { type: String, default: null, index: true },
     supabaseId: {
         type: String,
         trim: true,
@@ -18,7 +20,6 @@ const riderSchema = new mongoose.Schema({
     mobile: {
         type: String,
         required: true,
-        unique: true,
         trim: true
     },
     photoUrl: {
@@ -83,6 +84,8 @@ const riderSchema = new mongoose.Schema({
 
 // Sparse allows existing admin-onboarded riders to omit a Supabase account ID.
 riderSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });
+riderSchema.index({ tenantId: 1, mobile: 1 }, { unique: true });
+riderSchema.index({ tenantId: 1, enabled: 1, status: 1 });
 riderSchema.pre('validate', function syncPhoneAliases() {
     if (this.phone && !this.mobile) this.mobile = this.phone;
     if (this.mobile && !this.phone) this.phone = this.mobile;

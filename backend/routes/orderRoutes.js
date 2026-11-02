@@ -4,7 +4,9 @@ import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
 import Order from '../models/Order.js';
+import Tenant from '../models/Tenant.js';
 import Rider from '../models/Rider.js';
+import Medicine from '../models/Medicine.js';
 import { authenticateUser, isAdmin } from '../middleware/auth.js';
 import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
 import { getPrescription, removePrescription, savePrescription } from '../config/prescriptionStorage.js';
@@ -18,10 +20,88 @@ import prescriptionClient from '../services/prescription-service-client/Prescrip
 import { reinitiatePrescriptionProcessing } from '../../services/order-service/src/prescription-client.js';
 import { customerService } from '../services/customer-service/CustomerService.js';
 import { domainEvents } from '../shared/events/DomainEvents.js';
+import { isSameTenant } from '../authorization/tenantScope.js';
+import { isAssignedRiderForOrder } from '../authorization/deliveryScope.js';
 
 const router = express.Router();
+
+const TENANT_STAFF_ROLES = new Set([
+    'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF',
+    'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN', 'PHARMACY'
+]);
+const getActorRole = req => String(req.user?.role || req.user?.app_metadata?.role || req.context?.role || '').toUpperCase();
+const getActorTenantId = req => req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId || null;
+const isPlatformOrderAdmin = req => ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(getActorRole(req));
+const isTenantOrderStaff = req => TENANT_STAFF_ROLES.has(getActorRole(req));
+const canTenantAccessOrder = (req, order) => {
+    if (isPlatformOrderAdmin(req)) return true;
+    if (isTenantOrderStaff(req)) {
+        const tenantId = getActorTenantId(req);
+        return isSameTenant(tenantId, order?.tenantId);
+    }
+    return String(order?.userId || order?.customerId || '') === String(req.user?.sub || '');
+};
+
+const sanitizeTenantRiderReferences = async orders => {
+    const list = (Array.isArray(orders) ? orders : [orders]).filter(Boolean);
+    if (!list.length) return Array.isArray(orders) ? list : orders;
+    const grouped = new Map();
+    for (const order of list) {
+        const tenantId = String(order.tenantId || '');
+        const riderId = String(order.rider?.riderId || order.riderId || order.assignedRiderId || '');
+        if (!tenantId || !riderId || !mongoose.isValidObjectId(riderId)) continue;
+        if (!grouped.has(tenantId)) grouped.set(tenantId, new Set());
+        grouped.get(tenantId).add(riderId);
+    }
+    const valid = new Set();
+    try {
+        for (const [tenantId, riderIds] of grouped.entries()) {
+            const rows = await Rider.find({ tenantId, _id: { $in: [...riderIds] } }).select('_id').lean();
+            for (const row of rows) valid.add(`${tenantId}:${String(row._id)}`);
+        }
+    } catch (error) {
+        console.warn('[OrderRoutes] Could not verify rider tenant ownership; stripping rider details:', error.message);
+    }
+    for (const order of list) {
+        const riderId = String(order.rider?.riderId || order.riderId || order.assignedRiderId || '');
+        const key = `${String(order.tenantId || '')}:${riderId}`;
+        if (!riderId || !valid.has(key)) {
+            order.rider = null;
+            order.riderId = null;
+            order.assignedRiderId = null;
+            order.deliveryPersonMobile = null;
+            order.deliveryPersonName = null;
+            order.riderMobile = null;
+            order.riderName = null;
+        }
+    }
+    return Array.isArray(orders) ? list : list[0];
+};
+
+const tenantOrderIdGuard = async (req, res, next) => {
+    if (!isTenantOrderStaff(req)) return next();
+    const orderId = req.params.id;
+    if (!getActorTenantId(req) || !mongoose.isValidObjectId(orderId)) return res.status(404).json({ message: 'Order not found.' });
+    try {
+        const order = await Order.findById(orderId).select('_id tenantId').lean();
+        if (!order || !canTenantAccessOrder(req, order)) return res.status(404).json({ message: 'Order not found.' });
+        return next();
+    } catch {
+        return res.status(503).json({ message: 'Tenant-scoped order authorization is temporarily unavailable.' });
+    }
+};
+router.use('/:id', (req, res, next) => {
+    const reserved = new Set(['admin', 'mine', 'history', 'checkout', 'dynamic-restock', 'prescriptions', 'notifications', 'all']);
+    if (reserved.has(String(req.params.id || '').toLowerCase())) return next();
+    return tenantOrderIdGuard(req, res, next);
+});
+router.use('/admin/:id', (req, res, next) => {
+    const reserved = new Set(['all', 'transition', 'dispatch-batch', 'optimize-and-club-routes', 'medicine-requests', 'riders', 'assignment', 'whatsapp']);
+    if (reserved.has(String(req.params.id || '').toLowerCase())) return next();
+    return tenantOrderIdGuard(req, res, next);
+});
 const dynamicOrderService = new DynamicOrderService({
-    couponValidator: (code, subtotal) => dataStore.validateCoupon(code, subtotal)
+    couponValidator: (code, subtotal, context) => dataStore.validateCoupon(code, subtotal, context)
 });
 const getErrorStatus = (error) => {
     if (error.statusCode) return error.statusCode;
@@ -29,7 +109,7 @@ const getErrorStatus = (error) => {
     if (['MongoServerError', 'MongoNetworkError', 'MongooseError'].includes(error.name)) return 503;
     return 500;
 };
-const resolveDispatchRider = async (riderId, orderId = null) => {
+const resolveDispatchRider = async (riderId, orderId = null, tenantId) => {
     if (!getIsConnected()) {
         throw Object.assign(new Error('Dispatch requires an active MongoDB connection.'), { statusCode: 503 });
     }
@@ -37,7 +117,8 @@ const resolveDispatchRider = async (riderId, orderId = null) => {
         throw Object.assign(new Error('Select an onboarded rider before dispatching.'), { statusCode: 400 });
     }
     deliveryContainer.refreshDataLayer();
-    const rider = await deliveryContainer.riderRepository.findById(riderId);
+    if (!tenantId) throw Object.assign(new Error('The order tenant is required to select a delivery rider.'), { statusCode: 403 });
+    const rider = await deliveryContainer.riderRepository.findById(riderId, tenantId);
     if (!rider || !rider.enabled) {
         throw Object.assign(new Error('The selected onboarded rider is unavailable.'), { statusCode: 404 });
     }
@@ -132,14 +213,28 @@ router.post('/', authenticateUser, async (req, res) => {
         )) {
             return res.status(400).json({ error: 'Order items must be a non-empty list with a positive whole-number quantity per item.' });
         }
-        let totalAmount = req.body?.totalAmount ?? req.body?.finalTotal ?? req.body?.finalAmount;
-        if (totalAmount === undefined && Array.isArray(items)) {
-            totalAmount = items.reduce((sum, item) => sum + (Number(item.price || item.unitPrice || 0) * Number(item.quantity || 1)), 0);
+        const selectedTenantId = String(req.body?.tenantId || '').trim();
+        if (!selectedTenantId) return res.status(400).json({ code: 'PHARMACY_SELECTION_REQUIRED', message: 'Select a pharmacy before placing an order.' });
+        const selectedTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!selectedTenant) return res.status(404).json({ code: 'PHARMACY_UNAVAILABLE', message: 'The selected pharmacy is not available.' });
+        const medicineIds = [...new Set(items.map(item => String(item.medicineId || item.productId || item._id || item.id || '')).filter(Boolean))];
+        if (medicineIds.length === 0 || medicineIds.some(id => !mongoose.isValidObjectId(id))) {
+            return res.status(400).json({ message: 'Every order item must reference a valid medicine in the selected pharmacy catalogue.' });
         }
-        const amount = Number(totalAmount);
-        if (!Number.isFinite(amount) || amount < 0) {
-            return res.status(400).json({ error: 'totalAmount must be a non-negative number.' });
+        const medicines = await Medicine.find({
+            _id: { $in: medicineIds },
+            tenantId: selectedTenantId,
+            isActive: { $ne: false }
+        }).select('_id name price sku').lean();
+        if (medicines.length !== medicineIds.length) {
+            return res.status(404).json({ code: 'MEDICINE_NOT_IN_SELECTED_PHARMACY', message: 'One or more medicines are not available from the selected pharmacy.' });
         }
+        const medicineById = new Map(medicines.map(medicine => [String(medicine._id), medicine]));
+        const scopedItems = items.map(item => {
+            const medicineId = String(item.medicineId || item.productId || item._id || item.id);
+            const medicine = medicineById.get(medicineId);
+            return { ...item, medicineId, productId: medicineId, name: medicine.name, price: Number(medicine.price), unitPrice: Number(medicine.price), sku: medicine.sku || item.sku || '' };
+        });
         let deliveryAddress = typeof req.body.deliveryAddress === 'string' ? req.body.deliveryAddress.trim() : '';
         let coordinates = req.body.coordinates;
         let addressSnapshot = null;
@@ -171,42 +266,30 @@ router.post('/', authenticateUser, async (req, res) => {
             || req.user.user_metadata?.mobile
             || ''
         ).trim();
-        const order = await Order.create({
-            customerId: req.user.sub,
+        if (!hasValidCoordinates(coordinates)) {
+            return res.status(400).json({ code: 'DELIVERY_PIN_REQUIRED', message: 'A confirmed delivery map pin is required to place an order.' });
+        }
+        const order = await dataStore.reserveOrder({
             userId: req.user.sub,
-            riderId: null,
-            items,
-            totalAmount: amount,
-            finalTotal: amount,
+            customerId: req.user.sub,
+            tenantId: selectedTenantId,
+            addressId: addressSnapshot?._id || req.body.addressId || null,
+            customerName: addressSnapshot?.fullName || req.user.user_metadata?.name || req.user.email || 'Customer',
+            customerMobile,
+            items: scopedItems,
             deliveryAddress,
             addressDetails,
             coordinates,
-            location: req.body.location,
-            customerName: addressSnapshot?.fullName || req.user.user_metadata?.name || req.user.email || 'Customer',
-            customerMobile,
             paymentMethod: req.body.paymentMethod || 'Cash on Delivery (COD)',
-            status: 'pending',
-            orderStatus: 'Pending_Review'
-        });
-
-        // This checkout route creates Order documents directly instead of using
-        // dataStore.createOrder(). Emit the same domain event so the notification
-        // service targets the authenticated customer and the authorized tenant.
-        try {
-            domainEvents.emitDomainEvent('ORDER_CREATED', String(order._id), {
-                orderNumber: order.orderNumber || String(order._id),
-                customerUserId: String(order.userId || req.user.sub),
-                customerId: String(order.customerId || req.user.sub),
-                totalAmount: order.totalAmount ?? order.finalTotal ?? amount,
-                status: order.orderStatus || 'Pending_Review'
-            }, req.user, order.tenantId || req.user.app_metadata?.tenantId || null,
-            order.branchId || req.user.app_metadata?.branchId || null);
-        } catch (notificationError) {
-            console.error('[Orders] Order-created notification event failed:', notificationError?.message || notificationError);
-        }
+            couponCode: req.body.couponCode || '',
+            pointsToRedeem: Number(req.body.pointsToRedeem || 0)
+        }, req.user.user_metadata?.name || req.user.email || 'Customer');
 
         return res.status(201).json({ order });
     } catch (error) {
+        if (error.statusCode) {
+            return res.status(error.statusCode).json({ code: error.code || 'ORDER_CHECKOUT_FAILED', error: error.message, message: error.message });
+        }
         if (error.name === 'ValidationError' || error.name === 'CastError') {
             return res.status(400).json({ error: error.message });
         }
@@ -227,20 +310,30 @@ router.get('/', authenticateUser, async (req, res) => {
         if (riderId && !mongoose.isValidObjectId(riderId)) {
             return res.status(400).json({ error: 'riderId must be a valid rider ID.' });
         }
-        const isAdminUser = req.user?.app_metadata?.role === 'admin';
+        const isAdminUser = isPlatformOrderAdmin(req);
+        const tenantStaff = isTenantOrderStaff(req);
         const query = {};
         if (status) query.status = status;
+        if (tenantStaff) {
+            const tenantId = getActorTenantId(req);
+            if (!tenantId) return res.status(403).json({ error: 'An active tenant context is required to view fulfillment orders.' });
+            query.tenantId = String(tenantId);
+        }
         if (isAdminUser) {
             if (customerId) query.customerId = customerId;
-            if (riderId) query.riderId = riderId;
+            if (riderId) query.$or = [{ riderId }, { 'rider.riderId': String(riderId) }];
+        } else if (tenantStaff) {
+            if (riderId) query.$or = [{ riderId }, { 'rider.riderId': String(riderId) }];
         } else if (riderId) {
-            const rider = await Rider.findOne({ supabaseId: req.user.sub, _id: riderId }).select('_id').lean();
+            const rider = await Rider.findOne({ supabaseId: req.user.sub, _id: riderId, enabled: true }).select('_id tenantId').lean();
             if (!rider) return res.status(403).json({ error: 'You can only fetch orders assigned to your rider profile.' });
-            query.riderId = rider._id;
+            query.tenantId = String(rider.tenantId);
+            query.$or = [{ riderId: rider._id }, { 'rider.riderId': String(rider._id) }];
         } else {
             query.customerId = req.user.sub;
         }
         const orders = await Order.find(query).sort({ createdAt: -1 }).lean();
+        if (!isPlatformOrderAdmin(req)) await sanitizeTenantRiderReferences(orders);
         return res.json({ orders });
     } catch (error) {
         console.error('Order retrieval failed:', error);
@@ -256,6 +349,17 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             addressId, deliveryAddress, coordinates, paymentMethod, prescriptionUrl, couponCode
         } = req.body;
         const pointsToRedeem = Number(req.body.pointsToRedeem || 0);
+        const selectedTenantId = String(req.body.tenantId || '').trim();
+        if (!selectedTenantId) {
+            return res.status(400).json({ code: 'PHARMACY_SELECTION_REQUIRED', message: 'Select a pharmacy before placing your order.' });
+        }
+        if (!getIsConnected()) {
+            return res.status(503).json({ message: 'Pharmacy verification is unavailable. No order was created.' });
+        }
+        const selectedTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!selectedTenant) {
+            return res.status(404).json({ code: 'PHARMACY_UNAVAILABLE', message: 'The selected pharmacy is no longer available. Please choose another pharmacy.' });
+        }
         const cartItems = parseCheckoutItems(req.body.items || req.body.cartItems);
         if (!Array.isArray(cartItems) || !cartItems.length) {
             return res.status(400).json({ message: 'Add at least one medicine to your order.' });
@@ -346,7 +450,7 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
 
         const order = await dataStore.reserveOrder({
             userId: req.user.sub,
-            tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null,
+            tenantId: selectedTenantId,
             branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
             addressId: addressSnapshot?._id || addressId || null,
             customerName,
@@ -591,6 +695,10 @@ router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
         let order = await dataStore.getOrderById(req.params.id);
         if (!order) return res.status(404).json({ message: 'Order not found.' });
 
+        if (!canTenantAccessOrder(req, order)) {
+            return res.status(404).json({ message: 'Order not found.' });
+        }
+
         if (reviewDecision === 'Approved' && order.prescriptionRequired) {
             if (!order.prescriptionId) {
                 return res.status(409).json({
@@ -648,7 +756,7 @@ router.put('/:id/review', authenticateUser, isAdmin, async (req, res) => {
         if (reviewDecision === 'Approved') {
             try {
                 deliveryContainer.refreshDataLayer();
-                const result = await deliveryContainer.assignmentEngine.assignOrder(String(order._id));
+                const result = await deliveryContainer.assignmentEngine.assignOrder(String(order._id), { tenantId: order.tenantId });
                 if (result.success) {
                     order = result.order.toJSON ? result.order.toJSON() : result.order;
                     assignmentMessage = ` Rider ${result.rider.name} was assigned automatically.`;
@@ -843,7 +951,12 @@ router.post('/admin/:id/prescription/manual-approve', authenticateUser, isAdmin,
 
 router.put('/:id/dispatch', authenticateUser, isAdmin, async (req, res) => {
     try {
-        const riderInfo = await resolveDispatchRider(req.body.riderInfo?.riderId, req.params.id);
+        const targetOrder = await Order.findById(req.params.id).select('_id tenantId').lean();
+        if (!targetOrder) return res.status(404).json({ message: 'Order not found.' });
+        if (isTenantOrderStaff(req) && String(targetOrder.tenantId || '') !== String(getActorTenantId(req) || '')) {
+            return res.status(404).json({ message: 'Order not found.' });
+        }
+        const riderInfo = await resolveDispatchRider(req.body.riderInfo?.riderId, req.params.id, targetOrder.tenantId);
         const order = await dataStore.dispatchOrder(
             req.params.id,
             req.user.user_metadata?.name || req.user.email || 'Admin',
@@ -864,7 +977,11 @@ router.post('/admin/:id/auto-assign', authenticateUser, isAdmin, async (req, res
         }
         deliveryContainer.refreshDataLayer();
         const orderId = req.params.id;
-        const result = await deliveryContainer.assignmentEngine.assignOrder(orderId);
+        const targetOrder = await Order.findById(orderId).select('_id tenantId').lean();
+        if (!targetOrder || (isTenantOrderStaff(req) && String(targetOrder.tenantId || '') !== String(getActorTenantId(req) || ''))) {
+            return res.status(404).json({ message: 'Order not found.' });
+        }
+        const result = await deliveryContainer.assignmentEngine.assignOrder(orderId, { tenantId: targetOrder.tenantId });
         if (!result.success) {
             return res.status(404).json({
                 success: false,
@@ -975,16 +1092,27 @@ router.post('/:id/cancel', authenticateUser, handleCustomerCancelOrder);
 router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => {
     try {
         const { orderId, newStatus, cashCollectionStatus } = req.body;
+        if (isTenantOrderStaff(req)) {
+            const tenantId = getActorTenantId(req);
+            if (!tenantId) return res.status(403).json({ message: 'An active tenant context is required.' });
+            const scopedOrder = await Order.findOne({ _id: orderId, tenantId: String(tenantId) }).select('_id').lean();
+            if (!scopedOrder) return res.status(404).json({ message: 'Order not found.' });
+        }
         let { riderInfo } = req.body;
         if (!orderId || !newStatus) {
             return res.status(400).json({ message: "orderId and newStatus are required." });
         }
+        const targetOrder = await Order.findById(orderId).select('_id tenantId').lean();
+        if (!targetOrder || (isTenantOrderStaff(req) && String(targetOrder.tenantId || '') !== String(getActorTenantId(req) || ''))) {
+            return res.status(404).json({ message: 'Order not found.' });
+        }
         if (newStatus === 'Dispatched') {
             deliveryContainer.refreshDataLayer();
-            const currentOrder = await deliveryContainer.orderRepository.findById(orderId);
+            const currentOrder = await deliveryContainer.orderRepository.findById(orderId, targetOrder.tenantId);
             riderInfo = await resolveDispatchRider(
                 riderInfo?.riderId || currentOrder?.rider?.riderId,
-                orderId
+                orderId,
+                targetOrder.tenantId
             );
         }
 
@@ -997,7 +1125,7 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
         if (newStatus === 'Approved' || newStatus === 'Ready to Dispatch') {
             try {
                 deliveryContainer.refreshDataLayer();
-                const assignResult = await deliveryContainer.assignmentEngine.assignOrder(orderId);
+                const assignResult = await deliveryContainer.assignmentEngine.assignOrder(orderId, { tenantId: targetOrder.tenantId });
                 if (assignResult.success && assignResult.order) {
                     updatedOrder = assignResult.order.toJSON
                         ? assignResult.order.toJSON()
@@ -1053,8 +1181,10 @@ router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, async 
         }
         deliveryContainer.refreshDataLayer();
         const { riderId, maxRadiusKm, startLat, startLng } = req.body;
+        const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || req.body.tenantId || null;
+        if (!tenantId) return res.status(400).json({ message: 'Select a pharmacy tenant before planning a route.' });
         if (!riderId) return res.status(400).json({ message: 'Select an onboarded rider before planning a route.' });
-        const rider = await deliveryContainer.riderRepository.findById(riderId);
+        const rider = await deliveryContainer.riderRepository.findById(riderId, tenantId);
         if (!rider || !rider.enabled) {
             return res.status(404).json({ message: 'The selected onboarded rider is unavailable.' });
         }
@@ -1066,7 +1196,8 @@ router.post('/admin/optimize-and-club-routes', authenticateUser, isAdmin, async 
             rider.mobile,
             maxRadiusKm,
             Number(startLat) || 12.9716,
-            Number(startLng) || 77.5946
+            Number(startLng) || 77.5946,
+            tenantId
         );
 
         res.json({ ...result, riderId: rider.id });
@@ -1087,7 +1218,13 @@ router.post('/admin/dispatch-batch', authenticateUser, isAdmin, async (req, res)
         if (!Array.isArray(orderIds) || orderIds.length === 0) {
             return res.status(400).json({ message: "No order IDs provided for dispatch." });
         }
-        const riderInfo = await resolveDispatchRider(riderId);
+        const targetOrders = await Order.find({ _id: { $in: orderIds } }).select('_id tenantId').lean();
+        if (targetOrders.length !== new Set(orderIds.map(String)).size) return res.status(404).json({ message: 'One or more orders were not found.' });
+        const targetTenantIds = [...new Set(targetOrders.map(order => String(order.tenantId || '')))];
+        if (targetTenantIds.length !== 1 || !targetTenantIds[0]) return res.status(400).json({ message: 'A dispatch batch must contain orders from exactly one pharmacy tenant.' });
+        const targetTenantId = targetTenantIds[0];
+        if (isTenantOrderStaff(req) && targetTenantId !== String(getActorTenantId(req) || '')) return res.status(404).json({ message: 'Orders not found.' });
+        const riderInfo = await resolveDispatchRider(riderId, null, targetTenantId);
 
         const actor = req.user.user_metadata?.name || req.user.email || 'Logistics Admin';
 
@@ -1129,10 +1266,14 @@ router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res
         if (step === 'deliver') targetStatus = 'Delivered';
 
         let riderInfo = null;
+        const targetOrder = await Order.findById(orderId).select('_id tenantId').lean();
+        if (!targetOrder || (isTenantOrderStaff(req) && String(targetOrder.tenantId || '') !== String(getActorTenantId(req) || ''))) {
+            return res.status(404).json({ message: 'Order not found.' });
+        }
         if (targetStatus === 'Dispatched') {
             deliveryContainer.refreshDataLayer();
-            const currentOrder = await deliveryContainer.orderRepository.findById(orderId);
-            riderInfo = await resolveDispatchRider(currentOrder?.rider?.riderId, orderId);
+            const currentOrder = await deliveryContainer.orderRepository.findById(orderId, targetOrder.tenantId);
+            riderInfo = await resolveDispatchRider(currentOrder?.rider?.riderId, orderId, targetOrder.tenantId);
         }
         let order = await dataStore.transitionOrderStatus(orderId, targetStatus, actor, riderInfo);
         let assignmentMessage = '';
@@ -1140,7 +1281,7 @@ router.patch('/admin/:orderId/:step', authenticateUser, isAdmin, async (req, res
         if (step === 'ready') {
             try {
                 deliveryContainer.refreshDataLayer();
-                const result = await deliveryContainer.assignmentEngine.assignOrder(orderId);
+                const result = await deliveryContainer.assignmentEngine.assignOrder(orderId, { tenantId: targetOrder.tenantId });
                 if (result.success) {
                     order = result.order.toJSON ? result.order.toJSON() : result.order;
                     notificationEvent = 'Assigned';
@@ -1249,6 +1390,64 @@ router.post('/:id/notify-whatsapp', authenticateUser, isAdmin, handleNotifyWhats
 // Admin All Orders
 router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
     try {
+        if (isTenantOrderStaff(req)) {
+            const tenantId = getActorTenantId(req);
+            if (!tenantId) return res.status(403).json({ message: 'An active tenant context is required.' });
+            const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+            const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
+            if (req.query.fulfillmentSnapshot === 'true') {
+                const snapshot = await dataStore.getFulfillmentSnapshot(page, limit, String(tenantId));
+                for (const key of ['orders', 'items', 'recentOrders', 'latestOrders']) if (Array.isArray(snapshot?.[key])) await sanitizeTenantRiderReferences(snapshot[key]);
+                return res.json(snapshot);
+            }
+            if (req.query.search !== undefined) {
+                const { type, value } = classifyOrderSearch(req.query.search);
+                const result = await dataStore.searchOrders({ type, value, page, limit, tenantId: String(tenantId) });
+                await sanitizeTenantRiderReferences(result.items || []);
+                return res.json({ ...paginationResult(result.items, result.total, result.page || 1, limit), searchType: type });
+            }
+            const filter = { tenantId: String(tenantId) };
+            if (req.query.status) filter.$or = [
+                { orderStatus: req.query.status },
+                { status: String(req.query.status).toLowerCase() }
+            ];
+            if (req.query.status === 'Delivered' || req.query.status === 'Cancelled') {
+                const [items, total] = await Promise.all([
+                    Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+                    Order.countDocuments(filter)
+                ]);
+                await sanitizeTenantRiderReferences(items);
+                return res.json(paginationResult(items, total, page, limit));
+            }
+            const orders = await Order.find(filter).sort({ createdAt: -1, _id: -1 }).lean();
+            await sanitizeTenantRiderReferences(orders);
+            return res.json(orders);
+        }
+        if (isPlatformOrderAdmin(req) && req.query.tenantId) {
+            const tenantId = String(req.query.tenantId);
+            const selectedTenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
+            if (!selectedTenant) return res.status(404).json({ message: 'Active pharmacy tenant not found.' });
+            const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+            const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
+            if (req.query.fulfillmentSnapshot === 'true') {
+                return res.json(await dataStore.getFulfillmentSnapshot(page, limit, tenantId));
+            }
+            if (req.query.search !== undefined) {
+                const { type, value } = classifyOrderSearch(req.query.search);
+                const result = await dataStore.searchOrders({ type, value, page, limit, tenantId });
+                return res.json({ ...paginationResult(result.items, result.total, result.page || 1, limit), searchType: type });
+            }
+            const filter = { tenantId };
+            if (req.query.status) filter.$or = [
+                { orderStatus: req.query.status },
+                { status: String(req.query.status).toLowerCase() }
+            ];
+            const [items, total] = await Promise.all([
+                Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+                Order.countDocuments(filter)
+            ]);
+            return res.json(paginationResult(items, total, page, limit));
+        }
         if (req.query.search !== undefined) {
             const { type, value } = classifyOrderSearch(req.query.search);
             const parsedPage = Number.parseInt(req.query.page, 10);
@@ -1265,23 +1464,17 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
             const requestedPage = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
             const limit = Number.isSafeInteger(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 50) : 10;
             let result;
-            if (req.query.status === 'Delivered') {
-                result = await dataStore.getDeliveredOrdersPage(requestedPage, limit, { startDate: req.query.startDate, endDate: req.query.endDate });
-            } else if (req.query.status === 'Cancelled') {
-                result = await dataStore.getCancelledOrdersPage(requestedPage, limit);
-            } else {
-                return res.status(400).json({ message: 'Only Delivered and Cancelled orders support pagination on this endpoint.' });
-            }
-            const page = result.page || 1;
-            return res.json(paginationResult(result.items, result.total, page, limit));
+            if (req.query.status === 'Delivered') result = await dataStore.getDeliveredOrdersPage(requestedPage, limit, { startDate: req.query.startDate, endDate: req.query.endDate });
+            else if (req.query.status === 'Cancelled') result = await dataStore.getCancelledOrdersPage(requestedPage, limit);
+            else return res.status(400).json({ message: 'Only Delivered and Cancelled orders support pagination on this endpoint.' });
+            return res.json(paginationResult(result.items, result.total, result.page || 1, limit));
         }
         if (req.query.fulfillmentSnapshot === 'true') {
             const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
             const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
             return res.json(await dataStore.getFulfillmentSnapshot(page, limit));
         }
-        const orders = await dataStore.getAllOrders();
-        res.json(orders);
+        return res.json(await dataStore.getAllOrders());
     } catch (err) {
         if (err.statusCode === 422) return res.status(422).json({ message: err.message });
         if (err.statusCode === 503) return res.status(503).json({ message: 'Order search is temporarily unavailable. Please try again.' });
@@ -1294,6 +1487,7 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
 router.get('/mine', authenticateUser, async (req, res) => {
     try {
         const orders = await dataStore.getUserOrders(req.user.sub);
+        await sanitizeTenantRiderReferences(orders);
         res.json(orders);
     } catch (err) {
         console.error('Customer order retrieval failed:', err);
@@ -1325,6 +1519,7 @@ router.get('/history', authenticateUser, async (req, res) => {
             .skip((currentPage - 1) * limit)
             .limit(limit)
             .lean();
+        await sanitizeTenantRiderReferences(orders);
         res.status(200).json({
             orders,
             items: orders,
@@ -1352,17 +1547,10 @@ router.get('/:id', authenticateUser, async (req, res) => {
         if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid order ID.' });
         const order = await Order.findById(req.params.id).lean();
         if (!order) return res.status(404).json({ message: 'Order not found.' });
-        const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
-        const staff = ['admin','SUPER_ADMIN','PLATFORM_SUPER_ADMIN','TENANT_OWNER','TENANT_ADMIN','PHARMACIST','PHARMACY_STAFF','ORDER_MANAGER'].includes(role);
-        if (!staff && String(order.userId || order.customerId) !== String(req.user.sub)) {
-            return res.status(403).json({ message: 'You are not authorized to track this order.' });
+        if (!canTenantAccessOrder(req, order)) {
+            return res.status(404).json({ message: 'Order not found.' });
         }
-        if (staff && role !== 'admin' && !['SUPER_ADMIN','PLATFORM_SUPER_ADMIN'].includes(role)) {
-            const tenantId = req.user.tenantId || req.user.app_metadata?.tenantId || null;
-            if (tenantId && order.tenantId && String(order.tenantId) !== String(tenantId)) {
-                return res.status(403).json({ message: 'This order belongs to another pharmacy tenant.' });
-            }
-        }
+        if (!isPlatformOrderAdmin(req)) await sanitizeTenantRiderReferences(order);
         return res.json({ success: true, order });
     } catch (error) {
         console.error('Order tracking retrieval failed:', error);
@@ -1459,8 +1647,9 @@ router.post('/:id/resend-otp', authenticateUser, async (req, res) => {
 });
 
 router.post('/:id/verify-delivery', authenticateUser, async (req, res) => {
-    const role = String(req.user?.app_metadata?.role || req.user?.role || 'customer');
-    const staffRoles = new Set(['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER']);
+    const role = String(req.user?.app_metadata?.role || req.user?.role || req.context?.role || 'customer').toUpperCase();
+    const staffRoles = new Set(['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'PHARMACY']);
+    const platformStaff = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
     try {
         if (!getIsConnected() || !mongoose.isValidObjectId(req.params.id)) {
             return res.status(503).json({ message: 'Delivery verification is temporarily unavailable.' });
@@ -1471,22 +1660,32 @@ router.post('/:id/verify-delivery', authenticateUser, async (req, res) => {
             return res.status(409).json({ message: 'The order must be out for delivery before it can be completed.' });
         }
 
-        const rider = await Rider.findOne({ supabaseId: req.user.sub, enabled: true }).lean();
+        if (!order.tenantId) return res.status(404).json({ message: 'Order not found.' });
+        const rider = await Rider.findOne({
+            supabaseId: req.user.sub,
+            tenantId: String(order.tenantId),
+            enabled: true
+        }).lean();
         if (rider) {
-            if (String(order.rider?.riderId || order.riderId || '') !== String(rider._id)) {
+            if (!isAssignedRiderForOrder(rider, order)) {
                 return res.status(403).json({ message: 'This delivery is not assigned to your rider account.' });
             }
         } else {
             if (!staffRoles.has(role)) return res.status(403).json({ message: 'Only the assigned rider can verify delivery.' });
+            if (!platformStaff && !isSameTenant(getActorTenantId(req), order.tenantId)) {
+                return res.status(404).json({ message: 'Order not found.' });
+            }
             const requestedRiderId = String(req.body?.riderId || order.rider?.riderId || order.riderId || '');
-            if (!requestedRiderId) {
-                return res.status(403).json({ message: 'Select the rider assigned to this order before verifying delivery.' });
+            const assignedRiderId = String(order.rider?.riderId || order.riderId || '');
+            if (!requestedRiderId || requestedRiderId !== assignedRiderId) {
+                return res.status(403).json({ message: 'Only the rider assigned to this order can verify delivery.' });
             }
-            const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
-            if (!['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)
-                && tenantId && order.tenantId && String(tenantId) !== String(order.tenantId)) {
-                return res.status(403).json({ message: 'This order belongs to another pharmacy tenant.' });
-            }
+            const assignedRider = await Rider.findOne({
+                _id: requestedRiderId,
+                tenantId: String(order.tenantId),
+                enabled: true
+            }).select('_id').lean();
+            if (!isAssignedRiderForOrder(assignedRider, order)) return res.status(404).json({ message: 'Assigned rider not found for this pharmacy.' });
         }
 
         const code = String(req.body?.otp || '').trim();
