@@ -1,6 +1,14 @@
 import deliveryContainer from '../container.js';
 import { connectDB, getIsConnected } from '../../../config/db.js';
 
+const getRiderTenantId = req => {
+    const role = String(req.user?.role || req.user?.app_metadata?.role || req.context?.role || '').toUpperCase();
+    const platform = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+    return (req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId)
+        || (platform ? req.body?.tenantId || req.query?.tenantId : null)
+        || null;
+};
+
 const requireMongoConnection = async (res) => {
     if (getIsConnected() || await connectDB()) return true;
     res.status(503).json({
@@ -14,7 +22,7 @@ export const registerRider = async (req, res) => {
         if (!await requireMongoConnection(res)) return;
         deliveryContainer.refreshDataLayer();
         const { name, mobile, vehicleType, longitude, latitude } = req.body;
-        const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
+        const tenantId = getRiderTenantId(req);
         if (!tenantId) return res.status(403).json({ code: 'TENANT_CONTEXT_REQUIRED', message: 'A pharmacy tenant context is required.' });
 
         let coordinates = [77.5946, 12.9716];
@@ -24,7 +32,7 @@ export const registerRider = async (req, res) => {
 
         const rider = await deliveryContainer.registerRiderUseCase.execute({
             tenantId,
-            branchId: req.user?.branchId || req.user?.app_metadata?.branchId || null,
+            branchId: req.user?.branchId || req.user?.app_metadata?.branchId || req.context?.branchId || null,
             name,
             mobile,
             vehicleType,
@@ -48,7 +56,7 @@ export const listRiders = async (req, res) => {
         deliveryContainer.refreshDataLayer();
         const riders = await deliveryContainer.getRidersUseCase.execute({
             ...req.query,
-            tenantId: req.user?.tenantId || req.user?.app_metadata?.tenantId,
+            tenantId: getRiderTenantId(req),
             includeDisabled: req.query.includeDisabled === 'true'
         });
         res.json(riders.map(r => r.toJSON()));
@@ -81,7 +89,7 @@ export const setRiderEnabled = async (req, res) => {
             enabled,
             action,
             remark,
-            req.user?.tenantId || req.user?.app_metadata?.tenantId
+            getRiderTenantId(req)
         );
         res.json({
             message: enabled
@@ -100,7 +108,7 @@ export const updateRiderStatus = async (req, res) => {
         if (!await requireMongoConnection(res)) return;
         deliveryContainer.refreshDataLayer();
         const { status } = req.body;
-        const updated = await deliveryContainer.updateRiderStatusUseCase.execute(req.params.riderId, status, req.user?.tenantId || req.user?.app_metadata?.tenantId);
+        const updated = await deliveryContainer.updateRiderStatusUseCase.execute(req.params.riderId, status, getRiderTenantId(req));
         res.json({
             message: `Rider status updated to ${status}.`,
             rider: updated.toJSON()
