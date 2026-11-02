@@ -793,7 +793,7 @@ export const dataStore = {
     },
 
     // Medicines: Supports server-side pagination & "out-of-stock only on search" logic
-    async getMedicines(search = '', hideRx = false, category = 'All', sort = 'default', page = 1, limit = 16, includeOutOfStock = false) {
+    async getMedicines(search = '', hideRx = false, category = 'All', sort = 'default', page = 1, limit = 16, includeOutOfStock = false, tenantId = null) {
         const isSearching = Boolean(search && search.toString().trim() !== '');
         const parsedPage = Math.max(1, Number(page) || 1);
         const parsedLimit = Math.max(1, Number(limit) || 16);
@@ -801,6 +801,10 @@ export const dataStore = {
         if (getIsConnected()) {
             const filter = {};
             filter.isActive = { $ne: false };
+            // Public storefront reads must be scoped to the pharmacy selected by
+            // the customer. A missing tenant remains unscoped only for explicit
+            // platform-admin inventory calls.
+            if (tenantId) filter.tenantId = String(tenantId);
             if (isSearching) {
                 const escapedSearch = search.toString().trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                 filter.$or = [
@@ -854,6 +858,7 @@ export const dataStore = {
         }
 
         let filtered = inMemoryMedicines;
+        if (tenantId) filtered = filtered.filter(m => String(m.tenantId || '') === String(tenantId));
 
         // RULE: If search query is provided, out-of-stock items can display (with SOLD OUT badge).
         // If not searching, out-of-stock items are hidden from general browsing!
