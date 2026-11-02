@@ -5,6 +5,7 @@ import Tenant from '../models/Tenant.js';
 import Medicine from '../models/Medicine.js';
 import SurplusSavingsCampaign from '../models/SurplusSavingsCampaign.js';
 import SurplusSavingsRedemption from '../models/SurplusSavingsRedemption.js';
+import { tenantScopedFilter } from '../authorization/tenantScope.js';
 import { getIsConnected } from '../config/db.js';
 
 const router = express.Router();
@@ -35,16 +36,16 @@ router.get('/', async (req, res) => {
         const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
         if (!tenant) return res.status(404).json({ code: 'PHARMACY_UNAVAILABLE', message: 'This pharmacy is not available.' });
         const now = new Date();
-        const campaigns = await SurplusSavingsCampaign.find({
-            tenantId, status: 'ACTIVE', startsAt: { $lte: now }, endsAt: { $gt: now },
+        const campaigns = await SurplusSavingsCampaign.find(tenantScopedFilter(tenantId, {
+            status: 'ACTIVE', startsAt: { $lte: now }, endsAt: { $gt: now },
             $or: [{ usageLimit: null }, { $expr: { $lt: ['$usageCount', '$usageLimit'] } }]
-        }).sort({ createdAt: -1 }).lean();
+        })).sort({ createdAt: -1 }).lean();
         const redeemedRows = campaigns.length ? await SurplusSavingsRedemption.find({ campaignId: { $in: campaigns.map(c => c._id) }, customerId: String(req.user.sub) }).select('campaignId').lean() : [];
         const redeemedCampaignIds = new Set(redeemedRows.map(row => String(row.campaignId)));
         const visibleCampaigns = campaigns.filter(campaign => !redeemedCampaignIds.has(String(campaign._id)));
         const ids = [...new Set(visibleCampaigns.flatMap(c => c.medicineIds.map(String)))];
         if (!ids.length) return res.json({ success: true, tenantId, items: [] });
-        const medicines = await Medicine.find({ _id: { $in: ids }, tenantId, isActive: { $ne: false } })
+        const medicines = await Medicine.find(tenantScopedFilter(tenantId, { _id: { $in: ids }, isActive: { $ne: false } }))
             .select('_id name brand price imageUrl description stockQuantity stock quantity requiresPrescription isPrescriptionRequired')
             .lean();
         const items = [];
@@ -81,7 +82,7 @@ router.get('/admin', requireCampaignAdmin, requirePermission('promotions.read'),
     try {
         const tenantId = tenantOf(req);
         if (!tenantId) return res.status(400).json({ message: 'A tenant is required.' });
-        const campaigns = await SurplusSavingsCampaign.find({ tenantId }).sort({ createdAt: -1 }).lean();
+        const campaigns = await SurplusSavingsCampaign.find(tenantScopedFilter(tenantId)).sort({ createdAt: -1 }).lean();
         return res.json({ success: true, campaigns });
     } catch (error) {
         return res.status(503).json({ message: 'Could not load campaigns.' });
@@ -118,7 +119,7 @@ router.post('/admin', requireCampaignAdmin, requirePermission('promotions.manage
             || (maxDiscountAmount != null && (!Number.isFinite(maxDiscountAmount) || maxDiscountAmount <= 0))) {
             return res.status(400).json({ message: 'Usage limits and maximum discount must be positive whole-number/amount values.' });
         }
-        const medicines = await Medicine.find({ _id: { $in: medicineIds }, tenantId, isActive: { $ne: false } }).select('_id').lean();
+        const medicines = await Medicine.find(tenantScopedFilter(tenantId, { _id: { $in: medicineIds }, isActive: { $ne: false } })).select('_id').lean();
         if (medicines.length !== medicineIds.length) return res.status(400).json({ code: 'CROSS_TENANT_MEDICINE', message: 'Campaign products must all belong to the selected pharmacy.' });
         const campaign = await SurplusSavingsCampaign.create({
             tenantId, name, description: String(req.body.description || '').trim().slice(0, 500),
@@ -145,13 +146,13 @@ router.patch('/admin/:campaignId', requireCampaignAdmin, requirePermission('prom
         if (req.body.endsAt !== undefined) {
             const endsAt = new Date(req.body.endsAt);
             if (Number.isNaN(endsAt.getTime())) return res.status(400).json({ message: 'Invalid campaign end date.' });
-            const current = await SurplusSavingsCampaign.findOne({ _id: req.params.campaignId, tenantId }).select('startsAt').lean();
+            const current = await SurplusSavingsCampaign.findOne(tenantScopedFilter(tenantId, { _id: req.params.campaignId })).select('startsAt').lean();
             if (!current) return res.status(404).json({ message: 'Campaign not found in this pharmacy.' });
             if (endsAt <= new Date(current.startsAt)) return res.status(400).json({ message: 'Campaign end must be later than its start.' });
             updates.endsAt = endsAt;
         }
         if (updates.name !== undefined && !updates.name) return res.status(400).json({ message: 'Campaign name cannot be empty.' });
-        const campaign = await SurplusSavingsCampaign.findOneAndUpdate({ _id: req.params.campaignId, tenantId }, { $set: updates }, { new: true, runValidators: true });
+        const campaign = await SurplusSavingsCampaign.findOneAndUpdate(tenantScopedFilter(tenantId, { _id: req.params.campaignId }), { $set: updates }, { new: true, runValidators: true });
         if (!campaign) return res.status(404).json({ message: 'Campaign not found in this pharmacy.' });
         return res.json({ success: true, campaign });
     } catch (error) {
@@ -163,7 +164,7 @@ router.delete('/admin/:campaignId', requireCampaignAdmin, requirePermission('pro
     if (!getIsConnected() || !mongoose.isValidObjectId(req.params.campaignId)) return res.status(400).json({ message: 'Invalid campaign.' });
     try {
         const tenantId = tenantOf(req);
-        const campaign = await SurplusSavingsCampaign.findOneAndUpdate({ _id: req.params.campaignId, tenantId }, { $set: { status: 'PAUSED' } }, { new: true });
+        const campaign = await SurplusSavingsCampaign.findOneAndUpdate(tenantScopedFilter(tenantId, { _id: req.params.campaignId }), { $set: { status: 'PAUSED' } }, { new: true });
         if (!campaign) return res.status(404).json({ message: 'Campaign not found in this pharmacy.' });
         return res.json({ success: true, campaign, message: 'Campaign paused; existing order snapshots are unchanged.' });
     } catch {
