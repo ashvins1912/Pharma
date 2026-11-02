@@ -8,6 +8,21 @@ import { Audit, ImportBatch, ImportBatchSnapshot, ImportFailure, ImportJob, Inve
 
 const pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
+async function assertMongoTransactionsAvailable() {
+  if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
+    const error = new Error('Inventory database is unavailable.');
+    error.statusCode = 503;
+    throw error;
+  }
+  const hello = await mongoose.connection.db.admin().command({ hello: 1 });
+  if (!hello.setName && hello.msg !== 'isdbgrid') {
+    const error = new Error('Inventory imports and rollback require MongoDB replica-set or sharded-cluster transactions.');
+    error.statusCode = 503;
+    error.code = 'IMPORT_TRANSACTIONS_REQUIRED';
+    throw error;
+  }
+}
+
 const valueOf = (row, ...keys) => {
   for (const key of keys) {
     if (row[key] !== undefined && row[key] !== null && row[key] !== '') return row[key];
@@ -115,7 +130,7 @@ export const classifyImportError = error => {
 
 async function executeBatchOperations(tenantId, branchId, stockMode, eligibleRows, seenExistingProducts, seenExistingInventory, session = null) {
   const bySku = new Map(seenExistingProducts.map(p => [p.sku, p]));
-  const batchKey = (sku, batch = '') => `${sku}::${batch || ''}`;
+  const batchKey = (sku, batch = '') => JSON.stringify([sku, batch || '']);
   const inventoryByBatch = new Map(seenExistingInventory.map(i => [batchKey(i.sku, i.batchNumber), i]));
 
   const productOperations = [];
@@ -208,7 +223,7 @@ async function saveBatch(job, batch, batchId, seenSkus) {
       continue;
     }
 
-    const importKey = `${normalized.value.sku}::${normalized.value.batchNumber || ''}`;
+    const importKey = JSON.stringify([normalized.value.sku, normalized.value.batchNumber || '']);
     if (seenSkus.has(importKey) || batchSkus.has(importKey)) {
       failures.push({
         tenantId,
@@ -261,10 +276,10 @@ async function saveBatch(job, batch, batchId, seenSkus) {
           const invQuery = { tenantId, branchId, sku: { $in: skus } };
           const existingInventory = await Inventory.find(invQuery).session(sess).lean();
 
-          const inventoryByBatch = new Map(existingInventory.map(inv => [`${inv.sku}::${inv.batchNumber || ''}`, inv]));
+          const inventoryByBatch = new Map(existingInventory.map(inv => [JSON.stringify([inv.sku, inv.batchNumber || '']), inv]));
 
           for (const item of valid) {
-            const current = inventoryByBatch.get(`${item.value.sku}::${item.value.batchNumber || ''}`);
+            const current = inventoryByBatch.get(JSON.stringify([item.value.sku, item.value.batchNumber || '']));
             if (stockMode === 'REPLACE' && Number(current?.reservedQuantity || 0) > item.value.stockQuantity) {
               businessFailures.push({
                 tenantId,
@@ -294,7 +309,7 @@ async function saveBatch(job, batch, batchId, seenSkus) {
           const inventoryAfterRows = await Inventory.find(invQuery).session(sess).lean();
           const productBeforeBySku = new Map(existingProducts.map(row => [row.sku, row]));
           const productAfterBySku = new Map(productAfterRows.map(row => [row.sku, row]));
-          const inventoryKey = row => `${row.sku}::${row.batchNumber || ''}`;
+          const inventoryKey = row => JSON.stringify([row.sku, row.batchNumber || '']);
           const inventoryBeforeByKey = new Map(existingInventory.map(row => [inventoryKey(row), row]));
           const inventoryAfterByKey = new Map(inventoryAfterRows.map(row => [inventoryKey(row), row]));
           const snapshotOperations = [];
@@ -314,7 +329,7 @@ async function saveBatch(job, batch, batchId, seenSkus) {
             });
           }
           for (const item of eligibleRows) {
-            const key = `${item.value.sku}::${item.value.batchNumber || ''}`;
+            const key = JSON.stringify([item.value.sku, item.value.batchNumber || '']);
             const before = inventoryBeforeByKey.get(key) || null;
             const after = inventoryAfterByKey.get(key);
             if (!after) throw new Error(`Inventory snapshot could not be captured for ${key}.`);
@@ -558,6 +573,7 @@ export async function createImportJob({
   const safeFileName = path.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, '_');
   const isConnected = mongoose.connection.readyState === 1;
   if (!isConnected) { const error = new Error('Inventory database is unavailable; import was not queued.'); error.statusCode = 503; throw error; }
+  await assertMongoTransactionsAvailable();
   const batchId = randomUUID();
 
   // Idempotency check with tenant isolation
@@ -823,7 +839,7 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
       continue;
     }
     const value = item.parsed.value;
-    const key = `${value.sku}::${value.batchNumber || ''}`;
+    const key = JSON.stringify([value.sku, value.batchNumber || '']);
     if (seen.has(key)) {
       errors.push({ rowNumber: item.rowNumber, sku: value.sku, name: value.name, errors: ['Duplicate SKU + Batch Number in workbook.'] });
       continue;
@@ -833,9 +849,9 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
   }
   const skus = [...new Set(valid.map(item => item.value.sku))];
   const inventory = skus.length ? await Inventory.find({ tenantId, branchId, sku: { $in: skus } }).select('sku batchNumber stockQuantity reservedQuantity price updatedAt').lean() : [];
-  const byBatch = new Map(inventory.map(item => [`${item.sku}::${item.batchNumber || ''}`, item]));
+  const byBatch = new Map(inventory.map(item => [JSON.stringify([item.sku, item.batchNumber || '']), item]));
   const previewRows = valid.slice(0, 10).map(item => {
-    const current = byBatch.get(`${item.value.sku}::${item.value.batchNumber || ''}`);
+    const current = byBatch.get(JSON.stringify([item.value.sku, item.value.batchNumber || '']));
     const existingStock = Number(current?.stockQuantity || 0);
     const reservedStock = Number(current?.reservedQuantity || 0);
     return {
@@ -858,7 +874,7 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     tenantId, branchId,
     rows: normalized.map(item => ({ rowNumber: item.rowNumber, parsed: item.parsed.error ? { error: item.parsed.error, field: item.parsed.field } : item.parsed.value })),
     existingInventory: inventory.map(item => ({ sku: item.sku, batchNumber: item.batchNumber || '', stockQuantity: item.stockQuantity, reservedQuantity: item.reservedQuantity, updatedAt: item.updatedAt || null }))
-      .sort((a, b) => `${a.sku}::${a.batchNumber}`.localeCompare(`${b.sku}::${b.batchNumber}`))
+      .sort((a, b) => JSON.stringify([a.sku, a.batchNumber]).localeCompare(JSON.stringify([b.sku, b.batchNumber])))
   })).digest('hex');
   return {
     previewFingerprint,
@@ -895,6 +911,7 @@ export async function rollbackImportBatch({ batchId, tenantId, branchId, actor }
     throw error;
   }
 
+  await assertMongoTransactionsAvailable();
   const session = await mongoose.startSession();
   if (!session || typeof session.withTransaction !== 'function') {
     await session?.endSession?.();
