@@ -62,6 +62,7 @@ export class MongooseOrderRepository extends IOrderRepository {
     async update(id, updateData, tenantId) {
         if (!tenantId) return null;
         const updates = { ...updateData, updatedAt: new Date() };
+        delete updates.tenantId;
 
         if (updates.rider) {
             updates.rider = {
