@@ -43,7 +43,7 @@ const validateAssignmentEligibility = async (req, res, orderId) => {
         return null;
     }
     if (!globalAdmin && branchId && (!order.branchId || String(order.branchId) !== String(branchId))) {
-        res.status(403).json({
+        res.status(404).json({
             success: false,
             error: { code: 'NOT_FOUND', message: 'Order not found.', retryable: false, requestId: req.requestId || null }
         });
