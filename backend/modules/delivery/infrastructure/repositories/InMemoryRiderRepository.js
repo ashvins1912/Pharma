@@ -60,7 +60,9 @@ export class InMemoryRiderRepository extends IRiderRepository {
         if (!existing || !tenantId || existing.tenantId !== String(tenantId)) return null;
 
         const currentJson = existing.toJSON();
-        const updatedJson = { ...currentJson, ...updateData, updatedAt: new Date() };
+        const safeUpdates = { ...updateData };
+        delete safeUpdates.tenantId;
+        const updatedJson = { ...currentJson, ...safeUpdates, updatedAt: new Date() };
         if (updateData.currentLocation?.coordinates) {
             updatedJson.currentLocation = updateData.currentLocation.coordinates;
         }
