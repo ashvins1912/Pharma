@@ -864,7 +864,7 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     };
   });
   for (const item of valid) {
-    const current = byBatch.get(`${item.value.sku}::${item.value.batchNumber || ''}`);
+    const current = byBatch.get(JSON.stringify([item.value.sku, item.value.batchNumber || '']));
     if (Number(current?.reservedQuantity || 0) > item.value.stockQuantity) {
       errors.push({ rowNumber: item.rowNumber, sku: item.value.sku, name: item.value.name, errors: ['New stock is below the quantity already reserved for this batch.'] });
     }
