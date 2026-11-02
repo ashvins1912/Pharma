@@ -251,6 +251,9 @@ router.post('/', authenticateUser, async (req, res) => {
 
         return res.status(201).json({ order });
     } catch (error) {
+        if (error.statusCode) {
+            return res.status(error.statusCode).json({ code: error.code || 'ORDER_CHECKOUT_FAILED', error: error.message, message: error.message });
+        }
         if (error.name === 'ValidationError' || error.name === 'CastError') {
             return res.status(400).json({ error: error.message });
         }
