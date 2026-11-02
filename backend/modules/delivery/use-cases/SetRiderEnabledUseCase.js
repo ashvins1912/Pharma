@@ -3,8 +3,8 @@ export class SetRiderEnabledUseCase {
         this.riderRepository = riderRepository;
     }
 
-    async execute(riderId, enabled, action, remark) {
-        const rider = await this.riderRepository.findById(riderId);
+    async execute(riderId, enabled, action, remark, tenantId) {
+        const rider = await this.riderRepository.findById(riderId, tenantId);
         if (!rider) {
             throw new Error(`Rider #${riderId} not found.`);
         }
@@ -23,6 +23,6 @@ export class SetRiderEnabledUseCase {
             disabledReason: rider.disabledReason,
             disabledAt: rider.disabledAt,
             status: rider.status
-        });
+        }, tenantId);
     }
 }
