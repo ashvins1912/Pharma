@@ -84,6 +84,11 @@ const messages = {
     readyToDispatch: "Ready to Dispatch",
     processing: "Processing",
 
+    showing: "Showing",
+    of: "of",
+    medicines: "medicines",
+    page: "Page",
+
   },
   hi: {
     store: 'दुकान', orders: 'ऑर्डर', requests: 'अनुरोध', addresses: 'पते',
@@ -160,6 +165,11 @@ const messages = {
     outForDelivery: "डिलीवरी के लिए निकला",
     readyToDispatch: "डिस्पैच के लिए तैयार",
     processing: "प्रोसेस हो रहा है",
+
+    showing: "दिखाए जा रहे हैं",
+    of: "में से",
+    medicines: "दवाएँ",
+    page: "पृष्ठ",
 
   },
   kn: {
@@ -238,6 +248,11 @@ const messages = {
     readyToDispatch: "ರವಾನೆಗೆ ಸಿದ್ಧ",
     processing: "ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿದೆ",
 
+    showing: "ತೋರಿಸಲಾಗುತ್ತಿದೆ",
+    of: "ರಲ್ಲಿ",
+    medicines: "ಔಷಧಿಗಳು",
+    page: "ಪುಟ",
+
   },
   bn: {
     store: 'দোকান', orders: 'অর্ডার', requests: 'অনুরোধ', addresses: 'ঠিকানা',
@@ -314,6 +329,11 @@ const messages = {
     outForDelivery: "ডেলিভারির পথে",
     readyToDispatch: "পাঠানোর জন্য প্রস্তুত",
     processing: "প্রক্রিয়াধীন",
+
+    showing: "দেখানো হচ্ছে",
+    of: "এর মধ্যে",
+    medicines: "ওষুধ",
+    page: "পৃষ্ঠা",
 
   },
   te: {
@@ -408,6 +428,11 @@ export function LanguageProvider({ children }) {
     outForDelivery: "డెలివరీకి బయలుదేరింది",
     readyToDispatch: "డిస్పాచ్‌కు సిద్ధం",
     processing: "ప్రాసెస్ అవుతోంది",
+
+    showing: "చూపిస్తోంది",
+    of: "లో",
+    medicines: "మందులు",
+    page: "పేజీ",
 
   }, []);
 
