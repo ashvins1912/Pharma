@@ -1,10 +1,11 @@
 import React from 'react';
+import { useLanguage } from '../context/LanguageContext';
 
 const STAGES = [
-  { key: 'Processing Order', label: 'Processing Order', desc: 'Pharmacist validating Rx formulation & packaging' },
-  { key: 'Ready to Dispatch', label: 'Ready to Dispatch', desc: 'Securely packaged in pharmacy dispatch hub' },
-  { key: 'Dispatched', label: 'Out for Delivery', desc: 'Assigned to delivery courier with cold-chain lock' },
-  { key: 'Delivered', label: 'Delivered', desc: 'Safely delivered to patient & COD collected' }
+  { key: 'Processing Order', label: 'Processing Order', labelKey: 'processingOrderStage', desc: 'Pharmacist validating Rx formulation & packaging', descKey: 'processingOrderDesc' },
+  { key: 'Ready to Dispatch', label: 'Ready to Dispatch', desc: 'Securely packaged in pharmacy dispatch hub', descKey: 'readyDispatchDesc' },
+  { key: 'Dispatched', label: 'Out for Delivery', desc: 'Assigned to delivery courier with cold-chain lock', descKey: 'outDeliveryDesc' },
+  { key: 'Delivered', label: 'Delivered', desc: 'Safely delivered to patient & COD collected', descKey: 'deliveredDesc' }
 ];
 
 export default function OrderTrackingModal({ order, onClose }) {
@@ -73,7 +74,7 @@ export default function OrderTrackingModal({ order, onClose }) {
           </div>
           <button
             onClick={onClose}
-            aria-label="Close tracking"
+            aria-label={t("close")}
             className="absolute top-4 right-4 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer z-20"
           >
             ✕
@@ -126,7 +127,7 @@ export default function OrderTrackingModal({ order, onClose }) {
                               : 'text-slate-400'
                           }`}
                         >
-                          {stage.label}
+                          {t(stage.labelKey || 'processingOrderStage')}
                         </h4>
                         {isCurrent && (
                           <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full uppercase shrink-0">
@@ -134,7 +135,7 @@ export default function OrderTrackingModal({ order, onClose }) {
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">{stage.desc}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">{t(stage.descKey || 'processingOrderDesc')}</p>
                     </div>
                   </div>
                 );
@@ -148,8 +149,8 @@ export default function OrderTrackingModal({ order, onClose }) {
               <div className="flex items-center gap-3 min-w-0">
                 <span className="text-2xl shrink-0">🛵</span>
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Assigned Delivery Rider</p>
-                  <p className="text-xs font-black text-slate-900 truncate">{order.rider?.riderName || 'Pharmacy Express Rider'}</p>
+                  <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{t('assignedDeliveryRider')}</p>
+                  <p className="text-xs font-black text-slate-900 truncate">{order.rider?.riderName || t('pharmacyExpressRider')}</p>
                   <p className="text-[11px] text-slate-600">📞 {order.rider?.riderMobile || order.deliveryPersonMobile}</p>
                 </div>
               </div>
@@ -164,22 +165,22 @@ export default function OrderTrackingModal({ order, onClose }) {
 
           {/* Recipient Details */}
           <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3.5 text-[11px] text-blue-950 space-y-1">
-            <div><strong>Ordered by:</strong> {order.orderedByName || 'Customer'}</div>
-            <div><strong>Ordered for:</strong> {order.orderedForName || 'Customer'}</div>
+            <div><strong>{t('orderedBy')}:</strong> {order.orderedByName || 'Customer'}</div>
+            <div><strong>{t('orderedFor')}:</strong> {order.orderedForName || 'Customer'}</div>
           </div>
 
           {/* Order Details Summary */}
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2 text-xs">
             <div className="flex justify-between text-slate-600 gap-2">
-              <span className="shrink-0">Destination:</span>
-              <span className="font-semibold text-slate-800 text-right truncate">{order.deliveryAddress || 'Delivery Address Provided'}</span>
+              <span className="shrink-0">{t('destination')}:</span>
+              <span className="font-semibold text-slate-800 text-right truncate">{order.deliveryAddress || t('deliveryAddressProvided')}</span>
             </div>
             <div className="flex justify-between text-slate-600">
-              <span>Total Value:</span>
+              <span>{t('totalValue')}:</span>
               <span className="font-extrabold text-emerald-600 text-sm">₹{order.finalTotal} (COD)</span>
             </div>
             <div className="pt-2 border-t border-slate-200">
-              <span className="text-[11px] font-bold text-slate-500 uppercase block mb-1">Prescription Items:</span>
+              <span className="text-[11px] font-bold text-slate-500 uppercase block mb-1">{t('prescriptionItems')}:</span>
               <div className="space-y-1">
                 {(order.items || []).map((i, idx) => (
                   <div key={idx} className="flex justify-between text-slate-700 text-[11px]">
@@ -198,7 +199,7 @@ export default function OrderTrackingModal({ order, onClose }) {
           {currentStatus === 'Dispatched' && (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[11px] text-emerald-900">
               <p className="font-black">🔐 Delivery verification</p>
-              <p className="mt-1">Your 4-digit code is sent to your WhatsApp. Share it with the rider at handover. You do not need to enter the code on this tracking screen.</p>
+              <p className="mt-1">{t('whatsappOtpInstructions')}</p>
             </div>
           )}
           <button
