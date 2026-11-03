@@ -9,6 +9,7 @@ const STAGES = [
 ];
 
 export default function OrderTrackingModal({ order, onClose }) {
+  const { t } = useLanguage();
   const rawStatus = String(order?.orderStatus || order?.status || '').trim().toLowerCase();
   if (!order || rawStatus === 'delivered') return null;
 
