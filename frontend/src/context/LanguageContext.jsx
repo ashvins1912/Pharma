@@ -36,7 +36,7 @@ const messages = {
     checkingSession: 'Checking your session…', loadingYourDashboard: 'Loading your dashboard…',
     secureRestore: 'Please wait while we securely restore your account.',
     preparingDashboard: 'Your sign-in is complete. Preparing your account and dashboard.',
-    languageChanged: 'Language updated'
+    languageChanged: 'Language updated',
     searchPlaceholder: "Search medicines, brands, active salts...",
     clearSearch: "Clear search",
     sortDefault: "Sort: Default",
@@ -132,7 +132,7 @@ const messages = {
     checkingSession: 'आपका सेशन जाँचा जा रहा है…', loadingYourDashboard: 'आपका डैशबोर्ड लोड हो रहा है…',
     secureRestore: 'आपका अकाउंट सुरक्षित रूप से रीस्टोर किया जा रहा है। कृपया प्रतीक्षा करें।',
     preparingDashboard: 'साइन इन पूरा हुआ। आपका अकाउंट और डैशबोर्ड तैयार हो रहा है।',
-    languageChanged: 'भाषा अपडेट हो गई'
+    languageChanged: 'भाषा अपडेट हो गई',
     searchPlaceholder: "दवाएँ, ब्रांड और सक्रिय घटक खोजें...",
     clearSearch: "खोज साफ़ करें",
     sortDefault: "क्रम: डिफ़ॉल्ट",
@@ -228,7 +228,7 @@ const messages = {
     checkingSession: 'ನಿಮ್ಮ ಸೆಷನ್ ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ…', loadingYourDashboard: 'ನಿಮ್ಮ ಡ್ಯಾಶ್‌ಬೋರ್ಡ್ ಲೋಡ್ ಆಗುತ್ತಿದೆ…',
     secureRestore: 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಸುರಕ್ಷಿತವಾಗಿ ಮರುಸ್ಥಾಪಿಸಲಾಗುತ್ತಿದೆ. ದಯವಿಟ್ಟು ನಿರೀಕ್ಷಿಸಿ.',
     preparingDashboard: 'ಸೈನ್ ಇನ್ ಪೂರ್ಣಗೊಂಡಿದೆ. ನಿಮ್ಮ ಖಾತೆ ಮತ್ತು ಡ್ಯಾಶ್‌ಬೋರ್ಡ್ ಸಿದ್ಧವಾಗುತ್ತಿದೆ.',
-    languageChanged: 'ಭಾಷೆ ನವೀಕರಿಸಲಾಗಿದೆ'
+    languageChanged: 'ಭಾಷೆ ನವೀಕರಿಸಲಾಗಿದೆ',
     searchPlaceholder: "ಔಷಧಿಗಳು, ಬ್ರ್ಯಾಂಡ್‌ಗಳು ಮತ್ತು ಸಕ್ರಿಯ ಪದಾರ್ಥಗಳನ್ನು ಹುಡುಕಿ...",
     clearSearch: "ಹುಡುಕಾಟ ತೆರವುಗೊಳಿಸಿ",
     sortDefault: "ವಿಂಗಡಣೆ: ಡೀಫಾಲ್ಟ್",
@@ -324,7 +324,7 @@ const messages = {
     checkingSession: 'আপনার সেশন যাচাই করা হচ্ছে…', loadingYourDashboard: 'আপনার ড্যাশবোর্ড লোড হচ্ছে…',
     secureRestore: 'আপনার অ্যাকাউন্ট নিরাপদে পুনরুদ্ধার করা হচ্ছে। অনুগ্রহ করে অপেক্ষা করুন।',
     preparingDashboard: 'সাইন ইন সম্পন্ন। আপনার অ্যাকাউন্ট ও ড্যাশবোর্ড প্রস্তুত হচ্ছে।',
-    languageChanged: 'ভাষা আপডেট হয়েছে'
+    languageChanged: 'ভাষা আপডেট হয়েছে',
     searchPlaceholder: "ওষুধ, ব্র্যান্ড ও সক্রিয় উপাদান খুঁজুন...",
     clearSearch: "অনুসন্ধান মুছুন",
     sortDefault: "সাজান: ডিফল্ট",
@@ -420,7 +420,7 @@ const messages = {
     checkingSession: 'మీ సెషన్‌ను తనిఖీ చేస్తున్నాం…', loadingYourDashboard: 'మీ డ్యాష్‌బోర్డ్ లోడ్ అవుతోంది…',
     secureRestore: 'మీ ఖాతాను సురక్షితంగా పునరుద్ధరిస్తున్నాం. దయచేసి వేచి ఉండండి.',
     preparingDashboard: 'సైన్ ఇన్ పూర్తయింది. మీ ఖాతా మరియు డ్యాష్‌బోర్డ్ సిద్ధమవుతున్నాయి.',
-    languageChanged: 'భాష నవీకరించబడింది'
+    languageChanged: 'భాష నవీకరించబడింది',
   }
 };
 
