@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../api/apiClient';
+import { useAuth } from '../../context/AuthContext';
 import { useTenant } from '../../context/TenantContext';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -53,10 +54,12 @@ export default function TenantSelector({ onTenantSelected }) {
     }
   };
 
+  const { scope } = useAuth();
+
   const fetchTenants = async (coords) => {
     setError('');
     try {
-      const response = await apiClient.get('/api/tenants/nearby', {
+      const response = await apiClient.get(scope === 'TENANT' ? '/api/tenant/nearby' : '/api/tenants/nearby', {
         params: coords ? { lat: coords.lat, lng: coords.lng } : {}
       });
       let list = response.data?.tenants || [];
