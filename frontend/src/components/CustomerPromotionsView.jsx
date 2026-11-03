@@ -146,7 +146,7 @@ export default function CustomerPromotionsView({ canManage = false }) {
           <div>
             <h4 className="text-sm font-black text-slate-900">{t('assignOffer')}</h4>
             <p className="mt-1 text-[11px] text-slate-500">{selected ? `Selected: ${selected.name} · Customer ID: ${selected.customerId} · ${selected.orderCount} orders` : t('selectCustomerHistory')}</p>
-            {selectedHasActiveOffer && <p role="alert" className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">This customer already has an active discount or coupon. Revoke the existing offer before assigning another.</p>}
+            {selectedHasActiveOffer && <p role="alert" className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">{t('activeOfferExists')}</p>}
           </div>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setPromotionType('CUSTOMER_DISCOUNT')} className={`rounded-xl px-3 py-2 text-xs font-black ${promotionType === 'CUSTOMER_DISCOUNT' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{t('directDiscount')}</button>
