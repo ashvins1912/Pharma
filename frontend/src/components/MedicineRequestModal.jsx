@@ -3,8 +3,10 @@ import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
 import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
 import { useApp } from '../context/AppContext';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function MedicineRequestModal({ isOpen, onClose, initialMedicineName = '', onRequestSubmitted }) {
+  const { t } = useLanguage();
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
   const { addresses, selectedAddressId, setSelectedAddressId, loadAddresses } = useApp();
@@ -57,13 +59,13 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!medicineName.trim()) {
-      addToast('Please enter the medicine or salt name.', 'warning');
+      addToast(t('enterMedicineName'), 'warning');
       return;
     }
 
     await runAction(LOADING_ACTIONS.CREATE_MEDICINE, async () => {
       if (!selectedAddressId) {
-        setAddressError('Select a saved delivery address before submitting the request.');
+        setAddressError(t('selectSavedAddress'));
         return;
       }
       setAddressError('');
@@ -109,7 +111,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
       }
       const res = await apiClient.post('/api/medicine-requests', requestBody);
 
-      addToast(res.data.message || 'Medicine request submitted to pharmacy!', 'success');
+      addToast(res.data.message || t('requestSubmitted'), 'success');
       if (onRequestSubmitted) onRequestSubmitted(res.data.request);
       onClose();
       // Reset form
@@ -122,7 +124,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
       setPrescriptionFile(null);
       setAddressError('');
       } catch (err) {
-        addToast(err.message || 'Could not submit medicine request.', 'error');
+        addToast(err.message || t('requestSubmitFailed'), 'error');
       }
     });
   };
@@ -181,10 +183,10 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
               required
               className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
             >
-              <option value="Morning">Morning</option>
-              <option value="Evening">Evening</option>
-              <option value="Next Day">Next Day</option>
-              <option value="Flexible">Flexible / Any time</option>
+              <option value="Morning">{t('morning')}</option>
+              <option value="Evening">{t('evening')}</option>
+              <option value="Next Day">{t('nextDay')}</option>
+              <option value="Flexible">{t('flexibleAnytime')}</option>
             </select>
           </div>
 
@@ -255,7 +257,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
               onChange={e => { setSelectedAddressId(e.target.value); setAddressError(''); }}
               className="w-full px-3 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white"
             >
-              <option value="">Select saved address</option>
+              <option value="">{t('selectSavedAddressOption')}</option>
               {addresses.map(address => (
                 <option key={address._id} value={address._id}>
                   {address.label || 'Address'} — {[address.addressLine1, address.city, address.pincode].filter(Boolean).join(', ')}
@@ -263,7 +265,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
               ))}
             </select>
             {addressError && <p className="mt-1 text-[11px] font-bold text-rose-600">{addressError}</p>}
-            {!addresses.length && <p className="mt-1 text-[11px] text-amber-700">Please save a delivery address in your profile first.</p>}
+            {!addresses.length && <p className="mt-1 text-[11px] text-amber-700">{t('saveDeliveryAddressFirst')}</p>}
           </div>
 
           <div>
@@ -287,7 +289,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
             </label>
             <textarea
               rows={3}
-              placeholder="Provide preferred brand, packaging details, or dosage instructions..."
+              placeholder={t("requestDetailsPlaceholder")}
               value={customerNote}
               onChange={(e) => setCustomerNote(e.target.value)}
               className="w-full px-3.5 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
@@ -298,7 +300,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
           <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3 flex items-start gap-2.5 text-blue-900">
             <span className="text-base flex-shrink-0">⏱️</span>
             <p className="text-[11px] leading-relaxed">
-              <strong>Pharmacy Commitment:</strong> Our pharmacist reviews requests within 15–30 minutes, checks wholesale distributor stock, and delivers an itemized proposal with price and delivery slot.
+              <strong>{t('pharmacyCommitment')}:</strong> {t('pharmacistReviewCommitment')}
             </p>
           </div>
 
@@ -316,7 +318,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
               disabled={submitting || !medicineName.trim()}
               className="w-full sm:w-2/3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-extrabold py-2.5 rounded-xl text-xs shadow-md shadow-blue-600/20 transition cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
             >
-              {submitting && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}<span>{submitting ? 'Creating Medicine Request...' : 'Send Request to Pharmacist'}</span>
+              {submitting && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}<span>{submitting ? t('createMedicineRequest') : t('sendRequestToPharmacist')}</span>
               <span>→</span>
             </button>
           </div>
