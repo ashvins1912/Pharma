@@ -162,8 +162,8 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 text-xs">
         {[
           { id: 'ALL', label: 'All' },
-          { id: 'ACTIVE', label: 'In Progress / Proposals' },
-          { id: 'COMPLETED', label: 'Converted to Orders' }
+          { id: 'ACTIVE', label: t('inProgressProposals') },
+          { id: 'COMPLETED', label: t('convertedToOrders') }
         ].map(tab => (
           <button
             key={tab.id}
@@ -291,7 +291,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
 
                   <div className="space-y-0.5 sm:text-right">
                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-                      {proposal?.priceType === 'APPROXIMATE' ? 'Approximate Price' : 'Price / Proposal'}
+                      {proposal?.priceType === 'APPROXIMATE' ? t('approximatePrice') : t('priceProposal')}
                     </span>
                     {proposal ? (
                       <div>
@@ -299,7 +299,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                           ₹{proposal.finalPrice ?? proposal.totalPrice ?? proposal.approximatePrice}
                         </span>
                         <span className="text-[10px] text-slate-400 block">
-                          ({proposal.priceType === 'APPROXIMATE' ? 'Approximate' : 'Guaranteed Final'})
+                          ({proposal.priceType === 'APPROXIMATE' ? t('approximate') : t('guaranteedFinalPrice')})
                         </span>
                       </div>
                     ) : (
