@@ -135,6 +135,7 @@ const CAPABILITIES = [
   ['POST', /^\/api\/v1\/notifications(?:\/|$)/, 'profile.write'],
   ['GET', /^\/api\/v1\/vendors?(?:\/|$)/, 'tenants.read'],
   ['GET', /^\/api\/vendor\/profile$/, 'tenants.read'],
+  ['GET', /^\/api\/tenant\/nearby$/, 'tenants.read'],
   ['GET', /^\/api\/tenant\/branches(?:\/|$)/, 'tenants.read'],
   ['POST', /^\/api\/tenant\/branches(?:\/|$)/, 'tenants.manage'],
   ['POST', /^\/api\/v1\/vendors?(?:\/|$)/, 'tenants.manage']
@@ -148,6 +149,8 @@ const PUBLIC_PATHS = [
   // deliberately unauthenticated, sanitized catalog endpoint. Keep admin
   // inventory (/admin/inventory) and all mutations protected by capabilities.
   ['GET', /^\/api\/medicines$/],
+  // Public pharmacy discovery for customer sessions; tenant staff use the scoped /api/tenant/nearby endpoint.
+  ['GET', /^\/api\/tenants\/nearby$/],
   // Nearby pharmacy discovery is a read-only storefront feature; do not require staff RBAC.
   ['GET', /^\/api\/medicines\/discovery$/],
   ['GET', /^\/api\/public\//], ['POST', /^\/api\/public\//],
