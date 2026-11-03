@@ -15,12 +15,12 @@ export default function Footer({ onNavigate }) {
               <span className="text-base font-black text-slate-900 tracking-tight">QuickMeds Rx</span>
             </div>
             <p className="text-slate-500 leading-relaxed text-[11px]">
-              Licensed dispensing digital pharmacy providing authentic pharmaceuticals, cold-chain delivery, and instant prescription fulfillment.
+              {t('footerTagline')}
             </p>
             <div className="text-[11px] text-slate-500 space-y-1">
               <p>📍 43 Richmond Road, Bengaluru - 560025</p>
-              <p>📞 +91 95899 16475 (Dispensary Desk)</p>
-              <p>🕒 Mon - Sun: 7:00 AM - 11:30 PM</p>
+              <p>📞 +91 95899 16475 ({t('dispensaryDesk')})</p>
+              <p>🕒 {t('openingHours')}</p>
             </div>
           </div>
 
@@ -30,22 +30,22 @@ export default function Footer({ onNavigate }) {
             <ul className="space-y-2 text-[11px]">
               <li>
                 <button onClick={() => onNavigate('store')} className="hover:text-blue-600 transition cursor-pointer">
-                  Prescription Drugs (Rx)
+                  {t('prescriptionDrugs')}
                 </button>
               </li>
               <li>
                 <button onClick={() => onNavigate('store')} className="hover:text-blue-600 transition cursor-pointer">
-                  Over-the-Counter (OTC)
+                  {t('otc')}
                 </button>
               </li>
               <li>
                 <button onClick={() => onNavigate('store')} className="hover:text-blue-600 transition cursor-pointer">
-                  Vitamins & Supplements
+                  {t('vitamins')}
                 </button>
               </li>
               <li>
                 <button onClick={() => onNavigate('store')} className="hover:text-blue-600 transition cursor-pointer">
-                  First Aid & Rehydration
+                  {t('firstAid')}
                 </button>
               </li>
             </ul>
@@ -57,12 +57,12 @@ export default function Footer({ onNavigate }) {
             <ul className="space-y-2 text-[11px]">
               <li>
                 <button onClick={() => onNavigate('orders')} className="hover:text-blue-600 transition cursor-pointer">
-                  Order Tracking
+                  {t('orderTracking')}
                 </button>
               </li>
               <li>
                 <button onClick={() => onNavigate('addresses')} className="hover:text-blue-600 transition cursor-pointer">
-                  Saved Delivery Addresses
+                  {t('savedAddresses')}
                 </button>
               </li>
               <li>
@@ -79,10 +79,10 @@ export default function Footer({ onNavigate }) {
             <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px] mb-3">{t('footerCompliance')}</h4>
             <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2">
               <span className="inline-block bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded">
-                CDSCO & WHO-GMP Certified
+                {t('cdscoWhoGmp')}
               </span>
               <p className="text-[10px] text-slate-500 leading-tight">
-                All scheduled medicines are dispensed strictly under registered pharmacist supervision with batch expiry validation.
+                {t('pharmacistSupervision')}
               </p>
             </div>
           </div>
@@ -99,9 +99,9 @@ export default function Footer({ onNavigate }) {
                 {languages.map((item) => <option key={item.code} value={item.code}>{item.nativeLabel}</option>)}
               </select>
             </label>
-            <span>Privacy Policy</span>
-            <span>Terms of Service</span>
-            <span>Dispensary Licensing</span>
+            <span>{t('privacyPolicy')}</span>
+            <span>{t('termsOfService')}</span>
+            <span>{t('dispensaryLicensing')}</span>
           </div>
         </div>
       </div>
