@@ -73,7 +73,7 @@ export default function ProductGrid() {
     return (
       <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-6 sm:p-10 text-center space-y-4 my-4 shadow-xs">
         <div className="w-28 h-28 sm:w-36 sm:h-36 mx-auto rounded-3xl overflow-hidden shadow-md border border-slate-200">
-          <img src="/src/assets/images/no_inventory_illustration_1793636345826.jpg" alt="No inventory data" className="w-full h-full object-cover" />
+          <img src="/src/assets/images/no_inventory_illustration_1793636345826.jpg" alt={t('noMedicinesFound')} className="w-full h-full object-cover" />
         </div>
         <div className="max-w-md mx-auto space-y-1.5">
           <h3 className="font-extrabold text-slate-800 text-sm sm:text-base">{t('noMedicinesFound')}</h3>
@@ -114,7 +114,7 @@ export default function ProductGrid() {
               }}
               className="w-full sm:w-auto bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-xs px-3.5 py-2 rounded-xl cursor-pointer transition text-center"
             >
-              Reset Filters
+              {t('resetFilters')}
             </button>
           </div>
         </div>
@@ -134,7 +134,7 @@ export default function ProductGrid() {
             {t('showing')} {startRecord}–{endRecord} {t('of')} {totalMedicines.toLocaleString()} {t('medicines')}
           </span>
           <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full border border-blue-100">
-            Page {page} of {totalPages}
+            {t('page')} {page} {t('of')} {totalPages}
           </span>
         </div>
 
