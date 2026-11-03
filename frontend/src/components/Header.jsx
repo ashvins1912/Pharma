@@ -29,40 +29,23 @@ export default function Header({
   const [branchOptions, setBranchOptions] = useState([]);
 
   React.useEffect(() => {
-    apiClient.get('/api/v1/branches/all').then(res => {
-      const items = res.data?.data || res.data?.branches || [];
-      if (Array.isArray(items) && items.length > 0) {
-        const valid = items
-          .filter(Boolean)
-          .map(b => ({
-            id: String(b._id || b.id || ''),
-            name: String(b.name || b.branchName || 'Branch')
-          }))
-          .filter(b => b.id);
-        setBranchOptions(valid);
-      } else {
-        setBranchOptions([]);
-      }
+    let cancelled = false;
+    if (!user || !isTenantAdmin) {
+      setBranchOptions([]);
+      return () => { cancelled = true; };
+    }
+    apiClient.get('/api/tenant/branches?limit=100').then(res => {
+      if (cancelled) return;
+      const items = Array.isArray(res.data?.branches) ? res.data.branches : [];
+      setBranchOptions(items.filter(branch => branch && branch.status === 'ACTIVE').map(branch => ({
+        id: String(branch._id || branch.id || ''),
+        name: String(branch.name || 'Branch')
+      })).filter(branch => branch.id));
     }).catch(() => {
-      apiClient.get('/api/tenants/nearby').then(res => {
-        const tenants = res.data?.tenants || [];
-        if (tenants.length > 0) {
-          const dynamicBranches = tenants
-            .filter(Boolean)
-            .map((t, idx) => ({
-              id: String(t._id || t.id || `branch-${idx+1}`),
-              name: String(t.name ? `${t.name} (Primary Branch)` : 'Primary Branch')
-            }))
-            .filter(b => b.id);
-          setBranchOptions(dynamicBranches);
-        } else {
-          setBranchOptions([]);
-        }
-      }).catch(() => {
-        setBranchOptions([]);
-      });
+      if (!cancelled) setBranchOptions([]);
     });
-  }, []);
+    return () => { cancelled = true; };
+  }, [user, isTenantAdmin]);
 
   const cartItemCount = cart.reduce((total, item) => total + item.quantity, 0);
   const proposalsWaitingCount = (medicineRequests || []).filter(r => r.status === 'PROPOSAL_SENT').length;
