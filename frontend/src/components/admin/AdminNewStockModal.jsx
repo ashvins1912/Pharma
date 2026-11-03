@@ -168,7 +168,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
           <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-5">
             {/* Section 1: Basic Information & Future-Proof Categories */}
             <div className="space-y-4">
-              <h4 className="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">1. Product Identification &amp; Classification</h4>
+              <h4 className="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">{`1. ${t('productMedicineName')}`}</h4>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -179,7 +179,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                     required
                     value={form.name}
                     onChange={handleChange}
-                    placeholder="e.g. Amoxicillin 500mg Capsule"
+                    placeholder={t('productMedicineName')}
                     className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -191,7 +191,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                     name="brand"
                     value={form.brand}
                     onChange={handleChange}
-                    placeholder="e.g. Cipla / Sun Pharma"
+                    placeholder={t('manufacturerBrand')}
                     className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -219,7 +219,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                     name="drug"
                     value={form.drug}
                     onChange={handleChange}
-                    placeholder="e.g. Amoxicillin Trihydrate"
+                    placeholder={t('activeSaltFormula')}
                     className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -231,7 +231,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                     name="sku"
                     value={form.sku}
                     onChange={handleChange}
-                    placeholder="e.g. MED-AMOX-500"
+                    placeholder={t('skuBarcode')}
                     className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -242,7 +242,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
             <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <h4 className="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">2. Decoupled Visual Asset &amp; Optimized Storage</h4>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">{`2. ${t('inventoryCatalogCdn')}`}</h4>
                   <p className="text-[11px] text-slate-400">{t('imagesCompressed')}</p>
                 </div>
                 <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-fit">
@@ -312,7 +312,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                     name="imageUrl"
                     value={form.imageUrl}
                     onChange={handleChange}
-                    placeholder="https://cdn.ashvinpharmacy.in/uploads/... (CDN image path)"
+                    placeholder={t('inventoryCatalogCdn')}
                     className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -384,7 +384,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                     name="batchNumber"
                     value={form.batchNumber}
                     onChange={handleChange}
-                    placeholder="e.g. BAT-2026-99"
+                    placeholder={t('batchNumber')}
                     className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -410,7 +410,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                   rows="2"
                   value={form.dosage}
                   onChange={handleChange}
-                  placeholder="e.g. Take one capsule twice daily after meals or as directed by physician."
+                  placeholder={t('usageDosage')}
                   className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
