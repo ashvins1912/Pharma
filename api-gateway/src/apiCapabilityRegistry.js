@@ -94,6 +94,7 @@ const CAPABILITIES = [
   ['PATCH', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.manage'],
   ['DELETE', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.manage'],
   ['GET', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.read'],
+  ['GET', /^\/api\/tenant\/branches(?:\/|$)/, 'tenants.read'],
   ['POST', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.manage'],
   ['PUT', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.manage'],
   ['PATCH', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.manage'],
