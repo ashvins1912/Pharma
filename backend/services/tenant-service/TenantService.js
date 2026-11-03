@@ -478,10 +478,17 @@ export class TenantService {
         const branch = await this.getBranchById(branchId);
         if (!branch) throw new Error('Branch not found');
 
+        const safeUpdates = { ...(updates || {}) };
+        delete safeUpdates.id;
+        delete safeUpdates._id;
+        delete safeUpdates.tenantId;
+        delete safeUpdates.status;
         const updated = {
             ...branch,
-            ...updates,
-            address: { ...branch.address, ...(updates.address || {}) },
+            ...safeUpdates,
+            tenantId: branch.tenantId,
+            status: branch.status,
+            address: { ...branch.address, ...(safeUpdates.address || {}) },
             updatedAt: new Date().toISOString()
         };
         if (getIsConnected()) {
