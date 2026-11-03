@@ -4764,6 +4764,8 @@ tenantInfrastructure: "టెనెంట్ మౌలిక సదుపాయ�
     prescriptionAttached: "ప్రిస్క్రిప్షన్ జతచేయబడింది",
     viewPrescriptionReview: "ప్రిస్క్రిప్షన్‌ను వీక్షించి సమీక్షించండి",
 
+    tenantInfrastructure: "టెనెంట్ మౌలిక సదుపాయాలు",
+
   }
 };
 
