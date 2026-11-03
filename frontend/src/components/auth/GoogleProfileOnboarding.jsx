@@ -126,11 +126,11 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
               className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
               required
             >
-              <option value=""">{t('selectGenderOption')}</option>
-              <option value="MALE"">{t('male')}</option>
-              <option value="FEMALE"">{t('female')}</option>
-              <option value="OTHER"">{t('other')}</option>
-              <option value="PREFER_NOT_TO_SAY"">{t('preferNot')}</option>
+              <option value="">{t('selectGenderOption')}</option>
+              <option value="MALE">{t('male')}</option>
+              <option value="FEMALE">{t('female')}</option>
+              <option value="OTHER">{t('other')}</option>
+              <option value="PREFER_NOT_TO_SAY">{t('preferNot')}</option>
             </select>
           </div>
 
