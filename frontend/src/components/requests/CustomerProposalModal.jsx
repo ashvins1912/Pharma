@@ -137,7 +137,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
               <p className="text-[11px] text-slate-500 mt-0.5">
                 {request.status === 'PHARMACY_REJECTED'
                   ? t('unableToProcure')
-                  : '{t('proposalDeclined')}'}
+                  : t('proposalDeclined')}
               </p>
             </div>
           </div>
@@ -183,7 +183,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
           <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-3.5 space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
-                {priceType === 'APPROXIMATE' ? 'Approximate Price' : 'Guaranteed Final Price'}
+                {priceType === 'APPROXIMATE' ? t('approximatePrice') : t('guaranteedFinalPrice')}
               </span>
               <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
                 priceType === 'APPROXIMATE' ? 'bg-amber-200 text-amber-900' : 'bg-emerald-200 text-emerald-900'
