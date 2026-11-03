@@ -3,7 +3,9 @@ import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import apiClient from '../../api/apiClient';
 import Pagination from '../common/Pagination';
+import { useLanguage } from '../../context/LanguageContext';
 export default function AdminInventoryTable({ onOpenBulkImport, canManage = false, canImport = false }) {
+  const { t } = useLanguage();
   const { fetchMedicines, setAdminNewStockModalOpen } = useApp();
   const { addToast } = useToast();
   
@@ -84,12 +86,12 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       } else {
         await apiClient.post('/api/medicines', medicineDraft);
       }
-      addToast(`Medicine ${medicineDraft._id ? 'updated' : 'created'} successfully.`, 'success');
+      addToast(medicineDraft._id ? t('medicineUpdated') : t('medicineCreated'), 'success');
       setMedicineDraft(null);
       await loadAdminInventory(adminPage, searchTerm);
       fetchMedicines();
     } catch (err) {
-      addToast(err.message || 'Could not save medicine.', 'error');
+      addToast(err.message || t('saveMedicineFailed'), 'error');
     } finally {
       setSavingMedicine(false);
     }
@@ -100,11 +102,11 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
     if (!window.confirm(`Archive ${medicine.name} from the customer store?`)) return;
     try {
       await apiClient.delete(`/api/medicines/${encodeURIComponent(medicine._id)}`);
-      addToast('Medicine archived from the customer catalog.', 'success');
+      addToast(t('medicineArchived'), 'success');
       await loadAdminInventory(adminPage, searchTerm);
       fetchMedicines();
     } catch (err) {
-      addToast(err.message || 'Could not archive medicine.', 'error');
+      addToast(err.message || t('archiveMedicineFailed'), 'error');
     }
   };
 
@@ -131,7 +133,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h3 className="text-base font-black text-slate-900">📊 Inventory & Master Catalog ({adminTotal.toLocaleString()} Items)</h3>
-          <p className="text-xs text-slate-500">Track stock levels, batch numbers, HSN/SAC, drug formulas, and regulatory expiry dates.</p>
+          <p className="text-xs text-slate-500">{t('inventoryCatalogDescription')}</p>
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -150,7 +152,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
               className="flex-1 sm:flex-initial bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer shadow-md shadow-blue-600/20 flex items-center justify-center gap-1.5"
             >
               <span>📥</span>
-              <span>Bulk Excel Import</span>
+              <span>{t('bulkExcelImport')}</span>
             </button>
           )}
         </div>
@@ -162,7 +164,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search by medicine name, drug, batch number, or HSN/SAC..."
+          placeholder={t("medicineDrugBatchHsnSearch")}
           className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500 transition"
         />
         <svg className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -173,9 +175,9 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       {/* Grid of Admin Medicines */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
         {loading && adminMeds.length === 0 ? (
-          <div className="col-span-full py-12 text-center text-xs text-slate-400">Loading catalog inventory...</div>
+          <div className="col-span-full py-12 text-center text-xs text-slate-400">{t('loadingInventory')}</div>
         ) : adminMeds.length === 0 ? (
-          <div className="col-span-full py-12 text-center text-xs text-slate-400">No products found matching your search.</div>
+          <div className="col-span-full py-12 text-center text-xs text-slate-400">{t('noProductsSearch')}</div>
         ) : (
           adminMeds.map((med) => {
             const stock = med.stock !== undefined ? med.stock : med.quantity;
@@ -200,17 +202,17 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
 
                 <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-200 text-slate-600">
                   <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Stock</span>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">{t('stock')}</span>
                     <span className="font-black text-slate-900">{physicalStock} units</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Price</span>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">{t('price')}</span>
                     <span className="font-black text-emerald-700 text-sm">₹{med.price}</span>
                   </div>
                 </div>
 
                 <div className="flex justify-between items-center text-[10px] text-slate-500 pt-1">
-                  <span>Batch: <strong className="font-mono">{med.batchNumber || 'BTH-2024'}</strong></span>
+                  <span>{t('batch')}: <strong className="font-mono">{med.batchNumber || 'BTH-2024'}</strong></span>
                   <span className={med.isExpired ? 'text-red-600 font-bold' : ''}>
                     Exp: {med.expiryDate ? new Date(med.expiryDate).toLocaleDateString() : 'N/A'}
                   </span>
@@ -258,7 +260,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
           <form onSubmit={saveMedicine} className="max-h-[90vh] w-full max-w-xl space-y-4 overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between">
               <h4 className="text-base font-black text-slate-900">
-                {medicineDraft._id ? 'Edit Medicine / Product' : 'Add New Medicine / Product'}
+                {medicineDraft._id ? t('editMedicineProduct') : t('addNewMedicineProduct')}
               </h4>
               <button type="button" onClick={() => setMedicineDraft(null)} className="rounded-lg bg-slate-100 px-3 py-1 text-slate-600 text-xs font-bold">
                 ✕ Close
@@ -266,9 +268,9 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {[
-                ['name', 'Medicine name', 'text'],
+                ['name', t('medicineName'), 'text'],
                 ['drug', 'Drug / Active salt', 'text'],
-                ['batchNumber', 'Batch number', 'text'],
+                ['batchNumber', t('batchNumber'), 'text'],
                 ['hsnSac', 'HSN/SAC code', 'text'],
                 ['brand', 'Brand', 'text'],
                 ['sku', 'SKU / Code', 'text'],
@@ -292,7 +294,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
                 </label>
               ))}
               <label className="space-y-1 text-xs font-bold text-slate-600 sm:col-span-2">
-                <span>Description</span>
+                <span>{t('description')}</span>
                 <textarea
                   value={medicineDraft.description || ''}
                   onChange={event => setMedicineDraft(prev => ({ ...prev, description: event.target.value }))}
@@ -317,7 +319,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
                 Cancel
               </button>
               <button type="submit" disabled={savingMedicine} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-extrabold text-white disabled:opacity-50">
-                {savingMedicine ? 'Saving…' : 'Save Product / Medicine'}
+                {savingMedicine ? t('savingAddress') : t('saveProductMedicine')}
               </button>
             </div>
           </form>

@@ -17,6 +17,7 @@ import PlatformAccessControl from './PlatformAccessControl';
 import LiveTelemetryTab from './LiveTelemetryTab';
 import RoleFeatureMatrixTab from './RoleFeatureMatrixTab';
 import TenantProfileDashboard from './TenantProfileDashboard';
+import { useLanguage } from '../../context/LanguageContext';
 import { getAdminMedicineRequests, getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -41,13 +42,14 @@ function PendingMedicineRequestsNotice({ count, onOpen }) {
         onClick={onOpen}
         className="mt-3 text-xs font-extrabold text-rose-800 underline underline-offset-2 hover:text-rose-950"
       >
-        Open Medicine Requests &amp; Proposals →
+        Open {t('medicineRequests')} &amp; Proposals →
       </button>
     </aside>
   );
 }
 
 export default function AdminDashboardView() {
+  const { t } = useLanguage();
   const {
     isSuperAdmin,
     canAccessOperations,
@@ -205,7 +207,7 @@ export default function AdminDashboardView() {
   if (!authLoading && !canAccessOperations) {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center" role="status">
-        <div className="text-sm font-black text-amber-900">Access restricted</div>
+        <div className="text-sm font-black text-amber-900">{t('accessRestricted')}</div>
         <p className="mt-1 text-xs text-amber-700">Your current permissions do not allow access to the operations dashboard.</p>
       </div>
     );
@@ -216,10 +218,10 @@ export default function AdminDashboardView() {
       <div className="min-w-0 space-y-6 animate-fade-in">
         <div className="bg-slate-950 text-white rounded-3xl p-6 shadow-md">
           <span className="text-[11px] font-black uppercase tracking-wider text-blue-400">
-            Pharmacy Review
+            {t('pharmacyReview')}
           </span>
           <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-            Medicine Requests
+            {t('medicineRequests')}
           </h2>
           <p className="mt-2 text-sm text-slate-300">
             Review requests, prepare proposals, and wait for the customer to decide.
@@ -247,10 +249,10 @@ export default function AdminDashboardView() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div>
             <span className="text-[11px] font-black uppercase tracking-wider text-blue-400">
-              Dispensary Control Hub
+              {t('dispensaryControlHub')}
             </span>
             <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-              Pharmacy Operations & Fulfillment Dashboard
+              {t('operationsDashboard')}
             </h2>
           </div>
 
@@ -281,7 +283,7 @@ export default function AdminDashboardView() {
                 className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer flex items-center gap-2"
               >
                 <span>📥</span>
-                <span>Bulk Excel Ingestion</span>
+                <span>{t('bulkExcelIngestion')}</span>
               </button>
             )}
 
@@ -292,7 +294,7 @@ export default function AdminDashboardView() {
                 className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer flex items-center gap-2"
               >
                 <span>+</span>
-                <span>Add Medicine</span>
+                <span>{t('addMedicine')}</span>
               </button>
             )}
           </div>
@@ -394,7 +396,7 @@ export default function AdminDashboardView() {
             }`}
           >
             <span>📦</span>
-            <span>Fulfillment Queue</span>
+            <span>{t('fulfillmentQueue')}</span>
             <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${adminTab === 'fulfillment' ? 'bg-blue-700 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300'}`}>
               {orders.length}
             </span>
@@ -424,7 +426,7 @@ export default function AdminDashboardView() {
               }`}
             >
               <span>📋</span>
-              <span>Medicine Requests</span>
+              <span>{t('medicineRequests')}</span>
               <span
                 aria-hidden={pendingMedicineRequestCount === 0}
                 className={`inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[10px] font-black leading-none text-white ${pendingMedicineRequestCount === 0 ? 'invisible' : ''}`}
@@ -444,7 +446,7 @@ export default function AdminDashboardView() {
               }`}
             >
               <span>🛵</span>
-              <span>Rider Fleet &amp; Auto-Assignment</span>
+              <span>{t('riderFleet')}</span>
             </button>
           )}
 
@@ -458,7 +460,7 @@ export default function AdminDashboardView() {
               }`}
             >
               <span>🏷️</span>
-              <span>Customer Offers</span>
+              <span>{t('customerOffers')}</span>
             </button>
           )}
 
@@ -470,7 +472,7 @@ export default function AdminDashboardView() {
                 : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'}`}
             >
               <span>⚡</span>
-              <span>Exclusive Surplus Savings</span>
+              <span>{t('surplusSavings')}</span>
             </button>
           )}
 
@@ -484,7 +486,7 @@ export default function AdminDashboardView() {
               }`}
             >
               <span>⚡</span>
-              <span>Offer Zone &amp; Recommendations</span>
+              <span>{t('offerZone')}</span>
             </button>
           )}
 
@@ -498,7 +500,7 @@ export default function AdminDashboardView() {
               }`}
             >
               <span>💳</span>
-              <span>Payment Reminders</span>
+              <span>{t('paymentReminders')}</span>
             </button>
           )}
 
@@ -512,7 +514,7 @@ export default function AdminDashboardView() {
               }`}
             >
               <span>📊</span>
-              <span>Inventory &amp; Catalog</span>
+              <span>{t('inventoryCatalog')}</span>
             </button>
           )}
 
@@ -526,7 +528,7 @@ export default function AdminDashboardView() {
               }`}
             >
               <span>🗺️</span>
-              <span>Smart Route Clubbing</span>
+              <span>{t('smartRoute')}</span>
             </button>
           )}
 
@@ -540,7 +542,7 @@ export default function AdminDashboardView() {
               }`}
             >
               <span>📜</span>
-              <span>Inventory Audits</span>
+              <span>{t('inventoryAudits')}</span>
             </button>
           )}
 
@@ -554,7 +556,7 @@ export default function AdminDashboardView() {
               }`}
             >
               <span>🌐</span>
-              <span>Platform Tenants</span>
+              <span>{t('platformTenants')}</span>
             </button>
           )}
 
@@ -568,7 +570,7 @@ export default function AdminDashboardView() {
               }`}
             >
               <span>🛡️</span>
-              <span>Security Access</span>
+              <span>{t('securityAccess')}</span>
             </button>
           )}
 
@@ -582,7 +584,7 @@ export default function AdminDashboardView() {
               }`}
             >
               <span>📡</span>
-              <span>Live Telemetry</span>
+              <span>{t('liveTelemetry')}</span>
             </button>
           )}
 
@@ -596,7 +598,7 @@ export default function AdminDashboardView() {
               }`}
             >
               <span>📐</span>
-              <span>Role-Feature Matrix</span>
+              <span>{t('roleFeatureMatrix')}</span>
             </button>
           )}
 
@@ -609,7 +611,7 @@ export default function AdminDashboardView() {
             }`}
           >
             <span>🏢</span>
-            <span>Tenant Profile &amp; Branches</span>
+            <span>{t('tenantProfileBranches')}</span>
           </button>
         </div>
       </div>

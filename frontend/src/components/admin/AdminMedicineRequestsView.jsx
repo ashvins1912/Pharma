@@ -3,6 +3,7 @@ import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 
 export default function AdminMedicineRequestsView() {
+  const { t } = useLanguage();
   const { addToast } = useToast();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -26,7 +27,7 @@ export default function AdminMedicineRequestsView() {
       // Admin API returns a paginated envelope; keep the component state array-shaped.
       setRequests(Array.isArray(res.data) ? res.data : (res.data?.requests || res.data?.items || []));
     } catch (err) {
-      addToast(err.message || 'Could not load requests queue.', 'error');
+      addToast(err.message || t('couldNotLoadQueue'), 'error');
     } finally {
       setLoading(false);
     }
@@ -66,7 +67,7 @@ export default function AdminMedicineRequestsView() {
   const handleSaveProposal = async (e) => {
     e.preventDefault();
     if (!propMedicineName.trim() || !propPrice) {
-      addToast('Please enter medicine name and unit price.', 'warning');
+      addToast(t('enterMedicineNamePrice'), 'warning');
       return;
     }
 
@@ -87,7 +88,7 @@ export default function AdminMedicineRequestsView() {
       setProposalModalRequest(null);
       await loadAllRequests();
     } catch (err) {
-      addToast(err.message || 'Could not submit proposal.', 'error');
+      addToast(err.message || t('couldNotSubmitProposal'), 'error');
     } finally {
       setSubmittingProposal(false);
     }
@@ -96,13 +97,13 @@ export default function AdminMedicineRequestsView() {
   const getStatusBadge = (status) => {
     switch (status) {
       case 'Proposal Received':
-        return <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">Proposal Sent</span>;
+        return <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">{t('proposalSent')}</span>;
       case 'Proposal Approved':
-        return <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">Order Created ✓</span>;
+        return <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">{t('orderCreated')} ✓</span>;
       case 'Proposal Rejected':
-        return <span className="bg-slate-200 text-slate-700 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">Declined</span>;
+        return <span className="bg-slate-200 text-slate-700 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">{t('declined')}</span>;
       default:
-        return <span className="bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">Needs Proposal ⚠️</span>;
+        return <span className="bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">{t('needsProposal')}</span>;
     }
   };
 
@@ -137,7 +138,7 @@ export default function AdminMedicineRequestsView() {
         </div>
       ) : requests.length === 0 ? (
         <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-          <p className="text-xs font-bold text-slate-600">No active customer medicine requests.</p>
+          <p className="text-xs font-bold text-slate-600">{t('noActiveCustomerRequests')}</p>
         </div>
       ) : (
         <>
@@ -146,12 +147,12 @@ export default function AdminMedicineRequestsView() {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
-                  <th className="py-3 px-3">Customer</th>
-                  <th className="py-3 px-3">Medicine Requested</th>
-                  <th className="py-3 px-3">Urgency</th>
-                  <th className="py-3 px-3">Current Proposal Status</th>
-                  <th className="py-3 px-3">Proposal Price & Slot</th>
-                  <th className="py-3 px-3 text-right">Actions</th>
+                  <th className="py-3 px-3">{t('customer')}</th>
+                  <th className="py-3 px-3">{t('medicineRequested')}</th>
+                  <th className="py-3 px-3">{t('urgency')}</th>
+                  <th className="py-3 px-3">{t('currentProposalStatus')}</th>
+                  <th className="py-3 px-3">{t('proposalPriceSlot')}</th>
+                  <th className="py-3 px-3 text-right">{t('actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -160,7 +161,7 @@ export default function AdminMedicineRequestsView() {
                     {/* Customer */}
                     <td className="py-3.5 px-3">
                       <span className="font-extrabold text-slate-900 block">{req.customerName}</span>
-                      <span className="text-[10px] text-slate-400">{req.customerMobile || 'No phone'}</span>
+                      <span className="text-[10px] text-slate-400">{req.customerMobile || t('noPhone')}</span>
                     </td>
 
                     {/* Medicine */}
@@ -195,7 +196,7 @@ export default function AdminMedicineRequestsView() {
                           <span className="text-[10px] text-slate-500 block">{req.proposal.deliverySlot}</span>
                         </div>
                       ) : (
-                        <span className="text-slate-400 italic text-[11px]">No proposal formulated</span>
+                        <span className="text-slate-400 italic text-[11px]">{t('noProposal')}</span>
                       )}
                     </td>
 
@@ -233,7 +234,7 @@ export default function AdminMedicineRequestsView() {
 
                 {req.saltComposition && (
                   <p className="text-[11px] text-slate-500">
-                    <strong>Salt Composition:</strong> {req.saltComposition}
+                    <strong>{t('saltComposition')}:</strong> {req.saltComposition}
                   </p>
                 )}
 
@@ -358,10 +359,10 @@ export default function AdminMedicineRequestsView() {
                     onChange={(e) => setPropPriceType(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold"
                   >
-                    <option value="Standard MRP">Standard MRP</option>
-                    <option value="Subsidized Generic">Subsidized Generic</option>
-                    <option value="Special Formulation">Special Formulation</option>
-                    <option value="Discounted Institutional">Discounted Institutional</option>
+                    <option value="Standard MRP">{t('standardMrp')}</option>
+                    <option value="Subsidized Generic">{t('subsidizedGeneric')}</option>
+                    <option value="Special Formulation">{t('specialFormulation')}</option>
+                    <option value="Discounted Institutional">{t('discountedInstitutional')}</option>
                   </select>
                 </div>
               </div>
@@ -388,10 +389,10 @@ export default function AdminMedicineRequestsView() {
                     onChange={(e) => setPropDeliverySlot(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold"
                   >
-                    <option value="Morning (8 AM - 12 PM)">Morning (8 AM - 12 PM)</option>
-                    <option value="Afternoon (12 PM - 4 PM)">Afternoon (12 PM - 4 PM)</option>
-                    <option value="Evening (4 PM - 8 PM)">Evening (4 PM - 8 PM)</option>
-                    <option value="Express 30-Min Emergency">Express 30-Min Emergency</option>
+                    <option value="Morning (8 AM - 12 PM)">{t('morningTime')}</option>
+                    <option value="Afternoon (12 PM - 4 PM)">{t('afternoonTime')}</option>
+                    <option value="Evening (4 PM - 8 PM)">{t('eveningTime')}</option>
+                    <option value="Express 30-Min Emergency">{t('expressEmergency')}</option>
                   </select>
                 </div>
               </div>
@@ -422,7 +423,7 @@ export default function AdminMedicineRequestsView() {
                   disabled={submittingProposal}
                   className="w-full sm:w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2.5 rounded-xl text-xs shadow-md shadow-blue-600/20 flex items-center justify-center gap-1.5 min-h-[44px]"
                 >
-                  <span>{submittingProposal ? 'Dispatching...' : 'Send Proposal to Patient'}</span>
+                  <span>{submittingProposal ? t('dispatching') : t('sendProposalToPatient')}</span>
                   <span>↗</span>
                 </button>
               </div>

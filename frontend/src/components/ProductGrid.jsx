@@ -2,8 +2,10 @@ import React, { useRef } from 'react';
 import ProductCard from './ProductCard';
 import { useApp } from '../context/AppContext';
 import Pagination from './common/Pagination';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function ProductGrid() {
+  const { t } = useLanguage();
   const {
     medicines,
     medicinesError,
@@ -60,9 +62,9 @@ export default function ProductGrid() {
   if (medicinesError) {
     return (
       <div className="my-4 rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center" role="alert">
-        <h3 className="font-bold text-slate-900">The medicine catalog is temporarily unavailable.</h3>
-        <p className="mt-1 text-sm text-slate-600">Please try again in a moment.</p>
-        <button type="button" onClick={fetchMedicines} className="mt-3 rounded-xl bg-white px-4 py-2 text-sm font-bold text-blue-700 shadow-sm">Try Again</button>
+        <h3 className="font-bold text-slate-900">{t('catalogUnavailable')}</h3>
+        <p className="mt-1 text-sm text-slate-600">{t('pleaseTryAgain')}</p>
+        <button type="button" onClick={fetchMedicines} className="mt-3 rounded-xl bg-white px-4 py-2 text-sm font-bold text-blue-700 shadow-sm">{t('tryAgain')}</button>
       </div>
     );
   }
@@ -71,14 +73,14 @@ export default function ProductGrid() {
     return (
       <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-6 sm:p-10 text-center space-y-4 my-4 shadow-xs">
         <div className="w-28 h-28 sm:w-36 sm:h-36 mx-auto rounded-3xl overflow-hidden shadow-md border border-slate-200">
-          <img src="/src/assets/images/no_inventory_illustration_1793636345826.jpg" alt="No inventory data" className="w-full h-full object-cover" />
+          <img src="/src/assets/images/no_inventory_illustration_1793636345826.jpg" alt={t('noMedicinesFound')} className="w-full h-full object-cover" />
         </div>
         <div className="max-w-md mx-auto space-y-1.5">
-          <h3 className="font-extrabold text-slate-800 text-sm sm:text-base">No medicines found in catalog</h3>
+          <h3 className="font-extrabold text-slate-800 text-sm sm:text-base">{t('noMedicinesFound')}</h3>
           <p className="text-xs text-slate-500">
             {searchQuery
               ? `No catalog matches for "${searchQuery}". Out-of-stock items also checked.`
-              : 'No items match your active filters.'}
+              : t('noActiveFilters')}
           </p>
         </div>
 
@@ -87,7 +89,7 @@ export default function ProductGrid() {
           <div className="flex items-center gap-2">
             <span className="text-xl">📋</span>
             <h4 className="font-black text-xs sm:text-sm text-blue-950">
-              Can't find your medicine? Request it from Ashvin Pharmacy.
+              {t('cantFindMedicine')}
             </h4>
           </div>
           <p className="text-[11px] text-blue-800 leading-relaxed">
@@ -102,7 +104,7 @@ export default function ProductGrid() {
               className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl shadow-xs transition cursor-pointer flex items-center justify-center gap-1.5"
             >
               <span>+</span>
-              <span>Request Medicine</span>
+              <span>{t('requestMedicine')}</span>
             </button>
             <button
               onClick={() => {
@@ -112,7 +114,7 @@ export default function ProductGrid() {
               }}
               className="w-full sm:w-auto bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-xs px-3.5 py-2 rounded-xl cursor-pointer transition text-center"
             >
-              Reset Filters
+              {t('resetFilters')}
             </button>
           </div>
         </div>
@@ -129,10 +131,10 @@ export default function ProductGrid() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1.5 text-xs text-slate-500 pb-1">
         <div className="flex items-center gap-2">
           <span className="font-extrabold text-slate-800">
-            Showing {startRecord}–{endRecord} of {totalMedicines.toLocaleString()} medicines
+            {t('showing')} {startRecord}–{endRecord} {t('of')} {totalMedicines.toLocaleString()} {t('medicines')}
           </span>
           <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full border border-blue-100">
-            Page {page} of {totalPages}
+            {t('page')} {page} {t('of')} {totalPages}
           </span>
         </div>
 

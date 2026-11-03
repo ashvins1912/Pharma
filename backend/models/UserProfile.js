@@ -151,6 +151,11 @@ const userProfileSchema = new mongoose.Schema({
     accessGrants: [{ type: String, default: [] }],
     accessRevokes: [{ type: String, default: [] }],
     permissionVersion: { type: Number, default: 1, index: true },
+    preferredLanguage: {
+        type: String,
+        enum: ['en', 'hi', 'kn', 'bn', 'te'],
+        default: 'en'
+    },
     role: {
         type: String,
         default: 'customer'

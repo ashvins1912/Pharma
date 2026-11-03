@@ -292,7 +292,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
       }
 
       const res = await createMedicineRequest(formData);
-      addToast(res.message || 'Medicine request submitted to Ashvin Pharmacy!', 'success');
+      addToast(res.message || 'Medicine request submitted to QuickMeds Rx!', 'success');
       await loadUserMedicineRequests({ page: 1, statusGroup: 'ALL' });
       onClose();
     } catch (err) {

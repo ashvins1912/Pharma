@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useLanguage } from '../../context/LanguageContext';
 import apiClient from '../../api/apiClient';
 import { useActionLoading, LOADING_ACTIONS } from '../../context/LoadingContext';
 import { useToast } from '../../context/ToastContext';
@@ -88,6 +89,7 @@ const normalizeOrderStatus = (order) => {
 };
 
 export default function AdminFulfillmentKanban({ orders, onRefresh }) {
+  const { t } = useLanguage();
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
   const [updatingId, setUpdatingId] = useState(null);
@@ -249,7 +251,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     if (searchLoading) return;
     const query = searchInput.trim();
     if (!query) {
-      setSearchError('Please enter an Order ID, mobile number, or email address.');
+      setSearchError(t('enterOrderSearch'));
       return;
     }
     setSearchPagination(current => ({ ...current, page: 1 }));
@@ -295,7 +297,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       })
       .catch((err) => {
         if (isCurrentRequest) {
-          setAvailableRidersError(err.response?.data?.message || err.message || 'Could not load available riders.');
+          setAvailableRidersError(err.response?.data?.message || err.message || t('couldNotLoadRiders'));
         }
       })
       .finally(() => {
@@ -324,7 +326,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         newStatus,
         riderInfo
       });
-      addToast(res.data.message || `Order shifted to ${newStatus}`, 'success');
+      addToast(res.data.message || t('orderShifted').replace('{status}', newStatus), 'success');
       refreshBoard();
     } catch (err) {
       addToast(err.response?.data?.message || err.message || 'State transition failed', 'error');
@@ -351,11 +353,11 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         status,
         prescriptionVerified: status === 'Approved'
       });
-      addToast(res.data.message || `Order ${status.toLowerCase()}.`, 'success');
+      addToast(res.data.message || t('orderShifted').replace('{status}', status.toLowerCase()), 'success');
       setVerifiedOrderIds(prev => prev.filter(id => id !== orderId));
       refreshBoard();
     } catch (err) {
-      addToast(err.message || 'Order review failed.', 'error');
+      addToast(err.message || t('orderReviewFailed'), 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -365,10 +367,10 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     try {
       setUpdatingId(orderId);
       const res = await apiClient.put(`/api/orders/${encodeURIComponent(orderId)}/dispatch`, { riderInfo });
-      addToast(res.data.message || 'Order dispatched.', 'success');
+      addToast(res.data.message || t('orderDispatched'), 'success');
       refreshBoard();
     } catch (err) {
-      addToast(err.message || 'Order dispatch failed.', 'error');
+      addToast(err.message || t('orderDispatchFailed'), 'error');
     } finally {
       setUpdatingId(null);
       setAssignRiderModal(null);
@@ -379,7 +381,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     try {
       setUpdatingId(order._id);
       const res = await apiClient.post(`/api/orders/admin/${encodeURIComponent(order._id)}/prescription/reinitiate`);
-      addToast(res.data.message || 'Prescription verification re-initiated.', 'success');
+      addToast(res.data.message || t('prescriptionVerificationRestarted'), 'success');
       if (res.data?.order && prescriptionModalOrder && String(prescriptionModalOrder._id) === String(order._id)) {
         setPrescriptionModalOrder(res.data.order);
       } else if (res.data?.verification && prescriptionModalOrder && String(prescriptionModalOrder._id) === String(order._id)) {
@@ -390,7 +392,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       }
       refreshBoard();
     } catch (err) {
-      addToast(err.response?.data?.message || err.message || 'Could not re-initiate prescription verification.', 'error');
+      addToast(err.response?.data?.message || err.message || t('prescriptionVerificationRestartFailed'), 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -484,7 +486,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     if (!targetUrl) {
       console.warn('[PrescriptionLifecycle] No targetUrl resolved for order:', orderId);
       setPrescriptionPreview(null);
-      setPrescriptionPreviewError('No binary prescription document file is attached to this order. Manual approval is unavailable until a prescription document is attached and successfully opened.');
+      setPrescriptionPreviewError(t('noPrescriptionBinary'));
       setPrescriptionPreviewLoading(false);
       return;
     }
@@ -534,7 +536,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
           } else if (res.data) {
             blob = new Blob([res.data], { type: contentType || 'application/octet-stream' });
           } else {
-            throw new Error('Prescription file is empty.');
+            throw new Error(t('prescriptionFileEmpty'));
           }
         }
 
@@ -550,7 +552,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       } catch (loadError) {
         console.error('[PrescriptionLifecycle] Prescription fetch error encountered:', loadError);
         setPrescriptionPreview(null);
-        setPrescriptionPreviewError('Could not load the prescription document through the authenticated file endpoint. Retry loading it before recording any manual approval.');
+        setPrescriptionPreviewError(t('prescriptionDocumentLoadFailed'));
       } finally {
         setPrescriptionPreviewLoading(false);
         setViewingPrescriptionOrderId(null);
@@ -569,7 +571,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         if (decision === 'reject') {
           let reason = customReason;
           if (reason === null || reason === undefined) {
-            reason = window.prompt('Reason for prescription rejection:', 'Prescription unreadable or mismatch');
+            reason = window.prompt(t('prescriptionRejectReason'), t('prescriptionUnreadable'));
             if (reason === null) return;
           }
           form.append('reason', String(reason).trim());
@@ -581,7 +583,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
           conversionForm.append('order_id', String(order._id));
           await apiClient.post(`/api/v1/prescriptions/${encodeURIComponent(order.prescriptionId)}/convert-to-order`, conversionForm);
         }
-        addToast(decision === 'approve' ? 'Prescription approved and converted to order.' : 'Prescription rejected.', decision === 'approve' ? 'success' : 'info');
+        addToast(decision === 'approve' ? t('prescriptionApprovedOrder') : t('prescriptionRejected'), decision === 'approve' ? 'success' : 'info');
         if (prescriptionModalOrder && String(prescriptionModalOrder._id) === String(order._id)) {
           setPrescriptionModalOrder(prev => prev ? {
             ...prev,
@@ -613,7 +615,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-base font-black text-slate-900">📦 Order Fulfillment Pipeline</h3>
-          <p className="text-xs text-slate-500">Live order state machine & dispatch lifecycle</p>
+          <p className="text-xs text-slate-500">{t('operationsDashboard')}</p>
         </div>
         <button
           onClick={refreshBoard}
@@ -624,23 +626,23 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       </div>
 
       <form onSubmit={submitSearch} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" role="search">
-        <label htmlFor="fulfillment-order-search" className="mb-2 block text-xs font-black text-slate-800">Search orders</label>
+        <label htmlFor="fulfillment-order-search" className="mb-2 block text-xs font-black text-slate-800">{t('searchOrders')}</label>
         <div className="flex flex-col gap-2 sm:flex-row">
           <input
             id="fulfillment-order-search"
             type="search"
             value={searchInput}
             onChange={event => setSearchInput(event.target.value)}
-            placeholder="Order ID / customer mobile / email"
+            placeholder={t("orderSearchPlaceholder")}
             className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
           <button type="submit" disabled={searchLoading} className="min-h-11 rounded-xl bg-blue-600 px-5 text-xs font-black text-white disabled:opacity-50">{searchLoading ? 'Searching…' : 'Search'}</button>
-          {appliedSearch && <button type="button" onClick={clearSearch} className="min-h-11 rounded-xl border border-slate-300 px-4 text-xs font-bold text-slate-700">Clear Search</button>}
+          {appliedSearch && <button type="button" onClick={clearSearch} className="min-h-11 rounded-xl border border-slate-300 px-4 text-xs font-bold text-slate-700">{t('clearSearch')}</button>}
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">Searches all fulfillment statuses: Order ID, mobile number, or email.</p>
+        <p className="mt-2 text-[11px] text-slate-500">{t('fulfillmentSearchHelp')}</p>
         {appliedSearch && !searchLoading && !searchError && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
-            <span>{searchPagination.total === 0 ? 'No orders found.' : `${searchPagination.total} orders found for “${appliedSearch}”.`}</span>
+            <span>{searchPagination.total === 0 ? t('noOrdersFound') : t('ordersFoundFor').replace('{count}', searchPagination.total).replace('{query}', appliedSearch)}</span>
             <Pagination
               page={searchPagination.page}
               totalPages={searchPagination.totalPages}
@@ -652,8 +654,8 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
             />
           </div>
         )}
-        {searchLoading && <p className="mt-3 text-xs text-slate-500" role="status">Searching orders…</p>}
-        {searchError && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-rose-700" role="alert"><span>{searchError}</span><button type="button" onClick={retrySearch} disabled={searchLoading} className="font-bold underline">Try again</button></div>}
+        {searchLoading && <p className="mt-3 text-xs text-slate-500" role="status">{t('searchingOrders')}</p>}
+        {searchError && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-rose-700" role="alert"><span>{searchError}</span><button type="button" onClick={retrySearch} disabled={searchLoading} className="font-bold underline">{t('tryAgain')}</button></div>}
       </form>
 
       {/* UX Optimization Toolbar: Tabbed Stage View vs All Columns */}
@@ -697,26 +699,26 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
               {/* Cards Container */}
               <div className="min-w-0 space-y-3 flex-1">
                 {searchMode && searchLoading ? (
-                  <div className="h-40 flex items-center justify-center text-slate-500 text-xs" role="status">Searching orders...</div>
+                  <div className="h-40 flex items-center justify-center text-slate-500 text-xs" role="status">{t('searchingOrders')}</div>
                 ) : searchMode && searchError ? (
-                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs">Search results unavailable</div>
+                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs">{t('searchResultsUnavailable')}</div>
                 ) : col.id === 'Delivered' && deliveredLoading && !searchMode ? (
-                  <div className="h-40 flex items-center justify-center text-slate-500 text-xs" role="status">Loading delivered orders...</div>
+                  <div className="h-40 flex items-center justify-center text-slate-500 text-xs" role="status">{t('loadingDeliveredOrders')}</div>
                 ) : col.id === 'Delivered' && deliveredError && !searchMode ? (
                   <div className="min-h-40 flex flex-col items-center justify-center gap-2 text-center text-xs text-rose-700" role="alert">
                     <p>{deliveredError}</p>
                     <button type="button" onClick={() => setDeliveredRetryKey(value => value + 1)} className="font-bold underline">Try again</button>
                   </div>
                 ) : searchMode && !searchLoading && !searchError && searchPagination.total === 0 ? (
-                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">No orders found.</div>
+                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">{t('noOrdersFound')}</div>
                 ) : col.id === 'Delivered' && deliveredPagination.total === 0 && !searchMode ? (
-                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">No delivered orders found.</div>
+                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">{t('noDeliveredOrders')}</div>
                 ) : col.id === 'Cancelled' && cancelledLoading && !searchMode ? (
-                  <div className="h-40 flex items-center justify-center text-slate-500 text-xs" role="status">Loading cancelled order history…</div>
+                  <div className="h-40 flex items-center justify-center text-slate-500 text-xs" role="status">{t('loadingCancelledHistory')}</div>
                 ) : col.id === 'Cancelled' && cancelledError && !searchMode ? (
                   <div className="min-h-40 flex flex-col items-center justify-center gap-2 text-center text-xs text-rose-700" role="alert"><p>{cancelledError}</p><button type="button" onClick={() => setCancelledRetryKey(value => value + 1)} className="font-bold underline">Try again</button></div>
                 ) : col.id === 'Cancelled' && cancelledPagination.total === 0 && !searchMode ? (
-                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">No cancelled orders found.</div>
+                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">{t('noCancelledOrders')}</div>
                 ) : colOrders.length === 0 ? (
                   <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">
                     No orders in this stage
@@ -729,16 +731,16 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                     const isProcessing = updatingId === order._id;
 
                     if (col.id === 'Cancelled') {
-                      const customerName = order.customerName || order.addressDetails?.fullName || 'Customer';
+                      const customerName = order.customerName || order.addressDetails?.fullName || t('customer');
                       const cancelledAt = (order.statusHistory || []).filter(entry => ['Cancelled', 'cancelled'].includes(String(entry.newStatus || ''))).sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))[0]?.timestamp || order.updatedAt || order.createdAt;
                       return (
                         <section key={order._id} className="min-w-0 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
                           <div className="space-y-2 p-3">
-                            <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="font-black text-xs text-slate-900">#{orderId}</p><p className="mt-1 truncate text-xs font-semibold text-slate-600">{customerName}</p></div><span className="shrink-0 rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">Cancelled</span></div>
-                            <p className="text-[11px] text-slate-600"><span className="font-bold">Cancelled:</span> {new Date(cancelledAt).toLocaleString()}</p>
+                            <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="font-black text-xs text-slate-900">#{orderId}</p><p className="mt-1 truncate text-xs font-semibold text-slate-600">{customerName}</p></div><span className="shrink-0 rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">{t('cancelled')}</span></div>
+                            <p className="text-[11px] text-slate-600"><span className="font-bold">{t('cancelledLabel')}</span> {new Date(cancelledAt).toLocaleString()}</p>
                             <p className="text-xs font-bold text-slate-800">₹{order.finalTotal ?? order.totalAmount ?? 0}</p>
-                            <p className="text-[11px] text-slate-500 break-words">{(order.items || order.medicineItems || []).map(item => `${item.productName || item.name || item.genericName || 'Medicine'} × ${item.quantity || 1}`).join(', ') || 'Order items unavailable'}</p>
-                            {order.statusHistory?.length > 0 && <details className="border-t border-slate-100 pt-2 text-[11px] text-slate-600"><summary className="cursor-pointer font-bold">View order timeline</summary><div className="mt-2 space-y-1">{order.statusHistory.slice().sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0)).map((entry, index) => <p key={index}>{entry.newStatus || entry.previousStatus || 'Update'} · {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : 'Time unavailable'}{entry.notes ? ` — ${entry.notes}` : ''}</p>)}</div></details>}
+                            <p className="text-[11px] text-slate-500 break-words">{(order.items || order.medicineItems || []).map(item => `${item.productName || item.name || item.genericName || t('medicine')} × ${item.quantity || 1}`).join(', ') || t('itemDetailsUnavailable')}</p>
+                            {order.statusHistory?.length > 0 && <details className="border-t border-slate-100 pt-2 text-[11px] text-slate-600"><summary className="cursor-pointer font-bold">{t('viewOrderTimeline')}</summary><div className="mt-2 space-y-1">{order.statusHistory.slice().sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0)).map((entry, index) => <p key={index}>{entry.newStatus || entry.previousStatus || t('refresh')} · {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : t('timeUnavailable')}{entry.notes ? ` — ${entry.notes}` : ''}</p>)}</div></details>}
                           </div>
                         </section>
                       );
@@ -759,7 +761,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                             <span className="min-w-0 flex-1">
                               <span className="flex flex-wrap items-center gap-2">
                                 <span className="font-black text-xs text-slate-900">#{orderId}</span>
-                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-800">Delivered</span>
+                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-800">{t('delivered')}</span>
                               </span>
                               <span className="mt-1 block truncate text-xs font-semibold text-slate-600">{customerName}</span>
                             </span>
@@ -767,17 +769,17 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                           </button>
                           {isExpanded && (
                             <div id={`delivered-order-${order._id}`} className="space-y-2 border-t border-slate-100 p-3 text-xs text-slate-600">
-                              <p className="break-all"><span className="font-bold">Order ID:</span> {order._id || order.orderNumber}</p>
-                              {order.orderNumber && <p className="break-all"><span className="font-bold">Order number:</span> {order.orderNumber}</p>}
-                              <p><span className="font-bold">Customer:</span> {customerName}</p>
-                              <p><span className="font-bold">Mobile:</span> {getCustomerMobile(order) || 'No phone'}</p>
-                              {order.deliveryAddress && <p><span className="font-bold">Address:</span> {order.deliveryAddress}</p>}
-                              <p><span className="font-bold">Total:</span> ₹{order.finalTotal} COD</p>
+                              <p className="break-all"><span className="font-bold">{t('orderId')}:</span> {order._id || order.orderNumber}</p>
+                              {order.orderNumber && <p className="break-all"><span className="font-bold">{t('orderNumber')}:</span> {order.orderNumber}</p>}
+                              <p><span className="font-bold">{t('customer')}:</span> {customerName}</p>
+                              <p><span className="font-bold">{t('mobile')}:</span> {getCustomerMobile(order) || t('noPhone')}</p>
+                              {order.deliveryAddress && <p><span className="font-bold">{t('address')}:</span> {order.deliveryAddress}</p>}
+                              <p><span className="font-bold">{t('total')}:</span> ₹{order.finalTotal} COD</p>
                               {order.outForDeliveryAt && <p><span className="font-bold">Out for delivery:</span> {new Date(order.outForDeliveryAt).toLocaleString()}</p>}
                               {order.deliveredAt && <p><span className="font-bold">Delivered:</span> {new Date(order.deliveredAt).toLocaleString()}</p>}
-                              {order.rider && <p><span className="font-bold">Rider:</span> {order.rider.riderName || 'Assigned rider'}{order.rider.riderMobile ? ` · ${order.rider.riderMobile}` : ''}</p>}
+                              {order.rider && <p><span className="font-bold">{t('rider')}:</span> {order.rider.riderName || 'Assigned rider'}{order.rider.riderMobile ? ` · ${order.rider.riderMobile}` : ''}</p>}
                               <div className="border-t border-slate-100 pt-2">
-                                <p className="mb-1 font-bold">Items</p>
+                                <p className="mb-1 font-bold">{t('itemsLabel')}</p>
                                 {(order.items || []).map((item, index) => (
                                   <p key={`${item.name || 'item'}-${index}`}>{item.name || 'Item'} × {item.quantity || 1}</p>
                                 ))}
@@ -1019,8 +1021,8 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
 
                         {col.id === 'Processing Order' && order.prescriptionRequired && Boolean(order.prescriptionUrl || order.prescriptionId) && (
                           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
-                            <p className="text-xs font-extrabold text-amber-900">Prescription review is blocking fulfillment</p>
-                            <p className="text-[11px] text-amber-800">Status: <strong>{order.prescriptionVerification?.status || 'REVIEW_REQUIRED'}</strong>. Open the centered review workspace to inspect the document, re-queue extraction, or record a pharmacist decision.</p>
+                            <p className="text-xs font-extrabold text-amber-900">{t('prescriptionReviewBlocking')}</p>
+                            <p className="text-[11px] text-amber-800">Status: <strong>{order.prescriptionVerification?.status || 'REVIEW_REQUIRED'}</strong>. {t('prescriptionReviewInstructions')}</p>
                             <button
                               type="button"
                               onClick={() => viewPrescription(order)}
@@ -1135,7 +1137,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                                   className="min-h-11 w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-3 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-600/20 flex items-center justify-center gap-1.5"
                                 >
                                   <span>🏁</span>
-                                  <span>Mark as Delivered</span>
+                                  <span>{t('markAsDelivered')}</span>
                                 </button>
                               ) : (
                                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2.5 animate-fade-in">
@@ -1152,7 +1154,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                                            setDeliveryOtps(prev => ({ ...prev, [order._id]: otp }));
                                            addToast(`Revealed Customer OTP (Cached 24h): ${otp}`, 'info');
                                          } catch (err) {
-                                           addToast('Could not fetch OTP from cache service.', 'error');
+                                           addToast(t('otpFromCacheFailed'), 'error');
                                          }
                                        }}
                                       className="text-[10px] font-black text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-lg hover:bg-amber-200 transition cursor-pointer"
@@ -1174,7 +1176,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                                       onClick={async () => {
                                         const code = deliveryOtps[order._id];
                                         if (!code || code.length !== 4) {
-                                          addToast('Please enter a valid 4-digit verification code.', 'warning');
+                                          addToast(t('validFourDigitCode'), 'warning');
                                           return;
                                         }
                                         try {

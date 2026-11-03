@@ -1,7 +1,9 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBrowseMedicines }) {
+  const { t } = useLanguage();
   const {
     cart,
     updateQuantity,
@@ -39,7 +41,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
             <div className="flex items-center gap-2">
               <span className="text-xl">🛒</span>
               <h2 id="cart-drawer-title" className="text-base font-extrabold text-slate-900">
-                Your Shopping Cart ({cart.reduce((s, i) => s + i.quantity, 0)})
+                {t('cart')} ({cart.reduce((s, i) => s + i.quantity, 0)})
               </h2>
             </div>
             <button
@@ -58,9 +60,9 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
                   🛍️
                 </div>
                 <div className="space-y-1">
-                  <h3 className="font-extrabold text-slate-800 text-base">Your cart is empty</h3>
+                  <h3 className="font-extrabold text-slate-800 text-base">{t('emptyCart')}</h3>
                   <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                    Find medicines and healthcare products for your everyday family needs.
+                    {t('findMedicines')}
                   </p>
                 </div>
                 <button
@@ -89,7 +91,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
 
                       <div className="flex-1 min-w-0">
                         <h4 className="font-bold text-xs text-slate-900 truncate">{item.name}</h4>
-                        <p className="text-[10px] text-slate-400">Unit: ₹{item.price}</p>
+                        <p className="text-[10px] text-slate-400">{t('unit')}: ₹{item.price}</p>
                         <span className="font-extrabold text-xs text-emerald-600">
                           ₹{item.price * item.quantity}
                         </span>
@@ -118,7 +120,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
                         <button
                           onClick={() => removeFromCart(item._id)}
                           className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer transition text-xs"
-                          aria-label="Remove item"
+                          aria-label={t("removeItem")}
                         >
                           🗑️
                         </button>
@@ -131,7 +133,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                      🎟️ Promo Code
+                      🎟️ {t('promoCode')}
                     </span>
                     <span className="text-[10px] text-slate-400">Try: FREEMED20 or WELCOME10</span>
                   </div>
@@ -157,7 +159,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        placeholder="ENTER COUPON"
+                        placeholder={t("promoCode").toUpperCase()}
                         value={couponCode}
                         onChange={(e) => setCouponCode(e.target.value)}
                         className="flex-1 px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none uppercase font-bold text-slate-800"
@@ -184,7 +186,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
             <div className="shrink-0 p-6 border-t border-slate-100 bg-white space-y-3">
               <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between text-slate-500">
-                  <span>Cart Subtotal</span>
+                  <span>{t('cartSubtotal')}</span>
                   <span>₹{subtotal}</span>
                 </div>
                 {appliedCoupon && (
@@ -198,11 +200,11 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
                   </div>
                 )}
                 <div className="flex justify-between text-slate-500">
-                  <span>Delivery Charge</span>
-                  <span className="text-emerald-600 font-bold">FREE (Dispensary Promo)</span>
+                  <span>{t('deliveryCharge')}</span>
+                  <span className="text-emerald-600 font-bold">{t('freePromo')}</span>
                 </div>
                 <div className="border-t border-slate-200 pt-2 flex justify-between items-center text-slate-900 font-black text-base">
-                  <span>Final Total</span>
+                  <span>{t('finalTotal')}</span>
                   <span className="text-emerald-600 text-lg">₹{finalTotal.toFixed(1)}</span>
                 </div>
               </div>

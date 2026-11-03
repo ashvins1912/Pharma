@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { friendlyAuthError } from '../api/apiErrors';
+import { useLanguage } from '../context/LanguageContext';
 
 const signupFields = ['name', 'mobile', 'dateOfBirth', 'gender', 'email', 'password', 'confirmPassword'];
 
@@ -34,6 +35,7 @@ function validateSignupField(field, values) {
 }
 
 export default function AuthModal({ isOpen, onClose }) {
+  const { t } = useLanguage();
   const {
     loginWithGoogle,
     loginWithEmail,
@@ -319,7 +321,7 @@ export default function AuthModal({ isOpen, onClose }) {
             {mfaRequired ? '🛡️' : '⚕️'}
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            {mfaRequired ? 'Two-Factor Authentication' : 'Welcome to Ashvin Pharmacy'}
+            {mfaRequired ? t('twoFactor') : t('authWelcome')}
           </h2>
           <p className="text-xs text-slate-500 mt-1 font-medium">
             {mfaRequired
@@ -351,7 +353,7 @@ export default function AuthModal({ isOpen, onClose }) {
           <form onSubmit={handleEmailVerification} className="space-y-4 animate-fade-in">
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-center">
               <div className="text-2xl mb-1">✉️</div>
-              <h3 className="text-sm font-black text-emerald-900">Verify your email</h3>
+              <h3 className="text-sm font-black text-emerald-900">{t('emailVerify')}</h3>
               <p className="text-xs text-emerald-800 mt-1">
                 Enter the 6-digit code sent to <strong>{verificationEmail}</strong>.
               </p>
@@ -546,11 +548,11 @@ export default function AuthModal({ isOpen, onClose }) {
                         required
                         className="w-full min-w-0 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
                       >
-                        <option value="">Select gender</option>
-                        <option value="FEMALE">Female</option>
-                        <option value="MALE">Male</option>
-                        <option value="OTHER">Other</option>
-                        <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+                        <option value="">{t("selectGender")}</option>
+                        <option value="FEMALE">{t("female")}</option>
+                        <option value="MALE">{t("male")}</option>
+                        <option value="OTHER">{t("other")}</option>
+                        <option value="PREFER_NOT_TO_SAY">{t("preferNot")}</option>
                       </select>
                       {signupErrors.gender && <p id="signup-gender-error" className="mt-1 text-[11px] text-rose-600">{signupErrors.gender}</p>}
                     </div>
@@ -580,7 +582,7 @@ export default function AuthModal({ isOpen, onClose }) {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                        {passwordRecoveryRequired ? 'New Password' : 'Password'}
+                        {passwordRecoveryRequired ? t('newPassword') : t('password')}
                       </label>
                       {!isSignUp && !passwordRecoveryRequired && (
                         <button
@@ -610,10 +612,10 @@ export default function AuthModal({ isOpen, onClose }) {
                       <button
                         type="button"
                         onClick={() => setShowPassword((visible) => !visible)}
-                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        aria-label={showPassword ? t('hide') : t('show')}
                         className="absolute inset-y-0 right-3 text-[11px] font-bold text-blue-600 hover:text-blue-800"
                       >
-                        {showPassword ? 'Hide' : 'Show'}
+                        {showPassword ? t('hide') : t('show')}
                       </button>
                     </div>
                     {isSignUp && signupErrors.password && <p className="mt-1 text-[11px] text-rose-600">{signupErrors.password}</p>}
@@ -623,7 +625,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 {(isSignUp || passwordRecoveryRequired) && (
                   <div>
                     <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      {passwordRecoveryRequired ? 'Confirm New Password' : 'Retype Password'}
+                      {passwordRecoveryRequired ? t('confirmPassword') : t('retypePassword')}
                     </label>
                     <div className="relative">
                       <input
@@ -642,10 +644,10 @@ export default function AuthModal({ isOpen, onClose }) {
                       <button
                         type="button"
                         onClick={() => setShowConfirmPassword((visible) => !visible)}
-                        aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'}
+                        aria-label={showConfirmPassword ? t('hide') : t('show')}
                         className="absolute inset-y-0 right-3 text-[11px] font-bold text-blue-600 hover:text-blue-800"
                       >
-                        {showConfirmPassword ? 'Hide' : 'Show'}
+                        {showConfirmPassword ? t('hide') : t('show')}
                       </button>
                     </div>
                     {isSignUp && !passwordRecoveryRequired && signupErrors.confirmPassword && (
@@ -719,7 +721,7 @@ export default function AuthModal({ isOpen, onClose }) {
                       <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
                       <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
                     </svg>
-                    <span>Continue with Google</span>
+                    <span>{t('continueGoogle')}</span>
                   </>
                 )}
               </button>
@@ -757,10 +759,10 @@ export default function AuthModal({ isOpen, onClose }) {
               <div className="mt-4 text-center">
                 <p className="text-xs text-slate-500 font-medium">
                   {isForgotPassword
-                    ? 'Remember your password?'
+                    ? t('rememberPassword')
                     : isSignUp
-                    ? 'Already have an account?'
-                    : "Don't have an account?"}{' '}
+                    ? t('alreadyAccount')
+                    : t('noAccount')}{' '}
                   <button
                     onClick={() => {
                       setIsForgotPassword(false);
@@ -771,7 +773,7 @@ export default function AuthModal({ isOpen, onClose }) {
                     }}
                     className="text-blue-600 font-extrabold hover:underline cursor-pointer"
                   >
-                    {isForgotPassword ? 'Login here' : isSignUp ? 'Login here' : 'Sign Up'}
+                    {isForgotPassword ? t('loginHere') : isSignUp ? t('loginHere') : t('signUp')}
                   </button>
                 </p>
               </div>

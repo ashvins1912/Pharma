@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import apiClient from '../../api/apiClient';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function TenantOnboardingView({ onSuccess }) {
+  const { t } = useLanguage();
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     shopName: '',
@@ -58,7 +60,7 @@ export default function TenantOnboardingView({ onSuccess }) {
     setError('');
     if (currentStep === 1) {
       if (!formData.shopName.trim() || !formData.street.trim() || !formData.city.trim() || !formData.state.trim() || !formData.zipCode.trim()) {
-        setError('Please fill in all mandatory shop details and address fields.');
+        setError(t('completeShopAddress'));
         return false;
       }
     }
@@ -66,22 +68,22 @@ export default function TenantOnboardingView({ onSuccess }) {
       const lng = parseFloat(formData.longitude);
       const lat = parseFloat(formData.latitude);
       if (Number.isNaN(lng) || Number.isNaN(lat)) {
-        setError('Please use the Geolocation button to auto-populate valid longitude and latitude coordinates.');
+        setError(t('validCoordinatesRequired'));
         return false;
       }
       if (!formData.shopPhotoUrl.trim()) {
-        setError('Please provide a valid shop photo URL.');
+        setError(t('validShopPhotoUrl'));
         return false;
       }
     }
     if (currentStep === 3) {
       if (!formData.ownerName.trim() || !formData.ownerEmail.trim() || !formData.ownerPhone.trim()) {
-        setError('Please complete all mandatory owner contact details.');
+        setError(t('completeOwnerContact'));
         return false;
       }
       if (!formData.isOwnerAdmin) {
         if (!formData.adminName.trim() || !formData.adminEmail.trim() || !formData.adminPassword.trim()) {
-          setError('Please complete all standalone administrative account details.');
+          setError(t('completeAdminDetails'));
           return false;
         }
       }
@@ -154,7 +156,7 @@ export default function TenantOnboardingView({ onSuccess }) {
       {/* Header & Step Indicator */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Pharmacy Tenant Registration</h2>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{t('pharmacyTenantRegistration')}</h2>
           <span className="text-xs font-semibold px-3 py-1 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 rounded-full">
             Step {step} of 3
           </span>
@@ -187,9 +189,9 @@ export default function TenantOnboardingView({ onSuccess }) {
         {/* STEP 1: Shop & Address Details */}
         {step === 1 && (
           <div className="space-y-4 animate-fadeIn">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Shop Information & Physical Address</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{t('shopInformationAddress')}</h3>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Shop Name *</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('shopName')} *</label>
               <input
                 type="text"
                 name="shopName"
@@ -201,7 +203,7 @@ export default function TenantOnboardingView({ onSuccess }) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Street Address *</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('streetAddress')} *</label>
               <input
                 type="text"
                 name="street"
@@ -221,7 +223,7 @@ export default function TenantOnboardingView({ onSuccess }) {
                   required
                   value={formData.city}
                   onChange={handleChange}
-                  placeholder="City"
+                  placeholder={t("city")}
                   className="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition"
                 />
               </div>
@@ -233,7 +235,7 @@ export default function TenantOnboardingView({ onSuccess }) {
                   required
                   value={formData.state}
                   onChange={handleChange}
-                  placeholder="State"
+                  placeholder={t("state")}
                   className="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition"
                 />
               </div>
@@ -245,7 +247,7 @@ export default function TenantOnboardingView({ onSuccess }) {
                   required
                   value={formData.zipCode}
                   onChange={handleChange}
-                  placeholder="Zip Code"
+                  placeholder={t("zipCode")}
                   className="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition"
                 />
               </div>
@@ -256,13 +258,13 @@ export default function TenantOnboardingView({ onSuccess }) {
         {/* STEP 2: Geolocation & Storefront Photo */}
         {step === 2 && (
           <div className="space-y-6 animate-fadeIn">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Geolocation & Storefront Image</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{t('geolocationStorefrontImage')}</h3>
             
             <div className="p-5 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50 rounded-2xl">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h4 className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">Browser Geolocation Sensor</h4>
-                  <p className="text-xs text-emerald-700 dark:text-emerald-400">Auto-populate precise GPS shop coordinates for delivery dispatch.</p>
+                  <h4 className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">{t('browserGeolocationSensor')}</h4>
+                  <p className="text-xs text-emerald-700 dark:text-emerald-400">{t('autoPopulateGps')}</p>
                 </div>
                 <button
                   type="button"
@@ -275,7 +277,7 @@ export default function TenantOnboardingView({ onSuccess }) {
 
               <div className="grid grid-cols-2 gap-4 mt-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Longitude *</label>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('longitude')} *</label>
                   <input
                     type="number"
                     step="any"
@@ -288,7 +290,7 @@ export default function TenantOnboardingView({ onSuccess }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Latitude *</label>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('latitude')} *</label>
                   <input
                     type="number"
                     step="any"
@@ -304,7 +306,7 @@ export default function TenantOnboardingView({ onSuccess }) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Shop Photo URL *</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('shopPhotoUrl')} *</label>
               <input
                 type="url"
                 name="shopPhotoUrl"
@@ -314,7 +316,7 @@ export default function TenantOnboardingView({ onSuccess }) {
                 placeholder="https://images.unsplash.com/photo-..."
                 className="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition"
               />
-              <p className="text-xs text-gray-400 mt-1">Provide a direct persistent image link of the pharmacy storefront.</p>
+              <p className="text-xs text-gray-400 mt-1">{t('persistentImageLink')}</p>
             </div>
           </div>
         )}
@@ -322,13 +324,13 @@ export default function TenantOnboardingView({ onSuccess }) {
         {/* STEP 3: Owner & Administrative User Setup */}
         {step === 3 && (
           <div className="space-y-6 animate-fadeIn">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Owner & Administrative User Accounts</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{t('ownerAdminAccounts')}</h3>
             
             <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Owner Contact Details</h4>
+              <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200">{t('ownerContactDetails')}</h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Owner Name *</label>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('ownerName')} *</label>
                   <input
                     type="text"
                     name="ownerName"
@@ -340,7 +342,7 @@ export default function TenantOnboardingView({ onSuccess }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Owner Email *</label>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('ownerEmail')} *</label>
                   <input
                     type="email"
                     name="ownerEmail"
@@ -352,7 +354,7 @@ export default function TenantOnboardingView({ onSuccess }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Owner Phone *</label>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('ownerPhone')} *</label>
                   <input
                     type="tel"
                     name="ownerPhone"
@@ -387,10 +389,10 @@ export default function TenantOnboardingView({ onSuccess }) {
 
               {!formData.isOwnerAdmin && (
                 <div className="mt-4 p-5 bg-gray-50 dark:bg-gray-800/50 rounded-2xl space-y-4 border border-gray-200 dark:border-gray-700 animate-fadeIn">
-                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Standalone Admin Account Setup</h4>
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white">{t('standaloneAdminSetup')}</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Admin Name *</label>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('adminName')} *</label>
                       <input
                         type="text"
                         name="adminName"
@@ -401,7 +403,7 @@ export default function TenantOnboardingView({ onSuccess }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Admin Email *</label>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('adminEmail')} *</label>
                       <input
                         type="email"
                         name="adminEmail"
@@ -412,7 +414,7 @@ export default function TenantOnboardingView({ onSuccess }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Password Hash / Secret *</label>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('passwordHashSecret')} *</label>
                       <input
                         type="password"
                         name="adminPassword"
@@ -423,7 +425,7 @@ export default function TenantOnboardingView({ onSuccess }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Role *</label>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('roleLabel')} *</label>
                       <select
                         name="adminRole"
                         value={formData.adminRole}

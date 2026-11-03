@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import SearchGroundingInfo from './SearchGroundingInfo';
+import { useLanguage } from '../context/LanguageContext';
 
 const CATEGORIES = [
   'All',
@@ -13,6 +14,7 @@ const CATEGORIES = [
 ];
 
 export default function SearchFilter() {
+  const { t } = useLanguage();
   const {
     searchQuery,
     setSearchQuery,
@@ -24,6 +26,7 @@ export default function SearchFilter() {
     setSortOption
   } = useApp();
 
+  const categoryLabels = { All: t('all'), 'Pain & Fever': t('painFever'), Antibiotics: t('antibiotics'), 'Allergy & Cold': t('allergyCold'), 'Vitamins & Supplements': t('vitamins'), 'Digestion & Acidity': t('digestionAcidity'), 'Wellness & First Aid': t('wellnessFirstAid') };
   const isFilterActive = searchQuery || selectedCategory !== 'All' || hideRx || sortOption !== 'default';
 
   const clearAllFilters = () => {
@@ -41,7 +44,7 @@ export default function SearchFilter() {
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
           <input
             type="text"
-            placeholder="Search medicines, brands, active salts..."
+            placeholder={t("searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-8 pr-7 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl outline-none transition min-h-[38px]"
@@ -50,7 +53,7 @@ export default function SearchFilter() {
             <button
               onClick={() => setSearchQuery('')}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-1"
-              aria-label="Clear search"
+              aria-label={t("clearSearch")}
             >
               ✕
             </button>
@@ -64,10 +67,10 @@ export default function SearchFilter() {
             onChange={(e) => setSortOption(e.target.value)}
             className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-2.5 sm:px-3 py-2 font-bold text-slate-700 outline-none focus:border-blue-500 cursor-pointer min-h-[38px] flex-1 sm:flex-none"
           >
-            <option value="default">Sort: Default</option>
-            <option value="price-asc">Price: Low to High</option>
-            <option value="price-desc">Price: High to Low</option>
-            <option value="name-asc">Name (A-Z)</option>
+            <option value="default">{t("sortDefault")}</option>
+            <option value="price-asc">{t("priceLowHigh")}</option>
+            <option value="price-desc">{t("priceHighLow")}</option>
+            <option value="name-asc">{t("nameAZ")}</option>
           </select>
 
           {isFilterActive && (
@@ -75,7 +78,7 @@ export default function SearchFilter() {
               onClick={clearAllFilters}
               className="text-xs text-rose-600 hover:bg-rose-50 font-extrabold px-3 py-2 rounded-xl border border-rose-200 transition cursor-pointer whitespace-nowrap min-h-[38px]"
             >
-              Clear
+              {t('clear')}
             </button>
           )}
         </div>
@@ -88,7 +91,7 @@ export default function SearchFilter() {
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
           {CATEGORIES.map((cat) => (
             <button
-              key={cat}
+              key={categoryLabels[cat] || cat}
               onClick={() => setSelectedCategory(cat)}
               className={`text-[11px] sm:text-xs px-2.5 py-1 rounded-lg sm:rounded-xl font-bold whitespace-nowrap transition cursor-pointer flex-shrink-0 ${
                 selectedCategory === cat
@@ -109,7 +112,7 @@ export default function SearchFilter() {
             onChange={(e) => setHideRx(e.target.checked)}
             className="w-3.5 h-3.5 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer"
           />
-          <span>Hide Rx Drugs</span>
+          <span>{t('hideRx')}</span>
         </label>
       </div>
 

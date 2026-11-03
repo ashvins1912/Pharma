@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
 import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
+import { useLanguage } from '../context/LanguageContext';
 
 const RELATIONSHIP_OPTIONS = [
   { value: 'FATHER', label: 'Father' }, { value: 'MOTHER', label: 'Mother' },
@@ -14,6 +15,8 @@ const RELATIONSHIP_OPTIONS = [
 const emptyForm = { displayName: '', relationship: '', customRelationship: '', dateOfBirth: '', gender: '' };
 
 export default function RelativeProfiles({ user, onSelfPuid }) {
+  const { t } = useLanguage();
+  const relationshipLabel = (value) => ({ FATHER: t('father'), MOTHER: t('mother'), SPOUSE: t('spouse'), SON: t('son'), DAUGHTER: t('daughter'), BROTHER: t('brother'), SISTER: t('sister'), GRANDFATHER: t('grandfather'), GRANDMOTHER: t('grandmother'), FATHER_IN_LAW: t('fatherInLaw'), MOTHER_IN_LAW: t('motherInLaw'), OTHER: t('otherRelationship') }[value] || value);
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
   const [people, setPeople] = useState([]);
@@ -29,7 +32,7 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
       const { data } = await apiClient.get('/api/v1/customers/persons');
       setPeople(data?.data || data || []);
     } catch (error) {
-      addToast(error.message || 'Could not load relative profiles.', 'error');
+      addToast(error.message || t('couldNotLoadRelatives'), 'error');
     } finally {
       setLoading(false);
     }
@@ -73,13 +76,13 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
         setOpenForm(false);
         addToast(selected ? 'Relative profile updated successfully.' : 'Relative profile created successfully.', 'success');
       } catch (error) {
-        addToast(error.message || 'Could not save relative profile.', 'error');
+        addToast(error.message || t('couldNotSaveRelative'), 'error');
       }
     });
   };
 
   const removeRelative = async () => {
-    if (!selected || !window.confirm(`Remove ${selected.displayName} from your relative profiles?`)) return;
+    if (!selected || !window.confirm(t('removeRelativeConfirm').replace('{name}', selected.displayName))) return;
     await runAction(LOADING_ACTIONS.REMOVE_RELATIVE, async () => {
       try {
         await apiClient.delete(`/api/v1/customers/persons/${encodeURIComponent(selected.puid)}`);
@@ -88,7 +91,7 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
         setOpenForm(false);
         addToast('Relative profile removed.', 'success');
       } catch (error) {
-        addToast(error.message || 'Could not remove relative profile.', 'error');
+        addToast(error.message || t('couldNotRemoveRelatives'), 'error');
       }
     });
   };
@@ -99,16 +102,16 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
     <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-black text-slate-900">People & Relatives</h3>
-          <p className="text-[10px] text-slate-500">Manage patient profiles and their PUIDs.</p>
+          <h3 className="text-sm font-black text-slate-900">{t('peopleRelatives')}</h3>
+          <p className="text-[10px] text-slate-500">{t('managePatientProfiles')}</p>
         </div>
         <button type="button" onClick={() => { setSelected(null); setForm(emptyForm); setOpenForm(true); }} disabled={busy}
-          className="rounded-xl bg-blue-50 px-3 py-2 text-[10px] font-black text-blue-700 disabled:opacity-50">+ Add Relative</button>
+          className="rounded-xl bg-blue-50 px-3 py-2 text-[10px] font-black text-blue-700 disabled:opacity-50">+ {t('addRelative')}</button>
       </div>
 
       {self && (
         <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
-          <p className="text-[10px] font-black uppercase text-blue-600">Your profile</p>
+          <p className="text-[10px] font-black uppercase text-blue-600">{t('yourProfile')}</p>
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-black text-slate-900">{self.displayName}</p>
             <span className="rounded-lg bg-white px-2 py-1 text-[10px] font-black text-blue-800">PUID: {self.puid}</span>
@@ -116,7 +119,7 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
         </div>
       )}
 
-      {loading && <p className="text-[10px] text-slate-400">Loading people silently...</p>}
+      {loading && <p className="text-[10px] text-slate-400">{t('loadingPeople')}</p>}
 
       <div className="grid gap-2">
         {relatives.map((person) => (
@@ -125,9 +128,9 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
             <span className="flex items-center gap-2">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-lg">👤</span>
               <span><span className="block text-xs font-black text-slate-900">{person.displayName}</span>
-              <span className="block text-[10px] text-slate-500">{person.relationshipToOwner}</span></span>
+              <span className="block text-[10px] text-slate-500">{relationshipLabel(String(person.relationshipToOwner || '').toUpperCase())}</span></span>
             </span>
-            <span className="text-[9px] font-black text-slate-500">View PUID →</span>
+            <span className="text-[9px] font-black text-slate-500">{t('viewPuid')}</span>
           </button>
         ))}
       </div>
@@ -135,22 +138,22 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
       {openForm && (
         <form onSubmit={saveRelative} className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} placeholder="Relative name" disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" required />
+            <input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} placeholder={t("relativeName")} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" required />
             <select value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" required>
-              <option value="">Select relationship</option>
-              {RELATIONSHIP_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              <option value="">{t("selectRelationship")}</option>
+              {RELATIONSHIP_OPTIONS.map((option) => <option key={option.value} value={option.value}>{relationshipLabel(option.value)}</option>)}
             </select>
-            {form.relationship === 'OTHER' && <input value={form.customRelationship} onChange={(e) => setForm({ ...form, customRelationship: e.target.value })} placeholder="Specify relationship" disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" required />}
+            {form.relationship === 'OTHER' && <input value={form.customRelationship} onChange={(e) => setForm({ ...form, customRelationship: e.target.value })} placeholder={t("specifyRelationship")} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" required />}
             <input type="date" value={form.dateOfBirth} onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" />
             <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs">
-              <option value="">Gender</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option>
+              <option value="">{t('gender')}</option><option value="MALE">{t('male')}</option><option value="FEMALE">{t('female')}</option><option value="OTHER">{t('other')}</option>
             </select>
           </div>
           <div className="flex gap-2">
             <button type="submit" disabled={busy} className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-black text-white disabled:opacity-60">
-              {busy ? 'Saving...' : selected ? 'Update Relative' : 'Create Relative'}
+              {busy ? t('savingAddress') : selected ? t('updateRelative') : t('createRelative')}
             </button>
-            <button type="button" onClick={() => setOpenForm(false)} disabled={busy} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-600">Cancel</button>
+            <button type="button" onClick={() => setOpenForm(false)} disabled={busy} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-600">{t('cancel')}</button>
           </div>
         </form>
       )}
@@ -158,15 +161,15 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
       {selected && !openForm && (
         <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="text-xs font-black text-slate-900">Relative Profile</h4>
+            <h4 className="text-xs font-black text-slate-900">{t('relativeProfile')}</h4>
             <span className="rounded-lg bg-white px-2 py-1 text-[10px] font-black text-blue-800">PUID: {selected.puid}</span>
           </div>
-          <p className="text-xs"><strong>Name:</strong> {selected.displayName}</p>
-          <p className="text-xs"><strong>Relationship:</strong> {selected.relationshipToOwner}</p>
-          <p className="text-xs"><strong>Date of Birth:</strong> {selected.dateOfBirth || 'Not set'}</p>
-          <p className="text-xs"><strong>Gender:</strong> {selected.gender || 'Not set'}</p>
+          <p className="text-xs"><strong>{t('fullName')}:</strong> {selected.displayName}</p>
+          <p className="text-xs"><strong>{t('relationship')}:</strong> {relationshipLabel(String(selected.relationshipToOwner || '').toUpperCase())}</p>
+          <p className="text-xs"><strong>{t('dateOfBirth')}:</strong> {selected.dateOfBirth || t('notSet')}</p>
+          <p className="text-xs"><strong>{t('gender')}:</strong> {selected.gender || t('notSet')}</p>
           <div className="flex gap-2 pt-1">
-            <button type="button" onClick={() => setOpenForm(true)} disabled={busy} className="flex-1 rounded-lg bg-white px-3 py-2 text-xs font-black text-blue-700">Edit</button>
+            <button type="button" onClick={() => setOpenForm(true)} disabled={busy} className="flex-1 rounded-lg bg-white px-3 py-2 text-xs font-black text-blue-700">{t('edit')}</button>
             <button type="button" onClick={removeRelative} disabled={busy} className="flex-1 rounded-lg bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 disabled:opacity-60">
               {isActionLoading(LOADING_ACTIONS.REMOVE_RELATIVE) ? 'Removing...' : 'Remove'}
             </button>

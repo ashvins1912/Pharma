@@ -6,8 +6,10 @@ import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
 import apiClient from '../api/apiClient';
 import AddressManager from './AddressManager';
 import { useTenant } from '../context/TenantContext';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
+  const { t } = useLanguage();
   const { user } = useAuth();
   const { tenantId, activeTenant } = useTenant();
   const { cart, subtotal, discountAmount, deliveryFee, finalTotal, appliedCoupon, selectedAddressId, addresses, clearCart, addToCart } = useApp();
@@ -74,7 +76,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       } catch (error) {
         if (requestId === quoteRequestId.current) {
           setRewardQuote(null);
-          setQuoteError(error.message || 'Reward quote is unavailable.');
+          setQuoteError(error.message || t('catalogUnavailable'));
         }
       } finally {
         if (requestId === quoteRequestId.current) setQuoteLoading(false);
@@ -92,7 +94,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         if (active) setRestockItems(response.data.items || []);
       })
       .catch((error) => {
-        if (active) setRestockError(error.message || 'Your regular restock list is temporarily unavailable.');
+        if (active) setRestockError(error.message || t('addressUnavailable'));
       })
       .finally(() => {
         if (active) setRestockLoading(false);
@@ -116,26 +118,26 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
   const handlePlaceOrder = async () => {
     if (!tenantId) {
-      setErrorMsg('Please select a pharmacy before placing this order.');
-      addToast('Select a pharmacy to continue.', 'warning');
+      setErrorMsg(t('selectPharmacyFirst'));
+      addToast(t('selectPharmacyContinue'), 'warning');
       return;
     }
     if (!selectedAddress) {
-      setErrorMsg("Please select or add a delivery destination address first.");
+      setErrorMsg(t('selectDeliveryAddress'));
       addToast("Please select a delivery address", "warning");
       return;
     }
 
     if (cart.length === 0) {
-      setErrorMsg("Your cart is empty.");
+      setErrorMsg(t('cartEmptyError'));
       return;
     }
     if (prescriptionRequired && prescriptionChoice !== 'yes') {
-      setErrorMsg('Please confirm that you have a prescription for this order.');
+      setErrorMsg(t('confirmPrescription'));
       return;
     }
     if (prescriptionRequired && !prescriptionFile) {
-      setErrorMsg("Upload a clear prescription image or PDF before placing this order.");
+      setErrorMsg(t('uploadPrescription'));
       return;
     }
 
@@ -210,7 +212,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       const response = await apiClient.get('/api/orders/dynamic-restock');
       setRestockItems(response.data.items || []);
     } catch (error) {
-      setRestockError(error.message || 'Your regular restock list is temporarily unavailable.');
+      setRestockError(error.message || t('addressUnavailable'));
     } finally {
       setRestockLoading(false);
     }
@@ -228,12 +230,12 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
               <h2 id="checkout-modal-title" className="text-base sm:text-lg font-black text-slate-900 truncate">
                 Checkout & Order Confirmation
               </h2>
-              <p className="text-[11px] text-slate-400">Step 3 of 3: Confirm address & place Cash on Delivery order</p>
+              <p className="text-[11px] text-slate-400">{t('checkoutStep')}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            aria-label="Close checkout"
+            aria-label={t("cancel")}
             className="text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition cursor-pointer shrink-0 ml-2"
           >
             ✕
@@ -243,9 +245,9 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         {/* Scrollable Form Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 overscroll-contain">
           <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-            <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">Fulfillment pharmacy</p>
+            <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">{t('fulfillmentPharmacy')}</p>
             <p className="mt-1 text-sm font-extrabold text-emerald-950">{activeTenant?.shopName || 'Selected pharmacy'}</p>
-            <p className="mt-1 text-[11px] text-emerald-800">This order and its notifications will be routed only to this pharmacy.</p>
+            <p className="mt-1 text-[11px] text-emerald-800">{t('orderRoutedOnly')}</p>
           </section>
           {errorMsg && (
             <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2">
@@ -264,8 +266,8 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
           {/* Section 2: Order Recipient */}
           <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
-            <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider mb-2">2. Order For</h3>
-            <p className="text-[11px] text-indigo-800 mb-3">You can place this order for yourself or for a relative you manage.</p>
+            <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider mb-2">2. {t('orderFor')}</h3>
+            <p className="text-[11px] text-indigo-800 mb-3">{t('placeForSelfOrRelative')}</p>
             <label htmlFor="order-recipient" className="sr-only">Order for</label>
             <select
               id="order-recipient"
@@ -273,7 +275,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
               onChange={(event) => setPatientPuid(event.target.value)}
               className="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200"
             >
-              {people.length === 0 && <option value="">Myself</option>}
+              {people.length === 0 && <option value="">{t('myself')}</option>}
               {people.map((person) => (
                 <option key={person.puid} value={person.puid}>
                   {person.displayName} · {person.relationshipToOwner || 'SELF'}
@@ -289,13 +291,13 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             </h3>
             <div className={`mb-3 rounded-xl border p-3 ${prescriptionRequired ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50'}`}>
               <fieldset>
-                <legend className="text-xs font-bold text-slate-800">Do you have a prescription for this order?</legend>
+                <legend className="text-xs font-bold text-slate-800">{t('prescriptionQuestion')}</legend>
                 <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-700">
-                  <label className="inline-flex items-center gap-2"><input type="radio" name="prescription-choice" checked={prescriptionChoice === 'yes'} onChange={() => setPrescriptionChoice('yes')} />Yes, I have a prescription</label>
-                  <label className="inline-flex items-center gap-2"><input type="radio" name="prescription-choice" checked={prescriptionChoice === 'no'} onChange={() => { setPrescriptionChoice('no'); setPrescriptionFile(null); setPrescriptionError(''); }} />No prescription</label>
+                  <label className="inline-flex items-center gap-2"><input type="radio" name="prescription-choice" checked={prescriptionChoice === 'yes'} onChange={() => setPrescriptionChoice('yes')} />{t('yesPrescription')}</label>
+                  <label className="inline-flex items-center gap-2"><input type="radio" name="prescription-choice" checked={prescriptionChoice === 'no'} onChange={() => { setPrescriptionChoice('no'); setPrescriptionFile(null); setPrescriptionError(''); }} />{t('noPrescription')}</label>
                 </div>
               </fieldset>
-              {prescriptionRequired && prescriptionChoice !== 'yes' && <p className="mt-2 text-xs font-bold text-rose-800">A prescription is required for one or more items in this cart. Choose Yes and upload it to continue.</p>}
+              {prescriptionRequired && prescriptionChoice !== 'yes' && <p className="mt-2 text-xs font-bold text-rose-800">{t('prescriptionRequiredCart')}</p>}
               {(prescriptionRequired || prescriptionChoice === 'yes') && <>
                 <label htmlFor="prescription-upload" className="mt-2 block text-xs font-bold text-slate-800">
                   Upload Prescription (PDF or image; maximum 8 MB — mobile photos are converted to PDF automatically)
@@ -329,7 +331,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                 {prescriptionFile && (
                   <div className="mt-2 flex items-center gap-3 text-[10px] text-emerald-800" role="status">
                     {prescriptionPreview && <img src={prescriptionPreview} alt="Prescription preview" className="h-12 w-12 rounded-lg object-cover" />}
-                    <span>Ready to attach: {prescriptionFile.name}</span>
+                    <span>{t('readyToAttach')}: {prescriptionFile.name}</span>
                   </div>
                 )}
                 {prescriptionError && <p className="mt-1 text-xs text-rose-700" role="alert">{prescriptionError}</p>}
@@ -360,7 +362,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
           {restockError && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900" role="alert">
-              <p>Your regular restock list is temporarily unavailable.</p>
+              <p>{t('addressUnavailable')}</p>
               <button type="button" onClick={retryRestockItems} disabled={restockLoading} className="mt-2 font-bold underline disabled:opacity-50">{restockLoading ? 'Retrying...' : 'Try again'}</button>
             </div>
           )}
@@ -370,9 +372,9 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
               <div className="mb-3 flex items-center justify-between">
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-wider text-blue-950">Your regular restock</h3>
-                  <p className="mt-1 text-[11px] text-blue-800">Frequently purchased items from completed orders</p>
+                  <p className="mt-1 text-[11px] text-blue-800">{t('frequentlyPurchased')}</p>
                 </div>
-                {restockLoading && <span className="text-[10px] text-blue-700">Updating…</span>}
+                {restockLoading && <span className="text-[10px] text-blue-700">{t('updating')}</span>}
               </div>
               <div className="space-y-2">
                 {restockItems.map(item => (
@@ -398,7 +400,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           {/* Section 3: Payment Method & Totals */}
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-600">Payment Option</span>
+              <span className="text-xs font-bold text-slate-600">{t('paymentOption')}</span>
               <span className="bg-emerald-100 text-emerald-800 text-xs font-black px-2.5 py-1 rounded-xl">
                 💵 Cash on Delivery (COD)
               </span>
@@ -406,12 +408,12 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
             <div className="border-t border-slate-200 pt-3 space-y-1.5 text-xs">
               <div className="flex justify-between text-slate-600">
-                <span>Subtotal ({cart.reduce((s, i) => s + i.quantity, 0)} items)</span>
+                <span>{t('subtotal')} ({cart.reduce((s, i) => s + i.quantity, 0)} {t('items')})</span>
                 <span>₹{Number(rewardQuote?.subtotal ?? subtotal).toFixed(2)}</span>
               </div>
               {Number(rewardQuote?.surplusSavingsDiscount || 0) > 0 && (
                 <div className="flex justify-between text-emerald-700 font-bold">
-                  <span>Exclusive Surplus Savings</span>
+                  <span>{t('exclusiveSavings')}</span>
                   <span>−₹{Number(rewardQuote.surplusSavingsDiscount).toFixed(2)}</span>
                 </div>
               )}
@@ -459,7 +461,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                 <div className="mt-2 space-y-1 text-[11px] text-amber-950">
                   <p>{quoteLoading ? 'Checking reward eligibility…' : `Points earned after delivery: ${rewardQuote?.earnedPoints ?? '—'}`}</p>
                   {rewardQuote && (
-                    <p>Basket profit margin: {Number(rewardQuote.netMarginPercentage).toFixed(1)}%</p>
+                    <p>{t('basketProfitMargin')}: {Number(rewardQuote.netMarginPercentage).toFixed(1)}%</p>
                   )}
                   {rewardQuote?.redemptionBlockedReason && (
                     <p role="alert" className="font-bold text-rose-700">
@@ -467,7 +469,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                     </p>
                   )}
                   {rewardQuote?.redemptionEligible && !rewardQuote?.redemptionBlockedReason && (
-                    <p className="font-bold text-emerald-700">This basket meets the profit threshold for point redemption.</p>
+                    <p className="font-bold text-emerald-700">{t('profitThreshold')}</p>
                   )}
                   {usePoints && rewardQuote?.pointsAdjusted && (
                     <p role="status" className="font-bold text-orange-700">
@@ -478,11 +480,11 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                 </div>
               </div>
               <div className="flex justify-between text-slate-600">
-                <span>Delivery Charge</span>
+                <span>{t('deliveryCharge')}</span>
                 <span className="text-emerald-600 font-bold">FREE</span>
               </div>
               <div className="border-t border-dashed border-slate-300 pt-2 flex justify-between items-center text-base font-black text-slate-900">
-                <span>Payable Amount:</span>
+                <span>{t('payableAmount')}:</span>
                 <span className="text-emerald-600 text-xl font-black">
                   ₹{(rewardQuote?.finalTotal ?? finalTotal) + deliveryFee > 0
                     ? ((rewardQuote?.finalTotal ?? finalTotal) + deliveryFee).toFixed(1)

@@ -2,15 +2,16 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
 import Pagination from './common/Pagination';
+import { useLanguage } from '../context/LanguageContext';
 
 const formatDate = (date) => {
   const parsedDate = new Date(date);
   return Number.isNaN(parsedDate.getTime())
-    ? 'Date unavailable'
-    : parsedDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    ? t('dateUnavailable')
+    : parsedDate.toLocaleDateString(language, { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
-const getItemName = (item) => item.name || item.productName || 'Order item';
+const getItemName = (item) => item.name || item.productName || t('itemsLabel');
 const PAGE_SIZE = 10;
 
 const normalizeHistoryResponse = (data, requestedPage) => {
@@ -42,6 +43,7 @@ const normalizeHistoryResponse = (data, requestedPage) => {
 };
 
 export default function OrderHistory() {
+  const { t, language } = useLanguage();
   const { user } = useAuth();
   const [result, setResult] = useState({
     userId: null,
@@ -119,8 +121,8 @@ export default function OrderHistory() {
     <section className="min-w-0 overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="order-history-title">
       <div className="mb-4 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h3 id="order-history-title" className="text-base font-extrabold text-slate-900">Past Orders</h3>
-          <p className="text-xs text-slate-500">Your newest past orders, three at a time.</p>
+          <h3 id="order-history-title" className="text-base font-extrabold text-slate-900">{t('pastOrders')}</h3>
+          <p className="text-xs text-slate-500">{t('newestPastOrders')}</p>
         </div>
         <button
           type="button"
@@ -128,7 +130,7 @@ export default function OrderHistory() {
           disabled={isLoading}
           className="min-h-10 shrink-0 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isLoading ? 'Loading...' : 'Refresh'}
+          {isLoading ? t('loading') : t('refresh')}
         </button>
       </div>
 
@@ -146,12 +148,12 @@ export default function OrderHistory() {
         </div>
       ) : orders.length === 0 ? (
         <div className="py-12 text-center">
-          <p className="text-sm font-bold text-slate-700">No past orders found</p>
-          <p className="mt-1 text-xs text-slate-500">Completed or cancelled orders will appear here.</p>
+          <p className="text-sm font-bold text-slate-700">{t('noPastOrders')}</p>
+          <p className="mt-1 text-xs text-slate-500">{t('pastOrdersHint')}</p>
         </div>
       ) : (
         <>
-        {error && <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-800" role="alert"><p>{error}</p><button type="button" onClick={() => loadOrderHistory(pageRef.current, { append: failedAppendRef.current })} className="mt-2 font-bold underline underline-offset-2">Try again</button></div>}
+        {error && <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-800" role="alert"><p>{error}</p><button type="button" onClick={() => loadOrderHistory(pageRef.current, { append: failedAppendRef.current })} className="mt-2 font-bold underline underline-offset-2">{t('tryAgain')}</button></div>}
         <ul className="space-y-3">
           {orders.map((order) => {
             const id = String(order._id || order.id || '');
@@ -182,7 +184,7 @@ export default function OrderHistory() {
                 </div>
 
                 <div className="mt-4 border-t border-slate-200 pt-3">
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">Items</p>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">{t('itemsLabel')}</p>
                   {items.length ? (
                     <ul className="space-y-1.5">
                       {items.map((item, index) => (
@@ -197,7 +199,7 @@ export default function OrderHistory() {
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-xs text-slate-500">Item details unavailable.</p>
+                    <p className="text-xs text-slate-500">{t('itemDetailsUnavailable')}</p>
                   )}
                 </div>
               </li>
@@ -217,7 +219,7 @@ export default function OrderHistory() {
           label="past orders"
         />
       )}
-      {isLoading && orders.length > 0 && <p className="text-center text-xs text-slate-500" role="status">Loading previous orders...</p>}
+      {isLoading && orders.length > 0 && <p className="text-center text-xs text-slate-500" role="status">{t('loadingPreviousOrders')}</p>}
     </section>
   );
 }

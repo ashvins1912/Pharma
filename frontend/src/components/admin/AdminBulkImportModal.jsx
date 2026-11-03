@@ -4,8 +4,10 @@ import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function AdminBulkImportModal({ isOpen, onClose }) {
+  const { t } = useLanguage();
   const { addToast } = useToast();
   const { fetchMedicines } = useApp();
   const { isSuperAdmin, isTenantAdmin, user } = useAuth();
@@ -41,12 +43,12 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
           addToast(
             response.data.status === 'COMPLETED'
               ? 'Bulk inventory import completed successfully!'
-              : 'Inventory import completed with some failed records.',
+              : t('importCompletedPartial'),
             response.data.status === 'COMPLETED' ? 'success' : 'warning'
           );
         }
       } catch (error) {
-        if (!cancelled) setPollError(error.response?.data?.message || 'Could not refresh import progress.');
+        if (!cancelled) setPollError(error.response?.data?.message || t('couldNotRefreshImport'));
       }
     };
 
@@ -63,9 +65,9 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   // Single-Upload Architecture: Read workbook locally in browser for instant preview
   const handleFileChange = async (selectedFile) => {
     if (!selectedFile) return;
-    if (!/\.(xlsx|xls)$/i.test(selectedFile.name)) { addToast('Please select an .xlsx or .xls workbook.', 'warning'); return; }
+    if (!/\.(xlsx|xls)$/i.test(selectedFile.name)) { addToast(t('selectWorkbook'), 'warning'); return; }
     if ((isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) || (needsBranchSelection && !targetBranchId.trim())) {
-      addToast('Select the required tenant and branch context before previewing.', 'warning');
+      addToast(t('selectTenantBranch'), 'warning');
       return;
     }
     setFile(selectedFile); setAnalyzing(true); setPreviewData(null); setImportJob(null); setPollError('');
@@ -88,15 +90,15 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   // Authoritative Single Upload to /api/v1/inventory/imports with unique Idempotency-Key
   const handleConfirmImport = async () => {
     if ((isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) || (needsBranchSelection && !targetBranchId.trim())) {
-      addToast('Select the required tenant and branch context before importing.', 'warning');
+      addToast(t('selectTenantBranchImport'), 'warning');
       return;
     }
     if (!previewData?.importsEnabled) {
-      addToast('Inventory writes are disabled. Preview is available, but import must wait for an isolated controlled test environment.', 'warning');
+      addToast(t('inventoryWritesDisabled'), 'warning');
       return;
     }
     if (!previewData || previewData.rowsDetected === 0 || !file) {
-      addToast('No records available to import', 'warning');
+      addToast(t('noRecordsToImport'), 'warning');
       return;
     }
 
@@ -120,9 +122,9 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       });
 
       setImportJob(res.data);
-      addToast('Inventory import queued. Processing asynchronously in background.', 'info');
+      addToast(t('importQueued'), 'info');
     } catch (err) {
-      addToast(err.response?.data?.message || err.message || 'Import could not be started.', 'error');
+      addToast(err.response?.data?.message || err.message || t('importStartFailed'), 'error');
     } finally {
       setCommitting(false);
     }
@@ -131,7 +133,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   const rollbackImport = async () => {
     if (!importJob?.batchId) return;
     if ((isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) || (needsBranchSelection && !targetBranchId.trim())) {
-      addToast('Select the original tenant and branch before rolling back this batch.', 'warning');
+      addToast(t('selectOriginalScopeRollback'), 'warning');
       return;
     }
     if (!window.confirm(`Revert inventory changes from batch ${importJob.batchId}? This is allowed only if affected stock and catalogue records have not changed since import.`)) return;
@@ -139,9 +141,9 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       const response = await apiClient.post(`/api/v1/inventory/imports/batches/${importJob.batchId}/rollback`, {}, { headers: getImportScopeHeaders() });
       setImportJob(previous => ({ ...previous, status: response.data.status, revertedAt: response.data.revertedAt }));
       fetchMedicines();
-      addToast('Import batch reverted successfully.', 'success');
+      addToast(t('batchReverted'), 'success');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Batch rollback was blocked to protect newer inventory changes.', 'error');
+      addToast(error.response?.data?.message || t('rollbackBlocked'), 'error');
     }
   };
 
@@ -160,7 +162,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       link.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not download failed records.', 'error');
+      addToast(error.response?.data?.message || t('failedRecordsDownload'), 'error');
     }
   };
 
@@ -182,9 +184,9 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
         }
       );
       setImportJob(previous => ({ ...previous, ...response.data, status: 'QUEUED' }));
-      addToast('Import retry queued.', 'info');
+      addToast(t('importRetryQueued'), 'info');
     } catch (error) {
-      addToast(error.response?.data?.message || 'Could not retry import.', 'error');
+      addToast(error.response?.data?.message || t('importRetryFailed'), 'error');
     }
   };
 
@@ -242,7 +244,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       addToast("Synthetic controlled-test template downloaded. Do not use it for live inventory.", "success");
     } catch (error) {
       console.error('Sample inventory workbook generation failed:', error);
-      addToast('Could not generate the sample Excel template.', 'error');
+      addToast(t('sampleTemplateFailed'), 'error');
     }
   };
 
@@ -275,8 +277,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 overscroll-contain">
           {!isSuperAdmin && needsBranchSelection && (
             <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 space-y-2">
-              <p className="text-xs font-extrabold text-sky-950">Select pharmacy branch</p>
-              <p className="text-[11px] text-sky-800">Your tenant identity comes from your signed session. The selected branch is checked against your active tenant membership.</p>
+              <p className="text-xs font-extrabold text-sky-950">{t('selectPharmacyBranch')}</p>
+              <p className="text-[11px] text-sky-800">{t('signedTenantIdentity')}</p>
               <input
                 value={targetBranchId}
                 onChange={event => {
@@ -284,7 +286,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   localStorage.setItem('pharma_import_target_branch_id', event.target.value);
                   setPreviewData(null);
                 }}
-                placeholder="Branch ID"
+                placeholder={t("branchId")}
                 disabled={Boolean(importJob)}
                 className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
               />
@@ -292,8 +294,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
           )}
           {isSuperAdmin && (
             <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 space-y-2">
-              <p className="text-xs font-extrabold text-sky-950">Platform import target</p>
-              <p className="text-[11px] text-sky-800">Select the exact active tenant and branch. The backend verifies the branch belongs to the tenant before preview, import, status lookup or rollback.</p>
+              <p className="text-xs font-extrabold text-sky-950">{t('platformImportTarget')}</p>
+              <p className="text-[11px] text-sky-800">{t('targetTenantBranchHelp')}</p>
               <input
                 value={targetTenantId}
                 onChange={event => {
@@ -301,7 +303,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   localStorage.setItem('pharma_import_target_tenant_id', event.target.value);
                   setPreviewData(null);
                 }}
-                placeholder="Target tenant ID"
+                placeholder={t("targetTenantId")}
                 disabled={Boolean(importJob)}
                 className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
               />
@@ -312,7 +314,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   localStorage.setItem('pharma_import_target_branch_id', event.target.value);
                   setPreviewData(null);
                 }}
-                placeholder="Target branch ID"
+                placeholder={t("branchId")}
                 disabled={Boolean(importJob)}
                 className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
               />
@@ -356,7 +358,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
             </div>
 
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs text-slate-500 pt-2">
-              <span className="break-words">Required: SKU, Medicine Name, Price, Stock</span>
+              <span className="break-words">{t('requiredColumns')}</span>
               <button
                 type="button"
                 onClick={downloadSampleTemplate}
@@ -366,11 +368,11 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
               </button>
             </div>
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
-              <label htmlFor="inventory-stock-mode" className="block text-xs font-bold text-amber-900">Stock update behaviour</label>
+              <label htmlFor="inventory-stock-mode" className="block text-xs font-bold text-amber-900">{t('stockUpdateBehaviour')}</label>
               <select id="inventory-stock-mode" value={stockMode} onChange={event => setStockMode(event.target.value)} className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-slate-800">
-                <option value="REPLACE">Replace existing batch quantity (safe default)</option>
+                <option value="REPLACE">{t('replaceBatchQuantity')}</option>
               </select>
-              <p className="text-[11px] text-amber-900">Rows are matched by SKU + Batch Number. Different batches remain separate. Expired batches are rejected. Upload replaces the selected batch quantity; additive mode is disabled to prevent duplicate stock increases during worker recovery.</p>
+              <p className="text-[11px] text-amber-900">{t('inventoryImportRules')}</p>
             </div>
           </div>
         )}
@@ -379,9 +381,9 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
         {previewData && (
           <div className="py-4 space-y-4 animate-fade-in">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs space-y-1">
-              <p className="font-bold text-slate-800">Target inventory scope</p>
-              <p className="break-all text-slate-600">Tenant: <strong>{previewData.tenantId || 'Missing'}</strong></p>
-              <p className="break-all text-slate-600">Branch: <strong>{previewData.branchId || 'Missing'}</strong></p>
+              <p className="font-bold text-slate-800">{t('targetInventoryScope')}</p>
+              <p className="break-all text-slate-600">{t('tenantAdmin')} : <strong>{previewData.tenantId || 'Missing'}</strong></p>
+              <p className="break-all text-slate-600">{t('branchId')}: <strong>{previewData.branchId || 'Missing'}</strong></p>
             </div>
             {!previewData.importsEnabled && (
               <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-900">
@@ -391,19 +393,19 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
             {/* Metric Summary Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <div className="bg-slate-50 border border-slate-200 p-3 rounded-2xl text-center">
-                <span className="text-[10px] font-bold text-slate-400 uppercase block">Total Rows</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase block">{t('totalRows')}</span>
                 <span className="text-lg font-black text-slate-900">{previewData.rowsDetected}</span>
               </div>
               <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-2xl text-center">
-                <span className="text-[10px] font-bold text-emerald-700 uppercase block">Valid</span>
+                <span className="text-[10px] font-bold text-emerald-700 uppercase block">{t('valid')}</span>
                 <span className="text-lg font-black text-emerald-800">{previewData.validCount}</span>
               </div>
               <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl text-center">
-                <span className="text-[10px] font-bold text-amber-700 uppercase block">Warnings</span>
+                <span className="text-[10px] font-bold text-amber-700 uppercase block">{t('warnings')}</span>
                 <span className="text-lg font-black text-amber-800">{previewData.warningsCount}</span>
               </div>
               <div className="bg-rose-50 border border-rose-200 p-3 rounded-2xl text-center">
-                <span className="text-[10px] font-bold text-rose-700 uppercase block">Errors</span>
+                <span className="text-[10px] font-bold text-rose-700 uppercase block">{t('errors')}</span>
                 <span className="text-lg font-black text-rose-800">{previewData.errorsCount}</span>
               </div>
             </div>
@@ -416,10 +418,10 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                     {['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(importJob.status)
                       ? '✓ Import Completed'
                       : importJob.status === 'REVERTED'
-                        ? 'Import Batch Reverted'
+                        ? t('importBatchReverted')
                         : importJob.status === 'FAILED'
-                          ? 'Import Paused / Failed'
-                          : 'Inventory Import Processing...'}
+                          ? t('importPausedFailed')
+                           : t('inventoryImportProcessing')}
                   </h3>
                   <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-blue-800 uppercase">
                     {(importJob.status || 'QUEUED').replaceAll('_', ' ')}
@@ -470,7 +472,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                 )}
                 {importJob.batchId && ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'].includes(importJob.status) && (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
-                    <p className="text-xs text-amber-900 break-all">Import Batch ID: <strong>{importJob.batchId}</strong></p>
+                    <p className="text-xs text-amber-900 break-all">{t('importBatchId')}: <strong>{importJob.batchId}</strong></p>
                     <button
                       type="button"
                       onClick={rollbackImport}
@@ -481,7 +483,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   </div>
                 )}
                 {importJob.status === 'REVERTED' && (
-                  <p className="text-xs font-bold text-emerald-800">This import batch has been reverted.</p>
+                  <p className="text-xs font-bold text-emerald-800">{t('batchRevertedMessage')}</p>
                 )}
                 {['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED', 'REVERTED'].includes(importJob.status) && (
                   <button
@@ -537,21 +539,21 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
             {!showErrorsOnly && (
               <div className="border border-slate-200 rounded-2xl overflow-hidden">
                 <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 text-xs font-bold text-slate-700 flex justify-between">
-                  <span>Server Inventory Preview (First 5 Rows)</span>
+                  <span>{t('serverInventoryPreview')}</span>
                   <span className="min-w-0 max-w-full truncate text-slate-400">{file?.name}</span>
                 </div>
                 <div className="max-h-48 overflow-auto">
                   <table className="w-full min-w-[620px] text-left text-[11px]">
                     <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-500 font-bold">
                       <tr>
-                        <th className="py-2 px-2.5">SKU</th>
-                        <th className="py-2 px-2.5">Name</th>
-                        <th className="py-2 px-2.5">Price</th>
-                        <th className="py-2 px-2.5">Existing</th>
-                        <th className="py-2 px-2.5">New Stock</th>
-                        <th className="py-2 px-2.5">Available</th>
-                        <th className="py-2 px-2.5">Expiry</th>
-                        <th className="py-2 px-2.5">Batch</th>
+                        <th className="py-2 px-2.5">{t('sku')}</th>
+                        <th className="py-2 px-2.5">{t('name')}</th>
+                        <th className="py-2 px-2.5">{t('price')}</th>
+                        <th className="py-2 px-2.5">{t('existing')}</th>
+                        <th className="py-2 px-2.5">{t('newStock')}</th>
+                        <th className="py-2 px-2.5">{t('available')}</th>
+                        <th className="py-2 px-2.5">{t('expiry')}</th>
+                        <th className="py-2 px-2.5">{t('batch')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -588,7 +590,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   disabled={!previewData.importsEnabled || committing || previewData.rowsDetected === 0 || !previewData.previewFingerprint}
                   className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md shadow-emerald-600/25 cursor-pointer transition flex items-center gap-1.5"
                 >
-                  <span>{!previewData.importsEnabled ? 'Import Writes Disabled' : committing ? 'Starting Ingestion...' : `Import ${previewData.rowsDetected} Records`}</span>
+                  <span>{!previewData.importsEnabled ? t('importWritesDisabled') : committing ? t('startingIngestion') : t('importRecords').replace('{count}', previewData.rowsDetected)}</span>
                   <span>✓</span>
                 </button>
               </div>

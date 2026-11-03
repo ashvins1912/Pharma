@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { useLanguage } from '../../context/LanguageContext';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 
 export default function WhatsAppConnectModal({ isOpen, onClose }) {
+  const { t } = useLanguage();
   const {
     whatsappStatus,
     generateWhatsAppQR,
@@ -42,13 +44,13 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
 
   const handleRemindLater = () => {
     dismissWhatsAppPrompt('later');
-    addToast('WhatsApp pairing postponed for 24 hours.', 'info');
+    addToast(t('whatsappPairingPostponed'), 'info');
     onClose();
   };
 
   const handleNotRequired = () => {
     dismissWhatsAppPrompt('not_required');
-    addToast('WhatsApp pairing disabled. You can reconnect anytime from the header button.', 'info');
+    addToast(t('whatsappPairingDisabled'), 'info');
     onClose();
   };
 
@@ -58,7 +60,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
       await generateWhatsAppQR();
       addToast('New WhatsApp QR code generated.', 'info');
     } catch (err) {
-      addToast(err?.message || 'Failed to regenerate QR code.', 'error');
+      addToast(err?.message || t('whatsappQrFailed'), 'error');
     } finally {
       setLoading(false);
     }
@@ -68,10 +70,10 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
     try {
       setLoading(true);
       await disconnectWhatsApp();
-      addToast('WhatsApp gateway disconnected. Mobile updates paused.', 'warning');
+      addToast(t('whatsappDisconnected'), 'warning');
       await generateWhatsAppQR();
     } catch {
-      addToast('Failed to disconnect WhatsApp.', 'error');
+      addToast(t('whatsappDisconnectFailed'), 'error');
     } finally {
       setLoading(false);
     }
@@ -124,7 +126,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
           <button
             onClick={handleRemindLater}
             className="w-8 h-8 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-sm font-bold transition cursor-pointer"
-            aria-label="Close"
+            aria-label={t("close")}
           >
             ✕
           </button>
@@ -150,15 +152,15 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
 
               <div className="bg-white border border-slate-200 rounded-2xl p-4 text-left space-y-2 text-xs shadow-xs">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Linked Phone:</span>
+                  <span className="text-slate-500">{t('linkedPhone')}:</span>
                   <strong className="text-slate-800 font-mono">{whatsappStatus.phone || '+91 98450 12345'}</strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Device Name:</span>
+                  <span className="text-slate-500">{t('deviceName')}:</span>
                   <strong className="text-slate-800">{whatsappStatus.deviceName || 'Admin Primary Mobile'}</strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Connected At:</span>
+                  <span className="text-slate-500">{t('connectedAt')}:</span>
                   <span className="text-slate-700 font-medium">
                     {whatsappStatus.lastConnectedAt ? new Date(whatsappStatus.lastConnectedAt).toLocaleTimeString() : 'Active'}
                   </span>
@@ -189,7 +191,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
               <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-start gap-2.5 text-xs text-amber-800">
                 <span className="text-base shrink-0">⚠️</span>
                 <div className="leading-snug">
-                  <strong className="font-extrabold block">WhatsApp Dispatch Offline</strong>
+                  <strong className="font-extrabold block">{t('whatsappDispatchOffline')}</strong>
                   Connect WhatsApp to automate patient order delivery confirmations and rider dispatch tracking. You can postpone or dismiss if not required.
                 </div>
               </div>
@@ -208,7 +210,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
                       />
                     ) : (
                       <div className="text-center p-3 text-slate-400 text-xs">
-                        {loading ? 'Generating QR...' : 'Loading QR...'}
+                        {loading ? t('generatingQr') : t('loadingQr')}
                       </div>
                     )}
                   </div>
@@ -234,7 +236,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
                         1
                       </span>
                       <p className="text-[11px] text-slate-700 leading-snug">
-                        Open <strong>WhatsApp</strong> on your pharmacy mobile device
+                        {t('openWhatsAppPhone')}
                       </p>
                     </div>
                     <div className="flex items-start gap-2.5">
@@ -242,7 +244,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
                         2
                       </span>
                       <p className="text-[11px] text-slate-700 leading-snug">
-                        Tap <strong>Menu (⋮)</strong> or <strong>Settings (⚙️)</strong>
+                        Tap <strong>{t('menu')}</strong> or <strong>{t('settings')}</strong>
                       </p>
                     </div>
                     <div className="flex items-start gap-2.5">
@@ -250,7 +252,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
                         3
                       </span>
                       <p className="text-[11px] text-slate-700 leading-snug">
-                        Select <strong>Linked Devices</strong>
+                        Select <strong>{t('linkedDevices')}</strong>
                       </p>
                     </div>
                     <div className="flex items-start gap-2.5">
@@ -258,7 +260,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
                         4
                       </span>
                       <p className="text-[11px] text-slate-700 leading-snug">
-                        Tap <strong>Link a Device</strong> and point your camera here
+                        Tap <strong>{t('linkDevice')}</strong> and point your camera here
                       </p>
                     </div>
                   </div>
@@ -275,7 +277,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
                     type="button"
                     onClick={handleNotRequired}
                     className="w-1/2 sm:w-auto px-3 py-2 text-xs font-bold text-slate-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition cursor-pointer"
-                    title="Dismiss permanently until manually re-opened"
+                    title={t("close")}
                   >
                     Not Required
                   </button>
@@ -296,7 +298,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
 
         {/* Modal Footer */}
         <div className="shrink-0 bg-slate-50 p-3 border-t border-slate-200 text-center text-[11px] text-slate-400 font-medium">
-          Ashvin Pharmacy Real-Time Order Verification & WhatsApp Dispatch Gateway
+          QuickMeds Rx Real-Time Order Verification & WhatsApp Dispatch Gateway
         </div>
       </div>
     </div>

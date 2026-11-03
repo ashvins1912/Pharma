@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function AdminAlertBell({
   onOpenAlerts,
@@ -7,6 +8,7 @@ export default function AdminAlertBell({
   canReadWhatsApp = true,
   canManageWhatsApp = false
 }) {
+  const { t } = useLanguage();
   const { inventoryAlerts = {}, whatsappStatus = {}, setWhatsappModalOpen } = useApp();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -26,7 +28,7 @@ export default function AdminAlertBell({
           if (onOpenAlerts) onOpenAlerts();
         }}
         className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 transition cursor-pointer flex items-center justify-center flex-shrink-0"
-        aria-label="Authorized Pharmacy Alerts"
+        aria-label={t("authorizedPharmacyAlerts")}
       >
         <span className="text-sm sm:text-base select-none">🔔</span>
         {total > 0 && (
@@ -46,9 +48,9 @@ export default function AdminAlertBell({
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div>
                 <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                  Dispensary Alerts ({total})
+                  {t('dispensaryAlerts')} ({total})
                 </h4>
-                <p className="text-[10px] text-slate-400">Automated safety threshold monitor</p>
+                <p className="text-[10px] text-slate-400">{t('safetyThresholdMonitor')}</p>
               </div>
               <button
                 onClick={() => setIsOpen(false)}
@@ -71,20 +73,20 @@ export default function AdminAlertBell({
                   <span className={`text-xs font-black flex items-center gap-1.5 ${
                     whatsappStatus?.isConnected ? 'text-emerald-900' : 'text-amber-950'
                   }`}>
-                    <span>📲</span> WhatsApp Dispatch Gateway
+                    <span>📲</span> {t('whatsappDispatchGateway')}
                   </span>
                   <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded uppercase ${
                     whatsappStatus?.isConnected ? 'bg-emerald-200 text-emerald-800' : 'bg-rose-200 text-rose-800'
                   }`}>
-                    {whatsappStatus?.isConnected ? 'Connected' : 'Offline'}
+                    {whatsappStatus?.isConnected ? t('connected') : t('offline')}
                   </span>
                 </div>
                 <p className={`text-[11px] mt-1 leading-snug ${
                   whatsappStatus?.isConnected ? 'text-emerald-700' : 'text-amber-800'
                 }`}>
                   {whatsappStatus?.isConnected
-                    ? `Linked to ${whatsappStatus.phone || 'Primary Phone'} for real-time mobile order dispatch updates.`
-                    : 'You may miss delivery updates on mobile. Automated SMS/WhatsApp notifications are paused.'}
+                    ? t('whatsappLinkedMessage').replace('{phone}', whatsappStatus.phone || t('primaryPhone'))
+                    : t('whatsappOfflineMessage')}
                 </p>
                 {!whatsappStatus?.isConnected && canManageWhatsApp && (
                   <button
@@ -94,7 +96,7 @@ export default function AdminAlertBell({
                     }}
                     className="mt-2 w-full bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[11px] py-1.5 rounded-xl cursor-pointer shadow-xs transition"
                   >
-                    Scan QR to Connect WhatsApp →
+                    {t('scanQrConnectWhatsApp')}
                   </button>
                 )}
               </div>
@@ -107,20 +109,20 @@ export default function AdminAlertBell({
               <div className="p-3 bg-red-50 border border-red-200 rounded-2xl space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-red-900 flex items-center gap-1.5">
-                    <span>🔴</span> Expired Medicines ({alerts.expiredCount || expired.length})
+                    <span>🔴</span> {t('expiredMedicines')} ({alerts.expiredCount || expired.length})
                   </span>
                   <span className="text-[10px] bg-red-200 text-red-800 font-extrabold px-1.5 py-0.5 rounded">
-                    Blocked
+                    {t('blocked')}
                   </span>
                 </div>
                 {expired.length === 0 ? (
-                  <p className="text-[11px] text-slate-500">No expired pharmaceuticals.</p>
+                  <p className="text-[11px] text-slate-500">{t('noExpiredPharmaceuticals')}</p>
                 ) : (
                   <div className="space-y-1">
                     {expired.map(m => (
                       <div key={m._id || m.id} className="text-[11px] text-red-700 flex justify-between">
                         <span className="truncate max-w-[170px]">• {m.name}</span>
-                        <span className="font-bold">Expired {Math.abs(m.daysLeft || 0)}d ago</span>
+                        <span className="font-bold">{t('daysAgo').replace('{days}', Math.abs(m.daysLeft || 0))}</span>
                       </div>
                     ))}
                   </div>
@@ -131,20 +133,20 @@ export default function AdminAlertBell({
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-amber-900 flex items-center gap-1.5">
-                    <span>🟠</span> Expiring in ≤30 days ({alerts.expiringSoonCount || expiringSoon.length})
+                    <span>🟠</span> {t('expiringIn30Days')} ({alerts.expiringSoonCount || expiringSoon.length})
                   </span>
                   <span className="text-[10px] bg-amber-200 text-amber-900 font-extrabold px-1.5 py-0.5 rounded">
-                    Urgent
+                    {t('urgent')}
                   </span>
                 </div>
                 {expiringSoon.length === 0 ? (
-                  <p className="text-[11px] text-slate-500">No medicines near expiry.</p>
+                  <p className="text-[11px] text-slate-500">{t('noMedicinesNearExpiry')}</p>
                 ) : (
                   <div className="space-y-1">
                     {expiringSoon.map(m => (
                       <div key={m._id || m.id} className="text-[11px] text-amber-800 flex justify-between">
                         <span className="truncate max-w-[170px]">• {m.name}</span>
-                        <span className="font-bold">{m.daysLeft || 0}d left</span>
+                        <span className="font-bold">{t('daysLeft').replace('{days}', m.daysLeft || 0)}</span>
                       </div>
                     ))}
                   </div>
@@ -155,20 +157,20 @@ export default function AdminAlertBell({
               <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-2xl space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-yellow-900 flex items-center gap-1.5">
-                    <span>🟡</span> Low Stock ({alerts.lowStockCount || lowStock.length})
+                    <span>🟡</span> {t('lowStock')} ({alerts.lowStockCount || lowStock.length})
                   </span>
                   <span className="text-[10px] bg-yellow-200 text-yellow-900 font-extrabold px-1.5 py-0.5 rounded">
-                    Restock
+                    {t('restock')}
                   </span>
                 </div>
                 {lowStock.length === 0 ? (
-                  <p className="text-[11px] text-slate-500">Adequate inventory levels.</p>
+                  <p className="text-[11px] text-slate-500">{t('adequateInventory')}</p>
                 ) : (
                   <div className="space-y-1">
                     {lowStock.map(m => (
                       <div key={m._id || m.id} className="text-[11px] text-yellow-800 flex justify-between">
                         <span className="truncate max-w-[170px]">• {m.name}</span>
-                        <span className="font-bold">{m.stock || 0} left</span>
+                        <span className="font-bold">{t('itemsLeft').replace('{count}', m.stock || 0)}</span>
                       </div>
                     ))}
                   </div>
@@ -181,7 +183,7 @@ export default function AdminAlertBell({
 
             <div className="pt-2 border-t border-slate-100 text-center">
               <span className="text-[10px] text-slate-400">
-                Dispensary Safety Controls Active
+                {t('dispensarySafetyActive')}
               </span>
             </div>
           </div>

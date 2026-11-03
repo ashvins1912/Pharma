@@ -22,7 +22,7 @@ export default function AdminPaymentReminders({ canManage = false }) {
       setTotalOutstanding(Number(data.totalOutstanding || 0));
       setTruncated(Boolean(data.truncated));
     } catch (requestError) {
-      setError(requestError.message || 'Could not load outstanding payments.');
+      setError(requestError.message || t('couldNotLoadPayments'));
     } finally {
       setLoading(false);
     }
@@ -43,7 +43,7 @@ export default function AdminPaymentReminders({ canManage = false }) {
       setNotice(`Reminder ${status.toLowerCase().replaceAll('_', ' ')} for customer ${customer.customerId.slice(-6)}.`);
       await load();
     } catch (requestError) {
-      setError(requestError.message || 'Could not send payment reminder.');
+      setError(requestError.message || t('couldNotSendReminder'));
     } finally {
       setSendingId(null);
     }
@@ -53,16 +53,16 @@ export default function AdminPaymentReminders({ canManage = false }) {
     <section className="space-y-4" aria-labelledby="payment-reminder-title">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 id="payment-reminder-title" className="text-lg font-black text-slate-900">Outstanding digital payments</h2>
+          <h2 id="payment-reminder-title" className="text-lg font-black text-slate-900">{t('outstandingPayments')}</h2>
           <p className="text-xs text-slate-500">{totalOutstanding == null ? 'Outstanding total exceeds the scan limit; filter by customer to calculate it.' : `Total outstanding: ${currency.format(totalOutstanding)}`} · Eligible invoices, reminder history, and snooze status.</p>
         </div>
-        <button type="button" onClick={load} disabled={loading} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold disabled:opacity-50">Refresh</button>
+        <button type="button" onClick={load} disabled={loading} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold disabled:opacity-50">{t('refresh')}</button>
       </header>
       {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
       {notice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
-      {truncated && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Showing the first 500 customers. Use the customer filter API for more results.</p>}
-      {loading ? <p className="py-10 text-center text-sm text-slate-500">Loading payment records…</p>
-        : customers.length === 0 ? <p className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">No eligible outstanding digital payments.</p>
+      {truncated && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{t('showingFirst500')}</p>}
+      {loading ? <p className="py-10 text-center text-sm text-slate-500">{t('loadingPaymentRecords')}</p>
+        : customers.length === 0 ? <p className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">{t('noOutstandingPayments')}</p>
           : <div className="grid gap-3 lg:grid-cols-2">
             {customers.map(customer => (
               <article key={customer.customerId} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -74,7 +74,7 @@ export default function AdminPaymentReminders({ canManage = false }) {
                   </div>
                   {canManage && (
                     <button type="button" onClick={() => sendReminder(customer)} disabled={Boolean(sendingId) || Boolean(customer.snoozedUntil)} className="rounded-xl bg-emerald-700 px-3 py-2 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50">
-                      {sendingId === customer.customerId ? 'Sending…' : customer.snoozedUntil ? 'Snoozed' : 'Send WhatsApp reminder'}
+                      {sendingId === customer.customerId ? t('sending') : customer.snoozedUntil ? t('snoozed') : t('sendWhatsAppReminder')}
                     </button>
                   )}
                 </header>

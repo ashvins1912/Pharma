@@ -1,7 +1,9 @@
 import React, { useRef, useState } from 'react';
 import apiClient from '../api/apiClient';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function OrderRatingPrompt({ order, onClose, onSubmitted, onAlreadySubmitted }) {
+  const { t } = useLanguage();
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -47,7 +49,7 @@ export default function OrderRatingPrompt({ order, onClose, onSubmitted, onAlrea
         className="w-full max-w-md space-y-5 rounded-3xl bg-white p-6 shadow-2xl"
       >
         <div>
-          <p className="text-xs font-black uppercase tracking-wider text-emerald-700">Delivery complete</p>
+          <p className="text-xs font-black uppercase tracking-wider text-emerald-700">{t('deliveryComplete')}</p>
           <h2 id="delivery-rating-title" className="mt-1 text-lg font-black text-slate-900">
             How was your delivery?
           </h2>
@@ -57,8 +59,8 @@ export default function OrderRatingPrompt({ order, onClose, onSubmitted, onAlrea
         </div>
 
         <fieldset>
-          <legend className="mb-2 text-xs font-bold text-slate-700">Your rating</legend>
-          <div className="flex gap-2" role="radiogroup" aria-label="Delivery rating">
+          <legend className="mb-2 text-xs font-bold text-slate-700">{t('yourRating')}</legend>
+          <div className="flex gap-2" role="radiogroup" aria-label={t("deliveryRating")}>
             {[1, 2, 3, 4, 5].map((value) => (
               <button
                 key={value}
@@ -102,7 +104,7 @@ export default function OrderRatingPrompt({ order, onClose, onSubmitted, onAlrea
             disabled={submitting}
             className="w-1/2 rounded-xl bg-blue-600 py-2.5 text-xs font-extrabold text-white disabled:opacity-50"
           >
-            {submitting ? 'Sending...' : 'Submit rating'}
+            {submitting ? t('sending') : t('submitRating')}
           </button>
         </div>
       </form>

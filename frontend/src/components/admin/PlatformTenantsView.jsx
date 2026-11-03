@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function PlatformTenantsView() {
+  const { t } = useLanguage();
   const { user, isSuperAdmin } = useAuth();
 
   const [tenants, setTenants] = useState([]);
@@ -78,7 +80,7 @@ export default function PlatformTenantsView() {
       const items = res.data?.data || [];
       setTenants(Array.isArray(items) ? items : []);
     } catch (err) {
-      setError(err.message || 'Could not load platform tenants.');
+      setError(err.message || t('platformTenantLoadFailed'));
     } finally {
       setLoading(false);
     }
@@ -127,7 +129,7 @@ export default function PlatformTenantsView() {
   const handleOnboardSubmit = async (e) => {
     e.preventDefault();
     if (!onboardForm.name.trim()) {
-      setOnboardError('Pharmacy Name is required.');
+      setOnboardError(t('pharmacyNameRequired'));
       return;
     }
 
@@ -159,7 +161,7 @@ export default function PlatformTenantsView() {
         }
       }
 
-      setActionSuccess(`Tenant "${created?.name || payload.name}" onboarded successfully.`);
+      setActionSuccess(t('tenantOnboardedSuccessfully').replace('{name}', created?.name || payload.name));
       setOnboardModalOpen(false);
       setOnboardForm({
         name: '',
@@ -186,10 +188,10 @@ export default function PlatformTenantsView() {
       setError('');
       const endpoint = `/api/v1/admin/tenants/${tenant.id}/${action}`;
       await apiClient.post(endpoint);
-      setActionSuccess(`Tenant "${tenant.name}" has been ${action === 'suspend' ? 'suspended' : 'activated'}.`);
+      setActionSuccess((action === 'suspend' ? t('tenantSuspended') : t('tenantActivated')).replace('{name}', tenant.name));
       await loadTenants();
     } catch (err) {
-      setError(`Failed to ${action} tenant: ${err.message}`);
+      setError(t('tenantActionFailed').replace('{error}', err.message));
     } finally {
       setStatusActionPending(null);
     }
@@ -208,7 +210,7 @@ export default function PlatformTenantsView() {
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
     if (!inviteForm.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteForm.email.trim())) {
-      setInviteError('Please provide a valid administrator email address.');
+      setInviteError(t('validAdminEmail'));
       return;
     }
 
@@ -225,7 +227,7 @@ export default function PlatformTenantsView() {
       setActionSuccess(`Invitation issued to ${inviteForm.email.trim()}.`);
       // Keep modal open to show token details
     } catch (err) {
-      setInviteError(err.message || 'Could not issue administrator invitation.');
+      setInviteError(err.message || t('adminInvitationFailed'));
     } finally {
       setSubmittingInvite(false);
     }
@@ -272,7 +274,7 @@ export default function PlatformTenantsView() {
         pincode: ''
       });
     } catch (err) {
-      setVendorError(err.response?.data?.error?.message || err.message || 'Failed to invite vendor.');
+      setVendorError(err.response?.data?.error?.message || err.message || t('vendorInviteFailed'));
     } finally {
       setSubmittingVendor(false);
     }
@@ -286,7 +288,7 @@ export default function PlatformTenantsView() {
       setActionSuccess('Vendor invitation link resent successfully.');
       await loadVendors();
     } catch (err) {
-      setError(`Failed to resend invitation: ${err.message}`);
+      setError(t('resendInvitationFailed').replace('{error}', err.message));
     } finally {
       setResendingVendorId(null);
     }
@@ -355,9 +357,9 @@ export default function PlatformTenantsView() {
         <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 min-w-0">
           <div>
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-blue-400">
-              <span>Ashvin Platform Foundation</span>
+              <span>{t('platformVendorName')}</span>
               <span aria-hidden="true">·</span>
-              <span className="text-emerald-400">Platform Scope</span>
+              <span className="text-emerald-400">{t('platformScope')}</span>
             </div>
             <h2 className="text-xl sm:text-2xl font-black tracking-tight mt-1">
               Multi-Tenant Pharmacy Directory & Access Governance
@@ -378,7 +380,7 @@ export default function PlatformTenantsView() {
               className="bg-teal-600 hover:bg-teal-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-sm shrink-0"
             >
               <span>✉️</span>
-              <span>Invite Vendor Partner</span>
+              <span>{t('inviteVendorPartner')}</span>
             </button>
 
             <button
@@ -390,7 +392,7 @@ export default function PlatformTenantsView() {
               className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-sm shrink-0"
             >
               <span>➕</span>
-              <span>Onboard Pharmacy Tenant</span>
+              <span>{t('onboardPharmacyTenant')}</span>
             </button>
           </div>
         </div>
@@ -558,7 +560,7 @@ export default function PlatformTenantsView() {
           <div className="relative flex-1 min-w-0 lg:w-64">
             <input
               type="text"
-              placeholder="Search by name, slug, code..."
+              placeholder={t("tenantSearchPlaceholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
@@ -579,7 +581,7 @@ export default function PlatformTenantsView() {
             onClick={loadTenants}
             disabled={loading}
             className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition cursor-pointer text-xs disabled:opacity-50 shrink-0"
-            title="Reload Tenants"
+            title={t("reloadTenants")}
           >
             🔄
           </button>
@@ -590,12 +592,12 @@ export default function PlatformTenantsView() {
       {loading ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 space-y-2">
           <div className="inline-block animate-spin text-2xl">⚙️</div>
-          <p className="text-xs font-bold">Querying platform tenant registry...</p>
+          <p className="text-xs font-bold">{t('queryingTenantRegistry')}</p>
         </div>
       ) : filteredTenants.length === 0 ? (
         <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center text-slate-500 space-y-3">
           <span className="text-3xl">🏢</span>
-          <h4 className="text-sm font-bold text-slate-700">No matching tenants found</h4>
+          <h4 className="text-sm font-bold text-slate-700">{t('noMatchingTenants')}</h4>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
             {searchQuery || statusFilter !== 'ALL'
               ? 'Try adjusting your search criteria or filter controls.'
@@ -615,12 +617,12 @@ export default function PlatformTenantsView() {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4">Pharmacy / Tenant</th>
-                  <th className="py-3 px-4">System Identifiers</th>
-                  <th className="py-3 px-4">Operating Status</th>
-                  <th className="py-3 px-4">Contact Details</th>
+                  <th className="py-3 px-4">{t('pharmacyTenant')}</th>
+                  <th className="py-3 px-4">{t('systemIdentifiers')}</th>
+                  <th className="py-3 px-4">{t('operatingStatus')}</th>
+                  <th className="py-3 px-4">{t('contactDetails')}</th>
                   <th className="py-3 px-4">Locale & Currency</th>
-                  <th className="py-3 px-4 text-right">Administrative Actions</th>
+                  <th className="py-3 px-4 text-right">{t('administrativeActions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
@@ -693,7 +695,7 @@ export default function PlatformTenantsView() {
                             type="button"
                             onClick={() => openInviteModal(t)}
                             className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer"
-                            title="Invite a Tenant Administrator"
+                            title={t("inviteTenantAdministrator")}
                           >
                             👤 Invite Admin
                           </button>
@@ -703,7 +705,7 @@ export default function PlatformTenantsView() {
                             type="button"
                             onClick={() => openDetailsModal(t)}
                             className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer"
-                            title="Inspect Tenant Details"
+                            title={t("inspectTenantDetails")}
                           >
                             👁️ Details
                           </button>
@@ -715,7 +717,7 @@ export default function PlatformTenantsView() {
                               disabled={isMutating}
                               onClick={() => handleToggleStatus(t, 'suspend')}
                               className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer disabled:opacity-50"
-                              title="Suspend Tenant Operations"
+                              title={t("suspendTenantOperations")}
                             >
                               {isMutating ? '...' : '🚫 Suspend'}
                             </button>
@@ -727,7 +729,7 @@ export default function PlatformTenantsView() {
                               disabled={isMutating}
                               onClick={() => handleToggleStatus(t, 'activate')}
                               className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer disabled:opacity-50"
-                              title="Re-activate Tenant"
+                              title={t("reactivateTenant")}
                             >
                               {isMutating ? '...' : '✅ Activate'}
                             </button>
@@ -748,7 +750,7 @@ export default function PlatformTenantsView() {
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
             <div>
-              <h3 className="text-sm font-black text-slate-800">Pharmacy Vendor Onboarding Pipeline</h3>
+              <h3 className="text-sm font-black text-slate-800">{t('vendorOnboardingPipeline')}</h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Issue single-use cryptographic invitation links. Vendors complete verification to automatically provision their Tenant workspaces.
               </p>
@@ -763,7 +765,7 @@ export default function PlatformTenantsView() {
               className="bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm shrink-0"
             >
               <span>➕</span>
-              <span>Invite New Vendor</span>
+              <span>{t('inviteNewVendor')}</span>
             </button>
           </div>
 
@@ -773,18 +775,18 @@ export default function PlatformTenantsView() {
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
                     <th className="py-3 px-4">Company & Vendor</th>
-                    <th className="py-3 px-4">Contact</th>
-                    <th className="py-3 px-4">GST / Tax ID</th>
-                    <th className="py-3 px-4 text-center">Onboarding Status</th>
-                    <th className="py-3 px-4">Timeline</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    <th className="py-3 px-4">{t('contact')}</th>
+                    <th className="py-3 px-4">{t('gstTaxId')}</th>
+                    <th className="py-3 px-4 text-center">{t('onboardingStatus')}</th>
+                    <th className="py-3 px-4">{t('timeline')}</th>
+                    <th className="py-3 px-4 text-right">{t('actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
                   {vendors.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-12 text-center text-slate-400">
-                        {loadingVendors ? 'Loading vendor invitations...' : 'No vendor invitations issued yet. Click "Invite New Vendor" to get started.'}
+                        {loadingVendors ? t('loadingVendorInvitations') : t('noVendorInvitations')}
                       </td>
                     </tr>
                   ) : (
@@ -837,7 +839,7 @@ export default function PlatformTenantsView() {
                                 {resendingVendorId === vId ? 'Resending...' : 'Resend Invite'}
                               </button>
                             ) : (
-                              <span className="text-[11px] font-bold text-emerald-600">Active Tenant</span>
+                              <span className="text-[11px] font-bold text-emerald-600">{t('activeTenant')}</span>
                             )}
                           </td>
                         </tr>
@@ -1034,7 +1036,7 @@ export default function PlatformTenantsView() {
               <div className="space-y-3 bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-emerald-900 text-xs">
                 <div className="flex items-center gap-1.5 font-extrabold text-sm text-emerald-800">
                   <span>✅</span>
-                  <span>Invitation Successfully Issued</span>
+                  <span>{t('invitationIssued')}</span>
                 </div>
                 <p className="text-[11px] text-emerald-700">
                   An administrator record has been registered for <strong>{issuedInvitation.email}</strong> under <strong>{selectedTenant.name}</strong>.
@@ -1080,9 +1082,9 @@ export default function PlatformTenantsView() {
                 </div>
 
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 space-y-1">
-                  <div className="font-bold text-slate-700">Security Guarantee:</div>
+                  <div className="font-bold text-slate-700">{t('securityGuarantee')}</div>
                   <p>
-                    Invited administrators receive <strong>TENANT_ADMIN</strong> scope bound exclusively to this tenant. Cross-tenant access is strictly denied by the API Gateway.
+                    {t('tenantScopeSecurity')}
                   </p>
                 </div>
 
@@ -1166,7 +1168,7 @@ export default function PlatformTenantsView() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-slate-400 text-[11px] italic">No physical branches registered yet.</p>
+                    <p className="text-slate-400 text-[11px] italic">{t('noBranchesRegistered')}</p>
                   )}
                 </div>
 
@@ -1195,7 +1197,7 @@ export default function PlatformTenantsView() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-slate-400 text-[11px] italic">No active memberships attached.</p>
+                    <p className="text-slate-400 text-[11px] italic">{t('noActiveMemberships')}</p>
                   )}
                 </div>
               </div>
@@ -1256,13 +1258,13 @@ export default function PlatformTenantsView() {
                   <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900 space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-lg">🎉</span>
-                      <h4 className="font-black text-sm">Vendor Partner Invited Successfully!</h4>
+                      <h4 className="font-black text-sm">{t('vendorPartnerInvited')}</h4>
                     </div>
                     <p className="text-xs text-emerald-800">
                       An onboarding link has been generated. The vendor can complete their registration, setup pharmacy branches, and claim their tenant portal.
                     </p>
                     <div className="pt-2 text-xs space-y-1 text-slate-700">
-                      <p><span className="font-bold">Vendor Name:</span> {invitedVendorResult.name}</p>
+                      <p><span className="font-bold">{t('vendorName')}:</span> {invitedVendorResult.name}</p>
                       <p><span className="font-bold">Email:</span> {invitedVendorResult.email}</p>
                       <p><span className="font-bold">Status:</span> <span className="font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full text-[10px]">{invitedVendorResult.status || 'INVITED'}</span></p>
                       {invitedVendorResult.onboardingUrl && (
@@ -1385,7 +1387,7 @@ export default function PlatformTenantsView() {
                     </span>
                     <input
                       type="text"
-                      placeholder="Street address or landmark"
+                      placeholder={t("streetAddressOrLandmark")}
                       value={vendorForm.street}
                       onChange={(e) => setVendorForm({ ...vendorForm, street: e.target.value })}
                       className="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
@@ -1393,21 +1395,21 @@ export default function PlatformTenantsView() {
                     <div className="grid grid-cols-3 gap-2">
                       <input
                         type="text"
-                        placeholder="City"
+                        placeholder={t("city")}
                         value={vendorForm.city}
                         onChange={(e) => setVendorForm({ ...vendorForm, city: e.target.value })}
                         className="text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
                       />
                       <input
                         type="text"
-                        placeholder="State"
+                        placeholder={t("state")}
                         value={vendorForm.state}
                         onChange={(e) => setVendorForm({ ...vendorForm, state: e.target.value })}
                         className="text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
                       />
                       <input
                         type="text"
-                        placeholder="Pincode"
+                        placeholder={t("pincode")}
                         value={vendorForm.pincode}
                         onChange={(e) => setVendorForm({ ...vendorForm, pincode: e.target.value })}
                         className="text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
