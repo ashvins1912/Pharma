@@ -89,7 +89,7 @@ router.post('/:tenantId/branches', authenticateUser, requireRoles(PlatformRoles.
     try {
         const branch = await tenantService.createBranch(req.params.tenantId, req.body, req.context);
         await cacheService.del(CACHE_KEY_ALL_BRANCHES);
-        await cacheService.del(`cache:tenant:${req.params.tenantId}:branches`);
+        await cacheService.del(`cache:tenant:${req.params.tenantId}:branches:v2`);
         res.status(201).json({ success: true, data: branch });
     } catch (err) {
         next(err);
@@ -99,12 +99,33 @@ router.post('/:tenantId/branches', authenticateUser, requireRoles(PlatformRoles.
 // Update branch settings - Invalidates cache
 router.put('/branches/:branchId', authenticateUser, requireRoles(PlatformRoles.PLATFORM_SUPER_ADMIN, TenantRoles.TENANT_OWNER, TenantRoles.TENANT_ADMIN), async (req, res, next) => {
     try {
+        const current = await tenantService.getBranchById(req.params.branchId);
+        if (!current) return res.status(404).json({ success: false, code: 'BRANCH_NOT_FOUND', message: 'Branch not found.' });
+        if (!req.context?.isPlatformUser && String(req.context?.authorizedTenantId || req.context?.tenantId || '') !== String(current.tenantId)) {
+            return res.status(403).json({ success: false, code: 'CROSS_TENANT_BRANCH_ACCESS', message: 'You cannot modify a branch outside your pharmacy.' });
+        }
         const updated = await tenantService.updateBranch(req.params.branchId, req.body, req.context);
         await cacheService.del(CACHE_KEY_ALL_BRANCHES);
-        if (updated?.tenantId) {
-            await cacheService.del(`cache:tenant:${updated.tenantId}:branches:v2`);
-        }
+        await cacheService.del(`cache:tenant:${updated.tenantId}:branches:v2`);
         res.json({ success: true, data: updated });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.post('/branches/:branchId/activate', authenticateUser, requireRoles(PlatformRoles.PLATFORM_SUPER_ADMIN, TenantRoles.TENANT_OWNER, TenantRoles.TENANT_ADMIN), async (req, res, next) => {
+    try {
+        const current = await tenantService.getBranchById(req.params.branchId);
+        if (!current) return res.status(404).json({ success: false, code: 'BRANCH_NOT_FOUND', message: 'Branch not found.' });
+        const isPlatformUser = Boolean(req.context?.isPlatformUser);
+        const authorizedTenantId = String(req.context?.authorizedTenantId || req.context?.tenantId || '');
+        if (!isPlatformUser && authorizedTenantId !== String(current.tenantId)) {
+            return res.status(403).json({ success: false, code: 'CROSS_TENANT_BRANCH_ACCESS', message: 'You cannot activate a branch outside your pharmacy.' });
+        }
+        const activated = await tenantService.activateBranch(req.params.branchId, current.tenantId, req.context);
+        await cacheService.del(CACHE_KEY_ALL_BRANCHES);
+        await cacheService.del(`cache:tenant:${current.tenantId}:branches:v2`);
+        res.json({ success: true, data: activated });
     } catch (err) {
         next(err);
     }
