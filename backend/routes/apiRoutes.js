@@ -20,6 +20,7 @@ import UserProfile from '../models/UserProfile.js';
 import riderRoutes from '../modules/delivery/routes/riderRoutes.js';
 import assignmentRoutes from '../modules/delivery/routes/assignmentRoutes.js';
 import { GoogleGenAI } from '@google/genai';
+import { cacheService } from '../services/cache/CacheService.js';
 
 const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
@@ -140,7 +141,7 @@ router.get('/vendor/profile', async (req, res) => {
 
 const resolveTenantBranchScope = async (req) => {
     const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
-    const isPlatformAdmin = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+    const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
     const tenantId = String(isPlatformAdmin
         ? (req.get('x-tenant-id') || req.query.tenantId || req.body?.tenantId || '')
         : (req.user?.app_metadata?.tenantId || req.user?.tenantId || '')
@@ -192,6 +193,8 @@ router.post('/tenant/branches/:branchId/activate', authenticateUser, async (req,
         if (scope.error) return res.status(scope.error[0]).json({ success: false, code: scope.error[1], message: scope.error[2] });
         if (!scope.canManage) return res.status(403).json({ success: false, code: 'BRANCH_MANAGEMENT_FORBIDDEN', message: 'Only a pharmacy owner or administrator can activate branches.' });
         const branch = await tenantService.activateBranch(req.params.branchId, scope.tenantId, req.context || req.user);
+        await cacheService.del('cache:tenants:branches:all');
+        await cacheService.del(`cache:tenant:${scope.tenantId}:branches:v2`);
         return res.json({ success: true, data: branch });
     } catch (err) {
         return res.status(err.statusCode || 500).json({ success: false, code: err.code || 'BRANCH_ACTIVATION_FAILED', message: err.message || 'Branch could not be activated.' });
