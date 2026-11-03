@@ -3,6 +3,8 @@
  * Handles SMTP dispatch for account verification, vendor onboarding, and password resets.
  */
 import nodemailer from 'nodemailer';
+import mongoose from 'mongoose';
+import UserProfile from '../../models/UserProfile.js';
 import { logger } from '../../shared/observability/logger.js';
 
 class EmailService {
@@ -16,6 +18,18 @@ class EmailService {
 
         this.transporter = null;
         this._initTransporter();
+    }
+
+    async resolveLanguage(email, explicitLanguage = null) {
+        const explicit = String(explicitLanguage || '').toLowerCase();
+        if (['en', 'hi', 'kn', 'bn', 'te'].includes(explicit)) return explicit;
+        if (mongoose.connection.readyState !== 1 || !email) return 'en';
+        try {
+            const profile = await UserProfile.findOne({ email: String(email).toLowerCase().trim() }).select('preferredLanguage').lean();
+            return ['en', 'hi', 'kn', 'bn', 'te'].includes(profile?.preferredLanguage) ? profile.preferredLanguage : 'en';
+        } catch {
+            return 'en';
+        }
     }
 
     _initTransporter() {
@@ -47,11 +61,19 @@ class EmailService {
     /**
      * Send email verification link to newly registered user
      */
-    async sendEmailVerification({ email, name, token, code, verificationUrl }) {
+    async sendEmailVerification({ email, name, token, code, verificationUrl, language }) {
+        const locale = await this.resolveLanguage(email, language);
+        const copy = {
+            en: { subject: 'Verify your QuickMeds Rx account', brand: 'QuickMeds Rx', badge: 'Account Verification', welcome: 'Welcome', intro: 'Thank you for signing up for QuickMeds Rx. Confirm your email address using the verification code below before continuing to your profile setup.', code: 'Your 6-digit verification code', verify: 'Verify Email Address', expires: 'Your 6-digit code is valid for', link: 'You can also use the verification link below while it remains available:', ignore: 'If you did not request this account, please ignore this email.', footer: '${copy.footer}' },
+            hi: { subject: 'अपने QuickMeds Rx अकाउंट का ईमेल सत्यापित करें', brand: 'QuickMeds Rx', badge: 'अकाउंट सत्यापन', welcome: 'स्वागत है', intro: 'QuickMeds Rx पर साइन अप करने के लिए धन्यवाद। प्रोफ़ाइल सेटअप जारी रखने से पहले नीचे दिए गए कोड से अपना ईमेल सत्यापित करें।', code: 'आपका 6 अंकों का सत्यापन कोड', verify: 'ईमेल सत्यापित करें', expires: 'आपका 6 अंकों का कोड इस समय तक मान्य है', link: 'आप नीचे दिए गए सत्यापन लिंक का भी उपयोग कर सकते हैं:', ignore: 'यदि आपने यह अकाउंट नहीं बनाया है, तो इस ईमेल को अनदेखा करें।', footer: 'सर्वाधिकार सुरक्षित।' },
+            kn: { subject: 'ನಿಮ್ಮ QuickMeds Rx ಖಾತೆಯ ಇಮೇಲ್ ಪರಿಶೀಲಿಸಿ', brand: 'QuickMeds Rx', badge: 'ಖಾತೆ ಪರಿಶೀಲನೆ', welcome: 'ಸ್ವಾಗತ', intro: 'QuickMeds Rx ಗೆ ಸೈನ್ ಅಪ್ ಮಾಡಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. ಪ್ರೊಫೈಲ್ ಸೆಟಪ್ ಮುಂದುವರಿಸುವ ಮೊದಲು ಕೆಳಗಿನ ಕೋಡ್ ಬಳಸಿ ಇಮೇಲ್ ಪರಿಶೀಲಿಸಿ.', code: 'ನಿಮ್ಮ 6 ಅಂಕಿಯ ಪರಿಶೀಲನಾ ಕೋಡ್', verify: 'ಇಮೇಲ್ ಪರಿಶೀಲಿಸಿ', expires: 'ನಿಮ್ಮ 6 ಅಂಕಿಯ ಕೋಡ್ ಈ ಅವಧಿಗೆ ಮಾನ್ಯ', link: 'ಲಭ್ಯವಿರುವವರೆಗೆ ಕೆಳಗಿನ ಪರಿಶೀಲನಾ ಲಿಂಕ್ ಬಳಸಿ:', ignore: 'ನೀವು ಈ ಖಾತೆಯನ್ನು ವಿನಂತಿಸದಿದ್ದರೆ ಈ ಇಮೇಲ್ ನಿರ್ಲಕ್ಷಿಸಿ.', footer: 'ಎಲ್ಲ ಹಕ್ಕುಗಳನ್ನು ಕಾಯ್ದಿರಿಸಲಾಗಿದೆ.' },
+            bn: { subject: 'আপনার QuickMeds Rx অ্যাকাউন্টের ইমেল যাচাই করুন', brand: 'QuickMeds Rx', badge: 'অ্যাকাউন্ট যাচাইকরণ', welcome: 'স্বাগতম', intro: 'QuickMeds Rx-এ সাইন আপ করার জন্য ধন্যবাদ। প্রোফাইল সেটআপ চালিয়ে যাওয়ার আগে নিচের কোড দিয়ে আপনার ইমেল নিশ্চিত করুন।', code: 'আপনার ৬ সংখ্যার যাচাইকরণ কোড', verify: 'ইমেল যাচাই করুন', expires: 'আপনার ৬ সংখ্যার কোডের মেয়াদ', link: 'উপলভ্য থাকা পর্যন্ত নিচের যাচাইকরণ লিঙ্কটিও ব্যবহার করতে পারেন:', ignore: 'আপনি এই অ্যাকাউন্টের অনুরোধ না করলে এই ইমেল উপেক্ষা করুন।', footer: 'সর্বস্বত্ব সংরক্ষিত।' },
+            te: { subject: 'మీ QuickMeds Rx ఖాతా ఇమెయిల్‌ను ధృవీకరించండి', brand: 'QuickMeds Rx', badge: 'ఖాతా ధృవీకరణ', welcome: 'స్వాగతం', intro: 'QuickMeds Rxలో సైన్ అప్ చేసినందుకు ధన్యవాదాలు. ప్రొఫైల్ సెటప్ కొనసాగించే ముందు దిగువ కోడ్‌తో మీ ఇమెయిల్‌ను నిర్ధారించండి.', code: 'మీ 6 అంకెల ధృవీకరణ కోడ్', verify: 'ఇమెయిల్ ధృవీకరించండి', expires: 'మీ 6 అంకెల కోడ్ చెల్లుబాటు సమయం', link: 'అందుబాటులో ఉన్నంత వరకు దిగువ ధృవీకరణ లింక్‌ను కూడా ఉపయోగించవచ్చు:', ignore: 'మీరు ఈ ఖాతాను అభ్యర్థించకపోతే ఈ ఇమెయిల్‌ను పట్టించుకోకండి.', footer: 'అన్ని హక్కులు ప్రత్యేకించబడ్డాయి.' }
+        }[locale];
         const targetUrl = verificationUrl || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${encodeURIComponent(token)}`;
         const recipientName = name || 'Valued Member';
 
-        const subject = 'Verify your Ashvin Pharmacy account';
+        const subject = copy.subject;
         const html = `
 <!DOCTYPE html>
 <html>
@@ -71,17 +93,17 @@ class EmailService {
 </head>
 <body>
   <div class="card">
-    <div class="brand">💊 Ashvin Pharmacy Platform</div>
-    <span class="badge">Account Verification</span>
-    <h1>Welcome, ${recipientName}!</h1>
-    <p>Thank you for signing up for Ashvin Pharmacy. Confirm your email address using the verification code below before continuing to your profile setup.</p>
-    ${code ? `<div style="text-align:center; margin:24px 0;"><div style="font-size:12px; color:#64748b; margin-bottom:8px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Your 6-digit verification code</div><div style="display:inline-block; padding:16px 24px; background:#f0fdfa; border:1px solid #99f6e4; border-radius:14px; font-size:32px; letter-spacing:8px; font-weight:900; color:#0f766e; font-family:monospace;">${code}</div></div>` : ''}
+    <div class="brand">💊 ${copy.brand}</div>
+    <span class="badge">${copy.badge}</span>
+    <h1>${copy.welcome}, ${recipientName}!</h1>
+    <p>${copy.intro}</p>
+    ${code ? `<div style="text-align:center; margin:24px 0;"><div style="font-size:12px; color:#64748b; margin-bottom:8px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">${copy.code}</div><div style="display:inline-block; padding:16px 24px; background:#f0fdfa; border:1px solid #99f6e4; border-radius:14px; font-size:32px; letter-spacing:8px; font-weight:900; color:#0f766e; font-family:monospace;">${code}</div></div>` : ''}
     <div style="text-align: center;">
-      <a href="${targetUrl}" class="btn" target="_blank">Verify Email Address</a>
+      <a href="${targetUrl}" class="btn" target="_blank">${copy.verify}</a>
     </div>
-    <p>Your 6-digit code is valid for <strong>10 minutes</strong>. You can also use the verification link below while it remains available:</p>
+    <p>${copy.expires} <strong>10 minutes</strong>. ${copy.link}</p>
     <div class="link-box">${targetUrl}</div>
-    <p style="font-size: 12px; color: #64748b;">If you did not request this account, please ignore this email.</p>
+    <p style="font-size: 12px; color: #64748b;">${copy.ignore}</p>
     <div class="footer">
       &copy; ${new Date().getFullYear()} Ashvin Healthcare Private Limited. All rights reserved.
     </div>
@@ -171,11 +193,19 @@ class EmailService {
     /**
      * Send password reset email
      */
-    async sendPasswordResetEmail({ email, name, token, resetUrl }) {
+    async sendPasswordResetEmail({ email, name, token, resetUrl, language }) {
+        const locale = await this.resolveLanguage(email, language);
+        const copy = {
+            en: { subject: 'Reset your QuickMeds Rx password', brand: 'QuickMeds Rx', title: 'Password Reset Request', hello: 'Hello', intro: 'We received a request to reset the password for your QuickMeds Rx account. Click the button below to choose a new secure password:', button: 'Reset Password', expires: 'This password reset link expires in', ignore: 'If you did not initiate this request, you can safely ignore this email.' },
+            hi: { subject: 'QuickMeds Rx पासवर्ड रीसेट करें', brand: 'QuickMeds Rx', title: 'पासवर्ड रीसेट अनुरोध', hello: 'नमस्ते', intro: 'हमें आपके QuickMeds Rx अकाउंट का पासवर्ड रीसेट करने का अनुरोध मिला है। नया सुरक्षित पासवर्ड चुनने के लिए नीचे दिए बटन पर क्लिक करें:', button: 'पासवर्ड रीसेट करें', expires: 'इस पासवर्ड रीसेट लिंक की समय-सीमा', ignore: 'यदि आपने यह अनुरोध नहीं किया है, तो इस ईमेल को अनदेखा करें।' },
+            kn: { subject: 'QuickMeds Rx ಪಾಸ್‌ವರ್ಡ್ ಮರುಹೊಂದಿಸಿ', brand: 'QuickMeds Rx', title: 'ಪಾಸ್‌ವರ್ಡ್ ಮರುಹೊಂದಿಸುವ ವಿನಂತಿ', hello: 'ನಮಸ್ಕಾರ', intro: 'ನಿಮ್ಮ QuickMeds Rx ಖಾತೆಯ ಪಾಸ್‌ವರ್ಡ್ ಮರುಹೊಂದಿಸಲು ವಿನಂತಿ ಬಂದಿದೆ. ಹೊಸ ಸುರಕ್ಷಿತ ಪಾಸ್‌ವರ್ಡ್ ಆಯ್ಕೆ ಮಾಡಲು ಕೆಳಗಿನ ಬಟನ್ ಕ್ಲಿಕ್ ಮಾಡಿ:', button: 'ಪಾಸ್‌ವರ್ಡ್ ಮರುಹೊಂದಿಸಿ', expires: 'ಈ ಪಾಸ್‌ವರ್ಡ್ ಮರುಹೊಂದಿಸುವ ಲಿಂಕ್‌ನ ಅವಧಿ', ignore: 'ನೀವು ಈ ವಿನಂತಿ ಮಾಡದಿದ್ದರೆ ಈ ಇಮೇಲ್ ನಿರ್ಲಕ್ಷಿಸಿ.' },
+            bn: { subject: 'QuickMeds Rx পাসওয়ার্ড রিসেট করুন', brand: 'QuickMeds Rx', title: 'পাসওয়ার্ড রিসেটের অনুরোধ', hello: 'নমস্কার', intro: 'আপনার QuickMeds Rx অ্যাকাউন্টের পাসওয়ার্ড রিসেট করার অনুরোধ পেয়েছি। নতুন নিরাপদ পাসওয়ার্ড বেছে নিতে নিচের বোতামে ক্লিক করুন:', button: 'পাসওয়ার্ড রিসেট করুন', expires: 'এই পাসওয়ার্ড রিসেট লিঙ্কের মেয়াদ', ignore: 'আপনি এই অনুরোধ না করলে এই ইমেল উপেক্ষা করুন।' },
+            te: { subject: 'QuickMeds Rx పాస్‌వర్డ్ రీసెట్ చేయండి', brand: 'QuickMeds Rx', title: 'పాస్‌వర్డ్ రీసెట్ అభ్యర్థన', hello: 'నమస్కారం', intro: 'మీ QuickMeds Rx ఖాతా పాస్‌వర్డ్‌ను రీసెట్ చేయమని అభ్యర్థన అందింది. కొత్త సురక్షిత పాస్‌వర్డ్ ఎంచుకోవడానికి దిగువ బటన్‌పై క్లిక్ చేయండి:', button: 'పాస్‌వర్డ్ రీసెట్ చేయండి', expires: 'ఈ పాస్‌వర్డ్ రీసెట్ లింక్ గడువు', ignore: 'మీరు ఈ అభ్యర్థన చేయకపోతే ఈ ఇమెయిల్‌ను పట్టించుకోకండి.' }
+        }[locale];
         const targetUrl = resetUrl || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${encodeURIComponent(token)}`;
         const recipientName = name || 'User';
 
-        const subject = 'Reset your password - Ashvin Pharmacy';
+        const subject = copy.subject;
         const html = `
 <!DOCTYPE html>
 <html>
@@ -194,14 +224,14 @@ class EmailService {
 </head>
 <body>
   <div class="card">
-    <div class="brand">💊 Ashvin Pharmacy Platform</div>
-    <h1>Password Reset Request</h1>
-    <p>Hello ${recipientName},</p>
-    <p>We received a request to reset the password for your Ashvin Pharmacy account. Click the button below to choose a new secure password:</p>
+    <div class="brand">💊 ${copy.brand}</div>
+    <h1>${copy.title}</h1>
+    <p>${copy.hello} ${recipientName},</p>
+    <p>${copy.intro}</p>
     <div style="text-align: center;">
-      <a href="${targetUrl}" class="btn" target="_blank">Reset Password</a>
+      <a href="${targetUrl}" class="btn" target="_blank">${copy.button}</a>
     </div>
-    <p>This password reset link expires in <strong>1 hour</strong>. If you did not initiate this request, you can safely ignore this email.</p>
+    <p>${copy.expires} <strong>1 hour</strong>. ${copy.ignore}</p>
     <div class="link-box">${targetUrl}</div>
     <div class="footer">&copy; ${new Date().getFullYear()} Ashvin Healthcare Private Limited.</div>
   </div>
