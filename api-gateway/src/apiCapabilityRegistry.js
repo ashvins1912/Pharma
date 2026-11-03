@@ -135,7 +135,7 @@ const CAPABILITIES = [
   ['POST', /^\/api\/v1\/notifications(?:\/|$)/, 'profile.write'],
   ['GET', /^\/api\/v1\/vendors?(?:\/|$)/, 'tenants.read'],
   ['GET', /^\/api\/vendor\/profile$/, 'tenants.read'],
-  ['GET', /^\/api\/tenant\/nearby$/, 'tenants.read'],
+  ['GET', /^\/api\/tenant\/nearby$/, 'tenant.branches.read'],
   ['GET', /^\/api\/tenant\/branches(?:\/|$)/, 'tenants.read'],
   ['POST', /^\/api\/tenant\/branches(?:\/|$)/, 'tenants.manage'],
   ['POST', /^\/api\/v1\/vendors?(?:\/|$)/, 'tenants.manage']
