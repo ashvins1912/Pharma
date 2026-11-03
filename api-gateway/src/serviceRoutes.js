@@ -98,6 +98,9 @@ function createServiceHandler({ audience, getScope, target, includeCustomerProfi
         user: req.user,
         targetTenantId: req.get('x-tenant-id'),
         targetBranchId: req.get('x-branch-id'),
+        // Only import routes set this after Backend API has verified the
+        // selected branch belongs to the authenticated tenant and membership.
+        preferTargetBranch: validateTenantBranch,
         includeCustomerProfile
       }, gatewayConfig);
     } catch (error) {
