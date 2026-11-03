@@ -4,8 +4,10 @@ import OrderSummaryCard from './OrderSummaryCard';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
 import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function OrderConfirmation({ order, onTrackOrder, onContinueShopping }) {
+  const { t } = useLanguage();
   const { user } = useAuth();
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
@@ -25,7 +27,7 @@ export default function OrderConfirmation({ order, onTrackOrder, onContinueShopp
         const res = await apiClient.get(`/api/orders/${encodeURIComponent(targetId)}`);
         onTrackOrder(res.data?.order || res.data?.data || res.data || order);
       } catch (error) {
-        addToast(error.message || 'Could not load the latest tracking status.', 'error');
+        addToast(error.message || t('couldNotTrack'), 'error');
       }
     });
   };
@@ -53,14 +55,14 @@ export default function OrderConfirmation({ order, onTrackOrder, onContinueShopp
       {order && (
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left text-xs space-y-2">
           <div className="flex justify-between text-slate-500">
-            <span>Order Reference:</span>
+            <span>{t('orderReference')}:</span>
             <span className="font-extrabold text-slate-900">#{orderId}</span>
           </div>
           <div className="flex justify-between text-slate-500">
-            <span>Payment Mode:</span>
-            <span className="font-bold text-emerald-600">Cash on Delivery</span>
+            <span>{t('paymentMode')}:</span>
+            <span className="font-bold text-emerald-600">{t('cashOnDelivery')}</span>
           </div>
-          <div className="border-t border-slate-200 pt-2 text-[11px] text-slate-600"><strong>Ordered by:</strong> {order.orderedByName || userName}<br /><strong>Ordered for:</strong> {order.orderedForName || userName}</div>
+          <div className="border-t border-slate-200 pt-2 text-[11px] text-slate-600"><strong>{t('orderedBy')}:</strong> {order.orderedByName || userName}<br /><strong>{t('orderedFor')}:</strong> {order.orderedForName || userName}</div>
           {order.deliveryAddress && (
             <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-500">
               <span>📍 Delivery to: {order.deliveryAddress}</span>
@@ -78,7 +80,7 @@ export default function OrderConfirmation({ order, onTrackOrder, onContinueShopp
             disabled={isActionLoading(LOADING_ACTIONS.TRACK_ORDER)}
             className="w-full disabled:opacity-60 disabled:cursor-wait bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3 rounded-2xl text-xs shadow-md shadow-blue-600/25 transition cursor-pointer"
           >
-            {isActionLoading(LOADING_ACTIONS.TRACK_ORDER) ? 'Loading tracking...' : '📦 Track Order Status'}
+            {isActionLoading(LOADING_ACTIONS.TRACK_ORDER) ? t('loadingTracking') : `📦 ${t('trackOrderStatus')}`}
           </button>
         )}
         <button
