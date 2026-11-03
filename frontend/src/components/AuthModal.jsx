@@ -694,7 +694,7 @@ export default function AuthModal({ isOpen, onClose }) {
             {!isForgotPassword && !passwordRecoveryRequired && (
               <div className="relative my-4 flex items-center">
                 <div className="flex-grow border-t border-slate-200"></div>
-                <span className="flex-shrink mx-3 text-slate-400 text-[10px] font-bold uppercase tracking-wider"">{t('or')}</span>
+                <span className="flex-shrink mx-3 text-slate-400 text-[10px] font-bold uppercase tracking-wider">{t('or')}</span>
                 <div className="flex-grow border-t border-slate-200"></div>
               </div>
             )}
