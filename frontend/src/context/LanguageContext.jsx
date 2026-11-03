@@ -794,6 +794,7 @@ const messages = {
     deliveryVerification: "Delivery verification",
     closeTrackingPanel: "Close Tracking Panel",
     placedOn: "Placed on",
+  },
   hi: {
     store: "दुकान",
     orders: "ऑर्डर",
@@ -1578,6 +1579,7 @@ const messages = {
     deliveryVerification: "डिलीवरी सत्यापन",
     closeTrackingPanel: "ट्रैकिंग पैनल बंद करें",
     placedOn: "ऑर्डर की तारीख",
+  },
   kn: {
     store: "ಅಂಗಡಿ",
     orders: "ಆರ್ಡರ್‌ಗಳು",
@@ -2362,6 +2364,7 @@ const messages = {
     deliveryVerification: "ವಿತರಣಾ ಪರಿಶೀಲನೆ",
     closeTrackingPanel: "ಟ್ರ್ಯಾಕಿಂಗ್ ಫಲಕ ಮುಚ್ಚಿ",
     placedOn: "ಆರ್ಡರ್ ಮಾಡಿದ ದಿನಾಂಕ",
+  },
   bn: {
     store: "দোকান",
     orders: "অর্ডার",
@@ -3138,6 +3141,7 @@ const messages = {
     daysAgo: "{days} দিন আগে",
     daysLeft: "আর {days} দিন",
     itemsLeft: "{count} বাকি",
+  },
   te: {
     store: "స్టోర్",
     orders: "ఆర్డర్లు",
