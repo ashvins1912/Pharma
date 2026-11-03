@@ -919,9 +919,17 @@ export const dataStore = {
         };
     },
 
-    async getInventoryAlerts(lowStockThreshold = 3, expiringThresholdDays = 30) {
-        // Inspect all medicines including out of stock for admin alerts
-        const inventory = getIsConnected() ? await Medicine.find() : inMemoryMedicines;
+    async getInventoryAlerts(lowStockThreshold = 3, expiringThresholdDays = 30, { tenantId, branchId } = {}) {
+        let query = {};
+        if (tenantId) query.tenantId = tenantId;
+        if (branchId) query.branchId = branchId;
+
+        // Inspect tenant-scoped medicines including out of stock for admin alerts
+        const inventory = getIsConnected() ? await Medicine.find(query) : inMemoryMedicines.filter(m => {
+            if (tenantId && String(m.tenantId || '') !== String(tenantId)) return false;
+            if (branchId && String(m.branchId || '') !== String(branchId)) return false;
+            return true;
+        });
         const allMeds = inventory.map(formatMedicine);
         const now = new Date();
 

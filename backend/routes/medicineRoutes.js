@@ -225,10 +225,20 @@ router.get('/discovery', async (req, res) => {
     }
 });
 
-// Admin Inventory Alerts
+// Admin Inventory Alerts (Tenant and Role Scoped for Data Privacy)
 router.get('/alerts', authenticateUser, async (req, res) => {
     try {
-        const alerts = await dataStore.getInventoryAlerts();
+        const role = req.user?.role || req.user?.app_metadata?.role;
+        const isStaff = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'admin', 'TENANT_ADMIN', 'TENANT_OWNER', 'pharmacy', 'PHARMACIST', 'PHARMACY_STAFF'].includes(role) || req.user?.permissions?.includes('*') || req.user?.permissions?.includes('inventory.read');
+        if (!isStaff) {
+            return res.status(403).json({
+                success: false,
+                error: { code: 'FORBIDDEN', message: 'Dispensary alerts are restricted to authorized pharmacy staff.' }
+            });
+        }
+        const tenantId = req.context?.tenantId || req.user?.tenantId || null;
+        const branchId = req.context?.branchId || req.user?.branchId || null;
+        const alerts = await dataStore.getInventoryAlerts(3, 30, { tenantId, branchId });
         res.json(alerts);
     } catch (err) {
         console.error("Error fetching inventory alerts:", err);
