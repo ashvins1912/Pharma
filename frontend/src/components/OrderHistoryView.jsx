@@ -52,17 +52,17 @@ export default function OrderHistoryView({ onTrackOrder }) {
   const getStatusBadge = (status) => {
     switch (status) {
       case 'Delivered':
-        return <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full"}>{t('delivered')}</span>;
+        return <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full">{t('delivered')}</span>;
       case 'Cancelled':
-        return <span className="bg-slate-100 text-slate-600 text-[10px] font-black px-2 py-0.5 rounded-full"}>{t('cancelled')}</span>;
+        return <span className="bg-slate-100 text-slate-600 text-[10px] font-black px-2 py-0.5 rounded-full">{t('cancelled')}</span>;
       case 'Rejected':
-        return <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full"}>{t('rejected')}</span>;
+        return <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full">{t('rejected')}</span>;
       case 'Dispatched':
-        return <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full"}>{t('outForDelivery')}</span>;
+        return <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full">{t('outForDelivery')}</span>;
       case 'Ready to Dispatch':
-        return <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full"}>{t('readyToDispatch')}</span>;
+        return <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full">{t('readyToDispatch')}</span>;
       default:
-        return <span className="bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-full"}>{t('processing')}</span>;
+        return <span className="bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-full">{t('processing')}</span>;
     }
   };
 
