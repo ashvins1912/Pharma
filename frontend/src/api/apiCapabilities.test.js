@@ -41,6 +41,14 @@ describe('API capability registry', () => {
     assert.equal(resolveApiCapability('GET', '/api/tenants/nearby'), null);
   });
 
+  it('protects tenant profile and branch setup APIs', () => {
+    assert.equal(resolveApiCapability('GET', '/api/vendor/profile')?.permission, 'tenants.read');
+    assert.equal(resolveApiCapability('GET', '/api/tenant/branches?includePending=true')?.permission, 'tenant.branches.read');
+    assert.equal(resolveApiCapability('POST', '/api/tenant/branches')?.permission, 'tenants.manage');
+    assert.equal(resolveApiCapability('POST', '/api/tenant/branches/branch-1/activate')?.permission, 'tenants.manage');
+    assert.equal(resolveApiCapability('GET', '/api/tenant/nearby')?.permission, 'tenant.branches.read');
+  });
+
   it('requires tenant management permissions for administrative tenant changes', () => {
     assert.equal(
       resolveApiCapability('POST', '/api/v1/admin/tenants')?.permission,
