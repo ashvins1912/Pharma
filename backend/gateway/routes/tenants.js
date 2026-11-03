@@ -29,7 +29,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // List all active branches across tenants with Cache put/get & dynamic proximity/search support
-router.get('/branches/all', async (req, res, next) => {
+router.get('/branches/all', authenticateUser, requireRoles(PlatformRoles.PLATFORM_SUPER_ADMIN), async (req, res, next) => {
     try {
         let branches = await cacheService.get(CACHE_KEY_ALL_BRANCHES);
         if (!branches) {
