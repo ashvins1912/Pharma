@@ -96,7 +96,7 @@ const CAPABILITIES = [
   // Tenant-scoped branch listing is available to tenant admins/owners; backend enforces tenant membership.
   ['GET', /^\/api\/v1\/tenants\/[^/]+\/branches(?:\/|$)/, 'tenant.branches.read'],
   ['GET', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.read'],
-  ['GET', /^\/api\/tenant\/branches(?:\/|$)/, 'tenant.branches.read'],
+  ['GET', /^\/api\/tenant\/branches(?:\/|$)/, 'profile.read'],
   ['POST', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.manage'],
   ['PUT', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.manage'],
   ['PATCH', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.manage'],
