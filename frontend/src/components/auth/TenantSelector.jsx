@@ -16,6 +16,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 export default function TenantSelector({ onTenantSelected }) {
+  const { t } = useLanguage();
   const { tenantId, activeTenant, setActiveTenant, setTenantId } = useTenant();
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
