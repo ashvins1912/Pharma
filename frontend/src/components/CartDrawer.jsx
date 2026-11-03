@@ -135,7 +135,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
                     <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                       🎟️ {t('promoCode')}
                     </span>
-                    <span className="text-[10px] text-slate-400">Try: FREEMED20 or WELCOME10</span>
+                    <span className="text-[10px] text-slate-400">{t('tryCouponCodes')}</span>
                   </div>
 
                   {appliedCoupon ? (
@@ -216,7 +216,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
                 }}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-emerald-600/25 transition cursor-pointer text-sm flex items-center justify-center gap-2"
               >
-                <span>Proceed to Checkout</span>
+                <span>{t('proceedCheckout')}</span>
                 <span>→</span>
               </button>
 
