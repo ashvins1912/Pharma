@@ -29,8 +29,10 @@ import VendorOnboardingView from './components/auth/VendorOnboardingView';
 import TenantSelectorModal from './components/auth/TenantSelectorModal';
 import OfferZoneBanner from './components/OfferZoneBanner';
 import SpendingAnalyticsWidget from './components/SpendingAnalyticsWidget';
+import { useLanguage } from './context/LanguageContext';
 
 function AuthTransitionScreen({ initialLoad = false }) {
+  const { t } = useLanguage();
   return (
     <div
       className="fixed inset-0 z-[10000] flex min-h-screen items-center justify-center bg-slate-50 px-6"
@@ -44,10 +46,10 @@ function AuthTransitionScreen({ initialLoad = false }) {
         </div>
         <span className="mb-4 h-7 w-7 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" aria-hidden="true" />
         <h2 className="text-lg font-black tracking-tight text-slate-900">
-          {initialLoad ? 'Checking your session…' : 'Loading your dashboard…'}
+          {initialLoad ? t('checkingSession') : t('loadingYourDashboard')}
         </h2>
         <p className="mt-2 text-xs leading-5 text-slate-500">
-          {initialLoad ? 'Please wait while we securely restore your account.' : 'Your sign-in is complete. Preparing your account and dashboard.'}
+          {initialLoad ? t('secureRestore') : t('preparingDashboard')}
         </p>
       </div>
     </div>
@@ -84,6 +86,7 @@ function MainApp() {
   } = useApp();
   const { addToast } = useToast();
   const { activeTenant, tenantId } = useTenant();
+  const { t, language } = useLanguage();
 
   // Tab State: 'store' | 'orders' | 'requests' | 'addresses' | 'admin'
   const [activeTab, setActiveTab] = useState('store');
@@ -375,7 +378,7 @@ function MainApp() {
                 {(() => {
                   const istDate = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
                   const istHours = istDate.getHours();
-                  const istGreeting = istHours < 12 ? 'Good morning' : istHours < 18 ? 'Good afternoon' : 'Good evening';
+                  const istGreeting = istHours < 12 ? t('goodMorning') : istHours < 18 ? t('goodAfternoon') : t('goodEvening');
                   const istTimeStr = istDate.toLocaleTimeString('en-IN', {
                     timeZone: 'Asia/Kolkata',
                     hour: '2-digit',
@@ -387,12 +390,12 @@ function MainApp() {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="inline-block bg-white/20 backdrop-blur-md text-white text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                            Express 30-Min Prescription Delivery
+                            {t('expressDelivery')}
                           </span>
                           {activeTenant && (
                             <span className="inline-flex items-center gap-1 bg-emerald-500/30 border border-emerald-400/40 backdrop-blur-md text-emerald-50 text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full">
                               <span>🏥</span>
-                              <span>{activeTenant.shopName || activeTenant.name || 'Selected Pharmacy'}</span>
+                              <span>{activeTenant.shopName || activeTenant.name || t('selectedPharmacy')}</span>
                             </span>
                           )}
                         </div>
@@ -408,7 +411,7 @@ function MainApp() {
                   );
                 })()}
                 <p className="text-xs sm:text-sm text-blue-100 font-medium leading-relaxed">
-                  Welcome to <strong className="text-white">{activeTenant?.shopName || activeTenant?.name || 'Ashvin Pharmacy'}</strong>! Your trusted local dispensary brings you warm greetings and rapid door delivery for genuine pharmaceutical formulations, doctor-prescribed medications, and wellness care products.
+                  {t('welcomeTo')} <strong className="text-white">{activeTenant?.shopName || activeTenant?.name || 'QuickMeds Rx'}</strong>! Your trusted local dispensary brings you warm greetings and rapid door delivery for genuine pharmaceutical formulations, doctor-prescribed medications, and wellness care products.
                 </p>
                 <div className="pt-2 flex flex-wrap items-center gap-3">
                   <button
@@ -416,7 +419,7 @@ function MainApp() {
                     onClick={() => setTenantSelectorOpen(true)}
                     className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-xl backdrop-blur-md transition flex items-center gap-2 cursor-pointer shadow-sm"
                   >
-                    <span>📍 {activeTenant ? 'Change Pharmacy / Dispensary' : 'Select Nearby Pharmacy / Dispensary'}</span>
+                    <span>📍 {activeTenant ? t('changePharmacy') : t('selectNearbyPharmacy')}</span>
                   </button>
                   {activeTenant?.address && (
                     <span className="text-[11px] text-blue-200">
@@ -459,7 +462,7 @@ function MainApp() {
               <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-2xl mx-auto">
                 🔒
               </div>
-              <h3 className="text-base font-extrabold text-slate-900">Sign In Required</h3>
+              <h3 className="text-base font-extrabold text-slate-900">{t('signInRequired')}</h3>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
                 You must be signed in to view your prescription order history, delivery receipts, and live courier tracking.
               </p>
@@ -472,7 +475,7 @@ function MainApp() {
             </div>
           ) : (
             <div className="max-w-md mx-auto my-12 bg-white border border-slate-200 rounded-3xl p-8 text-center space-y-3">
-              <div className="text-sm font-extrabold text-slate-900">Access restricted</div>
+              <div className="text-sm font-extrabold text-slate-900">{t('accessRestricted')}</div>
               <p className="text-xs text-slate-500">Your current permissions do not allow access to this customer workspace.</p>
               {canAccessOperations && <button onClick={() => setActiveTab('admin')} className="text-xs font-bold text-blue-700 underline">Open Operations Dashboard</button>}
             </div>
@@ -549,7 +552,7 @@ function MainApp() {
         {/* TAB 4: ADMIN OPERATIONS DASHBOARD (Guarded) */}
         {activeTab === 'admin' && (
           canAccessOperations && (
-            <React.Suspense fallback={<div className="py-12 text-center text-sm text-slate-500">Loading operations dashboard...</div>}>
+            <React.Suspense fallback={<div className="py-12 text-center text-sm text-slate-500">{t('loadingDashboard')}</div>}>
               <AdminDashboardView />
             </React.Suspense>
           )
