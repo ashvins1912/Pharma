@@ -154,7 +154,7 @@ export default function TenantProfileDashboard() {
             Tenant Profile &amp; Branch Control
           </span>
           <h2 className="text-xl sm:text-2xl font-black mt-2">
-            {vendorProfile?.shopName || 'Ashvin Pharmacy & Dispensary'}
+            {vendorProfile?.shopName || 'QuickMeds Rx & Dispensary'}
           </h2>
           <p className="text-xs text-blue-100 max-w-xl">
             Manage organization credentials, associated branch locations, service radii, and branch managers with strict multi-tenant isolation.
