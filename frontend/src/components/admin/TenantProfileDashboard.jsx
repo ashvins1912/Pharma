@@ -4,6 +4,7 @@ import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 
 export default function TenantProfileDashboard() {
+  const { t } = useLanguage();
   const { addToast } = useToast();
   const { user, isSuperAdmin } = useAuth();
 
@@ -115,7 +116,7 @@ export default function TenantProfileDashboard() {
   const handleSaveBranch = async (e) => {
     e.preventDefault();
     if (!branchForm.name || !branchForm.location) {
-      addToast('Please provide branch name and location.', 'warning');
+      addToast(t('branchDetailsRequired'), 'warning');
       return;
     }
 
@@ -136,7 +137,7 @@ export default function TenantProfileDashboard() {
       }
       setBranchModalOpen(false);
     } catch (err) {
-      addToast('Failed to save branch details.', 'error');
+      addToast(t('branchSaveFailed'), 'error');
     } finally {
       setSubmittingBranch(false);
     }
@@ -183,30 +184,30 @@ export default function TenantProfileDashboard() {
         <div className="lg:col-span-2 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">🏢 Organization &amp; License Credentials</h3>
-            <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">Verified Tenant</span>
+            <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">{t('verifiedTenant')}</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
-              <span className="text-slate-400 font-bold block text-[10px] uppercase">Legal Entity Name</span>
+              <span className="text-slate-400 font-bold block text-[10px] uppercase">{t('legalEntityName')}</span>
               <span className="font-black text-slate-900 text-sm mt-0.5 block">{vendorProfile?.legalName || 'Ashvin Pharma Corp'}</span>
             </div>
             <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
-              <span className="text-slate-400 font-bold block text-[10px] uppercase">Drug License Number</span>
+              <span className="text-slate-400 font-bold block text-[10px] uppercase">{t('drugLicenseNumber')}</span>
               <span className="font-black font-mono text-blue-700 text-sm mt-0.5 block">{vendorProfile?.licenseNumber || 'DL-2026-SF-99887'}</span>
             </div>
             <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
-              <span className="text-slate-400 font-bold block text-[10px] uppercase">GSTIN / Tax ID</span>
+              <span className="text-slate-400 font-bold block text-[10px] uppercase">{t('gstTaxId')}</span>
               <span className="font-black font-mono text-slate-900 text-sm mt-0.5 block">{vendorProfile?.gstNumber || '27AABCC1234F1Z9'}</span>
             </div>
             <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
-              <span className="text-slate-400 font-bold block text-[10px] uppercase">Primary Support Email</span>
+              <span className="text-slate-400 font-bold block text-[10px] uppercase">{t('primarySupportEmail')}</span>
               <span className="font-black text-slate-900 text-sm mt-0.5 block">{vendorProfile?.ownerDetails?.email || user?.email || 'support@ashvinpharmacy.in'}</span>
             </div>
           </div>
 
           <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-2xl space-y-1">
-            <span className="text-[10px] font-black uppercase tracking-wider text-blue-800">Primary Registered Address</span>
+            <span className="text-[10px] font-black uppercase tracking-wider text-blue-800">{t('primaryRegisteredAddress')}</span>
             <p className="text-xs font-bold text-slate-800">
               {vendorProfile?.address?.street || '123 Main Street'}, {vendorProfile?.address?.city || 'San Francisco'}, {vendorProfile?.address?.state || 'CA'} — {vendorProfile?.address?.zipCode || '94105'}
             </p>
@@ -240,7 +241,7 @@ export default function TenantProfileDashboard() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-3">
           <div>
             <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">📍 Associated Branch Locations &amp; Branch Managers</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Every branch maintains dedicated inventory stock, branch managers, and localized fulfillment.</p>
+            <p className="text-xs text-slate-500 mt-0.5">{t('tenantProfileBranches')}</p>
           </div>
           <button
             type="button"
@@ -265,9 +266,9 @@ export default function TenantProfileDashboard() {
               </div>
 
               <div className="text-xs space-y-1.5 text-slate-600">
-                <div>📍 <strong>Location:</strong> {branch.location}</div>
-                <div>📡 <strong>Service Radius:</strong> {branch.serviceRadiusKm || 12} km</div>
-                <div>💳 <strong>Min. Order Value:</strong> ₹{branch.minimumOrderValue || 150}</div>
+                <div>📍 <strong>{t('branchLocation')}:</strong> {branch.location}</div>
+                <div>📡 <strong>{t('serviceRadius')}:</strong> {branch.serviceRadiusKm || 12} km</div>
+                <div>💳 <strong>{t('minimumOrderValue')}:</strong> ₹{branch.minimumOrderValue || 150}</div>
               </div>
 
               {/* Branch Manager Cover Box */}
@@ -284,8 +285,8 @@ export default function TenantProfileDashboard() {
                 </div>
                 <div className="text-xs font-black text-slate-900">{branch.managerName || 'Unassigned Manager'}</div>
                 <div className="text-[11px] text-slate-500 flex flex-wrap gap-x-3">
-                  <span>📞 {branch.managerPhone || 'No phone'}</span>
-                  <span>✉️ {branch.managerEmail || 'No email'}</span>
+                  <span>📞 {branch.managerPhone || t('noPhone')}</span>
+                  <span>✉️ {branch.managerEmail || t('emailAddress')}</span>
                 </div>
               </div>
             </div>
@@ -312,7 +313,7 @@ export default function TenantProfileDashboard() {
             <form onSubmit={handleSaveBranch} className="p-5 overflow-y-auto space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 mb-1">Branch Name *</label>
+                  <label className="block text-xs font-extrabold text-slate-700 mb-1">{t('branchName')} *</label>
                   <input
                     type="text"
                     required
@@ -324,20 +325,20 @@ export default function TenantProfileDashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 mb-1">Status</label>
+                  <label className="block text-xs font-extrabold text-slate-700 mb-1">{t('status')}</label>
                   <select
                     value={branchForm.status}
                     onChange={(e) => setBranchForm({ ...branchForm, status: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="ACTIVE">ACTIVE</option>
-                    <option value="MAINTENANCE">MAINTENANCE</option>
+                    <option value="ACTIVE">{t('active')}</option>
+                    <option value="MAINTENANCE">{t('maintenance')}</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-extrabold text-slate-700 mb-1">Full Location Address *</label>
+                <label className="block text-xs font-extrabold text-slate-700 mb-1">{t('address')} *</label>
                 <input
                   type="text"
                   required
@@ -350,7 +351,7 @@ export default function TenantProfileDashboard() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 mb-1">Service Radius (KM)</label>
+                  <label className="block text-xs font-extrabold text-slate-700 mb-1">{t('serviceRadius')} (KM)</label>
                   <input
                     type="number"
                     value={branchForm.serviceRadiusKm}
@@ -359,7 +360,7 @@ export default function TenantProfileDashboard() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 mb-1">Minimum Order Value (₹)</label>
+                  <label className="block text-xs font-extrabold text-slate-700 mb-1">{t('minimumOrderValue')} (₹)</label>
                   <input
                     type="number"
                     value={branchForm.minimumOrderValue}
@@ -370,11 +371,11 @@ export default function TenantProfileDashboard() {
               </div>
 
               <div className="pt-2 border-t border-slate-100 space-y-3">
-                <h4 className="text-xs font-black uppercase text-blue-700">Branch Manager Assignment</h4>
+                <h4 className="text-xs font-black uppercase text-blue-700">{t('branchManagerAssignment')}</h4>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-extrabold text-slate-700 mb-1">Manager Name</label>
+                    <label className="block text-xs font-extrabold text-slate-700 mb-1">{t('managerName')}</label>
                     <input
                       type="text"
                       value={branchForm.managerName}
@@ -384,7 +385,7 @@ export default function TenantProfileDashboard() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-extrabold text-slate-700 mb-1">Manager Phone</label>
+                    <label className="block text-xs font-extrabold text-slate-700 mb-1">{t('managerPhone')}</label>
                     <input
                       type="text"
                       value={branchForm.managerPhone}
@@ -394,7 +395,7 @@ export default function TenantProfileDashboard() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-extrabold text-slate-700 mb-1">Manager Email</label>
+                    <label className="block text-xs font-extrabold text-slate-700 mb-1">{t('managerEmail')}</label>
                     <input
                       type="email"
                       value={branchForm.managerEmail}
