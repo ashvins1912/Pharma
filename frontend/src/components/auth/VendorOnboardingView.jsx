@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 const initial = {
   firstName: '', lastName: '', dateOfBirth: '', gender: '', mobile: '',
@@ -10,6 +11,7 @@ const initial = {
 };
 
 export default function VendorOnboardingView({ token, onClose, onSuccess }) {
+  const { t } = useLanguage();
   const { syncSession } = useAuth();
   const { addToast } = useToast();
   const [data, setData] = useState(null);
@@ -76,16 +78,16 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
       position => {
         set('latitude', String(position.coords.latitude));
         set('longitude', String(position.coords.longitude));
-        addToast('Pharmacy coordinates captured.', 'success');
+        addToast(t('pharmacyCoordinatesCaptured'), 'success');
       },
-      () => setError('Could not capture pharmacy location. Allow location access or enter coordinates manually.'),
+      () => setError(t('captureLocationFailed')),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   };
 
   const validateTenant = () => {
     const e = {};
-    if (!form.companyName.trim()) e.companyName = 'Pharmacy / Company name is required.';
+    if (!form.companyName.trim()) e.companyName = t('pharmacyCompanyRequired');
     if (!form.drugLicenseNumber.trim()) e.drugLicenseNumber = 'Drug licence number is required.';
     if (!form.city.trim()) e.city = 'City is required.';
     if (!form.state.trim()) e.state = 'State is required.';
@@ -116,11 +118,11 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
       setTenant(result?.tenant || null);
       setDone(true);
       if (result?.user) syncSession({ user: result.user }, result.user);
-      addToast('Pharmacy tenant onboarding completed.', 'success');
+      addToast(t('tenantOnboardingComplete'), 'success');
       onSuccess?.(result);
     } catch (e) {
       const detail = e.response?.data?.error || {};
-      setError(detail.message || e.response?.data?.message || 'Could not complete onboarding.');
+      setError(detail.message || e.response?.data?.message || t('onboardingFailed'));
       const mapped = {};
       (detail.details || []).forEach(x => { if (x.field) mapped[x.field] = x.message; });
       setFieldErrors(mapped);
@@ -128,9 +130,9 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
     } finally { setSubmitting(false); }
   };
 
-  if (loading) return <Overlay><Spinner /><h3 className="text-lg font-bold">Opening your onboarding...</h3><p className="text-xs text-slate-500 mt-2">Validating the secure invitation and loading required details.</p></Overlay>;
-  if (error && !data) return <Overlay><div className="text-rose-600 text-3xl mb-3">✕</div><h3 className="text-xl font-bold">Onboarding Link Invalid</h3><p className="text-sm text-slate-600 my-5">{error}</p><button onClick={onClose} className="w-full py-3 bg-slate-800 text-white rounded-xl font-bold">Back to Home</button></Overlay>;
-  if (done) return <Overlay><div className="text-emerald-600 text-5xl mb-3">✓</div><h2 className="text-2xl font-black">Tenant Onboarding Completed</h2><p className="text-sm text-slate-600 my-5"><strong>{tenant?.name}</strong> is active and your account has <strong>TENANT_ADMIN</strong> access.</p><div className="p-4 bg-slate-50 rounded-xl text-left text-xs mb-5"><div>Tenant: <strong>{tenant?.name}</strong></div><div>Status: <strong>{tenant?.status}</strong></div><div>Role: <strong>TENANT_ADMIN</strong></div></div><button onClick={() => { onClose?.(); window.location.reload(); }} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold">Open Tenant Operations →</button></Overlay>;
+  if (loading) return <Overlay><Spinner /><h3 className="text-lg font-bold">{t('openingOnboarding')}</h3><p className="text-xs text-slate-500 mt-2">{t('validatingInvitation')}</p></Overlay>;
+  if (error && !data) return <Overlay><div className="text-rose-600 text-3xl mb-3">✕</div><h3 className="text-xl font-bold">{t('onboardingLinkInvalid')}</h3><p className="text-sm text-slate-600 my-5">{error}</p><button onClick={onClose} className="w-full py-3 bg-slate-800 text-white rounded-xl font-bold">{t('backHome')}</button></Overlay>;
+  if (done) return <Overlay><div className="text-emerald-600 text-5xl mb-3">✓</div><h2 className="text-2xl font-black">{t('tenantOnboardingCompleted')}</h2><p className="text-sm text-slate-600 my-5"><strong>{tenant?.name}</strong> is active and your account has <strong>TENANT_ADMIN</strong> access.</p><div className="p-4 bg-slate-50 rounded-xl text-left text-xs mb-5"><div>Tenant: <strong>{tenant?.name}</strong></div><div>Status: <strong>{tenant?.status}</strong></div><div>Role: <strong>TENANT_ADMIN</strong></div></div><button onClick={() => { onClose?.(); window.location.reload(); }} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold">{t('openTenantOperations')}</button></Overlay>;
 
   const v = data?.vendor || {};
   return (
@@ -138,11 +140,11 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
       <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl my-8 overflow-hidden">
         <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-slate-900 p-6 text-white">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] uppercase font-extrabold bg-blue-500/30 px-3 py-1 rounded-full">First-time user</span>
+            <span className="text-[11px] uppercase font-extrabold bg-blue-500/30 px-3 py-1 rounded-full">{t('firstTimeUser')}</span>
             <span className="text-[10px] uppercase font-bold bg-amber-400/15 text-amber-100 px-3 py-1 rounded-full">PROFILE_INCOMPLETE</span>
           </div>
-          <h2 className="text-2xl font-black mt-3">Welcome to Pharma</h2>
-          <p className="text-xs text-blue-200 mt-1">Complete your personal profile first, then activate your pharmacy tenant.</p>
+          <h2 className="text-2xl font-black mt-3">{t('welcomeToPharma')}</h2>
+          <p className="text-xs text-blue-200 mt-1">{t('completeProfileFirst')}</p>
           <div className="flex gap-2 mt-5"><div className={`h-1.5 flex-1 rounded-full ${step >= 1 ? 'bg-emerald-400' : 'bg-white/20'}`} /><div className={`h-1.5 flex-1 rounded-full ${step >= 2 ? 'bg-emerald-400' : 'bg-white/20'}`} /></div>
           <div className="text-[11px] mt-2 text-blue-200">Step {step} of 2 — {step === 1 ? 'Personal Profile' : 'Tenant / Pharmacy Setup'}</div>
         </div>
@@ -156,9 +158,9 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
                 <Field label="First name *" value={form.firstName} onChange={x => set('firstName', x)} error={fieldErrors.firstName} />
                 <Field label="Last name *" value={form.lastName} onChange={x => set('lastName', x)} error={fieldErrors.lastName} />
                 <Field label="Date of birth *" type="date" value={form.dateOfBirth} onChange={x => set('dateOfBirth', x)} error={fieldErrors.dateOfBirth} />
-                <div><label className="block text-xs font-bold text-slate-700 mb-1">Gender *</label><select className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" value={form.gender} onChange={e => set('gender', e.target.value)}><option value="">Select gender</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option><option value="PREFER_NOT_TO_SAY">Prefer not to say</option></select><Err x={fieldErrors.gender}/></div>
+                <div><label className="block text-xs font-bold text-slate-700 mb-1">{t('gender')} *</label><select className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" value={form.gender} onChange={e => set('gender', e.target.value)}><option value="">{t("selectGenderOption")}</option><option value="MALE">{t("male")}</option><option value="FEMALE">{t("female")}</option><option value="OTHER">{t("other")}</option><option value="PREFER_NOT_TO_SAY">{t("preferNot")}</option></select><Err x={fieldErrors.gender}/></div>
                 <Field label="Mobile *" type="tel" value={form.mobile} onChange={x => set('mobile', x)} error={fieldErrors.mobile} />
-                <div><label className="block text-xs font-bold text-slate-700 mb-1">Email</label><input className="input bg-slate-100" value={v.email || ''} disabled /></div>
+                <div><label className="block text-xs font-bold text-slate-700 mb-1">{t('emailAddress')}</label><input className="input bg-slate-100" value={v.email || ''} disabled /></div>
               </div>
             </Section>
             <Section title="2. Secure account">
@@ -168,14 +170,14 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
               </div>
               <button type="button" onClick={() => setShowPassword(x => !x)} className="text-xs text-blue-600 font-bold">{showPassword ? 'Hide password' : 'Show password'}</button>
             </Section>
-            <div className="flex justify-end border-t pt-4"><button className="px-7 py-3 bg-blue-600 text-white rounded-xl font-black">Continue to Tenant Setup →</button></div>
+            <div className="flex justify-end border-t pt-4"><button className="px-7 py-3 bg-blue-600 text-white rounded-xl font-black">{t('continueTenantSetup')}</button></div>
           </>}
 
           {step === 2 && <>
-            <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-xs text-blue-800">Profile complete ✓. Configure the pharmacy tenant that will be linked to your account as <strong>TENANT_ADMIN</strong>.</div>
+            <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-xs text-blue-800">{t('profileComplete')} {t('configureTenant')}  <strong>TENANT_ADMIN</strong>.</div>
             <Section title="3. Pharmacy tenant">
               <div className="grid md:grid-cols-2 gap-4">
-                <Field label="Pharmacy / Company name *" value={form.companyName} onChange={x => set('companyName', x)} error={fieldErrors.companyName} />
+                <Field label={`${t("pharmacy")} / ${t("companyName")} *`} value={form.companyName} onChange={x => set('companyName', x)} error={fieldErrors.companyName} />
                 <Field label="GSTIN / Tax ID" value={form.gstNumber} onChange={x => set('gstNumber', x)} />
                 <Field label="Drug License Number *" value={form.drugLicenseNumber} onChange={x => set('drugLicenseNumber', x)} error={fieldErrors.drugLicenseNumber} />
               </div>
@@ -185,10 +187,10 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
               <div className="grid md:grid-cols-3 gap-4 mt-4"><Field label="City *" value={form.city} onChange={x => set('city', x)} error={fieldErrors.city}/><Field label="State *" value={form.state} onChange={x => set('state', x)} error={fieldErrors.state}/><Field label="Pincode *" value={form.pincode} onChange={x => set('pincode', x)} error={fieldErrors.pincode}/></div>
               <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-extrabold text-emerald-900">Map location required for nearby discovery</p>
-                  <button type="button" onClick={capturePharmacyLocation} className="px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-bold">Use this device's location</button>
+                  <p className="text-xs font-extrabold text-emerald-900">{t('mapLocationRequired')}</p>
+                  <button type="button" onClick={capturePharmacyLocation} className="px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-bold">{t('useDeviceLocation')}</button>
                 </div>
-                <p className="text-[11px] text-emerald-800">Capture coordinates while at the pharmacy, or enter the pharmacy's map coordinates manually.</p>
+                <p className="text-[11px] text-emerald-800">{t('captureCoordinates')}</p>
                 <div className="grid md:grid-cols-2 gap-4">
                   <Field label="Latitude *" value={form.latitude} onChange={x => set('latitude', x)} error={fieldErrors.latitude}/>
                   <Field label="Longitude *" value={form.longitude} onChange={x => set('longitude', x)} error={fieldErrors.longitude}/>
