@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import apiClient from '../api/apiClient';
 import { useApp } from '../context/AppContext';
+import { useLanguage } from '../context/LanguageContext';
 import { applyCouponCode } from '../api/couponService';
 
 export default function ShoppingCart() {
+    const { t } = useLanguage();
     const { cart, subtotal = 0, addresses = [], selectedAddressId, updateQuantity, clearCart } = useApp();
     const [code, setCode] = useState('');
     const [pct, setPct] = useState(0);
@@ -86,12 +88,12 @@ export default function ShoppingCart() {
             <div className="flex justify-between items-center border-b pb-2">
                 <h3 className="font-bold text-sm text-slate-800">🛒 Cart ({cart.reduce((s, i) => s + i.quantity, 0)})</h3>
                 {cart.length > 0 && (
-                    <button onClick={clearCart} className="text-[10px] text-slate-400 hover:text-red-500 font-bold">Clear</button>
+                    <button onClick={clearCart} className="text-[10px] text-slate-400 hover:text-red-500 font-bold">{t('clearCart')}</button>
                 )}
             </div>
 
             {cart.length === 0 ? (
-                <p className="text-xs text-slate-400 py-4 text-center">Your shopping cart is empty.</p>
+                <p className="text-xs text-slate-400 py-4 text-center">{t('emptyCart')}</p>
             ) : (
                 <div className="space-y-2 max-h-60 overflow-y-auto">
                     {cart.map(i => {
@@ -122,7 +124,7 @@ export default function ShoppingCart() {
                        className="border border-slate-200 text-xs px-2.5 py-1.5 rounded-xl flex-1 uppercase outline-none focus:border-blue-500"/>
                 <button onClick={checkCoupon} disabled={loading}
                         className="bg-slate-800 hover:bg-slate-900 text-white text-xs px-3 py-1.5 rounded-xl font-bold cursor-pointer transition">
-                    {loading ? 'Checking...' : 'Apply'}
+                    {loading ? t('checking') : t('apply')}
                 </button>
             </div>
 
@@ -134,7 +136,7 @@ export default function ShoppingCart() {
 
             <div className="border-t border-slate-100 pt-2 font-bold text-xs space-y-2">
                 <div className="flex justify-between text-xs text-slate-500">
-                    <span>Subtotal:</span>
+                    <span>{t('subtotal')}:</span>
                     <span>₹{subtotal}</span>
                 </div>
                 {discountAmount > 0 && (
@@ -144,15 +146,15 @@ export default function ShoppingCart() {
                     </div>
                 )}
                 <div className="flex justify-between text-sm text-slate-900 font-extrabold pt-1 border-t border-dashed">
-                    <span>Payable:</span>
+                    <span>{t('payable')}:</span>
                     <span className="text-emerald-600">₹{totalBill}</span>
                 </div>
                 {hasOverdraft && (
-                    <p className="text-[10px] text-red-500 font-medium">Reduce quantities to match available stocks.</p>
+                    <p className="text-[10px] text-red-500 font-medium">{t('reduceQuantitiesStock')}</p>
                 )}
                 <button onClick={checkout} disabled={hasOverdraft || cart.length === 0 || loading}
                         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-center font-bold disabled:bg-slate-300 disabled:cursor-not-allowed cursor-pointer transition shadow-sm">
-                    {loading ? 'Processing...' : 'Place COD Order'}
+                    {loading ? t('processing') : t('placeCodOrder')}
                 </button>
             </div>
         </div>
