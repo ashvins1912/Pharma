@@ -93,6 +93,8 @@ const CAPABILITIES = [
   ['PUT', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.manage'],
   ['PATCH', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.manage'],
   ['DELETE', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.manage'],
+  // Tenant-scoped branch listing is available to tenant admins/owners; backend enforces tenant membership.
+  ['GET', /^\/api\/v1\/tenants\/[^/]+\/branches(?:\/|$)/, 'tenant.branches.read'],
   ['GET', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.read'],
   ['GET', /^\/api\/tenant\/branches(?:\/|$)/, 'tenant.branches.read'],
   ['POST', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.manage'],
