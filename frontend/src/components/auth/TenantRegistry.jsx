@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import apiClient from '../../api/apiClient';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 
 const emptyForm = { name: '', code: '', phone: '', email: '', street: '', city: '', state: '', pincode: '' };
 
 export default function TenantRegistry() {
   const { t } = useLanguage();
+  const { isTenantAdmin } = useAuth();
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -78,7 +80,7 @@ export default function TenantRegistry() {
         </div>
         <div className="flex gap-2">
           <button type="button" onClick={fetchBranches} className="px-4 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-semibold rounded-xl">Refresh</button>
-          <button type="button" onClick={() => setShowForm(value => !value)} className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow transition">{showForm ? 'Close form' : 'Create branch'}</button>
+          {isTenantAdmin && <button type="button" onClick={() => setShowForm(value => !value)} className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow transition">{showForm ? 'Close form' : 'Create branch'}</button>}
         </div>
       </div>
 
@@ -129,7 +131,7 @@ export default function TenantRegistry() {
                     <td className="py-4 px-6 text-gray-600 dark:text-gray-300">{[branch.address?.street, branch.address?.city, branch.address?.state, branch.address?.pincode].filter(Boolean).join(', ')}</td>
                     <td className="py-4 px-6 font-mono text-xs">{branch.code}</td>
                     <td className="py-4 px-6"><span className={`text-xs font-semibold px-3 py-1 rounded-full ${branch.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>{branch.status}</span></td>
-                    <td className="py-4 px-6 text-right">{branch.status === 'PENDING' && <button type="button" disabled={activatingId === String(branch.id || branch._id)} onClick={() => activateBranch(String(branch.id || branch._id))} className="text-xs font-semibold px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl disabled:opacity-50">{activatingId === String(branch.id || branch._id) ? 'Activating…' : 'Verify & activate'}</button>}</td>
+                    <td className="py-4 px-6 text-right">{isTenantAdmin && branch.status === 'PENDING' && <button type="button' disabled={activatingId === String(branch.id || branch._id)} onClick={() => activateBranch(String(branch.id || branch._id))} className="text-xs font-semibold px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl disabled:opacity-50">{activatingId === String(branch.id || branch._id) ? 'Activating…' : 'Verify & activate'}</button>}</td>
                   </tr>
                 )) : <tr><td colSpan="5" className="py-12 text-center text-gray-400">No branches registered for this pharmacy yet. Create your first branch to continue.</td></tr>}
               </tbody>
