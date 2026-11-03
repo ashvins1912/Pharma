@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { useTenant } from '../context/TenantContext';
+import { useLanguage } from '../context/LanguageContext';
 import NotificationBell from './NotificationBell';
 import AdminAlertBell from './admin/AdminAlertBell';
 
@@ -21,6 +22,7 @@ export default function Header({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const { branchId, setBranchId } = useTenant();
+  const { language, setLanguage, t, languages } = useLanguage();
   const branchOptions = [
     { id: 'branch-1', name: 'Downtown Flagship' },
     { id: 'branch-2', name: 'Northside Express' },
@@ -59,12 +61,12 @@ export default function Header({
             <div className="min-w-0 flex-1 flex flex-col justify-center">
               <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-2">
                 <span className="block min-w-0 max-w-[112px] min-[400px]:max-w-[150px] sm:max-w-none text-[13px] min-[400px]:text-sm sm:text-lg font-black text-slate-900 tracking-tight leading-tight whitespace-normal break-words">
-                  Ashvin Pharmacy
+                  QuickMeds Rx
                 </span>
                 {canViewOperations && (
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5 max-w-full">
                     <span className="max-w-full whitespace-normal break-words bg-blue-100 text-blue-700 text-[8px] min-[400px]:text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider leading-tight">
-                      {isSuperAdmin ? 'Super Admin' : (isTenantAdmin ? 'Tenant Admin' : (role === 'admin' ? 'Admin' : 'Pharmacy'))}
+                      {isSuperAdmin ? t('superAdmin') : (isTenantAdmin ? t('tenantAdmin') : (role === 'admin' ? t('admin') : t('pharmacy')))}
                     </span>
                     {canReadWhatsApp && (canManageWhatsApp ? (
                       whatsappStatus.isConnected ? (
@@ -72,32 +74,32 @@ export default function Header({
                           type="button"
                           onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
                           className="hidden lg:inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer"
-                          title="WhatsApp status and controls"
+                          title={t("whatsappStatus")}
                         >
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                          <span>WA Live</span>
+                          <span>{t('waLive')}</span>
                         </button>
                       ) : (
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
                           className="hidden lg:inline-flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer"
-                          title="WhatsApp offline; click to pair"
+                          title={t("whatsappOffline")}
                         >
                           <span>⚠️</span>
-                          <span>WA Offline</span>
+                          <span>{t('waOffline')}</span>
                         </button>
                       )
                     ) : (
                       <span className="hidden lg:inline-flex items-center gap-1 text-[9px] font-black uppercase text-slate-500">
-                        {whatsappStatus.isConnected ? 'WA Live' : 'WA Offline'}
+                        {whatsappStatus.isConnected ? t('waLive') : t('waOffline')}
                       </span>
                     ))}
                   </div>
                 )}
               </div>
               <p className="hidden md:block text-[11px] text-slate-400 font-medium tracking-tight leading-normal mt-0.5">
-                Your Trusted Pharmacy for Everyday Healthcare
+                {t('trustedTagline')}
               </p>
             </div>
           </div>
@@ -114,7 +116,7 @@ export default function Header({
               }`}
             >
               <span>💊</span>
-              <span>Store</span>
+              <span>{t('store')}</span>
             </button>
 
             {(canViewCustomerOrders || canViewCustomerRequests || canViewAddresses) && (
@@ -130,7 +132,7 @@ export default function Header({
                     }`}
                   >
                     <span>📦</span>
-                    <span>Orders</span>
+                    <span>{t('orders')}</span>
                   </button>
                 )}
                 {canViewCustomerRequests && (
@@ -144,7 +146,7 @@ export default function Header({
                     }`}
                   >
                     <span>📋</span>
-                    <span>Requests</span>
+                    <span>{t('requests')}</span>
                     {proposalsWaitingCount > 0 && (
                       <span className="ml-1 bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
                         {proposalsWaitingCount}
@@ -163,7 +165,7 @@ export default function Header({
                     }`}
                   >
                     <span>🏠</span>
-                    <span>Addresses</span>
+                    <span>{t('addresses')}</span>
                   </button>
                 )}
               </>
@@ -180,7 +182,7 @@ export default function Header({
                 }`}
               >
                 <span>⚙️</span>
-                <span>Admin Operations</span>
+                <span>{t('adminOperations')}</span>
               </button>
             )}
           </nav>
@@ -188,6 +190,19 @@ export default function Header({
           {/* Right: Actions Bar */}
           <div className="flex items-center gap-1 sm:gap-2 shrink-0 max-w-[58vw] sm:max-w-none">
             
+            <label className="hidden min-[380px]:flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-600" title={t('selectLanguage')}>
+              <span aria-hidden="true">🌐</span>
+              <span className="sr-only">{t('language')}</span>
+              <select
+                aria-label={t('language')}
+                value={language}
+                onChange={(event) => setLanguage(event.target.value)}
+                className="max-w-[94px] bg-transparent text-[11px] font-bold text-slate-700 outline-none"
+              >
+                {languages.map((item) => <option key={item.code} value={item.code}>{item.nativeLabel}</option>)}
+              </select>
+            </label>
+
             {/* Branch Quick-Switcher Dropdown */}
             <div className="hidden sm:flex items-center gap-1 bg-slate-100 hover:bg-slate-200/70 px-2.5 py-1.5 rounded-xl border border-slate-200 transition shrink-0" title="Toggle active branch context (X-Branch-Id)">
               <span className="text-xs">🏢</span>
@@ -216,7 +231,7 @@ export default function Header({
                 type="button"
                 onClick={onOpenCart}
                 className="relative h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition cursor-pointer flex items-center justify-center shrink-0"
-                aria-label="View Shopping Cart"
+                aria-label={t('viewCart')}
               >
                 <svg className="w-5 h-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
@@ -246,7 +261,7 @@ export default function Header({
                   type="button"
                   onClick={onOpenProfile}
                   className="h-9 sm:h-10 px-2 sm:px-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition flex items-center justify-center gap-2 shrink-0"
-                  aria-label="User Account Profile"
+                  aria-label={t('profile')}
                 >
                   <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center uppercase shadow-xs shrink-0">
                     {user.user_metadata?.name ? user.user_metadata.name.charAt(0) : user.email?.charAt(0) || 'U'}
@@ -265,10 +280,10 @@ export default function Header({
                 type="button"
                 onClick={onOpenAuth}
                 className="h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm cursor-pointer transition flex items-center justify-center gap-1.5 shrink-0"
-                aria-label="Sign In"
+                aria-label={t('signIn')}
               >
                 <span className="text-xs">👤</span>
-                <span>Sign In</span>
+                <span>{t('signIn')}</span>
               </button>
             )}
 
@@ -278,7 +293,7 @@ export default function Header({
                 type="button"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="md:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center shrink-0"
-                aria-label="Toggle Navigation Menu"
+                aria-label={t('toggleMenu')}
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   {mobileMenuOpen ? (
@@ -303,7 +318,7 @@ export default function Header({
                 activeTab === 'store' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              <span>💊</span> Store
+              <span>💊</span> {t('store')}
             </button>
             {canViewCustomerOrders && (
               <button
@@ -313,7 +328,7 @@ export default function Header({
                   activeTab === 'orders' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <span>📦</span> Orders
+                <span>📦</span> {t('orders')}
               </button>
             )}
             {canViewCustomerRequests && (
@@ -324,10 +339,10 @@ export default function Header({
                   activeTab === 'requests' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <span className="flex items-center gap-2"><span>📋</span> Requests</span>
+                <span className="flex items-center gap-2"><span>📋</span> {t('requests')}</span>
                 {proposalsWaitingCount > 0 && (
                   <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
-                    {proposalsWaitingCount} new
+                    {proposalsWaitingCount} {t('new')}
                   </span>
                 )}
               </button>
@@ -340,7 +355,7 @@ export default function Header({
                   activeTab === 'addresses' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <span>🏠</span> Addresses
+                <span>🏠</span> {t('addresses')}
               </button>
             )}
             {canViewOperations && (
@@ -351,12 +366,12 @@ export default function Header({
                   activeTab === 'admin' ? 'bg-blue-600 text-white font-extrabold' : 'text-blue-700 bg-blue-50'
                 }`}
               >
-                <span>⚙️</span> Admin Operations
+                <span>⚙️</span> {t('adminOperations')}
               </button>
             )}
             <div className="pt-2 border-t border-slate-100 flex items-center justify-between px-2">
               <span className="text-[11px] text-slate-500 font-medium truncate max-w-[180px]">
-                Signed in as {user?.email}
+                {t('signedInAs')} {user?.email}
               </span>
               <button
                 type="button"
@@ -364,7 +379,7 @@ export default function Header({
                 disabled={signingOut}
                 className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg transition"
               >
-                {signingOut ? 'Signing out...' : 'Sign Out'}
+                {signingOut ? t('signingOut') : t('signOut')}
               </button>
             </div>
           </div>
