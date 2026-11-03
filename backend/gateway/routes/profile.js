@@ -4,6 +4,7 @@ import express from 'express';
 import { authService, calculateAge, isValidDOB, isValidMobile } from '../../services/identity-service/AuthService.js';
 import { authenticateUser, requirePlatformSuperAdmin } from '../../middleware/auth.js';
 import UserProfile from '../../models/UserProfile.js';
+import User from '../../models/User.js';
 import Feature from '../../models/Feature.js';
 import Permission from '../../models/Permission.js';
 import { getRolePermissions, isKnownPermission } from '../../authorization/AuthorizationCatalogService.js';
@@ -131,13 +132,13 @@ router.put('/language', authenticateUser, async (req, res) => {
         return sendError(res, { code: 'INVALID_LANGUAGE', message: 'Choose a supported language.', statusCode: 400, req });
     }
     try {
-        const profile = await UserProfile.findOneAndUpdate(
-            { $or: [{ userId }, { supabase_user_id: userId }, { supabaseId: userId }] },
-            { $set: { preferredLanguage } },
-            { new: true, runValidators: true }
-        ).select('preferredLanguage').lean();
-        if (!profile) return sendError(res, { code: 'PROFILE_NOT_FOUND', message: 'User profile not found.', statusCode: 404, req });
-        return sendSuccess(res, { data: profile, message: 'Language preference saved.', statusCode: 200, req });
+        const identity = { $or: [{ userId }, { supabase_user_id: userId }, { supabaseId: userId }] };
+        const [profile, user] = await Promise.all([
+            UserProfile.findOneAndUpdate(identity, { $set: { preferredLanguage } }, { new: true, runValidators: true }).select('preferredLanguage').lean(),
+            User.findOneAndUpdate(identity, { $set: { preferredLanguage } }, { new: true, runValidators: true }).select('preferredLanguage').lean()
+        ]);
+        if (!profile && !user) return sendError(res, { code: 'PROFILE_NOT_FOUND', message: 'User profile not found.', statusCode: 404, req });
+        return sendSuccess(res, { data: { preferredLanguage: profile?.preferredLanguage || user?.preferredLanguage || preferredLanguage }, message: 'Language preference saved.', statusCode: 200, req });
     } catch (err) {
         return sendError(res, { code: 'LANGUAGE_PREFERENCE_SAVE_FAILED', message: err.message || 'Could not save language preference.', statusCode: 500, req });
     }
