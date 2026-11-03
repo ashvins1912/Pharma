@@ -11,12 +11,58 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   const { addToast } = useToast();
   const { fetchMedicines } = useApp();
   const { isSuperAdmin, isTenantAdmin, user } = useAuth();
-  const needsBranchSelection = Boolean(isTenantAdmin && !(user?.branchId || user?.app_metadata?.branchId));
-  const [targetTenantId, setTargetTenantId] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('pharma_import_target_tenant_id') || localStorage.getItem('pharma_tenant_id') || '') : '');
-  const [targetBranchId, setTargetBranchId] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('pharma_import_target_branch_id') || localStorage.getItem('pharma_branch_id') || '') : '');
-  const getImportScopeHeaders = () => isSuperAdmin
-    ? { 'X-Tenant-Id': targetTenantId.trim(), 'X-Branch-Id': targetBranchId.trim() }
-    : needsBranchSelection ? { 'X-Branch-Id': targetBranchId.trim() } : {};
+  const authenticatedTenantId = String(user?.tenantId || user?.app_metadata?.tenantId || '').trim();
+  const [targetTenantId, setTargetTenantId] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('pharma_import_target_tenant_id') || '') : '');
+  const scopeTenantId = isSuperAdmin ? targetTenantId.trim() : authenticatedTenantId;
+  // Import scope is selected from the tenant's actual branch registry. Never
+  // trust a branch ID left in localStorage or a stale global branch selector.
+  const [targetBranchId, setTargetBranchId] = useState('');
+  const [branchOptions, setBranchOptions] = useState([]);
+  const [branchLoading, setBranchLoading] = useState(false);
+  const [branchLoadError, setBranchLoadError] = useState('');
+  const getImportScopeHeaders = () => ({
+    ...(isSuperAdmin ? { 'X-Tenant-Id': scopeTenantId } : {}),
+    'X-Branch-Id': targetBranchId.trim()
+  });
+
+  useEffect(() => {
+    setTargetBranchId('');
+    setBranchOptions([]);
+    setBranchLoadError('');
+    if (!isOpen || !scopeTenantId) return undefined;
+
+    let cancelled = false;
+    setBranchLoading(true);
+    apiClient.get(`/api/v1/tenants/${encodeURIComponent(scopeTenantId)}/branches`)
+      .then(response => {
+        if (cancelled) return;
+        const payload = response.data?.data || response.data?.branches || [];
+        const options = (Array.isArray(payload) ? payload : [])
+          .filter(branch => branch && String(branch.status || 'ACTIVE').toUpperCase() === 'ACTIVE')
+          .map(branch => ({
+            id: String(branch._id || branch.id || '').trim(),
+            name: String(branch.name || branch.branchName || 'Branch').trim(),
+            tenantId: String(branch.tenantId?._id || branch.tenantId || scopeTenantId)
+          }))
+          .filter(branch => branch.id && branch.tenantId === scopeTenantId);
+        setBranchOptions(options);
+        const signedBranchId = String(user?.branchId || user?.app_metadata?.branchId || '').trim();
+        const preferredBranch = options.find(branch => branch.id === signedBranchId);
+        setTargetBranchId(preferredBranch?.id || (options.length === 1 ? options[0].id : ''));
+        if (!options.length) setBranchLoadError('No active branches were found for this pharmacy. Ask your pharmacy administrator to verify branch setup.');
+      })
+      .catch(error => {
+        if (!cancelled) {
+          setBranchOptions([]);
+          setBranchLoadError(error.response?.data?.error?.message || error.response?.data?.message || 'Could not load branches for this pharmacy.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setBranchLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [isOpen, scopeTenantId, user?.branchId, user?.app_metadata?.branchId]);
 
   const [file, setFile] = useState(null);
   const [stockMode, setStockMode] = useState('REPLACE');
@@ -66,7 +112,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   const handleFileChange = async (selectedFile) => {
     if (!selectedFile) return;
     if (!/\.(xlsx|xls)$/i.test(selectedFile.name)) { addToast(t('selectWorkbook'), 'warning'); return; }
-    if ((isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) || (needsBranchSelection && !targetBranchId.trim())) {
+    if (!scopeTenantId || !targetBranchId.trim()) {
       addToast(t('selectTenantBranch'), 'warning');
       return;
     }
@@ -77,7 +123,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       setPreviewData(response.data);
       addToast('Server validated ' + response.data.rowsDetected + ' rows (' + response.data.validCount + ' valid)', 'info');
     } catch (error) {
-      setFile(null); addToast(error.response?.data?.message || error.message || 'Server-side validation failed.', 'error');
+      setFile(null); addToast(error.response?.data?.error?.message || error.response?.data?.message || error.message || 'Server-side validation failed.', 'error');
     } finally { setAnalyzing(false); }
   };
   const handleDrop = (e) => {
@@ -89,7 +135,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
   // Authoritative Single Upload to /api/v1/inventory/imports with unique Idempotency-Key
   const handleConfirmImport = async () => {
-    if ((isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) || (needsBranchSelection && !targetBranchId.trim())) {
+    if (!scopeTenantId || !targetBranchId.trim()) {
       addToast(t('selectTenantBranchImport'), 'warning');
       return;
     }
@@ -124,7 +170,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       setImportJob(res.data);
       addToast(t('importQueued'), 'info');
     } catch (err) {
-      addToast(err.response?.data?.message || err.message || t('importStartFailed'), 'error');
+      addToast(err.response?.data?.error?.message || err.response?.data?.message || err.message || t('importStartFailed'), 'error');
     } finally {
       setCommitting(false);
     }
@@ -132,7 +178,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
   const rollbackImport = async () => {
     if (!importJob?.batchId) return;
-    if ((isSuperAdmin && (!targetTenantId.trim() || !targetBranchId.trim())) || (needsBranchSelection && !targetBranchId.trim())) {
+    if (!scopeTenantId || !targetBranchId.trim()) {
       addToast(t('selectOriginalScopeRollback'), 'warning');
       return;
     }
@@ -275,51 +321,61 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 overscroll-contain">
-          {!isSuperAdmin && needsBranchSelection && (
-            <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 space-y-2">
-              <p className="text-xs font-extrabold text-sky-950">{t('selectPharmacyBranch')}</p>
-              <p className="text-[11px] text-sky-800">{t('signedTenantIdentity')}</p>
-              <input
-                value={targetBranchId}
-                onChange={event => {
-                  setTargetBranchId(event.target.value);
-                  localStorage.setItem('pharma_import_target_branch_id', event.target.value);
-                  setPreviewData(null);
-                }}
-                placeholder={t("branchId")}
-                disabled={Boolean(importJob)}
-                className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
-              />
-            </div>
-          )}
-          {isSuperAdmin && (
-            <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 space-y-2">
-              <p className="text-xs font-extrabold text-sky-950">{t('platformImportTarget')}</p>
-              <p className="text-[11px] text-sky-800">{t('targetTenantBranchHelp')}</p>
-              <input
-                value={targetTenantId}
-                onChange={event => {
-                  setTargetTenantId(event.target.value);
-                  localStorage.setItem('pharma_import_target_tenant_id', event.target.value);
-                  setPreviewData(null);
-                }}
-                placeholder={t("targetTenantId")}
-                disabled={Boolean(importJob)}
-                className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
-              />
-              <input
-                value={targetBranchId}
-                onChange={event => {
-                  setTargetBranchId(event.target.value);
-                  localStorage.setItem('pharma_import_target_branch_id', event.target.value);
-                  setPreviewData(null);
-                }}
-                placeholder={t("branchId")}
-                disabled={Boolean(importJob)}
-                className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
-              />
-            </div>
-          )}
+          <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 space-y-2">
+            <p className="text-xs font-extrabold text-sky-950">
+              {isSuperAdmin ? t('platformImportTarget') : t('selectPharmacyBranch')}
+            </p>
+            {isSuperAdmin ? (
+              <>
+                <p className="text-[11px] text-sky-800">{t('targetTenantBranchHelp')}</p>
+                <input
+                  value={targetTenantId}
+                  onChange={event => {
+                    const value = event.target.value;
+                    setTargetTenantId(value);
+                    localStorage.setItem('pharma_import_target_tenant_id', value);
+                    setTargetBranchId('');
+                    setPreviewData(null);
+                    setFile(null);
+                    setImportJob(null);
+                  }}
+                  placeholder={t('targetTenantId')}
+                  disabled={Boolean(importJob)}
+                  className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
+                />
+              </>
+            ) : (
+              <p className="text-[11px] text-sky-800">
+                {t('signedTenantIdentity')}: <strong className="break-all">{scopeTenantId || 'Missing authenticated tenant'}</strong>
+              </p>
+            )}
+            <label className="block text-[11px] font-bold text-sky-950" htmlFor="inventory-import-branch">
+              {t('branchId')}
+            </label>
+            <select
+              id="inventory-import-branch"
+              value={targetBranchId}
+              onChange={event => {
+                setTargetBranchId(event.target.value);
+                setPreviewData(null);
+                setFile(null);
+                setImportJob(null);
+              }}
+              disabled={!scopeTenantId || branchLoading || Boolean(importJob) || branchOptions.length === 0}
+              className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs"
+            >
+              <option value="">
+                {branchLoading ? 'Loading active branches…' : 'Select an active branch'}
+              </option>
+              {branchOptions.map(branch => (
+                <option key={branch.id} value={branch.id}>{branch.name}</option>
+              ))}
+            </select>
+            {branchLoadError && <p role="alert" className="text-[11px] text-rose-700">{branchLoadError}</p>}
+            {!branchLoadError && targetBranchId && (
+              <p className="text-[11px] text-emerald-800">Branch selected. The server will verify tenant ownership and your active membership before preview.</p>
+            )}
+          </div>
           {/* Upload Zone */}
           {!previewData && (
           <div className="py-6 space-y-4">
