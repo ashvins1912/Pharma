@@ -25,6 +25,7 @@ const PRESET_IMAGE_ASSETS = [
 ];
 
 export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) {
+  const { t } = useLanguage();
   const { addToast } = useToast();
   const modalRef = useFocusTrap(isOpen, onClose);
 
