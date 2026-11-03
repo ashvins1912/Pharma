@@ -45,6 +45,7 @@ gateway.use('/admin/tenants', adminTenantsRouter);
 gateway.use('/vendors', vendorRouter);
 gateway.use('/vendor', vendorRouter);
 gateway.use('/tenants', tenantsRouter);
+gateway.use('/tenant', tenantsRouter);
 gateway.use('/branches', tenantsRouter);
 gateway.use('/customers', customersRouter);
 gateway.use('/catalog', catalogRouter);
