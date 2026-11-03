@@ -18,7 +18,7 @@ export default function CustomerPromotionsView({ canManage = false }) {
   const [minOrderAmount, setMinOrderAmount] = useState('0');
   const [expiryDate, setExpiryDate] = useState('');
   const [code, setCode] = useState('');
-  const [label, setLabel] = useState(t('personalDiscountCoupons'));
+  const [label, setLabel] = useState(t('pharmaDiscountForYou'));
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
