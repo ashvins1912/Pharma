@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import apiClient from '../api/apiClient';
 
 export const SUPPORTED_LANGUAGES = [
   { code: 'en', label: 'English', nativeLabel: 'English' },
@@ -1837,6 +1838,9 @@ export function LanguageProvider({ children }) {
   const setLanguage = useCallback((nextLanguage) => {
     if (!SUPPORTED_LANGUAGES.some((item) => item.code === nextLanguage)) return;
     setLanguageState(nextLanguage);
+    void apiClient.put('/api/v1/profile/language', { preferredLanguage: nextLanguage }).catch(() => {
+      // Anonymous browsing is supported; the device preference remains active locally.
+    });
     if (typeof window !== 'undefined') {
       try {
         window.localStorage.setItem('quickmeds-rx-language', nextLanguage);
