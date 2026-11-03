@@ -6,6 +6,7 @@ import './config/env.ts';
 import App from './App.jsx';
 import './index.css';
 import { AuthProvider } from './context/AuthContext';
+import { LanguageProvider } from './context/LanguageContext';
 import { ToastProvider } from './context/ToastContext';
 import { AppProvider } from './context/AppContext';
 import { LoadingProvider } from './context/LoadingContext';
@@ -17,6 +18,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
+      <LanguageProvider>
       <LoadingProvider>
         <AuthProvider>
           <ToastProvider>
@@ -32,6 +34,7 @@ createRoot(document.getElementById('root')).render(
           </ToastProvider>
         </AuthProvider>
       </LoadingProvider>
+      </LanguageProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );
