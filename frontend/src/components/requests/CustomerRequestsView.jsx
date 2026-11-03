@@ -10,6 +10,7 @@ import { useLanguage } from '../../context/LanguageContext';
 const DEFAULT_PAGINATION = { page: 1, pageSize: 10, limit: 10, total: 0, totalPages: 0, hasNextPage: false };
 
 export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
+  const { t } = useLanguage();
   const { user } = useAuth();
   const {
     medicineRequests,
