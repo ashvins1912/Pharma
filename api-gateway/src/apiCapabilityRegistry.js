@@ -134,6 +134,9 @@ const CAPABILITIES = [
   ['GET', /^\/api\/v1\/notifications(?:\/|$)/, 'profile.read'],
   ['POST', /^\/api\/v1\/notifications(?:\/|$)/, 'profile.write'],
   ['GET', /^\/api\/v1\/vendors?(?:\/|$)/, 'tenants.read'],
+  ['GET', /^\/api\/vendor\/profile$/, 'tenants.read'],
+  ['GET', /^\/api\/tenant\/branches(?:\/|$)/, 'tenants.read'],
+  ['POST', /^\/api\/tenant\/branches(?:\/|$)/, 'tenants.manage'],
   ['POST', /^\/api\/v1\/vendors?(?:\/|$)/, 'tenants.manage']
 ];
 
@@ -146,7 +149,6 @@ const PUBLIC_PATHS = [
   // inventory (/admin/inventory) and all mutations protected by capabilities.
   ['GET', /^\/api\/medicines$/],
   // Nearby pharmacy discovery is a read-only storefront feature; do not require staff RBAC.
-  ['GET', /^\/api\/tenants\/nearby$/],
   ['GET', /^\/api\/medicines\/discovery$/],
   ['GET', /^\/api\/public\//], ['POST', /^\/api\/public\//],
   ['GET', /^\/api\/vendors\//], ['POST', /^\/api\/vendors\//],
@@ -155,7 +157,7 @@ const PUBLIC_PATHS = [
   // endpoints remain session- and capability-protected.
   ['GET', /^\/api\/v1\/vendor\/onboarding\/[^/]+$/],
   ['POST', /^\/api\/v1\/vendor\/onboarding\/[^/]+\/complete$/],
-  ['GET', /^\/api\/vendor\//], ['POST', /^\/api\/vendor\//]
+  ['GET', /^\/api\/vendor\/onboarding\//], ['POST', /^\/api\/vendor\/onboarding\//]
 ];
 
 export function resolveGatewayCapability(method, url) {
