@@ -173,6 +173,7 @@ export default function AdminDashboardView() {
   // Keep the active tab valid when the server-side permission snapshot changes.
   useEffect(() => {
     const allowedTabs = [
+      'tenantProfile',
       canViewFulfillment && 'fulfillment',
       canViewCSquare && 'csquare',
       canViewAdminRequests && 'requests',
