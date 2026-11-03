@@ -19,7 +19,7 @@ export class EmailService {
                 : (Number(env.SMTP_PORT) === 465),
             user: env.SMTP_USER || '',
             pass: env.SMTP_PASS || '',
-            from: env.SMTP_FROM || (env.SMTP_USER ? `Ashvin Pharmacy Platform <${env.SMTP_USER}>` : 'Ashvin Pharmacy Platform <no-reply@ashvinpharmacy.com>'),
+            from: env.SMTP_FROM || (env.SMTP_USER ? `QuickMeds Rx Platform <${env.SMTP_USER}>` : 'QuickMeds Rx Platform <no-reply@ashvinpharmacy.com>'),
             service: env.SMTP_SERVICE || undefined,
             enabled: true
         };
@@ -117,7 +117,7 @@ export class EmailService {
             secure,
             user: effective.user || '',
             pass: effective.pass || '',
-            from: effective.from || (effective.user ? `Ashvin Pharmacy Platform <${effective.user}>` : 'Ashvin Pharmacy Platform <no-reply@ashvinpharmacy.com>'),
+            from: effective.from || (effective.user ? `QuickMeds Rx Platform <${effective.user}>` : 'QuickMeds Rx Platform <no-reply@ashvinpharmacy.com>'),
             service: effective.service || undefined,
             enabled: effective.enabled !== false
         };
@@ -306,7 +306,7 @@ export class EmailService {
         }
 
         const config = this.resolveConfig(tenant, options.smtpConfig);
-        const subject = `🏥 Welcome to Ashvin Pharmacy Platform: ${tenant.name} (${tenant.code || tenant.slug})`;
+        const subject = `🏥 Welcome to QuickMeds Rx Platform: ${tenant.name} (${tenant.code || tenant.slug})`;
         const timestamp = new Date().toLocaleString('en-IN', { timeZone: tenant.timezone || 'Asia/Kolkata' });
 
         const adminSectionHtml = initialAdmin ? `
@@ -343,7 +343,7 @@ ${initialAdmin.invitationToken ? `- Invitation Token: ${initialAdmin.invitationT
     <div style="max-width: 620px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.04);">
         <!-- Platform Header -->
         <div style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); padding: 32px 28px; text-align: left; color: #ffffff;">
-            <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.9; font-weight: 700; margin-bottom: 6px;">Ashvin Pharmacy Platform</div>
+            <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.9; font-weight: 700; margin-bottom: 6px;">QuickMeds Rx Platform</div>
             <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Tenant Onboarding Confirmation</h1>
             <p style="margin: 8px 0 0; font-size: 14px; opacity: 0.95;">Official Welcome & Multi-Tenant Architecture Provisioning Record</p>
         </div>
@@ -354,7 +354,7 @@ ${initialAdmin.invitationToken ? `- Invitation Token: ${initialAdmin.invitationT
                 Hello <strong>${tenant.name}</strong> Team,
             </p>
             <p style="font-size: 15px; line-height: 1.6; color: #334155;">
-                We are pleased to confirm that your pharmacy tenant organization has been successfully provisioned onto the <strong>Ashvin Pharmacy Multi-Tenant Healthcare Platform</strong>.
+                We are pleased to confirm that your pharmacy tenant organization has been successfully provisioned onto the <strong>QuickMeds Rx Multi-Tenant Healthcare Platform</strong>.
             </p>
 
             <!-- Tenant Details Table -->
@@ -417,7 +417,7 @@ ${initialAdmin.invitationToken ? `- Invitation Token: ${initialAdmin.invitationT
         </div>
 
         <div style="background: #f1f5f9; padding: 16px 28px; font-size: 12px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0;">
-            &copy; ${new Date().getFullYear()} Ashvin Pharmacy Healthcare Systems. All rights reserved.
+            &copy; ${new Date().getFullYear()} QuickMeds Rx Healthcare Systems. All rights reserved.
         </div>
     </div>
 </body>
@@ -431,7 +431,7 @@ ASHVIN PHARMACY PLATFORM - TENANT ONBOARDING CONFIRMATION
 
 Hello ${tenant.name} Team,
 
-Your pharmacy tenant organization has been successfully onboarded onto the Ashvin Pharmacy Multi-Tenant Healthcare Platform.
+Your pharmacy tenant organization has been successfully onboarded onto the QuickMeds Rx Multi-Tenant Healthcare Platform.
 
 TENANT SPECIFICATIONS:
 - Pharmacy Name: ${tenant.name}
@@ -485,7 +485,7 @@ For support, contact care@ashvinpharmacy.com.
     <div style="max-width: 580px; margin: 0 auto; background: #fff; border-radius: 8px; padding: 24px; border: 1px solid #e2e8f0;">
         <h2 style="color: #0284c7; margin-top: 0;">Pharmacy Administrator Invitation</h2>
         <p>Hello <strong>${invite.name || 'Administrator'}</strong>,</p>
-        <p>You have been invited to manage <strong>${tenantName}</strong> on the Ashvin Pharmacy Platform as a <strong>TENANT_ADMIN</strong>.</p>
+        <p>You have been invited to manage <strong>${tenantName}</strong> on the QuickMeds Rx Platform as a <strong>TENANT_ADMIN</strong>.</p>
         <div style="background: #f1f5f9; padding: 14px; border-radius: 6px; margin: 20px 0;">
             <p style="margin: 4px 0;"><strong>Pharmacy Tenant:</strong> ${tenantName} (${tenant?.slug || 'HQ'})</p>
             <p style="margin: 4px 0;"><strong>Assigned Email:</strong> ${invite.email}</p>
@@ -500,7 +500,7 @@ For support, contact care@ashvinpharmacy.com.
         const text = `
 Hello ${invite.name || 'Administrator'},
 
-You have been invited to manage ${tenantName} on the Ashvin Pharmacy Platform as a TENANT_ADMIN.
+You have been invited to manage ${tenantName} on the QuickMeds Rx Platform as a TENANT_ADMIN.
 - Pharmacy: ${tenantName}
 - Assigned Email: ${invite.email}
 ${invite.invitationToken ? `- Token: ${invite.invitationToken}\n` : ''}
@@ -528,13 +528,13 @@ Please log in to the management portal to accept.
     async sendTestEmail(targetEmail, customConfig = null) {
         if (!targetEmail) throw new Error('Target test recipient email is required.');
         const config = this.resolveConfig(null, customConfig);
-        const subject = `🧪 SMTP Diagnostic Test - Ashvin Pharmacy Platform`;
+        const subject = `🧪 SMTP Diagnostic Test - QuickMeds Rx Platform`;
         const timestamp = new Date().toISOString();
 
         const html = `
 <div style="font-family: sans-serif; padding: 20px; color: #1e293b;">
     <h2 style="color: #059669;">✅ SMTP Configuration Verified</h2>
-    <p>This is an automated diagnostic test from the <strong>Ashvin Pharmacy Platform</strong>.</p>
+    <p>This is an automated diagnostic test from the <strong>QuickMeds Rx Platform</strong>.</p>
     <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin: 16px 0;">
         <p style="margin: 4px 0;"><strong>SMTP Server:</strong> ${config.host}:${config.port}</p>
         <p style="margin: 4px 0;"><strong>Encryption:</strong> ${config.secure ? 'SSL (Port 465)' : 'STARTTLS (Port 587)'}</p>
@@ -549,7 +549,7 @@ Please log in to the management portal to accept.
             to: targetEmail,
             subject,
             html,
-            text: `SMTP Diagnostic Test - Ashvin Pharmacy Platform.\nServer: ${config.host}:${config.port}\nTimestamp: ${timestamp}`,
+            text: `SMTP Diagnostic Test - QuickMeds Rx Platform.\nServer: ${config.host}:${config.port}\nTimestamp: ${timestamp}`,
             smtpConfig: customConfig,
             metadata: {
                 eventType: 'DIAGNOSTIC_TEST'
