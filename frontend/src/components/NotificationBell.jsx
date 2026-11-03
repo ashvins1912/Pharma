@@ -31,7 +31,7 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
       'medicine request created': 'medicineRequestTitle',
       'proposal approved': 'proposalApprovedTitle',
       'proposal rejected': 'proposalRejectedTitle',
-      'out for delivery': 'outForDelivery'
+
     };
     return labels[normalized] ? t(labels[normalized]) : String(value || '');
   };
