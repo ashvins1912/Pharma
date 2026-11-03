@@ -6,7 +6,7 @@ process.env.SUPABASE_URL = 'https://example.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key-with-sufficient-length';
 process.env.NODE_ENV = 'test';
 
-const { buildWhatsAppMessageBody } = await import('./whatsapp.js');
+const { buildWhatsAppMessageBody, buildWhatsAppMedicineRequestBody } = await import('./whatsapp.js');
 
 const order = {
     id: 'order-123456',
@@ -73,4 +73,26 @@ test('new-order admin alert includes customer contact, delivery address, and ite
     assert.match(message, /Customer contact: \+919876543210/);
     assert.match(message, /Complete delivery address:.*560001/);
     assert.match(message, /Medicine A x2/);
+});
+
+test('customer WhatsApp order updates use the saved Hindi locale and preserve OTP handover safety', () => {
+    const message = buildWhatsAppMessageBody(order, 'Dispatched', 'customer', {
+        deliveryOtp: '4821',
+        language: 'hi'
+    });
+    assert.match(message, /आपका ऑर्डर डिलीवरी के लिए निकल गया/);
+    assert.match(message, /4 अंकों का सत्यापन कोड: 4821/);
+    assert.match(message, /राइडर आने से पहले साझा न करें/);
+    assert.match(message, /House 10, Main Road/);
+});
+
+test('customer WhatsApp medicine-request proposal uses the saved Kannada locale', () => {
+    const message = buildWhatsAppMedicineRequestBody({
+        requestNumber: 'MR-2026-10',
+        requestedItems: [{ requestedName: 'Medicine A', quantity: 2 }],
+        pharmacyProposal: { proposedMedicineName: 'Medicine A', proposedQuantity: 2, finalPrice: 250 }
+    }, 'MedicineProposalReady', 'kn');
+    assert.match(message, /ನಿಮ್ಮ ಔಷಧಿ ವಿನಂತಿಗೆ ಔಷಧಾಲಯದ ಪ್ರಸ್ತಾವನೆ ಸಿದ್ಧವಾಗಿದೆ/);
+    assert.match(message, /ಬೆಲೆ: ₹250/);
+    assert.match(message, /Medicine A/);
 });
