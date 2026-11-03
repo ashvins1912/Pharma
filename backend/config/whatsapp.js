@@ -10,10 +10,127 @@ import PaymentReminder from '../models/PaymentReminder.js';
 import Order from '../models/Order.js';
 import Tenant from '../models/Tenant.js';
 import Vendor from '../models/Vendor.js';
+import UserProfile from '../models/UserProfile.js';
 import { createRiderDeliveryActionToken } from '../services/payment/SignedPaymentActionService.js';
 import { buildDeliveryActionMenu, getDeliveryActionFromListReply } from '../services/delivery/DeliveryWhatsAppMenu.js';
 
 const sentNotifications = new Map();
+
+const resolveNotificationLanguage = async (userId) => {
+    if (!userId || !getIsConnected()) return 'en';
+    try {
+        const profile = await UserProfile.findOne({
+            $or: [{ userId: String(userId) }, { supabase_user_id: String(userId) }, { supabaseId: String(userId) }]
+        }).select('preferredLanguage').lean();
+        return ['en', 'hi', 'kn', 'bn', 'te'].includes(profile?.preferredLanguage) ? profile.preferredLanguage : 'en';
+    } catch {
+        return 'en';
+    }
+};
+
+const localizedWhatsApp = {
+    hi: {
+        placed: '🎉 आपका QuickMeds Rx ऑर्डर सफलतापूर्वक दर्ज हुआ',
+        status: 'स्थिति', customer: 'ग्राहक', address: 'डिलीवरी पता', total: 'कुल राशि', items: 'ऑर्डर की दवाएँ',
+        updates: 'ऑर्डर आगे बढ़ने पर हम आपको अपडेट भेजेंगे।', ready: 'ऑर्डर पैक है और डिलीवरी राइडर की प्रतीक्षा में है।',
+        dispatched: '🚚 आपका ऑर्डर डिलीवरी के लिए निकल गया', rider: 'डिलीवरी राइडर', riderPhone: 'राइडर का संपर्क',
+        delivered: '🏁 ऑर्डर सफलतापूर्वक डिलीवर हुआ', thankYou: 'QuickMeds Rx चुनने के लिए धन्यवाद। स्वस्थ रहें! 💚',
+        assigned: '🛵 आपके ऑर्डर के लिए डिलीवरी राइडर नियुक्त किया गया', otp: '🔐 4 अंकों का सत्यापन कोड',
+        otpRule: 'यह कोड डिलीवरी के समय राइडर को ही बताएँ। राइडर आने से पहले साझा न करें।',
+        at: 'डिलीवरी के लिए निकला समय', deliveredAt: 'डिलीवरी का समय', notAvailable: 'उपलब्ध नहीं',
+        placedTitle: 'ऑर्डर नंबर', itemsUnavailable: 'आइटम उपलब्ध नहीं'
+    },
+    kn: {
+        placed: '🎉 ನಿಮ್ಮ QuickMeds Rx ಆರ್ಡರ್ ಯಶಸ್ವಿಯಾಗಿ ಸ್ವೀಕರಿಸಲಾಗಿದೆ',
+        status: 'ಸ್ಥಿತಿ', customer: 'ಗ್ರಾಹಕರು', address: 'ವಿತರಣಾ ವಿಳಾಸ', total: 'ಒಟ್ಟು ಮೊತ್ತ', items: 'ಆರ್ಡರ್ ಔಷಧಿಗಳು',
+        updates: 'ನಿಮ್ಮ ಆರ್ಡರ್ ಮುಂದುವರಿದಂತೆ ನಾವು ಅಪ್‌ಡೇಟ್‌ಗಳನ್ನು ಕಳುಹಿಸುತ್ತೇವೆ.', ready: 'ಆರ್ಡರ್ ಪ್ಯಾಕ್ ಆಗಿದೆ ಮತ್ತು ಡೆಲಿವರಿ ರೈಡರ್‌ಗಾಗಿ ಕಾಯುತ್ತಿದೆ.',
+        dispatched: '🚚 ನಿಮ್ಮ ಆರ್ಡರ್ ವಿತರಣೆಗೆ ಹೊರಟಿದೆ', rider: 'ಡೆಲಿವರಿ ರೈಡರ್', riderPhone: 'ರೈಡರ್ ಸಂಪರ್ಕ',
+        delivered: '🏁 ಆರ್ಡರ್ ಯಶಸ್ವಿಯಾಗಿ ವಿತರಿಸಲಾಗಿದೆ', thankYou: 'QuickMeds Rx ಆಯ್ಕೆ ಮಾಡಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. ಆರೋಗ್ಯವಾಗಿರಿ! 💚',
+        assigned: '🛵 ನಿಮ್ಮ ಆರ್ಡರ್‌ಗೆ ಡೆಲಿವರಿ ರೈಡರ್ ನಿಯೋಜಿಸಲಾಗಿದೆ', otp: '🔐 4 ಅಂಕಿಯ ದೃಢೀಕರಣ ಕೋಡ್',
+        otpRule: 'ವಿತರಣೆಯ ಸಮಯದಲ್ಲಿ ಮಾತ್ರ ಈ ಕೋಡ್ ಅನ್ನು ರೈಡರ್‌ಗೆ ತಿಳಿಸಿ. ರೈಡರ್ ಬರುವ ಮೊದಲು ಹಂಚಿಕೊಳ್ಳಬೇಡಿ.',
+        at: 'ವಿತರಣೆಗೆ ಹೊರಟ ಸಮಯ', deliveredAt: 'ವಿತರಿಸಿದ ಸಮಯ', notAvailable: 'ಲಭ್ಯವಿಲ್ಲ',
+        placedTitle: 'ಆರ್ಡರ್ ಸಂಖ್ಯೆ', itemsUnavailable: 'ಐಟಂಗಳು ಲಭ್ಯವಿಲ್ಲ'
+    },
+    bn: {
+        placed: '🎉 আপনার QuickMeds Rx অর্ডার সফলভাবে গ্রহণ করা হয়েছে',
+        status: 'অবস্থা', customer: 'গ্রাহক', address: 'ডেলিভারির ঠিকানা', total: 'মোট পরিমাণ', items: 'অর্ডারের ওষুধ',
+        updates: 'অর্ডারের অগ্রগতি অনুযায়ী আমরা আপনাকে আপডেট পাঠাব।', ready: 'অর্ডার প্যাক করা হয়েছে এবং ডেলিভারি রাইডারের অপেক্ষায় আছে।',
+        dispatched: '🚚 আপনার অর্ডার ডেলিভারির পথে', rider: 'ডেলিভারি রাইডার', riderPhone: 'রাইডারের যোগাযোগ',
+        delivered: '🏁 অর্ডার সফলভাবে ডেলিভার হয়েছে', thankYou: 'QuickMeds Rx বেছে নেওয়ার জন্য ধন্যবাদ। সুস্থ থাকুন! 💚',
+        assigned: '🛵 আপনার অর্ডারের জন্য ডেলিভারি রাইডার নিয়োগ করা হয়েছে', otp: '🔐 ৪ সংখ্যার যাচাইকরণ কোড',
+        otpRule: 'হস্তান্তরের সময় শুধু রাইডারকে এই কোডটি জানান। রাইডার আসার আগে শেয়ার করবেন না।',
+        at: 'ডেলিভারির জন্য রওনা হওয়ার সময়', deliveredAt: 'ডেলিভারির সময়', notAvailable: 'পাওয়া যাচ্ছে না',
+        placedTitle: 'অর্ডার নম্বর', itemsUnavailable: 'আইটেম পাওয়া যাচ্ছে না'
+    },
+    te: {
+        placed: '🎉 మీ QuickMeds Rx ఆర్డర్ విజయవంతంగా స్వీకరించబడింది',
+        status: 'స్థితి', customer: 'కస్టమర్', address: 'డెలివరీ చిరునామా', total: 'మొత్తం', items: 'ఆర్డర్ మందులు',
+        updates: 'మీ ఆర్డర్ పురోగతిని బట్టి మేము అప్‌డేట్‌లు పంపుతాము.', ready: 'ఆర్డర్ ప్యాక్ చేయబడింది; డెలివరీ రైడర్ కోసం వేచి ఉంది.',
+        dispatched: '🚚 మీ ఆర్డర్ డెలివరీకి బయలుదేరింది', rider: 'డెలివరీ రైడర్', riderPhone: 'రైడర్ సంప్రదింపు',
+        delivered: '🏁 ఆర్డర్ విజయవంతంగా డెలివరీ అయింది', thankYou: 'QuickMeds Rxను ఎంచుకున్నందుకు ధన్యవాదాలు. ఆరోగ్యంగా ఉండండి! 💚',
+        assigned: '🛵 మీ ఆర్డర్‌కు డెలివరీ రైడర్ కేటాయించబడ్డారు', otp: '🔐 4 అంకెల ధృవీకరణ కోడ్',
+        otpRule: 'డెలివరీ అప్పగించే సమయంలో మాత్రమే ఈ కోడ్‌ను రైడర్‌కు చెప్పండి. రైడర్ రాకముందు పంచుకోవద్దు.',
+        at: 'డెలివరీకి బయలుదేరిన సమయం', deliveredAt: 'డెలివరీ సమయం', notAvailable: 'అందుబాటులో లేదు',
+        placedTitle: 'ఆర్డర్ నంబర్', itemsUnavailable: 'వస్తువులు అందుబాటులో లేవు'
+    }
+};
+
+const buildLocalizedCustomerOrderMessage = (order, status, language, { deliveryOtp = null } = {}) => {
+    const words = localizedWhatsApp[language];
+    if (!words) return null;
+    const orderId = order?.orderNumber || (order?._id?.toString() || order?.id?.toString() || 'UNKNOWN').slice(-6).toUpperCase();
+    const items = (order.items || []).map(item => `• ${item.name || words.itemsUnavailable} x${item.quantity || 1}`).join('\\n');
+    const address = getCompleteAddress(order);
+    const total = `₹${order.finalTotal}`;
+    const rider = order.rider?.riderName || words.notAvailable;
+    const riderPhone = order.rider?.riderMobile || words.notAvailable;
+    const when = order.outForDeliveryAt ? new Date(order.outForDeliveryAt).toLocaleString() : new Date().toLocaleString();
+    switch (normalizeOrderStatus(status)) {
+        case 'Placed':
+            return [words.placed + ` — #${orderId}`, `${words.status}: ${order.orderStatus || 'Processing'}`, `${words.customer}: ${order.addressDetails?.fullName || order.customerName || words.notAvailable}`, `${words.address}: ${address}`, `${words.total}: ${total}`, items && `${words.items}:\\n${items}`, words.updates].filter(Boolean).join('\\n');
+        case 'Ready to Dispatch':
+            return [`🔬 ${words.status}: Ready to Dispatch — #${orderId}`, words.ready, `${words.total}: ${total}`, items && `${words.items}:\\n${items}`].filter(Boolean).join('\\n');
+        case 'Dispatched':
+            return [words.dispatched + ` — #${orderId}`, `${words.status}: Out for Delivery`, deliveryOtp ? `${words.otp}: ${deliveryOtp}` : null, deliveryOtp ? words.otpRule : null, `${words.rider}: ${rider}`, `${words.riderPhone}: ${riderPhone}`, `${words.address}: ${address}`, `${words.at}: ${when}`, `${words.total}: ${total}`, items && `${words.items}:\\n${items}`].filter(Boolean).join('\\n');
+        case 'Assigned':
+            return [words.assigned + ` — #${orderId}`, `${words.rider}: ${rider}`, `${words.riderPhone}: ${riderPhone}`, words.ready, `${words.address}: ${address}`].join('\\n');
+        case 'Delivered':
+            return [words.delivered + ` — #${orderId}`, `${words.deliveredAt}: ${order.deliveredAt ? new Date(order.deliveredAt).toLocaleString() : new Date().toLocaleString()}`, `${words.items}:\\n${items || words.itemsUnavailable}`, `${words.total}: ${total}`, words.thankYou].join('\\n');
+        default:
+            return null;
+    }
+};
+
+const buildLocalizedCustomerMedicineRequestMessage = (request, eventType, language) => {
+    const words = {
+        hi: { created:'आपका दवा अनुरोध QuickMeds Rx को मिल गया है। हमारी फ़ार्मेसी टीम जल्द समीक्षा करेगी।', proposal:'आपके दवा अनुरोध के लिए फ़ार्मेसी का प्रस्ताव तैयार है। कृपया ऐप में समीक्षा करके मंज़ूर करें।', approved:'आपका प्रस्ताव मंज़ूर हो गया है और ऑर्डर पूर्ति के लिए बना दिया गया है। QuickMeds Rx चुनने के लिए धन्यवाद।', cancelled:'आपका दवा अनुरोध रद्द कर दिया गया है। दवा चाहिए तो नया अनुरोध भेजें।', rejected:'आपका दवा अनुरोध/प्रस्ताव स्वीकार नहीं हुआ। ज़रूरत होने पर नया अनुरोध भेजें या सहायता से संपर्क करें।', expired:'आपके दवा अनुरोध का प्रस्ताव समाप्त हो गया है। ज़रूरत होने पर नया अनुरोध भेजें।', medicine:'दवा', quantity:'मात्रा', price:'कीमत', delivery:'डिलीवरी', note:'फ़ार्मेसी नोट', number:'अनुरोध' },
+        kn: { created:'ನಿಮ್ಮ ಔಷಧಿ ವಿನಂತಿ QuickMeds Rx ಗೆ ಬಂದಿದೆ. ನಮ್ಮ ಔಷಧಾಲಯ ತಂಡ ಶೀಘ್ರದಲ್ಲೇ ಪರಿಶೀಲಿಸುತ್ತದೆ.', proposal:'ನಿಮ್ಮ ಔಷಧಿ ವಿನಂತಿಗೆ ಔಷಧಾಲಯದ ಪ್ರಸ್ತಾವನೆ ಸಿದ್ಧವಾಗಿದೆ. ದಯವಿಟ್ಟು ಆ್ಯಪ್‌ನಲ್ಲಿ ಪರಿಶೀಲಿಸಿ ಅನುಮೋದಿಸಿ.', approved:'ನಿಮ್ಮ ಪ್ರಸ್ತಾವನೆ ಅನುಮೋದಿಸಲಾಗಿದೆ ಮತ್ತು ಪೂರೈಕೆಗಾಗಿ ಆರ್ಡರ್ ರಚಿಸಲಾಗಿದೆ. QuickMeds Rx ಆಯ್ಕೆ ಮಾಡಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು.', cancelled:'ನಿಮ್ಮ ಔಷಧಿ ವಿನಂತಿ ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ. ಇನ್ನೂ ಅಗತ್ಯವಿದ್ದರೆ ಹೊಸ ವಿನಂತಿ ಕಳುಹಿಸಿ.', rejected:'ನಿಮ್ಮ ಔಷಧಿ ವಿನಂತಿ/ಪ್ರಸ್ತಾವನೆ ಸ್ವೀಕರಿಸಲಾಗಿಲ್ಲ. ಅಗತ್ಯವಿದ್ದರೆ ಹೊಸ ವಿನಂತಿ ಕಳುಹಿಸಿ ಅಥವಾ ಸಹಾಯ ಸಂಪರ್ಕಿಸಿ.', expired:'ನಿಮ್ಮ ಔಷಧಿ ವಿನಂತಿಯ ಪ್ರಸ್ತಾವನೆ ಅವಧಿ ಮುಗಿದಿದೆ. ಅಗತ್ಯವಿದ್ದರೆ ಹೊಸ ವಿನಂತಿ ಸಲ್ಲಿಸಿ.', medicine:'ಔಷಧಿ', quantity:'ಪ್ರಮಾಣ', price:'ಬೆಲೆ', delivery:'ವಿತರಣೆ', note:'ಔಷಧಾಲಯದ ಟಿಪ್ಪಣಿ', number:'ವಿನಂತಿ' },
+        bn: { created:'আপনার ওষুধের অনুরোধ QuickMeds Rx পেয়েছে। আমাদের ফার্মেসি টিম শীঘ্রই পর্যালোচনা করবে।', proposal:'আপনার ওষুধের অনুরোধের জন্য ফার্মেসির প্রস্তাব প্রস্তুত। অনুগ্রহ করে অ্যাপে পর্যালোচনা করে অনুমোদন করুন।', approved:'আপনার প্রস্তাব অনুমোদিত হয়েছে এবং পূরণের জন্য অর্ডার তৈরি হয়েছে। QuickMeds Rx বেছে নেওয়ার জন্য ধন্যবাদ।', cancelled:'আপনার ওষুধের অনুরোধ বাতিল হয়েছে। এখনও প্রয়োজন হলে নতুন অনুরোধ পাঠান।', rejected:'আপনার ওষুধের অনুরোধ/প্রস্তাব গ্রহণ করা হয়নি। প্রয়োজন হলে নতুন অনুরোধ পাঠান বা সহায়তায় যোগাযোগ করুন।', expired:'আপনার ওষুধের অনুরোধের প্রস্তাবের মেয়াদ শেষ হয়েছে। প্রয়োজন হলে নতুন অনুরোধ পাঠান।', medicine:'ওষুধ', quantity:'পরিমাণ', price:'দাম', delivery:'ডেলিভারি', note:'ফার্মেসির নোট', number:'অনুরোধ' },
+        te: { created:'మీ మందుల అభ్యర్థన QuickMeds Rxకు అందింది. మా ఫార్మసీ బృందం త్వరలో పరిశీలిస్తుంది.', proposal:'మీ మందుల అభ్యర్థనకు ఫార్మసీ ప్రతిపాదన సిద్ధంగా ఉంది. దయచేసి యాప్‌లో పరిశీలించి ఆమోదించండి.', approved:'మీ ప్రతిపాదన ఆమోదించబడింది మరియు పూర్తి చేయడానికి ఆర్డర్ సృష్టించబడింది. QuickMeds Rxను ఎంచుకున్నందుకు ధన్యవాదాలు.', cancelled:'మీ మందుల అభ్యర్థన రద్దు చేయబడింది. ఇంకా అవసరమైతే కొత్త అభ్యర్థన పంపండి.', rejected:'మీ మందుల అభ్యర్థన/ప్రతిపాదన అంగీకరించబడలేదు. అవసరమైతే కొత్త అభ్యర్థన పంపండి లేదా సహాయాన్ని సంప్రదించండి.', expired:'మీ మందుల అభ్యర్థన ప్రతిపాదన గడువు ముగిసింది. అవసరమైతే కొత్త అభ్యర్థన పంపండి.', medicine:'మందు', quantity:'పరిమాణం', price:'ధర', delivery:'డెలివరీ', note:'ఫార్మసీ గమనిక', number:'అభ్యర్థన' }
+    }[language];
+    if (!words) return null;
+    const reqNum = request?.requestNumber || 'MR-REQ';
+    const items = (request?.requestedItems || []).map(i => `${i.requestedName || words.medicine}${i.strength ? ' ' + i.strength : ''} (x${i.quantity || 1})`).join(', ') || words.medicine;
+    const proposal = request?.pharmacyProposal || {};
+    let message = '';
+    switch (eventType) {
+        case 'MedicineRequestCreated':
+        case 'NEW_REQUEST': message = words.created; break;
+        case 'MedicineProposalReady':
+        case 'PROPOSAL_SENT': message = [words.proposal, `${words.medicine}: ${proposal.proposedMedicineName || proposal.medicineName || items}`, `${words.quantity}: ${proposal.proposedQuantity || proposal.quantity || 1}`, `${words.price}: ₹${proposal.finalPrice ?? proposal.totalPrice ?? proposal.approximatePrice ?? 0}`, `${words.delivery}: ${proposal.deliverySlot?.label || proposal.deliverySlot?.date || '—'}`, (proposal.pharmacyNote || proposal.pharmacyNotes) ? `${words.note}: ${proposal.pharmacyNote || proposal.pharmacyNotes}` : null].filter(Boolean).join('\\n'); break;
+        case 'MedicineRequestApproved':
+        case 'CUSTOMER_APPROVED': message = words.approved; break;
+        case 'MedicineRequestCancelled': message = words.cancelled; break;
+        case 'MedicineRequestRejected':
+        case 'CUSTOMER_REJECTED':
+        case 'PHARMACY_REJECTED': message = words.rejected; break;
+        case 'MedicineProposalExpired':
+        case 'EXPIRED': message = words.expired; break;
+        default: return null;
+    }
+    return [`📋 ${words.number} #${reqNum}`, `${words.medicine}: ${items}`, message].join('\\n');
+};
+
 
 const publishWhatsAppRealtimeStatus = (record, { userId = null, tenantId = null, orderId = null, medicineRequestId = null, audience = 'customer' } = {}) => {
     if (!userId && !tenantId) return;
@@ -288,7 +405,11 @@ export const normalizeOrderStatus = (rawStatus) => {
     return rawStatus;
 };
 
-export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActionLinks = [], deliveryOtp = null } = {}) => {
+export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActionLinks = [], deliveryOtp = null, language = 'en' } = {}) => {
+    if (audience === 'customer' && language !== 'en') {
+        const localized = buildLocalizedCustomerOrderMessage(order, status, language, { deliveryOtp });
+        if (localized) return localized;
+    }
     const normalizedStatus = normalizeOrderStatus(status);
     const orderId = order?._id?.toString() || order?.id?.toString() || 'UNKNOWN';
     const shortId = orderId.slice(-6).toUpperCase();
@@ -385,7 +506,11 @@ export const buildWhatsAppMessageBody = (order, status, audience, { deliveryActi
     }
 };
 
-export const buildWhatsAppMedicineRequestBody = (request, eventType) => {
+export const buildWhatsAppMedicineRequestBody = (request, eventType, language = 'en') => {
+    if (language !== 'en') {
+        const localized = buildLocalizedCustomerMedicineRequestMessage(request, eventType, language);
+        if (localized) return localized;
+    }
     const reqNum = request?.requestNumber || 'MR-REQ';
     const items = (request?.requestedItems || [])
         .map(i => `${i.requestedName || 'Medicine'}${i.strength ? ' ' + i.strength : ''} (x${i.quantity || 1})`)
@@ -652,6 +777,7 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
         ]);
         selectedTenantPhone = vendor?.mobile || tenant?.contactPhone || '';
     }
+    const customerLanguage = await resolveNotificationLanguage(order.userId || order.customerUserId || order.customerId);
     const recipients = normalizedStatus === 'Assigned'
         ? [
             { audience: 'customer', phone: customerPhone },
@@ -723,7 +849,8 @@ export const sendCustomWhatsAppAlert = async (order, statusUpdateText, deliveryM
                 deliveryActionLinks: audience === 'rider' && ['Assigned', 'Dispatched'].includes(normalizedStatus)
                     ? createDeliveryActionLinks(order, normalizedStatus)
                     : [],
-                deliveryOtp: audience === 'customer' ? customerDeliveryOtp : null
+                deliveryOtp: audience === 'customer' ? customerDeliveryOtp : null,
+                language: audience === 'customer' ? customerLanguage : 'en'
             }),
             deliveryMenu: audience === 'rider' && ['Assigned', 'Dispatched'].includes(normalizedStatus)
                 ? createDeliveryActionMenu(order, normalizedStatus)
@@ -823,6 +950,7 @@ export const sendWhatsAppDirectMessage = async ({ recipient, message, dedupeKey,
 export const sendWhatsAppMedicineRequestAlert = async (request, eventType) => {
     const requestId = request?._id?.toString() || request?.id?.toString() || 'UNKNOWN';
     const customerPhone = request?.customerPhone || '';
+    const customerLanguage = await resolveNotificationLanguage(request?.customerUserId || request?.userId || request?.customerId);
     const recipients = [
         { audience: 'customer', phone: customerPhone },
         ...(eventType === 'MedicineRequestCreated' && whatsappState.isConnected && whatsappState.phone
@@ -858,7 +986,7 @@ export const sendWhatsAppMedicineRequestAlert = async (request, eventType) => {
             eventType,
             recipient: recipient || 'Not provided',
             dedupeKey,
-            messageBody: buildWhatsAppMedicineRequestBody(request, eventType),
+            messageBody: buildWhatsAppMedicineRequestBody(request, eventType, audience === 'customer' ? customerLanguage : 'en'),
             status: 'PENDING',
             channel: 'WHATSAPP',
             sentAt: null,
