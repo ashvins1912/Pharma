@@ -28,6 +28,9 @@ services:
         source: /api/v1/auth/*
         destination: https://pharma-api-gateway.onrender.com/api/v1/auth/*
       - type: rewrite
+        source: /api/v1/inventory/*
+        destination: https://pharma-api-gateway.onrender.com/api/v1/inventory/*
+      - type: rewrite
         source: /api/*
         destination: https://pharma-api-gateway.onrender.com/api/*
       - type: rewrite
