@@ -22,7 +22,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
   const { t } = useLanguage();
   const { tenantId, setTenantId, setActiveTenant } = useTenant();
   const { addresses, loadAddresses } = useApp();
-  const { isFullyAuthenticated } = useAuth();
+  const { isFullyAuthenticated, scope } = useAuth();
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -133,7 +133,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
 
   const fetchNearbyTenants = async (coords, addressContext = {}) => {
     try {
-      const response = await apiClient.get('/api/tenants/nearby', {
+      const response = await apiClient.get(scope === 'TENANT' ? '/api/tenant/nearby' : '/api/tenants/nearby', {
         params: {
           ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
           ...(addressContext.city ? { city: addressContext.city } : {}),
