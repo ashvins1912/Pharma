@@ -716,6 +716,7 @@ const messages = {
     couldNotSaveRelative: "Could not save relative profile.",
     couldNotRemoveRelatives: "Could not remove relative profile.",
     selectGenderOption: "Select gender",
+    contact: "Contact",
   hi: {
     store: "दुकान",
     orders: "ऑर्डर",
@@ -1422,6 +1423,7 @@ const messages = {
     couldNotSaveRelative: "रिश्तेदार प्रोफ़ाइल सेव नहीं हो सकी।",
     couldNotRemoveRelatives: "रिश्तेदार प्रोफ़ाइल हटाई नहीं जा सकी।",
     selectGenderOption: "लिंग चुनें",
+    contact: "संपर्क",
   kn: {
     store: "ಅಂಗಡಿ",
     orders: "ಆರ್ಡರ್‌ಗಳು",
@@ -2128,6 +2130,7 @@ const messages = {
     couldNotSaveRelative: "ಸಂಬಂಧಿಕರ ಪ್ರೊಫೈಲ್ ಉಳಿಸಲಾಗಲಿಲ್ಲ.",
     couldNotRemoveRelatives: "ಸಂಬಂಧಿಕರ ಪ್ರೊಫೈಲ್ ತೆಗೆದುಹಾಕಲಾಗಲಿಲ್ಲ.",
     selectGenderOption: "ಲಿಂಗ ಆಯ್ಕೆಮಾಡಿ",
+    contact: "ಸಂಪರ್ಕ",
   bn: {
     store: "দোকান",
     orders: "অর্ডার",
@@ -2834,6 +2837,7 @@ const messages = {
     couldNotSaveRelative: "আত্মীয়ের প্রোফাইল সংরক্ষণ করা যায়নি।",
     couldNotRemoveRelatives: "আত্মীয়ের প্রোফাইল সরানো যায়নি।",
     selectGenderOption: "লিঙ্গ নির্বাচন করুন",
+    contact: "যোগাযোগ",
   te: {
     store: "స్టోర్",
     orders: "ఆర్డర్లు",
@@ -3538,6 +3542,7 @@ const messages = {
     couldNotSaveRelative: "బంధువు ప్రొఫైల్‌ను సేవ్ చేయలేకపోయాం.",
     couldNotRemoveRelatives: "బంధువు ప్రొఫైల్‌ను తొలగించలేకపోయాం.",
     selectGenderOption: "లింగాన్ని ఎంచుకోండి",
+    contact: "సంప్రదింపు",
 
   }
 };
