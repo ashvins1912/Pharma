@@ -124,12 +124,20 @@ class EmailService {
     /**
      * Send vendor onboarding invitation email
      */
-    async sendVendorOnboardingEmail({ vendor, token, onboardingUrl }) {
+    async sendVendorOnboardingEmail({ vendor, token, onboardingUrl, language }) {
+        const locale = await this.resolveLanguage(vendor.email, language);
+        const copy = {
+            en: { subject: 'Complete your QuickMeds Rx vendor onboarding', brand: 'QuickMeds Rx', badge: 'Vendor Onboarding Invitation', welcome: 'Welcome to QuickMeds Rx', intro: 'You have been invited to onboard', platform: 'onto QuickMeds Rx as an authorized partner pharmacy vendor.', company: 'Company Name:', email: 'Primary Email:', phone: 'Contact Phone:', steps: 'Use the secure link below to review your pharmacy records, configure branch details, and create your Tenant Administrator credentials:', button: 'Complete Vendor Onboarding', expiry: 'This single-use invitation link expires in', footer: 'QuickMeds Rx Multi-Tenant Platform • Need assistance? Contact' },
+            hi: { subject: 'QuickMeds Rx वेंडर ऑनबोर्डिंग पूरी करें', brand: 'QuickMeds Rx', badge: 'वेंडर ऑनबोर्डिंग आमंत्रण', welcome: 'QuickMeds Rx में आपका स्वागत है', intro: 'आपको अधिकृत पार्टनर फ़ार्मेसी वेंडर के रूप में शामिल होने के लिए आमंत्रित किया गया है:', platform: 'QuickMeds Rx पर।', company: 'कंपनी का नाम:', email: 'मुख्य ईमेल:', phone: 'संपर्क फ़ोन:', steps: 'नीचे दिए सुरक्षित लिंक से फ़ार्मेसी रिकॉर्ड देखें, शाखा विवरण सेट करें और टेनेंट एडमिन क्रेडेंशियल बनाएँ:', button: 'वेंडर ऑनबोर्डिंग पूरी करें', expiry: 'यह एक बार उपयोग होने वाला आमंत्रण लिंक इतने समय में समाप्त होगा:', footer: 'QuickMeds Rx मल्टी-टेनेंट प्लेटफ़ॉर्म • सहायता के लिए संपर्क करें' },
+            kn: { subject: 'QuickMeds Rx ಮಾರಾಟಗಾರರ ಆನ್‌ಬೋರ್ಡಿಂಗ್ ಪೂರ್ಣಗೊಳಿಸಿ', brand: 'QuickMeds Rx', badge: 'ಮಾರಾಟಗಾರರ ಆಹ್ವಾನ', welcome: 'QuickMeds Rx ಗೆ ಸ್ವಾಗತ', intro: 'ಅಧಿಕೃತ ಔಷಧಾಲಯ ಪಾಲುದಾರರಾಗಿ ಸೇರಲು ನಿಮ್ಮನ್ನು ಆಹ್ವಾನಿಸಲಾಗಿದೆ:', platform: 'QuickMeds Rx ಗೆ.', company: 'ಕಂಪನಿ ಹೆಸರು:', email: 'ಪ್ರಾಥಮಿಕ ಇಮೇಲ್:', phone: 'ಸಂಪರ್ಕ ಫೋನ್:', steps: 'ಕೆಳಗಿನ ಸುರಕ್ಷಿತ ಲಿಂಕ್ ಬಳಸಿ ಔಷಧಾಲಯ ದಾಖಲೆಗಳನ್ನು ಪರಿಶೀಲಿಸಿ, ಶಾಖೆ ವಿವರಗಳನ್ನು ಹೊಂದಿಸಿ ಮತ್ತು ಟೆನಂಟ್ ನಿರ್ವಾಹಕ ರುಜುವಾತುಗಳನ್ನು ರಚಿಸಿ:', button: 'ಮಾರಾಟಗಾರರ ಆನ್‌ಬೋರ್ಡಿಂಗ್ ಪೂರ್ಣಗೊಳಿಸಿ', expiry: 'ಈ ಏಕಬಳಕೆ ಆಹ್ವಾನ ಲಿಂಕ್ ಅವಧಿ ಮುಗಿಯುವ ಸಮಯ:', footer: 'QuickMeds Rx ಮಲ್ಟಿ-ಟೆನಂಟ್ ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ • ಸಹಾಯಕ್ಕಾಗಿ ಸಂಪರ್ಕಿಸಿ' },
+            bn: { subject: 'QuickMeds Rx ভেন্ডর অনবোর্ডিং সম্পন্ন করুন', brand: 'QuickMeds Rx', badge: 'ভেন্ডর অনবোর্ডিং আমন্ত্রণ', welcome: 'QuickMeds Rx-এ স্বাগতম', intro: 'অনুমোদিত পার্টনার ফার্মেসি ভেন্ডর হিসেবে যোগ দিতে আপনাকে আমন্ত্রণ জানানো হয়েছে:', platform: 'QuickMeds Rx-এ।', company: 'কোম্পানির নাম:', email: 'প্রাথমিক ইমেল:', phone: 'যোগাযোগের ফোন:', steps: 'নিচের নিরাপদ লিঙ্ক দিয়ে ফার্মেসির রেকর্ড পর্যালোচনা করুন, শাখার বিবরণ সেট করুন এবং টেন্যান্ট অ্যাডমিন পরিচয়পত্র তৈরি করুন:', button: 'ভেন্ডর অনবোর্ডিং সম্পন্ন করুন', expiry: 'এই একবার ব্যবহারযোগ্য আমন্ত্রণ লিঙ্কের মেয়াদ শেষ হবে:', footer: 'QuickMeds Rx মাল্টি-টেন্যান্ট প্ল্যাটফর্ম • সহায়তার জন্য যোগাযোগ করুন' },
+            te: { subject: 'QuickMeds Rx వెండర్ ఆన్‌బోర్డింగ్ పూర్తి చేయండి', brand: 'QuickMeds Rx', badge: 'వెండర్ ఆన్‌బోర్డింగ్ ఆహ్వానం', welcome: 'QuickMeds Rxకు స్వాగతం', intro: 'అధీకృత భాగస్వామి ఫార్మసీ వెండర్‌గా చేరడానికి మిమ్మల్ని ఆహ్వానించాం:', platform: 'QuickMeds Rxలో.', company: 'కంపెనీ పేరు:', email: 'ప్రధాన ఇమెయిల్:', phone: 'సంప్రదింపు ఫోన్:', steps: 'క్రింది సురక్షిత లింక్ ద్వారా ఫార్మసీ రికార్డులను పరిశీలించి, శాఖ వివరాలను కాన్ఫిగర్ చేసి, టెనెంట్ అడ్మిన్ ఆధారాలను సృష్టించండి:', button: 'వెండర్ ఆన్‌బోర్డింగ్ పూర్తి చేయండి', expiry: 'ఈ ఒక్కసారి ఉపయోగించే ఆహ్వాన లింక్ గడువు:', footer: 'QuickMeds Rx మల్టీ-టెనెంట్ ప్లాట్‌ఫారమ్ • సహాయం కోసం సంప్రదించండి' }
+        }[locale];
         const targetUrl = onboardingUrl || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/vendor-onboarding?token=${encodeURIComponent(token)}`;
         const vendorName = vendor.name || 'Pharmacy Partner';
         const companyName = vendor.companyName || 'Your Pharmacy';
 
-        const subject = `Complete your Vendor Onboarding - ${companyName}`;
+        const subject = `${copy.subject} - ${companyName}`;
         const html = `
 <!DOCTYPE html>
 <html>
@@ -153,28 +161,28 @@ class EmailService {
 </head>
 <body>
   <div class="card">
-    <div class="brand">🌐 Ashvin Pharmacy Multi-Tenant Platform</div>
-    <span class="badge">Vendor Onboarding Invitation</span>
-    <h1>Welcome to the Platform, ${vendorName}!</h1>
-    <p>You have been invited to onboard <strong>${companyName}</strong> onto the Ashvin Pharmacy Multi-Tenant Platform as an authorized partner pharmacy vendor.</p>
+    <div class="brand">🌐 ${copy.brand}</div>
+    <span class="badge">${copy.badge}</span>
+    <h1>${copy.welcome}, ${vendorName}!</h1>
+    <p>${copy.intro} <strong>${companyName}</strong> ${copy.platform}</p>
     
     <div class="details">
-      <div class="details-row"><span class="details-label">Company Name:</span><span class="details-value">${companyName}</span></div>
-      <div class="details-row"><span class="details-label">Primary Email:</span><span class="details-value">${vendor.email}</span></div>
-      ${vendor.mobile ? `<div class="details-row"><span class="details-label">Contact Phone:</span><span class="details-value">${vendor.mobile}</span></div>` : ''}
+      <div class="details-row"><span class="details-label">${copy.company}</span><span class="details-value">${companyName}</span></div>
+      <div class="details-row"><span class="details-label">${copy.email}</span><span class="details-value">${vendor.email}</span></div>
+      ${vendor.mobile ? `<div class="details-row"><span class="details-label">${copy.phone}</span><span class="details-value">${vendor.mobile}</span></div>` : ''}
     </div>
 
-    <p>Click the secure link below to review pre-filled pharmacy records, configure your branch parameters, and create your Tenant Administrator credentials:</p>
+    <p>${copy.steps}</p>
     
     <div style="text-align: center;">
-      <a href="${targetUrl}" class="btn" target="_blank">Complete Vendor Onboarding</a>
+      <a href="${targetUrl}" class="btn" target="_blank">${copy.button}</a>
     </div>
 
-    <p>This invitation link is single-use and will expire in <strong>48 hours</strong>.</p>
+    <p>${copy.expiry} <strong>48 hours</strong>.</p>
     <div class="link-box">${targetUrl}</div>
 
     <div class="footer">
-      Ashvin Pharmacy Multi-Tenant Architecture &bull; Need assistance? Contact <a href="mailto:care@ashvinpharmacy.com">care@ashvinpharmacy.com</a>
+      ${copy.footer} <a href="mailto:care@ashvinpharmacy.com">care@ashvinpharmacy.com</a>
     </div>
   </div>
 </body>
