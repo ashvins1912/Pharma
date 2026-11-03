@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function ProductCard({ med }) {
+  const { t } = useLanguage();
   const { cart, addToCart, updateQuantity, openRequestModal } = useApp();
   const { user } = useAuth();
   const [imageError, setImageError] = useState(false);
@@ -92,16 +94,16 @@ export default function ProductCard({ med }) {
 
         {/* Description / Formulation */}
         <p className="text-[10px] sm:text-[11px] text-slate-500 line-clamp-1 leading-normal mb-1">
-          {med.composition || med.description || 'Active pharmaceutical grade formulation.'}
+          {med.composition || med.description || t('activeFormulation')}
         </p>
         {isOut && (
           <p className="text-[10px] text-amber-700 font-semibold mb-1 leading-tight">
-            Currently out of stock. Ask QuickMeds Rx to arrange it.
+            {t('outOfStockArrange')}
           </p>
         )}
         {med.expiryDate && (
           <p className="mb-2 text-[9px] text-slate-400">
-            Expires: {new Date(med.expiryDate).toLocaleDateString()}
+            {t('expires')} {new Date(med.expiryDate).toLocaleDateString()}
           </p>
         )}
       </div>
@@ -109,7 +111,7 @@ export default function ProductCard({ med }) {
       {/* Card Footer: Always aligned at bottom */}
       <div className="pt-2 sm:pt-3 border-t border-slate-100 flex items-center justify-between gap-1.5 mt-auto">
         <div>
-          <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase block leading-none">Price</span>
+          <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase block leading-none">{t('priceLabel')}</span>
           <span className="text-xs sm:text-base font-black text-emerald-600">
             ₹{med.price}
           </span>
@@ -126,12 +128,12 @@ export default function ProductCard({ med }) {
                 medicineId: med._id,
                 originalAvailabilityStatus: 'OUT_OF_STOCK'
               })}
-              title="Currently out of stock. Ask QuickMeds Rx to arrange it."
+              title={t("outOfStockArrange")}
               className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-extrabold text-xs px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl cursor-pointer transition shadow-xs flex items-center gap-1 min-h-[36px]"
             >
               <span>📋</span>
-              <span className="sm:hidden">Request</span>
-              <span className="hidden sm:inline">Request Medicine</span>
+              <span className="sm:hidden">{t('request')}</span>
+              <span className="hidden sm:inline">{t('requestMedicine')}</span>
             </button>
           ) : cartQty > 0 ? (
             /* Compact Step Controller with accessible touch sizing */
@@ -139,7 +141,7 @@ export default function ProductCard({ med }) {
               <button
                 onClick={() => updateQuantity(med._id, -1)}
                 className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-blue-700 hover:bg-blue-200 rounded-md font-black text-xs cursor-pointer transition"
-                aria-label="Decrease quantity"
+                aria-label={t("decreaseQuantity")}
               >
                 −
               </button>
@@ -150,7 +152,7 @@ export default function ProductCard({ med }) {
                 onClick={() => updateQuantity(med._id, 1)}
                 disabled={cartQty >= stock}
                 className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-blue-700 hover:bg-blue-200 disabled:opacity-30 rounded-md font-black text-xs cursor-pointer transition"
-                aria-label="Increase quantity"
+                aria-label={t("increaseQuantity")}
               >
                 +
               </button>
@@ -161,7 +163,7 @@ export default function ProductCard({ med }) {
               className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1 min-h-[36px]"
             >
               <span>+</span>
-              <span>Add</span>
+              <span>{t('addToCart')}</span>
             </button>
           )}
         </div>}
