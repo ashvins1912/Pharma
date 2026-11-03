@@ -90,6 +90,7 @@ const normalizeOrderStatus = (order) => {
 
 export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   const { t } = useLanguage();
+  const getColumnTitle = (id) => t(({ Pending_Review: 'awaitingPharmacist', Approved: 'proposalApprovedTitle', Rejected: 'rejected', 'Processing Order': 'processingOrderStage', 'Ready to Dispatch': 'readyToDispatch', Dispatched: 'outForDelivery', Delivered: 'delivered', Cancelled: 'cancelled' })[id] || id);
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
   const [updatingId, setUpdatingId] = useState(null);
@@ -636,7 +637,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
             placeholder={t("orderSearchPlaceholder")}
             className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
-          <button type="submit" disabled={searchLoading} className="min-h-11 rounded-xl bg-blue-600 px-5 text-xs font-black text-white disabled:opacity-50">{searchLoading ? 'Searching…' : 'Search'}</button>
+          <button type="submit" disabled={searchLoading} className="min-h-11 rounded-xl bg-blue-600 px-5 text-xs font-black text-white disabled:opacity-50">{searchLoading ? t('processing') : t('search')}</button>
           {appliedSearch && <button type="button" onClick={clearSearch} className="min-h-11 rounded-xl border border-slate-300 px-4 text-xs font-bold text-slate-700">{t('clearSearch')}</button>}
         </div>
         <p className="mt-2 text-[11px] text-slate-500">{t('fulfillmentSearchHelp')}</p>
@@ -666,7 +667,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
         setActiveTabId={setActiveTabId}
         layoutDirection={layoutDirection}
         setLayoutDirection={setLayoutDirection}
-        columns={COLUMNS}
+        columns={COLUMNS.map((column) => ({ ...column, title: getColumnTitle(column.id) }))}
         counts={columnCounts}
       />
 
@@ -707,7 +708,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                 ) : col.id === 'Delivered' && deliveredError && !searchMode ? (
                   <div className="min-h-40 flex flex-col items-center justify-center gap-2 text-center text-xs text-rose-700" role="alert">
                     <p>{deliveredError}</p>
-                    <button type="button" onClick={() => setDeliveredRetryKey(value => value + 1)} className="font-bold underline">Try again</button>
+                    <button type="button" onClick={() => setDeliveredRetryKey(value => value + 1)} className="font-bold underline">{t('tryAgain')}</button>
                   </div>
                 ) : searchMode && !searchLoading && !searchError && searchPagination.total === 0 ? (
                   <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic">{t('noOrdersFound')}</div>
@@ -846,7 +847,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                             </div>
                           ))}
                           {(order.items || order.medicineItems || []).length === 0 && (
-                            <p className="text-[11px] text-slate-400 italic">No medicines listed</p>
+                            <p className="text-[11px] text-slate-400 italic">{t('noMedicinesFound')}</p>
                           )}
                         </div>
 
@@ -863,7 +864,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                             {order.prescriptionRequired && Boolean(order.prescriptionUrl || order.prescriptionId) && (
                               <div className="rounded-xl bg-rose-50 p-2.5 text-xs text-rose-800 space-y-2">
                                 <div className="flex items-center justify-between gap-1">
-                                  <p className="font-bold">{order.prescriptionRequired ? 'Prescription required' : 'Prescription attached'}</p>
+                                  <p className="font-bold">{order.prescriptionRequired ? t('prescriptionRequired') : t('prescriptionAttached')}</p>
                                   <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
                                     order.prescriptionVerification?.status === 'MATCHED' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                                   }`}>
@@ -877,7 +878,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
                                   className="min-h-9 w-full rounded-lg bg-white border border-rose-200 text-rose-900 font-bold text-xs hover:bg-rose-100/50 flex items-center justify-center gap-1.5 transition shadow-sm"
                                 >
                                   <span>🩺</span>
-                                  <span>{viewingPrescriptionOrderId === String(order._id) ? 'Opening prescription…' : 'View prescription & review'}</span>
+                                  <span>{viewingPrescriptionOrderId === String(order._id) ? t('loading') : t('viewPrescriptionReview')}</span>
                                 </button>
                                 <p className="text-[11px] font-semibold text-rose-800">
                                   {verifiedOrderIds.includes(String(order._id)) || order.prescriptionVerification?.status === 'MATCHED'
