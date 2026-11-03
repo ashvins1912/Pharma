@@ -364,12 +364,12 @@ export const API_CAPABILITIES = [
   {
     method: 'GET',
     pattern: /^\/api\/tenant\/nearby$/,
-    permission: 'tenants.read'
+    permission: 'tenant.branches.read'
   },
   {
     method: 'GET',
     pattern: /^\/api\/tenant\/branches(?:\/|$)/,
-    permission: 'tenants.read'
+    permission: 'tenant.branches.read'
   },
   {
     method: 'POST',
