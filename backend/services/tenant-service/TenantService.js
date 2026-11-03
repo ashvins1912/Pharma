@@ -400,44 +400,78 @@ export class TenantService {
         return this.branches.get(id) || null;
     }
 
-    async createBranch(tenantId, data, actor = null) {
-        const tenant = await this.getTenantById(tenantId);
+    async createBranch(tenantId, data = {}, actor = null) {
+        const normalizedTenantId = String(tenantId || '').trim();
+        const tenant = await this.getTenantById(normalizedTenantId);
         if (!tenant) throw new Error('Tenant not found');
 
-        const id = data.id || `branch-${Date.now()}`;
-        const newBranch = {
-            id,
-            tenantId,
-            name: data.name,
-            code: data.code || `BR-${this.branches.size + 1}`,
-            phone: data.phone || tenant.phone,
-            email: data.email || tenant.email,
-            address: {
-                street: data.address?.street || '',
-                city: data.address?.city || 'Indore',
-                state: data.address?.state || 'Madhya Pradesh',
-                pincode: data.address?.pincode || '',
-                coordinates: {
-                    lat: Number(data.address?.coordinates?.lat || 22.7196),
-                    lng: Number(data.address?.coordinates?.lng || 75.8577)
-                }
-            },
-            serviceRadiusKm: Number(data.serviceRadiusKm) || 10.0,
+        const name = String(data.name || '').trim();
+        const code = String(data.code || '').trim().toUpperCase();
+        const phone = String(data.phone || '').trim();
+        const email = String(data.email || '').trim().toLowerCase();
+        const street = String(data.address?.street || '').trim();
+        const city = String(data.address?.city || '').trim();
+        const state = String(data.address?.state || '').trim();
+        const pincode = String(data.address?.pincode || '').trim();
+        const errors = [];
+        if (name.length < 2 || name.length > 120) errors.push('Branch name must be between 2 and 120 characters.');
+        if (!/^[A-Z0-9][A-Z0-9-]{1,19}$/.test(code)) errors.push('Branch code must be 2-20 characters using letters, numbers or hyphens.');
+        if (!/^\+?[0-9 ()-]{7,20}$/.test(phone) || phone.replace(/\D/g, '').length < 7 || phone.replace(/\D/g, '').length > 15) errors.push('Enter a valid branch contact number.');
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Enter a valid branch contact email.');
+        if (street.length < 5 || street.length > 200) errors.push('Enter a complete street address.');
+        if (city.length < 2 || state.length < 2) errors.push('City and state are required.');
+        if (!/^[0-9]{6}$/.test(pincode)) errors.push('Enter a valid 6-digit PIN code.');
+        if (errors.length) { const error = new Error(errors.join(' ')); error.statusCode = 400; error.code = 'BRANCH_VALIDATION_FAILED'; throw error; }
+
+        const existing = getIsConnected()
+            ? await TenantBranch.findOne({ tenantId: normalizedTenantId, code }).lean()
+            : Array.from(this.branches.values()).find(item => item.tenantId === normalizedTenantId && String(item.code).toUpperCase() === code);
+        if (existing) { const error = new Error('This branch code is already used by your pharmacy.'); error.statusCode = 409; error.code = 'BRANCH_CODE_ALREADY_EXISTS'; throw error; }
+
+        const id = `branch-${crypto.randomUUID()}`;
+        const branch = {
+            id, tenantId: normalizedTenantId, name, code, phone, email,
+            address: { street, city, state, pincode },
+            serviceRadiusKm: Number(data.serviceRadiusKm) > 0 ? Number(data.serviceRadiusKm) : 10,
             deliveryMode: data.deliveryMode || 'OWN_RIDER',
-            minimumOrderValue: Number(data.minimumOrderValue) || 149,
-            freeDeliveryAbove: Number(data.freeDeliveryAbove) || 499,
-            deliveryFee: Number(data.deliveryFee) || 30,
+            minimumOrderValue: Number.isFinite(Number(data.minimumOrderValue)) ? Number(data.minimumOrderValue) : 149,
+            freeDeliveryAbove: Number.isFinite(Number(data.freeDeliveryAbove)) ? Number(data.freeDeliveryAbove) : 499,
+            deliveryFee: Number.isFinite(Number(data.deliveryFee)) ? Number(data.deliveryFee) : 30,
             operatingHours: data.operatingHours || { open: '08:00', close: '22:00' },
-            status: 'ACTIVE',
-            createdAt: new Date().toISOString()
+            status: 'PENDING', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
         };
         if (getIsConnected()) {
-            const persisted = await TenantBranch.create({ _id: id, ...newBranch });
-            Object.assign(newBranch, persisted.toObject(), { id });
+            const persisted = await TenantBranch.create({ _id: id, ...branch });
+            Object.assign(branch, persisted.toObject(), { id });
         }
-        this.branches.set(id, newBranch);
-        domainEvents.emitDomainEvent('BRANCH_CREATED', id, newBranch, actor, tenantId, id);
-        return newBranch;
+        this.branches.set(id, branch);
+        domainEvents.emitDomainEvent('BRANCH_CREATED', id, branch, actor, normalizedTenantId, id);
+        return branch;
+    }
+
+    async activateBranch(branchId, tenantId, actor = null) {
+        const branch = await this.getBranchById(branchId);
+        if (!branch || String(branch.tenantId) !== String(tenantId)) {
+            const error = new Error('Branch not found for this pharmacy.'); error.statusCode = 404; error.code = 'BRANCH_NOT_FOUND'; throw error;
+        }
+        if (branch.status === 'ACTIVE') return branch;
+        if (branch.status !== 'PENDING') {
+            const error = new Error('Only a pending branch can be activated.'); error.statusCode = 409; error.code = 'BRANCH_NOT_PENDING'; throw error;
+        }
+        const activatedAt = new Date().toISOString();
+        let updated = { ...branch, status: 'ACTIVE', activatedAt, updatedAt: activatedAt };
+        if (getIsConnected()) {
+            const persisted = await TenantBranch.findOneAndUpdate(
+                { _id: String(branchId), tenantId: String(tenantId), status: 'PENDING' },
+                { $set: { status: 'ACTIVE', activatedAt, updatedAt: activatedAt } },
+                { new: true, runValidators: true }
+            ).lean();
+            if (!persisted) { const error = new Error('Branch activation conflict. Refresh and try again.'); error.statusCode = 409; error.code = 'BRANCH_ACTIVATION_CONFLICT'; throw error; }
+            updated = { ...persisted, id: String(persisted._id) };
+        }
+        this.branches.set(String(branchId), updated);
+        domainEvents.emitDomainEvent('BRANCH_ACTIVATED', branchId, updated, actor, String(tenantId), String(branchId));
+        return updated;
     }
 
     async updateBranch(branchId, updates, actor = null) {
