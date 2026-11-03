@@ -61,7 +61,7 @@ export default function VerifyEmailView({ token, onClose, onOpenSignIn }) {
           {loading
             ? 'Please wait while we confirm your email verification token with the secure medical gateway.'
             : verified
-            ? 'Your Ashvin Pharmacy account is now active and verified. You can now log in and order medicines or manage your prescriptions.'
+            ? 'Your QuickMeds Rx account is now active and verified. You can now log in and order medicines or manage your prescriptions.'
             : errorMessage}
         </p>
 
