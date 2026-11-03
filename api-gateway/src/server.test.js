@@ -368,11 +368,19 @@ test('gateway requires admin role for Inventory adjustment and signs import scop
     }
     const token = req.headers.authorization;
     const admin = token === 'Bearer admin-user-token';
+    const tenantAdmin = token === 'Bearer tenant-admin-user-token';
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       user: {
-        sub: admin ? 'admin-1' : 'customer-1',
-        app_metadata: { role: admin ? 'admin' : 'customer' },
+        sub: admin ? 'admin-1' : tenantAdmin ? 'tenant-admin-1' : 'customer-1',
+        tenantId: tenantAdmin ? 'tenant-ashvin-main' : null,
+        branchId: tenantAdmin ? 'branch-stale-from-token' : null,
+        permissions: tenantAdmin ? ['inventory.import'] : [],
+        app_metadata: {
+          role: admin ? 'admin' : tenantAdmin ? 'TENANT_ADMIN' : 'customer',
+          tenantId: tenantAdmin ? 'tenant-ashvin-main' : null,
+          permissions: tenantAdmin ? ['inventory.import'] : []
+        },
         user_metadata: {}
       }
     }));
@@ -443,6 +451,25 @@ test('gateway requires admin role for Inventory adjustment and signs import scop
     assert.equal(serviceIdempotencyKey, 'inventory-import-1');
     assert.equal(serviceOrigin, undefined);
     assert.equal(forwardedGatewayAssertion, undefined);
+
+    // A tenant administrator may switch to another branch in their own tenant.
+    // The selected UI branch must take precedence over a stale branch claim,
+    // but Backend API validation remains mandatory.
+    const tenantBranchUpload = await fetch(`${gateway.url}/api/v1/inventory/imports/preview`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer tenant-admin-user-token',
+        'X-Branch-Id': 'branch-selected-in-ui',
+        'Content-Type': 'multipart/form-data; boundary=upload-boundary'
+      },
+      body: '--upload-boundary--\\r\\n'
+    });
+    assert.equal(tenantBranchUpload.status, 202);
+    assert.equal(validatedScopeClaims.tenantId, 'tenant-ashvin-main');
+    assert.equal(validatedScopeClaims.branchId, 'branch-selected-in-ui');
+    assert.equal(serviceClaims.tenantId, 'tenant-ashvin-main');
+    assert.equal(serviceClaims.branchId, 'branch-selected-in-ui');
+    assert.equal(serviceRequestCount, 2);
   } finally {
     await Promise.all([gateway.close(), backend.close(), service.close()]);
   }
