@@ -139,6 +139,7 @@ export function createServiceRouters(gatewayConfig = config) {
 
   const inventoryRouter = express.Router();
   inventoryRouter.use((req, res, next) => {
+    req.matchedServiceRouter = 'inventory';
     if (!gatewayConfig.inventoryServiceUrl) {
       req.inventoryServiceUnavailable = true;
       return next();
