@@ -212,7 +212,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       const response = await apiClient.get('/api/orders/dynamic-restock');
       setRestockItems(response.data.items || []);
     } catch (error) {
-      setRestockError(error.message || '{t('addressUnavailable')}');
+      setRestockError(error.message || t('addressUnavailable'));
     } finally {
       setRestockLoading(false);
     }
