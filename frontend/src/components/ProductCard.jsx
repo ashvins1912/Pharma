@@ -96,7 +96,7 @@ export default function ProductCard({ med }) {
         </p>
         {isOut && (
           <p className="text-[10px] text-amber-700 font-semibold mb-1 leading-tight">
-            Currently out of stock. Ask Ashvin Pharmacy to arrange it.
+            Currently out of stock. Ask QuickMeds Rx to arrange it.
           </p>
         )}
         {med.expiryDate && (
@@ -126,7 +126,7 @@ export default function ProductCard({ med }) {
                 medicineId: med._id,
                 originalAvailabilityStatus: 'OUT_OF_STOCK'
               })}
-              title="Currently out of stock. Ask Ashvin Pharmacy to arrange it."
+              title="Currently out of stock. Ask QuickMeds Rx to arrange it."
               className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-extrabold text-xs px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl cursor-pointer transition shadow-xs flex items-center gap-1 min-h-[36px]"
             >
               <span>📋</span>
