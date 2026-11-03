@@ -126,6 +126,11 @@ const userSchema = new mongoose.Schema({
         enum: ['LOCAL', 'GOOGLE'],
         default: 'LOCAL'
     },
+    preferredLanguage: {
+        type: String,
+        enum: ['en', 'hi', 'kn', 'bn', 'te'],
+        default: 'en'
+    },
     role: {
         type: String,
         default: 'customer'
