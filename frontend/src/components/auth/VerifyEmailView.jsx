@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../api/apiClient';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function VerifyEmailView({ token, onClose, onOpenSignIn }) {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [verified, setVerified] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -9,7 +11,7 @@ export default function VerifyEmailView({ token, onClose, onOpenSignIn }) {
   useEffect(() => {
     if (!token) {
       setLoading(false);
-      setErrorMessage('No verification token provided in the link.');
+      setErrorMessage(t('verificationNoToken'));
       return;
     }
 
@@ -22,7 +24,7 @@ export default function VerifyEmailView({ token, onClose, onOpenSignIn }) {
       } catch (err) {
         const msg = err.response?.data?.error?.message
           || err.response?.data?.message
-          || 'The verification link is invalid or has expired.';
+          || t('verificationInvalidExpired');
         setErrorMessage(msg);
       } finally {
         setLoading(false);
