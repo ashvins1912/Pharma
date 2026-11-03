@@ -19,6 +19,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 export default function TenantSelector({ onTenantSelected }) {
   const { t } = useLanguage();
   const { tenantId, activeTenant, setActiveTenant, setTenantId } = useTenant();
+  const { scope } = useAuth();
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -27,7 +28,7 @@ export default function TenantSelector({ onTenantSelected }) {
 
   useEffect(() => {
     getUserLocationAndFetchTenants();
-  }, []);
+  }, [scope]);
 
   const getUserLocationAndFetchTenants = () => {
     setLoading(true);
@@ -53,8 +54,6 @@ export default function TenantSelector({ onTenantSelected }) {
       fetchTenants(null);
     }
   };
-
-  const { scope } = useAuth();
 
   const fetchTenants = async (coords) => {
     setError('');
