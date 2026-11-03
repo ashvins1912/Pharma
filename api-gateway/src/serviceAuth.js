@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { config } from './config.js';
 
 export function createServiceToken(
-  { audience, scope, user, includeCustomerProfile = false, targetTenantId = null, targetBranchId = null },
+  { audience, scope, user, includeCustomerProfile = false, targetTenantId = null, targetBranchId = null, preferTargetBranch = false },
   gatewayConfig = config
 ) {
   const userId = typeof user?.sub === 'string' ? user.sub : '';
@@ -18,7 +18,11 @@ export function createServiceToken(
     userRole: role,
     roles: Array.isArray(user.roles) ? user.roles : [role],
     tenantId: (isPlatformUser && targetTenantId ? String(targetTenantId).trim() : user.tenantId || user.app_metadata?.tenantId || null),
-    branchId: (isPlatformUser && targetBranchId ? String(targetBranchId).trim() : user.branchId || user.app_metadata?.branchId || (targetBranchId ? String(targetBranchId).trim() : null)),
+    branchId: (isPlatformUser && targetBranchId
+      ? String(targetBranchId).trim()
+      : (preferTargetBranch && targetBranchId
+        ? String(targetBranchId).trim()
+        : user.branchId || user.app_metadata?.branchId || (targetBranchId ? String(targetBranchId).trim() : null))),
     isPlatformUser
   };
   if (includeCustomerProfile) {
