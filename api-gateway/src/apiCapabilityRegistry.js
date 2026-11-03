@@ -94,7 +94,7 @@ const CAPABILITIES = [
   ['PATCH', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.manage'],
   ['DELETE', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.manage'],
   ['GET', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.read'],
-  ['GET', /^\/api\/tenant\/branches(?:\/|$)/, 'tenants.read'],
+  ['GET', /^\/api\/tenant\/branches(?:\/|$)/, 'tenant.branches.read'],
   ['POST', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.manage'],
   ['PUT', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.manage'],
   ['PATCH', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.manage'],
@@ -181,6 +181,9 @@ export function isGatewayPermissionAllowed(user, permission) {
 
   const role = user?.app_metadata?.role || user?.role;
   if (['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return true;
+  // Tenant admins/owners may request the branch directory for their own tenant.
+  // The backend route independently enforces active membership and branch scope.
+  if (permission === 'tenant.branches.read' && ['TENANT_ADMIN', 'TENANT_OWNER'].includes(String(role || '').toUpperCase())) return true;
   return permissions.includes('*')
     || permissions.includes(permission)
     || permissions.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)));
