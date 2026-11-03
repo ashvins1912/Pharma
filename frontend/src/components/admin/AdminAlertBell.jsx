@@ -48,7 +48,7 @@ export default function AdminAlertBell({
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div>
                 <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                  Dispensary Alerts ({total})
+                  {t('dispensaryAlerts')} ({total})
                 </h4>
                 <p className="text-[10px] text-slate-400">{t('safetyThresholdMonitor')}</p>
               </div>
@@ -96,7 +96,7 @@ export default function AdminAlertBell({
                     }}
                     className="mt-2 w-full bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[11px] py-1.5 rounded-xl cursor-pointer shadow-xs transition"
                   >
-                    Scan QR to Connect WhatsApp →
+                    {t('scanQrConnectWhatsApp')}
                   </button>
                 )}
               </div>
@@ -109,10 +109,10 @@ export default function AdminAlertBell({
               <div className="p-3 bg-red-50 border border-red-200 rounded-2xl space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-red-900 flex items-center gap-1.5">
-                    <span>🔴</span> Expired Medicines ({alerts.expiredCount || expired.length})
+                    <span>🔴</span> {t('expiredMedicines')} ({alerts.expiredCount || expired.length})
                   </span>
                   <span className="text-[10px] bg-red-200 text-red-800 font-extrabold px-1.5 py-0.5 rounded">
-                    Blocked
+                    {t('blocked')}
                   </span>
                 </div>
                 {expired.length === 0 ? (
@@ -133,10 +133,10 @@ export default function AdminAlertBell({
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-amber-900 flex items-center gap-1.5">
-                    <span>🟠</span> Expiring in ≤30 days ({alerts.expiringSoonCount || expiringSoon.length})
+                    <span>🟠</span> {t('expiringIn30Days')} ({alerts.expiringSoonCount || expiringSoon.length})
                   </span>
                   <span className="text-[10px] bg-amber-200 text-amber-900 font-extrabold px-1.5 py-0.5 rounded">
-                    Urgent
+                    {t('urgent')}
                   </span>
                 </div>
                 {expiringSoon.length === 0 ? (
@@ -157,10 +157,10 @@ export default function AdminAlertBell({
               <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-2xl space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-yellow-900 flex items-center gap-1.5">
-                    <span>🟡</span> Low Stock ({alerts.lowStockCount || lowStock.length})
+                    <span>🟡</span> {t('lowStock')} ({alerts.lowStockCount || lowStock.length})
                   </span>
                   <span className="text-[10px] bg-yellow-200 text-yellow-900 font-extrabold px-1.5 py-0.5 rounded">
-                    Restock
+                    {t('restock')}
                   </span>
                 </div>
                 {lowStock.length === 0 ? (
