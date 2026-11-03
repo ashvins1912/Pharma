@@ -159,13 +159,14 @@ router.get('/tenant/branches', authenticateUser, async (req, res) => {
             });
         }
 
+        let activeMembership = null;
         if (!isPlatformAdmin) {
-            const membership = await TenantMembership.findOne({
+            activeMembership = await TenantMembership.findOne({
                 userId: String(req.user?.sub || ''),
                 tenantId,
                 status: 'ACTIVE'
             }).lean();
-            if (!membership) {
+            if (!activeMembership) {
                 return res.status(403).json({
                     success: false,
                     code: 'TENANT_MEMBERSHIP_REQUIRED',
@@ -182,10 +183,9 @@ router.get('/tenant/branches', authenticateUser, async (req, res) => {
             : (() => {
                 // Tenant-wide memberships (branchId=null) can see all branches;
                 // branch-scoped staff can only see their assigned branch.
-                return allBranches.filter(branch =>
-                    !req.user?.branchId && !req.user?.app_metadata?.branchId
-                    || String(branch.id || branch._id) === String(req.user?.branchId || req.user?.app_metadata?.branchId)
-                );
+                return activeMembership?.branchId
+                    ? allBranches.filter(branch => String(branch.id || branch._id) === String(activeMembership.branchId))
+                    : allBranches;
             })();
         const total = scopedBranches.length;
         const branches = scopedBranches.slice((page - 1) * limit, page * limit);
