@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 
 export default function AdminOfferZoneManager() {
+  const { t } = useLanguage();
   const { medicines, orders } = useApp();
   const { addToast } = useToast();
 
@@ -101,7 +102,7 @@ export default function AdminOfferZoneManager() {
       ...prev,
       [id]: !(prev[id] ?? catalogItems.find(m => (m.id || m._id) === id)?.isInOfferZone)
     }));
-    addToast('Offer Zone status updated for product.', 'success');
+    addToast(t('offerZoneStatusUpdated'), 'success');
   };
 
   const handleDiscountChange = (id, val) => {
@@ -132,18 +133,18 @@ export default function AdminOfferZoneManager() {
         {/* Season & Analytics Badge */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 relative z-10 border-t border-white/20">
           <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3">
-            <div className="text-[10px] uppercase font-bold text-indigo-200">Current Detected Season</div>
+            <div className="text-[10px] uppercase font-bold text-indigo-200">{t('currentDetectedSeason')}</div>
             <div className="text-sm font-black text-white">{seasonName}</div>
           </div>
           <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3">
-            <div className="text-[10px] uppercase font-bold text-indigo-200">Active Offer Zone Items</div>
+            <div className="text-[10px] uppercase font-bold text-indigo-200">{t('activeOfferZoneItems')}</div>
             <div className="text-sm font-black text-white">
               {catalogItems.filter(i => i.isInOfferZone).length} Products Listed
             </div>
           </div>
           <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3">
-            <div className="text-[10px] uppercase font-bold text-indigo-200">Recommendation Engine</div>
-            <div className="text-sm font-black text-emerald-300">Active (Sales &amp; Season Synced)</div>
+            <div className="text-[10px] uppercase font-bold text-indigo-200">{t('recommendationEngine')}</div>
+            <div className="text-sm font-black text-emerald-300">{t('activeSalesSeasonSynced')}</div>
           </div>
         </div>
       </div>
@@ -153,7 +154,7 @@ export default function AdminOfferZoneManager() {
         <div className="w-full sm:w-80">
           <input
             type="text"
-            placeholder="Search catalog medicines by name..."
+            placeholder={t("searchCatalogMedicines")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-600 transition"
@@ -182,8 +183,8 @@ export default function AdminOfferZoneManager() {
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm overflow-hidden space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-black text-slate-900 dark:text-white">Product Offer &amp; Recommendation Control</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Toggle products into the customer Offer Zone and customize discount percentages (20 records per page).</p>
+            <h3 className="text-sm font-black text-slate-900 dark:text-white">{t('productOfferRecommendationControl')}</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('toggleOfferZoneDiscount')}</p>
           </div>
           <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-3 py-1.5 rounded-xl w-fit">
             Showing {paginatedMedicines.length} of {filteredMedicines.length} items (Page {currentPage} of {totalPages})
@@ -194,11 +195,11 @@ export default function AdminOfferZoneManager() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] font-black uppercase text-slate-400 tracking-wider">
-                <th className="py-3 px-4">Medicine &amp; Category</th>
-                <th className="py-3 px-4">Platform Sales</th>
-                <th className="py-3 px-4">Seasonal / Recommendation Reason</th>
-                <th className="py-3 px-4">Discount %</th>
-                <th className="py-3 px-4 text-center">Offer Zone Status</th>
+                <th className="py-3 px-4">{t('medicineCategory')}</th>
+                <th className="py-3 px-4">{t('platformSales')}</th>
+                <th className="py-3 px-4">{t('seasonalReason')}</th>
+                <th className="py-3 px-4">{t('discountPercent')}</th>
+                <th className="py-3 px-4 text-center">{t('offerZoneStatus')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
