@@ -395,3 +395,51 @@ html.dark .quickmeds-brand-name {
   }
 }
 
+/* ==========================================================================
+   Universal Mobile Responsiveness & Screen Compatibility Utility Classes
+   ========================================================================== */
+.pharma-table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.pharma-responsive-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .pharma-responsive-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .pharma-responsive-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .pharma-responsive-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Small screen touch target & padding adjustments */
+@media (max-width: 640px) {
+  input, select, textarea {
+    font-size: 16px !important; /* Prevents iOS Safari auto-zoom on input focus */
+  }
+  
+  .pharma-modal-surface {
+    max-height: 92vh !important;
+    margin: 0.5rem;
+    padding: 1rem !important;
+  }
+}
+
+

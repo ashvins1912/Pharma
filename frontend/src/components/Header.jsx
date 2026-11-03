@@ -5,6 +5,7 @@ import { useTenant } from '../context/TenantContext';
 import { useLanguage } from '../context/LanguageContext';
 import NotificationBell from './NotificationBell';
 import AdminAlertBell from './admin/AdminAlertBell';
+import apiClient from '../api/apiClient';
 
 export default function Header({
   activeTab,
@@ -23,11 +24,28 @@ export default function Header({
   const [signingOut, setSigningOut] = useState(false);
   const { branchId, setBranchId } = useTenant();
   const { language, setLanguage, t, languages } = useLanguage();
-  const branchOptions = [
+  const [branchOptions, setBranchOptions] = useState([
     { id: 'branch-1', name: 'Downtown Flagship' },
     { id: 'branch-2', name: 'Northside Express' },
     { id: 'branch-3', name: 'Westend Wellness' }
-  ];
+  ]);
+
+  React.useEffect(() => {
+    apiClient.get('/api/v1/branches/all').then(res => {
+      const items = res.data?.data || res.data?.branches || [];
+      if (Array.isArray(items) && items.length > 0) {
+        setBranchOptions(items.map(b => ({ id: b._id || b.id, name: b.name || b.branchName || 'Branch' })));
+      }
+    }).catch(() => {
+      apiClient.get('/api/tenants/nearby').then(res => {
+        const tenants = res.data?.tenants || [];
+        if (tenants.length > 0) {
+          const dynamicBranches = tenants.map((t, idx) => ({ id: t._id || t.id || `branch-${idx+1}`, name: `${t.name} (Primary Branch)` }));
+          setBranchOptions(dynamicBranches);
+        }
+      }).catch(() => {});
+    });
+  }, []);
 
   const cartItemCount = cart.reduce((total, item) => total + item.quantity, 0);
   const proposalsWaitingCount = (medicineRequests || []).filter(r => r.status === 'PROPOSAL_SENT').length;
@@ -105,7 +123,7 @@ export default function Header({
           </div>
 
           {/* Center: Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-1.5 lg:gap-2">
+          <nav className="hidden sm:flex items-center gap-1.5 lg:gap-2">
             <button
               type="button"
               onClick={() => setActiveTab('store')}
@@ -288,29 +306,56 @@ export default function Header({
             )}
 
             {/* Mobile Navigation Sandwich / Hamburger Menu Toggle */}
-            {user && (
-              <button
-                type="button"
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="md:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center shrink-0"
-                aria-label={t('toggleMenu')}
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  {mobileMenuOpen ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  )}
-                </svg>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="sm:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center shrink-0"
+              aria-label={t('toggleMenu')}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {mobileMenuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
 
           </div>
         </div>
 
         {/* Mobile Navigation Dropdown Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-slate-100 py-3 space-y-1 animate-fade-in">
+          <div className="sm:hidden border-t border-slate-100 py-3 space-y-2 animate-fade-in">
+            {/* Mobile Language & Branch selectors */}
+            <div className="grid grid-cols-2 gap-2 px-2 pb-2 border-b border-slate-100">
+              <label className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-700">
+                <span>🌐</span>
+                <select
+                  aria-label={t('language')}
+                  value={language}
+                  onChange={(event) => setLanguage(event.target.value)}
+                  className="w-full bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                >
+                  {languages.map((item) => <option key={item.code} value={item.code}>{item.nativeLabel}</option>)}
+                </select>
+              </label>
+
+              <label className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-700">
+                <span>🏢</span>
+                <select
+                  aria-label="Branch"
+                  value={branchId}
+                  onChange={(e) => setBranchId(e.target.value)}
+                  className="w-full bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer truncate"
+                >
+                  {branchOptions.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
             <button
               type="button"
               onClick={() => { setActiveTab('store'); setMobileMenuOpen(false); }}
@@ -320,68 +365,83 @@ export default function Header({
             >
               <span>💊</span> {t('store')}
             </button>
-            {canViewCustomerOrders && (
-              <button
-                type="button"
-                onClick={() => { setActiveTab('orders'); setMobileMenuOpen(false); }}
-                className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                  activeTab === 'orders' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <span>📦</span> {t('orders')}
-              </button>
-            )}
-            {canViewCustomerRequests && (
-              <button
-                type="button"
-                onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
-                className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
-                  activeTab === 'requests' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <span className="flex items-center gap-2"><span>📋</span> {t('requests')}</span>
-                {proposalsWaitingCount > 0 && (
-                  <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
-                    {proposalsWaitingCount} {t('new')}
-                  </span>
+
+            {user ? (
+              <>
+                {canViewCustomerOrders && (
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('orders'); setMobileMenuOpen(false); }}
+                    className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                      activeTab === 'orders' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>📦</span> {t('orders')}
+                  </button>
                 )}
-              </button>
+                {canViewCustomerRequests && (
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
+                    className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
+                      activeTab === 'requests' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2"><span>📋</span> {t('requests')}</span>
+                    {proposalsWaitingCount > 0 && (
+                      <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                        {proposalsWaitingCount} {t('new')}
+                      </span>
+                    )}
+                  </button>
+                )}
+                {canViewAddresses && (
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('addresses'); setMobileMenuOpen(false); }}
+                    className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                      activeTab === 'addresses' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>🏠</span> {t('addresses')}
+                  </button>
+                )}
+                {canViewOperations && (
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
+                    className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                      activeTab === 'admin' ? 'bg-blue-600 text-white font-extrabold' : 'text-blue-700 bg-blue-50'
+                    }`}
+                  >
+                    <span>⚙️</span> {t('adminOperations')}
+                  </button>
+                )}
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between px-2">
+                  <span className="text-[11px] text-slate-500 font-medium truncate max-w-[180px]">
+                    {t('signedInAs')} {user?.email}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    disabled={signingOut}
+                    className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg transition"
+                  >
+                    {signingOut ? t('signingOut') : t('signOut')}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="pt-2 border-t border-slate-100 px-2">
+                <button
+                  type="button"
+                  onClick={() => { setMobileMenuOpen(false); onOpenAuth?.(); }}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm text-center flex items-center justify-center gap-1.5"
+                >
+                  <span>👤</span> {t('signIn')}
+                </button>
+              </div>
             )}
-            {canViewAddresses && (
-              <button
-                type="button"
-                onClick={() => { setActiveTab('addresses'); setMobileMenuOpen(false); }}
-                className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                  activeTab === 'addresses' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <span>🏠</span> {t('addresses')}
-              </button>
-            )}
-            {canViewOperations && (
-              <button
-                type="button"
-                onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
-                className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                  activeTab === 'admin' ? 'bg-blue-600 text-white font-extrabold' : 'text-blue-700 bg-blue-50'
-                }`}
-              >
-                <span>⚙️</span> {t('adminOperations')}
-              </button>
-            )}
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between px-2">
-              <span className="text-[11px] text-slate-500 font-medium truncate max-w-[180px]">
-                {t('signedInAs')} {user?.email}
-              </span>
-              <button
-                type="button"
-                onClick={handleSignOut}
-                disabled={signingOut}
-                className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg transition"
-              >
-                {signingOut ? t('signingOut') : t('signOut')}
-              </button>
-            </div>
           </div>
         )}
 

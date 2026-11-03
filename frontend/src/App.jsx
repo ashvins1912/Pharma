@@ -29,6 +29,7 @@ import VendorOnboardingView from './components/auth/VendorOnboardingView';
 import TenantSelectorModal from './components/auth/TenantSelectorModal';
 import OfferZoneBanner from './components/OfferZoneBanner';
 import SpendingAnalyticsWidget from './components/SpendingAnalyticsWidget';
+import QuickActionsFAB from './components/QuickActionsFAB';
 import { useLanguage } from './context/LanguageContext';
 
 function AuthTransitionScreen({ initialLoad = false }) {
@@ -722,6 +723,20 @@ function MainApp() {
       <AdminBulkImportModal
         isOpen={adminBulkImportModalOpen}
         onClose={() => setAdminBulkImportModalOpen(false)}
+      />
+
+      {/* Mobile Quick Actions Floating Action Button */}
+      <QuickActionsFAB
+        onRefillPrescriptions={() => {
+          if (!user) {
+            setAuthOpen(true);
+            return;
+          }
+          setActiveTab('requests');
+        }}
+        onContactPharmacist={() => {
+          setWhatsappModalOpen(true);
+        }}
       />
 
     </div>

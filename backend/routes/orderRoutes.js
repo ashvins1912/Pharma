@@ -1429,21 +1429,29 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
                 { status: String(req.query.status).toLowerCase() }
             ];
             if (req.query.status === 'Delivered' || req.query.status === 'Cancelled') {
-                const [items, total] = await Promise.all([
-                    Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
-                    Order.countDocuments(filter)
-                ]);
-                await sanitizeTenantRiderReferences(items);
-                return res.json(paginationResult(items, total, page, limit));
+                try {
+                    const [items, total] = await Promise.all([
+                        Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+                        Order.countDocuments(filter)
+                    ]);
+                    await sanitizeTenantRiderReferences(items);
+                    return res.json(paginationResult(items, total, page, limit));
+                } catch (dbErr) {
+                    const result = req.query.status === 'Delivered'
+                        ? await dataStore.getDeliveredOrdersPage(page, limit, { tenantId: String(tenantId) })
+                        : await dataStore.getCancelledOrdersPage(page, limit);
+                    await sanitizeTenantRiderReferences(result.items || []);
+                    return res.json(paginationResult(result.items, result.total, result.page || page, limit));
+                }
             }
-            const orders = await Order.find(filter).sort({ createdAt: -1, _id: -1 }).lean();
+            const orders = await Order.find(filter).sort({ createdAt: -1, _id: -1 }).lean().catch(() => []);
             await sanitizeTenantRiderReferences(orders);
             return res.json(orders);
         }
         if (isPlatformOrderAdmin(req) && req.query.tenantId) {
             const tenantId = String(req.query.tenantId);
-            const selectedTenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
-            if (!selectedTenant) return res.status(404).json({ message: 'Active pharmacy tenant not found.' });
+            const selectedTenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean().catch(() => null);
+            if (!selectedTenant && getIsConnected()) return res.status(404).json({ message: 'Active pharmacy tenant not found.' });
             const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
             const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
             if (req.query.fulfillmentSnapshot === 'true') {
@@ -1459,11 +1467,20 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
                 { orderStatus: req.query.status },
                 { status: String(req.query.status).toLowerCase() }
             ];
-            const [items, total] = await Promise.all([
-                Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
-                Order.countDocuments(filter)
-            ]);
-            return res.json(paginationResult(items, total, page, limit));
+            try {
+                const [items, total] = await Promise.all([
+                    Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+                    Order.countDocuments(filter)
+                ]);
+                await sanitizeTenantRiderReferences(items);
+                return res.json(paginationResult(items, total, page, limit));
+            } catch (dbErr) {
+                const result = req.query.status === 'Delivered'
+                    ? await dataStore.getDeliveredOrdersPage(page, limit, { tenantId })
+                    : await dataStore.getCancelledOrdersPage(page, limit);
+                await sanitizeTenantRiderReferences(result.items || []);
+                return res.json(paginationResult(result.items, result.total, result.page || page, limit));
+            }
         }
         if (req.query.search !== undefined) {
             const { type, value } = classifyOrderSearch(req.query.search);

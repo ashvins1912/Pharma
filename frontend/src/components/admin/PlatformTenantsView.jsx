@@ -77,10 +77,12 @@ export default function PlatformTenantsView() {
       setLoading(true);
       setError('');
       const res = await apiClient.get('/api/v1/admin/tenants');
-      const items = res.data?.data || [];
+      const raw = res.data?.data || res.data?.tenants || res.data || [];
+      const items = Array.isArray(raw) ? raw : (raw.tenants || []);
       setTenants(Array.isArray(items) ? items : []);
     } catch (err) {
       setError(err.message || t('platformTenantLoadFailed'));
+      setTenants([]);
     } finally {
       setLoading(false);
     }
@@ -90,10 +92,12 @@ export default function PlatformTenantsView() {
     try {
       setLoadingVendors(true);
       const res = await apiClient.get('/api/v1/vendors');
-      const items = res.data?.data || [];
+      const raw = res.data?.data || res.data?.vendors || res.data || [];
+      const items = Array.isArray(raw) ? raw : (raw.vendors || []);
       setVendors(Array.isArray(items) ? items : []);
     } catch (err) {
       console.warn('Could not load vendors:', err.message);
+      setVendors([]);
     } finally {
       setLoadingVendors(false);
     }
@@ -105,8 +109,10 @@ export default function PlatformTenantsView() {
   }, []);
 
   // Filtered tenants calculation
+  const safeTenants = Array.isArray(tenants) ? tenants : [];
   const filteredTenants = useMemo(() => {
-    return tenants.filter((t) => {
+    return safeTenants.filter((t) => {
+      if (!t) return false;
       const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
       const q = searchQuery.toLowerCase().trim();
       const matchesQuery = !q ||
@@ -117,13 +123,13 @@ export default function PlatformTenantsView() {
         t.id?.toLowerCase().includes(q);
       return matchesStatus && matchesQuery;
     });
-  }, [tenants, statusFilter, searchQuery]);
+  }, [safeTenants, statusFilter, searchQuery]);
 
   // Derived counts
-  const totalCount = tenants.length;
-  const activeCount = tenants.filter(t => t.status === 'ACTIVE').length;
-  const suspendedCount = tenants.filter(t => t.status === 'SUSPENDED').length;
-  const pendingCount = tenants.filter(t => t.status === 'PENDING').length;
+  const totalCount = safeTenants.length;
+  const activeCount = safeTenants.filter(t => t?.status === 'ACTIVE').length;
+  const suspendedCount = safeTenants.filter(t => t?.status === 'SUSPENDED').length;
+  const pendingCount = safeTenants.filter(t => t?.status === 'PENDING').length;
 
   // Handle Tenant Onboarding Submission
   const handleOnboardSubmit = async (e) => {
