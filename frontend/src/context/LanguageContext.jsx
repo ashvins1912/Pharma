@@ -787,6 +787,7 @@ const messages = {
     daysLeft: "{days}d left",
     itemsLeft: "{count} left",
     dispensarySafetyActive: "Dispensary Safety Controls Active",
+    primaryPhone: "Primary Phone",
   hi: {
     store: "दुकान",
     orders: "ऑर्डर",
@@ -1564,6 +1565,7 @@ const messages = {
     daysLeft: "{days} दिन शेष",
     itemsLeft: "{count} शेष",
     dispensarySafetyActive: "डिस्पेंसरी सुरक्षा नियंत्रण सक्रिय",
+    primaryPhone: "मुख्य फ़ोन",
   kn: {
     store: "ಅಂಗಡಿ",
     orders: "ಆರ್ಡರ್‌ಗಳು",
@@ -2341,6 +2343,7 @@ const messages = {
     daysLeft: "ಇನ್ನೂ {days} ದಿನಗಳು",
     itemsLeft: "{count} ಉಳಿದಿದೆ",
     dispensarySafetyActive: "ಔಷಧಾಲಯ ಸುರಕ್ಷತಾ ನಿಯಂತ್ರಣಗಳು ಸಕ್ರಿಯ",
+    primaryPhone: "ಪ್ರಾಥಮಿಕ ಫೋನ್",
   bn: {
     store: "দোকান",
     orders: "অর্ডার",
@@ -3118,6 +3121,7 @@ const messages = {
     daysLeft: "আর {days} দিন",
     itemsLeft: "{count} বাকি",
     dispensarySafetyActive: "ডিসপেনসারি নিরাপত্তা নিয়ন্ত্রণ সক্রিয়",
+    primaryPhone: "প্রাথমিক ফোন",
   te: {
     store: "స్టోర్",
     orders: "ఆర్డర్లు",
@@ -3893,6 +3897,7 @@ const messages = {
     daysLeft: "ఇంకా {days} రోజులు",
     itemsLeft: "{count} మిగిలాయి",
     dispensarySafetyActive: "డిస్పెన్సరీ భద్రతా నియంత్రణలు యాక్టివ్",
+    primaryPhone: "ప్రధాన ఫోన్",
 
   }
 };
