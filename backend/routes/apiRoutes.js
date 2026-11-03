@@ -137,6 +137,54 @@ router.get('/vendor/profile', authenticateUser, async (req, res) => {
     }
 });
 
+router.get('/tenant/nearby', authenticateUser, async (req, res) => {
+    try {
+        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+        const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const tenantId = String(isPlatformAdmin
+            ? (req.get('x-tenant-id') || req.query.tenantId || '')
+            : (req.user?.app_metadata?.tenantId || req.user?.tenantId || '')
+        ).trim();
+        if (!tenantId) return res.status(403).json({ success: false, code: 'TENANT_CONTEXT_REQUIRED', message: 'Your authenticated pharmacy session is missing its tenant identity.' });
+        if (!isPlatformAdmin) {
+            const membership = await TenantMembership.findOne({
+                userId: String(req.user?.sub || req.user?.id || ''),
+                tenantId,
+                status: 'ACTIVE'
+            }).lean();
+            if (!membership) return res.status(403).json({ success: false, code: 'TENANT_MEMBERSHIP_REQUIRED', message: 'Your active pharmacy membership could not be verified.' });
+        }
+        const [tenant, vendor] = await Promise.all([
+            Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).lean(),
+            Vendor.findOne({ tenantId }).lean()
+        ]);
+        if (!tenant) return res.status(404).json({ success: false, code: 'TENANT_NOT_FOUND', message: 'Your pharmacy tenant is not active or could not be found.' });
+        const lat = Number(vendor?.latitude ?? vendor?.geoLocation?.coordinates?.[1]);
+        const lng = Number(vendor?.longitude ?? vendor?.geoLocation?.coordinates?.[0]);
+        const hasCoordinates = Number.isFinite(lat) && lat >= -90 && lat <= 90
+            && Number.isFinite(lng) && lng >= -180 && lng <= 180
+            && (vendor?.latitude != null || vendor?.longitude != null || vendor?.geoLocation?.coordinates?.length === 2);
+        const item = {
+            _id: String(tenant._id),
+            shopName: tenant.name || vendor?.companyName || '',
+            address: {
+                street: vendor?.address?.street || '',
+                city: vendor?.address?.city || '',
+                state: vendor?.address?.state || '',
+                zipCode: vendor?.address?.pincode || ''
+            },
+            geoLocation: hasCoordinates ? { type: 'Point', coordinates: [lng, lat] } : null,
+            shopPhotoUrl: vendor?.shopPhotoUrl || null,
+            distanceKm: null,
+            locationMatch: null
+        };
+        return res.json({ status: 'success', tenants: [item], scope: 'TENANT' });
+    } catch (err) {
+        console.error('[TenantDiscovery] Tenant-scoped nearby lookup failed:', { requestId: req.requestId || null, code: err.code || err.name });
+        return res.status(503).json({ success: false, code: 'TENANT_DISCOVERY_UNAVAILABLE', message: 'Your pharmacy information is temporarily unavailable.' });
+    }
+});
+
 const resolveTenantBranchScope = async (req) => {
     const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
     const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
