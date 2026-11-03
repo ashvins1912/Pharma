@@ -1,5 +1,5 @@
 /**
- * Centralized Email Service for Ashvin Pharmacy Platform
+ * Centralized Email Service for QuickMeds Rx Platform
  * Handles SMTP dispatch for account verification, vendor onboarding, and password resets.
  */
 import nodemailer from 'nodemailer';
@@ -14,7 +14,7 @@ class EmailService {
         this.secure = process.env.SMTP_SECURE === 'true' || this.port === 465;
         this.user = process.env.SMTP_USER || '';
         this.pass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '';
-        this.from = process.env.SMTP_FROM || (this.user ? `"Ashvin Pharmacy" <${this.user}>` : '');
+        this.from = process.env.SMTP_FROM || (this.user ? `"QuickMeds Rx" <${this.user}>` : '');
 
         this.transporter = null;
         this._initTransporter();
