@@ -4,6 +4,7 @@ import { useTenant } from '../../context/TenantContext';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useLanguage } from '../../context/LanguageContext';
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // Earth radius in km
@@ -18,6 +19,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId = '' }) {
+  const { t } = useLanguage();
   const { tenantId, setTenantId, setActiveTenant } = useTenant();
   const { addresses, loadAddresses } = useApp();
   const { isFullyAuthenticated } = useAuth();
@@ -78,7 +80,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
       // Ask for browser location only when there is no saved delivery address.
       if (!navigator.geolocation) {
         await fetchNearbyTenants(null);
-        if (!cancelled) setError('Add a delivery address to see pharmacies near you. You can still browse all available pharmacies.');
+        if (!cancelled) setError(t('addDeliveryAddressNearby'));
         return;
       }
       try {
@@ -168,7 +170,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
         setActiveTenant(preferred);
       }
     } catch (err) {
-      setError(err?.response?.data?.message || err.message || 'Failed to fetch nearby pharmacies');
+      setError(err?.response?.data?.message || err.message || t('failedFetchNearby'));
     } finally {
       setLoading(false);
     }
@@ -197,8 +199,8 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
       >
         <div className="flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Nearby Pharmacy Finder</span>
-            <h3 id="tenant-modal-title" className="text-xl font-black text-gray-900 dark:text-white mt-1">Select Active Pharmacy Dispensary</h3>
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">{t('nearbyPharmacyFinder')}</span>
+            <h3 id="tenant-modal-title" className="text-xl font-black text-gray-900 dark:text-white mt-1">{t('selectActivePharmacy')}</h3>
           </div>
           <button
             onClick={onClose}
@@ -222,7 +224,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search dispensary by shop name, street, or city..."
+            placeholder={t("searchDispensaryPlaceholder")}
             className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
           />
           <svg className="w-4 h-4 text-gray-400 absolute left-3.5 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -239,7 +241,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
         {loading ? (
           <div className="py-12 text-center">
             <div className="inline-block w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mb-3" />
-            <p className="text-xs text-gray-400">Finding active pharmacies near your saved address...</p>
+            <p className="text-xs text-gray-400">{t('findingPharmacies')}</p>
           </div>
         ) : (
           <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
@@ -284,8 +286,8 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
             {filteredTenants.length === 0 && (
               <div className="py-8 text-center text-sm text-gray-400">
                 {searchQuery.trim()
-                  ? `No pharmacies match "${searchQuery}". Try another shop name, area or PIN code.`
-                  : 'No active pharmacies were returned for this area. Clear the search or try another address.'}
+                  ? `{t('noPharmacyMatches')} \"${searchQuery}\". ${t('pleaseTryAgain')}`
+                  : t('noActivePharmaciesArea')}
               </div>
             )}
           </div>
