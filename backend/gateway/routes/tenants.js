@@ -72,7 +72,7 @@ router.post('/', authenticateUser, requireRoles(PlatformRoles.PLATFORM_SUPER_ADM
 // Get branches for a tenant
 router.get('/:tenantId/branches', async (req, res, next) => {
     try {
-        const cacheKey = `cache:tenant:${req.params.tenantId}:branches`;
+        const cacheKey = `cache:tenant:${req.params.tenantId}:branches:v2`;
         let branches = await cacheService.get(cacheKey);
         if (!branches) {
             branches = await tenantService.getBranches(req.params.tenantId, { status: 'ACTIVE' });
@@ -101,6 +101,9 @@ router.put('/branches/:branchId', authenticateUser, requireRoles(PlatformRoles.P
     try {
         const updated = await tenantService.updateBranch(req.params.branchId, req.body, req.context);
         await cacheService.del(CACHE_KEY_ALL_BRANCHES);
+        if (updated?.tenantId) {
+            await cacheService.del(`cache:tenant:${updated.tenantId}:branches:v2`);
+        }
         res.json({ success: true, data: updated });
     } catch (err) {
         next(err);
