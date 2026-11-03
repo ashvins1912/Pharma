@@ -137,7 +137,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
               <p className="text-[11px] text-slate-500 mt-0.5">
                 {request.status === 'PHARMACY_REJECTED'
                   ? t('unableToProcure')
-                  : 'You declined this proposal.'}
+                  : '{t('proposalDeclined')}'}
               </p>
             </div>
           </div>
@@ -197,7 +197,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
             <p className="text-[10px] text-emerald-700 leading-snug">
               {priceType === 'APPROXIMATE'
                 ? 'Estimated price; final price may vary slightly based on supplier invoice.'
-                : `Payment method: ${t('cashOnDelivery')} (COD) upon courier arrival.`}
+                : `${t('paymentMethod')}: ${t('cashOnDelivery')} (COD) upon courier arrival.`}
             </p>
           </div>
 
@@ -281,7 +281,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
                     disabled={approving}
                     className="rounded-xl bg-emerald-700 px-4 py-2 text-xs font-black text-white disabled:opacity-50"
                   >
-                    {approving ? 'Creating Order...' : 'Confirm & Create Order'}
+                    {approving ? t('processing') : t('confirmCreateOrder')}
                   </button>
                 </div>
               </div>
@@ -311,7 +311,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
                     disabled={rejecting}
                     className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl cursor-pointer disabled:opacity-50"
                   >
-                    {rejecting ? 'Declining...' : 'Confirm Rejection'}
+                    {rejecting ? t('processing') : t('confirmRejection')}
                   </button>
                 </div>
               </div>
