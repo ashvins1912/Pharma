@@ -19,7 +19,7 @@ export default function Header({
 }) {
   const {
     user, isAdmin, isSuperAdmin, isTenantAdmin, canAccessOperations,
-    hasPermission, hasAnyPermission, role, logout
+    hasPermission, hasAnyPermission, role, logout, scope
   } = useAuth();
   const { cart, whatsappStatus, setWhatsappModalOpen, medicineRequests } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -30,7 +30,7 @@ export default function Header({
 
   React.useEffect(() => {
     let cancelled = false;
-    if (!user || !isTenantAdmin) {
+    if (!user || scope !== 'TENANT') {
       setBranchOptions([]);
       return () => { cancelled = true; };
     }
@@ -45,7 +45,7 @@ export default function Header({
       if (!cancelled) setBranchOptions([]);
     });
     return () => { cancelled = true; };
-  }, [user, isTenantAdmin]);
+  }, [user, scope]);
 
   const cartItemCount = cart.reduce((total, item) => total + item.quantity, 0);
   const proposalsWaitingCount = (medicineRequests || []).filter(r => r.status === 'PROPOSAL_SENT').length;
