@@ -347,8 +347,25 @@ export class TenantService {
     }
 
     async getBranches(tenantId, filter = {}) {
-        let list = Array.from(this.branches.values()).filter(b => b.tenantId === String(tenantId));
-        if (filter.status) list = list.filter(b => b.status === filter.status);
+        const normalizedTenantId = String(tenantId || '').trim();
+        if (!normalizedTenantId) return [];
+
+        // In production, the database is the source of truth. The in-memory
+        // seed map is only for disconnected local/demo mode and must never
+        // leak demo branches into a real tenant's branch selector.
+        if (getIsConnected()) {
+            const query = { tenantId: normalizedTenantId };
+            if (filter.status) query.status = filter.status;
+            const persisted = await TenantBranch.find(query).lean();
+            return persisted.map(branch => ({
+                ...branch,
+                id: String(branch._id)
+            }));
+        }
+
+        let list = Array.from(this.branches.values())
+            .filter(branch => branch.tenantId === normalizedTenantId);
+        if (filter.status) list = list.filter(branch => branch.status === filter.status);
         return list;
     }
 
