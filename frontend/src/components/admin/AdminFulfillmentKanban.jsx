@@ -89,6 +89,7 @@ const normalizeOrderStatus = (order) => {
 };
 
 export default function AdminFulfillmentKanban({ orders, onRefresh }) {
+  const { t } = useLanguage();
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
   const [updatingId, setUpdatingId] = useState(null);
