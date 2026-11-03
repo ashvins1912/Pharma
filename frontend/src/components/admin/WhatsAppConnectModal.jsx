@@ -296,7 +296,7 @@ export default function WhatsAppConnectModal({ isOpen, onClose }) {
 
         {/* Modal Footer */}
         <div className="shrink-0 bg-slate-50 p-3 border-t border-slate-200 text-center text-[11px] text-slate-400 font-medium">
-          Ashvin Pharmacy Real-Time Order Verification & WhatsApp Dispatch Gateway
+          QuickMeds Rx Real-Time Order Verification & WhatsApp Dispatch Gateway
         </div>
       </div>
     </div>
