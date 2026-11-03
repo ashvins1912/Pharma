@@ -319,7 +319,7 @@ export default function AuthModal({ isOpen, onClose }) {
             {mfaRequired ? '🛡️' : '⚕️'}
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            {mfaRequired ? 'Two-Factor Authentication' : 'Welcome to Ashvin Pharmacy'}
+            {mfaRequired ? 'Two-Factor Authentication' : 'Welcome to QuickMeds Rx'}
           </h2>
           <p className="text-xs text-slate-500 mt-1 font-medium">
             {mfaRequired
