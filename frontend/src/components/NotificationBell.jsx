@@ -22,8 +22,16 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
       sent: 'sent',
       failed: 'failed',
       requested: 'requested',
-      queued_offline: 'queuedOffline',
-      missing_recipient: 'missingRecipient'
+      'queued offline': 'queuedOffline',
+      'missing recipient': 'missingRecipient',
+      'order created': 'orderConfirmedTitle',
+      'order accepted': 'orderProcessingTitle',
+      'rider assigned': 'riderAssignedTitle',
+      'order delivered': 'orderDeliveredTitle',
+      'medicine request created': 'medicineRequestTitle',
+      'proposal approved': 'proposalApprovedTitle',
+      'proposal rejected': 'proposalRejectedTitle',
+      'out for delivery': 'outForDelivery'
     };
     return labels[normalized] ? t(labels[normalized]) : String(value || '');
   };
@@ -158,9 +166,7 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
                   {n.actionType === 'CONNECT_WHATSAPP' && (
                     <div className="mt-2 pt-1 border-t border-amber-200/60 flex items-center justify-between">
                       <span className="text-[10px] font-black text-amber-700 uppercase">{t('actionRequired')}</span>
-                      <span className="text-[11px] font-extrabold text-blue-700 underline">
-                        Link WhatsApp Device Now →
-                      </span>
+                      <span className="text-[11px] font-extrabold text-blue-700 underline">{t('linkWhatsAppNow')}</span>
                     </div>
                   )}
                 </div>
@@ -182,7 +188,7 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
                           <span className="shrink-0 text-[9px] text-slate-400">{event.timestamp ? new Date(event.timestamp).toLocaleTimeString(language) : t('recent')}</span>
                         </div>
                         {orderLabel && <p className="mt-1 text-[10px] text-slate-600">{t('orderLabel')}: {String(orderLabel)}</p>}
-                        {event.status && <p className="mt-1 text-[10px] font-semibold text-indigo-700">Status: {String(event.status).replaceAll('_', ' ')}</p>}
+                        {event.status && <p className="mt-1 text-[10px] font-semibold text-indigo-700">{t('status')}: {localizedStatus(event.status)}</p>}
                       </div>
                     );
                   })}
@@ -198,7 +204,7 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
                 }}
                 className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
               >
-                View All Orders & Deliveries →
+                {t('viewAllOrdersDeliveries')}
               </button>
             </div>
           </div>
