@@ -16,6 +16,7 @@ const emptyForm = { displayName: '', relationship: '', customRelationship: '', d
 
 export default function RelativeProfiles({ user, onSelfPuid }) {
   const { t } = useLanguage();
+  const relationshipLabel = (value) => ({ FATHER: t('father'), MOTHER: t('mother'), SPOUSE: t('spouse'), SON: t('son'), DAUGHTER: t('daughter'), BROTHER: t('brother'), SISTER: t('sister'), GRANDFATHER: t('grandfather'), GRANDMOTHER: t('grandmother'), FATHER_IN_LAW: t('fatherInLaw'), MOTHER_IN_LAW: t('motherInLaw'), OTHER: t('otherRelationship') }[value] || value);
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
   const [people, setPeople] = useState([]);
@@ -81,7 +82,7 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
   };
 
   const removeRelative = async () => {
-    if (!selected || !window.confirm(`Remove ${selected.displayName} from your relative profiles?`)) return;
+    if (!selected || !window.confirm(t('removeRelativeConfirm').replace('{name}', selected.displayName))) return;
     await runAction(LOADING_ACTIONS.REMOVE_RELATIVE, async () => {
       try {
         await apiClient.delete(`/api/v1/customers/persons/${encodeURIComponent(selected.puid)}`);
@@ -105,7 +106,7 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
           <p className="text-[10px] text-slate-500">{t('managePatientProfiles')}</p>
         </div>
         <button type="button" onClick={() => { setSelected(null); setForm(emptyForm); setOpenForm(true); }} disabled={busy}
-          className="rounded-xl bg-blue-50 px-3 py-2 text-[10px] font-black text-blue-700 disabled:opacity-50">+ Add Relative</button>
+          className="rounded-xl bg-blue-50 px-3 py-2 text-[10px] font-black text-blue-700 disabled:opacity-50">+ {t('addRelative')}</button>
       </div>
 
       {self && (
@@ -127,7 +128,7 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
             <span className="flex items-center gap-2">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-lg">👤</span>
               <span><span className="block text-xs font-black text-slate-900">{person.displayName}</span>
-              <span className="block text-[10px] text-slate-500">{person.relationshipToOwner}</span></span>
+              <span className="block text-[10px] text-slate-500">{relationshipLabel(String(person.relationshipToOwner || '').toUpperCase())}</span></span>
             </span>
             <span className="text-[9px] font-black text-slate-500">{t('viewPuid')}</span>
           </button>
@@ -140,12 +141,12 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
             <input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} placeholder={t("relativeName")} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" required />
             <select value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" required>
               <option value="">{t("selectRelationship")}</option>
-              {RELATIONSHIP_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              {RELATIONSHIP_OPTIONS.map((option) => <option key={option.value} value={option.value}>{relationshipLabel(option.value)}</option>)}
             </select>
             {form.relationship === 'OTHER' && <input value={form.customRelationship} onChange={(e) => setForm({ ...form, customRelationship: e.target.value })} placeholder={t("specifyRelationship")} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" required />}
             <input type="date" value={form.dateOfBirth} onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" />
             <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs">
-              <option value="">{t('gender')}</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option>
+              <option value="">{t('gender')}</option><option value="MALE">{t('male')}</option><option value="FEMALE">{t('female')}</option><option value="OTHER">{t('other')}</option>
             </select>
           </div>
           <div className="flex gap-2">
@@ -164,9 +165,9 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
             <span className="rounded-lg bg-white px-2 py-1 text-[10px] font-black text-blue-800">PUID: {selected.puid}</span>
           </div>
           <p className="text-xs"><strong>{t('fullName')}:</strong> {selected.displayName}</p>
-          <p className="text-xs"><strong>{t('relationship')}:</strong> {selected.relationshipToOwner}</p>
+          <p className="text-xs"><strong>{t('relationship')}:</strong> {relationshipLabel(String(selected.relationshipToOwner || '').toUpperCase())}</p>
           <p className="text-xs"><strong>{t('dateOfBirth')}:</strong> {selected.dateOfBirth || t('notSet')}</p>
-          <p className="text-xs"><strong>{t('gender')}:</strong> {selected.gender || 'Not set'}</p>
+          <p className="text-xs"><strong>{t('gender')}:</strong> {selected.gender || t('notSet')}</p>
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={() => setOpenForm(true)} disabled={busy} className="flex-1 rounded-lg bg-white px-3 py-2 text-xs font-black text-blue-700">{t('edit')}</button>
             <button type="button" onClick={removeRelative} disabled={busy} className="flex-1 rounded-lg bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 disabled:opacity-60">
