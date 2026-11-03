@@ -83,7 +83,7 @@ const buildLocalizedCustomerOrderMessage = (order, status, language, { deliveryO
     const words = localizedWhatsApp[language];
     if (!words) return null;
     const orderId = order?.orderNumber || (order?._id?.toString() || order?.id?.toString() || 'UNKNOWN').slice(-6).toUpperCase();
-    const items = (order.items || []).map(item => `• ${item.name || words.itemsUnavailable} x${item.quantity || 1}`).join('\\n');
+    const items = (order.items || []).map(item => `• ${item.name || words.itemsUnavailable} x${item.quantity || 1}`).join('\n');
     const address = getCompleteAddress(order);
     const total = `₹${order.finalTotal}`;
     const rider = order.rider?.riderName || words.notAvailable;
@@ -91,15 +91,15 @@ const buildLocalizedCustomerOrderMessage = (order, status, language, { deliveryO
     const when = order.outForDeliveryAt ? new Date(order.outForDeliveryAt).toLocaleString() : new Date().toLocaleString();
     switch (normalizeOrderStatus(status)) {
         case 'Placed':
-            return [words.placed + ` — #${orderId}`, `${words.status}: ${order.orderStatus || 'Processing'}`, `${words.customer}: ${order.addressDetails?.fullName || order.customerName || words.notAvailable}`, `${words.address}: ${address}`, `${words.total}: ${total}`, items && `${words.items}:\\n${items}`, words.updates].filter(Boolean).join('\\n');
+            return [words.placed + ` — #${orderId}`, `${words.status}: ${order.orderStatus || 'Processing'}`, `${words.customer}: ${order.addressDetails?.fullName || order.customerName || words.notAvailable}`, `${words.address}: ${address}`, `${words.total}: ${total}`, items && `${words.items}:\n${items}`, words.updates].filter(Boolean).join('\n');
         case 'Ready to Dispatch':
-            return [`🔬 ${words.status}: Ready to Dispatch — #${orderId}`, words.ready, `${words.total}: ${total}`, items && `${words.items}:\\n${items}`].filter(Boolean).join('\\n');
+            return [`🔬 ${words.status}: Ready to Dispatch — #${orderId}`, words.ready, `${words.total}: ${total}`, items && `${words.items}:\n${items}`].filter(Boolean).join('\n');
         case 'Dispatched':
-            return [words.dispatched + ` — #${orderId}`, `${words.status}: Out for Delivery`, deliveryOtp ? `${words.otp}: ${deliveryOtp}` : null, deliveryOtp ? words.otpRule : null, `${words.rider}: ${rider}`, `${words.riderPhone}: ${riderPhone}`, `${words.address}: ${address}`, `${words.at}: ${when}`, `${words.total}: ${total}`, items && `${words.items}:\\n${items}`].filter(Boolean).join('\\n');
+            return [words.dispatched + ` — #${orderId}`, `${words.status}: Out for Delivery`, deliveryOtp ? `${words.otp}: ${deliveryOtp}` : null, deliveryOtp ? words.otpRule : null, `${words.rider}: ${rider}`, `${words.riderPhone}: ${riderPhone}`, `${words.address}: ${address}`, `${words.at}: ${when}`, `${words.total}: ${total}`, items && `${words.items}:\n${items}`].filter(Boolean).join('\n');
         case 'Assigned':
-            return [words.assigned + ` — #${orderId}`, `${words.rider}: ${rider}`, `${words.riderPhone}: ${riderPhone}`, words.ready, `${words.address}: ${address}`].join('\\n');
+            return [words.assigned + ` — #${orderId}`, `${words.rider}: ${rider}`, `${words.riderPhone}: ${riderPhone}`, words.ready, `${words.address}: ${address}`].join('\n');
         case 'Delivered':
-            return [words.delivered + ` — #${orderId}`, `${words.deliveredAt}: ${order.deliveredAt ? new Date(order.deliveredAt).toLocaleString() : new Date().toLocaleString()}`, `${words.items}:\\n${items || words.itemsUnavailable}`, `${words.total}: ${total}`, words.thankYou].join('\\n');
+            return [words.delivered + ` — #${orderId}`, `${words.deliveredAt}: ${order.deliveredAt ? new Date(order.deliveredAt).toLocaleString() : new Date().toLocaleString()}`, `${words.items}:\n${items || words.itemsUnavailable}`, `${words.total}: ${total}`, words.thankYou].join('\n');
         default:
             return null;
     }
@@ -121,7 +121,7 @@ const buildLocalizedCustomerMedicineRequestMessage = (request, eventType, langua
         case 'MedicineRequestCreated':
         case 'NEW_REQUEST': message = words.created; break;
         case 'MedicineProposalReady':
-        case 'PROPOSAL_SENT': message = [words.proposal, `${words.medicine}: ${proposal.proposedMedicineName || proposal.medicineName || items}`, `${words.quantity}: ${proposal.proposedQuantity || proposal.quantity || 1}`, `${words.price}: ₹${proposal.finalPrice ?? proposal.totalPrice ?? proposal.approximatePrice ?? 0}`, `${words.delivery}: ${proposal.deliverySlot?.label || proposal.deliverySlot?.date || '—'}`, (proposal.pharmacyNote || proposal.pharmacyNotes) ? `${words.note}: ${proposal.pharmacyNote || proposal.pharmacyNotes}` : null].filter(Boolean).join('\\n'); break;
+        case 'PROPOSAL_SENT': message = [words.proposal, `${words.medicine}: ${proposal.proposedMedicineName || proposal.medicineName || items}`, `${words.quantity}: ${proposal.proposedQuantity || proposal.quantity || 1}`, `${words.price}: ₹${proposal.finalPrice ?? proposal.totalPrice ?? proposal.approximatePrice ?? 0}`, `${words.delivery}: ${proposal.deliverySlot?.label || proposal.deliverySlot?.date || '—'}`, (proposal.pharmacyNote || proposal.pharmacyNotes) ? `${words.note}: ${proposal.pharmacyNote || proposal.pharmacyNotes}` : null].filter(Boolean).join('\n'); break;
         case 'MedicineRequestApproved':
         case 'CUSTOMER_APPROVED': message = words.approved; break;
         case 'MedicineRequestCancelled': message = words.cancelled; break;
@@ -132,7 +132,7 @@ const buildLocalizedCustomerMedicineRequestMessage = (request, eventType, langua
         case 'EXPIRED': message = words.expired; break;
         default: return null;
     }
-    return [`📋 ${words.number} #${reqNum}`, `${words.medicine}: ${items}`, message].join('\\n');
+    return [`📋 ${words.number} #${reqNum}`, `${words.medicine}: ${items}`, message].join('\n');
 };
 
 
