@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function PlatformTenantsView() {
   const { t } = useLanguage();
