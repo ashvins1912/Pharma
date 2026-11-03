@@ -118,6 +118,31 @@ router.put('/onboarding', authenticateUser, async (req, res) => {
     }
 });
 
+
+/**
+ * PUT /api/v1/profile/language
+ * Persist the authenticated user's UI and notification language preference.
+ */
+router.put('/language', authenticateUser, async (req, res) => {
+    const userId = req.user?.id || req.user?.sub || req.user?.userId;
+    const preferredLanguage = String(req.body?.preferredLanguage || '').trim().toLowerCase();
+    if (!userId) return sendError(res, { code: 'UNAUTHORIZED', message: 'Authentication required.', statusCode: 401, req });
+    if (!['en', 'hi', 'kn', 'bn', 'te'].includes(preferredLanguage)) {
+        return sendError(res, { code: 'INVALID_LANGUAGE', message: 'Choose a supported language.', statusCode: 400, req });
+    }
+    try {
+        const profile = await UserProfile.findOneAndUpdate(
+            { $or: [{ userId }, { supabase_user_id: userId }, { supabaseId: userId }] },
+            { $set: { preferredLanguage } },
+            { new: true, runValidators: true }
+        ).select('preferredLanguage').lean();
+        if (!profile) return sendError(res, { code: 'PROFILE_NOT_FOUND', message: 'User profile not found.', statusCode: 404, req });
+        return sendSuccess(res, { data: profile, message: 'Language preference saved.', statusCode: 200, req });
+    } catch (err) {
+        return sendError(res, { code: 'LANGUAGE_PREFERENCE_SAVE_FAILED', message: err.message || 'Could not save language preference.', statusCode: 500, req });
+    }
+});
+
 router.get('/access/features', authenticateUser, requirePlatformSuperAdmin, async (req, res) => {
   try {
     const features = await Feature.find({}).lean();
