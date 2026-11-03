@@ -45,6 +45,8 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
         correlationId: req.correlationId,
         method: req.method,
         path: req.path,
+        originalUrl: req.originalUrl,
+        matchedServiceRouter: req.matchedServiceRouter || null,
         statusCode: res.statusCode,
         durationMs: Date.now() - startedAt,
         gatewayAuthenticated: Boolean(req.gatewayAuthenticated),
