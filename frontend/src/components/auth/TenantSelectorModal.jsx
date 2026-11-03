@@ -101,7 +101,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
 
     load();
     return () => { cancelled = true; };
-  }, [isOpen, isFullyAuthenticated, addresses, loadAddresses]); 
+  }, [isOpen, isFullyAuthenticated, scope, addresses, loadAddresses]); 
 
   const getUserLocationAndFetchTenants = () => {
     setLoading(true);
