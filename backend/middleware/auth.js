@@ -104,15 +104,30 @@ export const authenticateUser = async (req, res, next, options = {}) => {
         const tokenType = payload.token_type;
         const accountStatus = payload.accountStatus || 'ACTIVE';
         const url = req.originalUrl || req.url || '';
+        const requestId = req.context?.requestId || req.headers['x-request-id'] || 'req-unknown';
         if (tokenType === 'pharma_onboarding'
             && !url.includes('/api/v1/auth/complete-profile')
             && !url.includes('/api/v1/auth/onboarding')
             && !url.includes('/api/v1/auth/logout')) {
-            return res.status(403).json({ message: 'Onboarding session is restricted to profile completion.', code: 'ONBOARDING_SESSION_RESTRICTED' });
+            return res.status(403).json({
+                success: false,
+                error: {
+                    code: 'ONBOARDING_SESSION_RESTRICTED',
+                    message: 'Onboarding session is restricted to profile completion.',
+                    requestId
+                }
+            });
         }
         if (tokenType === 'pharma_mfa_challenge'
             && !url.includes('/api/v1/auth/mfa/verify')) {
-            return res.status(403).json({ message: 'MFA challenge session is restricted to MFA verification.', code: 'MFA_SESSION_RESTRICTED' });
+            return res.status(403).json({
+                success: false,
+                error: {
+                    code: 'MFA_SESSION_RESTRICTED',
+                    message: 'MFA challenge session is restricted to MFA verification.',
+                    requestId
+                }
+            });
         }
         if (accountStatus !== 'ACTIVE' && tokenType === 'pharma_access') {
             throw new Error('Inactive account session.');
@@ -174,9 +189,12 @@ export const authenticateUser = async (req, res, next, options = {}) => {
         if (capability && !authorizationService.isAllowed(req.user, capability.permission)) {
             return res.status(403).json({
                 success: false,
-                code: 'FORBIDDEN',
-                message: 'You do not have permission to access this API.',
-                permission: capability.permission
+                error: {
+                    code: 'FORBIDDEN',
+                    message: 'You do not have permission to access this API.',
+                    permission: capability.permission,
+                    requestId
+                }
             });
         }
 
@@ -188,7 +206,14 @@ export const authenticateUser = async (req, res, next, options = {}) => {
 
     // Supabase JWTs are no longer accepted as application sessions.
     // Google OAuth must first exchange the upstream identity for a Pharma token.
-    return res.status(401).json({ message: 'Invalid or expired authentication token.', code: 'INVALID_PHARMA_TOKEN' });
+    return res.status(401).json({
+        success: false,
+        error: {
+            code: 'INVALID_PHARMA_TOKEN',
+            message: 'Invalid or expired authentication token.',
+            requestId: req.context?.requestId || 'req-unknown'
+        }
+    });
 };
 
 export const requirePlatformSuperAdmin = (req, res, next) => {

@@ -211,10 +211,15 @@ apiClient.interceptors.request.use(async (config) => {
     const csrfToken = getCsrfCookie();
     if (csrfToken) config.headers['X-XSRF-TOKEN'] = csrfToken;
 
+    const isPublicDiscoveryRoute = config.method?.toLowerCase() === 'get' && (
+        /\/api\/(?:v1\/)?(?:tenants|tenant|branch|branches|medicines|catalog|surplus-savings)(\/|$)/.test(String(config.url || '')) ||
+        /\/api\/tenants\/nearby/.test(String(config.url || ''))
+    );
+
     const isRefreshRequest = /\/api\/(?:v1\/auth|auth)\/refresh(\/|$)/.test(String(config.url || ''));
-    if (isRefreshRequest) {
-        // Refresh is authenticated exclusively by the HttpOnly refresh cookie.
-        // Never attach a stale access JWT to this request.
+    if (isRefreshRequest || isPublicDiscoveryRoute) {
+        // Refresh and public discovery GET routes are unauthenticated.
+        // Never attach a stale access JWT to these requests.
         config.headers.delete?.('Authorization');
         config.headers.delete?.('authorization');
         delete config.headers.Authorization;

@@ -324,124 +324,164 @@ export default function Header({
           </div>
         </div>
 
-        {/* Mobile / Universal Navigation Dropdown Menu */}
+        {/* Slide-in Mobile Navigation Drawer from the Right */}
         {mobileMenuOpen && (
-          <div className="border-t border-slate-100 py-3 space-y-2 animate-fade-in">
-            {/* Mobile Language & Branch selectors */}
-            <div className="grid grid-cols-2 gap-2 px-2 pb-2 border-b border-slate-100">
-              <label className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-700">
-                <span>🌐</span>
-                <select
-                  aria-label={t('language')}
-                  value={language}
-                  onChange={(event) => setLanguage(event.target.value)}
-                  className="w-full bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer"
+          <div className="fixed inset-0 z-50 overflow-hidden animate-fade-in" aria-modal="true" role="dialog">
+            {/* Backdrop */}
+            <div
+              onClick={() => setMobileMenuOpen(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity"
+            />
+
+            {/* Slide-in Panel */}
+            <div className="absolute inset-y-0 right-0 max-w-xs w-full bg-white border-l border-slate-200 shadow-2xl flex flex-col justify-between p-6 animate-slide-in-right overflow-y-auto">
+              
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="h-9 w-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-base shadow-md">
+                    ⚕️
+                  </div>
+                  <div>
+                    <h3 className="font-black text-sm text-slate-900">QuickMeds Rx</h3>
+                    <p className="text-[10px] text-slate-400 font-medium">{t('trustedTagline')}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition cursor-pointer"
+                  aria-label="Close menu"
                 >
-                  {languages.map((item) => <option key={item.code} value={item.code}>{item.nativeLabel}</option>)}
-                </select>
-              </label>
+                  ✕
+                </button>
+              </div>
 
-              <label className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-700">
-                <span>🏢</span>
-                <select
-                  aria-label="Branch"
-                  value={branchId}
-                  onChange={(e) => setBranchId(e.target.value)}
-                  className="w-full bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer truncate"
-                >
-                  {branchOptions.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
+              {/* Drawer Body: Navigation & Selectors */}
+              <div className="py-4 space-y-3 flex-1">
+                {/* Language & Branch Selectors */}
+                <div className="space-y-2 pb-3 border-b border-slate-100">
+                  <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+                    <span>🌐</span>
+                    <select
+                      aria-label={t('language')}
+                      value={language}
+                      onChange={(event) => setLanguage(event.target.value)}
+                      className="w-full bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                    >
+                      {languages.map((item) => <option key={item.code} value={item.code}>{item.nativeLabel}</option>)}
+                    </select>
+                  </label>
 
-            <button
-              type="button"
-              onClick={() => { setActiveTab('store'); setMobileMenuOpen(false); }}
-              className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                activeTab === 'store' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <span>💊</span> {t('store')}
-            </button>
+                  <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+                    <span>🏢</span>
+                    <select
+                      aria-label="Branch"
+                      value={branchId}
+                      onChange={(e) => setBranchId(e.target.value)}
+                      className="w-full bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer truncate"
+                    >
+                      {branchOptions.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
 
-            {user ? (
-              <>
-                {canViewCustomerOrders && (
+                <div className="space-y-1">
                   <button
                     type="button"
-                    onClick={() => { setActiveTab('orders'); setMobileMenuOpen(false); }}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                      activeTab === 'orders' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
+                    onClick={() => { setActiveTab('store'); setMobileMenuOpen(false); }}
+                    className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-bold transition flex items-center gap-2.5 ${
+                      activeTab === 'store' ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs' : 'text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    <span>📦</span> {t('orders')}
+                    <span>💊</span> {t('store')}
                   </button>
-                )}
-                {canViewCustomerRequests && (
-                  <button
-                    type="button"
-                    onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between ${
-                      activeTab === 'requests' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2"><span>📋</span> {t('requests')}</span>
-                    {proposalsWaitingCount > 0 && (
-                      <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
-                        {proposalsWaitingCount} {t('new')}
-                      </span>
-                    )}
-                  </button>
-                )}
-                {canViewAddresses && (
-                  <button
-                    type="button"
-                    onClick={() => { setActiveTab('addresses'); setMobileMenuOpen(false); }}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                      activeTab === 'addresses' ? 'bg-blue-50 text-blue-700 font-extrabold' : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    <span>🏠</span> {t('addresses')}
-                  </button>
-                )}
-                {canViewOperations && (
-                  <button
-                    type="button"
-                    onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                      activeTab === 'admin' ? 'bg-blue-600 text-white font-extrabold' : 'text-blue-700 bg-blue-50'
-                    }`}
-                  >
-                    <span>⚙️</span> {t('adminOperations')}
-                  </button>
-                )}
-                <div className="pt-2 border-t border-slate-100 flex items-center justify-between px-2">
-                  <span className="text-[11px] text-slate-500 font-medium truncate max-w-[180px]">
-                    {t('signedInAs')} {user?.email}
-                  </span>
+
+                  {user ? (
+                    <>
+                      {canViewCustomerOrders && (
+                        <button
+                          type="button"
+                          onClick={() => { setActiveTab('orders'); setMobileMenuOpen(false); }}
+                          className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-bold transition flex items-center gap-2.5 ${
+                            activeTab === 'orders' ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs' : 'text-slate-700 hover:bg-slate-100'
+                          }`}
+                        >
+                          <span>📦</span> {t('orders')}
+                        </button>
+                      )}
+                      {canViewCustomerRequests && (
+                        <button
+                          type="button"
+                          onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
+                          className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-bold transition flex items-center justify-between ${
+                            activeTab === 'requests' ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs' : 'text-slate-700 hover:bg-slate-100'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2.5"><span>📋</span> {t('requests')}</span>
+                          {proposalsWaitingCount > 0 && (
+                            <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                              {proposalsWaitingCount} {t('new')}
+                            </span>
+                          )}
+                        </button>
+                      )}
+                      {canViewAddresses && (
+                        <button
+                          type="button"
+                          onClick={() => { setActiveTab('addresses'); setMobileMenuOpen(false); }}
+                          className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-bold transition flex items-center gap-2.5 ${
+                            activeTab === 'addresses' ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs' : 'text-slate-700 hover:bg-slate-100'
+                          }`}
+                        >
+                          <span>🏠</span> {t('addresses')}
+                        </button>
+                      )}
+                      {canViewOperations && (
+                        <button
+                          type="button"
+                          onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
+                          className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-bold transition flex items-center gap-2.5 ${
+                            activeTab === 'admin' ? 'bg-blue-600 text-white font-extrabold' : 'text-blue-700 bg-blue-50'
+                          }`}
+                        >
+                          <span>⚙️</span> {t('adminOperations')}
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => { setMobileMenuOpen(false); onOpenAuth?.(); }}
+                      className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm text-center flex items-center justify-center gap-2"
+                    >
+                      <span>👤</span> {t('signIn')}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Drawer Footer: User & Sign Out */}
+              {user && (
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <div className="flex flex-col min-w-0 pr-2">
+                    <span className="text-[10px] text-slate-400 font-medium">{t('signedInAs')}</span>
+                    <span className="text-xs text-slate-800 font-bold truncate">{user?.email}</span>
+                  </div>
                   <button
                     type="button"
                     onClick={handleSignOut}
                     disabled={signingOut}
-                    className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg transition"
+                    className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3.5 py-2 rounded-xl transition shrink-0 cursor-pointer"
                   >
                     {signingOut ? t('signingOut') : t('signOut')}
                   </button>
                 </div>
-              </>
-            ) : (
-              <div className="pt-2 border-t border-slate-100 px-2">
-                <button
-                  type="button"
-                  onClick={() => { setMobileMenuOpen(false); onOpenAuth?.(); }}
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm text-center flex items-center justify-center gap-1.5"
-                >
-                  <span>👤</span> {t('signIn')}
-                </button>
-              </div>
-            )}
+              )}
+
+            </div>
           </div>
         )}
 
