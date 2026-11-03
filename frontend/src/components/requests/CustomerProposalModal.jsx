@@ -3,8 +3,10 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { approveProposal, rejectProposal } from '../../api/medicineRequestService';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function CustomerProposalModal({ request, isOpen, onClose, onOrderCreated }) {
+  const { t } = useLanguage();
   const { loadUserMedicineRequests, loadUserOrders } = useApp();
   const { user, role } = useAuth();
   const { addToast } = useToast();
@@ -107,7 +109,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
           <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3.5 text-rose-900 text-xs flex items-center gap-2.5">
             <span className="text-xl">⏳</span>
             <div>
-              <strong>This proposal has expired.</strong>
+              <strong>{t('proposalExpired')}</strong>
               <p className="text-[11px] text-rose-700 mt-0.5">
                 Pricing and supplier delivery slots are subject to market validity. Please submit a new medicine request.
               </p>
@@ -119,7 +121,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
           <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 text-emerald-900 text-xs flex items-center gap-2.5">
             <span className="text-xl">✅</span>
             <div>
-              <strong>Proposal approved & order created!</strong>
+              <strong>{t('proposalApprovedOrderCreated')}</strong>
               <p className="text-[11px] text-emerald-700 mt-0.5">
                 Order #{request.convertedOrderId ? String(request.convertedOrderId).slice(-6).toUpperCase() : ''} is currently being fulfilled.
               </p>
@@ -131,10 +133,10 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
           <div className="bg-slate-100 border border-slate-200 rounded-2xl p-3.5 text-slate-800 text-xs flex items-center gap-2.5">
             <span className="text-xl">❌</span>
             <div>
-              <strong>Proposal was declined.</strong>
+              <strong>{t('proposalDeclined')}</strong>
               <p className="text-[11px] text-slate-500 mt-0.5">
                 {request.status === 'PHARMACY_REJECTED'
-                  ? 'Pharmacy was unable to procure this item from supplier network.'
+                  ? t('unableToProcure')
                   : 'You declined this proposal.'}
               </p>
             </div>
@@ -159,7 +161,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
               </p>
             </div>
             <div className="text-right">
-              <span className="text-[10px] text-slate-400 uppercase font-black block">Quantity</span>
+              <span className="text-[10px] text-slate-400 uppercase font-black block">{t('quantity')}</span>
               <span className="text-sm font-black text-slate-900 bg-white border border-slate-200 px-2.5 py-0.5 rounded-lg inline-block">
                 {proposal?.quantity || 1} units
               </span>
@@ -168,7 +170,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
 
           {proposal?.alternativeProduct && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-xs text-amber-900">
-              <strong className="block font-bold">Recommended Alternative Formulation:</strong>
+              <strong className="block font-bold">{t('recommendedAlternative')}</strong>
               <p className="text-[11px] text-amber-800">{proposal.alternativeProduct}</p>
             </div>
           )}
@@ -195,7 +197,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
             <p className="text-[10px] text-emerald-700 leading-snug">
               {priceType === 'APPROXIMATE'
                 ? 'Estimated price; final price may vary slightly based on supplier invoice.'
-                : 'Payment method: Cash on Delivery (COD) upon courier arrival.'}
+                : `Payment method: ${t('cashOnDelivery')} (COD) upon courier arrival.`}
             </p>
           </div>
 
@@ -231,7 +233,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
 
         {/* Prescription Verification Status */}
         <div className="flex items-center justify-between text-xs py-1 border-t border-slate-100 px-1">
-          <span className="text-slate-500 font-medium">Prescription Status:</span>
+          <span className="text-slate-500 font-medium">{t('prescriptionStatus')}:</span>
           <span className={`font-bold px-2 py-0.5 rounded-full text-[11px] ${
             proposal?.prescriptionStatus === 'Verified'
               ? 'bg-emerald-100 text-emerald-800'
@@ -254,9 +256,9 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
         {canDecide && (
           <div className="space-y-3 pt-2 border-t border-slate-100">
             {showApprovalConfirm ? (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 space-y-3" role="group" aria-label="Confirm proposal approval">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 space-y-3" role="group" aria-label={t("confirmPharmacyProposal")}>
                 <div>
-                  <p className="text-sm font-extrabold text-emerald-950">Please confirm this pharmacy proposal.</p>
+                  <p className="text-sm font-extrabold text-emerald-950">{t('confirmPharmacyProposal')}</p>
                   <p className="mt-1 text-xs text-emerald-800">
                     {proposal?.medicineName || request.requestedItems?.[0]?.requestedName}
                     {' · Qty '}{proposal?.quantity || 1}
@@ -329,7 +331,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
                   className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span>✓</span>
-                  <span>Approve & Confirm Order</span>
+                  <span>{t('approveConfirmOrder')}</span>
                 </button>
               </div>
             )}
