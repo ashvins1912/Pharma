@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
+import { useLanguage } from '../../context/LanguageContext';
 
 const MOBILE_PATTERN = /^(?:\+?91|0)?[6-9]\d{9}$/;
 
 export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) {
+  const { t } = useLanguage();
   const [firstName, setFirstName] = useState(user?.firstName || user?.name?.split(' ')?.[0] || '');
   const [lastName, setLastName] = useState(user?.lastName || user?.name?.split(' ')?.slice(1).join(' ') || '');
   const [dateOfBirth, setDateOfBirth] = useState(user?.dateOfBirth || '');
@@ -124,11 +126,11 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
               className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
               required
             >
-              <option value="">Select gender</option>
-              <option value="MALE">Male</option>
-              <option value="FEMALE">Female</option>
-              <option value="OTHER">Other</option>
-              <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+              <option value=""">{t('selectGenderOption')}</option>
+              <option value="MALE"">{t('male')}</option>
+              <option value="FEMALE"">{t('female')}</option>
+              <option value="OTHER"">{t('other')}</option>
+              <option value="PREFER_NOT_TO_SAY"">{t('preferNot')}</option>
             </select>
           </div>
 
@@ -179,7 +181,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
                 autoComplete="new-password"
                 minLength={8}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 pr-20 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
-                placeholder="Create a strong password"
+                placeholder={t('createStrongPassword')}
                 required
               />
               <button
@@ -203,7 +205,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
                 autoComplete="new-password"
                 minLength={8}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 pr-20 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
-                placeholder="Re-enter your password"
+                placeholder={t('reenterPassword')}
                 required
               />
               <button
