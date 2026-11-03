@@ -704,6 +704,10 @@ const messages = {
     resendInvitationFailed: "Failed to resend invitation: {error}",
     platformTenantLoadFailed: "Could not load platform tenants.",
     platformVendorName: "Ashvin Platform Foundation",
+    pharmacistReviewCommitment: "Our pharmacist reviews requests within 15–30 minutes, checks wholesale distributor stock, and delivers an itemized proposal with price and delivery slot.",
+    proposalApprovedQueue: "Proposal approved! The order has been automatically placed into the dispensary dispatch queue.",
+    pharmacistChecking: "Our pharmacist is actively checking dispensary availability and formulating your proposal.",
+    whatsappDelivery: "WhatsApp",
   hi: {
     store: "दुकान",
     orders: "ऑर्डर",
@@ -1398,6 +1402,10 @@ const messages = {
     resendInvitationFailed: "आमंत्रण दोबारा नहीं भेजा जा सका: {error}",
     platformTenantLoadFailed: "प्लेटफ़ॉर्म टेनेंट लोड नहीं हो सके।",
     platformVendorName: "QuickMeds Rx प्लेटफ़ॉर्म फ़ाउंडेशन",
+    pharmacistReviewCommitment: "हमारा फ़ार्मासिस्ट 15–30 मिनट में अनुरोध की समीक्षा करता है, थोक वितरक का स्टॉक जाँचता है और कीमत व डिलीवरी समय सहित प्रस्ताव देता है।",
+    proposalApprovedQueue: "प्रस्ताव मंज़ूर! ऑर्डर डिस्पेंसरी की डिस्पैच कतार में डाल दिया गया है।",
+    pharmacistChecking: "हमारा फ़ार्मासिस्ट उपलब्धता जाँचकर आपका प्रस्ताव तैयार कर रहा है।",
+    whatsappDelivery: "WhatsApp",
   kn: {
     store: "ಅಂಗಡಿ",
     orders: "ಆರ್ಡರ್‌ಗಳು",
@@ -2092,6 +2100,10 @@ const messages = {
     resendInvitationFailed: "ಆಹ್ವಾನ ಮರುಕಳುಹಿಸಲಾಗಲಿಲ್ಲ: {error}",
     platformTenantLoadFailed: "ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಟೆನಂಟ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ.",
     platformVendorName: "QuickMeds Rx ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಮೂಲಸೌಕರ್ಯ",
+    pharmacistReviewCommitment: "ನಮ್ಮ ಔಷಧಿಕಾರರು 15–30 ನಿಮಿಷಗಳಲ್ಲಿ ವಿನಂತಿಗಳನ್ನು ಪರಿಶೀಲಿಸಿ, ಸಗಟು ವಿತರಕರ ಸ್ಟಾಕ್ ಪರಿಶೀಲಿಸಿ, ಬೆಲೆ ಮತ್ತು ವಿತರಣಾ ಸಮಯದೊಂದಿಗೆ ಪ್ರಸ್ತಾವನೆ ನೀಡುತ್ತಾರೆ.",
+    proposalApprovedQueue: "ಪ್ರಸ್ತಾವನೆ ಅನುಮೋದಿಸಲಾಗಿದೆ! ಆರ್ಡರ್ ಡಿಸ್ಪೆನ್ಸರಿ ರವಾನೆ ಸರತಿಗೆ ಸೇರಿಸಲಾಗಿದೆ.",
+    pharmacistChecking: "ನಮ್ಮ ಔಷಧಿಕಾರರು ಲಭ್ಯತೆಯನ್ನು ಪರಿಶೀಲಿಸಿ ಪ್ರಸ್ತಾವನೆ ಸಿದ್ಧಪಡಿಸುತ್ತಿದ್ದಾರೆ.",
+    whatsappDelivery: "WhatsApp",
   bn: {
     store: "দোকান",
     orders: "অর্ডার",
@@ -2786,6 +2798,10 @@ const messages = {
     resendInvitationFailed: "আমন্ত্রণ আবার পাঠানো যায়নি: {error}",
     platformTenantLoadFailed: "প্ল্যাটফর্ম টেন্যান্ট লোড করা যায়নি।",
     platformVendorName: "QuickMeds Rx প্ল্যাটফর্ম ফাউন্ডেশন",
+    pharmacistReviewCommitment: "আমাদের ফার্মাসিস্ট ১৫–৩০ মিনিটের মধ্যে অনুরোধ পর্যালোচনা করেন, পাইকারি সরবরাহকারীর স্টক পরীক্ষা করেন এবং দাম ও ডেলিভারির সময়সহ প্রস্তাব পাঠান।",
+    proposalApprovedQueue: "প্রস্তাব অনুমোদিত! অর্ডারটি স্বয়ংক্রিয়ভাবে ডিসপেনসারির প্রেরণ সারিতে যোগ হয়েছে।",
+    pharmacistChecking: "আমাদের ফার্মাসিস্ট উপলভ্যতা পরীক্ষা করে আপনার প্রস্তাব তৈরি করছেন।",
+    whatsappDelivery: "WhatsApp",
   te: {
     store: "స్టోర్",
     orders: "ఆర్డర్లు",
@@ -3478,6 +3494,10 @@ const messages = {
     resendInvitationFailed: "ఆహ్వానాన్ని మళ్లీ పంపలేకపోయాం: {error}",
     platformTenantLoadFailed: "ప్లాట్‌ఫారమ్ టెనెంట్లను లోడ్ చేయలేకపోయాం.",
     platformVendorName: "QuickMeds Rx ప్లాట్‌ఫారమ్ పునాది",
+    pharmacistReviewCommitment: "మా ఫార్మసిస్ట్ 15–30 నిమిషాల్లో అభ్యర్థనలను పరిశీలించి, హోల్‌సేల్ సరఫరాదారుల స్టాక్‌ను తనిఖీ చేసి, ధర మరియు డెలివరీ సమయంతో ప్రతిపాదన పంపుతారు।",
+    proposalApprovedQueue: "ప్రతిపాదన ఆమోదించబడింది! ఆర్డర్ డిస్పెన్సరీ డిస్పాచ్ క్యూ‌లో చేర్చబడింది.",
+    pharmacistChecking: "మా ఫార్మసిస్ట్ లభ్యతను తనిఖీ చేసి మీ ప్రతిపాదనను సిద్ధం చేస్తున్నారు.",
+    whatsappDelivery: "WhatsApp",
 
   }
 };
