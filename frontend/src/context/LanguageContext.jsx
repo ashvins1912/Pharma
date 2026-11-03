@@ -830,6 +830,8 @@ const messages = {
     removeRelative: "Remove",
     removing: "Removing...",
     totalLabel: "TOTAL",
+    findNearbyOrders: "Find & Club Nearby Orders",
+    dispatchBatchToRider: "Dispatch Batch to Rider",
   },
   hi: {
     store: "दुकान",
@@ -1615,6 +1617,8 @@ const messages = {
     callRider: "राइडर को कॉल करें",
     cod: "कैश ऑन डिलीवरी",
     deliveryVerification: "डिलीवरी सत्यापन",
+    findNearbyOrders: "पास के ऑर्डर खोजें और समूहित करें",
+    dispatchBatchToRider: "राइडर को बैच भेजें",
     closeTrackingPanel: "ट्रैकिंग पैनल बंद करें",
     placedOn: "ऑर्डर की तारीख",
   },
@@ -2434,6 +2438,8 @@ const messages = {
     primaryPhone: "ಪ್ರಾಥಮಿಕ ಫೋನ್",
     currentStage: "ಪ್ರಸ್ತುತ ಹಂತ",
     callRider: "ರೈಡರ್‌ಗೆ ಕರೆ ಮಾಡಿ",
+    findNearbyOrders: "ಹತ್ತಿರದ ಆರ್ಡರ್‌ಗಳನ್ನು ಹುಡುಕಿ ಮತ್ತು ಗುಂಪುಮಾಡಿ",
+    dispatchBatchToRider: "ರೈಡರ್‌ಗೆ ಬ್ಯಾಚ್ ಕಳುಹಿಸಿ",
     cod: "ಕ್ಯಾಶ್ ಆನ್ ಡೆಲಿವರಿ",
     deliveryVerification: "ವಿತರಣಾ ಪರಿಶೀಲನೆ",
     closeTrackingPanel: "ಟ್ರ್ಯಾಕಿಂಗ್ ಫಲಕ ಮುಚ್ಚಿ",
@@ -3219,6 +3225,8 @@ const messages = {
     itemsLeft: "{count} বাকি",
     dispensarySafetyActive: "ডিসপেনসারি নিরাপত্তা নিয়ন্ত্রণ সক্রিয়",
     primaryPhone: "প্রাথমিক ফোন",
+    findNearbyOrders: "কাছাকাছি অর্ডার খুঁজুন ও একত্র করুন",
+    dispatchBatchToRider: "রাইডারের কাছে ব্যাচ পাঠান",
     currentStage: "বর্তমান ধাপ",
     callRider: "রাইডারকে কল করুন",
     cod: "ক্যাশ অন ডেলিভারি",
@@ -4012,7 +4020,7 @@ const messages = {
   }
 };
 
-const LanguageContext = createContext(null);
+export const LanguageContext = createContext(null);
 
 export function LanguageProvider({ children }) {
   const [language, setLanguageState] = useState(() => {
@@ -4092,3 +4100,5 @@ export function useLanguage() {
     removeRelative: "తొలగించండి",
     removing: "తొలగిస్తోంది...",
     totalLabel: "మొత్తం",
+    findNearbyOrders: "సమీప ఆర్డర్లను కనుగొని సమూహపరచండి",
+    dispatchBatchToRider: "రైడర్‌కు బ్యాచ్ పంపండి",
