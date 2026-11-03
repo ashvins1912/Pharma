@@ -369,7 +369,7 @@ export const API_CAPABILITIES = [
   {
     method: 'GET',
     pattern: /^\/api\/tenant\/branches(?:\/|$)/,
-    permission: 'tenant.branches.read'
+    permission: 'profile.read'
   },
   {
     method: 'POST',
