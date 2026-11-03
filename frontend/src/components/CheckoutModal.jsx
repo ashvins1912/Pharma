@@ -246,7 +246,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 overscroll-contain">
           <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
             <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">{t('fulfillmentPharmacy')}</p>
-            <p className="mt-1 text-sm font-extrabold text-emerald-950">{activeTenant?.shopName || 'Selected pharmacy'}</p>
+            <p className="mt-1 text-sm font-extrabold text-emerald-950">{activeTenant?.shopName || t('selectedPharmacy')}</p>
             <p className="mt-1 text-[11px] text-emerald-800">{t('orderRoutedOnly')}</p>
           </section>
           {errorMsg && (
@@ -268,7 +268,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
             <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider mb-2">2. {t('orderFor')}</h3>
             <p className="text-[11px] text-indigo-800 mb-3">{t('placeForSelfOrRelative')}</p>
-            <label htmlFor="order-recipient" className="sr-only">Order for</label>
+            <label htmlFor="order-recipient" className="sr-only">{t('orderFor')}</label>
             <select
               id="order-recipient"
               value={patientPuid}
@@ -371,7 +371,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             <section className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
               <div className="mb-3 flex items-center justify-between">
                 <div>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-blue-950">Your regular restock</h3>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-blue-950">{t('regularRestock')}</h3>
                   <p className="mt-1 text-[11px] text-blue-800">{t('frequentlyPurchased')}</p>
                 </div>
                 {restockLoading && <span className="text-[10px] text-blue-700">{t('updating')}</span>}
