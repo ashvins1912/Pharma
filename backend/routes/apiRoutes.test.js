@@ -44,6 +44,18 @@ test('central API router preserves auth and user-profile compatibility paths', a
     }
 });
 
+test('tenant profile, branch registry and tenant-only nearby routes require authentication', async () => {
+    const server = await start();
+    try {
+        for (const path of ['/api/vendor/profile', '/api/tenant/branches', '/api/tenant/nearby']) {
+            const response = await fetch(`${server.url}${path}`);
+            assert.equal(response.status, 401, `${path} must reject anonymous requests`);
+        }
+    } finally {
+        await server.close();
+    }
+});
+
 test('central API router applies admin authorization to audit routes', async () => {
     const server = await start();
     try {
