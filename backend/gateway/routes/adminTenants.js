@@ -62,7 +62,7 @@ router.put('/smtp/config', async (req, res, next) => {
  */
 router.post('/smtp/test', async (req, res, next) => {
     try {
-        const { targetEmail, host, port, secure, user, pass, from } = req.body;
+        const { targetEmail, host, port, secure, user, pass, from, language } = req.body;
         if (!targetEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail.trim())) {
             return res.status(400).json({
                 success: false,
@@ -71,7 +71,7 @@ router.post('/smtp/test', async (req, res, next) => {
         }
 
         const customConfig = (host || user || pass) ? { host, port, secure, user, pass, from } : null;
-        const testResult = await emailService.sendTestEmail(targetEmail.trim(), customConfig);
+        const testResult = await emailService.sendTestEmail(targetEmail.trim(), customConfig, language);
 
         res.json({
             success: true,
@@ -142,7 +142,8 @@ router.post('/', async (req, res, next) => {
             settings,
             initialAdminEmail,
             initialAdminName,
-            smtpConfig
+            smtpConfig,
+            language
         } = req.body;
 
         if (!name || typeof name !== 'string' || !name.trim()) {
@@ -187,7 +188,8 @@ router.post('/', async (req, res, next) => {
         let emailNotification = null;
         try {
             const emailResult = await emailService.sendTenantOnboardingEmail(newTenant, initialAdmin, {
-                smtpConfig: smtpConfig || mergedSettings.smtp
+                smtpConfig: smtpConfig || mergedSettings.smtp,
+                language
             });
             emailNotification = {
                 dispatched: emailResult.success,
@@ -337,7 +339,7 @@ router.post('/:tenantId/activate', async (req, res, next) => {
  */
 router.post('/:tenantId/invite-admin', async (req, res, next) => {
     try {
-        const { email, name, branchId, permissions } = req.body;
+        const { email, name, branchId, permissions, language } = req.body;
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
             return res.status(400).json({
                 success: false,
@@ -375,7 +377,7 @@ router.post('/:tenantId/invite-admin', async (req, res, next) => {
         let emailNotification = null;
         try {
             const tenant = await tenantService.getTenantById(req.params.tenantId);
-            const emailResult = await emailService.sendTenantAdminInvitationEmail(tenant, invite);
+            const emailResult = await emailService.sendTenantAdminInvitationEmail(tenant, invite, { language });
             emailNotification = {
                 dispatched: emailResult.success,
                 simulated: Boolean(emailResult.simulated),
