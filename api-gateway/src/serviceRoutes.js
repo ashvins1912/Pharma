@@ -56,7 +56,10 @@ function createServiceHandler({ audience, getScope, target, includeCustomerProfi
       const isPlatformUser = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
       const tenantId = String((isPlatformUser ? req.get('x-tenant-id') : req.user?.tenantId || req.user?.app_metadata?.tenantId) || '').trim();
       const signedBranchId = req.user?.branchId || req.user?.app_metadata?.branchId;
-      const branchId = String((isPlatformUser ? req.get('x-branch-id') : signedBranchId || req.get('x-branch-id')) || '').trim();
+      // The UI may select a different branch within the user's tenant. Prefer
+      // that explicit selection, then verify it server-side against tenant
+      // ownership and active membership before forwarding anything.
+      const branchId = String(req.get('x-branch-id') || signedBranchId || '').trim();
       if (!tenantId || !branchId) {
         return res.status(403).json({ success: false, error: { code: 'TENANT_BRANCH_REQUIRED', message: 'Select a valid tenant and branch before using inventory imports.' }, requestId: req.requestId });
       }
