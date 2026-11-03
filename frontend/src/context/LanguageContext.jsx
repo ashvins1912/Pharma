@@ -981,15 +981,23 @@ const LanguageContext = createContext(null);
 export function LanguageProvider({ children }) {
   const [language, setLanguageState] = useState(() => {
     if (typeof window === 'undefined') return 'en';
-    const saved = window.localStorage.getItem('quickmeds-rx-language');
-    return SUPPORTED_LANGUAGES.some((item) => item.code === saved) ? saved : 'en';
+    try {
+      const saved = window.localStorage.getItem('quickmeds-rx-language');
+      return SUPPORTED_LANGUAGES.some((item) => item.code === saved) ? saved : 'en';
+    } catch {
+      return 'en';
+    }
   });
 
   const setLanguage = useCallback((nextLanguage) => {
     if (!SUPPORTED_LANGUAGES.some((item) => item.code === nextLanguage)) return;
     setLanguageState(nextLanguage);
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem('quickmeds-rx-language', nextLanguage);
+      try {
+        window.localStorage.setItem('quickmeds-rx-language', nextLanguage);
+      } catch {
+        // Keep the in-memory language change even when storage is unavailable.
+      }
     }
   }, []);
 
