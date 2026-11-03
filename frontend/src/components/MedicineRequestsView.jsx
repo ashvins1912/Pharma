@@ -3,8 +3,10 @@ import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
 import MedicineRequestModal from './MedicineRequestModal';
 import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function MedicineRequestsView({ onOrderCreated }) {
+  const { t } = useLanguage();
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
   const [requests, setRequests] = useState([]);
@@ -17,7 +19,7 @@ export default function MedicineRequestsView({ onOrderCreated }) {
       const res = await apiClient.get('/api/medicine-requests/my');
       setRequests(res.data || []);
     } catch (err) {
-      addToast(err.message || 'Could not load your medicine requests.', 'error');
+      addToast(err.message || t('requestSubmitFailed'), 'error');
     } finally {
       setLoading(false);
     }
@@ -80,7 +82,7 @@ export default function MedicineRequestsView({ onOrderCreated }) {
             className="flex-1 sm:flex-initial bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm shadow-blue-500/20 min-h-[44px]"
           >
             <span>+</span>
-            <span>New Request</span>
+            <span>{t('newRequest')}</span>
           </button>
           <button
             onClick={loadRequests}
@@ -100,7 +102,7 @@ export default function MedicineRequestsView({ onOrderCreated }) {
       ) : requests.length === 0 ? (
         <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-3">
           <span className="text-3xl block">💊</span>
-          <h4 className="text-sm font-bold text-slate-700">No special medicine requests placed</h4>
+          <h4 className="text-sm font-bold text-slate-700">{t('noSpecialRequests')}</h4>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             Need a rare prescription medicine or out-of-stock formulation? Submit a request and our pharmacist will curate a dedicated delivery proposal for you.
           </p>
@@ -155,7 +157,7 @@ export default function MedicineRequestsView({ onOrderCreated }) {
                 {/* Patient Notes */}
                 {req.customerNote && (
                   <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <strong className="text-slate-700">Patient Note:</strong> {req.customerNote}
+                    <strong className="text-slate-700">{t('patientNote')}:</strong> {req.customerNote}
                   </p>
                 )}
 
@@ -170,14 +172,14 @@ export default function MedicineRequestsView({ onOrderCreated }) {
                         </span>
                       </div>
                       <span className="text-[10px] text-emerald-700 font-bold">
-                        Proposed by {req.proposal.proposedBy || 'Pharmacy Staff'}
+                        {t('proposedBy')} {req.proposal.proposedBy || 'Pharmacy Staff'}
                       </span>
                     </div>
 
                     {/* Proposal Details Table/Grid */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                       <div className="space-y-0.5">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Medicine</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">{t('medicine')}</span>
                         <p className="font-extrabold text-slate-900 leading-snug">
                           {req.proposal.medicineName}
                         </p>
@@ -187,14 +189,14 @@ export default function MedicineRequestsView({ onOrderCreated }) {
                       </div>
 
                       <div className="space-y-0.5">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Quantity</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">{t('quantity')}</span>
                         <p className="font-extrabold text-slate-900">
                           {req.proposal.quantity} unit{req.proposal.quantity > 1 ? 's' : ''}
                         </p>
                       </div>
 
                       <div className="space-y-0.5">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Price & Type</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">{t('priceType')}</span>
                         <p className="font-black text-emerald-700 text-sm">
                           ₹{req.proposal.price * req.proposal.quantity}{' '}
                           <span className="text-[10px] text-slate-400 font-normal">
@@ -207,7 +209,7 @@ export default function MedicineRequestsView({ onOrderCreated }) {
                       </div>
 
                       <div className="space-y-0.5">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Delivery Schedule</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">{t('deliverySchedule')}</span>
                         <p className="font-bold text-slate-900">
                           📅 {req.proposal.deliveryDate || 'Next Day'}
                         </p>
@@ -220,7 +222,7 @@ export default function MedicineRequestsView({ onOrderCreated }) {
                     {/* Pharmacy Note */}
                     {req.proposal.pharmacyNote && (
                       <div className="bg-emerald-50/70 border border-emerald-100 rounded-xl p-2.5 text-xs text-emerald-900 leading-relaxed">
-                        <strong>Pharmacy Note:</strong> {req.proposal.pharmacyNote}
+                        <strong>{t('pharmacyNote')}:</strong> {req.proposal.pharmacyNote}
                       </div>
                     )}
 
@@ -247,7 +249,7 @@ export default function MedicineRequestsView({ onOrderCreated }) {
                     {req.status === 'Proposal Approved' && (
                       <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 font-bold flex items-center gap-2">
                         <span>🎉</span>
-                        <span>Proposal approved! The order has been automatically placed into the dispensary dispatch queue.</span>
+                        <span>{t('proposalApprovedQueue')}</span>
                       </div>
                     )}
 
@@ -261,7 +263,7 @@ export default function MedicineRequestsView({ onOrderCreated }) {
                 ) : (
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-500 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
-                    <span>Our pharmacist is actively checking dispensary availability and formulating your proposal.</span>
+                    <span>{t('pharmacistChecking')}</span>
                   </div>
                 )}
               </div>
