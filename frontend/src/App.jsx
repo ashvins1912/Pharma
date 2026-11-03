@@ -86,7 +86,14 @@ function MainApp() {
   } = useApp();
   const { addToast } = useToast();
   const { activeTenant, tenantId } = useTenant();
-  const { t, language } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
+
+  useEffect(() => {
+    const preferredLanguage = user?.preferredLanguage;
+    if (['en', 'hi', 'kn', 'bn', 'te'].includes(preferredLanguage) && preferredLanguage !== language) {
+      setLanguage(preferredLanguage);
+    }
+  }, [user?.preferredLanguage, language, setLanguage]);
 
   // Tab State: 'store' | 'orders' | 'requests' | 'addresses' | 'admin'
   const [activeTab, setActiveTab] = useState('store');
