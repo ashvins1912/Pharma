@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
 export default function ProductCard({ med }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { cart, addToCart, updateQuantity, openRequestModal } = useApp();
   const { user } = useAuth();
   const [imageError, setImageError] = useState(false);
@@ -103,7 +103,7 @@ export default function ProductCard({ med }) {
         )}
         {med.expiryDate && (
           <p className="mb-2 text-[9px] text-slate-400">
-            {t('expires')} {new Date(med.expiryDate).toLocaleDateString()}
+            {t('expires')} {new Date(med.expiryDate).toLocaleDateString(language)}
           </p>
         )}
       </div>
