@@ -32,7 +32,7 @@ const EMAIL_COPY = {
         adminIntro: 'You have been invited to manage this pharmacy on QuickMeds Rx as a tenant administrator.',
         pharmacy: 'Pharmacy', assignedEmail: 'Assigned email', acceptInvite: 'Sign in to accept your invitation',
         inviteToken: 'Invitation token', adminText: 'You have been invited to manage',
-        diagnosticSubject: 'QuickMeds Rx SMTP diagnostic test', diagnosticTitle: 'SMTP configuration test',
+        diagnosticSubject: 'SMTP Diagnostic Test - QuickMeds Rx Platform', diagnosticTitle: 'SMTP configuration test',
         diagnosticIntro: 'This is an automated diagnostic message from QuickMeds Rx.',
         smtpServer: 'SMTP server', encryption: 'Encryption', authenticatedUser: 'Authenticated user',
         sender: 'Sender', timestamp: 'Timestamp', ssl: 'SSL (port 465)', starttls: 'STARTTLS (port 587)',
@@ -408,7 +408,7 @@ export class EmailService {
     async resolveEmailLanguage(email, explicitLanguage = null) {
         const requested = String(explicitLanguage || '').trim().toLowerCase();
         if (SUPPORTED_EMAIL_LANGUAGES.includes(requested)) return requested;
-        if (!email) return 'en';
+        if (!email || UserProfile.db?.readyState !== 1) return 'en';
         try {
             const profile = await UserProfile.findOne({ email: String(email).trim().toLowerCase() })
                 .select('preferredLanguage').lean();
