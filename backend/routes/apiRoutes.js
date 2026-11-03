@@ -138,77 +138,63 @@ router.get('/vendor/profile', async (req, res) => {
     }
 });
 
+const resolveTenantBranchScope = async (req) => {
+    const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+    const isPlatformAdmin = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+    const tenantId = String(isPlatformAdmin
+        ? (req.get('x-tenant-id') || req.query.tenantId || req.body?.tenantId || '')
+        : (req.user?.app_metadata?.tenantId || req.user?.tenantId || '')
+    ).trim();
+    if (!tenantId) return { error: [403, 'TENANT_CONTEXT_REQUIRED', 'An authenticated tenant context is required.'] };
+    let membership = null;
+    if (!isPlatformAdmin) {
+        membership = await TenantMembership.findOne({ userId: String(req.user?.sub || req.user?.id || ''), tenantId, status: 'ACTIVE' }).lean();
+        if (!membership) return { error: [403, 'TENANT_MEMBERSHIP_REQUIRED', 'An active membership for this pharmacy is required.'] };
+    }
+    const memberRole = String(membership?.role || role).toUpperCase();
+    return { tenantId, membership, isPlatformAdmin, canManage: isPlatformAdmin || ['TENANT_OWNER', 'TENANT_ADMIN'].includes(memberRole) };
+};
+
 router.get('/tenant/branches', authenticateUser, async (req, res) => {
     try {
-        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
-        const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
-        const authenticatedTenantId = String(
-            req.user?.tenantId || req.user?.app_metadata?.tenantId || ''
-        ).trim();
-        const tenantId = String(
-            isPlatformAdmin
-                ? (req.get('x-tenant-id') || req.query.tenantId || '')
-                : authenticatedTenantId
-        ).trim();
-
-        if (!tenantId) {
-            return res.status(403).json({
-                success: false,
-                code: 'TENANT_CONTEXT_REQUIRED',
-                message: 'An authenticated tenant context is required.'
-            });
-        }
-
-        let activeMembership = null;
-        if (!isPlatformAdmin) {
-            activeMembership = await TenantMembership.findOne({
-                userId: String(req.user?.sub || ''),
-                tenantId,
-                status: 'ACTIVE'
-            }).lean();
-            if (!activeMembership) {
-                return res.status(403).json({
-                    success: false,
-                    code: 'TENANT_MEMBERSHIP_REQUIRED',
-                    message: 'An active membership for this pharmacy is required.'
-                });
-            }
-        }
-
+        const scope = await resolveTenantBranchScope(req);
+        if (scope.error) return res.status(scope.error[0]).json({ success: false, code: scope.error[1], message: scope.error[2] });
         const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
         const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
-        const allBranches = await tenantService.getBranches(tenantId, { status: 'ACTIVE' });
-        const scopedBranches = isPlatformAdmin
-            ? allBranches
-            : (() => {
-                // Tenant-wide memberships (branchId=null) can see all branches;
-                // branch-scoped staff can only see their assigned branch.
-                return activeMembership?.branchId
-                    ? allBranches.filter(branch => String(branch.id || branch._id) === String(activeMembership.branchId))
-                    : allBranches;
-            })();
-        const total = scopedBranches.length;
-        const branches = scopedBranches.slice((page - 1) * limit, page * limit);
-        return res.json({
-            status: 'success',
-            branches,
-            pagination: {
-                page,
-                limit,
-                total,
-                totalPages: Math.ceil(total / limit)
-            }
-        });
+        const includePending = req.query.includePending === 'true' && scope.canManage;
+        const list = await tenantService.getBranches(scope.tenantId, includePending ? {} : { status: 'ACTIVE' });
+        const scoped = scope.isPlatformAdmin || !scope.membership?.branchId
+            ? list
+            : list.filter(branch => String(branch.id || branch._id) === String(scope.membership.branchId));
+        const total = scoped.length;
+        return res.json({ status: 'success', branches: scoped.slice((page - 1) * limit, page * limit), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
     } catch (err) {
-        console.error('[TenantBranches] Scoped branch lookup failed:', {
-            requestId: req.requestId || null,
-            code: err.code || err.name
-        });
-        return res.status(503).json({
-            success: false,
-            code: 'TENANT_BRANCH_REGISTRY_UNAVAILABLE',
-            message: 'Pharmacy branches are temporarily unavailable.'
-        });
+        console.error('[TenantBranches] Scoped branch lookup failed:', { requestId: req.requestId || null, code: err.code || err.name });
+        return res.status(503).json({ success: false, code: 'TENANT_BRANCH_REGISTRY_UNAVAILABLE', message: 'Pharmacy branches are temporarily unavailable.' });
+    }
+});
+
+router.post('/tenant/branches', authenticateUser, async (req, res) => {
+    try {
+        const scope = await resolveTenantBranchScope(req);
+        if (scope.error) return res.status(scope.error[0]).json({ success: false, code: scope.error[1], message: scope.error[2] });
+        if (!scope.canManage) return res.status(403).json({ success: false, code: 'BRANCH_MANAGEMENT_FORBIDDEN', message: 'Only a pharmacy owner or administrator can create branches.' });
+        const branch = await tenantService.createBranch(scope.tenantId, req.body || {}, req.context || req.user);
+        return res.status(201).json({ success: true, data: branch });
+    } catch (err) {
+        return res.status(err.statusCode || 500).json({ success: false, code: err.code || 'BRANCH_CREATE_FAILED', message: err.message || 'Branch could not be created.' });
+    }
+});
+
+router.post('/tenant/branches/:branchId/activate', authenticateUser, async (req, res) => {
+    try {
+        const scope = await resolveTenantBranchScope(req);
+        if (scope.error) return res.status(scope.error[0]).json({ success: false, code: scope.error[1], message: scope.error[2] });
+        if (!scope.canManage) return res.status(403).json({ success: false, code: 'BRANCH_MANAGEMENT_FORBIDDEN', message: 'Only a pharmacy owner or administrator can activate branches.' });
+        const branch = await tenantService.activateBranch(req.params.branchId, scope.tenantId, req.context || req.user);
+        return res.json({ success: true, data: branch });
+    } catch (err) {
+        return res.status(err.statusCode || 500).json({ success: false, code: err.code || 'BRANCH_ACTIVATION_FAILED', message: err.message || 'Branch could not be activated.' });
     }
 });
 
