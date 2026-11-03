@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useTenant } from '../context/TenantContext';
 import { useToast } from '../context/ToastContext';
+import { useLanguage } from '../context/LanguageContext';
 
 const CACHE_PREFIX = 'pharma_surplus_savings_v1:';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -29,6 +30,7 @@ const writeCampaignCache = (key, items) => {
 };
 
 export default function OfferZoneBanner() {
+  const { t } = useLanguage();
   const { addToCart } = useApp();
   const { user, loading: authLoading, isFullyAuthenticated } = useAuth();
   const { tenantId, activeTenant } = useTenant();
@@ -127,14 +129,14 @@ export default function OfferZoneBanner() {
   };
 
   return (
-    <section className="bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 rounded-2xl sm:rounded-3xl p-5 sm:p-7 text-white shadow-lg shadow-orange-500/20 space-y-4 my-6 relative overflow-hidden" aria-label="Exclusive Surplus Savings">
+    <section className="bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 rounded-2xl sm:rounded-3xl p-5 sm:p-7 text-white shadow-lg shadow-orange-500/20 space-y-4 my-6 relative overflow-hidden" aria-label={t("exclusiveSurplusSavings")}>
       <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/10 skew-x-12 pointer-events-none" />
       <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
           <span className="bg-white/20 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider backdrop-blur-md">
             Pharmacy-verified clearance offers
           </span>
-          <h2 className="text-base sm:text-xl font-black tracking-tight text-white mt-2">Exclusive Surplus Savings</h2>
+          <h2 className="text-base sm:text-xl font-black tracking-tight text-white mt-2">{t('exclusiveSurplusSavings')}</h2>
           <p className="text-xs text-amber-50 mt-1">
             {activeTenant?.shopName || activeTenant?.name || 'Selected pharmacy'} offers, applied again by the server at checkout
           </p>
@@ -152,10 +154,10 @@ export default function OfferZoneBanner() {
         )}
       </div>
 
-      {loading && <p className="relative z-10 text-xs font-semibold">{items.length ? 'Refreshing this pharmacy’s savings…' : 'Loading this pharmacy’s active savings…'}</p>}
+      {loading && <p className="relative z-10 text-xs font-semibold">{items.length ? t('refreshingPharmacySavings') : t('loadingPharmacySavings')}</p>}
       {loadError && <p role="alert" className="relative z-10 text-xs font-semibold">{loadError} {items.length > 0 ? 'Showing the last successfully loaded offers.' : ''}</p>}
       {!loading && !loadError && items.length === 0 && (
-        <p className="relative z-10 text-xs font-semibold">No active surplus campaigns at this pharmacy right now. This section will update automatically when the pharmacy publishes an offer.</p>
+        <p className="relative z-10 text-xs font-semibold">{t('noActiveSurplusCampaigns')}</p>
       )}
 
       <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pt-1">
