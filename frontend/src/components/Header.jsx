@@ -305,11 +305,11 @@ export default function Header({
               </button>
             )}
 
-            {/* Mobile / Universal Navigation Sandwich / Hamburger Menu Toggle */}
+            {/* Mobile / Small Screen Navigation Hamburger Menu Toggle */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center shrink-0"
+              className="md:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center shrink-0"
               aria-label={t('toggleMenu')}
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -326,7 +326,7 @@ export default function Header({
 
         {/* Slide-in Mobile Navigation Drawer from the Right */}
         {mobileMenuOpen && (
-          <div className="fixed inset-0 z-50 overflow-hidden animate-fade-in" aria-modal="true" role="dialog">
+          <div className="fixed inset-0 z-[9999] overflow-hidden animate-fade-in" aria-modal="true" role="dialog">
             {/* Backdrop */}
             <div
               onClick={() => setMobileMenuOpen(false)}
