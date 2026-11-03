@@ -14,7 +14,8 @@ export default function Header({
   onOpenCart,
   onOpenAuth,
   onOpenProfile,
-  onOpenAdminAlerts
+  onOpenAdminAlerts,
+  onToggleMobileMenu
 }) {
   const {
     user, isAdmin, isSuperAdmin, isTenantAdmin, canAccessOperations,
@@ -227,7 +228,11 @@ export default function Header({
             {/* Mobile / Small Screen Navigation Hamburger Menu Toggle */}
             <button
               type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              onClick={() => {
+                const nextState = !mobileMenuOpen;
+                setMobileMenuOpen(nextState);
+                onToggleMobileMenu?.(nextState);
+              }}
               className="md:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center shrink-0"
               aria-label={t('toggleMenu')}
             >

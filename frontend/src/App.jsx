@@ -374,6 +374,9 @@ function MainApp() {
         onOpenAdminAlerts={() => {
           if (canAccessOperations) setActiveTab('admin');
         }}
+        onToggleMobileMenu={(isOpen) => {
+          if (isOpen) setAuthOpen(false);
+        }}
       />
 
       {/* Main Content Area - Full width layout */}
