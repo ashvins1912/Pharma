@@ -15,6 +15,7 @@ const RELATIONSHIP_OPTIONS = [
 const emptyForm = { displayName: '', relationship: '', customRelationship: '', dateOfBirth: '', gender: '' };
 
 export default function RelativeProfiles({ user, onSelfPuid }) {
+  const { t } = useLanguage();
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
   const [people, setPeople] = useState([]);
