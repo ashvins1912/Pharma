@@ -118,26 +118,26 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
   const handlePlaceOrder = async () => {
     if (!tenantId) {
-      setErrorMsg('{t('selectPharmacyFirst')}');
-      addToast('{t('selectPharmacyContinue')}', 'warning');
+      setErrorMsg(t('selectPharmacyFirst'));
+      addToast(t('selectPharmacyContinue'), 'warning');
       return;
     }
     if (!selectedAddress) {
-      setErrorMsg("{t('selectDeliveryAddress')}");
+      setErrorMsg(t('selectDeliveryAddress'));
       addToast("Please select a delivery address", "warning");
       return;
     }
 
     if (cart.length === 0) {
-      setErrorMsg("{t('cartEmptyError')}");
+      setErrorMsg(t('cartEmptyError'));
       return;
     }
     if (prescriptionRequired && prescriptionChoice !== 'yes') {
-      setErrorMsg('{t('confirmPrescription')}');
+      setErrorMsg(t('confirmPrescription'));
       return;
     }
     if (prescriptionRequired && !prescriptionFile) {
-      setErrorMsg("{t('uploadPrescription')}");
+      setErrorMsg(t('uploadPrescription'));
       return;
     }
 
@@ -362,7 +362,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
           {restockError && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900" role="alert">
-              <p>{t('regularRestock')} list is temporarily unavailable.</p>
+              <p>{t('addressUnavailable')}</p>
               <button type="button" onClick={retryRestockItems} disabled={restockLoading} className="mt-2 font-bold underline disabled:opacity-50">{restockLoading ? 'Retrying...' : 'Try again'}</button>
             </div>
           )}
