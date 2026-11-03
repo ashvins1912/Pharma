@@ -760,6 +760,7 @@ const messages = {
     emailVerificationFailed: "Email Verification Failed",
     emailVerifiedMessage: "Your email address has been verified. You can now sign in to QuickMeds Rx.",
     continueSignIn: "Continue to Sign In",
+    request: "Request",
   hi: {
     store: "दुकान",
     orders: "ऑर्डर",
@@ -1510,6 +1511,7 @@ const messages = {
     emailVerificationFailed: "ईमेल सत्यापन विफल हुआ",
     emailVerifiedMessage: "आपका ईमेल सत्यापित हो गया है। अब QuickMeds Rx में लॉग इन करें।",
     continueSignIn: "लॉग इन जारी रखें",
+    request: "अनुरोध",
   kn: {
     store: "ಅಂಗಡಿ",
     orders: "ಆರ್ಡರ್‌ಗಳು",
@@ -2260,6 +2262,7 @@ const messages = {
     emailVerificationFailed: "ಇಮೇಲ್ ಪರಿಶೀಲನೆ ವಿಫಲವಾಗಿದೆ",
     emailVerifiedMessage: "ನಿಮ್ಮ ಇಮೇಲ್ ಪರಿಶೀಲಿಸಲಾಗಿದೆ. ಈಗ QuickMeds Rx ಗೆ ಲಾಗಿನ್ ಮಾಡಬಹುದು.",
     continueSignIn: "ಲಾಗಿನ್ ಮುಂದುವರಿಸಿ",
+    request: "ವಿನಂತಿ",
   bn: {
     store: "দোকান",
     orders: "অর্ডার",
@@ -3010,6 +3013,7 @@ const messages = {
     emailVerificationFailed: "ইমেল যাচাইকরণ ব্যর্থ হয়েছে",
     emailVerifiedMessage: "আপনার ইমেল যাচাই হয়েছে। এখন QuickMeds Rx-এ সাইন ইন করতে পারেন।",
     continueSignIn: "সাইন ইন চালিয়ে যান",
+    request: "অনুরোধ",
   te: {
     store: "స్టోర్",
     orders: "ఆర్డర్లు",
@@ -3758,6 +3762,7 @@ const messages = {
     emailVerificationFailed: "ఇమెయిల్ ధృవీకరణ విఫలమైంది",
     emailVerifiedMessage: "మీ ఇమెయిల్ ధృవీకరించబడింది. ఇప్పుడు QuickMeds Rxలో సైన్ ఇన్ చేయవచ్చు.",
     continueSignIn: "సైన్ ఇన్ కొనసాగించండి",
+    request: "అభ్యర్థన",
 
   }
 };
