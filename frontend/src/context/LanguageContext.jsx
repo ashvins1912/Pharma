@@ -95,6 +95,14 @@ const messages = {
     freePromo: "FREE (Dispensary Promo)",
     finalTotal: "Final Total",
 
+    cancel: "Cancel",
+    track: "Track",
+    cancelOrderConfirm: "Cancel this order? Reserved stock will be released.",
+    orderCancelled: "Order cancelled and stock released.",
+    couldNotCancel: "Could not cancel this order.",
+    couldNotTrack: "Could not load the latest order tracking status.",
+    outForDelivery: "Out for Delivery",
+
   },
   hi: {
     store: 'दुकान', orders: 'ऑर्डर', requests: 'अनुरोध', addresses: 'पते',
@@ -182,6 +190,14 @@ const messages = {
     deliveryCharge: "डिलीवरी शुल्क",
     freePromo: "मुफ़्त (डिस्पेंसरी ऑफ़र)",
     finalTotal: "अंतिम कुल",
+
+    cancel: "रद्द करें",
+    track: "ट्रैक करें",
+    cancelOrderConfirm: "क्या यह ऑर्डर रद्द करें? आरक्षित स्टॉक रिलीज़ कर दिया जाएगा।",
+    orderCancelled: "ऑर्डर रद्द हुआ और स्टॉक रिलीज़ किया गया।",
+    couldNotCancel: "यह ऑर्डर रद्द नहीं हो सका।",
+    couldNotTrack: "ऑर्डर की नवीनतम ट्रैकिंग स्थिति लोड नहीं हो सकी।",
+    outForDelivery: "डिलीवरी के लिए निकला",
 
   },
   kn: {
@@ -271,6 +287,14 @@ const messages = {
     freePromo: "ಉಚಿತ (ಡಿಸ್ಪೆನ್ಸರಿ ಆಫರ್)",
     finalTotal: "ಅಂತಿಮ ಮೊತ್ತ",
 
+    cancel: "ರದ್ದುಮಾಡಿ",
+    track: "ಟ್ರ್ಯಾಕ್ ಮಾಡಿ",
+    cancelOrderConfirm: "ಈ ಆರ್ಡರ್ ರದ್ದುಗೊಳಿಸಬೇಕೇ? ಕಾಯ್ದಿರಿಸಿದ ಸ್ಟಾಕ್ ಬಿಡುಗಡೆ ಆಗುತ್ತದೆ.",
+    orderCancelled: "ಆರ್ಡರ್ ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ ಮತ್ತು ಸ್ಟಾಕ್ ಬಿಡುಗಡೆ ಮಾಡಲಾಗಿದೆ.",
+    couldNotCancel: "ಈ ಆರ್ಡರ್ ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.",
+    couldNotTrack: "ಇತ್ತೀಚಿನ ಆರ್ಡರ್ ಟ್ರ್ಯಾಕಿಂಗ್ ಸ್ಥಿತಿಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.",
+    outForDelivery: "ವಿತರಣೆಗೆ ಹೊರಟಿದೆ",
+
   },
   bn: {
     store: 'দোকান', orders: 'অর্ডার', requests: 'অনুরোধ', addresses: 'ঠিকানা',
@@ -358,6 +382,14 @@ const messages = {
     deliveryCharge: "ডেলিভারি চার্জ",
     freePromo: "বিনামূল্যে (ডিসপেনসারি অফার)",
     finalTotal: "সর্বমোট",
+
+    cancel: "বাতিল করুন",
+    track: "ট্র্যাক করুন",
+    cancelOrderConfirm: "এই অর্ডার বাতিল করবেন? সংরক্ষিত স্টক ছেড়ে দেওয়া হবে।",
+    orderCancelled: "অর্ডার বাতিল হয়েছে এবং স্টক ছেড়ে দেওয়া হয়েছে।",
+    couldNotCancel: "এই অর্ডার বাতিল করা যায়নি।",
+    couldNotTrack: "অর্ডারের সর্বশেষ ট্র্যাকিং অবস্থা লোড করা যায়নি।",
+    outForDelivery: "ডেলিভারির পথে",
 
   },
   te: {
@@ -463,6 +495,14 @@ export function LanguageProvider({ children }) {
     deliveryCharge: "డెలివరీ ఛార్జీ",
     freePromo: "ఉచితం (డిస్పెన్సరీ ఆఫర్)",
     finalTotal: "చివరి మొత్తం",
+
+    cancel: "రద్దు చేయండి",
+    track: "ట్రాక్ చేయండి",
+    cancelOrderConfirm: "ఈ ఆర్డర్‌ను రద్దు చేయాలా? రిజర్వ్ చేసిన స్టాక్ విడుదల అవుతుంది.",
+    orderCancelled: "ఆర్డర్ రద్దు చేయబడింది మరియు స్టాక్ విడుదల చేయబడింది.",
+    couldNotCancel: "ఈ ఆర్డర్‌ను రద్దు చేయలేకపోయాం.",
+    couldNotTrack: "తాజా ఆర్డర్ ట్రాకింగ్ స్థితిని లోడ్ చేయలేకపోయాం.",
+    outForDelivery: "డెలివరీకి బయలుదేరింది",
 
   }, []);
 
