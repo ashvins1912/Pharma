@@ -15,6 +15,7 @@ import versionedOrderRoutes from './versionedOrderRoutes.js';
 import adminRoutes from './adminRoutes.js';
 import { authenticateUser } from '../middleware/auth.js';
 import TenantMembership from '../models/TenantMembership.js';
+import tenantService from '../services/tenant-service/TenantService.js';
 import UserProfile from '../models/UserProfile.js';
 import riderRoutes from '../modules/delivery/routes/riderRoutes.js';
 import assignmentRoutes from '../modules/delivery/routes/assignmentRoutes.js';
@@ -137,22 +138,77 @@ router.get('/vendor/profile', async (req, res) => {
     }
 });
 
-router.get('/tenant/branches', async (req, res) => {
+router.get('/tenant/branches', authenticateUser, async (req, res) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
-        const branches = [
-            { id: 'branch-1', name: 'Downtown Flagship Dispensary', status: 'ACTIVE', location: '123 Main Street, San Francisco, CA', serviceRadiusKm: 12, minimumOrderValue: 150 },
-            { id: 'branch-2', name: 'Northside Express Hub', status: 'ACTIVE', location: '456 Health Ave, San Francisco, CA', serviceRadiusKm: 15, minimumOrderValue: 200 },
-            { id: 'branch-3', name: 'Westend Wellness Depot', status: 'MAINTENANCE', location: '789 Care Blvd, San Francisco, CA', serviceRadiusKm: 10, minimumOrderValue: 100 }
-        ];
-        res.json({
+        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+        const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const authenticatedTenantId = String(
+            req.user?.tenantId || req.user?.app_metadata?.tenantId || ''
+        ).trim();
+        const tenantId = String(
+            isPlatformAdmin
+                ? (req.get('x-tenant-id') || req.query.tenantId || '')
+                : authenticatedTenantId
+        ).trim();
+
+        if (!tenantId) {
+            return res.status(403).json({
+                success: false,
+                code: 'TENANT_CONTEXT_REQUIRED',
+                message: 'An authenticated tenant context is required.'
+            });
+        }
+
+        if (!isPlatformAdmin) {
+            const membership = await TenantMembership.findOne({
+                userId: String(req.user?.sub || ''),
+                tenantId,
+                status: 'ACTIVE'
+            }).lean();
+            if (!membership) {
+                return res.status(403).json({
+                    success: false,
+                    code: 'TENANT_MEMBERSHIP_REQUIRED',
+                    message: 'An active membership for this pharmacy is required.'
+                });
+            }
+        }
+
+        const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
+        const allBranches = await tenantService.getBranches(tenantId, { status: 'ACTIVE' });
+        const scopedBranches = isPlatformAdmin
+            ? allBranches
+            : (() => {
+                // Tenant-wide memberships (branchId=null) can see all branches;
+                // branch-scoped staff can only see their assigned branch.
+                return allBranches.filter(branch =>
+                    !req.user?.branchId && !req.user?.app_metadata?.branchId
+                    || String(branch.id || branch._id) === String(req.user?.branchId || req.user?.app_metadata?.branchId)
+                );
+            })();
+        const total = scopedBranches.length;
+        const branches = scopedBranches.slice((page - 1) * limit, page * limit);
+        return res.json({
             status: 'success',
             branches,
-            pagination: { page, limit, total: branches.length, totalPages: 1 }
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit)
+            }
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('[TenantBranches] Scoped branch lookup failed:', {
+            requestId: req.requestId || null,
+            code: err.code || err.name
+        });
+        return res.status(503).json({
+            success: false,
+            code: 'TENANT_BRANCH_REGISTRY_UNAVAILABLE',
+            message: 'Pharmacy branches are temporarily unavailable.'
+        });
     }
 });
 
