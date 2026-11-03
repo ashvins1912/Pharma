@@ -763,6 +763,8 @@ const messages = {
     request: "Request",
     fatherInLaw: "Father-in-law",
     motherInLaw: "Mother-in-law",
+    addRelative: "Add Relative",
+    removeRelativeConfirm: "Remove {name} from your relative profiles?",
   hi: {
     store: "दुकान",
     orders: "ऑर्डर",
@@ -1516,6 +1518,8 @@ const messages = {
     request: "अनुरोध",
     fatherInLaw: "ससुर",
     motherInLaw: "सास",
+    addRelative: "रिश्तेदार जोड़ें",
+    removeRelativeConfirm: "क्या {name} को आपकी रिश्तेदार प्रोफ़ाइल से हटाएँ?",
   kn: {
     store: "ಅಂಗಡಿ",
     orders: "ಆರ್ಡರ್‌ಗಳು",
@@ -2269,6 +2273,8 @@ const messages = {
     request: "ವಿನಂತಿ",
     fatherInLaw: "ಮಾವ",
     motherInLaw: "ಅತ್ತೆ",
+    addRelative: "ಸಂಬಂಧಿಕರನ್ನು ಸೇರಿಸಿ",
+    removeRelativeConfirm: "ನಿಮ್ಮ ಸಂಬಂಧಿಕರ ಪ್ರೊಫೈಲ್‌ನಿಂದ {name} ಅವರನ್ನು ತೆಗೆದುಹಾಕಬೇಕೇ?",
   bn: {
     store: "দোকান",
     orders: "অর্ডার",
@@ -3022,6 +3028,8 @@ const messages = {
     request: "অনুরোধ",
     fatherInLaw: "শ্বশুর",
     motherInLaw: "শাশুড়ি",
+    addRelative: "আত্মীয় যোগ করুন",
+    removeRelativeConfirm: "আপনার আত্মীয়ের প্রোফাইল থেকে {name}-কে সরাবেন?",
   te: {
     store: "స్టోర్",
     orders: "ఆర్డర్లు",
@@ -3773,6 +3781,8 @@ const messages = {
     request: "అభ్యర్థన",
     fatherInLaw: "మామగారు",
     motherInLaw: "అత్తగారు",
+    addRelative: "బంధువును జోడించండి",
+    removeRelativeConfirm: "మీ బంధువుల ప్రొఫైల్‌ల నుండి {name}ను తొలగించాలా?",
 
   }
 };
