@@ -202,7 +202,6 @@ const messages = {
     expired: "expired",
     whatsappConnected: "WhatsApp: Connected",
     whatsappOfflineStatus: "WhatsApp: Offline",
-  },
     checkoutStep: "Step 3 of 3: Confirm address & place Cash on Delivery order",
     fulfillmentPharmacy: "Fulfillment pharmacy",
     orderRoutedOnly: "This order and its notifications will be routed only to this pharmacy.",
@@ -960,6 +959,7 @@ const messages = {
     proceedCheckout: "Proceed to Checkout",
     pharmaDiscountForYou: "Pharma discount for you",
     createCampaign: "Create a campaign",
+  },
   hi: {
     store: "दुकान",
     orders: "ऑर्डर",
@@ -1152,7 +1152,6 @@ const messages = {
     expired: "समाप्त",
     whatsappConnected: "WhatsApp: जुड़ा हुआ",
     whatsappOfflineStatus: "WhatsApp: ऑफ़लाइन",
-  },
     checkoutStep: "चरण 3/3: पता पुष्टि करें और कैश ऑन डिलीवरी ऑर्डर दें",
     fulfillmentPharmacy: "ऑर्डर पूरा करने वाली फ़ार्मेसी",
     orderRoutedOnly: "यह ऑर्डर और इसकी सूचनाएँ केवल इसी फ़ार्मेसी को भेजी जाएँगी।",
@@ -1910,6 +1909,7 @@ const messages = {
     proceedCheckout: "चेकआउट पर जाएँ",
     pharmaDiscountForYou: "आपके लिए फ़ार्मेसी छूट",
     createCampaign: "अभियान बनाएँ",
+  },
   kn: {
     store: "ಅಂಗಡಿ",
     orders: "ಆರ್ಡರ್‌ಗಳು",
@@ -2102,7 +2102,6 @@ const messages = {
     expired: "ಅವಧಿ ಮುಗಿದಿದೆ",
     whatsappConnected: "WhatsApp: ಸಂಪರ್ಕಗೊಂಡಿದೆ",
     whatsappOfflineStatus: "WhatsApp: ಆಫ್‌ಲೈನ್",
-  },
     checkoutStep: "ಹಂತ 3/3: ವಿಳಾಸ ದೃಢೀಕರಿಸಿ ಮತ್ತು ಕ್ಯಾಶ್ ಆನ್ ಡೆಲಿವರಿ ಆರ್ಡರ್ ಮಾಡಿ",
     fulfillmentPharmacy: "ಆರ್ಡರ್ ಪೂರೈಸುವ ಔಷಧಾಲಯ",
     orderRoutedOnly: "ಈ ಆರ್ಡರ್ ಮತ್ತು ಅದರ ಅಧಿಸೂಚನೆಗಳು ಈ ಔಷಧಾಲಯಕ್ಕೆ ಮಾತ್ರ ಕಳುಹಿಸಲಾಗುತ್ತದೆ.",
@@ -2860,6 +2859,7 @@ const messages = {
     proceedCheckout: "ಚೆಕ್‌ಔಟ್‌ಗೆ ಮುಂದುವರಿಯಿರಿ",
     pharmaDiscountForYou: "ನಿಮಗಾಗಿ ಫಾರ್ಮಸಿ ರಿಯಾಯಿತಿ",
     createCampaign: "ಅಭಿಯಾನ ರಚಿಸಿ",
+  },
   bn: {
     store: "দোকান",
     orders: "অর্ডার",
@@ -3052,7 +3052,6 @@ const messages = {
     expired: "মেয়াদোত্তীর্ণ",
     whatsappConnected: "WhatsApp: সংযুক্ত",
     whatsappOfflineStatus: "WhatsApp: অফলাইন",
-  },
     checkoutStep: "ধাপ ৩/৩: ঠিকানা নিশ্চিত করুন এবং ক্যাশ অন ডেলিভারি অর্ডার দিন",
     fulfillmentPharmacy: "অর্ডার পূরণকারী ফার্মেসি",
     orderRoutedOnly: "এই অর্ডার ও এর বিজ্ঞপ্তি শুধুমাত্র এই ফার্মেসিতেই পাঠানো হবে।",
@@ -3810,6 +3809,7 @@ const messages = {
     proceedCheckout: "চেকআউটে এগিয়ে যান",
     pharmaDiscountForYou: "আপনার জন্য ফার্মেসি ছাড়",
     createCampaign: "প্রচার তৈরি করুন",
+  },
   te: {
     store: "స్టోర్",
     orders: "ఆర్డర్లు",
