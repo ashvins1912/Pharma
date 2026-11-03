@@ -737,6 +737,7 @@ const messages = {
     companyName: "Company Name",
     mapLocationRequired: "Map location required for nearby discovery",
     captureCoordinates: "Capture coordinates while at the pharmacy, or enter the pharmacy's map coordinates manually.",
+    viewAllOrdersDeliveries: "View All Orders & Deliveries →",
   hi: {
     store: "दुकान",
     orders: "ऑर्डर",
@@ -1464,6 +1465,7 @@ const messages = {
     companyName: "कंपनी का नाम",
     mapLocationRequired: "नज़दीकी खोज के लिए मैप लोकेशन आवश्यक है",
     captureCoordinates: "फ़ार्मेसी पर रहते हुए निर्देशांक लें या मैप निर्देशांक स्वयं दर्ज करें।",
+    viewAllOrdersDeliveries: "सभी ऑर्डर और डिलीवरी देखें →",
   kn: {
     store: "ಅಂಗಡಿ",
     orders: "ಆರ್ಡರ್‌ಗಳು",
@@ -2191,6 +2193,7 @@ const messages = {
     companyName: "ಕಂಪನಿ ಹೆಸರು",
     mapLocationRequired: "ಹತ್ತಿರದ ಹುಡುಕಾಟಕ್ಕೆ ನಕ್ಷೆಯ ಸ್ಥಳ ಅಗತ್ಯವಿದೆ",
     captureCoordinates: "ಔಷಧಾಲಯದಲ್ಲಿರುವಾಗ ನಿರ್ದೇಶಾಂಕಗಳನ್ನು ಪಡೆಯಿರಿ ಅಥವಾ ನಕ್ಷೆಯ ನಿರ್ದೇಶಾಂಕಗಳನ್ನು ನಮೂದಿಸಿ.",
+    viewAllOrdersDeliveries: "ಎಲ್ಲಾ ಆರ್ಡರ್‌ಗಳು ಮತ್ತು ವಿತರಣೆಗಳನ್ನು ವೀಕ್ಷಿಸಿ →",
   bn: {
     store: "দোকান",
     orders: "অর্ডার",
@@ -2918,6 +2921,7 @@ const messages = {
     companyName: "কোম্পানির নাম",
     mapLocationRequired: "কাছাকাছি খোঁজার জন্য মানচিত্রের অবস্থান প্রয়োজন",
     captureCoordinates: "ফার্মেসিতে থাকাকালীন স্থানাঙ্ক নিন অথবা মানচিত্রের স্থানাঙ্ক লিখুন।",
+    viewAllOrdersDeliveries: "সব অর্ডার ও ডেলিভারি দেখুন →",
   te: {
     store: "స్టోర్",
     orders: "ఆర్డర్లు",
@@ -3643,6 +3647,7 @@ const messages = {
     companyName: "కంపెనీ పేరు",
     mapLocationRequired: "సమీప శోధనకు మ్యాప్ స్థానం అవసరం",
     captureCoordinates: "ఫార్మసీ వద్ద ఉన్నప్పుడు కోఆర్డినేట్‌లు పొందండి లేదా మ్యాప్ కోఆర్డినేట్‌లను నమోదు చేయండి.",
+    viewAllOrdersDeliveries: "అన్ని ఆర్డర్‌లు & డెలివరీలను చూడండి →",
 
   }
 };
