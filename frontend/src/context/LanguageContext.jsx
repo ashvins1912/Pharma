@@ -958,6 +958,8 @@ const messages = {
     ofLabel: "of",
     tryCouponCodes: "Try: FREEMED20 or WELCOME10",
     proceedCheckout: "Proceed to Checkout",
+    pharmaDiscountForYou: "Pharma discount for you",
+    createCampaign: "Create a campaign",
   hi: {
     store: "दुकान",
     orders: "ऑर्डर",
@@ -1906,6 +1908,8 @@ const messages = {
     ofLabel: "में से",
     tryCouponCodes: "कोशिश करें: FREEMED20 या WELCOME10",
     proceedCheckout: "चेकआउट पर जाएँ",
+    pharmaDiscountForYou: "आपके लिए फ़ार्मेसी छूट",
+    createCampaign: "अभियान बनाएँ",
   kn: {
     store: "ಅಂಗಡಿ",
     orders: "ಆರ್ಡರ್‌ಗಳು",
@@ -2854,6 +2858,8 @@ const messages = {
     ofLabel: "ರಲ್ಲಿ",
     tryCouponCodes: "ಪ್ರಯತ್ನಿಸಿ: FREEMED20 ಅಥವಾ WELCOME10",
     proceedCheckout: "ಚೆಕ್‌ಔಟ್‌ಗೆ ಮುಂದುವರಿಯಿರಿ",
+    pharmaDiscountForYou: "ನಿಮಗಾಗಿ ಫಾರ್ಮಸಿ ರಿಯಾಯಿತಿ",
+    createCampaign: "ಅಭಿಯಾನ ರಚಿಸಿ",
   bn: {
     store: "দোকান",
     orders: "অর্ডার",
@@ -3802,6 +3808,8 @@ const messages = {
     ofLabel: "এর মধ্যে",
     tryCouponCodes: "চেষ্টা করুন: FREEMED20 বা WELCOME10",
     proceedCheckout: "চেকআউটে এগিয়ে যান",
+    pharmaDiscountForYou: "আপনার জন্য ফার্মেসি ছাড়",
+    createCampaign: "প্রচার তৈরি করুন",
   te: {
     store: "స్టోర్",
     orders: "ఆర్డర్లు",
@@ -4751,6 +4759,8 @@ tenantInfrastructure: "టెనెంట్ మౌలిక సదుపాయ�
     ofLabel: "లో",
     tryCouponCodes: "ప్రయత్నించండి: FREEMED20 లేదా WELCOME10",
     proceedCheckout: "చెక్‌అవుట్‌కు కొనసాగండి",
+    pharmaDiscountForYou: "మీ కోసం ఫార్మసీ తగ్గింపు",
+    createCampaign: "ప్రచారాన్ని సృష్టించండి",
 
 };
 
