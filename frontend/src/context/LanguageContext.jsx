@@ -853,6 +853,9 @@ const messages = {
     targetPharmacy: "Target pharmacy",
     tenantIdLabel: "Tenant ID",
     branchIdOptional: "Branch ID (optional)",
+    prescriptionRequired: "Prescription required",
+    prescriptionAttached: "Prescription attached",
+    viewPrescriptionReview: "View prescription & review",
   },
   hi: {
     store: "दुकान",
@@ -1697,6 +1700,9 @@ const messages = {
     targetPharmacy: "लक्षित फ़ार्मेसी",
     tenantIdLabel: "टेनेंट आईडी",
     branchIdOptional: "ब्रांच आईडी (वैकल्पिक)",
+    prescriptionRequired: "प्रिस्क्रिप्शन आवश्यक है",
+    prescriptionAttached: "प्रिस्क्रिप्शन संलग्न है",
+    viewPrescriptionReview: "प्रिस्क्रिप्शन देखें और समीक्षा करें",
   },
   kn: {
     store: "ಅಂಗಡಿ",
@@ -2541,6 +2547,9 @@ const messages = {
     targetPharmacy: "ಗುರಿ ಫಾರ್ಮಸಿ",
     tenantIdLabel: "ಟೆನಂಟ್ ಐಡಿ",
     branchIdOptional: "ಶಾಖೆ ಐಡಿ (ಐಚ್ಛಿಕ)",
+    prescriptionRequired: "ಪ್ರಿಸ್ಕ್ರಿಪ್ಷನ್ ಅಗತ್ಯವಿದೆ",
+    prescriptionAttached: "ಪ್ರಿಸ್ಕ್ರಿಪ್ಷನ್ ಲಗತ್ತಿಸಲಾಗಿದೆ",
+    viewPrescriptionReview: "ಪ್ರಿಸ್ಕ್ರಿಪ್ಷನ್ ನೋಡಿ ಮತ್ತು ಪರಿಶೀಲಿಸಿ",
   },
   bn: {
     store: "দোকান",
@@ -3385,6 +3394,9 @@ const messages = {
     targetPharmacy: "লক্ষ্য ফার্মেসি",
     tenantIdLabel: "টেন্যান্ট আইডি",
     branchIdOptional: "শাখা আইডি (ঐচ্ছিক)",
+    prescriptionRequired: "প্রেসক্রিপশন প্রয়োজন",
+    prescriptionAttached: "প্রেসক্রিপশন সংযুক্ত",
+    viewPrescriptionReview: "প্রেসক্রিপশন দেখুন ও পর্যালোচনা করুন",
   },
   te: {
     store: "స్టోర్",
@@ -4275,3 +4287,6 @@ export function useLanguage() {
     targetPharmacy: "లక్ష్య ఫార్మసీ",
     tenantIdLabel: "టెనెంట్ ఐడి",
     branchIdOptional: "బ్రాంచ్ ఐడి (ఐచ్ఛికం)",
+    prescriptionRequired: "ప్రిస్క్రిప్షన్ అవసరం",
+    prescriptionAttached: "ప్రిస్క్రిప్షన్ జతచేయబడింది",
+    viewPrescriptionReview: "ప్రిస్క్రిప్షన్‌ను వీక్షించి సమీక్షించండి",
