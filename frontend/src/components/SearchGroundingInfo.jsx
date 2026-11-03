@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api/apiClient';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function SearchGroundingInfo({ searchQuery }) {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -52,7 +54,7 @@ export default function SearchGroundingInfo({ searchQuery }) {
           </span>
           <div>
             <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-              <span>Real-Time Medical Grounding &amp; Availability</span>
+              <span>{t('realTimeMedicalGrounding')}</span>
               <span className="text-[9px] font-black uppercase bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full">
                 Google Search AI
               </span>
@@ -68,7 +70,7 @@ export default function SearchGroundingInfo({ searchQuery }) {
           onClick={() => setExpanded(!expanded)}
           className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline px-2 py-1"
         >
-          {expanded ? 'Hide Details ▲' : 'Show Details ▼'}
+          {expanded ? `${t('hideDetails')} ▲` : `${t('showDetails')} ▼`}
         </button>
       </div>
 

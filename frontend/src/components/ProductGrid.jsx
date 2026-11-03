@@ -193,7 +193,7 @@ export default function ProductGrid() {
           className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer flex-shrink-0 shadow-xs flex items-center gap-1.5"
         >
           <span>+</span>
-          <span>Request Any Medicine</span>
+          <span>{t('requestAnyMedicine')}</span>
         </button>
       </div>
     </div>

@@ -216,7 +216,7 @@ export default function TenantOnboardingView({ onSuccess }) {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">City *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('city')} *</label>
                 <input
                   type="text"
                   name="city"
@@ -228,7 +228,7 @@ export default function TenantOnboardingView({ onSuccess }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">State *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('state')} *</label>
                 <input
                   type="text"
                   name="state"
@@ -240,7 +240,7 @@ export default function TenantOnboardingView({ onSuccess }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Zip Code *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('zipCode')} *</label>
                 <input
                   type="text"
                   name="zipCode"
@@ -337,7 +337,7 @@ export default function TenantOnboardingView({ onSuccess }) {
                     required
                     value={formData.ownerName}
                     onChange={handleChange}
-                    placeholder="Full Name"
+                    placeholder={t('fullName')}
                     className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
                   />
                 </div>

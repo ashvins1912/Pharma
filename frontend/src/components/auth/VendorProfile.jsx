@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../api/apiClient';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function VendorProfile() {
+  const { t } = useLanguage();
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -27,7 +29,7 @@ export default function VendorProfile() {
     return (
       <div className="max-w-4xl mx-auto p-12 text-center">
         <div className="inline-block w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-gray-500 dark:text-gray-400 font-medium">Aggregating vendor profile and personnel records...</p>
+        <p className="text-gray-500 dark:text-gray-400 font-medium">{t('aggregatingVendorProfile')}</p>
       </div>
     );
   }
@@ -35,7 +37,7 @@ export default function VendorProfile() {
   if (error) {
     return (
       <div className="max-w-4xl mx-auto p-8 my-8 bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-red-100 dark:border-red-900/50 text-center">
-        <div className="text-red-500 font-semibold mb-2">Unable to Load Vendor Profile</div>
+        <div className="text-red-500 font-semibold mb-2">{t('unableLoadVendorProfile')}</div>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{error}</p>
         <button
           onClick={fetchProfile}
@@ -78,7 +80,7 @@ export default function VendorProfile() {
         <div className="p-6 md:p-8 grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Card 1: Address */}
           <div className="p-5 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-2">Physical Address</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-2">{t('physicalAddress')}</h3>
             <p className="text-sm text-gray-800 dark:text-gray-200 font-medium">{tenant?.address?.street}</p>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
               {tenant?.address?.city}, {tenant?.address?.state} {tenant?.address?.zipCode}
@@ -87,7 +89,7 @@ export default function VendorProfile() {
 
           {/* Card 2: Geo-Location */}
           <div className="p-5 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-2">GeoJSON Coordinates</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-2">{t('geoJsonCoordinates')}</h3>
             <p className="text-sm text-gray-800 dark:text-gray-200 font-medium">Longitude: {tenant?.geoLocation?.coordinates?.[0]}</p>
             <p className="text-sm text-gray-800 dark:text-gray-200 font-medium">Latitude: {tenant?.geoLocation?.coordinates?.[1]}</p>
             <span className="text-xs text-emerald-600 dark:text-emerald-400 mt-2 inline-block font-semibold">2dsphere Proximity Index Active</span>
@@ -95,7 +97,7 @@ export default function VendorProfile() {
 
           {/* Card 3: Owner Details */}
           <div className="p-5 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-2">Shop Owner</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-2">{t('shopOwner')}</h3>
             <p className="text-sm text-gray-800 dark:text-gray-200 font-semibold">{tenant?.ownerDetails?.name}</p>
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{tenant?.ownerDetails?.email}</p>
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{tenant?.ownerDetails?.phone}</p>
@@ -107,7 +109,7 @@ export default function VendorProfile() {
       <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 p-6 md:p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Administrative Personnel Directory</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t('administrativePersonnelDirectory')}</h2>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               Scoped management accounts. Sensitive properties (such as passwordHash) are filtered out via frontend security logic.
             </p>
@@ -121,10 +123,10 @@ export default function VendorProfile() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-gray-100 dark:border-gray-800 text-xs font-bold uppercase tracking-wider text-gray-400">
-                <th className="py-3 px-4">Name</th>
-                <th className="py-3 px-4">Email</th>
-                <th className="py-3 px-4">Role</th>
-                <th className="py-3 px-4">Account ID</th>
+                <th className="py-3 px-4">{t('nameLabel')}</th>
+                <th className="py-3 px-4">{t('emailLabel')}</th>
+                <th className="py-3 px-4">{t('roleLabel')}</th>
+                <th className="py-3 px-4">{t('accountId')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60 text-sm">

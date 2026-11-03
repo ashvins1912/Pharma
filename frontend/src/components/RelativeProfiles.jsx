@@ -171,7 +171,7 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={() => setOpenForm(true)} disabled={busy} className="flex-1 rounded-lg bg-white px-3 py-2 text-xs font-black text-blue-700">{t('edit')}</button>
             <button type="button" onClick={removeRelative} disabled={busy} className="flex-1 rounded-lg bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 disabled:opacity-60">
-              {isActionLoading(LOADING_ACTIONS.REMOVE_RELATIVE) ? 'Removing...' : 'Remove'}
+              {isActionLoading(LOADING_ACTIONS.REMOVE_RELATIVE) ? t('removing') : t('removeRelative')}
             </button>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../api/apiClient';
 import { useTenant } from '../../context/TenantContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // Earth radius in km
@@ -15,6 +16,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 export default function TenantSelector({ onTenantSelected }) {
+  const { t } = useLanguage();
   const { tenantId, activeTenant, setActiveTenant, setTenantId } = useTenant();
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -128,8 +130,8 @@ export default function TenantSelector({ onTenantSelected }) {
     <div className="bg-white dark:bg-gray-900 rounded-3xl p-6 shadow-xl border border-gray-100 dark:border-gray-800 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Geolocation Proximity Engine</span>
-          <h3 className="text-lg font-black text-gray-900 dark:text-white mt-0.5">Select Active Pharmacy Dispensary</h3>
+          <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">{t('geolocationProximityEngine')}</span>
+          <h3 className="text-lg font-black text-gray-900 dark:text-white mt-0.5">{t('selectActivePharmacy')}</h3>
         </div>
         <span className="text-xs px-3 py-1 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 font-bold rounded-full">
           {filteredTenants.length} Available
@@ -142,7 +144,7 @@ export default function TenantSelector({ onTenantSelected }) {
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search dispensary by shop name, street, or city..."
+          placeholder={t('searchDispensary')}
           className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
         />
         <svg className="w-4 h-4 text-gray-400 absolute left-3.5 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -93,7 +93,10 @@ function MainApp() {
     if (['en', 'hi', 'kn', 'bn', 'te'].includes(preferredLanguage) && preferredLanguage !== language) {
       setLanguage(preferredLanguage);
     }
-  }, [user?.preferredLanguage, language, setLanguage]);
+    // Apply the account preference when the account/profile preference changes,
+    // not on every local language change. This prevents stale profile data
+    // from immediately reverting a user's manual language selection.
+  }, [user?.id, user?.preferredLanguage, setLanguage]);
 
   // Tab State: 'store' | 'orders' | 'requests' | 'addresses' | 'admin'
   const [activeTab, setActiveTab] = useState('store');

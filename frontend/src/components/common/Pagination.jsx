@@ -1,4 +1,5 @@
 import React from 'react';
+import { useLanguage } from '../../context/LanguageContext';
 
 const getPages = (page, totalPages) => {
   const total = Math.max(1, Number(totalPages) || 1);
@@ -19,6 +20,7 @@ export default function Pagination({
   label = 'records',
   className = ''
 }) {
+  const { t } = useLanguage();
   const pages = getPages(page, totalPages);
   if (Number(total) <= Number(pageSize) || Number(totalPages) <= 1) return null;
 
@@ -35,12 +37,12 @@ export default function Pagination({
   return (
     <nav className={`flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between ${className}`} aria-label={`${label} pagination`}>
       <span className="text-[10px] font-semibold text-slate-500">
-        {first}–{last} of {total} {label}
+        {first}–{last} {t('ofLabel')} {total} {label}
       </span>
-      <div className="flex items-center gap-1" role="group" aria-label="Pagination controls">
+      <div className="flex items-center gap-1" role="group" aria-label={t("paginationControls")}>
         <button type="button" onClick={() => go(current - 1)} disabled={current <= 1 || loading}
           className="h-7 min-w-7 rounded-lg border border-slate-200 bg-white px-2 text-[10px] font-black text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-35"
-          aria-label="Previous page">‹</button>
+          aria-label={t("previousPage")}>‹</button>
         {pages.map((item, index) => item === 'ellipsis-left' || item === 'ellipsis-right'
           ? <span key={item} className="flex h-7 min-w-5 items-center justify-center text-[10px] font-bold text-slate-400">…</span>
           : <button key={item} type="button" onClick={() => go(item)} disabled={loading}
@@ -53,7 +55,7 @@ export default function Pagination({
         )}
         <button type="button" onClick={() => go(current + 1)} disabled={current >= totalPageCount || loading}
           className="h-7 min-w-7 rounded-lg border border-slate-200 bg-white px-2 text-[10px] font-black text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-35"
-          aria-label="Next page">›</button>
+          aria-label={t("nextPage")}>›</button>
       </div>
     </nav>
   );

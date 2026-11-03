@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../api/apiClient';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function TenantRegistry() {
+  const { t } = useLanguage();
   const [branchesData, setBranchesData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -28,8 +30,8 @@ export default function TenantRegistry() {
     <div className="max-w-6xl mx-auto p-6 md:p-8 space-y-6 my-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Tenant Infrastructure</span>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white mt-1">Dispensary Branches Registry</h1>
+          <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">{t('tenantInfrastructure')}</span>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white mt-1">{t('dispensaryBranchesRegistry')}</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Manage physical dispensary locations, service radii, operational status, and branch assignments.
           </p>
@@ -52,7 +54,7 @@ export default function TenantRegistry() {
         {loading ? (
           <div className="p-12 text-center">
             <div className="inline-block w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mb-4" />
-            <p className="text-gray-500 dark:text-gray-400 text-sm">Loading branch registry...</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">{t('loadingBranchRegistry')}</p>
           </div>
         ) : (
           <div>
@@ -60,11 +62,11 @@ export default function TenantRegistry() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-gray-100 dark:border-gray-800 text-xs font-bold uppercase tracking-wider text-gray-400">
-                    <th className="py-4 px-6">Branch Name</th>
-                    <th className="py-4 px-6">Location / Address</th>
-                    <th className="py-4 px-6">Service Radius</th>
+                    <th className="py-4 px-6">{t('branchName')}</th>
+                    <th className="py-4 px-6">{t('locationAddress')}</th>
+                    <th className="py-4 px-6">{t('serviceRadius')}</th>
                     <th className="py-4 px-6">Status</th>
-                    <th className="py-4 px-6 text-right">Management</th>
+                    <th className="py-4 px-6 text-right">{t('management')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60 text-sm">

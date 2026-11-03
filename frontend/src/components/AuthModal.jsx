@@ -357,7 +357,7 @@ export default function AuthModal({ isOpen, onClose }) {
               <p className="text-xs text-emerald-800 mt-1">
                 Enter the 6-digit code sent to <strong>{verificationEmail}</strong>.
               </p>
-              <p className="text-[11px] text-emerald-700 mt-2">The code expires in 10 minutes.</p>
+              <p className="text-[11px] text-emerald-700 mt-2">{t('verificationCodeExpiry')}</p>
             </div>
             <input
               type="text"
@@ -444,10 +444,10 @@ export default function AuthModal({ isOpen, onClose }) {
               {loading ? (
                 <>
                   <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                  <span>Verifying Code...</span>
+                  <span>{t('verifyingCode')}</span>
                 </>
               ) : (
-                <span>Verify & Sign In</span>
+                <span>{t('verifyContinue')}</span>
               )}
             </button>
 
@@ -548,7 +548,7 @@ export default function AuthModal({ isOpen, onClose }) {
                         required
                         className="w-full min-w-0 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
                       >
-                        <option value="">{t("selectGender")}</option>
+                        <option value=">{t("selectGender")}</option>
                         <option value="FEMALE">{t("female")}</option>
                         <option value="MALE">{t("male")}</option>
                         <option value="OTHER">{t("other")}</option>
@@ -694,7 +694,7 @@ export default function AuthModal({ isOpen, onClose }) {
             {!isForgotPassword && !passwordRecoveryRequired && (
               <div className="relative my-4 flex items-center">
                 <div className="flex-grow border-t border-slate-200"></div>
-                <span className="flex-shrink mx-3 text-slate-400 text-[10px] font-bold uppercase tracking-wider">OR</span>
+                <span className="flex-shrink mx-3 text-slate-400 text-[10px] font-bold uppercase tracking-wider">{t('or')}</span>
                 <div className="flex-grow border-t border-slate-200"></div>
               </div>
             )}
@@ -711,7 +711,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 {googleLoading ? (
                   <>
                     <span className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" aria-hidden="true"></span>
-                    <span>Connecting to Google...</span>
+                    <span>{t('connectingGoogle')}</span>
                   </>
                 ) : (
                   <>
@@ -730,7 +730,7 @@ export default function AuthModal({ isOpen, onClose }) {
             {/* Quick Demo Access */}
             {(demoCustomerEnabled || demoAdminEnabled) && !isForgotPassword && !passwordRecoveryRequired && (
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 text-center">Instant Demo Access</p>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 text-center">{t('instantDemoAccess')}</p>
                 <div className={`grid grid-cols-1 ${demoCustomerEnabled && demoAdminEnabled ? 'sm:grid-cols-2' : ''} gap-2`}>
                   {demoCustomerEnabled && (
                     <button
