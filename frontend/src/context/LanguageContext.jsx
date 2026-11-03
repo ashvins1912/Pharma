@@ -89,6 +89,12 @@ const messages = {
     medicines: "medicines",
     page: "Page",
 
+    apply: "Apply",
+    cartSubtotal: "Cart Subtotal",
+    deliveryCharge: "Delivery Charge",
+    freePromo: "FREE (Dispensary Promo)",
+    finalTotal: "Final Total",
+
   },
   hi: {
     store: 'दुकान', orders: 'ऑर्डर', requests: 'अनुरोध', addresses: 'पते',
@@ -170,6 +176,12 @@ const messages = {
     of: "में से",
     medicines: "दवाएँ",
     page: "पृष्ठ",
+
+    apply: "लागू करें",
+    cartSubtotal: "कार्ट का उप-योग",
+    deliveryCharge: "डिलीवरी शुल्क",
+    freePromo: "मुफ़्त (डिस्पेंसरी ऑफ़र)",
+    finalTotal: "अंतिम कुल",
 
   },
   kn: {
@@ -253,6 +265,12 @@ const messages = {
     medicines: "ಔಷಧಿಗಳು",
     page: "ಪುಟ",
 
+    apply: "ಅನ್ವಯಿಸಿ",
+    cartSubtotal: "ಕಾರ್ಟ್ ಉಪಮೊತ್ತ",
+    deliveryCharge: "ವಿತರಣಾ ಶುಲ್ಕ",
+    freePromo: "ಉಚಿತ (ಡಿಸ್ಪೆನ್ಸರಿ ಆಫರ್)",
+    finalTotal: "ಅಂತಿಮ ಮೊತ್ತ",
+
   },
   bn: {
     store: 'দোকান', orders: 'অর্ডার', requests: 'অনুরোধ', addresses: 'ঠিকানা',
@@ -334,6 +352,12 @@ const messages = {
     of: "এর মধ্যে",
     medicines: "ওষুধ",
     page: "পৃষ্ঠা",
+
+    apply: "প্রয়োগ করুন",
+    cartSubtotal: "কার্টের উপমোট",
+    deliveryCharge: "ডেলিভারি চার্জ",
+    freePromo: "বিনামূল্যে (ডিসপেনসারি অফার)",
+    finalTotal: "সর্বমোট",
 
   },
   te: {
@@ -433,6 +457,12 @@ export function LanguageProvider({ children }) {
     of: "లో",
     medicines: "మందులు",
     page: "పేజీ",
+
+    apply: "వర్తింపజేయండి",
+    cartSubtotal: "కార్ట్ ఉపమొత్తం",
+    deliveryCharge: "డెలివరీ ఛార్జీ",
+    freePromo: "ఉచితం (డిస్పెన్సరీ ఆఫర్)",
+    finalTotal: "చివరి మొత్తం",
 
   }, []);
 
