@@ -49,13 +49,13 @@ export default function MedicineRequestsView({ onOrderCreated }) {
   const getStatusBadge = (status) => {
     switch (status) {
       case 'Proposal Received':
-        return <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase animate-pulse">Proposal Ready ✨</span>;
+        return <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase animate-pulse">{t('proposalReady')} ✨</span>;
       case 'Proposal Approved':
-        return <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">Order Created ✓</span>;
+        return <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">{t('orderCreated')} ✓</span>;
       case 'Proposal Rejected':
-        return <span className="bg-slate-200 text-slate-700 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">Declined</span>;
+        return <span className="bg-slate-200 text-slate-700 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">{t('declined')}</span>;
       default:
-        return <span className="bg-amber-100 text-amber-800 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">Awaiting Pharmacist</span>;
+        return <span className="bg-amber-100 text-amber-800 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">{t('awaitingPharmacist')}</span>;
     }
   };
 
