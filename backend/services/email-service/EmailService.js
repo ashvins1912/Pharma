@@ -64,7 +64,7 @@ class EmailService {
     async sendEmailVerification({ email, name, token, code, verificationUrl, language }) {
         const locale = await this.resolveLanguage(email, language);
         const copy = {
-            en: { subject: 'Verify your QuickMeds Rx account', brand: 'QuickMeds Rx', badge: 'Account Verification', welcome: 'Welcome', intro: 'Thank you for signing up for QuickMeds Rx. Confirm your email address using the verification code below before continuing to your profile setup.', code: 'Your 6-digit verification code', verify: 'Verify Email Address', expires: 'Your 6-digit code is valid for', link: 'You can also use the verification link below while it remains available:', ignore: 'If you did not request this account, please ignore this email.', footer: '${copy.footer}' },
+            en: { subject: 'Verify your QuickMeds Rx account', brand: 'QuickMeds Rx', badge: 'Account Verification', welcome: 'Welcome', intro: 'Thank you for signing up for QuickMeds Rx. Confirm your email address using the verification code below before continuing to your profile setup.', code: 'Your 6-digit verification code', verify: 'Verify Email Address', expires: 'Your 6-digit code is valid for', link: 'You can also use the verification link below while it remains available:', ignore: 'If you did not request this account, please ignore this email.', footer: 'All rights reserved.' },
             hi: { subject: 'अपने QuickMeds Rx अकाउंट का ईमेल सत्यापित करें', brand: 'QuickMeds Rx', badge: 'अकाउंट सत्यापन', welcome: 'स्वागत है', intro: 'QuickMeds Rx पर साइन अप करने के लिए धन्यवाद। प्रोफ़ाइल सेटअप जारी रखने से पहले नीचे दिए गए कोड से अपना ईमेल सत्यापित करें।', code: 'आपका 6 अंकों का सत्यापन कोड', verify: 'ईमेल सत्यापित करें', expires: 'आपका 6 अंकों का कोड इस समय तक मान्य है', link: 'आप नीचे दिए गए सत्यापन लिंक का भी उपयोग कर सकते हैं:', ignore: 'यदि आपने यह अकाउंट नहीं बनाया है, तो इस ईमेल को अनदेखा करें।', footer: 'सर्वाधिकार सुरक्षित।' },
             kn: { subject: 'ನಿಮ್ಮ QuickMeds Rx ಖಾತೆಯ ಇಮೇಲ್ ಪರಿಶೀಲಿಸಿ', brand: 'QuickMeds Rx', badge: 'ಖಾತೆ ಪರಿಶೀಲನೆ', welcome: 'ಸ್ವಾಗತ', intro: 'QuickMeds Rx ಗೆ ಸೈನ್ ಅಪ್ ಮಾಡಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. ಪ್ರೊಫೈಲ್ ಸೆಟಪ್ ಮುಂದುವರಿಸುವ ಮೊದಲು ಕೆಳಗಿನ ಕೋಡ್ ಬಳಸಿ ಇಮೇಲ್ ಪರಿಶೀಲಿಸಿ.', code: 'ನಿಮ್ಮ 6 ಅಂಕಿಯ ಪರಿಶೀಲನಾ ಕೋಡ್', verify: 'ಇಮೇಲ್ ಪರಿಶೀಲಿಸಿ', expires: 'ನಿಮ್ಮ 6 ಅಂಕಿಯ ಕೋಡ್ ಈ ಅವಧಿಗೆ ಮಾನ್ಯ', link: 'ಲಭ್ಯವಿರುವವರೆಗೆ ಕೆಳಗಿನ ಪರಿಶೀಲನಾ ಲಿಂಕ್ ಬಳಸಿ:', ignore: 'ನೀವು ಈ ಖಾತೆಯನ್ನು ವಿನಂತಿಸದಿದ್ದರೆ ಈ ಇಮೇಲ್ ನಿರ್ಲಕ್ಷಿಸಿ.', footer: 'ಎಲ್ಲ ಹಕ್ಕುಗಳನ್ನು ಕಾಯ್ದಿರಿಸಲಾಗಿದೆ.' },
             bn: { subject: 'আপনার QuickMeds Rx অ্যাকাউন্টের ইমেল যাচাই করুন', brand: 'QuickMeds Rx', badge: 'অ্যাকাউন্ট যাচাইকরণ', welcome: 'স্বাগতম', intro: 'QuickMeds Rx-এ সাইন আপ করার জন্য ধন্যবাদ। প্রোফাইল সেটআপ চালিয়ে যাওয়ার আগে নিচের কোড দিয়ে আপনার ইমেল নিশ্চিত করুন।', code: 'আপনার ৬ সংখ্যার যাচাইকরণ কোড', verify: 'ইমেল যাচাই করুন', expires: 'আপনার ৬ সংখ্যার কোডের মেয়াদ', link: 'উপলভ্য থাকা পর্যন্ত নিচের যাচাইকরণ লিঙ্কটিও ব্যবহার করতে পারেন:', ignore: 'আপনি এই অ্যাকাউন্টের অনুরোধ না করলে এই ইমেল উপেক্ষা করুন।', footer: 'সর্বস্বত্ব সংরক্ষিত।' },
@@ -105,7 +105,7 @@ class EmailService {
     <div class="link-box">${targetUrl}</div>
     <p style="font-size: 12px; color: #64748b;">${copy.ignore}</p>
     <div class="footer">
-      &copy; ${new Date().getFullYear()} Ashvin Healthcare Private Limited. All rights reserved.
+      &copy; ${new Date().getFullYear()} Ashvin Healthcare Private Limited. ${copy.footer}
     </div>
   </div>
 </body>
