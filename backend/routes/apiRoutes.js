@@ -54,36 +54,32 @@ router.use('/proposals', proposalRoutes);
 router.use('/v1/orders', versionedOrderRoutes);
 router.use('/test', testRoutes);
 
-router.get('/vendor/profile', async (req, res) => {
+router.get('/vendor/profile', authenticateUser, async (req, res) => {
     try {
-        const tenantId = String(
-            req.query.tenantId
-            || req.headers['x-tenant-id']
-            || '65a1234567890abcdef12345'
+        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+        const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const tenantId = String(isPlatformAdmin
+            ? (req.get('x-tenant-id') || req.query.tenantId || '')
+            : (req.user?.app_metadata?.tenantId || req.user?.tenantId || '')
         ).trim();
+        if (!tenantId) return res.status(403).json({ success: false, code: 'TENANT_CONTEXT_REQUIRED', message: 'A pharmacy tenant context is required to view this profile.' });
+
+        if (!isPlatformAdmin) {
+            const membership = await TenantMembership.findOne({
+                userId: String(req.user?.sub || req.user?.id || ''),
+                tenantId,
+                status: 'ACTIVE'
+            }).lean();
+            if (!membership) return res.status(403).json({ success: false, code: 'TENANT_MEMBERSHIP_REQUIRED', message: 'An active membership for this pharmacy is required.' });
+        }
+
         const [tenant, vendor, memberships] = await Promise.all([
-            Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).lean(),
-            Vendor.findOne({ tenantId, status: 'ACTIVE' }).lean(),
+            Tenant.findOne({ _id: tenantId }).lean(),
+            Vendor.findOne({ tenantId }).lean(),
             TenantMembership.find({ tenantId, status: 'ACTIVE' }).select('userId role branchId').lean()
         ]);
-        if (!tenant || !vendor) {
-            return res.json({
-                status: 'success',
-                tenant: {
-                    _id: tenantId || '65a1234567890abcdef12345',
-                    shopName: 'City Health Pharmacy & Wellness',
-                    legalName: 'City Health Pharma Pvt Ltd',
-                    licenseNumber: 'DL-2026-SF-99887',
-                    gstNumber: '27AABCC1234F1Z9',
-                    address: { street: '123 Main Street', city: 'San Francisco', state: 'CA', zipCode: '94105' },
-                    ownerDetails: { name: 'Ashvin Singh', email: 'ashvinsingh25@gmail.com', phone: '+19876543210' }
-                },
-                personnel: [
-                    { _id: 'user-1', name: 'Ashvin Singh', email: 'ashvinsingh25@gmail.com', role: 'OWNER' },
-                    { _id: 'user-2', name: 'Jane Admin', email: 'jane.admin@pharmacy.com', role: 'TENANT_ADMIN' }
-                ]
-            });
-        }
+        if (!tenant) return res.status(404).json({ success: false, code: 'TENANT_PROFILE_NOT_FOUND', message: 'The authenticated pharmacy profile has not been created yet.' });
+
         const userIds = [...new Set(memberships.map(item => String(item.userId)))];
         const profiles = userIds.length ? await UserProfile.find({
             $or: [
@@ -94,48 +90,50 @@ router.get('/vendor/profile', async (req, res) => {
         }).select('supabase_user_id supabaseId userId name email').lean() : [];
         const profileById = new Map();
         for (const profile of profiles) {
-            for (const id of [profile.supabase_user_id, profile.supabaseId, profile.userId].filter(Boolean)) {
-                profileById.set(String(id), profile);
-            }
+            for (const id of [profile.supabase_user_id, profile.supabaseId, profile.userId].filter(Boolean)) profileById.set(String(id), profile);
         }
         const personnel = memberships.map(member => {
             const profile = profileById.get(String(member.userId)) || {};
             return {
                 _id: String(member.userId),
-                name: profile.name || 'Pharmacy Staff',
+                name: profile.name || '',
                 email: profile.email || '',
                 role: member.role,
                 branchId: member.branchId || null
             };
         });
-        const hasCoordinates = Number.isFinite(Number(vendor.latitude)) && Number.isFinite(Number(vendor.longitude));
+
         return res.json({
             status: 'success',
+            profileConfigured: Boolean(vendor),
             tenant: {
-                _id: tenant._id,
-                shopName: tenant.name || vendor.companyName,
+                _id: String(tenant._id),
+                shopName: tenant.name || vendor?.companyName || '',
+                legalName: vendor?.legalName || '',
+                licenseNumber: vendor?.licenseNumber || '',
+                gstNumber: vendor?.gstNumber || '',
                 address: {
-                    street: vendor.address?.street || '',
-                    city: vendor.address?.city || '',
-                    state: vendor.address?.state || '',
-                    zipCode: vendor.address?.pincode || ''
+                    street: vendor?.address?.street || '',
+                    city: vendor?.address?.city || '',
+                    state: vendor?.address?.state || '',
+                    zipCode: vendor?.address?.pincode || ''
                 },
-                geoLocation: hasCoordinates ? {
+                geoLocation: vendor?.latitude != null && vendor?.longitude != null ? {
                     type: 'Point',
                     coordinates: [Number(vendor.longitude), Number(vendor.latitude)]
                 } : null,
-                shopPhotoUrl: vendor.shopPhotoUrl || null,
+                shopPhotoUrl: vendor?.shopPhotoUrl || null,
                 ownerDetails: {
-                    name: vendor.name || '',
-                    email: vendor.email || '',
-                    phone: vendor.mobile || ''
+                    name: vendor?.name || req.user?.name || '',
+                    email: vendor?.email || req.user?.email || '',
+                    phone: vendor?.mobile || ''
                 }
             },
             personnel
         });
     } catch (err) {
-        console.error('[TenantProfile] Scoped vendor profile lookup failed:', err);
-        res.status(503).json({ message: 'Pharmacy profile is temporarily unavailable.' });
+        console.error('[TenantProfile] Scoped profile lookup failed:', { requestId: req.requestId || null, code: err.code || err.name });
+        return res.status(503).json({ success: false, code: 'TENANT_PROFILE_UNAVAILABLE', message: 'Pharmacy profile is temporarily unavailable.' });
     }
 });
 
