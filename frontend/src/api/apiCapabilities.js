@@ -356,6 +356,21 @@ export const API_CAPABILITIES = [
     pattern: /^\/api\/v1\/admin\/tenants(?:\/|$)/,
     permission: 'tenants.manage'
   },
+  {
+    method: 'GET',
+    pattern: /^\/api\/vendor\/profile$/,
+    permission: 'tenants.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/tenant\/branches(?:\/|$)/,
+    permission: 'tenants.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/tenant\/branches(?:\/|$)/,
+    permission: 'tenants.manage'
+  },
   // Public tenant and branch discovery (e.g. /api/v1/tenants, /api/v1/branches, /api/tenants/nearby)
   // are deliberately unrestricted so all patients can discover local pharmacies.
   // Administrative mutations remain strictly protected.
