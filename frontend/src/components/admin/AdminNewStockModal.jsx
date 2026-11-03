@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLanguage } from '../../context/LanguageContext';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -87,7 +88,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
   const handleSubmit = async (e, shouldContinue = false) => {
     e.preventDefault();
     if (!form.name || !form.price) {
-      addToast('Please provide at least product name and price.', 'warning');
+      addToast(t('pleaseTryAgain'), 'warning');
       return;
     }
 
@@ -127,7 +128,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
         onClose();
       }
     } catch (err) {
-      addToast(err?.response?.data?.error || err.message || 'Failed to add stock item.', 'error');
+      addToast(err?.response?.data?.error || err.message || t('saveMedicineFailed'), 'error');
     } finally {
       setSaving(false);
     }
@@ -151,14 +152,14 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
         <header className="relative shrink-0 bg-white dark:bg-gray-900 border-b border-slate-100 dark:border-slate-800 px-5 pt-5 pb-4 w-full">
           <button
             onClick={onClose}
-            aria-label="Close modal"
+            aria-label={t("close")}
             className="absolute right-4 top-4 h-8 w-8 rounded-full bg-slate-100 dark:bg-gray-800 flex items-center justify-center text-slate-500 hover:text-slate-800 dark:hover:text-white transition cursor-pointer"
           >
             ✕
           </button>
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Inventory Catalog &amp; CDN Storage</span>
-            <h3 id="new-stock-modal-title" className="text-base sm:text-lg font-black text-gray-900 dark:text-white mt-0.5">Add New Stock &amp; Optimized Asset</h3>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">{t('inventoryCatalogCdn')}</span>
+            <h3 id="new-stock-modal-title" className="text-base sm:text-lg font-black text-gray-900 dark:text-white mt-0.5">{t('addNewStockAsset')}</h3>
           </div>
         </header>
 
@@ -170,7 +171,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">Product / Medicine Name *</label>
+                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">{t('productMedicineName')} *</label>
                   <input
                     type="text"
                     name="name"
@@ -183,7 +184,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                 </div>
 
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">Manufacturer / Brand</label>
+                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">{t('manufacturerBrand')}</label>
                   <input
                     type="text"
                     name="brand"
@@ -197,7 +198,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">Future-Proof Category</label>
+                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">{t('futureProofCategory')}</label>
                   <select
                     name="category"
                     value={form.category}
@@ -211,7 +212,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                 </div>
 
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">Active Salt / Drug Formula</label>
+                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">{t('activeSaltFormula')}</label>
                   <input
                     type="text"
                     name="drug"
@@ -223,7 +224,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                 </div>
 
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">SKU / Barcode ID</label>
+                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">{t('skuBarcode')}</label>
                   <input
                     type="text"
                     name="sku"
@@ -241,7 +242,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <h4 className="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">2. Decoupled Visual Asset &amp; Optimized Storage</h4>
-                  <p className="text-[11px] text-slate-400">Images are compressed and stored in local folder / CDN-ready path.</p>
+                  <p className="text-[11px] text-slate-400">{t('imagesCompressed')}</p>
                 </div>
                 <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-fit">
                   <button
@@ -286,11 +287,11 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
               ) : selectedAssetTab === 'upload' ? (
                 <div className="p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl bg-slate-50 dark:bg-slate-800/40 text-center space-y-2">
                   {uploadingImage ? (
-                    <div className="py-4 text-xs font-bold text-blue-600 animate-pulse">Compressing and optimizing image asset...</div>
+                    <div className="py-4 text-xs font-bold text-blue-600 animate-pulse">{t('compressingImage')}</div>
                   ) : (
                     <>
                       <div className="text-2xl">📁</div>
-                      <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Choose product image for compression &amp; CDN-ready upload</div>
+                      <div className="text-xs font-bold text-slate-700 dark:text-slate-300">{t('chooseProductImage')}</div>
                       <input
                         type="file"
                         accept="image/*"
@@ -323,7 +324,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">MRP Price (₹) *</label>
+                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">{t('mrpPrice')} *</label>
                   <input
                     type="number"
                     name="price"
@@ -337,7 +338,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                 </div>
 
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">Selling Price (₹)</label>
+                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">{t('sellingPrice')}</label>
                   <input
                     type="number"
                     name="sellingPrice"
@@ -350,7 +351,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                 </div>
 
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">Initial Stock Units</label>
+                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">{t('initialStockUnits')}</label>
                   <input
                     type="number"
                     name="stockQuantity"
@@ -363,7 +364,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                 </div>
 
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">Expiry Date</label>
+                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">{t('expiry')}</label>
                   <input
                     type="date"
                     name="expiryDate"
@@ -376,7 +377,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">Batch Number</label>
+                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">{t('batchNumber')}</label>
                   <input
                     type="text"
                     name="batchNumber"
@@ -396,13 +397,13 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                       onChange={handleChange}
                       className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                     />
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Prescription strictly required for dispensing</span>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{t('prescriptionStrict')}</span>
                   </label>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">Usage &amp; Dosage Instructions</label>
+                <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">{t('usageDosage')}</label>
                 <textarea
                   name="dosage"
                   rows="2"
@@ -423,7 +424,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                   onChange={(e) => setKeepOpenForMultiple(e.target.checked)}
                   className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
                 />
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Keep modal open for batch entry (Multiple Add)</span>
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{t('keepModalOpenBatch')}</span>
               </label>
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -442,7 +443,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                     onClick={(e) => handleSubmit(e, true)}
                     className="flex-1 sm:flex-initial px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
                   >
-                    {saving ? <span>Saving...</span> : <span>Save &amp; Add Another +</span>}
+                    {saving ? <span>{t('savingAddress')}</span> : <span>{t('saveAddAnother')}</span>}
                   </button>
                 )}
 
@@ -451,7 +452,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                   disabled={saving || uploadingImage}
                   className="flex-1 sm:flex-initial px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
-                  {saving ? <span>Saving...</span> : <span>Save &amp; Close</span>}
+                  {saving ? <span>{t('savingAddress')}</span> : <span>{t('saveClose')}</span>}
                 </button>
               </div>
             </div>
