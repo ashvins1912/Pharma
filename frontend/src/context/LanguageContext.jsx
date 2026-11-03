@@ -761,6 +761,8 @@ const messages = {
     emailVerifiedMessage: "Your email address has been verified. You can now sign in to QuickMeds Rx.",
     continueSignIn: "Continue to Sign In",
     request: "Request",
+    fatherInLaw: "Father-in-law",
+    motherInLaw: "Mother-in-law",
   hi: {
     store: "दुकान",
     orders: "ऑर्डर",
@@ -1512,6 +1514,8 @@ const messages = {
     emailVerifiedMessage: "आपका ईमेल सत्यापित हो गया है। अब QuickMeds Rx में लॉग इन करें।",
     continueSignIn: "लॉग इन जारी रखें",
     request: "अनुरोध",
+    fatherInLaw: "ससुर",
+    motherInLaw: "सास",
   kn: {
     store: "ಅಂಗಡಿ",
     orders: "ಆರ್ಡರ್‌ಗಳು",
@@ -2263,6 +2267,8 @@ const messages = {
     emailVerifiedMessage: "ನಿಮ್ಮ ಇಮೇಲ್ ಪರಿಶೀಲಿಸಲಾಗಿದೆ. ಈಗ QuickMeds Rx ಗೆ ಲಾಗಿನ್ ಮಾಡಬಹುದು.",
     continueSignIn: "ಲಾಗಿನ್ ಮುಂದುವರಿಸಿ",
     request: "ವಿನಂತಿ",
+    fatherInLaw: "ಮಾವ",
+    motherInLaw: "ಅತ್ತೆ",
   bn: {
     store: "দোকান",
     orders: "অর্ডার",
@@ -3014,6 +3020,8 @@ const messages = {
     emailVerifiedMessage: "আপনার ইমেল যাচাই হয়েছে। এখন QuickMeds Rx-এ সাইন ইন করতে পারেন।",
     continueSignIn: "সাইন ইন চালিয়ে যান",
     request: "অনুরোধ",
+    fatherInLaw: "শ্বশুর",
+    motherInLaw: "শাশুড়ি",
   te: {
     store: "స్టోర్",
     orders: "ఆర్డర్లు",
@@ -3763,6 +3771,8 @@ const messages = {
     emailVerifiedMessage: "మీ ఇమెయిల్ ధృవీకరించబడింది. ఇప్పుడు QuickMeds Rxలో సైన్ ఇన్ చేయవచ్చు.",
     continueSignIn: "సైన్ ఇన్ కొనసాగించండి",
     request: "అభ్యర్థన",
+    fatherInLaw: "మామగారు",
+    motherInLaw: "అత్తగారు",
 
   }
 };
