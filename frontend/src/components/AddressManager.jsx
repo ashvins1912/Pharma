@@ -53,6 +53,7 @@ export default function AddressManager({
   onAddressSelected,
   onAddressSaved
 }) {
+  const { t } = useLanguage();
   const {
     addresses,
     addressesError,
