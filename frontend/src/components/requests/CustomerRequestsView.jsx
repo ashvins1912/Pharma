@@ -206,7 +206,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
             <p className="text-xs font-bold text-slate-700">No medicine requests found</p>
             <p className="text-[11px] text-slate-400">
               {statusFilter === 'ALL'
-                ? "Can't find a medicine in our store? Ask Ashvin Pharmacy to procure it for you."
+                ? "Can't find a medicine in our store? Ask QuickMeds Rx to procure it for you."
                 : 'No requests match your selected filter.'}
             </p>
           </div>
@@ -380,7 +380,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                   <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
                     <div className="space-y-0.5">
                       <p className="font-extrabold text-purple-950">
-                        🎉 Ashvin Pharmacy sent a proposal for #{req.requestNumber}!
+                        🎉 QuickMeds Rx sent a proposal for #{req.requestNumber}!
                       </p>
                       <p className="text-[11px] text-blue-800">
                         {proposal?.deliverySlot?.label || 'Scheduled delivery slot available'}. Review pricing and medicine formulation.
