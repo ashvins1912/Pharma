@@ -212,10 +212,10 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
 
         <p className="text-sm text-gray-500 dark:text-gray-400">
           {userLocation?.source === 'saved-address'
-            ? `Showing pharmacies near your saved ${userLocation.label || 'delivery'} address. Your address is used automatically; GPS permission is not needed.`
+            ? t('showingNearSavedAddress')
             : userLocation?.lat != null
-              ? 'Showing pharmacies closest to your current location.'
-              : 'Search available pharmacies or add a delivery address to find pharmacies near you.'}
+              ? t('showingNearCurrentLocation')
+              : t('searchOrAddAddress')}
         </p>
 
         {/* Search Bar */}
@@ -272,7 +272,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
                     </p>
                     <div className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
                       <span>📍</span>
-                      <span>{tenant.calculatedDistance == null ? (userLocation?.source === 'saved-address' ? 'Matches your saved address area' : 'Location distance unavailable') : `Distance: ${tenant.calculatedDistance} km away`}</span>
+                      <span>{tenant.calculatedDistance == null ? (userLocation?.source === 'saved-address' ? t('matchesSavedAddress') : t('locationDistanceUnavailable')) : `${t('distanceLabel')}: ${tenant.calculatedDistance} ${t('kmAway')}`}</span>
                     </div>
                   </div>
                   {isSelected && (
@@ -286,7 +286,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
             {filteredTenants.length === 0 && (
               <div className="py-8 text-center text-sm text-gray-400">
                 {searchQuery.trim()
-                  ? `{t('noPharmacyMatches')} \"${searchQuery}\". ${t('pleaseTryAgain')}`
+                  ? `${t('noPharmacyMatches')} "${searchQuery}". ${t('pleaseTryAgain')}`
                   : t('noActivePharmaciesArea')}
               </div>
             )}
@@ -299,7 +299,7 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
             disabled={!tenantId || !tenants.some(tenant => String(tenant._id) === String(tenantId))}
             className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold rounded-2xl shadow transition"
           >
-            Confirm & View Product Catalogue
+            {t('confirmAndViewCatalogue')}
           </button>
         </div>
       </div>

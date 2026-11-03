@@ -4,6 +4,7 @@ import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
 
 export default function AdminCSquareTab() {
+  const { t } = useLanguage();
   const { user, hasPermission } = useAuth();
   const canRead = hasPermission('csquare.read');
   const canManage = hasPermission('csquare.manage');

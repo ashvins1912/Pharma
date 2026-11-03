@@ -99,7 +99,7 @@ export default function SearchFilter() {
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {cat}
+              {categoryLabels[cat] || cat}
             </button>
           ))}
         </div>

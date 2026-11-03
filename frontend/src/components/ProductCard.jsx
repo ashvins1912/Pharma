@@ -21,6 +21,16 @@ export default function ProductCard({ med }) {
   const fallbackUrl = "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80";
   const displayImage = imageError || !med.imageUrl ? fallbackUrl : med.imageUrl;
 
+  const categoryLabels = {
+    'All': t('all'),
+    'Pain & Fever': t('painFever'),
+    'Antibiotics': t('antibiotics'),
+    'Allergy & Cold': t('allergyCold'),
+    'Vitamins & Supplements': t('vitamins'),
+    'Digestion & Acidity': t('digestionAcidity'),
+    'Wellness & First Aid': t('wellnessFirstAid')
+  };
+
   return (
     <div
       className={`bg-white border rounded-xl sm:rounded-2xl p-2.5 sm:p-4 flex flex-col justify-between transition-all duration-200 h-full ${
@@ -45,7 +55,7 @@ export default function ProductCard({ med }) {
             <div className="flex flex-col items-center justify-center p-3 text-slate-400 select-none">
               <span className="text-3xl sm:text-4xl mb-1">💊</span>
               <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center line-clamp-1">
-                {med.category || 'Pharmaceutical'}
+                {categoryLabels[med.category] || med.category || t('prescriptionDrugs')}
               </span>
             </div>
           )}
@@ -54,36 +64,36 @@ export default function ProductCard({ med }) {
           <div className="absolute top-1.5 left-1.5 flex flex-col gap-1">
             {(med.isPrescriptionRequired || med.requiresPrescription) && (
               <span className="bg-rose-600 text-white text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded shadow-xs tracking-wider uppercase">
-                Rx Only
+                {t('rxOnly')}
               </span>
             )}
             {med.isExpired && (
               <span className="bg-red-600 text-white text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded shadow-xs tracking-wider uppercase">
-                Expired
+                {t('expiredBadge')}
               </span>
             )}
             {!med.isExpired && isOut && (
               <span className="bg-slate-700 text-white text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded shadow-xs tracking-wider uppercase">
-                Sold Out
+                {t('soldOutBadge')}
               </span>
             )}
             {!med.isExpired && !isOut && !isLow && (
               <span className="bg-emerald-600 text-white text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded shadow-xs tracking-wider uppercase">
-                In Stock
+                {t('inStockBadge')}
               </span>
             )}
           </div>
 
           {isLow && !med.isExpired && (
             <span className="absolute bottom-1.5 right-1.5 bg-amber-500 text-white text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded shadow-xs">
-              Only {stock} Left
+              {t('onlyLeftBadge') ? t('onlyLeftBadge').replace('{count}', stock) : `Only ${stock} Left`}
             </span>
           )}
         </div>
 
         {/* Category & Brand */}
         <div className="flex items-center justify-between text-[9px] sm:text-[11px] text-slate-400 font-semibold mb-0.5">
-          <span className="truncate max-w-[50%]">{med.category || 'General'}</span>
+          <span className="truncate max-w-[50%]">{categoryLabels[med.category] || med.category || t('otc')}</span>
           <span className="truncate max-w-[45%] text-right">{med.brand}</span>
         </div>
 

@@ -72,7 +72,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
                   }}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-6 py-2.5 rounded-xl cursor-pointer transition shadow-md shadow-blue-600/20"
                 >
-                  Browse Medicines
+                  {t('browseMedicines')}
                 </button>
               </div>
             ) : (
@@ -152,7 +152,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
                         onClick={removeCoupon}
                         className="text-emerald-700 hover:text-emerald-900 text-xs font-bold cursor-pointer"
                       >
-                        Remove
+                        {t('remove')}
                       </button>
                     </div>
                   ) : (
@@ -168,7 +168,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
                         onClick={() => applyCoupon()}
                         className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition cursor-pointer"
                       >
-                        Apply
+                        {t('apply')}
                       </button>
                     </div>
                   )}

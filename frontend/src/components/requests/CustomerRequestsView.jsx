@@ -131,11 +131,11 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
           <div className="flex items-center gap-2">
             <span className="text-xl">📋</span>
             <h3 className="text-base sm:text-lg font-black text-slate-900">
-              My Medicine Requests
+              {t('myMedicineRequests')}
             </h3>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Track special procurement inquiries, review pharmacy price proposals, and approve delivery slots.
+            {t('myMedicineRequestsDesc')}
           </p>
         </div>
 

@@ -46,59 +46,59 @@ export default function Header({
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full min-w-0 bg-white/95 backdrop-blur-md border-b border-slate-200 transition">
+    <header className="quickmeds-header bg-white/95 backdrop-blur-md border-b border-slate-200">
       <div className="w-full min-w-0 px-2.5 sm:px-6 lg:px-8">
-        <div className="flex min-h-16 sm:min-h-20 h-auto items-center justify-between gap-2 sm:gap-4 py-2">
+        <div className="quickmeds-header-inner">
           
           {/* Left: Logo & Pharmacy Brand */}
           <div
             onClick={() => setActiveTab('store')}
-            className="flex flex-1 items-center gap-2 sm:gap-3 cursor-pointer select-none min-w-0"
+            className="quickmeds-brand-anchor"
           >
-            <div className="h-8 w-8 min-[400px]:h-9 min-[400px]:w-9 sm:h-11 sm:w-11 rounded-lg min-[400px]:rounded-xl sm:rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-sm min-[400px]:text-base sm:text-xl shadow-md shadow-blue-500/20 shrink-0">
+            <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl sm:rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-base sm:text-xl shadow-md shadow-blue-500/20 shrink-0">
               ⚕️
             </div>
-            <div className="min-w-0 flex-1 flex flex-col justify-center">
-              <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-2">
-                <span className="block min-w-0 max-w-[112px] min-[400px]:max-w-[150px] sm:max-w-none text-[13px] min-[400px]:text-sm sm:text-lg font-black text-slate-900 tracking-tight leading-tight whitespace-normal break-words">
+            <div className="flex flex-col justify-center min-w-0">
+              <div className="quickmeds-brand-badge-container">
+                <span className="quickmeds-brand-name">
                   QuickMeds Rx
                 </span>
                 {canViewOperations && (
-                  <div className="flex min-w-0 flex-wrap items-center gap-1.5 max-w-full">
-                    <span className="max-w-full whitespace-normal break-words bg-blue-100 text-blue-700 text-[8px] min-[400px]:text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider leading-tight">
-                      {isSuperAdmin ? t('superAdmin') : (isTenantAdmin ? t('tenantAdmin') : (role === 'admin' ? t('admin') : t('pharmacy')))}
-                    </span>
-                    {canReadWhatsApp && (canManageWhatsApp ? (
-                      whatsappStatus.isConnected ? (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
-                          className="hidden lg:inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer"
-                          title={t("whatsappStatus")}
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                          <span>{t('waLive')}</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
-                          className="hidden lg:inline-flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer"
-                          title={t("whatsappOffline")}
-                        >
-                          <span>⚠️</span>
-                          <span>{t('waOffline')}</span>
-                        </button>
-                      )
+                  <span className="quickmeds-role-chip bg-blue-100 text-blue-700">
+                    {isSuperAdmin ? t('superAdmin') : (isTenantAdmin ? t('tenantAdmin') : (role === 'admin' ? t('admin') : t('pharmacy')))}
+                  </span>
+                )}
+                {canViewOperations && canReadWhatsApp && (
+                  canManageWhatsApp ? (
+                    whatsappStatus.isConnected ? (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
+                        className="hidden lg:inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer whitespace-nowrap"
+                        title={t("whatsappStatus")}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        <span>{t('waLive')}</span>
+                      </button>
                     ) : (
-                      <span className="hidden lg:inline-flex items-center gap-1 text-[9px] font-black uppercase text-slate-500">
-                        {whatsappStatus.isConnected ? t('waLive') : t('waOffline')}
-                      </span>
-                    ))}
-                  </div>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setWhatsappModalOpen(true); }}
+                        className="hidden lg:inline-flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase transition cursor-pointer whitespace-nowrap"
+                        title={t("whatsappOffline")}
+                      >
+                        <span>⚠️</span>
+                        <span>{t('waOffline')}</span>
+                      </button>
+                    )
+                  ) : (
+                    <span className="hidden lg:inline-flex items-center gap-1 text-[9px] font-black uppercase text-slate-500 whitespace-nowrap">
+                      {whatsappStatus.isConnected ? t('waLive') : t('waOffline')}
+                    </span>
+                  )
                 )}
               </div>
-              <p className="hidden md:block text-[11px] text-slate-400 font-medium tracking-tight leading-normal mt-0.5">
+              <p className="hidden md:block text-[11px] text-slate-400 font-medium tracking-tight leading-normal mt-0.5 whitespace-nowrap">
                 {t('trustedTagline')}
               </p>
             </div>
@@ -188,7 +188,7 @@ export default function Header({
           </nav>
 
           {/* Right: Actions Bar */}
-          <div className="flex items-center gap-1 sm:gap-2 shrink-0 max-w-[58vw] sm:max-w-none">
+          <div className="quickmeds-actions-group">
             
             <label className="hidden min-[380px]:flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-600" title={t('selectLanguage')}>
               <span aria-hidden="true">🌐</span>

@@ -26,6 +26,10 @@ export const TenantProvider = ({ children }) => {
     return saved;
   });
   const [activeTenant, setActiveTenantState] = useState(readSavedTenant);
+  const [branchId, setBranchIdState] = useState(() => {
+    if (typeof window === 'undefined') return 'branch-1';
+    return localStorage.getItem('pharma_branch_id') || 'branch-1';
+  });
 
   const setTenantId = (value) => {
     const id = value == null ? null
@@ -50,7 +54,20 @@ export const TenantProvider = ({ children }) => {
     setTenantId(tenant ? (tenant._id || tenant.id) : null);
   };
 
-  return <TenantContext.Provider value={{ tenantId, setTenantId, activeTenant, setActiveTenant }}>{children}</TenantContext.Provider>;
+  const setBranchId = (id) => {
+    const nextBranchId = id ? String(id).trim() : '';
+    setBranchIdState(nextBranchId);
+    if (typeof window !== 'undefined') {
+      if (nextBranchId) localStorage.setItem('pharma_branch_id', nextBranchId);
+      else localStorage.removeItem('pharma_branch_id');
+    }
+  };
+
+  return (
+    <TenantContext.Provider value={{ tenantId, setTenantId, activeTenant, setActiveTenant, branchId, setBranchId }}>
+      {children}
+    </TenantContext.Provider>
+  );
 };
 
 export const useTenant = () => {

@@ -42,13 +42,13 @@ export default function OrderConfirmation({ order, onTrackOrder, onContinueShopp
 
       <div className="space-y-2">
         <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-          Order Placed Successfully!
+          {t('orderPlacedSuccessfully')}
         </h2>
         <p className="text-sm font-bold text-slate-700">
-          Thank you, {userName}!
+          {t('thankYouUser')}, {userName}!
         </p>
         <p className="text-xs text-slate-500">
-          Your medicine order <strong className="text-blue-600">#{orderId}</strong> has been registered in the dispensary fulfillment queue and is being processed.
+          {t('registeredInDispensaryQueue') ? t('registeredInDispensaryQueue').replace('{id}', orderId) : `Your medicine order #${orderId} has been registered.`}
         </p>
       </div>
 
@@ -65,7 +65,7 @@ export default function OrderConfirmation({ order, onTrackOrder, onContinueShopp
           <div className="border-t border-slate-200 pt-2 text-[11px] text-slate-600"><strong>{t('orderedBy')}:</strong> {order.orderedByName || userName}<br /><strong>{t('orderedFor')}:</strong> {order.orderedForName || userName}</div>
           {order.deliveryAddress && (
             <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-500">
-              <span>📍 Delivery to: {order.deliveryAddress}</span>
+              <span>📍 {t('deliveryTo')}: {order.deliveryAddress}</span>
             </div>
           )}
           {order && <OrderSummaryCard order={order} />}
@@ -87,7 +87,7 @@ export default function OrderConfirmation({ order, onTrackOrder, onContinueShopp
           onClick={onContinueShopping}
           className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-2xl text-xs transition cursor-pointer"
         >
-          Continue Shopping
+          {t('continueShopping')}
         </button>
       </div>
 

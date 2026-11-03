@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { useDashboardAnalytics } from '../context/DashboardAnalyticsContext';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function SpendingAnalyticsWidget() {
+  const { t } = useLanguage();
   const analytics = useDashboardAnalytics();
   const { user } = useAuth();
   const [timeRange, setTimeRange] = useState('30d'); // '7d' | '14d' | '30d'
@@ -26,20 +28,20 @@ export default function SpendingAnalyticsWidget() {
           <div className="flex items-center gap-2">
             <span className="text-xl">📊</span>
             <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white tracking-tight">
-              Monthly Healthcare Expenditure &amp; Refill Insights
+              {t('spendingAnalyticsTitle')}
             </h3>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Track your verified pharmacy spending and prescription refill trajectory over time.
+            {t('spendingAnalyticsDesc')}
           </p>
         </div>
 
         {/* Navigation Filters / Range Tabs */}
         <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl">
           {[
-            { id: '7d', label: '7 Days' },
-            { id: '14d', label: '14 Days' },
-            { id: '30d', label: '30 Days' }
+            { id: '7d', days: 7 },
+            { id: '14d', days: 14 },
+            { id: '30d', days: 30 }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -50,7 +52,7 @@ export default function SpendingAnalyticsWidget() {
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-700'
               }`}
             >
-              {tab.label}
+              {tab.days} {t('days')}
             </button>
           ))}
         </div>

@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import apiClient from '../../api/apiClient';
+import { useLanguage } from '../../context/LanguageContext';
 
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
 
 export default function AdminPaymentReminders({ canManage = false }) {
+  const { t } = useLanguage();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -43,7 +45,7 @@ export default function AdminPaymentReminders({ canManage = false }) {
       setNotice(`Reminder ${status.toLowerCase().replaceAll('_', ' ')} for customer ${customer.customerId.slice(-6)}.`);
       await load();
     } catch (requestError) {
-      setError(requestError.message || t('couldNotSendReminder'));
+      setError(requestError.message || t('couldNotSendPaymentReminder') || t('couldNotSendReminder'));
     } finally {
       setSendingId(null);
     }

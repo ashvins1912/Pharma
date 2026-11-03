@@ -188,13 +188,17 @@ apiClient.interceptors.request.use(async (config) => {
     // Gateway to distinguish our SPA fetches when privacy tooling strips Origin.
     config.headers['X-Pharma-Client'] = 'web';
     
-    const activeTenantId = typeof window !== 'undefined' ? localStorage.getItem('pharma_tenant_id') : null;
-    const activeBranchId = typeof window !== 'undefined' ? localStorage.getItem('pharma_branch_id') : null;
-    if (activeTenantId && !config.headers['X-Tenant-Id'] && !config.headers['x-tenant-id']) {
-        config.headers['X-Tenant-Id'] = activeTenantId;
-    }
-    if (activeBranchId && !config.headers['X-Branch-Id'] && !config.headers['x-branch-id']) {
-        config.headers['X-Branch-Id'] = activeBranchId;
+    const isAuthRoute = /\/api\/(?:v1\/auth|auth)(\/|$)/.test(String(config.url || ''));
+    const isPlatformTenantsRoute = /\/api\/v1\/admin\/tenants(\/|$)/.test(String(config.url || ''));
+    if (!isAuthRoute && !isPlatformTenantsRoute) {
+        const activeTenantId = typeof window !== 'undefined' ? localStorage.getItem('pharma_tenant_id') : null;
+        const activeBranchId = typeof window !== 'undefined' ? localStorage.getItem('pharma_branch_id') : null;
+        if (activeTenantId && !config.headers['X-Tenant-Id'] && !config.headers['x-tenant-id']) {
+            config.headers['X-Tenant-Id'] = activeTenantId;
+        }
+        if (activeBranchId && !config.headers['X-Branch-Id'] && !config.headers['x-branch-id']) {
+            config.headers['X-Branch-Id'] = activeBranchId;
+        }
     }
 
 
@@ -325,6 +329,39 @@ apiClient.interceptors.response.use(
                 return apiClient(retryConfig);
             } catch {
                 // The refresh cookie is also expired/revoked; continue normally.
+            }
+        }
+
+        // Tenant / Branch Access Mismatch Recovery (resolves 401 and 403 gateway errors)
+        const isTenantOrBranchError = (status === 403 || status === 401) && (
+            error.response?.data?.error?.code === 'TENANT_ACCESS_DENIED' ||
+            error.response?.data?.error?.code === 'CROSS_TENANT_ACCESS_DENIED' ||
+            error.response?.data?.error?.code === 'BRANCH_ACCESS_DENIED' ||
+            error.response?.data?.error?.code === 'TENANT_REQUIRED' ||
+            error.response?.data?.code === 'TENANT_ACCESS_DENIED' ||
+            error.response?.data?.code === 'CROSS_TENANT_ACCESS_DENIED' ||
+            error.response?.data?.code === 'BRANCH_ACCESS_DENIED' ||
+            /Cross-tenant access forbidden|membership is restricted|assigned tenant/i.test(String(error.response?.data?.error?.message || error.response?.data?.message || ''))
+        );
+
+        if (isTenantOrBranchError && !error.config?.__pharmaTenantRetry && typeof window !== 'undefined') {
+            try {
+                // Clear stale customer preference from storage so it does not poison subsequent calls
+                localStorage.removeItem('pharma_tenant_id');
+                localStorage.removeItem('pharma_active_tenant');
+                localStorage.removeItem('pharma_branch_id');
+                const retryConfig = {
+                    ...error.config,
+                    __pharmaTenantRetry: true,
+                    headers: { ...(error.config?.headers || {}) }
+                };
+                delete retryConfig.headers['X-Tenant-Id'];
+                delete retryConfig.headers['x-tenant-id'];
+                delete retryConfig.headers['X-Branch-Id'];
+                delete retryConfig.headers['x-branch-id'];
+                return apiClient(retryConfig);
+            } catch {
+                // If retry fails, continue to normal rejection
             }
         }
 

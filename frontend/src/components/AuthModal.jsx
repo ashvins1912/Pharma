@@ -548,7 +548,7 @@ export default function AuthModal({ isOpen, onClose }) {
                         required
                         className="w-full min-w-0 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
                       >
-                        <option value=">{t("selectGender")}</option>
+                        <option value="">{t("selectGender")}</option>
                         <option value="FEMALE">{t("female")}</option>
                         <option value="MALE">{t("male")}</option>
                         <option value="OTHER">{t("other")}</option>

@@ -7,8 +7,10 @@ import AdminProposalModal from './AdminProposalModal';
 import apiClient from '../../../api/apiClient';
 import { normalizePrescriptionBlob } from '../../../utils/prescriptionFile';
 import Pagination from '../../common/Pagination';
+import { useLanguage } from '../../../context/LanguageContext';
 
 export default function AdminMedicineRequestsTab({ initialData = null, initialLoading = false, onPendingCountRefresh }) {
+  const { t } = useLanguage();
   const [requests, setRequests] = useState(initialData?.requests || []);
   const [metrics, setMetrics] = useState({
     totalRequests: 0,
@@ -295,10 +297,10 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-base font-black text-slate-900">
-              📋 Medicine Procurement Requests & Proposals
+              📋 {t('medicineProcurementRequests')}
             </h3>
             <p className="text-xs text-slate-500">
-              Customer inquiries for unstocked or out-of-stock items requiring supplier arrangement.
+              {t('medicineProcurementDesc')}
             </p>
           </div>
           <button
@@ -306,16 +308,16 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
             disabled={loading}
             className="text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl cursor-pointer transition disabled:opacity-50"
           >
-            {loading ? 'Refreshing...' : '🔄 Refresh'}
+            {loading ? t('loading') : `🔄 ${t('refresh')}`}
           </button>
         </div>
 
         {requests.length === 0 ? (
           <div className="py-16 text-center text-slate-400 space-y-2">
             <p className="text-3xl">📭</p>
-            <p className="text-xs font-bold text-slate-700">No medicine requests found</p>
+            <p className="text-xs font-bold text-slate-700">{t('noMedicineRequestsFound')}</p>
             <p className="text-[11px] text-slate-400">
-              When customers search for medicines that are out of stock or not in the catalog, requests will appear here.
+              {t('noMedicineRequestsHelp')}
             </p>
           </div>
         ) : (

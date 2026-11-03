@@ -456,12 +456,12 @@ export default function AddressManager({
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-base font-extrabold text-slate-900">
-            {isSelectOnly ? 'Delivery Address' : 'Multi-Address Directory'}
+            {isSelectOnly ? t('deliveryAddress') : t('multiAddressDirectory')}
           </h3>
           <p className="text-xs text-slate-500">
             {isSelectOnly
-              ? 'Select your delivery destination with one tap.'
-              : 'Manage saved addresses for quick prescription deliveries.'}
+              ? t('selectDeliveryDestination')
+              : t('manageSavedAddressesDesc')}
           </p>
         </div>
 

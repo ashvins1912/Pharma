@@ -228,7 +228,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             <span className="text-2xl shrink-0">📋</span>
             <div className="min-w-0">
               <h2 id="checkout-modal-title" className="text-base sm:text-lg font-black text-slate-900 truncate">
-                Checkout & Order Confirmation
+                {t('checkoutOrderConfirmation')}
               </h2>
               <p className="text-[11px] text-slate-400">{t('checkoutStep')}</p>
             </div>
@@ -259,7 +259,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           {/* Section 1: Delivery Address Selection */}
           <div>
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2.5">
-              1. Choose Shipping Address
+              {t('chooseShippingAddress')}
             </h3>
             <AddressManager isSelectOnly={true} />
           </div>
@@ -287,7 +287,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           {/* Section 3: Order Items Summary */}
           <div>
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2.5">
-              2. Prescription & Medicine Items ({cart.length})
+              {t('prescriptionAndMedicineItems')} ({cart.length})
             </h3>
             <div className={`mb-3 rounded-xl border p-3 ${prescriptionRequired ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50'}`}>
               <fieldset>
@@ -300,7 +300,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
               {prescriptionRequired && prescriptionChoice !== 'yes' && <p className="mt-2 text-xs font-bold text-rose-800">{t('prescriptionRequiredCart')}</p>}
               {(prescriptionRequired || prescriptionChoice === 'yes') && <>
                 <label htmlFor="prescription-upload" className="mt-2 block text-xs font-bold text-slate-800">
-                  Upload Prescription (PDF or image; maximum 8 MB — mobile photos are converted to PDF automatically)
+                  {t('uploadPrescriptionGuide')}
                 </label>
                 <input
                   id="prescription-upload"
@@ -502,7 +502,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             onClick={onClose}
             className="w-full sm:w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-2xl text-xs cursor-pointer transition"
           >
-            Cancel
+            {t('cancel')}
           </button>
           <button
             onClick={handlePlaceOrder}
@@ -510,7 +510,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             className="w-full sm:w-2/3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold py-3 rounded-2xl text-xs shadow-lg shadow-emerald-600/25 transition cursor-pointer flex items-center justify-center gap-2"
           >
             {loading && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
-            <span>{loading ? 'Creating Order...' : 'Confirm & Place COD Order'}</span>
+            <span>{loading ? t('creatingOrder') : t('confirmCodOrder')}</span>
             <span>✓</span>
           </button>
         </div>

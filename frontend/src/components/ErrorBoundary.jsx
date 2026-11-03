@@ -60,22 +60,41 @@ export default class ErrorBoundary extends React.Component {
               </div>
             )}
 
-            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={this.handleReset}
-                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-lg shadow-blue-600/25 transition-all active:scale-95"
-              >
-                Reload Application
-              </button>
-              <button
-                type="button"
-                onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
-                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-all active:scale-95"
-              >
-                Try Again
-              </button>
-            </div>
+            {(() => {
+              const lang = typeof window !== 'undefined' ? (window.localStorage.getItem('quickmeds-rx-language') || 'en') : 'en';
+              const reloadLabels = {
+                hi: 'एप्लिकेशन पुनः लोड करें',
+                kn: 'ಅಪ್ಲಿಕೇಶನ್ ಮರುಲೋಡ್ ಮಾಡಿ',
+                bn: 'অ্যাপ্লিকেশন পুনরায় লোড করুন',
+                te: 'అప్లికేషన్‌ను రీలోడ్ చేయండి',
+                en: 'Reload Application'
+              };
+              const tryAgainLabels = {
+                hi: 'पुनः प्रयास करें',
+                kn: 'ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ',
+                bn: 'আবার চেষ্টা করুন',
+                te: 'మళ్లీ ప్రయత్నించండి',
+                en: 'Try Again'
+              };
+              return (
+                <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={this.handleReset}
+                    className="w-full sm:w-auto px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-lg shadow-blue-600/25 transition-all active:scale-95"
+                  >
+                    {reloadLabels[lang] || reloadLabels.en}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
+                    className="w-full sm:w-auto px-6 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-all active:scale-95"
+                  >
+                    {tryAgainLabels[lang] || tryAgainLabels.en}
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         </div>
       );

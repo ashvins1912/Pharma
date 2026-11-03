@@ -178,10 +178,10 @@ export default function ProductGrid() {
           </div>
           <div>
             <h4 className="font-black text-slate-900 text-xs sm:text-sm">
-              Looking for a specific prescription or brand not listed above?
+              {t('lookingForSpecificPrescription')}
             </h4>
             <p className="text-[11px] text-slate-600 mt-0.5">
-              Submit a medicine request with optional prescription upload. Our pharmacists will source it and send a custom price and delivery slot proposal.
+              {t('submitMedicineRequestDesc')}
             </p>
           </div>
         </div>

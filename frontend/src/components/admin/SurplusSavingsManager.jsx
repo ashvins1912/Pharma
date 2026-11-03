@@ -171,7 +171,7 @@ export default function SurplusSavingsManager({ canManage = false }) {
                   <p className="mt-1 text-[11px] text-slate-500">{campaign.discountType === 'percentage' ? `${campaign.discountValue}% off` : `₹${campaign.discountValue} off per unit`} · {campaign.medicineIds?.length || 0} products · {campaign.usageCount || 0}{campaign.usageLimit ? `/${campaign.usageLimit}` : ''} redemptions</p>
                   <p className="text-[10px] text-slate-400">{new Date(campaign.startsAt).toLocaleString()} – {new Date(campaign.endsAt).toLocaleString()}</p>
                 </div>
-                {canManage && <div className="flex gap-2">{campaign.status !== 'ACTIVE' && <button type="button" onClick={() => setCampaignStatus(campaign, 'ACTIVE')} className="rounded-lg bg-emerald-600 px-3 py-2 text-[10px] font-black text-white"{t('activate')}</button>}{campaign.status === 'ACTIVE' && <button type="button" onClick={() => setCampaignStatus(campaign, 'PAUSED')} className="rounded-lg bg-amber-600 px-3 py-2 text-[10px] font-black text-white"{t('pause')}</button>}</div>}
+                {canManage && <div className="flex gap-2">{campaign.status !== 'ACTIVE' && <button type="button" onClick={() => setCampaignStatus(campaign, 'ACTIVE')} className="rounded-lg bg-emerald-600 px-3 py-2 text-[10px] font-black text-white">{t('activate')}</button>}{campaign.status === 'ACTIVE' && <button type="button" onClick={() => setCampaignStatus(campaign, 'PAUSED')} className="rounded-lg bg-amber-600 px-3 py-2 text-[10px] font-black text-white">{t('pause')}</button>}</div>}
               </article>
             ))}
           </div>

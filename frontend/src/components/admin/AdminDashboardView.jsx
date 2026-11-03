@@ -24,6 +24,7 @@ import { useAuth } from '../../context/AuthContext';
 import Pagination from '../common/Pagination';
 
 function PendingMedicineRequestsNotice({ count, onOpen }) {
+  const { t } = useLanguage();
   if (count < 1) return null;
   const plural = count !== 1;
 
@@ -353,10 +354,10 @@ export default function AdminDashboardView() {
             </div>
             <div>
               <h4 className="font-extrabold text-xs sm:text-sm text-amber-950">
-                You may miss delivery updates on mobile!
+                {t('missDeliveryUpdatesTitle')}
               </h4>
               <p className="text-[11px] text-amber-800 mt-0.5">
-                WhatsApp dispatch gateway is disconnected. Automated order tracking messages, delivery verification OTPs, and courier route links cannot be sent to mobile devices.
+                {t('whatsappDisconnectedDesc')}
               </p>
             </div>
           </div>
@@ -366,7 +367,7 @@ export default function AdminDashboardView() {
               className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 flex-shrink-0 shadow-sm"
             >
               <span>📲</span>
-              <span>Link WhatsApp QR Code →</span>
+              <span>{t('linkWhatsAppQr')}</span>
             </button>
           )}
         </div>
@@ -728,32 +729,32 @@ export default function AdminDashboardView() {
         <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
           <div className="flex justify-between items-center">
             <div>
-              <h3 className="text-base font-black text-slate-900">📜 Inventory Merge Audit Trail</h3>
-              <p className="text-xs text-slate-500">Bulk inventory changes and delivered order stock deductions.</p>
+              <h3 className="text-base font-black text-slate-900">📜 {t('inventoryMergeAuditTrail')}</h3>
+              <p className="text-xs text-slate-500">{t('bulkInventoryChangesDesc')}</p>
             </div>
             <button
               onClick={() => { setAuditPagination(p => ({ ...p, page: 1 })); void loadAuditLogs(); }}
               className="text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl cursor-pointer"
             >
-              🔄 Refresh
+              🔄 {t('refresh')}
             </button>
           </div>
 
           {auditLogs.length === 0 ? (
             <div className="py-12 text-center text-slate-400 text-xs">
-              No inventory changes or delivered orders have been recorded yet.
+              {t('noInventoryChangesRecorded')}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
-                    <th className="py-2.5 px-3">Timestamp</th>
-                    <th className="py-2.5 px-3">Event / Reference</th>
-                    <th className="py-2.5 px-3">SKU & Medicine</th>
-                    <th className="py-2.5 px-3">Stock Shift</th>
-                    <th className="py-2.5 px-3">Price Shift</th>
-                    <th className="py-2.5 px-3">Authorized By</th>
+                    <th className="py-2.5 px-3">{t('timestamp')}</th>
+                    <th className="py-2.5 px-3">{t('eventReference')}</th>
+                    <th className="py-2.5 px-3">{t('skuMedicine')}</th>
+                    <th className="py-2.5 px-3">{t('stockShift')}</th>
+                    <th className="py-2.5 px-3">{t('priceShift')}</th>
+                    <th className="py-2.5 px-3">{t('authorizedBy')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">

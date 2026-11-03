@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function TenantProfileDashboard() {
   const { t } = useLanguage();
@@ -152,13 +153,13 @@ export default function TenantProfileDashboard() {
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/10 skew-x-12 pointer-events-none" />
         <div className="relative z-10 space-y-1">
           <span className="text-[10px] font-black uppercase tracking-wider bg-white/20 px-3 py-1 rounded-full text-blue-100">
-            Tenant Profile &amp; Branch Control
+            {t('tenantProfileControl')}
           </span>
           <h2 className="text-xl sm:text-2xl font-black mt-2">
             {vendorProfile?.shopName || 'QuickMeds Rx & Dispensary'}
           </h2>
           <p className="text-xs text-blue-100 max-w-xl">
-            Manage organization credentials, associated branch locations, service radii, and branch managers with strict multi-tenant isolation.
+            {t('manageOrgCredentials')}
           </p>
         </div>
         <div className="relative z-10 flex gap-2 w-full sm:w-auto">
@@ -167,7 +168,7 @@ export default function TenantProfileDashboard() {
             onClick={() => handleOpenBranchModal()}
             className="flex-1 sm:flex-initial px-5 py-3 bg-white text-blue-900 font-black text-xs rounded-2xl shadow-md hover:bg-blue-50 transition cursor-pointer"
           >
-            + Link / Add New Branch
+            {t('linkAddNewBranch')}
           </button>
         </div>
       </div>
@@ -183,7 +184,7 @@ export default function TenantProfileDashboard() {
         {/* Company Details Card */}
         <div className="lg:col-span-2 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">🏢 Organization &amp; License Credentials</h3>
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">🏢 {t('orgLicenseCredentials')}</h3>
             <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">{t('verifiedTenant')}</span>
           </div>
 
@@ -217,8 +218,8 @@ export default function TenantProfileDashboard() {
         {/* Personnel & Key Staff Roster */}
         <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">👥 Tenant Personnel</h3>
-            <span className="text-xs font-bold text-slate-400">{personnel.length} Staff</span>
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">👥 {t('tenantPersonnel')}</h3>
+            <span className="text-xs font-bold text-slate-400">{personnel.length} {t('staffCount')}</span>
           </div>
           <div className="space-y-3 max-h-72 overflow-y-auto">
             {personnel.map((p) => (
@@ -240,7 +241,7 @@ export default function TenantProfileDashboard() {
       <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-3">
           <div>
-            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">📍 Associated Branch Locations &amp; Branch Managers</h3>
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">📍 {t('associatedBranchLocations')}</h3>
             <p className="text-xs text-slate-500 mt-0.5">{t('tenantProfileBranches')}</p>
           </div>
           <button
@@ -248,7 +249,7 @@ export default function TenantProfileDashboard() {
             onClick={() => handleOpenBranchModal()}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition cursor-pointer"
           >
-            + Add Branch Location
+            {t('addBranchLocation')}
           </button>
         </div>
 
@@ -274,16 +275,16 @@ export default function TenantProfileDashboard() {
               {/* Branch Manager Cover Box */}
               <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-700">👤 Branch Manager Cover</span>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-700">👤 {t('branchManagerCover')}</span>
                   <button
                     type="button"
                     onClick={() => handleOpenBranchModal(branch)}
                     className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
                   >
-                    Edit / Change Manager
+                    {t('editChangeManager')}
                   </button>
                 </div>
-                <div className="text-xs font-black text-slate-900">{branch.managerName || 'Unassigned Manager'}</div>
+                <div className="text-xs font-black text-slate-900">{branch.managerName || t('unassignedManager')}</div>
                 <div className="text-[11px] text-slate-500 flex flex-wrap gap-x-3">
                   <span>📞 {branch.managerPhone || t('noPhone')}</span>
                   <span>✉️ {branch.managerEmail || t('emailAddress')}</span>
@@ -300,7 +301,7 @@ export default function TenantProfileDashboard() {
           <div className="w-full max-w-xl bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-5 border-b border-slate-100 bg-white flex justify-between items-center">
               <h3 className="text-base font-black text-slate-900">
-                {editingBranch ? 'Edit Branch &amp; Manager Details' : 'Link New Branch Location'}
+                {editingBranch ? t('editBranchDetails') : t('linkNewBranchLocation')}
               </h3>
               <button
                 onClick={() => setBranchModalOpen(false)}
@@ -413,14 +414,14 @@ export default function TenantProfileDashboard() {
                   onClick={() => setBranchModalOpen(false)}
                   className="px-4 py-2.5 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={submittingBranch}
                   className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-md cursor-pointer disabled:opacity-50"
                 >
-                  {submittingBranch ? 'Saving Branch...' : 'Save & Link Branch ✓'}
+                  {submittingBranch ? t('savingBranch') : t('saveAndLinkBranch')}
                 </button>
               </div>
             </form>

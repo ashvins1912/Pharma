@@ -107,20 +107,20 @@ export default function AdminRouteOptimizer({ onRefresh }) {
           <div className="flex items-center gap-2">
             <span className="text-xl">🗺️</span>
             <h3 className="text-base font-black text-slate-900">
-              Smart Delivery Route Clubbing & Dispatch
+              {t('smartDeliveryRouteClubbing')}
             </h3>
           </div>
           <div className="flex items-center gap-2">
             <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1">
-              <span>📍 Spatial Geohash Indexing</span>
+              <span>📍 {t('spatialGeohashIndexing')}</span>
             </span>
             <span className="bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1">
-              <span>⚡ Probabilistic Bloom Filter</span>
+              <span>⚡ {t('probabilisticBloomFilter')}</span>
             </span>
           </div>
         </div>
         <p className="text-xs text-slate-500 mt-0.5">
-          Haversine geographic corridor clustering with multi-stop Google Maps deep links & spatial-probabilistic data indexing.
+          {t('routeCorridorDesc')}
         </p>
       </div>
 
@@ -134,7 +134,7 @@ export default function AdminRouteOptimizer({ onRefresh }) {
         {/* Step 1: Select Rider */}
         <div className="space-y-4">
           <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">
-            Step 1: Select Available Courier / Rider
+            {t('selectAvailableRider')}
           </h4>
 
           <div className="space-y-2">

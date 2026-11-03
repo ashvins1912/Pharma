@@ -421,7 +421,7 @@ function MainApp() {
                   );
                 })()}
                 <p className="text-xs sm:text-sm text-blue-100 font-medium leading-relaxed">
-                  {t('welcomeTo')} <strong className="text-white">{activeTenant?.shopName || activeTenant?.name || 'QuickMeds Rx'}</strong>! Your trusted local dispensary brings you warm greetings and rapid door delivery for genuine pharmaceutical formulations, doctor-prescribed medications, and wellness care products.
+                  {t('welcomeTo')} <strong className="text-white">{activeTenant?.shopName || activeTenant?.name || 'QuickMeds Rx'}</strong>. {t('welcomeBannerDesc')}
                 </p>
                 <div className="pt-2 flex flex-wrap items-center gap-3">
                   <button
