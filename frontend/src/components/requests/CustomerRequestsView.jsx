@@ -5,6 +5,7 @@ import { useToast } from '../../context/ToastContext';
 import { replaceMedicineRequestPrescription } from '../../api/medicineRequestService';
 import { useActionLoading, LOADING_ACTIONS } from '../../context/LoadingContext';
 import Pagination from '../common/Pagination';
+import { useLanguage } from '../../context/LanguageContext';
 
 const DEFAULT_PAGINATION = { page: 1, pageSize: 10, limit: 10, total: 0, totalPages: 0, hasNextPage: false };
 
@@ -44,17 +45,17 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
   const handlePrescriptionReplacement = async (request, file) => {
     if (!file || updatingPrescriptionId) return;
     if (file.size > 5 * 1024 * 1024) {
-      addToast('Prescription file size must be under 5 MB.', 'warning');
+      addToast(t('prescriptionFileTooLarge'), 'warning');
       return;
     }
     await runAction(LOADING_ACTIONS.UPLOAD_PRESCRIPTION, async () => {
       setUpdatingPrescriptionId(request._id);
       try {
         const result = await replaceMedicineRequestPrescription(request._id, file);
-        addToast(result.message || 'Prescription updated and queued for reprocessing.', 'success');
+        addToast(result.message || t('prescriptionUpdated'), 'success');
         await loadUserMedicineRequests({ page: 1, statusGroup: statusFilter });
       } catch (error) {
-        addToast(error.message || 'Failed to update prescription.', 'error');
+        addToast(error.message || t('prescriptionUpdateFailed'), 'error');
       } finally {
         setUpdatingPrescriptionId(null);
       }
@@ -151,7 +152,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition cursor-pointer shadow-xs flex items-center gap-1.5"
           >
             <span>+</span>
-            <span>New Request</span>
+            <span>{t('newRequest')}</span>
           </button>
         </div>
       </div>
@@ -203,11 +204,11 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
         <div className="py-16 text-center text-slate-400 space-y-3">
           <p className="text-4xl">💊</p>
           <div className="max-w-sm mx-auto space-y-1">
-            <p className="text-xs font-bold text-slate-700">No medicine requests found</p>
+            <p className="text-xs font-bold text-slate-700">{t('noMedicineRequests')}</p>
             <p className="text-[11px] text-slate-400">
               {statusFilter === 'ALL'
                 ? "Can't find a medicine in our store? Ask QuickMeds Rx to procure it for you."
-                : 'No requests match your selected filter.'}
+                : t('noRequestsFilter')}
             </p>
           </div>
           <button
@@ -261,7 +262,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                       {(req.requestedItems || []).map((item, index) => (
                         <li key={`${item.requestedName}-${index}`}>
                           <p className="font-extrabold text-slate-900 text-sm">
-                            {item.requestedName || 'Medicine'}
+                            {item.requestedName || t('medicine')}
                           </p>
                           <p className="text-[11px] text-slate-500">
                             {item.dosageForm && `${item.dosageForm} • `}
@@ -351,7 +352,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                 {req.prescriptionId && !['CONVERTED_TO_ORDER', 'CUSTOMER_APPROVED', 'CANCELLED', 'CUSTOMER_REJECTED', 'PHARMACY_REJECTED'].includes(req.status) && (
                   <div className="flex items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-3">
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-blue-900">Prescription document</p>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-blue-900">{t('prescriptionDocument')}</p>
                       <p className="text-[11px] text-blue-800">
                         {req.prescriptionVerification?.status === 'PROCESSING'
                           ? 'Processing the latest prescription…'
@@ -359,7 +360,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                       </p>
                     </div>
                     <label className="cursor-pointer rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-black text-white hover:bg-blue-700">
-                      {isActionLoading(LOADING_ACTIONS.UPLOAD_PRESCRIPTION) && updatingPrescriptionId === req._id ? 'Uploading…' : 'Update Prescription'}
+                      {isActionLoading(LOADING_ACTIONS.UPLOAD_PRESCRIPTION) && updatingPrescriptionId === req._id ? t('uploading') : t('updatePrescription')}
                       <input
                         type="file"
                         accept="application/pdf,image/jpeg,image/png,image/webp"
