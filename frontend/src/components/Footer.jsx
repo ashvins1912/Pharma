@@ -2,7 +2,7 @@ import React from 'react';
 import { useLanguage } from '../context/LanguageContext';
 
 export default function Footer({ onNavigate }) {
-  const { t } = useLanguage();
+  const { t, language, setLanguage, languages } = useLanguage();
   return (
     <footer className="bg-white border-t border-slate-200 mt-16 text-slate-600 text-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -91,7 +91,14 @@ export default function Footer({ onNavigate }) {
 
         <div className="border-t border-slate-100 mt-10 pt-6 flex flex-col sm:flex-row justify-between items-center gap-3 text-slate-400 text-[11px]">
           <p>© {new Date().getFullYear()} QuickMeds Rx Operations. {t('allRightsReserved')}</p>
-          <div className="flex gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+              <span aria-hidden="true">🌐</span>
+              <span>{t("language")}</span>
+              <select aria-label={t("language")} value={language} onChange={(event) => setLanguage(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700">
+                {languages.map((item) => <option key={item.code} value={item.code}>{item.nativeLabel}</option>)}
+              </select>
+            </label>
             <span>Privacy Policy</span>
             <span>Terms of Service</span>
             <span>Dispensary Licensing</span>
