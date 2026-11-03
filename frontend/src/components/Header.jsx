@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { useTenant } from '../context/TenantContext';
@@ -24,26 +25,41 @@ export default function Header({
   const [signingOut, setSigningOut] = useState(false);
   const { branchId, setBranchId } = useTenant();
   const { language, setLanguage, t, languages } = useLanguage();
-  const [branchOptions, setBranchOptions] = useState([
-    { id: 'branch-1', name: 'Downtown Flagship' },
-    { id: 'branch-2', name: 'Northside Express' },
-    { id: 'branch-3', name: 'Westend Wellness' }
-  ]);
+  const [branchOptions, setBranchOptions] = useState([]);
 
   React.useEffect(() => {
     apiClient.get('/api/v1/branches/all').then(res => {
       const items = res.data?.data || res.data?.branches || [];
       if (Array.isArray(items) && items.length > 0) {
-        setBranchOptions(items.map(b => ({ id: b._id || b.id, name: b.name || b.branchName || 'Branch' })));
+        const valid = items
+          .filter(Boolean)
+          .map(b => ({
+            id: String(b._id || b.id || ''),
+            name: String(b.name || b.branchName || 'Branch')
+          }))
+          .filter(b => b.id);
+        setBranchOptions(valid);
+      } else {
+        setBranchOptions([]);
       }
     }).catch(() => {
       apiClient.get('/api/tenants/nearby').then(res => {
         const tenants = res.data?.tenants || [];
         if (tenants.length > 0) {
-          const dynamicBranches = tenants.map((t, idx) => ({ id: t._id || t.id || `branch-${idx+1}`, name: `${t.name} (Primary Branch)` }));
+          const dynamicBranches = tenants
+            .filter(Boolean)
+            .map((t, idx) => ({
+              id: String(t._id || t.id || `branch-${idx+1}`),
+              name: String(t.name ? `${t.name} (Primary Branch)` : 'Primary Branch')
+            }))
+            .filter(b => b.id);
           setBranchOptions(dynamicBranches);
+        } else {
+          setBranchOptions([]);
         }
-      }).catch(() => {});
+      }).catch(() => {
+        setBranchOptions([]);
+      });
     });
   }, []);
 
@@ -207,6 +223,22 @@ export default function Header({
 
           {/* Right: Actions Bar */}
           <div className="quickmeds-actions-group">
+
+            {/* Mobile / Small Screen Navigation Hamburger Menu Toggle */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center shrink-0"
+              aria-label={t('toggleMenu')}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {mobileMenuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
             
             <label className="hidden min-[380px]:flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-600" title={t('selectLanguage')}>
               <span aria-hidden="true">🌐</span>
@@ -222,18 +254,20 @@ export default function Header({
             </label>
 
             {/* Branch Quick-Switcher Dropdown */}
-            <div className="hidden sm:flex items-center gap-1 bg-slate-100 hover:bg-slate-200/70 px-2.5 py-1.5 rounded-xl border border-slate-200 transition shrink-0" title="Toggle active branch context (X-Branch-Id)">
-              <span className="text-xs">🏢</span>
-              <select
-                value={branchId}
-                onChange={(e) => setBranchId(e.target.value)}
-                className="bg-transparent text-[11px] font-black text-slate-800 outline-none cursor-pointer max-w-[130px] truncate"
-              >
-                {branchOptions.map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
+            {Array.isArray(branchOptions) && branchOptions.length > 0 && (
+              <div className="hidden sm:flex items-center gap-1 bg-slate-100 hover:bg-slate-200/70 px-2.5 py-1.5 rounded-xl border border-slate-200 transition shrink-0" title="Toggle active branch context (X-Branch-Id)">
+                <span className="text-xs">🏢</span>
+                <select
+                  value={branchId}
+                  onChange={(e) => setBranchId(e.target.value)}
+                  className="bg-transparent text-[11px] font-black text-slate-800 outline-none cursor-pointer max-w-[130px] truncate"
+                >
+                  {branchOptions.filter(Boolean).map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Customer notifications */}
             {user && canViewCustomerWorkspace && hasPermission('profile.read') && (
@@ -305,28 +339,12 @@ export default function Header({
               </button>
             )}
 
-            {/* Mobile / Small Screen Navigation Hamburger Menu Toggle */}
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center shrink-0"
-              aria-label={t('toggleMenu')}
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                {mobileMenuOpen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
-            </button>
-
           </div>
         </div>
 
-        {/* Slide-in Mobile Navigation Drawer from the Right */}
-        {mobileMenuOpen && (
-          <div className="fixed inset-0 z-[9999] overflow-hidden animate-fade-in" aria-modal="true" role="dialog">
+        {/* Slide-in Mobile Navigation Drawer from the Right (Rendered via Portal) */}
+        {mobileMenuOpen && typeof document !== 'undefined' && createPortal(
+          <div className="fixed inset-0 z-[99999] overflow-hidden animate-fade-in" aria-modal="true" role="dialog">
             {/* Backdrop */}
             <div
               onClick={() => setMobileMenuOpen(false)}
@@ -373,19 +391,21 @@ export default function Header({
                     </select>
                   </label>
 
-                  <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
-                    <span>🏢</span>
-                    <select
-                      aria-label="Branch"
-                      value={branchId}
-                      onChange={(e) => setBranchId(e.target.value)}
-                      className="w-full bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer truncate"
-                    >
-                      {branchOptions.map(b => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
-                      ))}
-                    </select>
-                  </label>
+                  {Array.isArray(branchOptions) && branchOptions.length > 0 && (
+                    <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+                      <span>🏢</span>
+                      <select
+                        aria-label="Branch"
+                        value={branchId}
+                        onChange={(e) => setBranchId(e.target.value)}
+                        className="w-full bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer truncate"
+                      >
+                        {branchOptions.filter(Boolean).map(b => (
+                          <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                 </div>
 
                 <div className="space-y-1">
@@ -482,7 +502,8 @@ export default function Header({
               )}
 
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
       </div>
