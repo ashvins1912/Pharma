@@ -78,7 +78,7 @@ export default function SearchFilter() {
               onClick={clearAllFilters}
               className="text-xs text-rose-600 hover:bg-rose-50 font-extrabold px-3 py-2 rounded-xl border border-rose-200 transition cursor-pointer whitespace-nowrap min-h-[38px]"
             >
-              Clear
+              {t('clear')}
             </button>
           )}
         </div>
@@ -91,7 +91,7 @@ export default function SearchFilter() {
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
           {CATEGORIES.map((cat) => (
             <button
-              key={cat}
+              key={categoryLabels[cat] || cat}
               onClick={() => setSelectedCategory(cat)}
               className={`text-[11px] sm:text-xs px-2.5 py-1 rounded-lg sm:rounded-xl font-bold whitespace-nowrap transition cursor-pointer flex-shrink-0 ${
                 selectedCategory === cat
