@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 /**
  * Presentation Component: MFAEnrollmentModal
@@ -10,6 +11,7 @@ import { useToast } from '../../context/ToastContext';
  * 3. Prompts user for 6-digit verification code to confirm enrollment.
  */
 export default function MFAEnrollmentModal({ isOpen, onClose }) {
+    const { t } = useLanguage();
     const { enrollMfa, confirmMfaEnroll } = useAuth();
     const { addToast } = useToast();
 
@@ -36,7 +38,7 @@ export default function MFAEnrollmentModal({ isOpen, onClose }) {
                 const data = await enrollMfa();
                 setEnrollData(data);
             } catch (err) {
-                setErrorMsg(err.message || 'Could not initiate MFA setup.');
+                setErrorMsg(err.message || t('couldNotStartMfa'));
             } finally {
                 setLoading(false);
             }
@@ -59,7 +61,7 @@ export default function MFAEnrollmentModal({ isOpen, onClose }) {
         e.preventDefault();
         setErrorMsg('');
         if (verificationCode.trim().length !== 6) {
-            setErrorMsg('Please enter a 6-digit code.');
+            setErrorMsg(t('enterSixDigitCode'));
             return;
         }
 
@@ -85,8 +87,8 @@ export default function MFAEnrollmentModal({ isOpen, onClose }) {
                             🛡️
                         </div>
                         <div>
-                            <h3 className="text-base font-black text-slate-900">Setup Two-Factor Authentication</h3>
-                            <p className="text-xs text-slate-500">Zero-cost TOTP with your mobile authenticator app</p>
+                            <h3 className="text-base font-black text-slate-900">{t('setupTwoFactor')}</h3>
+                            <p className="text-xs text-slate-500">{t('totpDescription')}</p>
                         </div>
                     </div>
                     <button
@@ -100,7 +102,7 @@ export default function MFAEnrollmentModal({ isOpen, onClose }) {
                 {loading ? (
                     <div className="py-12 text-center text-xs text-slate-400 font-semibold space-y-2">
                         <span className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></span>
-                        <p>Generating cryptographically secure TOTP secret...</p>
+                        <p>{t('generatingTotp')}</p>
                     </div>
                 ) : errorMsg && !enrollData ? (
                     <div className="py-8 text-center space-y-3">
@@ -119,7 +121,7 @@ export default function MFAEnrollmentModal({ isOpen, onClose }) {
                             <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
                                 Step 1 of 2
                             </span>
-                            <h4 className="text-xs font-bold text-slate-800">Scan QR Code with Authenticator App</h4>
+                            <h4 className="text-xs font-bold text-slate-800">{t('scanQrCode')}</h4>
                             <p className="text-[11px] text-slate-500 leading-relaxed">
                                 Open Google Authenticator, Microsoft Authenticator, Bitwarden, or Apple Passwords on your phone and scan:
                             </p>
