@@ -1,6 +1,8 @@
 import React from 'react';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function MedicineCard({ med, onAddToCart }) {
+    const { t } = useLanguage();
     const stock = med.stock !== undefined ? med.stock : (med.quantity || 0);
     const isOut = stock <= 0;
 
@@ -36,7 +38,7 @@ export default function MedicineCard({ med, onAddToCart }) {
             </div>
             <div className="mt-3">
                 <div className="flex justify-between items-center text-xs mb-2">
-                    <span className="text-slate-400">Price</span>
+                    <span className="text-slate-400">{t('priceLabel')}</span>
                     <span className="font-extrabold text-emerald-600 text-sm">₹{med.price}</span>
                 </div>
                 <button
