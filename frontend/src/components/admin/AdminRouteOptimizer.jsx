@@ -2,9 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useTenant } from '../../context/TenantContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { SpatialGridIndex, SimpleBloomFilter } from '../../utils/spatialProbUtils';
 
 export default function AdminRouteOptimizer({ onRefresh }) {
+  const { t } = useLanguage();
   const { addToast } = useToast();
   const { tenantId } = useTenant();
 
@@ -138,7 +140,7 @@ export default function AdminRouteOptimizer({ onRefresh }) {
           <div className="space-y-2">
             <input
               type="text"
-              placeholder="Search available riders..."
+              placeholder={t('searchRiders')}
               value={riderSearch}
               onChange={(e) => setRiderSearch(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs outline-none focus:border-blue-500"
@@ -147,9 +149,9 @@ export default function AdminRouteOptimizer({ onRefresh }) {
 
           <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
             {loadingRiders ? (
-              <div className="py-8 text-center text-xs text-slate-400">Loading available riders...</div>
+              <div className="py-8 text-center text-xs text-slate-400">{t('loadingRiders')}</div>
             ) : filteredRiders.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400">No available riders found.</div>
+              <div className="py-8 text-center text-xs text-slate-400">{t('noRiders')}</div>
             ) : (
               filteredRiders.map((rider) => {
                 const riderId = String(rider.id || rider._id);
@@ -211,7 +213,7 @@ export default function AdminRouteOptimizer({ onRefresh }) {
               disabled={!selectedRiderId || searching}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs py-2.5 rounded-xl transition cursor-pointer shadow-sm"
             >
-              {searching ? 'Optimizing & Clustering Routes...' : 'Find & Club Nearby Orders'}
+              {searching ? t('processing') : t('findNearbyOrders')}
             </button>
           </div>
         </form>
@@ -247,7 +249,7 @@ export default function AdminRouteOptimizer({ onRefresh }) {
                 disabled={dispatching || !routeResult.orders?.length}
                 className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs px-4 py-2 rounded-xl transition shadow-sm cursor-pointer"
               >
-                {dispatching ? 'Dispatching Batch...' : 'Dispatch Batch to Rider'}
+                {dispatching ? t('processing') : t('dispatchBatchToRider')}
               </button>
             </div>
           </div>
