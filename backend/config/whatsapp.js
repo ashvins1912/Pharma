@@ -11,6 +11,7 @@ import Order from '../models/Order.js';
 import Tenant from '../models/Tenant.js';
 import Vendor from '../models/Vendor.js';
 import UserProfile from '../models/UserProfile.js';
+import User from '../models/User.js';
 import { createRiderDeliveryActionToken } from '../services/payment/SignedPaymentActionService.js';
 import { buildDeliveryActionMenu, getDeliveryActionFromListReply } from '../services/delivery/DeliveryWhatsAppMenu.js';
 
@@ -19,10 +20,13 @@ const sentNotifications = new Map();
 const resolveNotificationLanguage = async (userId) => {
     if (!userId || !getIsConnected()) return 'en';
     try {
-        const profile = await UserProfile.findOne({
-            $or: [{ userId: String(userId) }, { supabase_user_id: String(userId) }, { supabaseId: String(userId) }]
-        }).select('preferredLanguage').lean();
-        return ['en', 'hi', 'kn', 'bn', 'te'].includes(profile?.preferredLanguage) ? profile.preferredLanguage : 'en';
+        const identity = { $or: [{ userId: String(userId) }, { supabase_user_id: String(userId) }, { supabaseId: String(userId) }] };
+        const [profile, user] = await Promise.all([
+            UserProfile.findOne(identity).select('preferredLanguage').lean(),
+            User.findOne(identity).select('preferredLanguage').lean()
+        ]);
+        const language = profile?.preferredLanguage || user?.preferredLanguage;
+        return ['en', 'hi', 'kn', 'bn', 'te'].includes(language) ? language : 'en';
     } catch {
         return 'en';
     }
