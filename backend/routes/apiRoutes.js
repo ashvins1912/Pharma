@@ -202,7 +202,17 @@ router.post('/tenant/branches/:branchId/activate', authenticateUser, async (req,
 import Tenant from '../models/Tenant.js';
 import Vendor from '../models/Vendor.js';
 
-router.get('/tenants/nearby', async (req, res) => {
+const optionalTenantAuthentication = (req, res, next) => {
+    const hasCredential = Boolean(
+        req.get('x-gateway-trusted-authorization')
+        || req.get('authorization')?.startsWith('Bearer ')
+        || req.cookies?.access_token
+        || req.get('cookie')?.match(/(?:^|;\\s*)access_token=/)
+    );
+    return hasCredential ? authenticateUser(req, res, next) : next();
+};
+
+router.get('/tenants/nearby', optionalTenantAuthentication, async (req, res) => {
     try {
         const hasLat = req.query.lat !== undefined;
         const hasLng = req.query.lng !== undefined;
@@ -214,7 +224,25 @@ router.get('/tenants/nearby', async (req, res) => {
             || !Number.isFinite(userLng) || userLng < -180 || userLng > 180))) {
             return res.status(400).json({ message: 'Provide valid latitude and longitude coordinates.' });
         }
-        const dbTenants = await Tenant.find({ status: 'ACTIVE' }).lean();
+
+        // A signed tenant session is never allowed to discover/select a different pharmacy.
+        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+        const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const authenticatedTenantId = String(req.user?.app_metadata?.tenantId || req.user?.tenantId || '').trim();
+        let tenantFilter = { status: 'ACTIVE' };
+        if (req.user && !isPlatformAdmin && authenticatedTenantId) {
+            const membership = await TenantMembership.findOne({
+                userId: String(req.user.sub || req.user.id || ''),
+                tenantId: authenticatedTenantId,
+                status: 'ACTIVE'
+            }).lean();
+            if (!membership) return res.status(403).json({ success: false, code: 'TENANT_MEMBERSHIP_REQUIRED', message: 'Your active pharmacy membership could not be verified.' });
+            tenantFilter = { _id: authenticatedTenantId, status: 'ACTIVE' };
+        } else if (req.user && !isPlatformAdmin && ['TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACY', 'PHARMACIST', 'PHARMACY_STAFF'].includes(role)) {
+            return res.status(403).json({ success: false, code: 'TENANT_CONTEXT_REQUIRED', message: 'Your pharmacy session is missing its tenant identity.' });
+        }
+
+        const dbTenants = await Tenant.find(tenantFilter).lean();
         const tenantIds = dbTenants.map(tenant => String(tenant._id));
         const vendors = tenantIds.length
             ? await Vendor.find({ status: 'ACTIVE', tenantId: { $in: tenantIds } }).lean()
@@ -241,9 +269,7 @@ router.get('/tenants/nearby', async (req, res) => {
             const vendorCity = String(vendor.address?.city || '').trim().toLowerCase();
             const locationMatch = requestedPincode && vendorPincode === requestedPincode
                 ? 'PINCODE'
-                : requestedCity && vendorCity === requestedCity
-                    ? 'CITY'
-                    : null;
+                : requestedCity && vendorCity === requestedCity ? 'CITY' : null;
             return [{
                 _id: tenant._id,
                 shopName: tenant.name || vendor.companyName,
@@ -259,23 +285,17 @@ router.get('/tenants/nearby', async (req, res) => {
                 locationMatch
             }];
         });
-        // Keep pharmacies without GPS pins visible. Older vendor records may have
-        // a complete postal address but no coordinates yet.
         if (userLat != null) {
-            tenants.sort((a, b) => {
-                const distanceA = a.distanceKm == null ? Number.POSITIVE_INFINITY : a.distanceKm;
-                const distanceB = b.distanceKm == null ? Number.POSITIVE_INFINITY : b.distanceKm;
-                return distanceA - distanceB;
-            });
+            tenants.sort((a, b) => (a.distanceKm ?? Number.POSITIVE_INFINITY) - (b.distanceKm ?? Number.POSITIVE_INFINITY));
         } else if (requestedPincode || requestedCity) {
             tenants.sort((a, b) => {
                 const score = item => item.locationMatch === 'PINCODE' ? 0 : item.locationMatch === 'CITY' ? 1 : 2;
                 return score(a) - score(b);
             });
         }
-        return res.json({ status: 'success', tenants });
+        return res.json({ status: 'success', tenants, scope: req.user && !isPlatformAdmin && authenticatedTenantId ? 'TENANT' : 'DISCOVERY' });
     } catch (err) {
-        console.error('[TenantDiscovery] Nearby pharmacy lookup failed:', err);
+        console.error('[TenantDiscovery] Nearby pharmacy lookup failed:', { requestId: req.requestId || null, code: err.code || err.name });
         return res.status(503).json({ message: 'Nearby pharmacy discovery is temporarily unavailable.' });
     }
 });
