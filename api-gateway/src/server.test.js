@@ -462,7 +462,7 @@ test('gateway requires admin role for Inventory adjustment and signs import scop
         'X-Branch-Id': 'branch-selected-in-ui',
         'Content-Type': 'multipart/form-data; boundary=upload-boundary'
       },
-      body: '--upload-boundary--\\r\\n'
+      body: '--upload-boundary--\r\n'
     });
     assert.equal(tenantBranchUpload.status, 202);
     assert.equal(validatedScopeClaims.tenantId, 'tenant-ashvin-main');
