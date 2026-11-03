@@ -10,7 +10,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   const { t } = useLanguage();
   const { addToast } = useToast();
   const { fetchMedicines } = useApp();
-  const { isSuperAdmin, isTenantAdmin, user } = useAuth();
+  const { isSuperAdmin, user } = useAuth();
   const authenticatedTenantId = String(user?.tenantId || user?.app_metadata?.tenantId || '').trim();
   const [targetTenantId, setTargetTenantId] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('pharma_import_target_tenant_id') || '') : '');
   const scopeTenantId = isSuperAdmin ? targetTenantId.trim() : authenticatedTenantId;
@@ -29,7 +29,11 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     setTargetBranchId('');
     setBranchOptions([]);
     setBranchLoadError('');
-    if (!isOpen || !scopeTenantId) return undefined;
+    if (!isOpen) return undefined;
+    if (!scopeTenantId) {
+      setBranchLoadError('Your authenticated account does not have an active tenant. Sign in with a pharmacy account or contact your platform administrator.');
+      return undefined;
+    }
 
     let cancelled = false;
     setBranchLoading(true);
