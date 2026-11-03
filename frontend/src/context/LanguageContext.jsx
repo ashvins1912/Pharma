@@ -951,6 +951,13 @@ const messages = {
     emailLabel: "Email",
     accountId: "Account ID",
  },
+
+    paginationControls: "Pagination controls",
+    previousPage: "Previous page",
+    nextPage: "Next page",
+    ofLabel: "of",
+    tryCouponCodes: "Try: FREEMED20 or WELCOME10",
+    proceedCheckout: "Proceed to Checkout",
   hi: {
     store: "दुकान",
     orders: "ऑर्डर",
@@ -1892,6 +1899,13 @@ const messages = {
     emailLabel: "ईमेल",
     accountId: "खाता आईडी",
  },
+
+    paginationControls: "पृष्ठांकन नियंत्रण",
+    previousPage: "पिछला पृष्ठ",
+    nextPage: "अगला पृष्ठ",
+    ofLabel: "में से",
+    tryCouponCodes: "कोशिश करें: FREEMED20 या WELCOME10",
+    proceedCheckout: "चेकआउट पर जाएँ",
   kn: {
     store: "ಅಂಗಡಿ",
     orders: "ಆರ್ಡರ್‌ಗಳು",
@@ -2833,6 +2847,13 @@ const messages = {
     emailLabel: "ಇಮೇಲ್",
     accountId: "ಖಾತೆ ಐಡಿ",
  },
+
+    paginationControls: "ಪುಟ ನಿಯಂತ್ರಣಗಳು",
+    previousPage: "ಹಿಂದಿನ ಪುಟ",
+    nextPage: "ಮುಂದಿನ ಪುಟ",
+    ofLabel: "ರಲ್ಲಿ",
+    tryCouponCodes: "ಪ್ರಯತ್ನಿಸಿ: FREEMED20 ಅಥವಾ WELCOME10",
+    proceedCheckout: "ಚೆಕ್‌ಔಟ್‌ಗೆ ಮುಂದುವರಿಯಿರಿ",
   bn: {
     store: "দোকান",
     orders: "অর্ডার",
@@ -3774,6 +3795,13 @@ const messages = {
     emailLabel: "ইমেল",
     accountId: "অ্যাকাউন্ট আইডি",
  },
+
+    paginationControls: "পৃষ্ঠাসজ্জা নিয়ন্ত্রণ",
+    previousPage: "আগের পৃষ্ঠা",
+    nextPage: "পরের পৃষ্ঠা",
+    ofLabel: "এর মধ্যে",
+    tryCouponCodes: "চেষ্টা করুন: FREEMED20 বা WELCOME10",
+    proceedCheckout: "চেকআউটে এগিয়ে যান",
   te: {
     store: "స్టోర్",
     orders: "ఆర్డర్లు",
@@ -4717,6 +4745,13 @@ tenantInfrastructure: "టెనెంట్ మౌలిక సదుపాయ�
     tenantInfrastructure: "టెనెంట్ మౌలిక సదుపాయాలు",
 
   }
+    paginationControls: "పేజినేషన్ నియంత్రణలు",
+    previousPage: "మునుపటి పేజీ",
+    nextPage: "తదుపరి పేజీ",
+    ofLabel: "లో",
+    tryCouponCodes: "ప్రయత్నించండి: FREEMED20 లేదా WELCOME10",
+    proceedCheckout: "చెక్‌అవుట్‌కు కొనసాగండి",
+
 };
 
 export const LanguageContext = createContext(null);
