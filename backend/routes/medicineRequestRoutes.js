@@ -821,6 +821,7 @@ router.get('/:id/fulfillment-options', authenticateUser, requirePermission('medi
 
 router.post('/:id/waitlist', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, authorizeRequestDetails, async (req, res) => {
     if (!requireDatabase(res)) return;
+    let requestFingerprint = null;
     try {
         const request = req.authorizedMedicineRequest;
         if (!request?.tenantId) return res.status(409).json({ message: 'Select a pharmacy before waiting for stock.' });
@@ -830,7 +831,7 @@ router.post('/:id/waitlist', authenticateUser, requirePermission('medicine_reque
         const idempotencyKey = String(req.get('Idempotency-Key') || '').trim();
         if (!idempotencyKey || idempotencyKey.length > 128) return res.status(400).json({ message: 'A valid Idempotency-Key header is required.' });
         const { waitDays, waitUntil } = validateWaitWindow(req.body?.waitDays);
-        const requestFingerprint = createHash('sha256').update(JSON.stringify({ sourceId: String(request._id), waitDays, requestedItems: (request.requestedItems || []).map(item => ({ name: item.requestedName, composition: item.composition, strength: item.strength, dosageForm: item.dosageForm, quantity: item.quantity })) })).digest('hex');
+        requestFingerprint = createHash('sha256').update(JSON.stringify({ sourceId: String(request._id), waitDays, requestedItems: (request.requestedItems || []).map(item => ({ name: item.requestedName, composition: item.composition, strength: item.strength, dosageForm: item.dosageForm, quantity: item.quantity })) })).digest('hex');
         const existing = await FulfillmentCase.findOne({ customerId: String(req.user.sub), tenantId: String(request.tenantId), idempotencyKey }).lean();
         if (existing) {
             if (existing.requestFingerprint !== requestFingerprint) return res.status(409).json({ message: 'This idempotency key was already used for a different request.' });
@@ -874,6 +875,11 @@ router.post('/:id/waitlist', authenticateUser, requirePermission('medicine_reque
         }
         return res.status(201).json({ case: created.toObject(), request: updatedRequest, message: 'We will monitor availability for the selected wait period.' });
     } catch (error) {
+        if (error.code === 11000) {
+            const existing = await FulfillmentCase.findOne({ customerId: String(req.user.sub), tenantId: String(req.authorizedMedicineRequest?.tenantId || ''), idempotencyKey: String(req.get('Idempotency-Key') || '') }).lean();
+            if (existing && existing.requestFingerprint === requestFingerprint) return res.status(200).json({ case: existing, alreadyCreated: true });
+            if (existing) return res.status(409).json({ message: 'This idempotency key was already used for a different request.' });
+        }
         return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to create medicine stock waitlist.' });
     }
 });
