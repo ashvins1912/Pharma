@@ -251,6 +251,7 @@ export class TenantService {
             email: data.contactEmail || data.email || '',
             contactEmail: data.contactEmail || data.email || '',
             contactPhone: data.contactPhone || data.phone || '',
+            geolocation: data.geolocation || { latitude: null, longitude: null },
             status: data.status || 'ACTIVE',
             timezone: data.timezone || 'Asia/Kolkata',
             currency: data.currency || 'INR',
@@ -274,6 +275,7 @@ export class TenantService {
                     code: newTenant.code,
                     contactEmail: newTenant.contactEmail,
                     contactPhone: newTenant.contactPhone,
+                    geolocation: newTenant.geolocation,
                     status: newTenant.status,
                     timezone: newTenant.timezone,
                     currency: newTenant.currency,
@@ -310,6 +312,7 @@ export class TenantService {
             name: updates.name ? updates.name.trim() : tenant.name,
             contactEmail: updates.contactEmail !== undefined ? updates.contactEmail : tenant.contactEmail,
             contactPhone: updates.contactPhone !== undefined ? updates.contactPhone : tenant.contactPhone,
+            geolocation: updates.geolocation !== undefined ? updates.geolocation : tenant.geolocation,
             settings: { ...tenant.settings, ...(updates.settings || {}) },
             updatedAt: new Date().toISOString()
         };
@@ -324,6 +327,7 @@ export class TenantService {
                     status: updated.status,
                     contactEmail: updated.contactEmail,
                     contactPhone: updated.contactPhone,
+                    geolocation: updated.geolocation,
                     timezone: updated.timezone,
                     currency: updated.currency,
                     settings: updated.settings
