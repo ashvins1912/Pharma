@@ -746,7 +746,7 @@ export async function createImportJob({
   previewFingerprint,
   approvedPreview
 }) {
-  if (!config.importsEnabled) { const error = new Error('Inventory import writes are disabled. Enable INVENTORY_IMPORTS_ENABLED only in an isolated test environment after review.'); error.statusCode = 503; throw error; }
+  if (!config.importsEnabled) { const error = new Error('Inventory import writes are disabled by deployment configuration. Enable publishing only after confirming transaction-capable MongoDB and an approved rollout.'); error.statusCode = 503; throw error; }
   if (!tenantId || !branchId) { const error = new Error('Verified tenant and branch context are required.'); error.statusCode = 403; throw error; }
   if (stockMode !== 'REPLACE') { const error = new Error('Only REPLACE stock mode is currently supported; additive imports are disabled.'); error.statusCode = 400; throw error; }
   if (!previewFingerprint) { const error = new Error('A server-generated preview fingerprint and explicit confirmation are required.'); error.statusCode = 400; throw error; }
