@@ -1218,10 +1218,19 @@ export const dataStore = {
         for (const item of requestedItems) {
             const medicineId = String(item.medicineId || item._id || item.id || '');
             const quantity = Number(item.quantity);
-            if (!medicineId || !Number.isInteger(quantity) || quantity < 1) {
-                throw inventoryError('Each order item requires a medicineId and a positive whole-number quantity.');
+            const unitPrice = item.unitPrice == null ? null : Number(item.unitPrice);
+            if (!medicineId || !Number.isInteger(quantity) || quantity < 1
+                || (unitPrice != null && (!Number.isFinite(unitPrice) || unitPrice < 0))) {
+                throw inventoryError('Each order item requires a medicineId, positive whole-number quantity and optional valid unit price.');
             }
-            quantities.set(medicineId, (quantities.get(medicineId) || 0) + quantity);
+            const existing = quantities.get(medicineId) || { quantity: 0, unitPrice: null };
+            if (existing.unitPrice != null && unitPrice != null && Math.abs(existing.unitPrice - unitPrice) > 0.01) {
+                throw inventoryError('Duplicate order lines for the same medicine have conflicting prices.', 409);
+            }
+            quantities.set(medicineId, {
+                quantity: existing.quantity + quantity,
+                unitPrice: unitPrice ?? existing.unitPrice
+            });
         }
 
         const now = new Date();
@@ -1245,7 +1254,8 @@ export const dataStore = {
                     let totalAmount = 0;
                     let prescriptionRequired = false;
 
-                    for (const [medicineId, quantity] of quantities) {
+                    for (const [medicineId, requested] of quantities) {
+                        const quantity = requested.quantity;
                         if (!mongoose.isValidObjectId(medicineId)) {
                             throw inventoryError(`Invalid medicine ID: ${medicineId}`);
                         }
@@ -1286,7 +1296,13 @@ export const dataStore = {
                             throw inventoryError(`Insufficient available stock for ${medicine.name}.`, 409);
                         }
 
-                        const price = Number(medicine.price);
+                        const catalogPrice = Number(medicine.price);
+                        const discountPercentage = Math.min(100, Math.max(0, Number(medicine.discountPercentage || 0)));
+                        const discountedCatalogPrice = roundCurrency(catalogPrice * (1 - discountPercentage / 100));
+                        if (requested.unitPrice != null && Math.abs(requested.unitPrice - discountedCatalogPrice) > 0.01) {
+                            throw inventoryError('The selected discounted product price has changed. Refresh the fulfilment options before confirming.', 409);
+                        }
+                        const price = requested.unitPrice == null ? catalogPrice : discountedCatalogPrice;
                         totalAmount += price * quantity;
                         medicineItems.push({
                             medicineId: medicine._id,
@@ -1567,7 +1583,13 @@ export const dataStore = {
                 medicine.stockQuantity = physicalStock;
                 medicine.reservedQuantity = currentReserved + quantity;
                 reservedMedicines.push({ medicine, quantity });
-                const price = Number(medicine.price);
+                const catalogPrice = Number(medicine.price);
+                const discountPercentage = Math.min(100, Math.max(0, Number(medicine.discountPercentage || 0)));
+                const discountedCatalogPrice = roundCurrency(catalogPrice * (1 - discountPercentage / 100));
+                if (requested.unitPrice != null && Math.abs(requested.unitPrice - discountedCatalogPrice) > 0.01) {
+                    throw inventoryError('The selected discounted product price has changed. Refresh the fulfilment options before confirming.', 409);
+                }
+                const price = requested.unitPrice == null ? catalogPrice : discountedCatalogPrice;
                 totalAmount += price * quantity;
                 medicineItems.push({
                     medicineId,
