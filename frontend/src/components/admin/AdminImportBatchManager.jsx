@@ -89,7 +89,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     if (!window.confirm('Revert every published row in this batch? Rows changed by another operation will be protected and may block the transaction.')) return;
     setBusy(true);
     try {
-      await apiClient.post(`${base}/rollback`, {}, { headers });
+      await apiClient.post(`${base}/rollback`, {}, { headers: stableHeaders });
       await load();
       onInventoryChanged?.();
     } catch (e) {
