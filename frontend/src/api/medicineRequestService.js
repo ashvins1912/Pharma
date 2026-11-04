@@ -45,6 +45,31 @@ export const getMedicineRequestById = async (id) => {
   return response.data?.request || null;
 };
 
+export const previewMedicineRequestFulfillment = async (id) => {
+  const response = await apiClient.get(`/api/medicine-requests/${id}/fulfillment/preview`);
+  return response.data;
+};
+
+export const confirmMedicineRequestFulfillment = async (id, payload = {}) => {
+  const response = await apiClient.post(`/api/medicine-requests/${id}/fulfillment/confirm`, payload);
+  return response.data;
+};
+
+export const getCustomerStockWaitlist = async () => {
+  const response = await apiClient.get('/api/orders/fulfillment/waitlist');
+  return response.data?.items || [];
+};
+
+export const confirmCustomerStockWaitlist = async (caseId) => {
+  const response = await apiClient.post(`/api/orders/fulfillment/waitlist/${caseId}/confirm`);
+  return response.data;
+};
+
+export const cancelCustomerStockWaitlist = async (caseId) => {
+  const response = await apiClient.post(`/api/orders/fulfillment/waitlist/${caseId}/cancel`);
+  return response.data;
+};
+
 export const approveProposal = async (id, approvalNote = '', selectedProductId = null) => {
   const response = await apiClient.post(`/api/medicine-requests/${id}/approve`, { approvalNote, selectedProductId });
   return response.data;
