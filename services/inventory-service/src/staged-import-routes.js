@@ -46,6 +46,8 @@ function normalizeRow(raw, usedSkus, tenantIdentityForSku = '') {
   const baseCostRaw = pick(raw, 'Base Cost Price', 'baseCostPrice', 'Cost Price', 'Base Price');
   const baseCostPrice = baseCostRaw === undefined || baseCostRaw === '' ? null : Number(baseCostRaw);
   const marginTier = String(pick(raw, 'Margin Tier', 'marginTier') || 'LOW').trim().toUpperCase();
+  const discountRaw = pick(raw, 'Discount Percentage', 'discountPercentage', 'Discount %', 'discount');
+  const discountPercentage = discountRaw === undefined || discountRaw === '' ? 0 : Number(discountRaw);
   const errors = [];
   if (!name) errors.push('Medicine name is required.');
   if (priceRaw === undefined || priceRaw === '' || !Number.isFinite(price) || price < 0) errors.push('Price must be a valid non-negative number.');
@@ -76,7 +78,7 @@ function normalizeRow(raw, usedSkus, tenantIdentityForSku = '') {
     description: String(pick(raw, 'Description', 'description') || '').trim(),
     imageUrl: String(pick(raw, 'Image URL', 'imageUrl') || '').trim(),
     requiresPrescription: ['true', 'yes', '1'].includes(String(pick(raw, 'Requires Prescription', 'requiresPrescription') || '').toLowerCase()),
-    price, stockQuantity, baseCostPrice, marginTier,
+    price, stockQuantity, baseCostPrice, marginTier, discountPercentage,
     batchNumber: String(pick(raw, 'Batch Number', 'batchNumber', 'Batch No', 'Batch') || '').trim(),
     expiryDate
   };
