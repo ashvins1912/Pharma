@@ -63,7 +63,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
   const saveEdit = async row => {
     setBusy(true);
     try {
-      await apiClient.patch(`${base}/rows/${encodeURIComponent(row.rowId)}`, draft, { headers: stableHeaders });
+      await apiClient.patch(`${base}/rows/${encodeURIComponent(row.rowId)}`, draft, { headers: stableHeaders, timeout: 30000 });
       setEditing(null);
       await load();
     } catch (e) {
@@ -81,7 +81,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     if (!window.confirm(`${action === 'publish' ? 'Publish' : 'Unpublish / revert'} ${eligibleIds.length} selected row(s)?`)) return;
     setBusy(true);
     try {
-      if (action === 'publish') await apiClient.post(`${base}/publish`, { rowIds: eligibleIds }, { headers: stableHeaders });
+      if (action === 'publish') await apiClient.post(`${base}/publish`, { rowIds: eligibleIds }, { headers: stableHeaders, timeout: 60000 });
       else await apiClient.post(`${base}/unpublish`, { rowIds: eligibleIds }, { headers: stableHeaders });
       await load();
       onInventoryChanged?.();
@@ -96,7 +96,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     setBusy(true);
     try {
       if (action === 'publish') await apiClient.post(`${base}/rows/${encodeURIComponent(row.rowId)}/publish`, {}, { headers: stableHeaders });
-      else await apiClient.post(`${base}/unpublish`, { rowIds: [row.rowId] }, { headers: stableHeaders });
+      else await apiClient.post(`${base}/unpublish`, { rowIds: [row.rowId] }, { headers: stableHeaders, timeout: 60000 });
       await load();
       if (action === 'publish') onInventoryChanged?.();
       else onInventoryChanged?.();
@@ -109,7 +109,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     if (!window.confirm('Revert every published row in this batch? Rows changed by another operation will be protected and may block the transaction.')) return;
     setBusy(true);
     try {
-      await apiClient.post(`${base}/rollback`, {}, { headers: stableHeaders });
+      await apiClient.post(`${base}/rollback`, {}, { headers: stableHeaders, timeout: 110000 });
       await load();
       onInventoryChanged?.();
     } catch (e) {
