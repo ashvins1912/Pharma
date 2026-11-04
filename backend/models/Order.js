@@ -169,6 +169,7 @@ const orderSchema = new mongoose.Schema({
     },
     medicineRequestId: { type: String, default: null },
     fulfillmentCaseId: { type: String, default: null, index: true },
+    fulfillmentConfirmationId: { type: String, default: null },
     fulfillmentState: { type: String, enum: ['FULL', 'PARTIAL', 'WAITING', 'COMPLETE'], default: 'FULL', index: true },
     addressId: { type: mongoose.Schema.Types.ObjectId, ref: 'UserAddress', default: null },
     deliverySlot: { type: Object, default: null },
@@ -232,6 +233,7 @@ orderSchema.pre('findOneAndUpdate', function syncUpdatedOrderStatus() {
 });
 
 orderSchema.index({ orderStatus: 1, createdAt: -1, _id: -1 });
+orderSchema.index({ fulfillmentConfirmationId: 1 }, { unique: true, sparse: true });
 
 orderSchema.index({ orderStatus: 1, createdAt: -1 });
 orderSchema.index(
