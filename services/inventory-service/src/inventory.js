@@ -401,7 +401,7 @@ export async function adjustInventory({ sku, stockQuantity, price, batchNumber, 
         productId: product._id, sku: normalizedSku, batchNumber: normalizedBatchNumber,
         reservedQuantity: 0, warehouse: 'default'
       });
-      Object.assign(inventory, { stockQuantity, price, batchNumber: normalizedBatchNumber, expiryDate: normalizedExpiry });
+      Object.assign(inventory, { stockQuantity, price, batchNumber: normalizedBatchNumber, ...(normalizedExpiry ? { expiryDate: normalizedExpiry } : {}) });
       await inventory.save({ session });
       result = {
         productId: String(product._id), sku: normalizedSku, batchNumber: normalizedBatchNumber,
