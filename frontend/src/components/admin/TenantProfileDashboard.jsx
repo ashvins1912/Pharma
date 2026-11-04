@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -43,12 +43,15 @@ export default function TenantProfileDashboard() {
   const [branchRegistryVersion, setBranchRegistryVersion] = useState(0);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const profileRequestVersion = useRef(0);
 
   const loadProfile = useCallback(async () => {
+    const requestVersion = ++profileRequestVersion.current;
     if (isSuperAdmin && !selectedTenantId) {
       setProfile(emptyProfile); setDraft(emptyProfile); setPersonnel([]); setProfileMissing(false);
       setLoading(false); return;
     }
+    if (isSuperAdmin) { setProfile(emptyProfile); setDraft(emptyProfile); setPersonnel([]); setProfileMissing(false); setPharmacyCanEdit(false); }
     setLoading(true);
     setError('');
     try {
@@ -56,6 +59,7 @@ export default function TenantProfileDashboard() {
         apiClient.get('/api/v1/vendor/profile', { params: isSuperAdmin ? { tenantId: selectedTenantId } : undefined }),
         apiClient.get('/api/v1/vendor/profile/edit-policy', { params: isSuperAdmin ? { tenantId: selectedTenantId } : undefined })
       ]);
+      if (requestVersion !== profileRequestVersion.current) return;
       const payload = profileResponse.data?.data || profileResponse.data || {};
       const tenant = payload.tenant || {};
       const nextProfile = {
@@ -72,9 +76,12 @@ export default function TenantProfileDashboard() {
       setProfileMissing(!payload.profileConfigured);
       setPharmacyCanEdit(policyResponse.data?.data?.pharmacyCanEdit === true);
     } catch (err) {
-      setError(err?.response?.data?.message || err.message || 'Pharmacy profile could not be loaded.');
+      if (requestVersion === profileRequestVersion.current) {
+        setProfile(emptyProfile); setDraft(emptyProfile); setPersonnel([]);
+        setError(err?.response?.data?.message || err.message || 'Pharmacy profile could not be loaded.');
+      }
     } finally {
-      setLoading(false);
+      if (requestVersion === profileRequestVersion.current) setLoading(false);
     }
   }, [isSuperAdmin, selectedTenantId]);
 
@@ -121,6 +128,7 @@ export default function TenantProfileDashboard() {
     setNotice('');
     try {
       const response = await apiClient.patch('/api/v1/vendor/profile', {
+        ...(isSuperAdmin ? { tenantId: selectedTenantId } : {}),
         shopName: draft.shopName, legalName: draft.legalName,
         licenseNumber: draft.licenseNumber, gstNumber: draft.gstNumber,
         address: draft.address,
