@@ -505,12 +505,12 @@ export default function PlatformTenantsView() {
                   {[
                     ['Tenant ID', id => id],
                     ['Status', id => safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.status || '—'],
-                    ['Legal name', id => compareDetails[id]?.tenant?.legalName || safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.legalName || '—'],
-                    ['Contact email', id => compareDetails[id]?.tenant?.contactEmail || safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.contactEmail || '—'],
-                    ['Contact phone', id => compareDetails[id]?.tenant?.contactPhone || safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.contactPhone || '—'],
+                    ['Legal name', id => compareDetails[id]?.legalName || safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.legalName || '—'],
+                    ['Contact email', id => compareDetails[id]?.contactEmail || safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.contactEmail || '—'],
+                    ['Contact phone', id => compareDetails[id]?.contactPhone || safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.contactPhone || '—'],
                     ['Branches', id => Array.isArray(compareDetails[id]?.branches) ? compareDetails[id].branches.length : 'Not available'],
                     ['Memberships', id => Array.isArray(compareDetails[id]?.memberships) ? compareDetails[id].memberships.length : 'Not available'],
-                    ['Tenant as main branch', id => compareDetails[id]?.tenant?.usesTenantAsBranch === true ? 'Yes' : 'No / Not configured']
+                    ['Tenant as main branch', id => compareDetails[id]?.usesTenantAsBranch === true ? 'Yes' : 'No / Not configured']
                   ].map(([label, value]) => <tr key={label}><th className="p-3 font-bold text-slate-600">{label}</th>{compareTenantIds.map(id => <td key={id} className="p-3 text-slate-800">{value(id)}</td>)}</tr>)}
                 </tbody>
               </table>
