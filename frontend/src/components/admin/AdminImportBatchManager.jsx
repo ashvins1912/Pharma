@@ -3,7 +3,7 @@ import apiClient from '../../api/apiClient';
 
 const editableFields = ['sku', 'name', 'price', 'stockQuantity', 'batchNumber', 'expiryDate', 'category', 'manufacturer'];
 
-export default function AdminImportBatchManager({ batchId, headers, onInventoryChanged }) {
+export default function AdminImportBatchManager({ batchId, headers, onInventoryChanged, publishingEnabled = false }) {
   const [rows, setRows] = useState([]);
   const [selected, setSelected] = useState([]);
   const [status, setStatus] = useState('');
@@ -58,7 +58,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     } finally { setBusy(false); }
   };
   const bulkAction = async action => {
-    if (!selected.length || busy) return;
+    if (!selected.length || busy || !publishingEnabled) return;
     if (!window.confirm(`${action === 'publish' ? 'Publish' : 'Unpublish / revert'} ${selected.length} selected row(s)?`)) return;
     setBusy(true);
     try {
@@ -71,7 +71,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     } finally { setBusy(false); }
   };
   const rowAction = async (row, action) => {
-    if (busy) return;
+    if (busy || !publishingEnabled) return;
     const message = action === 'publish' ? `Publish row ${row.rowNumber}?` : `Unpublish and revert row ${row.rowNumber}?`;
     if (!window.confirm(message)) return;
     setBusy(true);
@@ -86,6 +86,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     } finally { setBusy(false); }
   };
   const revertBatch = async () => {
+    if (!publishingEnabled) return;
     if (!window.confirm('Revert every published row in this batch? Rows changed by another operation will be protected and may block the transaction.')) return;
     setBusy(true);
     try {
@@ -104,8 +105,9 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
           <h3 className="text-sm font-black text-slate-900">Batch records · review & publish</h3>
           <p className="text-[11px] text-slate-500">{total.toLocaleString()} rows · staged records do not affect live stock until published</p>
         </div>
-        <button type="button" onClick={revertBatch} disabled={busy} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Revert published batch</button>
+        <button type="button" onClick={revertBatch} disabled={busy || !publishingEnabled} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Revert published batch</button>
       </div>
+      {!publishingEnabled && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">Publishing, unpublishing and reverting are disabled by the Inventory Service. Enable INVENTORY_IMPORTS_ENABLED only in the isolated test environment to exercise live test-stock changes.</p>}
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-2">
         <input value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} placeholder="Search SKU or medicine" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs" />
         <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }} className="rounded-lg border border-slate-200 px-3 py-2 text-xs">
@@ -116,8 +118,8 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={allVisibleSelected} onChange={e => toggleAll(e.target.checked)} /> Select page</label>
         <span className="text-[11px] text-slate-500">{selected.length} selected</span>
-        <button type="button" onClick={() => bulkAction('publish')} disabled={!selected.length || busy} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">Publish selected</button>
-        <button type="button" onClick={() => bulkAction('unpublish')} disabled={!selected.length || busy || !rows.some(r => selected.includes(r.rowId) && r.status === 'PUBLISHED')} className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-bold text-amber-800 disabled:opacity-40">Unpublish / revert selected</button>
+        <button type="button" onClick={() => bulkAction('publish')} disabled={!selected.length || busy || !publishingEnabled} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">Publish selected</button>
+        <button type="button" onClick={() => bulkAction('unpublish')} disabled={!selected.length || busy || !publishingEnabled || !rows.some(r => selected.includes(r.rowId) && r.status === 'PUBLISHED')} className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-bold text-amber-800 disabled:opacity-40">Unpublish / revert selected</button>
       </div>
       {error && <p role="alert" className="rounded-lg bg-rose-50 p-2 text-xs text-rose-700">{error}</p>}
       <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -150,7 +152,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
                     <button type="button" onClick={() => setEditing(null)} className="rounded border px-2 py-1">Cancel</button>
                   </> : <>
                     {row.status !== 'PUBLISHED' && <button type="button" onClick={() => beginEdit(row)} className="rounded border px-2 py-1">Edit</button>}
-                    {row.status === 'PUBLISHED' ? <button type="button" onClick={() => rowAction(row,'unpublish')} disabled={busy} className="rounded border border-amber-300 px-2 py-1 text-amber-800">Unpublish</button> : <button type="button" onClick={() => rowAction(row,'publish')} disabled={busy || row.status === 'INVALID'} className="rounded bg-emerald-600 px-2 py-1 text-white disabled:opacity-40">Publish</button>}
+                    {row.status === 'PUBLISHED' ? <button type="button" onClick={() => rowAction(row,'unpublish')} disabled={busy || !publishingEnabled} className="rounded border border-amber-300 px-2 py-1 text-amber-800">Unpublish</button> : <button type="button" onClick={() => rowAction(row,'publish')} disabled={busy || !publishingEnabled || row.status === 'INVALID'} className="rounded bg-emerald-600 px-2 py-1 text-white disabled:opacity-40">Publish</button>}
                   </>}
                 </div></td>
               </tr>)}
