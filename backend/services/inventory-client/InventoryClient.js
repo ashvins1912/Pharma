@@ -75,10 +75,30 @@ export const inventoryClient = {
     return Boolean(baseUrl());
   },
 
-  async searchProducts({ tenantId = null, branchId = null, query = '', category = '', page = 1, limit = 50, userId = 'backend' } = {}) {
+  async searchProducts({ tenantId = null, branchId = null, query = '', category = '', hideRx = false, includeOutOfStock = false, sort = 'default', page = 1, limit = 50, userId = 'backend' } = {}) {
     return request('GET', '/api/v1/inventory/products/search', {
       userId,
-      params: { tenantId, branchId, q: query, category, page, limit }
+      params: { tenantId, branchId, q: query, category, hideRx, includeOutOfStock, sort, page, limit }
+    });
+  },
+
+  async createProduct({ product, tenantId, branchId, userId = 'backend' }) {
+    return request('POST', '/api/v1/inventory/products', {
+      userId, scopes: ['inventory.write'],
+      data: { product, tenantId, branchId }
+    });
+  },
+
+  async updateProduct({ productId, product, tenantId, branchId, userId = 'backend' }) {
+    return request('PATCH', `/api/v1/inventory/products/${encodeURIComponent(productId)}`, {
+      userId, scopes: ['inventory.write'],
+      data: { ...product, tenantId, branchId }
+    });
+  },
+
+  async archiveProduct({ productId, tenantId, branchId, userId = 'backend' }) {
+    return request('DELETE', `/api/v1/inventory/products/${encodeURIComponent(productId)}`, {
+      userId, scopes: ['inventory.write'], params: { tenantId, branchId }
     });
   },
 
@@ -112,18 +132,20 @@ export const inventoryClient = {
     });
   },
 
-  async release(reservationId, { userId = 'backend', idempotencyKey } = {}) {
+  async release(reservationId, { tenantId, branchId, userId = 'backend', idempotencyKey } = {}) {
     return request('POST', `/api/v1/inventory/reservations/${encodeURIComponent(reservationId)}/release`, {
       userId,
       scopes: ['inventory.release'],
+      data: { tenantId, branchId },
       idempotencyKey
     });
   },
 
-  async deduct(reservationId, { userId = 'backend', idempotencyKey } = {}) {
+  async deduct(reservationId, { tenantId, branchId, userId = 'backend', idempotencyKey } = {}) {
     return request('POST', `/api/v1/inventory/reservations/${encodeURIComponent(reservationId)}/deduct`, {
       userId,
       scopes: ['inventory.deduct'],
+      data: { tenantId, branchId },
       idempotencyKey
     });
   }
