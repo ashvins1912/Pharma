@@ -41,14 +41,14 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
         const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
         const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
         const tenantId = isPlatformAdmin
-            ? String(req.query.tenantId || '').trim() || null
+            ? String(req.user?.tenantId || req.user?.app_metadata?.tenantId || req.query.tenantId || '').trim() || null
             : String(req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
         if (!isPlatformAdmin && !tenantId) {
             return res.status(403).json({ message: 'An active pharmacy tenant is required to view inventory.' });
         }
         const result = await inventoryClient.searchProducts({
             tenantId,
-            branchId: req.query.branchId || req.context?.branchId || null,
+            branchId: req.user?.branchId || req.context?.branchId || null,
             query: search || '',
             category: category === 'All' ? '' : category || '',
             sort: sort || 'default',
