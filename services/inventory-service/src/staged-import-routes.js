@@ -164,6 +164,7 @@ async function publishRows(batch, rows, req) {
     await session.withTransaction(async () => {
       for (const row of rows) {
         const fresh = await StagedImportRow.findOne({ _id: row._id, batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId }).session(session);
+        if (fresh?.status === 'PUBLISHED' && fresh.publication) { published.push(fresh.rowId); continue; }
         if (!fresh || !['READY','UNPUBLISHED'].includes(fresh.status) || fresh.validationErrors.length) {
           throw Object.assign(new Error(`Row ${row.rowNumber} is not ready to publish. Refresh the batch and correct validation errors.`), { statusCode: 409 });
         }
@@ -249,6 +250,7 @@ async function unpublishRows(batch, rows, req) {
       for (const row of [...rows].sort((a,b) => Number(b.publication?.sequence || 0) - Number(a.publication?.sequence || 0))) {
         const fresh = await StagedImportRow.findOne({ _id: row._id, batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId }).session(session);
         const p = fresh?.publication;
+        if (fresh?.status === 'UNPUBLISHED' && !p) continue;
         if (!fresh || fresh.status !== 'PUBLISHED' || !p) throw Object.assign(new Error('Only published rows can be unpublished.'), { statusCode: 409 });
         const inventory = await Inventory.findOne({ _id: p.inventoryId, tenantId: batch.tenantId, branchId: batch.branchId }).session(session);
         if (!inventory || !same(snapshot(asPlain(inventory), liveInventoryFields), p.inventoryAfter)) {
@@ -499,8 +501,8 @@ router.post('/imports/batches/:batchId/unpublish', requireServiceScope('inventor
   const batch = await safeBatch(req.params.batchId, tenantId, branchId);
   const ids = [...new Set((req.body?.rowIds || []).map(String))];
   if (!ids.length) return res.status(400).json({ message: 'Provide rowIds to unpublish.' });
-  const rows = await StagedImportRow.find({ batchId: batch.batchId, tenantId, branchId, rowId: { $in: ids }, status: 'PUBLISHED' }).sort({ publishedAt: -1 });
-  if (rows.length !== ids.length) return res.status(409).json({ message: 'Every selected row must be published before unpublishing.' });
+  const rows = await StagedImportRow.find({ batchId: batch.batchId, tenantId, branchId, rowId: { $in: ids }, status: { $in: ['PUBLISHED', 'UNPUBLISHED'] } }).sort({ publishedAt: -1 });
+  if (rows.length !== ids.length) return res.status(409).json({ message: 'Every selected row must be published or already unpublished.' });
   const changed = await unpublishRows(batch, rows, req);
   return res.json({ success: true, unpublished: changed });
 }));
