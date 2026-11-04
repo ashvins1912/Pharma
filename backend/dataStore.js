@@ -4000,10 +4000,18 @@ export const dataStore = {
         let selectedMedicine = null;
         if (selectedProductId && getIsConnected()) {
             selectedMedicine = await Medicine.findOne({ _id: selectedProductId, tenantId: String(request.tenantId) })
-                .select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive requiresPrescription isPrescriptionRequired')
+                .select('_id name sku code price discountPercentage stockQuantity stock quantity reservedQuantity expiryDate isActive requiresPrescription isPrescriptionRequired')
                 .lean();
             if (!selectedMedicine || selectedMedicine.isActive === false || (selectedMedicine.expiryDate && new Date(selectedMedicine.expiryDate) <= new Date())) {
                 throw inventoryError('The selected catalogue product is no longer available from this pharmacy.', 409);
+            }
+            if (selectedAlternative) {
+                const currentDiscount = Math.min(100, Math.max(0, Number(selectedMedicine.discountPercentage || 0)));
+                const currentOfferPrice = Math.round(Number(selectedMedicine.price || 0) * (1 - currentDiscount / 100) * 100) / 100;
+                if (Math.abs(currentOfferPrice - Number(selectedAlternative.discountedUnitPrice || 0)) > 0.01
+                    || Math.abs(Number(selectedMedicine.price || 0) - Number(selectedAlternative.unitPrice || 0)) > 0.01) {
+                    throw inventoryError('The alternative offer price changed. Ask the pharmacy to refresh the proposal before approving.', 409);
+                }
             }
             if (Boolean(selectedMedicine.requiresPrescription ?? selectedMedicine.isPrescriptionRequired) && !request.prescriptionUrl && !request.prescriptionId) {
                 throw inventoryError('A valid prescription is required for the selected product.', 409);
