@@ -604,3 +604,14 @@ test('gateway CORS preflight allows selected tenant and branch headers', async (
     await server.close();
   }
 });
+
+
+test('intelligent order and medicine request fulfilment endpoints are registered with customer permissions', () => {
+  assert.equal(resolveGatewayCapability('POST', '/api/orders/fulfillment/preview'), 'orders.create');
+  assert.equal(resolveGatewayCapability('POST', '/api/orders/fulfillment/waitlist'), 'orders.create');
+  assert.equal(resolveGatewayCapability('GET', '/api/orders/fulfillment/waitlist'), 'orders.read');
+  assert.equal(resolveGatewayCapability('POST', '/api/orders/fulfillment/waitlist/fulfillment-case-1/confirm'), 'orders.create');
+  assert.equal(resolveGatewayCapability('POST', '/api/orders/fulfillment/from-medicine-request/request-1'), 'medicine_requests.decide');
+  assert.equal(resolveGatewayCapability('GET', '/api/medicine-requests/request-1/fulfillment/preview'), 'medicine_requests.decide');
+  assert.equal(resolveGatewayCapability('POST', '/api/medicine-requests/request-1/fulfillment/confirm'), 'medicine_requests.decide');
+});
