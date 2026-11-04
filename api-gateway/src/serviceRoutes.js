@@ -170,6 +170,15 @@ export function createServiceRouters(gatewayConfig = config) {
   inventoryRouter.post('/adjust', inventoryAdmin, inventory('inventory.adjust'));
   inventoryRouter.post('/imports/preview', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.post('/imports', inventoryImportAuth, inventory('inventory.import'));
+  inventoryRouter.get('/imports/batches', inventoryImportAuth, inventory('inventory.import'));
+  inventoryRouter.get('/imports/batches/:batchId', inventoryImportAuth, inventory('inventory.import'));
+  inventoryRouter.get('/imports/batches/:batchId/rows', inventoryImportAuth, inventory('inventory.import'));
+  inventoryRouter.patch('/imports/batches/:batchId/rows/:rowId', inventoryImportAuth, inventory('inventory.import'));
+  inventoryRouter.post('/imports/batches/:batchId/publish', inventoryImportAuth, inventory('inventory.import'));
+  inventoryRouter.post('/imports/batches/:batchId/rows/:rowId/publish', inventoryImportAuth, inventory('inventory.import'));
+  inventoryRouter.post('/imports/batches/:batchId/unpublish', inventoryImportAuth, inventory('inventory.import'));
+  inventoryRouter.post('/imports/batches/:batchId/rollback', inventoryImportAuth, inventory('inventory.import'));
+  inventoryRouter.get('/imports/batches/:batchId/invalid-records/download', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.get('/imports/:jobId/failures/download', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.get('/imports/:jobId/failures', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.post('/imports/:jobId/retry', inventoryImportAuth, inventory('inventory.import'));
