@@ -20,6 +20,7 @@ import adminPaymentReminderRoutes from './routes/adminPaymentReminderRoutes.js';
 import medicineRequestRoutes from './routes/medicineRequestRoutes.js';
 import gatewayRouter from './gateway/gatewayRouter.js';
 import vendorRouter from './gateway/routes/vendorRoutes.js';
+import tenantProfileManagementRoutes from './gateway/routes/tenantProfileManagementRoutes.js';
 import { csrfProtection } from './security/sessionCookie.js';
 import dataStore from './dataStore.js';
 import DataMartRefreshService from './services/DataMartRefreshService.js';
@@ -127,6 +128,7 @@ app.use('/vendors', vendorRouter);
 app.use('/vendor', vendorRouter);
 app.use('/api/vendors', vendorRouter);
 app.use('/api/vendor', vendorRouter);
+app.use('/api/v1/vendor', tenantProfileManagementRoutes);
 app.use('/api/v1/vendor', vendorRouter);
 
 // Ashvin Platform API Gateway (v1 Multi-Tenant Engine)
