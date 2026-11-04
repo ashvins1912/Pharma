@@ -44,6 +44,23 @@ const deliverySlotSchema = new mongoose.Schema({
     label: { type: String, default: '' }
 }, { _id: false });
 
+const alternativeOfferSchema = new mongoose.Schema({
+    productId: { type: String, required: true },
+    medicineName: { type: String, required: true },
+    manufacturer: { type: String, default: '' },
+    composition: { type: String, default: '' },
+    strength: { type: String, default: '' },
+    dosageForm: { type: String, default: '' },
+    quantity: { type: Number, min: 1, required: true },
+    unitPrice: { type: Number, min: 0, required: true },
+    discountPercentage: { type: Number, min: 0, max: 100, default: 0 },
+    discountedUnitPrice: { type: Number, min: 0, required: true },
+    availableQuantity: { type: Number, min: 0, default: 0 },
+    requiresPrescription: { type: Boolean, default: false },
+    requiresPharmacistApproval: { type: Boolean, default: false },
+    customerConsentRequired: { type: Boolean, default: true }
+}, { _id: false });
+
 const pharmacyProposalSchema = new mongoose.Schema({
     productId: { type: String, default: null },
     medicineName: { type: String, default: '', trim: true },
@@ -67,7 +84,8 @@ const pharmacyProposalSchema = new mongoose.Schema({
         enum: ['Pending Verification', 'Verified', 'Rejected', 'Not Required'],
         default: 'Pending Verification'
     },
-    alternativeProduct: { type: String, default: '', trim: true }
+    alternativeProduct: { type: String, default: '', trim: true },
+    alternativeOffers: { type: [alternativeOfferSchema], default: [] }
 }, { _id: false });
 
 const prescriptionVerificationMedicineSchema = new mongoose.Schema({
