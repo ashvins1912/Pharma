@@ -24,6 +24,13 @@ const tenantSchema = new mongoose.Schema({
     drugLicenseNumber: { type: String, trim: true, uppercase: true, default: '' },
     timezone: { type: String, default: 'Asia/Kolkata' },
     currency: { type: String, default: 'INR' },
+    profileAudit: [{
+        action: { type: String, required: true },
+        changedFields: { type: [String], default: [] },
+        actorId: { type: String, default: '' },
+        actorRole: { type: String, default: '' },
+        at: { type: Date, default: Date.now }
+    }],
     settings: {
         allowOfferWithCoupon: { type: Boolean, default: false },
         allowCouponWithRewards: { type: Boolean, default: true },
