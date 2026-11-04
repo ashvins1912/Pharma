@@ -1269,11 +1269,13 @@ export const dataStore = {
             }
             const price = Number(product.price);
             if (!Number.isFinite(price) || price < 0) throw inventoryError(`Invalid price for ${product.name}.`, 409);
+            const rawBaseCostPrice = Number(product.baseCostPrice);
+            const baseCostPrice = Number.isFinite(rawBaseCostPrice) && rawBaseCostPrice > 0 ? rawBaseCostPrice : price;
             totalAmountForOrder += price * quantity;
             const productObjectId = new mongoose.Types.ObjectId(medicineId);
             medicineItemsForOrder.push({
                 medicineId: productObjectId, quantity, price,
-                baseCostPrice: Number(product.baseCostPrice ?? price),
+                baseCostPrice,
                 discountPercentage: Number(product.discountPercentage || 0),
                 marginTier: ['LOW', 'MID', 'HIGH'].includes(product.marginTier) ? product.marginTier : 'LOW',
                 name: product.name, sku: product.sku || ''
