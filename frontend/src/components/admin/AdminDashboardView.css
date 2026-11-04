@@ -340,7 +340,7 @@ select, textarea) {
   min-width: 0;
 }
 
-.admin-screen :where(.text-xs, .text-\\[10px\\], .text-\\[11px\\]) {
+.admin-screen :where(.text-xs) {
   overflow-wrap: anywhere;
 }
 
