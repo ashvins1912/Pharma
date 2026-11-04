@@ -953,9 +953,8 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
         if (!request.tenantId) return res.status(409).json({ message: 'This medicine request is not linked to an active pharmacy.' });
 
         const tenantId = String(request.tenantId);
-        const branchId = request.branchId ? String(request.branchId) : null;
-        const scope = { tenantId };
-        if (branchId) scope.branchId = branchId;
+        const branchId = await resolveRequestBranchId(tenantId, request.branchId, req.user);
+        const scope = { tenantId, branchId: branchId || null };
         const requestedItems = (request.requestedItems?.length ? request.requestedItems : [{
             requestedName: request.pharmacyProposal?.medicineName || 'Requested medicine',
             productId: request.pharmacyProposal?.productId || null,
