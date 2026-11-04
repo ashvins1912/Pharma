@@ -555,7 +555,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                 {importJob.status === 'REVERTED' && (
                   <p className="text-xs font-bold text-emerald-800">{t('batchRevertedMessage')}</p>
                 )}
-                {['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED', 'REVERTED'].includes(importJob.status) && (
+                {['READY', 'PARTIALLY_PUBLISHED', 'PUBLISHED', 'COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED', 'REVERTED'].includes(importJob.status) && (
                   <button
                     type="button"
                     onClick={() => {
