@@ -14,6 +14,7 @@ const tenantSchema = new mongoose.Schema({
     },
     contactEmail: { type: String, trim: true, lowercase: true },
     contactPhone: { type: String, trim: true },
+    usesTenantAsBranch: { type: Boolean, default: false, index: true },
     geolocation: {
         latitude: { type: Number, min: -90, max: 90, default: null },
         longitude: { type: Number, min: -180, max: 180, default: null }
