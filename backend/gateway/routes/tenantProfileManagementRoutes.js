@@ -14,7 +14,7 @@ const requireSuperAdmin = (req, res, next) => isPlatformAdmin(req)
 
 async function resolveTenant(req, res) {
   const tenantId = isPlatformAdmin(req)
-    ? String(req.get('x-tenant-id') || req.query.tenantId || req.body?.tenantId || '').trim()
+    ? String(req.get('x-tenant-id') || req.query.tenantId || req.body?.tenantId || req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim()
     : String(req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
   if (!tenantId) {
     res.status(403).json({ success: false, code: 'TENANT_CONTEXT_REQUIRED', message: 'Select a pharmacy tenant.' });
