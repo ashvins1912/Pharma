@@ -34,7 +34,7 @@ router.get('/profile', authenticateUser, async (req, res) => {
         const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
         const platformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
         const tenantId = platformAdmin
-            ? String(req.get('x-tenant-id') || req.query.tenantId || '').trim()
+            ? String(req.get('x-tenant-id') || req.query.tenantId || req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim()
             : String(req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
 
         if (!tenantId) {
