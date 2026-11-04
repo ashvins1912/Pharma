@@ -186,7 +186,10 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       setDeliveredOrders(Array.isArray(data.items) ? data.items : []);
       setDeliveredPagination(data.pagination || { page: deliveredPage, limit: 10, total: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false });
     }).catch(error => {
-      if (isCurrentRequest) setDeliveredError(error.message || 'Unable to load delivered orders. Please try again.');
+      if (isCurrentRequest) {
+        setDeliveredOrders([]);
+        setDeliveredError(error.response?.data?.message || error.message || 'Unable to load delivered orders. Please try again.');
+      }
     }).finally(() => {
       if (isCurrentRequest) setDeliveredLoading(false);
     });
