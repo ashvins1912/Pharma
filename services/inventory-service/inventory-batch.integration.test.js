@@ -7,7 +7,7 @@ const testMongoUri = process.env.INVENTORY_TEST_MONGO_URI;
 process.env.SERVICE_AUTH_SECRET = process.env.SERVICE_AUTH_SECRET || 'test-only-inventory-service-secret-1234567890';
 process.env.INVENTORY_MONGO_URI = testMongoUri || 'mongodb://127.0.0.1:27017/pharma-inventory-batch-test';
 
-const [{ Product, Inventory, Reservation, Audit }, { lookupInventory, searchInventoryProducts, reserveInventory, transitionReservation }] = await Promise.all([
+const [{ Product, Inventory, Reservation, Audit }, { lookupInventory, searchInventoryProducts, createProduct, updateProduct, archiveProduct, reserveInventory, transitionReservation }] = await Promise.all([
   import('./src/models.js'),
   import('./src/inventory.js')
 ]);
@@ -83,6 +83,28 @@ test('inventory lookup aggregates active batches and reservation allocates/relea
 
     const otherTenantLookup = await lookupInventory({ skus: [product.sku], tenantId: 'different-tenant', branchId });
     assert.equal(otherTenantLookup.length, 0);
+
+    const manuallyCreated = await createProduct({
+      tenantId, branchId, actor: 'inventory-batch-test',
+      product: {
+        name: 'Manual Product Test', sku: 'MANUAL-CREATE-001', brand: 'Test Labs',
+        drug: 'Test Ingredient', category: 'General Medicine',
+        price: 8, stockQuantity: 2, batchNumber: 'MANUAL-LOT'
+      }
+    });
+    assert.equal(manuallyCreated.sku, 'MANUAL-CREATE-001');
+    assert.equal(manuallyCreated.availableQuantity, 2);
+    const manuallyUpdated = await updateProduct({
+      productId: manuallyCreated.productId, tenantId, branchId, actor: 'inventory-batch-test',
+      product: { name: 'Manual Product Updated', batchNumber: 'MANUAL-LOT', price: 9, stockQuantity: 4 }
+    });
+    assert.equal(manuallyUpdated.name, 'Manual Product Updated');
+    assert.equal(manuallyUpdated.availableQuantity, 4);
+    const archived = await archiveProduct({
+      productId: manuallyCreated.productId, tenantId, branchId, actor: 'inventory-batch-test'
+    });
+    assert.equal(archived.active, false);
+    assert.equal((await lookupInventory({ productIds: [manuallyCreated.productId], tenantId, branchId })).length, 0);
   } finally {
     await mongoose.connection.dropDatabase();
     await mongoose.disconnect();
