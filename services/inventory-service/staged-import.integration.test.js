@@ -84,6 +84,12 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(await models.Product.countDocuments({ tenantId }), 0);
     assert.equal(await models.Inventory.countDocuments({ tenantId, branchId }), 0);
 
+    const batchListResponse = await fetch(origin + '/api/v1/inventory/imports/batches', { headers });
+    assert.equal(batchListResponse.status, 200);
+    const batchList = await batchListResponse.json();
+    assert.equal(batchList.items[0].batchId, staged.batchId);
+    assert.equal(batchList.publishEnabled, true);
+
     const rowsResponse = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/rows`, { headers });
     assert.equal(rowsResponse.status, 200);
     const rowsPayload = await rowsResponse.json();
