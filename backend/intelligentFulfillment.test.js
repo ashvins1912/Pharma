@@ -72,6 +72,37 @@ test('validates customer wait windows from one to five days', () => {
   }
 });
 
+
+test('supports unlisted medicine requests and offers only metadata-matched listed alternatives', () => {
+  const plan = buildIntelligentFulfillmentPlan({
+    requestedItems: [{
+      requestedName: 'Requested generic tablet', composition: 'example salt',
+      strength: '500 mg', dosageForm: 'tablet', quantity: 3
+    }],
+    inventory: [],
+    catalog: [
+      medicine({ _id: 'listed-equivalent', name: 'Listed equivalent', stockQuantity: 5, reservedQuantity: 0 }),
+      medicine({ _id: 'wrong-form', dosageForm: 'capsule', stockQuantity: 5, reservedQuantity: 0 })
+    ],
+    now
+  });
+  assert.equal(plan.lines[0].availability, 'NOT_LISTED');
+  assert.equal(plan.lines[0].waitingQuantity, 3);
+  assert.deepEqual(plan.lines[0].alternatives.map(item => item.productId), ['listed-equivalent']);
+});
+
+test('does not propose alternatives when requested composition is a placeholder', () => {
+  const plan = buildIntelligentFulfillmentPlan({
+    requestedItems: [{
+      medicineId: 'medicine-1', quantity: 1,
+    }],
+    inventory: [medicine({ stockQuantity: 0, composition: 'Active Compound' })],
+    catalog: [medicine({ _id: 'other', stockQuantity: 5, reservedQuantity: 0 })],
+    now
+  });
+  assert.equal(plan.lines[0].alternatives.length, 0);
+});
+
 test('rejects invalid cart lines and empty plans', () => {
   assert.throws(() => buildIntelligentFulfillmentPlan({ requestedItems: [], inventory: [] }), /At least one order item/);
   assert.throws(() => buildIntelligentFulfillmentPlan({ requestedItems: [{ medicineId: 'x', quantity: 0 }], inventory: [] }), /positive whole-number/);
