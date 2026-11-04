@@ -39,6 +39,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const [alternativeChoices, setAlternativeChoices] = useState({});
   const [waitDays, setWaitDays] = useState(3);
   const [waitlistKey, setWaitlistKey] = useState('');
+  const [checkoutKey, setCheckoutKey] = useState('');
   const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
   useEffect(() => {
     if (!isOpen || !user?.id) return;
@@ -107,7 +108,12 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     setFulfillmentConfirmed(false);
     setAlternativeChoices({});
     setWaitlistKey('');
+    setCheckoutKey('');
   }, [cartForQuote]);
+
+  useEffect(() => {
+    setCheckoutKey('');
+  }, [alternativeChoices, waitDays, usePoints, pointsRequested, appliedCoupon?.code, selectedAddressId, patientPuid]);
 
   useEffect(() => {
     if (!isOpen || cart.length === 0 || (fulfillmentPlan?.customerDecisionRequired && fulfillmentConfirmed)) {
@@ -349,7 +355,11 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       });
       if (prescriptionFile) formData.append('prescription', prescriptionFile);
 
-      const res = await apiClient.post('/api/orders/checkout', formData);
+      const checkoutIdempotencyKey = checkoutKey || (window.crypto?.randomUUID?.() || `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      if (!checkoutKey) setCheckoutKey(checkoutIdempotencyKey);
+      const res = await apiClient.post('/api/orders/checkout', formData, {
+        headers: { 'Idempotency-Key': checkoutIdempotencyKey }
+      });
       setRestockError('');
       if (createdWaitlistCaseId) {
         try {
@@ -378,6 +388,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       setFulfillmentConfirmed(false);
       setAlternativeChoices({});
       setWaitlistKey('');
+      setCheckoutKey('');
       setUsePoints(false);
       setPointsRequested(0);
       setPrescriptionFile(null);
@@ -659,7 +670,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                   </div>
                   <p className="text-[11px] text-slate-600">Requested {line.requestedQuantity} · Available now {line.fulfilNowQuantity}</p>
                   <label className="flex items-center gap-2 text-xs">
-                    <input type="radio" name={`stock-${line.productId}`} checked={!alternativeChoices[line.productId]} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: '' })); setFulfillmentConfirmed(false); }}/>
+                    <input type="radio" name={`stock-${line.productId}`} checked={!alternativeChoices[line.productId]} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: '' })); setFulfillmentConfirmed(false); setCheckoutKey(''); }}/>
                     Wait for the original medicine
                   </label>
                   <label className="flex items-center gap-2 text-xs">
@@ -668,7 +679,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                   </label>
                   {line.alternatives?.map(alternative => (
                     <label key={alternative.productId} className="flex items-start gap-2 rounded-lg border border-emerald-100 p-2 text-xs">
-                      <input type="radio" name={`stock-${line.productId}`} disabled={alternative.requiresPharmacistApproval || alternative.availableQuantity < line.waitingQuantity} checked={alternativeChoices[line.productId] === alternative.productId} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: alternative.productId })); setFulfillmentConfirmed(false); }}/>
+                      <input type="radio" name={`stock-${line.productId}`} disabled={alternative.requiresPharmacistApproval || alternative.availableQuantity < line.waitingQuantity} checked={alternativeChoices[line.productId] === alternative.productId} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: alternative.productId })); setFulfillmentConfirmed(false); setCheckoutKey(''); }}/>
                       <span className="flex-1"><strong>{alternative.name}</strong><br/><span className="text-slate-500">{alternative.brand} · Available {alternative.availableQuantity}</span><br/><span className="font-bold text-emerald-700">₹{alternative.discountedUnitPrice.toFixed(2)} each</span>{alternative.listPrice > alternative.discountedUnitPrice ? <span className="ml-1 text-slate-400 line-through">₹{alternative.listPrice.toFixed(2)}</span> : null}{alternative.discountPercentage > 0 ? <span className="ml-1 text-emerald-700">({alternative.discountPercentage}% savings)</span> : null}{alternative.requiresPharmacistApproval ? <span className="block mt-1 text-amber-700">Pharmacist approval required — cannot substitute at checkout</span> : null}{alternative.availableQuantity < line.waitingQuantity ? <span className="block mt-1 text-amber-700">Not enough stock for the remaining quantity</span> : null}</span>
                     </label>
                   ))}
