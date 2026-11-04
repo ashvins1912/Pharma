@@ -4,12 +4,14 @@ import { useToast } from '../context/ToastContext';
 import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
 import { useApp } from '../context/AppContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useTenant } from '../context/TenantContext';
 
 export default function MedicineRequestModal({ isOpen, onClose, initialMedicineName = '', onRequestSubmitted }) {
   const { t } = useLanguage();
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
   const { addresses, selectedAddressId, setSelectedAddressId, loadAddresses } = useApp();
+  const { tenantId, branchId } = useTenant();
   const submitting = isActionLoading(LOADING_ACTIONS.CREATE_MEDICINE);
 
   const [medicineName, setMedicineName] = useState(initialMedicineName);
@@ -78,6 +80,8 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
         originalAvailabilityStatus: 'NOT_IN_CATALOG'
       }];
       const requestFields = {
+        tenantId: String(tenantId || ''),
+        branchId: String(branchId || ''),
         requestedItems,
         addressId: selectedAddressId,
         deliveryAddress: selectedAddress?.addressLine || (selectedAddress ? `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}` : undefined),
@@ -93,6 +97,8 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
       let requestBody = requestFields;
       if (prescriptionFile) {
         requestBody = new FormData();
+        requestBody.append('tenantId', String(tenantId || ''));
+        requestBody.append('branchId', String(branchId || ''));
         requestBody.append('requestedItems', JSON.stringify(requestedItems));
         requestBody.append('addressId', selectedAddressId);
         if (requestFields.deliveryAddress) {
