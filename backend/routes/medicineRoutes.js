@@ -320,17 +320,8 @@ router.get('/discovery', async (req, res) => {
 // Admin Inventory Alerts (Tenant and Role Scoped for Data Privacy)
 router.get('/alerts', authenticateUser, async (req, res) => {
     try {
-        const role = req.user?.role || req.user?.app_metadata?.role;
-        const isStaff = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'admin', 'TENANT_ADMIN', 'TENANT_OWNER', 'pharmacy', 'PHARMACIST', 'PHARMACY_STAFF'].includes(role) || req.user?.permissions?.includes('*') || req.user?.permissions?.includes('inventory.read');
-        if (!isStaff) {
-            return res.status(403).json({
-                success: false,
-                error: { code: 'FORBIDDEN', message: 'Dispensary alerts are restricted to authorized pharmacy staff.' }
-            });
-        }
-        const tenantId = req.context?.tenantId || req.user?.tenantId || null;
-        const branchId = req.context?.branchId || req.user?.branchId || null;
-        const alerts = await dataStore.getInventoryAlerts(3, 30, { tenantId, branchId });
+        const scope = await getVerifiedInventoryScope(req, 'inventory.read');
+        const alerts = await dataStore.getInventoryAlerts(3, 30, scope);
         res.json(alerts);
     } catch (err) {
         console.error("Error fetching inventory alerts:", err);
@@ -343,9 +334,8 @@ router.get('/audits', authenticateUser, async (req, res) => {
     try {
         const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
         const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
-        const tenantId = req.query.tenantId || req.context?.tenantId || req.user?.tenantId || req.user?.app_metadata?.tenantId;
-        const branchId = req.query.branchId || req.context?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId;
-        res.json(await dataStore.getInventoryAudits(page, limit, { tenantId, branchId }));
+        const scope = await getVerifiedInventoryScope(req, 'inventory.read');
+        res.json(await dataStore.getInventoryAudits(page, limit, scope));
     } catch (err) {
         console.error('Inventory audit list failed:', err);
         res.status(err.statusCode || 500).json({ message: err.message || "Failed to fetch audit logs" });
