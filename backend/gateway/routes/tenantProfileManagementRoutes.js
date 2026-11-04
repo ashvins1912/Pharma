@@ -93,6 +93,11 @@ router.patch('/profile', authenticateUser, async (req, res) => {
     const licenseNumber = typeof body.licenseNumber === 'string' ? body.licenseNumber.trim().toUpperCase() : undefined;
     const gstNumber = typeof body.gstNumber === 'string' ? body.gstNumber.trim().toUpperCase() : undefined;
     const address = body.address && typeof body.address === 'object' ? body.address : null;
+    const contactEmail = typeof body.contactEmail === 'string' ? body.contactEmail.trim().toLowerCase() : undefined;
+    const contactPhone = typeof body.contactPhone === 'string' ? body.contactPhone.trim() : undefined;
+    if (contactEmail !== undefined && contactEmail && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(contactEmail)) {
+      return res.status(400).json({ success: false, code: 'INVALID_CONTACT_EMAIL', message: 'Enter a valid pharmacy contact email.' });
+    }
     if (shopName !== undefined && !shopName) {
       return res.status(400).json({ success: false, code: 'INVALID_PHARMACY_NAME', message: 'Pharmacy name cannot be empty.' });
     }
@@ -101,6 +106,8 @@ router.patch('/profile', authenticateUser, async (req, res) => {
     if (legalName !== undefined) { tenant.legalName = legalName; changedFields.push('legalName'); }
     if (licenseNumber !== undefined) { tenant.drugLicenseNumber = licenseNumber; changedFields.push('licenseNumber'); }
     if (gstNumber !== undefined) { tenant.gstNumber = gstNumber; changedFields.push('gstNumber'); }
+    if (contactEmail !== undefined) { tenant.contactEmail = contactEmail; changedFields.push('contactEmail'); }
+    if (contactPhone !== undefined) { tenant.contactPhone = contactPhone; changedFields.push('contactPhone'); }
     if (address) {
       changedFields.push('address');
       tenant.address = {
@@ -119,6 +126,8 @@ router.patch('/profile', authenticateUser, async (req, res) => {
       if (shopName !== undefined) vendor.companyName = shopName;
       if (licenseNumber !== undefined) vendor.drugLicenseNumber = licenseNumber;
       if (gstNumber !== undefined) vendor.gstNumber = gstNumber;
+      if (contactEmail !== undefined) vendor.email = contactEmail;
+      if (contactPhone !== undefined) vendor.mobile = contactPhone;
       if (address) vendor.address = { street: tenant.address.street || '', city: tenant.address.city || '', state: tenant.address.state || '', pincode: tenant.address.pincode || '' };
       await vendor.save();
     }
@@ -128,6 +137,7 @@ router.patch('/profile', authenticateUser, async (req, res) => {
         tenant: {
           id: String(tenant._id), shopName: tenant.name || '', legalName: tenant.legalName || '',
           licenseNumber: tenant.drugLicenseNumber || '', gstNumber: tenant.gstNumber || '',
+          ownerDetails: { name: '', email: tenant.contactEmail || '', phone: tenant.contactPhone || '' },
           address: { street: tenant.address?.street || '', city: tenant.address?.city || '', state: tenant.address?.state || '', zipCode: tenant.address?.pincode || '' }
         }
       },
