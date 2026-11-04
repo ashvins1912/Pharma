@@ -881,7 +881,8 @@ router.post('/:id/approve', authenticateUser, requirePermission('medicine_reques
         const result = await dataStore.approveMedicineProposalAndConvertToOrder(
             req.params.id,
             req.body.approvalNote || '',
-            req.user
+            req.user,
+            req.body.selectedProductId || null
         );
         res.json(result);
     } catch (err) {
