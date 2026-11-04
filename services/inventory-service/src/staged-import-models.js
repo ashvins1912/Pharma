@@ -33,7 +33,6 @@ const stagedImportRowSchema = new mongoose.Schema({
   status: { type: String, enum: ['INVALID', 'READY', 'PUBLISHED', 'UNPUBLISHED', 'REVERTED'], default: 'READY', index: true },
   version: { type: Number, default: 1 },
   publishedAt: Date,
-  publicationSequence: { type: Number, default: 0 },
   publishedBy: String,
   publication: { type: mongoose.Schema.Types.Mixed, default: null },
   history: { type: [mongoose.Schema.Types.Mixed], default: [] }
