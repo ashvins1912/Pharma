@@ -11,12 +11,25 @@ import Medicine from '../models/Medicine.js';
 import Order from '../models/Order.js';
 import UserAddress from '../models/UserAddress.js';
 import Tenant from '../models/Tenant.js';
+import TenantBranch from '../models/TenantBranch.js';
 import FulfillmentCase from '../models/FulfillmentCase.js';
 import { validateWaitWindow } from '../services/intelligentFulfillment/fulfillmentPlanner.js';
 import { customerService } from '../services/customer-service/CustomerService.js';
 import prescriptionClient from '../services/prescription-service-client/PrescriptionClient.js';
 
 const router = express.Router();
+
+const resolveRequestBranchId = async (tenantId, requestedBranchId, user = {}) => {
+    const branchId = String(requestedBranchId || user?.branchId || user?.app_metadata?.branchId || '').trim();
+    if (branchId) {
+        const branch = await TenantBranch.findOne({ _id: branchId, tenantId: String(tenantId), status: 'ACTIVE' }).select('_id').lean();
+        if (!branch) throw Object.assign(new Error('The selected pharmacy branch is no longer active.'), { statusCode: 404 });
+        return String(branch._id);
+    }
+    const defaultBranch = await TenantBranch.findOne({ tenantId: String(tenantId), status: 'ACTIVE' })
+        .sort({ isDefault: -1, createdAt: 1 }).select('_id').lean();
+    return defaultBranch ? String(defaultBranch._id) : null;
+};
 
 const requireDatabase = (res) => {
     if (getIsConnected()) return true;
@@ -893,9 +906,8 @@ router.get('/:id/fulfillment/preview', authenticateUser, requirePermission('medi
         if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
         if (!request.tenantId) return res.status(409).json({ message: 'This request is not linked to a pharmacy. Select a pharmacy and submit a new request.' });
         const ids = [...new Set((request.requestedItems || []).map(item => String(item.productId || item.medicineId || '')).filter(id => mongoose.isValidObjectId(id)))];
-        const branchId = request.branchId || null;
-        const scope = { tenantId: String(request.tenantId) };
-        if (branchId) scope.branchId = String(branchId);
+        const branchId = await resolveRequestBranchId(request.tenantId, request.branchId, req.user);
+        const scope = { tenantId: String(request.tenantId), branchId: branchId || null };
         const inventory = ids.length ? await Medicine.find({ _id: { $in: ids }, ...scope })
             .select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean() : [];
         const descriptors = (request.requestedItems || []).map(item => ({
@@ -1065,6 +1077,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
                 userId: customerId,
                 tenantId,
                 branchId,
+                branchScopeExplicit: true,
                 addressId: request.addressId || null,
                 customerName: request.customerName || 'Customer',
                 customerMobile: request.customerPhone || '',
