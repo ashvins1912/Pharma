@@ -516,7 +516,9 @@ router.get('/dynamic-restock', authenticateUser, async (req, res) => {
         return res.status(503).json({ message: 'Personalized restock is temporarily unavailable.' });
     }
     try {
-        const items = await dynamicOrderService.generateDynamicRestockBasket(req.user.sub);
+        const tenantId = String(req.query.tenantId || req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
+        const branchId = String(req.query.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || '').trim();
+        const items = await dynamicOrderService.generateDynamicRestockBasket(req.user.sub, { tenantId, branchId });
         return res.json({ items });
     } catch (error) {
         console.error('Dynamic restock generation failed:', error);
@@ -545,7 +547,7 @@ router.post('/checkout/quote', authenticateUser, async (req, res) => {
             items,
             req.user.sub,
             pointsToRedeem,
-            { couponCode: req.body.couponCode || undefined, tenantId: selectedTenantId }
+            { couponCode: req.body.couponCode || undefined, tenantId: selectedTenantId, branchId: req.body.branchId || req.user.branchId || req.user.app_metadata?.branchId || null }
         );
         return res.json(quote);
     } catch (error) {
