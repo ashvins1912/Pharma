@@ -118,6 +118,11 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(publishedInventory.sourceImportRowId, first.rowId);
     assert.equal(publishedProduct.lastImportBatchId, staged.batchId);
     assert.equal(publishedProduct.lastImportRowId, first.rowId);
+    const repeatedPublish = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/rows/${encodeURIComponent(first.rowId)}/publish`, {
+      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: '{}'
+    });
+    assert.equal(repeatedPublish.status, 200);
+    assert.equal(await models.Inventory.countDocuments({ tenantId, branchId }), 1);
 
     const unpublishOne = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/unpublish`, {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
@@ -126,6 +131,11 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(unpublishOne.status, 200);
     assert.equal(await models.Inventory.countDocuments({ tenantId, branchId }), 0);
     assert.equal(await models.Product.countDocuments({ tenantId }), 0);
+    const repeatedUnpublish = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/unpublish`, {
+      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ rowIds: [first.rowId] })
+    });
+    assert.equal(repeatedUnpublish.status, 200);
+    assert.equal(await models.Inventory.countDocuments({ tenantId, branchId }), 0);
 
     const publishBoth = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/publish`, {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
