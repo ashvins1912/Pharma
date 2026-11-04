@@ -98,7 +98,6 @@ function normalizeRow(raw, tenantId, usedSkus) {
     do { sku = `${name.normalize('NFKD').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase().padEnd(2, 'X')}${randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase()}`; }
     while (usedSkus.has(sku));
   }
-  if (sku && usedSkus.has(sku)) errors.push('Duplicate SKU detected in this upload.');
   if (sku) usedSkus.add(sku);
   const normalized = {
     sku, name,
