@@ -170,6 +170,8 @@ const orderSchema = new mongoose.Schema({
     medicineRequestId: { type: String, default: null },
     fulfillmentCaseId: { type: String, default: null, index: true },
     parentOrderId: { type: String, default: null, index: true },
+    idempotencyKey: { type: String, default: null },
+    requestFingerprint: { type: String, default: null },
     fulfillmentConfirmationId: { type: String, default: undefined },
     fulfillmentState: { type: String, enum: ['FULL', 'PARTIAL', 'WAITING', 'COMPLETE', 'CANCELLED_REMAINDER', 'EXPIRED_REMAINDER'], default: 'FULL', index: true },
     addressId: { type: mongoose.Schema.Types.ObjectId, ref: 'UserAddress', default: null },
@@ -234,6 +236,7 @@ orderSchema.pre('findOneAndUpdate', function syncUpdatedOrderStatus() {
 });
 
 orderSchema.index({ orderStatus: 1, createdAt: -1, _id: -1 });
+orderSchema.index({ userId: 1, tenantId: 1, idempotencyKey: 1 }, { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } });
 orderSchema.index({ fulfillmentConfirmationId: 1 }, { unique: true, sparse: true });
 
 orderSchema.index({ orderStatus: 1, createdAt: -1 });
