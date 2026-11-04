@@ -22,6 +22,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
   // Recover medicine-request confirmations if the process stopped after the
   // order transaction committed but before the request record was finalized.
   const staleRequests = await MedicineRequest.find({
+    ...(customerId ? { customerId: String(customerId) } : {}),
     status: 'FULFILLMENT_PROCESSING',
     updatedAt: { $lt: new Date(now.getTime() - 10 * 60 * 1000) }
   }).limit(100).lean();
