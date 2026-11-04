@@ -272,7 +272,7 @@ router.get('/alerts', authenticateUser, async (req, res) => {
         res.json(alerts);
     } catch (err) {
         console.error("Error fetching inventory alerts:", err);
-        res.status(500).json({ message: "Failed to fetch alerts" });
+        res.status(err.statusCode || 500).json({ message: err.message || "Failed to fetch alerts" });
     }
 });
 
@@ -286,7 +286,7 @@ router.get('/audits', authenticateUser, async (req, res) => {
         res.json(await dataStore.getInventoryAudits(page, limit, { tenantId, branchId }));
     } catch (err) {
         console.error('Inventory audit list failed:', err);
-        res.status(500).json({ message: "Failed to fetch audit logs" });
+        res.status(err.statusCode || 500).json({ message: err.message || "Failed to fetch audit logs" });
     }
 });
 
