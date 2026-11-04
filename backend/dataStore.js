@@ -1508,6 +1508,7 @@ export const dataStore = {
                         coordinates: orderData.coordinates,
                         paymentMethod: orderData.paymentMethod || 'Cash on Delivery (COD)',
                         source: orderData.source || 'DIRECT',
+                        medicineRequestId: orderData.medicineRequestId ? String(orderData.medicineRequestId) : null,
                         fulfillmentCaseId: orderData.fulfillmentCaseId || null,
                         fulfillmentConfirmationId: orderData.fulfillmentConfirmationId || null,
                         orderStatus: 'Pending_Review',
