@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
 import Order from '../models/Order.js';
 import Tenant from '../models/Tenant.js';
+import TenantBranch from '../models/TenantBranch.js';
 import Rider from '../models/Rider.js';
 import Medicine from '../models/Medicine.js';
 import FulfillmentCase from '../models/FulfillmentCase.js';
@@ -510,6 +511,106 @@ router.post('/fulfillment/waitlist/:id/link-order', authenticateUser, async (req
         return res.json({ case: linked, message: 'Pending items are linked to your partial order.' });
     } catch (error) {
         return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to link pending items to the order.' });
+    }
+});
+
+router.post('/fulfillment/from-medicine-request/:id', authenticateUser, async (req, res) => {
+    if (!getIsConnected()) return res.status(503).json({ message: 'Medicine request stock matching is temporarily unavailable.' });
+    try {
+        const request = await dataStore.getMedicineRequestById(req.params.id, req.user);
+        if (!request || String(request.customerId) !== String(req.user.sub)) {
+            return res.status(404).json({ message: 'Medicine request not found.' });
+        }
+        if (!request.tenantId) return res.status(409).json({ message: 'Select a pharmacy for this medicine request before joining its stock waitlist.' });
+        if (request.fulfillmentCaseId) {
+            const existing = await FulfillmentCase.findOne({ _id: request.fulfillmentCaseId, customerId: String(req.user.sub), tenantId: String(request.tenantId) }).lean();
+            if (existing) return res.status(200).json({ case: existing, alreadyCreated: true });
+        }
+        if (!['REQUESTED', 'UNDER_REVIEW', 'FULFILLMENT_PROCESSING', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION'].includes(request.status)) {
+            return res.status(409).json({ message: 'This medicine request cannot be added to a stock waitlist in its current status.' });
+        }
+        const { waitDays, waitUntil } = validateWaitWindow(req.body?.waitDays);
+        const tenantId = String(request.tenantId);
+        const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!tenant) return res.status(404).json({ message: 'The selected pharmacy is unavailable.' });
+        const branchId = request.branchId ? String(request.branchId) : null;
+        if (branchId) {
+            const branch = await TenantBranch.findOne({ _id: branchId, tenantId, status: 'ACTIVE' }).select('_id').lean();
+            if (!branch) return res.status(404).json({ message: 'The selected pharmacy branch is unavailable.' });
+        }
+        const address = request.addressId ? await dataStore.getUserAddress(req.user.sub, request.addressId) : null;
+        const deliveryAddress = String(request.deliveryAddress || address?.addressLine || '').trim();
+        const coordinates = request.coordinates || address?.coordinates || null;
+        if (!address || !deliveryAddress || !hasValidCoordinates(coordinates)) {
+            return res.status(409).json({ message: 'Add and verify a delivery address with a map pin before waiting for stock.' });
+        }
+        const items = (request.requestedItems || []).map(item => {
+            const rawId = String(item.productId || item.medicineId || '');
+            const productId = mongoose.isValidObjectId(rawId) ? rawId : '';
+            return {
+                productId: productId || null,
+                requestedName: String(item.requestedName || '').trim(),
+                composition: String(item.composition || '').trim(),
+                strength: String(item.strength || '').trim(),
+                dosageForm: String(item.dosageForm || '').trim(),
+                manufacturer: String(item.manufacturer || '').trim(),
+                requestedQuantity: Number(item.quantity || 1)
+            };
+        });
+        if (!items.length || items.some(item => (!item.productId && item.requestedName.length < 2) || !Number.isSafeInteger(item.requestedQuantity) || item.requestedQuantity < 1)) {
+            return res.status(400).json({ message: 'The medicine request needs a valid medicine name and positive whole-number quantity for each item.' });
+        }
+        const idempotencyKey = `medicine-request:${String(request._id)}`;
+        const requestFingerprint = createHash('sha256').update(JSON.stringify({ requestId: String(request._id), tenantId, waitDays, items })).digest('hex');
+        const duplicate = await FulfillmentCase.findOne({ customerId: String(req.user.sub), tenantId, idempotencyKey }).lean();
+        if (duplicate) return res.status(200).json({ case: duplicate, alreadyCreated: true });
+        const caseNumber = 'FUL-' + randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase();
+        const created = await FulfillmentCase.create({
+            caseNumber, customerId: String(req.user.sub), tenantId, branchId,
+            sourceType: 'MEDICINE_REQUEST', sourceId: String(request._id),
+            addressId: address._id, deliveryAddress, addressDetails: address,
+            coordinates, customerMobile: request.customerPhone || address.mobile || '',
+            orderedForName: request.customerName || 'Customer',
+            patientPuid: request.patientPuid || null,
+            prescriptionRequired: Boolean(request.prescriptionId || request.prescriptionUrl),
+            prescriptionUrl: request.prescriptionUrl || null,
+            prescriptionId: request.prescriptionId || null,
+            status: 'WAITING_FOR_STOCK', lines: items.map(item => ({
+                productId: item.productId, name: item.requestedName, requestedName: item.requestedName,
+                composition: item.composition, strength: item.strength, dosageForm: item.dosageForm,
+                manufacturer: item.manufacturer, requestedQuantity: item.requestedQuantity,
+                allocatedQuantity: 0, waitingQuantity: item.requestedQuantity,
+                customerDecision: 'ACCEPTED_ORIGINAL'
+            })),
+            waitDays, waitUntil, idempotencyKey, requestFingerprint,
+            auditTrail: [{ action: 'MEDICINE_REQUEST_WAITLIST_CREATED', actorId: String(req.user.sub), at: new Date(), waitDays, waitUntil }]
+        });
+        const updatedRequest = await MedicineRequest.findOneAndUpdate({
+            _id: request._id, customerId: String(req.user.sub),
+            fulfillmentCaseId: null, status: { $in: ['REQUESTED', 'UNDER_REVIEW', 'FULFILLMENT_PROCESSING', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION'] }
+        }, {
+            $set: { fulfillmentCaseId: String(created._id), waitDays, waitUntil, status: 'WAITING_FOR_STOCK' },
+            $push: { auditTrail: { action: 'STOCK_WAITLIST_CREATED', actorId: String(req.user.sub), role: 'Customer', timestamp: new Date(), notes: `Customer requested a ${waitDays}-day stock wait window.` } }
+        }, { new: true }).lean();
+        if (!updatedRequest) {
+            await FulfillmentCase.updateOne({ _id: created._id, customerId: String(req.user.sub) }, { $set: { status: 'CANCELLED' } });
+            const latest = await dataStore.getMedicineRequestById(req.params.id, req.user);
+            if (latest?.fulfillmentCaseId) {
+                const existing = await FulfillmentCase.findOne({ _id: latest.fulfillmentCaseId, customerId: String(req.user.sub) }).lean();
+                if (existing) return res.status(200).json({ case: existing, alreadyCreated: true });
+            }
+            return res.status(409).json({ message: 'The medicine request changed while saving. Refresh and try again.' });
+        }
+        return res.status(201).json({ case: created.toObject(), request: updatedRequest, message: 'Your medicine request is now on the stock waitlist.' });
+    } catch (error) {
+        if (error.code === 11000) {
+            const request = await dataStore.getMedicineRequestById(req.params.id, req.user);
+            if (request?.fulfillmentCaseId) {
+                const existing = await FulfillmentCase.findOne({ _id: request.fulfillmentCaseId, customerId: String(req.user.sub) }).lean();
+                if (existing) return res.status(200).json({ case: existing, alreadyCreated: true });
+            }
+        }
+        return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to add medicine request to the stock waitlist.' });
     }
 });
 
