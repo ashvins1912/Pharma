@@ -137,6 +137,11 @@ export function normalizeImportRow(row) {
   const rawMarginTier = valueOf(row, 'Margin Tier', 'marginTier');
   const marginTier = rawMarginTier ? String(rawMarginTier).trim().toUpperCase() : 'LOW';
 
+  const rawDiscountPercentage = valueOf(row, 'Discount Percentage', 'discountPercentage', 'Discount %', 'discount');
+  const discountPercentage = rawDiscountPercentage !== undefined && rawDiscountPercentage !== null && String(rawDiscountPercentage).trim() !== ''
+    ? Number(rawDiscountPercentage)
+    : 0;
+
   const rawExpiry = valueOf(row, 'Expiry Date', 'expiryDate', 'Expiry', 'expiry', 'Exp Dt');
   let expiryDate = null;
   if (rawExpiry !== undefined && rawExpiry !== null && rawExpiry !== '') {
@@ -166,6 +171,9 @@ export function normalizeImportRow(row) {
   if (rawMarginTier && !['LOW', 'MID', 'HIGH'].includes(marginTier)) {
     return { error: 'Margin tier must be LOW, MID, or HIGH.', errorType: 'VALIDATION_ERROR', field: 'Margin Tier' };
   }
+  if (!Number.isFinite(discountPercentage) || discountPercentage < 0 || discountPercentage > 100) {
+    return { error: 'Discount Percentage must be between 0 and 100.', errorType: 'VALIDATION_ERROR', field: 'Discount Percentage' };
+  }
   if (expiryDate && !Number.isFinite(expiryDate.getTime())) return { error: 'Expiry date is invalid. Use an Excel date or ISO YYYY-MM-DD.', errorType: 'VALIDATION_ERROR', field: 'Expiry Date' };
   if (expiryDate) { const d = Date.UTC(expiryDate.getUTCFullYear(), expiryDate.getUTCMonth(), expiryDate.getUTCDate()); const n = new Date(); const today = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()); if (d < today) return { error: 'Expired medicine batches cannot be imported.', errorType: 'VALIDATION_ERROR', field: 'Expiry Date' }; }
 
@@ -190,6 +198,7 @@ export function normalizeImportRow(row) {
       stockQuantity,
       baseCostPrice: baseCostPrice ?? undefined,
       marginTier,
+      discountPercentage,
       batchNumber: String(valueOf(row, 'Batch Number', 'batchNumber', 'Batch', 'batch', 'Batch No') || '').trim(),
       expiryDate
     }
@@ -271,6 +280,7 @@ async function executeBatchOperations(tenantId, branchId, stockMode, eligibleRow
             requiresPrescription: value.requiresPrescription,
             baseCostPrice: value.baseCostPrice,
             marginTier: value.marginTier,
+            discountPercentage: value.discountPercentage,
             active: true,
             version: Number(currentProduct?.version || 0) + 1
           },
@@ -1187,7 +1197,7 @@ export async function rollbackImportBatch({ batchId, tenantId, branchId, actor }
       for (const snapshot of productSnapshots) {
         const expected = snapshot.after;
         const current = await Product.findOne({ _id: expected._id, tenantId }).session(session).lean();
-        const fields = ['tenantId', 'sku', 'name', 'genericName', 'strength', 'form', 'manufacturer', 'category', 'description', 'imageUrl', 'baseCostPrice', 'marginTier', 'requiresPrescription', 'version', 'active', 'updatedAt'];
+        const fields = ['tenantId', 'sku', 'name', 'genericName', 'strength', 'form', 'manufacturer', 'category', 'description', 'imageUrl', 'baseCostPrice', 'marginTier', 'discountPercentage', 'requiresPrescription', 'version', 'active', 'updatedAt'];
         if (!current || !sameFields(current, expected, fields)) {
           const error = new Error(`Product ${snapshot.entityKey} changed after import; rollback was stopped to avoid overwriting newer catalogue changes.`);
           error.statusCode = 409;
