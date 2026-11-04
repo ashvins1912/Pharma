@@ -8,6 +8,7 @@ const emptyProfile = {
   shopName: '', legalName: '', licenseNumber: '', gstNumber: '',
   address: { street: '', city: '', state: '', zipCode: '' },
   geolocation: { latitude: '', longitude: '' },
+  usesTenantAsBranch: false,
   ownerDetails: { name: '', email: '', phone: '' }
 };
 
@@ -54,6 +55,7 @@ export default function TenantProfileDashboard() {
         ...tenant,
         address: { ...emptyProfile.address, ...(tenant.address || {}) },
         geolocation: { ...emptyProfile.geolocation, ...(tenant.geolocation || {}) },
+        usesTenantAsBranch: tenant.usesTenantAsBranch === true,
         ownerDetails: { ...emptyProfile.ownerDetails, ...(tenant.ownerDetails || {}) }
       };
       setProfile(nextProfile);
@@ -97,6 +99,7 @@ export default function TenantProfileDashboard() {
         licenseNumber: draft.licenseNumber, gstNumber: draft.gstNumber,
         address: draft.address,
         geolocation: draft.geolocation,
+        usesTenantAsBranch: draft.usesTenantAsBranch === true,
         contactEmail: draft.ownerDetails.email,
         contactPhone: draft.ownerDetails.phone
       });
@@ -200,6 +203,13 @@ export default function TenantProfileDashboard() {
                 <input type={field === 'email' ? 'email' : 'tel'} value={draft.ownerDetails[field] || ''} onChange={event => updateOwner(field, event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm font-medium text-slate-900" />
               </label>
             ))}
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 sm:col-span-2">
+              <input type="checkbox" className="mt-1 h-4 w-4 accent-emerald-700" checked={draft.usesTenantAsBranch === true} onChange={event => updateDraft('usesTenantAsBranch', event.target.checked)} />
+              <span>
+                <span className="block text-sm font-extrabold text-emerald-950">I don't have separate branches — use tenant as the main branch</span>
+                <span className="mt-1 block text-xs leading-5 text-emerald-800">The tenant's name, address and geolocation will be used as the main branch. Turn this off before adding separate branches.</span>
+              </span>
+            </label>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:col-span-2">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div><p className="text-sm font-bold text-slate-800">Pharmacy geolocation</p><p className="text-xs text-slate-500">Set the registered pharmacy's map coordinates.</p></div>
@@ -227,6 +237,7 @@ export default function TenantProfileDashboard() {
             <ProfileField label="GST number" value={profile.gstNumber} />
             <ProfileField label="Registered address" value={address} />
             <ProfileField label="Geolocation" value={profile.geolocation?.latitude != null && profile.geolocation?.longitude != null ? `${profile.geolocation.latitude}, ${profile.geolocation.longitude}` : ''} />
+            <ProfileField label="Branch setup" value={profile.usesTenantAsBranch ? 'Tenant is the main branch' : 'Separate branches'} />
             <ProfileField label="Owner / contact" value={profile.ownerDetails.name} />
             <ProfileField label="Contact email" value={profile.ownerDetails.email} />
             <ProfileField label="Contact phone" value={profile.ownerDetails.phone} />
