@@ -222,20 +222,12 @@ router.post('/', authenticateUser, async (req, res) => {
         if (medicineIds.length === 0 || medicineIds.some(id => !mongoose.isValidObjectId(id))) {
             return res.status(400).json({ message: 'Every order item must reference a valid medicine in the selected pharmacy catalogue.' });
         }
-        const medicines = await Medicine.find({
-            _id: { $in: medicineIds },
-            tenantId: selectedTenantId,
-            isActive: { $ne: false }
-        }).select('_id name price sku').lean();
-        if (medicines.length !== medicineIds.length) {
-            return res.status(404).json({ code: 'MEDICINE_NOT_IN_SELECTED_PHARMACY', message: 'One or more medicines are not available from the selected pharmacy.' });
-        }
-        const medicineById = new Map(medicines.map(medicine => [String(medicine._id), medicine]));
         const scopedItems = items.map(item => {
             const medicineId = String(item.medicineId || item.productId || item._id || item.id);
-            const medicine = medicineById.get(medicineId);
-            return { ...item, medicineId, productId: medicineId, name: medicine.name, price: Number(medicine.price), unitPrice: Number(medicine.price), sku: medicine.sku || item.sku || '' };
+            return { ...item, medicineId, productId: medicineId };
         });
+        const branchId = String(req.body?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || '').trim();
+        if (!branchId) return res.status(400).json({ code: 'BRANCH_SELECTION_REQUIRED', message: 'Select a pharmacy branch before placing an order.' });
         let deliveryAddress = typeof req.body.deliveryAddress === 'string' ? req.body.deliveryAddress.trim() : '';
         let coordinates = req.body.coordinates;
         let addressSnapshot = null;
@@ -274,6 +266,7 @@ router.post('/', authenticateUser, async (req, res) => {
             userId: req.user.sub,
             customerId: req.user.sub,
             tenantId: selectedTenantId,
+            branchId,
             addressId: addressSnapshot?._id || req.body.addressId || null,
             customerName: addressSnapshot?.fullName || req.user.user_metadata?.name || req.user.email || 'Customer',
             customerMobile,
@@ -426,7 +419,7 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
                         idempotencyKey: req.get('Idempotency-Key') || null,
                         userId: req.user.sub,
                         tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || null,
-                        branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
+                        branchId: req.body.branchId || req.user.branchId || req.user.app_metadata?.branchId || null,
                         role: req.user?.app_metadata?.role || req.user?.role || 'customer',
                         patientPuid: orderedForPerson?.puid || req.body.patientPuid || null,
                         orderId: null
