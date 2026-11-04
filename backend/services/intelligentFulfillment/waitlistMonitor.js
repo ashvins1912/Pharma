@@ -30,6 +30,8 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date() 
           $set: { lines: remainingLines, status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'FULFILLED', parentOrderId: String(recoveredOrder._id), confirmationId: null, confirmingAt: null, confirmationPreviousStatus: null, confirmationLines: [] },
           $push: { auditTrail: { action: 'CONFIRMATION_RECOVERED', at: now, actorId: 'system', details: { orderId: String(recoveredOrder._id) } } }
         });
+        if (entry.parentOrderId) await Order.updateOne({ _id: entry.parentOrderId, tenantId: entry.tenantId }, { $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' } });
+        if (entry.sourceType === 'MEDICINE_REQUEST' && entry.sourceId) await MedicineRequest.updateOne({ _id: entry.sourceId, fulfillmentCaseId: String(entry._id) }, { $set: { status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'CONVERTED_TO_ORDER', convertedOrderId: String(recoveredOrder._id) } });
       } else {
         await FulfillmentCase.updateOne({ _id: entry._id, status: 'CONFIRMING', confirmationId: entry.confirmationId }, {
           $set: { status: entry.confirmationPreviousStatus || 'WAITING_FOR_STOCK', confirmationId: null, confirmingAt: null, confirmationPreviousStatus: null, confirmationLines: [], lastAvailabilityCheckAt: null },
