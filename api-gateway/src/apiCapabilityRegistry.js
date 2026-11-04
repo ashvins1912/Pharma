@@ -14,7 +14,7 @@ const CAPABILITIES = [
   ['GET', /^\/api\/orders(?:\/|$)/, 'orders.read'],
   ['POST', /^\/api\/orders\/checkout(?:\/|$)/, 'orders.create'],
   ['POST', /^\/api\/orders\/checkout\/quote(?:\/|$)/, 'orders.create'],
-  ['POST', /^\/api\/orders\/fulfillment\/(?:preview|waitlist(?:\/[^/]+\/(?:confirm|cancel))?)$/, 'orders.create'],
+  ['POST', /^\/api\/orders\/fulfillment\/(?:preview|waitlist(?:\/[^/]+\/(?:confirm|cancel|link-order))?)$/, 'orders.create'],
   ['POST', /^\/api\/orders\/admin(?:\/|$)/, 'orders.manage'],
   ['PUT', /^\/api\/orders\/[^/]+(?:\/|$)/, 'orders.manage'],
   ['PATCH', /^\/api\/orders\/[^/]+(?:\/|$)/, 'orders.manage'],
