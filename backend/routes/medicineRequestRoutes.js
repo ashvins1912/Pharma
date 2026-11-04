@@ -778,8 +778,8 @@ router.get('/:id/fulfillment-options', authenticateUser, requirePermission('medi
         const results = [];
         for (let index = 0; index < (request.requestedItems || []).length; index += 1) {
             const item = request.requestedItems[index];
-            if (!item.composition || !item.strength) {
-                results.push({ itemIndex: index, requestedName: item.requestedName, options: [], reason: 'Composition and strength are required before safe alternatives can be suggested.' });
+            if (!item.composition || !item.strength || !item.dosageForm) {
+                results.push({ itemIndex: index, requestedName: item.requestedName, options: [], reason: 'Composition, strength and dosage form are required before safe alternatives can be suggested.' });
                 continue;
             }
             const query = {
