@@ -5,10 +5,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import TenantRegistry from '../auth/TenantRegistry';
 
 const emptyProfile = {
-  shopName: '',
-  legalName: '',
-  licenseNumber: '',
-  gstNumber: '',
+  shopName: '', legalName: '', licenseNumber: '', gstNumber: '',
   address: { street: '', city: '', state: '', zipCode: '' },
   ownerDetails: { name: '', email: '', phone: '' }
 };
@@ -27,35 +24,43 @@ function ProfileField({ label, value }) {
 export default function TenantProfileDashboard() {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const role = String(user?.app_metadata?.role || user?.role || '').toUpperCase();
+  const isSuperAdmin = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'ADMIN'].includes(role);
   const [profile, setProfile] = useState(emptyProfile);
+  const [draft, setDraft] = useState(emptyProfile);
   const [personnel, setPersonnel] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [profileMissing, setProfileMissing] = useState(false);
+  const [pharmacyCanEdit, setPharmacyCanEdit] = useState(false);
+  const [policySaving, setPolicySaving] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
     setError('');
-    setProfileMissing(false);
     try {
-      const response = await apiClient.get('/api/v1/vendor/profile');
-      const payload = response.data?.data || response.data || {};\n      const tenant = payload.tenant || {};
-      setProfile({
+      const [profileResponse, policyResponse] = await Promise.all([
+        apiClient.get('/api/v1/vendor/profile'),
+        apiClient.get('/api/v1/vendor/profile/edit-policy')
+      ]);
+      const payload = profileResponse.data?.data || profileResponse.data || {};
+      const tenant = payload.tenant || {};
+      const nextProfile = {
         ...emptyProfile,
         ...tenant,
         address: { ...emptyProfile.address, ...(tenant.address || {}) },
         ownerDetails: { ...emptyProfile.ownerDetails, ...(tenant.ownerDetails || {}) }
-      });
-      setPersonnel(Array.isArray(response.data?.personnel) ? response.data.personnel : []);
-      setProfileMissing(!response.data?.profileConfigured);
+      };
+      setProfile(nextProfile);
+      setDraft(nextProfile);
+      setPersonnel(Array.isArray(payload.personnel) ? payload.personnel : []);
+      setProfileMissing(!payload.profileConfigured);
+      setPharmacyCanEdit(policyResponse.data?.data?.pharmacyCanEdit === true);
     } catch (err) {
-      if (err?.response?.status === 404 && err?.response?.data?.code === 'TENANT_PROFILE_NOT_FOUND') {
-        setProfile(emptyProfile);
-        setPersonnel([]);
-        setProfileMissing(true);
-      } else {
-        setError(err?.response?.data?.message || err.message || 'Pharmacy profile could not be loaded.');
-      }
+      setError(err?.response?.data?.message || err.message || 'Pharmacy profile could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -63,7 +68,49 @@ export default function TenantProfileDashboard() {
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
 
+  const canEdit = isSuperAdmin || pharmacyCanEdit;
   const address = [profile.address.street, profile.address.city, profile.address.state, profile.address.zipCode].filter(Boolean).join(', ');
+  const updateDraft = (field, value) => setDraft(current => ({ ...current, [field]: value }));
+  const updateAddress = (field, value) => setDraft(current => ({ ...current, address: { ...current.address, [field]: value } }));
+
+  const saveProfile = async event => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await apiClient.patch('/api/v1/vendor/profile', {
+        shopName: draft.shopName, legalName: draft.legalName,
+        licenseNumber: draft.licenseNumber, gstNumber: draft.gstNumber,
+        address: draft.address
+      });
+      const updated = response.data?.data?.tenant || draft;
+      const next = { ...draft, ...updated, address: { ...draft.address, ...(updated.address || {}) } };
+      setProfile(next);
+      setDraft(next);
+      setEditing(false);
+      setNotice(response.data?.message || 'Pharmacy details saved.');
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Pharmacy details could not be saved.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changePolicy = async enabled => {
+    setPolicySaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await apiClient.patch('/api/v1/vendor/profile/edit-policy', { pharmacyCanEdit: enabled });
+      setPharmacyCanEdit(response.data?.data?.pharmacyCanEdit === true);
+      setNotice(enabled ? 'Pharmacy editing has been enabled.' : 'Pharmacy editing has been disabled.');
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Could not update pharmacy edit permission.');
+    } finally {
+      setPolicySaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -72,7 +119,7 @@ export default function TenantProfileDashboard() {
           <div>
             <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">{t('tenantProfileControl')}</span>
             <h2 className="mt-2 text-2xl font-black text-slate-900">{profile.shopName || 'Tenant Profile'}</h2>
-            <p className="mt-1 text-sm text-slate-500">Your pharmacy profile and branch registry remain available even before setup is completed.</p>
+            <p className="mt-1 text-sm text-slate-500">Pharmacy details and branch registry are loaded from the selected tenant.</p>
           </div>
           <button type="button" onClick={loadProfile} disabled={loading} className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-50">
             {loading ? 'Refreshing…' : 'Refresh profile'}
@@ -81,23 +128,63 @@ export default function TenantProfileDashboard() {
       </section>
 
       {error && <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{error}</div>}
+      {notice && <div role="status" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{notice}</div>}
+
+      {isSuperAdmin && (
+        <section className="flex flex-col justify-between gap-4 rounded-3xl border border-violet-200 bg-violet-50 p-5 sm:flex-row sm:items-center">
+          <div>
+            <h3 className="font-black text-violet-950">Pharmacy profile edit permission</h3>
+            <p className="mt-1 text-sm text-violet-800">Control whether this pharmacy's administrators can edit their registered details.</p>
+            <p className="mt-1 text-xs font-semibold text-violet-700">Current setting: {pharmacyCanEdit ? 'Pharmacy can edit' : 'Read-only for pharmacy'}</p>
+          </div>
+          <button type="button" disabled={policySaving || loading} onClick={() => changePolicy(!pharmacyCanEdit)} className="rounded-xl bg-violet-700 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">
+            {policySaving ? 'Saving…' : pharmacyCanEdit ? 'Disable pharmacy editing' : 'Allow pharmacy editing'}
+          </button>
+        </section>
+      )}
 
       {profileMissing && (
         <div role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <strong>Pharmacy profile setup is incomplete.</strong>
-          <p className="mt-1">This page is available now. Profile fields will appear as they are registered; branch setup can continue below.</p>
+          <p className="mt-1">Registered details will appear as they are added. Branch setup remains available below.</p>
         </div>
       )}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col justify-between gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-center">
           <div>
             <h3 className="text-sm font-black uppercase tracking-wide text-slate-900">Pharmacy details</h3>
-            <p className="mt-1 text-xs text-slate-500">Authenticated tenant profile · {user?.email || 'Signed-in pharmacy user'}</p>
+            <p className="mt-1 text-xs text-slate-500">Tenant: {profile.shopName || 'Profile not configured'} · {user?.email || 'Signed-in user'}</p>
           </div>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold text-slate-600">{profileMissing ? 'SETUP PENDING' : 'PROFILE'}</span>
+          <div className="flex items-center gap-2">
+            {!isSuperAdmin && <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold text-slate-600">{pharmacyCanEdit ? 'EDITING ALLOWED' : 'READ ONLY'}</span>}
+            {canEdit && !editing && <button type="button" onClick={() => { setDraft(profile); setEditing(true); }} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white">Edit details</button>}
+          </div>
         </div>
-        {loading ? <div className="py-8 text-center text-sm text-slate-500">Loading pharmacy profile…</div> : (
+
+        {loading ? <div className="py-8 text-center text-sm text-slate-500">Loading pharmacy profile…</div> : editing ? (
+          <form onSubmit={saveProfile} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {[
+              ['shopName', 'Pharmacy name'], ['legalName', 'Legal name'],
+              ['licenseNumber', 'Drug licence number'], ['gstNumber', 'GST number']
+            ].map(([field, label]) => (
+              <label key={field} className="space-y-1 text-xs font-bold text-slate-600">{label}
+                <input value={draft[field] || ''} onChange={event => updateDraft(field, event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm font-medium text-slate-900" />
+              </label>
+            ))}
+            {[
+              ['street', 'Street address'], ['city', 'City'], ['state', 'State'], ['zipCode', 'PIN code']
+            ].map(([field, label]) => (
+              <label key={field} className="space-y-1 text-xs font-bold text-slate-600">{label}
+                <input value={draft.address[field] || ''} onChange={event => updateAddress(field, event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm font-medium text-slate-900" />
+              </label>
+            ))}
+            <div className="flex flex-wrap gap-2 sm:col-span-2">
+              <button type="submit" disabled={saving} className="rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Saving…' : 'Save pharmacy details'}</button>
+              <button type="button" disabled={saving} onClick={() => { setDraft(profile); setEditing(false); }} className="rounded-xl bg-slate-100 px-5 py-3 text-sm font-bold text-slate-700">Cancel</button>
+            </div>
+          </form>
+        ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <ProfileField label="Pharmacy name" value={profile.shopName} />
             <ProfileField label="Legal name" value={profile.legalName} />
@@ -109,14 +196,12 @@ export default function TenantProfileDashboard() {
             <ProfileField label="Contact phone" value={profile.ownerDetails.phone} />
           </div>
         )}
+        {!isSuperAdmin && !pharmacyCanEdit && <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">Your Super Admin has disabled pharmacy profile editing. You can still view these details.</p>}
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm space-y-3">
+      <section className="space-y-3 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div>
-            <h3 className="text-sm font-black uppercase tracking-wide text-slate-900">Tenant personnel</h3>
-            <p className="mt-1 text-xs text-slate-500">Authorized users linked to this pharmacy</p>
-          </div>
+          <div><h3 className="text-sm font-black uppercase tracking-wide text-slate-900">Tenant personnel</h3><p className="mt-1 text-xs text-slate-500">Authorized users linked to this pharmacy</p></div>
           <span className="text-xs font-bold text-slate-500">{personnel.length} members</span>
         </div>
         {personnel.length ? personnel.map(member => (
@@ -124,14 +209,11 @@ export default function TenantProfileDashboard() {
             <div><p className="text-sm font-bold text-slate-800">{member.name || 'Name not added'}</p><p className="text-xs text-slate-500">{member.email || 'Email not added'}</p></div>
             <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">{member.role}</span>
           </div>
-        )) : <p className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-500">No personnel records are available yet. This section remains open while your team is being configured.</p>}
+        )) : <p className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-500">No personnel records are available yet.</p>}
       </section>
 
       <section className="space-y-3">
-        <div>
-          <h3 className="text-lg font-black text-slate-900">Tenant branches</h3>
-          <p className="text-sm text-slate-500">Create and activate branches for this pharmacy. Empty branch data will not hide this section.</p>
-        </div>
+        <div><h3 className="text-lg font-black text-slate-900">Tenant branches</h3><p className="text-sm text-slate-500">Create and activate branches for this pharmacy.</p></div>
         <TenantRegistry />
       </section>
     </div>
