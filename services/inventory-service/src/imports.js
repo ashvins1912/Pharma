@@ -1054,6 +1054,16 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     throw error;
   }
   const normalized = rows.map((row, index) => ({ rowNumber: Number(row['Source Row Number']) || index + 2, originalRecord: row, parsed: normalizeImportRow(row) }));
+  // Use the same tenant-scoped deterministic SKU as staged publishing so the preview snapshot
+  // can detect existing stock on later uploads when the source workbook omits a SKU.
+  for (const item of normalized) {
+    const value = item.parsed.value;
+    if (!value || value.sku) continue;
+    const identity = [tenantId, value.name, value.genericName, value.strength, value.form, value.manufacturer]
+      .map(part => String(part || '').trim().toLowerCase()).join('|');
+    const prefix = String(value.name || '').normalize('NFKD').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase().padEnd(2, 'X');
+    value.sku = prefix + createHash('sha256').update(identity).digest('hex').slice(0, 10).toUpperCase();
+  }
   const seen = new Set();
   const valid = [];
   const errors = [];
@@ -1091,6 +1101,7 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     const reservedStock = Number(current?.reservedQuantity || 0);
     return {
       ...item.originalRecord,
+      SKU: item.value.sku,
       'Source Row Number': item.rowNumber,
       'Existing Stock': existingStock,
       'Reserved Stock': reservedStock,
