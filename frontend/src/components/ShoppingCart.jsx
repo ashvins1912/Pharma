@@ -3,10 +3,12 @@ import apiClient from '../api/apiClient';
 import { useApp } from '../context/AppContext';
 import { useLanguage } from '../context/LanguageContext';
 import { applyCouponCode } from '../api/couponService';
+import { useTenant } from '../context/TenantContext';
 
 export default function ShoppingCart() {
     const { t } = useLanguage();
     const { cart, subtotal = 0, addresses = [], selectedAddressId, updateQuantity, clearCart } = useApp();
+    const { tenantId, branchId } = useTenant();
     const [code, setCode] = useState('');
     const [pct, setPct] = useState(0);
     const [discountAmount, setDiscountAmount] = useState(0);
@@ -54,6 +56,8 @@ export default function ShoppingCart() {
             const deliveryAddress = selectedAddress?.addressLine || (selectedAddress?.addressLine1 ? `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}` : undefined);
             const coordinates = selectedAddress?.coordinates;
             const res = await apiClient.post('/api/orders/checkout', {
+                tenantId: String(tenantId || ''),
+                branchId: String(branchId || ''),
                 cartItems: cart,
                 items: cart.map(item => ({
                     medicineId: item._id || item.id,
