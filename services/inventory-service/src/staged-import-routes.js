@@ -170,6 +170,7 @@ async function publishRows(batch, rows, req) {
   const published = [];
   try {
     await session.withTransaction(async () => {
+      published.length = 0;
       const baselineBatch = await StagedImportBatch.findById(batch._id).session(session).lean();
       let inventoryBaseline = [...(baselineBatch?.previewInventorySnapshot || [])];
       let productBaseline = [...(baselineBatch?.previewProductSnapshot || [])];
@@ -272,6 +273,7 @@ async function unpublishRows(batch, rows, req) {
   const changed = [];
   try {
     await session.withTransaction(async () => {
+      changed.length = 0;
       const baselineBatch = await StagedImportBatch.findById(batch._id).session(session).lean();
       let inventoryBaseline = [...(baselineBatch?.previewInventorySnapshot || [])];
       let productBaseline = [...(baselineBatch?.previewProductSnapshot || [])];
