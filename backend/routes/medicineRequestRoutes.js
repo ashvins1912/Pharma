@@ -805,19 +805,22 @@ router.get('/:id/fulfillment-options', authenticateUser, requirePermission('medi
             };
             if (item.dosageForm) query.dosageForm = String(item.dosageForm).trim();
             if (request.branchId) query.branchId = String(request.branchId);
-            const products = await Medicine.find(query).limit(25).select('_id name brand manufacturer composition strength dosageForm form price discountPercentage stockQuantity stock quantity reservedQuantity requiresPrescription isPrescriptionRequired expiryDate').lean();
+            const products = await Medicine.find(query).limit(25).select('_id name brand manufacturer composition strength dosageForm form price basePrice discountPercentage stockQuantity stock quantity reservedQuantity requiresPrescription isPrescriptionRequired expiryDate').lean();
             const options = products.map(product => {
                 const physical = Number(product.stockQuantity ?? product.stock ?? product.quantity ?? 0);
                 const availableQuantity = Math.max(0, physical - Number(product.reservedQuantity || 0));
-                const discountPercentage = Math.min(100, Math.max(0, Number(product.discountPercentage || 0)));
                 const unitPrice = Number(product.price || 0);
+                const listPrice = Math.max(unitPrice, Number(product.basePrice ?? unitPrice));
+                const discountPercentage = listPrice > unitPrice
+                    ? Math.round((1 - unitPrice / listPrice) * 10000) / 100
+                    : Math.min(100, Math.max(0, Number(product.discountPercentage || 0)));
                 return {
                     productId: String(product._id), medicineName: product.name,
                     manufacturer: product.manufacturer || product.brand || '',
                     composition: product.composition || '', strength: product.strength || '',
                     dosageForm: product.dosageForm || product.form || '',
-                    unitPrice, discountPercentage,
-                    discountedUnitPrice: Math.round(unitPrice * (1 - discountPercentage / 100) * 100) / 100,
+                    unitPrice, listPrice, discountPercentage,
+                    discountedUnitPrice: unitPrice,
                     availableQuantity,
                     requiresPrescription: Boolean(product.requiresPrescription ?? product.isPrescriptionRequired),
                     requiresPharmacistApproval: Boolean(item.source === 'PRESCRIPTION_EXTRACTED' || request.prescriptionId || request.prescriptionUrl),
