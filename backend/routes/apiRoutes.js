@@ -13,6 +13,7 @@ import testRoutes from './testRoutes.js';
 import whatsappRoutes from './whatsappRoutes.js';
 import versionedOrderRoutes from './versionedOrderRoutes.js';
 import adminRoutes from './adminRoutes.js';
+import tenantBranchRoutes from './tenantBranchRoutes.js';
 import { authenticateUser } from '../middleware/auth.js';
 import TenantMembership from '../models/TenantMembership.js';
 import tenantService from '../services/tenant-service/TenantService.js';
@@ -138,79 +139,7 @@ router.get('/vendor/profile', async (req, res) => {
     }
 });
 
-router.get('/tenant/branches', authenticateUser, async (req, res) => {
-    try {
-        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
-        const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
-        const authenticatedTenantId = String(
-            req.user?.tenantId || req.user?.app_metadata?.tenantId || ''
-        ).trim();
-        const tenantId = String(
-            isPlatformAdmin
-                ? (req.get('x-tenant-id') || req.query.tenantId || '')
-                : authenticatedTenantId
-        ).trim();
-
-        if (!tenantId) {
-            return res.status(403).json({
-                success: false,
-                code: 'TENANT_CONTEXT_REQUIRED',
-                message: 'An authenticated tenant context is required.'
-            });
-        }
-
-        let activeMembership = null;
-        if (!isPlatformAdmin) {
-            activeMembership = await TenantMembership.findOne({
-                userId: String(req.user?.sub || ''),
-                tenantId,
-                status: 'ACTIVE'
-            }).lean();
-            if (!activeMembership) {
-                return res.status(403).json({
-                    success: false,
-                    code: 'TENANT_MEMBERSHIP_REQUIRED',
-                    message: 'An active membership for this pharmacy is required.'
-                });
-            }
-        }
-
-        const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
-        const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
-        const allBranches = await tenantService.getBranches(tenantId, { status: 'ACTIVE' });
-        const scopedBranches = isPlatformAdmin
-            ? allBranches
-            : (() => {
-                // Tenant-wide memberships (branchId=null) can see all branches;
-                // branch-scoped staff can only see their assigned branch.
-                return activeMembership?.branchId
-                    ? allBranches.filter(branch => String(branch.id || branch._id) === String(activeMembership.branchId))
-                    : allBranches;
-            })();
-        const total = scopedBranches.length;
-        const branches = scopedBranches.slice((page - 1) * limit, page * limit);
-        return res.json({
-            status: 'success',
-            branches,
-            pagination: {
-                page,
-                limit,
-                total,
-                totalPages: Math.ceil(total / limit)
-            }
-        });
-    } catch (err) {
-        console.error('[TenantBranches] Scoped branch lookup failed:', {
-            requestId: req.requestId || null,
-            code: err.code || err.name
-        });
-        return res.status(503).json({
-            success: false,
-            code: 'TENANT_BRANCH_REGISTRY_UNAVAILABLE',
-            message: 'Pharmacy branches are temporarily unavailable.'
-        });
-    }
-});
+router.use('/tenant/branches', tenantBranchRoutes);
 
 import Tenant from '../models/Tenant.js';
 import Vendor from '../models/Vendor.js';
