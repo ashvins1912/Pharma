@@ -14,6 +14,14 @@ const tenantSchema = new mongoose.Schema({
     },
     contactEmail: { type: String, trim: true, lowercase: true },
     contactPhone: { type: String, trim: true },
+    address: {
+        street: { type: String, trim: true, default: '' },
+        city: { type: String, trim: true, default: '' },
+        state: { type: String, trim: true, default: '' },
+        pincode: { type: String, trim: true, default: '' }
+    },
+    gstNumber: { type: String, trim: true, uppercase: true, default: '' },
+    drugLicenseNumber: { type: String, trim: true, uppercase: true, default: '' },
     timezone: { type: String, default: 'Asia/Kolkata' },
     currency: { type: String, default: 'INR' },
     settings: {
