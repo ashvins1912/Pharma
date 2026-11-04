@@ -187,6 +187,7 @@ router.post('/imports', requireServiceScope('inventory.import'), requireImportsE
       tenantId,
       branchId,
       previewFingerprint: approvedPreview.previewFingerprint,
+      approvedPreview,
       stockMode: String(req.body?.stockMode || 'REPLACE').toUpperCase()
     });
     return res.status(202).json({
