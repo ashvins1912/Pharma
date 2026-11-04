@@ -44,7 +44,7 @@ export default function TenantProfileDashboard() {
     } catch (err) {
       setProfile(EMPTY_PROFILE);
       setPersonnel([]);
-      setProfileMissing(err?.response?.status === 404 || true);
+      setProfileMissing(err?.response?.status === 404);
       setError(err?.response?.data?.message || '');
     } finally {
       setLoading(false);
