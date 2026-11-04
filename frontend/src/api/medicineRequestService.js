@@ -40,8 +40,8 @@ export const getMedicineRequestById = async (id) => {
   return response.data?.request || null;
 };
 
-export const approveProposal = async (id, approvalNote = '') => {
-  const response = await apiClient.post(`/api/medicine-requests/${id}/approve`, { approvalNote });
+export const approveProposal = async (id, approvalNote = '', selectedProductId = null) => {
+  const response = await apiClient.post(`/api/medicine-requests/${id}/approve`, { approvalNote, selectedProductId });
   return response.data;
 };
 
