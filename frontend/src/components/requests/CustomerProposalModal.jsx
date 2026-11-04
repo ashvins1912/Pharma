@@ -17,12 +17,14 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
   const [rejectReason, setRejectReason] = useState('');
   const [approvalNote, setApprovalNote] = useState('');
   const [showApprovalConfirm, setShowApprovalConfirm] = useState(false);
+  const [selectedOfferProductId, setSelectedOfferProductId] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
     setShowApprovalConfirm(false);
     setShowRejectInput(false);
     setRejectReason('');
+    setSelectedOfferProductId(request?.pharmacyProposal?.productId || '');
   }, [isOpen, request?._id]);
 
   if (!isOpen || !request) return null;
@@ -38,13 +40,15 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
     && !isExpired;
 
   const priceType = proposal?.priceType || 'APPROXIMATE';
-  const priceValue = proposal?.finalPrice ?? proposal?.totalPrice ?? proposal?.approximatePrice ?? 0;
+  const selectedOffer = (proposal?.alternativeOffers || []).find(offer => String(offer.productId) === String(selectedOfferProductId));
+  const priceValue = selectedOffer ? Number(selectedOffer.discountedUnitPrice || 0) * Number(selectedOffer.quantity || proposal?.quantity || 1) : (proposal?.finalPrice ?? proposal?.totalPrice ?? proposal?.approximatePrice ?? 0);
+  const selectedName = selectedOffer?.medicineName || proposal?.medicineName || request.requestedItems?.[0]?.requestedName;
 
   const handleApprove = async () => {
     if (approving) return;
     try {
       setApproving(true);
-      const res = await approveProposal(request._id, approvalNote);
+      const res = await approveProposal(request._id, approvalNote, selectedOfferProductId || null);
       addToast(res.message || 'Proposal approved and converted into an order!', 'success');
       await loadUserMedicineRequests();
       await loadUserOrders();
@@ -176,6 +180,31 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
           )}
         </div>
 
+        {(proposal?.alternativeOffers || []).length > 0 && canDecide && (
+          <section className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-2">
+            <h4 className="text-xs font-black text-emerald-950">Choose your medicine offer</h4>
+            {proposal.productId && (
+              <label className="flex items-start gap-2 rounded-xl border border-emerald-100 bg-white p-3 text-xs">
+                <input type="radio" name="proposal-product-choice" checked={selectedOfferProductId === proposal.productId} onChange={() => setSelectedOfferProductId(proposal.productId)}/>
+                <span className="flex-1"><strong>{proposal.medicineName}</strong><br/><span className="text-slate-500">{proposal.manufacturer} · {proposal.strength} · {proposal.dosageForm}</span><br/><span className="font-bold text-emerald-700">₹{proposal.finalPrice ?? proposal.totalPrice ?? proposal.approximatePrice}</span></span>
+              </label>
+            )}
+            {!proposal.productId && (
+              <label className="flex items-start gap-2 rounded-xl border border-emerald-100 bg-white p-3 text-xs">
+                <input type="radio" name="proposal-product-choice" checked={!selectedOfferProductId} onChange={() => setSelectedOfferProductId('')}/>
+                <span className="flex-1"><strong>{proposal.medicineName}</strong><br/><span className="text-slate-500">Pharmacy-arranged offer</span><br/><span className="font-bold text-emerald-700">₹{proposal.finalPrice ?? proposal.totalPrice ?? proposal.approximatePrice}</span></span>
+              </label>
+            )}
+            {proposal.alternativeOffers.map(offer => (
+              <label key={offer.productId} className="flex items-start gap-2 rounded-xl border border-emerald-100 bg-white p-3 text-xs">
+                <input type="radio" name="proposal-product-choice" checked={selectedOfferProductId === offer.productId} onChange={() => setSelectedOfferProductId(offer.productId)}/>
+                <span className="flex-1"><strong>{offer.medicineName}</strong><br/><span className="text-slate-500">{offer.manufacturer} · {offer.strength} · {offer.dosageForm}</span><br/><span className="font-bold text-emerald-700">₹{offer.discountedUnitPrice} each · {offer.availableQuantity} available</span>{offer.discountPercentage > 0 ? <span className="ml-1 text-emerald-700">({offer.discountPercentage}% off)</span> : null}{offer.requiresPharmacistApproval ? <span className="block mt-1 text-amber-700">Prescription verification / pharmacist approval applies</span> : null}</span>
+              </label>
+            ))}
+            <p className="text-[10px] text-emerald-900">Your selection is explicit. Stock is rechecked and reserved when you confirm. The pharmacy will not substitute a medicine without your approval.</p>
+          </section>
+        )}
+
         {/* Pricing & Delivery Slot Summary Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           
@@ -260,8 +289,8 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
                 <div>
                   <p className="text-sm font-extrabold text-emerald-950">{t('confirmPharmacyProposal')}</p>
                   <p className="mt-1 text-xs text-emerald-800">
-                    {proposal?.medicineName || request.requestedItems?.[0]?.requestedName}
-                    {' · Qty '}{proposal?.quantity || 1}
+                    {selectedName}
+                    {' · Qty '}{selectedOffer?.quantity || proposal?.quantity || 1}
                     {' · '}{priceType} ₹{priceValue}
                     {' · '}{proposal?.deliverySlot?.label || 'Flexible delivery'}
                   </p>
