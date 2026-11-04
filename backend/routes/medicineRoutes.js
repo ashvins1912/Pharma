@@ -14,8 +14,16 @@ const searchMetricIngestion = new SearchMetricIngestionService();
 const publicMedicine = medicine => {
     const { stockQuantity, reservedQuantity, ...visibleMedicine } = medicine;
     const availableQuantity = medicine.availableQuantity ?? medicine.stock ?? medicine.quantity ?? 0;
+    const basePrice = Number(medicine.basePrice ?? medicine.mrp ?? medicine.price ?? 0);
+    const discountPercentage = Math.min(100, Math.max(0, Number(medicine.discountPercentage || 0)));
+    const sellingPrice = medicine.sellingPrice ?? Math.round(basePrice * (1 - discountPercentage / 100) * 100) / 100;
     return {
         ...visibleMedicine,
+        basePrice,
+        mrp: basePrice,
+        price: sellingPrice,
+        sellingPrice,
+        discountPercentage,
         availableQuantity,
         stock: availableQuantity,
         quantity: availableQuantity
