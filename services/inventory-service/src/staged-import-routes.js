@@ -224,9 +224,10 @@ async function publishRows(batch, rows, req) {
       const totals = Object.fromEntries(counts.map(x => [x._id, x.count]));
       const total = await StagedImportRow.countDocuments({ batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId }).session(session);
       const publishedCount = totals.PUBLISHED || 0;
+      const unpublishedCount = totals.UNPUBLISHED || 0;
       const publishableCount = total - (totals.INVALID || 0);
       await StagedImportBatch.updateOne({ _id: batch._id }, {
-        $set: { publishedRows: publishedCount, status: publishedCount >= publishableCount ? 'PUBLISHED' : 'PARTIALLY_PUBLISHED' }
+        $set: { publishedRows: publishedCount, unpublishedRows: unpublishedCount, status: publishedCount >= publishableCount ? 'PUBLISHED' : 'PARTIALLY_PUBLISHED' }
       }, { session });
       await Audit.create([{
         tenantId: batch.tenantId, branchId: batch.branchId, actor: actor(req),
@@ -283,9 +284,10 @@ async function unpublishRows(batch, rows, req) {
       const total = await StagedImportRow.countDocuments({ batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId }).session(session);
       const publishedRows = await StagedImportRow.countDocuments({ batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId, status: 'PUBLISHED' }).session(session);
       const invalidRows = await StagedImportRow.countDocuments({ batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId, status: 'INVALID' }).session(session);
+      const unpublishedRows = await StagedImportRow.countDocuments({ batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId, status: 'UNPUBLISHED' }).session(session);
       const publishableCount = total - invalidRows;
       await StagedImportBatch.updateOne({ _id: batch._id }, {
-        $set: { publishedRows, status: publishedRows === 0 ? 'READY' : (publishedRows >= publishableCount ? 'PUBLISHED' : 'PARTIALLY_PUBLISHED') }
+        $set: { publishedRows, unpublishedRows, status: publishedRows === 0 ? 'READY' : (publishedRows >= publishableCount ? 'PUBLISHED' : 'PARTIALLY_PUBLISHED') }
       }, { session });
       await Audit.create([{
         tenantId: batch.tenantId, branchId: batch.branchId, actor: actor(req),
