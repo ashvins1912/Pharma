@@ -939,6 +939,7 @@ router.get('/:id/fulfillment/preview', authenticateUser, requirePermission('medi
         const { inventory, catalog } = await loadInventoryFulfillmentData({
             productIds: ids, tenantId: String(request.tenantId), branchId, requestedItems: descriptors, userId: req.user.sub
         });
+        const plan = buildIntelligentFulfillmentPlan({ requestedItems: descriptors, inventory, catalog });
 
         return res.json({ requestId: String(request._id), requestNumber: request.requestNumber, tenantId: request.tenantId, branchId, ...plan });
     } catch (error) {
@@ -1011,6 +1012,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
         const { inventory, catalog } = await loadInventoryFulfillmentData({
             productIds: ids, tenantId, branchId, requestedItems, userId: customerId
         });
+        const plan = buildIntelligentFulfillmentPlan({ requestedItems, inventory, catalog });
 
         const decisions = req.body?.decisions && typeof req.body.decisions === 'object' ? req.body.decisions : {};
         const orderItems = [];
