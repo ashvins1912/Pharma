@@ -95,7 +95,7 @@ const tenantOrderIdGuard = async (req, res, next) => {
     }
 };
 router.use('/:id', (req, res, next) => {
-    const reserved = new Set(['admin', 'mine', 'history', 'checkout', 'dynamic-restock', 'prescriptions', 'notifications', 'all']);
+    const reserved = new Set(['admin', 'mine', 'history', 'checkout', 'dynamic-restock', 'prescriptions', 'notifications', 'fulfillment', 'all']);
     if (reserved.has(String(req.params.id || '').toLowerCase())) return next();
     return tenantOrderIdGuard(req, res, next);
 });
