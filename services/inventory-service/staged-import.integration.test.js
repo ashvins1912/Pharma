@@ -32,7 +32,6 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
   const databaseName = `staged_import_${randomUUID().replace(/-/g, '')}`;
   const app = express();
   config.importsEnabled = true;
-  config.importStorage = await fs.mkdtemp(path.join(os.tmpdir(), 'pharma-staged-import-'));
   await mongoose.connect(testMongoUri, { dbName: databaseName, serverSelectionTimeoutMS: 10000 });
   await Promise.all([
     models.Product.init(), models.Inventory.init(), models.Audit.init(),
