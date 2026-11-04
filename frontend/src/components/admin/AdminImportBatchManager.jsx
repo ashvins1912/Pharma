@@ -23,7 +23,9 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
   const headersKey = JSON.stringify(headers || {});
   const stableHeaders = useMemo(() => JSON.parse(headersKey), [headersKey]);
   const base = activeBatchId ? `/api/v1/inventory/imports/batches/${encodeURIComponent(activeBatchId)}` : '';
-  const canPublish = (publishingEnabled || serverPublishingEnabled) && !['REVERTING', 'REVERTED', 'FAILED', 'STAGING'].includes(activeBatchStatus);
+  const publishFeatureEnabled = publishingEnabled || serverPublishingEnabled;
+  const canPublish = publishFeatureEnabled && !['REVERTING', 'REVERTED', 'FAILED', 'STAGING'].includes(activeBatchStatus);
+  const canRevertBatch = publishFeatureEnabled && ['READY', 'PARTIALLY_PUBLISHED', 'PUBLISHED', 'REVERTING'].includes(activeBatchStatus);
   const loadBatches = useCallback(async () => {
     try {
       const response = await apiClient.get('/api/v1/inventory/imports/batches', { params: { page: 1, limit: 20 }, headers: stableHeaders });
@@ -138,9 +140,11 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
           <h3 className="text-sm font-black text-slate-900">Batch records · review & publish</h3>
           <p className="text-[11px] text-slate-500">{total.toLocaleString()} rows · batch status: {activeBatchStatus || 'loading'} · staged records do not affect live stock until published</p>
         </div>
-        <button type="button" onClick={revertBatch} disabled={busy || !canPublish} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Revert published batch</button>
+        <button type="button" onClick={revertBatch} disabled={busy || !canRevertBatch} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Revert published batch</button>
       </div>
-      {!canPublish && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">Publishing, unpublishing and reverting are disabled by the Inventory Service. Enable INVENTORY_IMPORTS_ENABLED only in the isolated test environment to exercise live test-stock changes.</p>}
+      {!publishFeatureEnabled && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">Publishing, unpublishing and reverting are disabled by the Inventory Service. Enable INVENTORY_IMPORTS_ENABLED only in the isolated test environment to exercise live test-stock changes.</p>}
+      {activeBatchStatus === 'REVERTING' && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">Batch rollback is incomplete. Retry “Revert published batch” to continue safely from the remaining published rows.</p>}
+      {activeBatchStatus === 'REVERTED' && <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-600">This batch has been reverted and is read-only. Upload a new batch for further changes.</p>}
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-2">
         <input value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} placeholder="Search SKU or medicine" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs" />
         <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }} className="rounded-lg border border-slate-200 px-3 py-2 text-xs">
