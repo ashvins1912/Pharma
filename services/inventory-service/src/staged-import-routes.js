@@ -130,7 +130,7 @@ async function publishRows(batch, rows, req) {
     await session.withTransaction(async () => {
       published.length = 0;
       const baselineBatch = await StagedImportBatch.findById(batch._id).session(session).lean();
-      if (!baselineBatch || ['REVERTING', 'REVERTED'].includes(baselineBatch.status)) throw Object.assign(new Error('This batch is being reverted or has already been reverted. Publish is blocked.'), { statusCode: 409 });
+      if (!baselineBatch || !['READY', 'PARTIALLY_PUBLISHED', 'PUBLISHED'].includes(baselineBatch.status)) throw Object.assign(new Error('This batch is not in a publishable state. Refresh the batch before publishing.'), { statusCode: 409 });
       let inventoryBaseline = [...(baselineBatch?.previewInventorySnapshot || [])];
       let productBaseline = [...(baselineBatch?.previewProductSnapshot || [])];
       for (const row of rows) {
