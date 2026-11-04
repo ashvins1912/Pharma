@@ -196,7 +196,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             if (alternativeId === 'REMOVE') {
               // Customer explicitly chose to remove the unavailable quantity.
             } else if (alternativeId && alternative && alternative.availableQuantity >= line.waitingQuantity) {
-              selectedItems.push({ medicineId: alternative.productId, quantity: line.waitingQuantity });
+              selectedItems.push({ medicineId: alternative.productId, quantity: line.waitingQuantity, unitPrice: alternative.discountedUnitPrice });
             } else if (alternativeId) {
               throw new Error('The selected alternative no longer has enough stock. Please review the updated options.');
             } else {
