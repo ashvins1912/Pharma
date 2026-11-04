@@ -434,7 +434,8 @@ router.get('/imports/batches/:batchId/rows', requireServiceScope('inventory.impo
 
 router.patch('/imports/batches/:batchId/rows/:rowId', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   const { tenantId, branchId } = scope(req);
-  await safeBatch(req.params.batchId, tenantId, branchId);
+  const batch = await safeBatch(req.params.batchId, tenantId, branchId);
+  if (['REVERTING', 'REVERTED'].includes(batch.status)) return res.status(409).json({ message: 'This batch has been reverted and is read-only. Create a new upload batch for further changes.' });
   const row = await StagedImportRow.findOne({ batchId: req.params.batchId, rowId: req.params.rowId, tenantId, branchId });
   if (!row) return res.status(404).json({ message: 'Import row was not found.' });
   if (req.body?.expectedVersion !== undefined && Number(req.body.expectedVersion) !== row.version) return res.status(409).json({ message: 'This row was edited by another user. Reload it before saving your changes.' });
@@ -493,7 +494,8 @@ router.patch('/imports/batches/:batchId/rows/:rowId', requireServiceScope('inven
 
 router.post('/imports/batches/:batchId/rows/edit-selected', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   const { tenantId, branchId } = scope(req);
-  await safeBatch(req.params.batchId, tenantId, branchId);
+  const batch = await safeBatch(req.params.batchId, tenantId, branchId);
+  if (['REVERTING', 'REVERTED'].includes(batch.status)) return res.status(409).json({ message: 'This batch has been reverted and is read-only.' });
   const ids = [...new Set((req.body?.rowIds || []).map(String))];
   if (!ids.length || ids.length > 200) return res.status(400).json({ message: 'Select between 1 and 200 rows.' });
   const results = [];
