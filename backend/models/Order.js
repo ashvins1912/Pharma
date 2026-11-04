@@ -171,7 +171,7 @@ const orderSchema = new mongoose.Schema({
     fulfillmentCaseId: { type: String, default: null, index: true },
     parentOrderId: { type: String, default: null, index: true },
     fulfillmentConfirmationId: { type: String, default: undefined },
-    fulfillmentState: { type: String, enum: ['FULL', 'PARTIAL', 'WAITING', 'COMPLETE'], default: 'FULL', index: true },
+    fulfillmentState: { type: String, enum: ['FULL', 'PARTIAL', 'WAITING', 'COMPLETE', 'CANCELLED_REMAINDER', 'EXPIRED_REMAINDER'], default: 'FULL', index: true },
     addressId: { type: mongoose.Schema.Types.ObjectId, ref: 'UserAddress', default: null },
     deliverySlot: { type: Object, default: null },
     rider: {
