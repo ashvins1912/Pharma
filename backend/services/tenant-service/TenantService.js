@@ -412,6 +412,7 @@ export class TenantService {
             code: data.code || `BR-${this.branches.size + 1}`,
             phone: data.phone || tenant.phone,
             email: data.email || tenant.email,
+            geolocation: data.geolocation || { latitude: null, longitude: null },
             address: {
                 street: data.address?.street || '',
                 city: data.address?.city || '',
@@ -446,6 +447,7 @@ export class TenantService {
             ...branch,
             ...updates,
             address: { ...branch.address, ...(updates.address || {}) },
+            geolocation: updates.geolocation !== undefined ? updates.geolocation : branch.geolocation,
             updatedAt: new Date().toISOString()
         };
         if (getIsConnected()) {
