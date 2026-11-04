@@ -1505,6 +1505,8 @@ export const dataStore = {
                         addressDetails: orderData.addressDetails || {},
                         coordinates: orderData.coordinates,
                         paymentMethod: orderData.paymentMethod || 'Cash on Delivery (COD)',
+                        source: orderData.source || 'DIRECT',
+                        fulfillmentCaseId: orderData.fulfillmentCaseId || null,
                         orderStatus: 'Pending_Review',
                         statusHistory: [statusEntry]
                     }], { session });
