@@ -384,6 +384,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       } catch (err) {
         if (createdWaitlistCaseId) {
           await apiClient.post(`/api/orders/fulfillment/waitlist/${createdWaitlistCaseId}/cancel`).catch(() => {});
+          setWaitlistKey('');
         }
         setErrorMsg(err.response?.data?.message || err.message || "Checkout failed. Please verify cart items.");
       if (err.response?.status === 409) {
