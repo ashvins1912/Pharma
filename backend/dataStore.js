@@ -641,6 +641,15 @@ const orderInventoryWasDeducted = (order) => Boolean(
 
 const deductMongoOrderInventory = async (order, session) => {
     if (orderInventoryWasDeducted(order)) return;
+    if (order.inventoryReservationId) {
+        await inventoryClient.deduct(order.inventoryReservationId, {
+            tenantId: order.tenantId, branchId: order.branchId, userId: order.userId || 'backend',
+            idempotencyKey: `legacy-order-deduct:${String(order._id)}`
+        });
+        order.inventoryReservationStatus = 'DEDUCTED';
+        order.inventoryDeductedAt = new Date();
+        return;
+    }
     const items = getOrderInventoryItems(order);
     if (!items.length) {
         if (order.source === 'MEDICINE_REQUEST') {
@@ -1767,7 +1776,13 @@ export const dataStore = {
                         throw inventoryError('This order requires an attached prescription before approval.', 409);
                     }
 
-                    if (status === 'Rejected') {
+                    if (status === 'Rejected' && order.inventoryReservationId) {
+                        await inventoryClient.release(order.inventoryReservationId, {
+                            tenantId: order.tenantId, branchId: order.branchId, userId: order.userId || 'backend',
+                            idempotencyKey: `legacy-order-release-rejected:${String(order._id)}`
+                        });
+                        order.inventoryReservationStatus = 'RELEASED';
+                    } else if (status === 'Rejected') {
                         for (const item of order.medicineItems) {
                             const quantity = Number(item.quantity);
                             const result = await Medicine.updateOne({
@@ -1865,7 +1880,13 @@ export const dataStore = {
                     }
 
                     const legacyStockRestored = !order.medicineItems?.length;
-                    if (order.medicineItems?.length) {
+                    if (order.inventoryReservationId) {
+                        await inventoryClient.release(order.inventoryReservationId, {
+                            tenantId: order.tenantId, branchId: order.branchId, userId: order.userId || 'backend',
+                            idempotencyKey: `legacy-order-release-cancel:${String(order._id)}`
+                        });
+                        order.inventoryReservationStatus = 'RELEASED';
+                    } else if (order.medicineItems?.length) {
                         for (const item of order.medicineItems) {
                             const quantity = Number(item.quantity);
                             const result = await Medicine.updateOne({
