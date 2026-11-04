@@ -350,6 +350,12 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
     const seenKeys = new Set();
     const documents = records.map((originalRecord, index) => {
       const { normalized, errors } = normalizeRow(originalRecord, usedSkus);
+      const existingBatch = (approved.inventorySnapshot || []).find(item =>
+        item.sku === normalized.sku && (item.batchNumber || '') === (normalized.batchNumber || '')
+      );
+      if (existingBatch && Number(existingBatch.reservedQuantity || 0) > normalized.stockQuantity) {
+        errors.push('New stock is below the quantity already reserved for this batch.');
+      }
       const keyValue = JSON.stringify([normalized.sku, normalized.batchNumber || '']);
       if (seenKeys.has(keyValue)) errors.push('Duplicate SKU + medicine batch number in this upload.');
       seenKeys.add(keyValue);
