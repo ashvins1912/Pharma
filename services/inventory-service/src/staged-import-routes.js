@@ -102,7 +102,7 @@ function normalizeRow(raw, tenantId, usedSkus) {
   if (expiryRaw && (!expiryDate || !Number.isFinite(expiryDate.getTime()))) { errors.push('Expiry date is invalid.'); expiryDate = null; }
   if (expiryDate && expiryDate.getTime() < new Date(new Date().toISOString().slice(0, 10)).getTime()) errors.push('Expired medicine batches cannot be published.');
   if (!sku && name) {
-    do { sku = `${name.normalize('NFKD').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase().padEnd(2, 'X')}${randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase()}`; }
+    do { sku = `${name.normalize('NFKD').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase().padEnd(2, 'X')}${randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`; }
     while (usedSkus.has(sku));
   }
   if (sku) usedSkus.add(sku);
