@@ -1559,7 +1559,8 @@ export const dataStore = {
             let totalAmount = 0;
             let prescriptionRequired = false;
 
-            for (const [medicineId, quantity] of quantities) {
+            for (const [medicineId, requested] of quantities) {
+                const quantity = requested.quantity;
                 const medicine = inMemoryMedicines.find(item => String(item._id) === medicineId
                     && String(item.tenantId || '') === selectedTenantId
                     && (!selectedBranchId || String(item.branchId || '') === selectedBranchId));
