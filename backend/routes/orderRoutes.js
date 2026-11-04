@@ -1,5 +1,5 @@
 import express from 'express';
-import { randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
@@ -402,12 +402,17 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
         if (!tenantId || !items.length) return res.status(400).json({ message: 'Pharmacy and pending medicine items are required.' });
         if (!idempotencyKey || idempotencyKey.length > 128) return res.status(400).json({ message: 'A valid Idempotency-Key header is required.' });
         const { waitDays, waitUntil } = validateWaitWindow(req.body?.waitDays);
+        const normalizedWaitItems = items.map(item => ({ productId: String(item.productId || item.medicineId || ''), requestedQuantity: Number(item.requestedQuantity ?? item.waitingQuantity) })).sort((a, b) => a.productId.localeCompare(b.productId));
+        const requestFingerprint = createHash('sha256').update(JSON.stringify({ tenantId, sourceType: req.body?.sourceType || 'CHECKOUT', sourceId: req.body?.sourceId || null, parentOrderId: req.body?.parentOrderId || null, waitDays, items: normalizedWaitItems })).digest('hex');
         const ids = [...new Set(items.map(item => String(item.productId || item.medicineId || '')).filter(Boolean))];
         if (!ids.length || ids.some(id => !mongoose.isValidObjectId(id))) return res.status(400).json({ message: 'Pending items must reference valid catalogue products.' });
         const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
         if (!tenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
         const existing = await FulfillmentCase.findOne({ customerId: String(req.user.sub), tenantId, idempotencyKey }).lean();
-        if (existing) return res.status(200).json({ case: existing, alreadyCreated: true });
+        if (existing) {
+            if (existing.requestFingerprint !== requestFingerprint) return res.status(409).json({ message: 'This idempotency key was already used for a different waitlist request.' });
+            return res.status(200).json({ case: existing, alreadyCreated: true });
+        }
         const inventory = await Medicine.find({ _id: { $in: ids }, tenantId }).select('_id name').lean();
         if (inventory.length !== ids.length) return res.status(404).json({ message: 'One or more requested medicines are not listed by this pharmacy.' });
         const lines = items.map(item => {
@@ -437,7 +442,7 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
             prescriptionId: req.body?.prescriptionId || null,
             patientPuid: req.body?.patientPuid || null,
             status: 'WAITING_FOR_STOCK', lines, waitDays, waitUntil,
-            idempotencyKey,
+            idempotencyKey, requestFingerprint,
             auditTrail: [{ action: 'WAITLIST_CREATED', actorId: String(req.user.sub), at: new Date(), waitDays, waitUntil }]
         });
         if (created.parentOrderId) {
@@ -447,7 +452,7 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
     } catch (error) {
         if (error.code === 11000) {
             const existing = await FulfillmentCase.findOne({ customerId: String(req.user.sub), tenantId: String(req.body?.tenantId || ''), idempotencyKey: String(req.get('Idempotency-Key') || '') }).lean();
-            if (existing) return res.status(200).json({ case: existing, alreadyCreated: true });
+            if (existing && existing.requestFingerprint === requestFingerprint) return res.status(200).json({ case: existing, alreadyCreated: true });
         }
         return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to save stock waitlist request.' });
     }
