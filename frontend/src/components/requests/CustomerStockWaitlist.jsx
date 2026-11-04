@@ -83,6 +83,7 @@ export default function CustomerStockWaitlist() {
                 <span className="font-bold text-slate-900">{line.allocatedQuantity || 0} available / {line.waitingQuantity || line.requestedQuantity} waiting</span>
               </div>
             ))}
+            {entry.parentOrderId && <p className="text-[10px] text-indigo-700">Linked to order #{String(entry.parentOrderId).slice(-6).toUpperCase()}</p>}
             <p className="text-[10px] text-slate-500">Wait window ends: {until || 'Not specified'}</p>
             <div className="flex gap-2">
               {ready && <button type="button" disabled={busyId === String(entry._id)} onClick={() => confirm(entry)} className="flex-1 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50">{busyId === String(entry._id) ? 'Processing…' : 'Confirm available stock'}</button>}
