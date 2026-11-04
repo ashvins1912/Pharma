@@ -555,7 +555,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   </div>
                 )}
                 {importJob.batchId && !['FAILED','REVERTED'].includes(importJob.status) && (
-                  <AdminImportBatchManager batchId={importJob.batchId} headers={getImportScopeHeaders()} publishingEnabled={previewData.importsEnabled === true} onInventoryChanged={fetchMedicines} />
+                  <AdminImportBatchManager batchId={importJob.batchId} headers={getImportScopeHeaders()} publishingEnabled={previewData.importsEnabled === true} onInventoryChanged={refreshInventoryCatalogue} />
                 )}
                 {importJob.status === 'REVERTED' && (
                   <p className="text-xs font-bold text-emerald-800">{t('batchRevertedMessage')}</p>
