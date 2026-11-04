@@ -85,7 +85,7 @@ export default function CustomerStockWaitlist() {
             {(entry.lines || []).map((line, index) => (
               <div key={`${line.productId}-${index}`} className="flex justify-between gap-3 text-xs">
                 <span className="text-slate-700">{line.name || 'Medicine'}</span>
-                <span className="font-bold text-slate-900">{line.allocatedQuantity || 0} available / {line.waitingQuantity || line.requestedQuantity} waiting</span>
+                <span className="text-right font-bold text-slate-900">{line.allocatedQuantity || 0} available / {line.waitingQuantity || line.requestedQuantity} waiting<br/><span className="text-[10px] font-medium text-emerald-700">₹{Number(line.unitPrice || 0).toFixed(2)} each</span></span>
               </div>
             ))}
             {entry.parentOrderId && <p className="text-[10px] text-indigo-700">Linked to order #{String(entry.parentOrderId).slice(-6).toUpperCase()}</p>}
