@@ -34,7 +34,7 @@ const publicMedicine = medicine => {
 router.get('/admin/inventory', authenticateUser, async (req, res) => {
     try {
         const { search, category, sort, page, limit } = req.query;
-        const scope = await getVerifiedInventoryScope(req);
+        const scope = await getVerifiedInventoryScope(req, 'inventory.read');
         const result = await inventoryClient.searchProducts({
             ...scope,
             query: search || '',
@@ -62,15 +62,24 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
     }
 });
 
-const getVerifiedInventoryScope = async req => {
+const getVerifiedInventoryScope = async (req, requiredPermission = 'inventory.read') => {
     const role = String(req.user?.app_metadata?.role || req.user?.role || req.context?.role || '').toUpperCase();
     const platformRoles = new Set(['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN']);
-    const inventoryRoles = new Set([
-        'TENANT_OWNER', 'TENANT_ADMIN', 'OWNER', 'PHARMACIST', 'PHARMACY_STAFF',
-        'INVENTORY_MANAGER', 'ORDER_MANAGER', 'BRANCH_ADMIN', 'PHARMACY'
+    const readRoles = new Set([
+        'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF',
+        'PHARMACY', 'INVENTORY_MANAGER'
     ]);
-    if (!platformRoles.has(role) && !inventoryRoles.has(role)) {
-        const error = new Error('You do not have permission to manage pharmacy inventory.');
+    const writeRoles = new Set([
+        'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'INVENTORY_MANAGER'
+    ]);
+    const permissions = [
+        ...(Array.isArray(req.user?.permissions) ? req.user.permissions : []),
+        ...(Array.isArray(req.context?.permissions) ? req.context.permissions : [])
+    ];
+    const hasPermission = permissions.includes('*') || permissions.includes(requiredPermission);
+    const roleAllowed = requiredPermission === 'inventory.write' ? writeRoles.has(role) : readRoles.has(role);
+    if (!platformRoles.has(role) && !roleAllowed && !hasPermission) {
+        const error = new Error(`You do not have permission to ${requiredPermission === 'inventory.write' ? 'manage' : 'view'} pharmacy inventory.`);
         error.statusCode = 403;
         throw error;
     }
@@ -103,7 +112,7 @@ const getVerifiedInventoryScope = async req => {
 
 router.post('/', authenticateUser, async (req, res) => {
     try {
-        const scope = await getVerifiedInventoryScope(req);
+        const scope = await getVerifiedInventoryScope(req, 'inventory.write');
         const result = await inventoryClient.createProduct({
             product: req.body || {},
             tenantId: scope.tenantId,
@@ -119,7 +128,7 @@ router.post('/', authenticateUser, async (req, res) => {
 
 router.put('/:medicineId', authenticateUser, async (req, res) => {
     try {
-        const scope = await getVerifiedInventoryScope(req);
+        const scope = await getVerifiedInventoryScope(req, 'inventory.write');
         const result = await inventoryClient.updateProduct({
             productId: req.params.medicineId,
             product: req.body || {},
@@ -136,7 +145,7 @@ router.put('/:medicineId', authenticateUser, async (req, res) => {
 
 router.delete('/:medicineId', authenticateUser, async (req, res) => {
     try {
-        const scope = await getVerifiedInventoryScope(req);
+        const scope = await getVerifiedInventoryScope(req, 'inventory.write');
         const result = await inventoryClient.archiveProduct({
             productId: req.params.medicineId,
             tenantId: scope.tenantId,
