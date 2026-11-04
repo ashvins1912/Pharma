@@ -136,6 +136,8 @@ export default function OrderHistoryView({ onTrackOrder }) {
                       </td>
                       <td className="py-3.5 px-3">
                         {getStatusBadge(order.orderStatus)}
+                        {order.fulfillmentState === 'PARTIAL' && <p className="mt-1 text-[10px] font-bold text-amber-700">Partially fulfilled · remaining items are being monitored for stock</p>}
+                        {order.fulfillmentState === 'COMPLETE' && <p className="mt-1 text-[10px] font-bold text-emerald-700">All split items fulfilled</p>}
                       </td>
                       <td className="py-3.5 px-3 text-right">
                         {editableStatuses.includes(getNormalizedStatus(order)) && (
@@ -178,6 +180,8 @@ export default function OrderHistoryView({ onTrackOrder }) {
                     </div>
                     {getStatusBadge(order.orderStatus)}
                   </div>
+                  {order.fulfillmentState === 'PARTIAL' && <p className="text-[10px] font-bold text-amber-700">Partially fulfilled · remaining items are being monitored for stock</p>}
+                  {order.fulfillmentState === 'COMPLETE' && <p className="text-[10px] font-bold text-emerald-700">All split items fulfilled</p>}
 
                   <p className="text-[11px] text-slate-600 line-clamp-2">
                     {(order.items || []).map(i => `${i.name} (x${i.quantity})`).join(', ')}
