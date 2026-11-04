@@ -63,20 +63,29 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
 });
 
 const getVerifiedInventoryScope = async req => {
-    const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
-    const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+    const role = String(req.user?.app_metadata?.role || req.user?.role || req.context?.role || '').toUpperCase();
+    const platformRoles = new Set(['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN']);
+    const inventoryRoles = new Set([
+        'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF',
+        'INVENTORY_MANAGER', 'ORDER_MANAGER', 'BRANCH_ADMIN', 'PHARMACY'
+    ]);
+    if (!platformRoles.has(role) && !inventoryRoles.has(role)) {
+        const error = new Error('You do not have permission to manage pharmacy inventory.');
+        error.statusCode = 403;
+        throw error;
+    }
+    const isPlatformAdmin = platformRoles.has(role);
     const tenantId = String(
-        req.user?.tenantId || req.user?.app_metadata?.tenantId
-        || (isPlatformAdmin ? req.get('x-tenant-id') || req.query?.tenantId || req.body?.tenantId : '')
+        req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId
+        || (isPlatformAdmin ? req.get('x-tenant-id') || req.body?.tenantId || req.query?.tenantId : '')
         || ''
     ).trim();
     const branchId = String(
-        req.user?.branchId || req.context?.branchId
-        || (isPlatformAdmin ? req.get('x-branch-id') || req.query?.branchId || req.body?.branchId : '')
-        || ''
+        req.user?.branchId || req.user?.app_metadata?.branchId || req.context?.branchId
+        || req.get('x-branch-id') || req.body?.branchId || req.query?.branchId || ''
     ).trim();
     if (!tenantId || !branchId) {
-        const error = new Error('Select an authorized pharmacy tenant and branch before changing catalogue inventory.');
+        const error = new Error('Select an authorized pharmacy tenant and branch before accessing inventory.');
         error.statusCode = 403;
         throw error;
     }
@@ -85,7 +94,7 @@ const getVerifiedInventoryScope = async req => {
         tenantService.getBranchById(branchId)
     ]);
     if (!tenant || tenant.status !== 'ACTIVE' || !branch || branch.status !== 'ACTIVE' || String(branch.tenantId) !== tenantId) {
-        const error = new Error('An active tenant and its active branch are required for inventory changes.');
+        const error = new Error('An active tenant and its active branch are required for inventory access.');
         error.statusCode = 403;
         throw error;
     }
