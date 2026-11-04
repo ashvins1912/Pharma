@@ -137,6 +137,9 @@ const CAPABILITIES = [
   ['GET', /^\/api\/v1\/notifications(?:\/|$)/, 'profile.read'],
   ['POST', /^\/api\/v1\/notifications(?:\/|$)/, 'profile.write'],
   ['GET', /^\/api\/v1\/vendors?(?:\/|$)/, 'tenants.read'],
+  ['PATCH', /^\/api\/v1\/vendor\/profile$/, 'profile.write'],
+  ['GET', /^\/api\/v1\/vendor\/profile\/edit-policy$/, 'tenants.read'],
+  ['PATCH', /^\/api\/v1\/vendor\/profile\/edit-policy$/, 'tenants.manage'],
   ['POST', /^\/api\/v1\/vendors?(?:\/|$)/, 'tenants.manage']
 ];
 
