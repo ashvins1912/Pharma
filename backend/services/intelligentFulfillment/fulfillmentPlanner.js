@@ -36,10 +36,10 @@ const scoreAlternative = (requested, candidate) => {
     unitPrice: price,
     availableQuantity: availableStock(candidate),
     listPrice: Number(candidate.basePrice ?? price) > price ? Number(candidate.basePrice) : price,
-    discountPercentage: Number(candidate.basePrice ?? price) > price
-      ? Math.round((1 - price / Number(candidate.basePrice)) * 10000) / 100
-      : 0,
-    discountedUnitPrice: roundMoney(price),
+    discountPercentage: Number(candidate.basePrice ?? price) > roundMoney(price * (1 - Math.min(100, Math.max(0, Number(candidate.discountPercentage || 0))) / 100))
+      ? Math.round((1 - (price * (1 - Math.min(100, Math.max(0, Number(candidate.discountPercentage || 0))) / 100)) / Number(candidate.basePrice ?? price)) * 10000) / 100
+      : Math.min(100, Math.max(0, Number(candidate.discountPercentage || 0))),
+    discountedUnitPrice: roundMoney(price * (1 - Math.min(100, Math.max(0, Number(candidate.discountPercentage || 0))) / 100)),
     requiresPharmacistApproval: Boolean(requested.requiresPrescription || requested.isPrescriptionRequired || candidate.requiresPrescription || candidate.isPrescriptionRequired),
     substitutionRequiresCustomerConsent: true
   };
