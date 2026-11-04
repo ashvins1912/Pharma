@@ -223,3 +223,341 @@ html.dark .dashboard-nav-group {
 html.dark .dashboard-nav-group-title {
   color: #94a3b8;
 }
+
+
+/* --------------------------------------------------------------------------
+   QuickMeds Rx admin module redesign
+   Shared interaction, surface, form, table and responsive layout system.
+   -------------------------------------------------------------------------- */
+.dashboard-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(1rem, 1.8vw, 1.5rem);
+  min-width: 0;
+  width: 100%;
+  align-content: start;
+}
+
+.admin-screen {
+  --admin-surface: #ffffff;
+  --admin-surface-muted: #f8fafc;
+  --admin-border: #e2e8f0;
+  --admin-ink: #0f172a;
+  --admin-muted: #64748b;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(0.85rem, 1.5vw, 1.25rem);
+  min-width: 0;
+  width: 100%;
+  color: var(--admin-ink);
+  overflow-wrap: anywhere;
+}
+
+.admin-screen *,
+.admin-screen *::before,
+.admin-screen *::after {
+  min-width: 0;
+}
+
+.admin-screen :where(h1, h2, h3, h4) {
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.admin-screen :where(p) {
+  line-height: 1.55;
+}
+
+.admin-screen :where(input:not([type="checkbox"]):not([type="radio"]),
+select, textarea) {
+  width: 100%;
+  min-height: 42px;
+  max-width: 100%;
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.admin-screen :where(textarea) {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.admin-screen :where(button) {
+  max-width: 100%;
+  min-height: 38px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.admin-screen :where(button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible) {
+  outline: 3px solid rgb(37 99 235 / 0.28);
+  outline-offset: 2px;
+}
+
+.admin-screen :where(form) {
+  min-width: 0;
+}
+
+.admin-screen :where(form > div, form > section) {
+  min-width: 0;
+}
+
+.admin-screen :where(article, .admin-panel) {
+  min-width: 0;
+  border-radius: 1rem;
+}
+
+.admin-screen :where(table) {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-screen :where(th) {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  white-space: nowrap;
+}
+
+.admin-screen :where(td, th) {
+  vertical-align: middle;
+}
+
+.admin-screen :where(.overflow-x-auto) {
+  max-width: 100%;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.admin-screen :where(.grid) {
+  min-width: 0;
+}
+
+.admin-screen :where(.rounded-2xl, .rounded-3xl) {
+  min-width: 0;
+}
+
+.admin-screen :where(.text-xs, .text-\\[10px\\], .text-\\[11px\\]) {
+  overflow-wrap: anywhere;
+}
+
+/* Make the main operations screens feel like one coherent product. */
+.admin-screen--inventory > div:first-child,
+.admin-screen--requests > div:first-child,
+.admin-screen--tenants > div:first-child,
+.admin-screen--tenant-profile > div:first-child,
+.admin-screen--access > section:first-child,
+.admin-screen--riders > div:first-child,
+.admin-screen--routes > div:first-child {
+  min-width: 0;
+  width: 100%;
+}
+
+.admin-screen--inventory .grid,
+.admin-screen--payments .grid,
+.admin-screen--promotions .grid,
+.admin-screen--surplus-savings .grid,
+.admin-screen--offer-zone .grid,
+.admin-screen--routes .grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 245px), 1fr));
+}
+
+.admin-screen--inventory .relative input {
+  padding-left: 2.75rem;
+}
+
+.admin-screen--inventory :where(img) {
+  object-fit: contain;
+  max-width: 100%;
+}
+
+.admin-screen--requests :where(form) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.admin-screen--requests :where(form input, form select) {
+  flex: 1 1 190px;
+}
+
+.admin-screen--requests :where(article) {
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.admin-screen--payments :where(article) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.admin-screen--payments :where(article ul) {
+  margin-top: auto;
+}
+
+.admin-screen--riders :where(.grid) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+}
+
+.admin-screen--csquare :where(input, select) {
+  min-height: 44px;
+}
+
+.admin-screen--csquare :where(button) {
+  min-height: 42px;
+}
+
+.admin-screen--telemetry :where(article) {
+  min-height: 132px;
+}
+
+.admin-screen--matrix .overflow-x-auto,
+.admin-screen--tenants .overflow-x-auto,
+.admin-screen--audits .overflow-x-auto {
+  border: 1px solid var(--admin-border);
+  border-radius: 0.9rem;
+  background: white;
+}
+
+.admin-screen--matrix table,
+.admin-screen--tenants table,
+.admin-screen--audits table {
+  min-width: 720px;
+}
+
+.admin-screen--access :where(input[type="checkbox"]) {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  accent-color: #2563eb;
+}
+
+.admin-screen--tenant-profile :where(label) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.admin-screen--tenant-profile :where(input, select, textarea) {
+  min-height: 44px;
+}
+
+.admin-screen--promotions :where(button),
+.admin-screen--offer-zone :where(button),
+.admin-screen--surplus-savings :where(button) {
+  min-height: 40px;
+}
+
+/* Fulfilment board: preserve lane workflows while making each lane scroll-safe. */
+.admin-screen--fulfillment {
+  overflow: hidden;
+}
+
+.admin-screen--fulfillment :where(.overflow-x-auto) {
+  max-width: 100%;
+}
+
+.admin-screen--fulfillment :where(article) {
+  overflow-wrap: anywhere;
+}
+
+/* Narrow screens: stack action bars, preserve usable controls, avoid clipped labels. */
+@media (max-width: 767px) {
+  .dashboard-content {
+    gap: 0.9rem;
+  }
+
+  .admin-screen {
+    gap: 0.85rem;
+  }
+
+  .admin-screen :where(header) {
+    align-items: stretch;
+  }
+
+  .admin-screen :where(header > div, .flex.items-center.justify-between) {
+    flex-wrap: wrap;
+  }
+
+  .admin-screen :where(form) {
+    gap: 0.6rem;
+  }
+
+  .admin-screen :where(button) {
+    min-height: 42px;
+  }
+
+  .admin-screen :where(.p-5, .p-6, .p-8) {
+    padding: 1rem;
+  }
+
+  .admin-screen :where(.gap-5, .gap-6) {
+    gap: 0.85rem;
+  }
+
+  .admin-screen :where(.overflow-x-auto) {
+    margin-inline: -0.15rem;
+    padding-bottom: 0.25rem;
+  }
+
+  .admin-screen--matrix table,
+  .admin-screen--tenants table,
+  .admin-screen--audits table {
+    min-width: 680px;
+  }
+
+  .admin-screen--inventory .grid,
+  .admin-screen--payments .grid,
+  .admin-screen--promotions .grid,
+  .admin-screen--surplus-savings .grid,
+  .admin-screen--offer-zone .grid,
+  .admin-screen--routes .grid,
+  .admin-screen--riders .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 380px) {
+  .admin-screen :where(.flex) {
+    min-width: 0;
+  }
+
+  .admin-screen :where(button) {
+    padding-inline: 0.65rem;
+    font-size: 0.7rem;
+  }
+
+  .admin-screen :where(.p-4, .p-5, .p-6) {
+    padding: 0.75rem;
+  }
+
+  .admin-screen :where(.text-xl, .text-2xl) {
+    font-size: 1.05rem;
+  }
+}
+
+html.dark .admin-screen {
+  --admin-surface: #0f172a;
+  --admin-surface-muted: #1e293b;
+  --admin-border: #334155;
+  --admin-ink: #f8fafc;
+  --admin-muted: #94a3b8;
+}
+
+html.dark .admin-screen :where(.overflow-x-auto) {
+  border-color: var(--admin-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-screen *,
+  .admin-screen *::before,
+  .admin-screen *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
