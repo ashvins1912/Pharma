@@ -112,7 +112,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     } finally { setBusy(false); }
   };
   const revertBatch = async () => {
-    if (!canPublish) return;
+    if (!canRevertBatch) return;
     if (!window.confirm('Revert every published row in this batch? Rows changed by another operation will be protected and may block the transaction.')) return;
     setBusy(true);
     try {
