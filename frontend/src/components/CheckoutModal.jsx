@@ -195,7 +195,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             const alternative = line.alternatives?.find(item => item.productId === alternativeId);
             if (alternativeId === 'REMOVE') {
               // Customer explicitly chose to remove the unavailable quantity.
-            } else if (alternativeId && alternative && alternative.availableQuantity >= line.waitingQuantity) {
+            } else if (alternativeId && alternative && !alternative.requiresPharmacistApproval && alternative.availableQuantity >= line.waitingQuantity) {
               selectedItems.push({ medicineId: alternative.productId, quantity: line.waitingQuantity, unitPrice: alternative.discountedUnitPrice });
             } else if (alternativeId) {
               throw new Error('The selected alternative no longer has enough stock. Please review the updated options.');
@@ -568,13 +568,13 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                     Wait for the original medicine
                   </label>
                   <label className="flex items-center gap-2 text-xs">
-                    <input type="radio" name={`stock-${line.productId}`} checked={alternativeChoices[line.productId] === 'REMOVE'} onChange={() => setAlternativeChoices(current => ({ ...current, [line.productId]: 'REMOVE' }))}/>
+                    <input type="radio" name={`stock-${line.productId}`} checked={alternativeChoices[line.productId] === 'REMOVE'} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: 'REMOVE' })); setFulfillmentConfirmed(false); }}/>
                     Remove the unavailable quantity from this order
                   </label>
                   {line.alternatives?.map(alternative => (
                     <label key={alternative.productId} className="flex items-start gap-2 rounded-lg border border-emerald-100 p-2 text-xs">
-                      <input type="radio" name={`stock-${line.productId}`} checked={alternativeChoices[line.productId] === alternative.productId} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: alternative.productId })); setFulfillmentConfirmed(false); }}/>
-                      <span className="flex-1"><strong>{alternative.name}</strong><br/><span className="text-slate-500">{alternative.brand} · Available {alternative.availableQuantity}</span><br/><span className="font-bold text-emerald-700">₹{alternative.discountedUnitPrice.toFixed(2)} each</span>{alternative.discountPercentage > 0 ? <span className="ml-1 text-emerald-700">({alternative.discountPercentage}% offer)</span> : null}{alternative.requiresPharmacistApproval ? <span className="block mt-1 text-amber-700">Pharmacist approval required</span> : null}</span>
+                      <input type="radio" name={`stock-${line.productId}`} disabled={alternative.requiresPharmacistApproval || alternative.availableQuantity < line.waitingQuantity} checked={alternativeChoices[line.productId] === alternative.productId} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: alternative.productId })); setFulfillmentConfirmed(false); }}/>
+                      <span className="flex-1"><strong>{alternative.name}</strong><br/><span className="text-slate-500">{alternative.brand} · Available {alternative.availableQuantity}</span><br/><span className="font-bold text-emerald-700">₹{alternative.discountedUnitPrice.toFixed(2)} each</span>{alternative.listPrice > alternative.discountedUnitPrice ? <span className="ml-1 text-slate-400 line-through">₹{alternative.listPrice.toFixed(2)}</span> : null}{alternative.discountPercentage > 0 ? <span className="ml-1 text-emerald-700">({alternative.discountPercentage}% savings)</span> : null}{alternative.requiresPharmacistApproval ? <span className="block mt-1 text-amber-700">Pharmacist approval required — cannot substitute at checkout</span> : null}{alternative.availableQuantity < line.waitingQuantity ? <span className="block mt-1 text-amber-700">Not enough stock for the remaining quantity</span> : null}</span>
                     </label>
                   ))}
                 </div>
