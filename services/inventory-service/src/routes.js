@@ -16,6 +16,9 @@ import {
 } from './imports.js';
 import {
   adjustInventory,
+  createProduct,
+  updateProduct,
+  archiveProduct,
   lookupInventory,
   searchInventoryProducts,
   reserveInventory,
@@ -41,6 +44,41 @@ const upload = multer({
   }),
   limits: { fileSize: config.maxFileBytes, files: 1 }
 });
+
+router.post('/products', requireServiceScope('inventory.write'), asyncHandler(async (req, res) => {
+  const result = await createProduct({
+    ...(req.body || {}),
+    product: req.body?.product || req.body || {},
+    ...getInventoryScope(req, req.body || {}),
+    actor: req.service.userId || req.service.name,
+    requestId: req.requestId,
+    correlationId: req.correlationId
+  });
+  return res.status(201).json(result);
+}));
+
+router.patch('/products/:productId', requireServiceScope('inventory.write'), asyncHandler(async (req, res) => {
+  const result = await updateProduct({
+    productId: req.params.productId,
+    product: req.body || {},
+    ...getInventoryScope(req, req.body || {}),
+    actor: req.service.userId || req.service.name,
+    requestId: req.requestId,
+    correlationId: req.correlationId
+  });
+  return res.json(result);
+}));
+
+router.delete('/products/:productId', requireServiceScope('inventory.write'), asyncHandler(async (req, res) => {
+  const result = await archiveProduct({
+    productId: req.params.productId,
+    ...getInventoryScope(req, req.query || {}),
+    actor: req.service.userId || req.service.name,
+    requestId: req.requestId,
+    correlationId: req.correlationId
+  });
+  return res.json(result);
+}));
 
 router.get('/products/search', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
   const result = await searchInventoryProducts({
