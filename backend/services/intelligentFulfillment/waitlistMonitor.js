@@ -5,6 +5,7 @@ import Order from '../../models/Order.js';
 import { getIsConnected } from '../../config/db.js';
 import { domainEvents } from '../../shared/events/DomainEvents.js';
 
+const roundPrice = value => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 const available = medicine => Math.max(0,
   Number(medicine?.stockQuantity ?? medicine?.stock ?? medicine?.quantity ?? 0)
   - Number(medicine?.reservedQuantity || 0));
@@ -64,7 +65,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
     const ids = [...new Set((entry.lines || []).map(line => String(line.productId || '')).filter(Boolean))];
     const products = ids.length ? await Medicine.find({
       _id: { $in: ids }, tenantId: entry.tenantId, ...(entry.branchId ? { branchId: entry.branchId } : {})
-    }).select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive').lean() : [];
+    }) .select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive price discountPercentage').lean() : [];
     const byId = new Map(products.map(product => [String(product._id), product]));
     let anyAvailable = false;
     let allAvailable = true;
@@ -77,7 +78,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
           composition: line.composition, strength: line.strength,
           ...(line.dosageForm ? { dosageForm: line.dosageForm } : {}),
           ...(line.manufacturer ? { manufacturer: line.manufacturer } : {})
-        }).select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive').limit(2).lean();
+        }).select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive price discountPercentage').limit(2).lean();
         // Never guess between multiple catalog matches. Keep the request pending for pharmacist review.
         if (matches.length === 1) product = matches[0];
       }
@@ -96,7 +97,10 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
       if (quantity > 0) anyAvailable = true;
       if (quantity < Number(line.waitingQuantity || 0)) allAvailable = false;
       if (quantity > previousNotified) newlyAvailable = true;
-      return { ...line, ...(product?._id ? { productId: String(product._id), name: product.name || line.name } : {}), allocatedQuantity: quantity, notifiedAvailableQuantity: quantity };
+      const basePrice = Number(product?.price ?? line.unitPrice ?? 0);
+      const discountPercentage = Math.min(100, Math.max(0, Number(product?.discountPercentage || 0)));
+      const unitPrice = roundPrice(basePrice * (1 - discountPercentage / 100));
+      return { ...line, ...(product?._id ? { productId: String(product._id), name: product.name || line.name } : {}), allocatedQuantity: quantity, notifiedAvailableQuantity: quantity, unitPrice };
     }));
     const nextStatus = allAvailable ? 'READY_FOR_CONFIRMATION' : anyAvailable ? 'PARTIALLY_FULFILLED' : 'WAITING_FOR_STOCK';
     const result = await FulfillmentCase.updateOne({
