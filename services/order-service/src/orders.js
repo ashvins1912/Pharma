@@ -299,9 +299,12 @@ export async function createOrder(body, user) {
   const items = request.items.map(([sku, quantity]) => {
     const product = products.get(sku);
     if (!product || product.price == null) throw fail(409, `Product ${sku} is unavailable.`);
-    const unitPrice = Number(product.price);
+    const listPrice = Number(product.price);
+    const discountPercentage = Math.min(100, Math.max(0, Number(product.discountPercentage || 0)));
+    const unitPrice = Math.round(listPrice * (1 - discountPercentage / 100) * 100) / 100;
     const totalPrice = unitPrice * quantity;
-    if (!Number.isFinite(unitPrice) || unitPrice < 0 || !Number.isFinite(totalPrice)) {
+    const discount = Math.round((listPrice - unitPrice) * quantity * 100) / 100;
+    if (!Number.isFinite(listPrice) || listPrice < 0 || !Number.isFinite(unitPrice) || unitPrice < 0 || !Number.isFinite(totalPrice)) {
       throw fail(409, `Product ${sku} has invalid pricing.`);
     }
     return {
@@ -316,7 +319,7 @@ export async function createOrder(body, user) {
       quantity,
       unitPrice,
       tax: 0,
-      discount: 0,
+      discount,
       totalPrice,
       snapshotAt
     };
