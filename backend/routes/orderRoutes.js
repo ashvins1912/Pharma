@@ -722,7 +722,7 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
                 fulfillmentConfirmationId: confirmationId,
                 prescriptionUrl: claimed.prescriptionUrl || null, prescriptionId: claimed.prescriptionId || null,
                 patientPuid: claimed.patientPuid || null,
-                items: confirmationLines.map(line => ({ medicineId: line.productId, quantity: Number(line.allocatedQuantity) }))
+                items: confirmationLines.map(line => ({ medicineId: line.productId, quantity: Number(line.allocatedQuantity), unitPrice: Number(line.unitPrice) }))
             }, 'Customer stock waitlist confirmation');
             const completed = await finalize(order);
             return res.status(201).json({ order: completed.order, waitlistCaseId: String(claimed._id), remainingItems: completed.remainingLines, message: 'Available stock has been reserved and a new order has been created.' });
