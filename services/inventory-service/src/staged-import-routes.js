@@ -427,7 +427,8 @@ router.patch('/imports/batches/:batchId/rows/:rowId', requireServiceScope('inven
   next.name = String(next.name || '').trim();
   next.price = Number(next.price);
   next.stockQuantity = Number(next.stockQuantity);
-  if (next.baseCostPrice !== null && next.baseCostPrice !== undefined && next.baseCostPrice !== '') next.baseCostPrice = Number(next.baseCostPrice);
+  if (next.baseCostPrice === '') next.baseCostPrice = null;
+  else if (next.baseCostPrice !== null && next.baseCostPrice !== undefined) next.baseCostPrice = Number(next.baseCostPrice);
   next.marginTier = String(next.marginTier || 'LOW').toUpperCase();
   next.batchNumber = String(next.batchNumber || '').trim();
   const errors = [];
