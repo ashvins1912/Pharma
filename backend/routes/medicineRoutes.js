@@ -120,7 +120,7 @@ router.post('/', authenticateUser, async (req, res) => {
 
 router.put('/:medicineId', authenticateUser, async (req, res) => {
     try {
-        const scope = getVerifiedInventoryScope(req);
+        const scope = await getVerifiedInventoryScope(req);
         const result = await inventoryClient.updateProduct({
             productId: req.params.medicineId,
             product: req.body || {},
@@ -137,7 +137,7 @@ router.put('/:medicineId', authenticateUser, async (req, res) => {
 
 router.delete('/:medicineId', authenticateUser, async (req, res) => {
     try {
-        const scope = getVerifiedInventoryScope(req);
+        const scope = await getVerifiedInventoryScope(req);
         const result = await inventoryClient.archiveProduct({
             productId: req.params.medicineId,
             tenantId: scope.tenantId,
