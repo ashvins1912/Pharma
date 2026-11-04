@@ -445,9 +445,11 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
               <p className="break-all text-slate-600">{t('tenantAdmin')} : <strong>{previewData.tenantId || 'Missing'}</strong></p>
               <p className="break-all text-slate-600">{t('branchId')}: <strong>{previewData.branchId || 'Missing'}</strong></p>
             </div>
-            {!previewData.importsEnabled && (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-900">
-                Production inventory writes are disabled. You can review this preview, but no stock will be changed.
+            {previewData.importsEnabled !== true && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 space-y-1">
+                <p className="font-extrabold">Inventory imports are disabled by the inventory service.</p>
+                <p>You can review this preview, but no stock will be changed. To enable controlled imports, set <code className="rounded bg-amber-100 px-1">INVENTORY_IMPORTS_ENABLED=true</code> in the Inventory Service environment on Render, then redeploy that service and preview this workbook again.</p>
+                <p className="font-semibold">The server enforces this setting; enabling the button alone cannot bypass it.</p>
               </div>
             )}
             {/* Metric Summary Cards */}
@@ -647,10 +649,10 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
                 <button
                   onClick={handleConfirmImport}
-                  disabled={!previewData.importsEnabled || committing || previewData.validCount === 0 || !previewData.previewFingerprint}
+                  disabled={previewData.importsEnabled !== true || committing || previewData.validCount === 0 || !previewData.previewFingerprint}
                   className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md shadow-emerald-600/25 cursor-pointer transition flex items-center gap-1.5"
                 >
-                  <span>{!previewData.importsEnabled ? t('importWritesDisabled') : committing ? t('startingIngestion') : t('importRecords').replace('{count}', previewData.validCount)}</span>
+                  <span>{previewData.importsEnabled !== true ? 'Imports disabled in service configuration' : committing ? t('startingIngestion') : t('importRecords').replace('{count}', previewData.validCount)}</span>
                   <span>✓</span>
                 </button>
               </div>
