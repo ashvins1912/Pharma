@@ -2,7 +2,7 @@ const physicalStock = medicine => Number(medicine?.stockQuantity ?? medicine?.st
 const reservedStock = medicine => Number(medicine?.reservedQuantity || 0);
 const availableStock = medicine => Math.max(0, physicalStock(medicine) - reservedStock(medicine));
 const roundMoney = value => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
-const normalized = value => String(value || '').trim().toLowerCase().replace(/\\s+/g, ' ');
+const normalized = value => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
 const isSellable = (medicine, now) => medicine
   && medicine.isActive !== false
@@ -48,24 +48,27 @@ export function buildIntelligentFulfillmentPlan({ requestedItems, inventory, cat
   }
   const inventoryById = new Map((inventory || []).map(item => [String(item._id), item]));
   const seen = new Map();
+  const descriptorsById = new Map();
   for (const [itemIndex, item] of requestedItems.entries()) {
     const productId = String(item.medicineId || item.productId || item._id || (item.requestedName ? `request-line-${itemIndex + 1}` : ''));
     const quantity = Number(item.quantity);
     if (!productId || !Number.isSafeInteger(quantity) || quantity < 1) {
       throw Object.assign(new Error('Every item needs a product ID and a positive whole-number quantity.'), { statusCode: 400 });
     }
+    if (!descriptorsById.has(productId)) descriptorsById.set(productId, item);
     seen.set(productId, (seen.get(productId) || 0) + quantity);
   }
   const lines = [];
   for (const [productId, requestedQuantity] of seen) {
+    const descriptor = descriptorsById.get(productId) || {};
     const medicine = inventoryById.get(productId) || {
       _id: productId,
-      name: item.requestedName || item.name || 'Requested medicine',
-      composition: item.composition || '',
-      genericName: item.genericName || '',
-      strength: item.strength || '',
-      dosageForm: item.dosageForm || item.form || '',
-      requiresPrescription: Boolean(item.requiresPrescription || item.isPrescriptionRequired),
+      name: descriptor.requestedName || descriptor.name || 'Requested medicine',
+      composition: descriptor.composition || '',
+      genericName: descriptor.genericName || '',
+      strength: descriptor.strength || '',
+      dosageForm: descriptor.dosageForm || descriptor.form || '',
+      requiresPrescription: Boolean(descriptor.requiresPrescription || descriptor.isPrescriptionRequired),
       price: 0
     };
     const isListed = inventoryById.has(productId);
