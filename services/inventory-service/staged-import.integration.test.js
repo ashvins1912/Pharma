@@ -170,6 +170,55 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(stalePublishResponse.status, 409);
     assert.equal((await models.Inventory.findById(staleInventory._id).lean()).stockQuantity, 11);
 
+    const invalidWorkbook = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(invalidWorkbook, xlsx.utils.json_to_sheet([
+      { SKU: 'TEST-STAGED-INVALID', Price: 5, Stock: 3, 'Batch Number': 'INVALID-LOT' }
+    ]), 'Inventory');
+    const invalidBytes = xlsx.write(invalidWorkbook, { type: 'buffer', bookType: 'xlsx' });
+    const invalidPreviewForm = new FormData();
+    invalidPreviewForm.append('excelFile', new Blob([invalidBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'invalid-test.xlsx');
+    const invalidPreviewResponse = await fetch(origin + '/api/v1/inventory/imports/preview', { method: 'POST', headers, body: invalidPreviewForm });
+    const invalidPreview = await invalidPreviewResponse.json();
+    assert.equal(invalidPreview.rowsDetected, 1);
+    assert.equal(invalidPreview.errorsCount, 1);
+    const invalidStageForm = new FormData();
+    invalidStageForm.append('excelFile', new Blob([invalidBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'invalid-test.xlsx');
+    invalidStageForm.append('confirmImport', 'true');
+    invalidStageForm.append('previewFingerprint', invalidPreview.previewFingerprint);
+    const invalidStageResponse = await fetch(origin + '/api/v1/inventory/imports', {
+      method: 'POST', headers: { ...headers, 'Idempotency-Key': 'staged-test-invalid-row' }, body: invalidStageForm
+    });
+    assert.equal(invalidStageResponse.status, 202);
+    const invalidBatch = await invalidStageResponse.json();
+    assert.equal(invalidBatch.successfulRecords, 0);
+    assert.equal(invalidBatch.failedRecords, 1);
+    const invalidRowsResponse = await fetch(origin + `/api/v1/inventory/imports/batches/${invalidBatch.batchId}/rows`, { headers });
+    const invalidRows = await invalidRowsResponse.json();
+    assert.equal(invalidRows.items[0].status, 'INVALID');
+    const invalidWorkbookResponse = await fetch(origin + `/api/v1/inventory/imports/batches/${invalidBatch.batchId}/invalid-records/download`, { headers });
+    assert.equal(invalidWorkbookResponse.status, 200);
+    assert.match(invalidWorkbookResponse.headers.get('content-type'), /spreadsheetml/);
+    const corrected = await fetch(origin + `/api/v1/inventory/imports/batches/${invalidBatch.batchId}/rows/${encodeURIComponent(invalidRows.items[0].rowId)}`, {
+      method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Corrected Test Medicine', expectedVersion: invalidRows.items[0].version })
+    });
+    assert.equal(corrected.status, 200);
+    assert.equal((await corrected.json()).item.status, 'READY');
+    const correctedRows = await fetch(origin + `/api/v1/inventory/imports/batches/${invalidBatch.batchId}/rows`, { headers });
+    const correctedPayload = await correctedRows.json();
+    const publishCorrected = await fetch(origin + `/api/v1/inventory/imports/batches/${invalidBatch.batchId}/publish`, {
+      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rowIds: correctedPayload.items.map(row => row.rowId) })
+    });
+    assert.equal(publishCorrected.status, 200);
+    assert.equal(await models.Inventory.countDocuments({ tenantId, branchId, sku: 'TEST-STAGED-INVALID' }), 1);
+    const unpublishCorrected = await fetch(origin + `/api/v1/inventory/imports/batches/${invalidBatch.batchId}/unpublish`, {
+      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rowIds: correctedPayload.items.map(row => row.rowId) })
+    });
+    assert.equal(unpublishCorrected.status, 200);
+    assert.equal(await models.Inventory.countDocuments({ tenantId, branchId, sku: 'TEST-STAGED-INVALID' }), 0);
+
     const duplicateUpload = await upload('/api/v1/inventory/imports', preview.previewFingerprint, 'staged-test-idempotency-1');
     assert.equal(duplicateUpload.status, 202);
     assert.equal((await duplicateUpload.json()).batchId, staged.batchId);
