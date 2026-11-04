@@ -7,7 +7,7 @@ import { useLanguage } from '../../context/LanguageContext';
 const initial = {
   firstName: '', lastName: '', dateOfBirth: '', gender: '', mobile: '',
   password: '', confirmPassword: '', companyName: '', gstNumber: '',
-  drugLicenseNumber: '', street: '', city: '', state: '', pincode: '', latitude: '', longitude: ''
+  drugLicenseNumber: '', street: '', city: '', state: '', pincode: '', latitude: '', longitude: '', usesTenantAsBranch: true
 };
 
 export default function VendorOnboardingView({ token, onClose, onSuccess }) {
@@ -112,7 +112,8 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
         password: form.password,
         company: { companyName: form.companyName.trim(), gstNumber: form.gstNumber.trim(), drugLicenseNumber: form.drugLicenseNumber.trim() },
         address: { line1: form.street.trim(), city: form.city.trim(), state: form.state.trim(), pincode: form.pincode.replace(/\D/g, '') },
-        location: { latitude: Number(form.latitude), longitude: Number(form.longitude) }
+        location: { latitude: Number(form.latitude), longitude: Number(form.longitude) },
+        usesTenantAsBranch: form.usesTenantAsBranch
       });
       const result = res.data?.data || res.data;
       setTenant(result?.tenant || null);
@@ -182,7 +183,17 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
                 <Field label="Drug License Number *" value={form.drugLicenseNumber} onChange={x => set('drugLicenseNumber', x)} error={fieldErrors.drugLicenseNumber} />
               </div>
             </Section>
-            <Section title="4. Pharmacy location">
+            <Section title="4. Branch setup">
+              <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <input type="checkbox" className="mt-1 h-4 w-4 accent-emerald-700" checked={form.usesTenantAsBranch} onChange={event => set('usesTenantAsBranch', event.target.checked)} />
+                <span>
+                  <span className="block text-sm font-extrabold text-emerald-950">I don't have separate branches</span>
+                  <span className="mt-1 block text-xs leading-5 text-emerald-800">Use this tenant / pharmacy location as the main branch. You can add separate branches later from Tenant Profile.</span>
+                </span>
+              </label>
+              {!form.usesTenantAsBranch && <p className="text-xs text-slate-500">You can set up your pharmacy branches after onboarding from Tenant Profile & Branches.</p>}
+            </Section>
+            <Section title="5. Pharmacy location">
               <Field label="Street address" value={form.street} onChange={x => set('street', x)} />
               <div className="grid md:grid-cols-3 gap-4 mt-4"><Field label="City *" value={form.city} onChange={x => set('city', x)} error={fieldErrors.city}/><Field label="State *" value={form.state} onChange={x => set('state', x)} error={fieldErrors.state}/><Field label="Pincode *" value={form.pincode} onChange={x => set('pincode', x)} error={fieldErrors.pincode}/></div>
               <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-3">
