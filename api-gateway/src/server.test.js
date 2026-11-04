@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import test from 'node:test';
 import { loadConfig } from './config.js';
 import { createGatewayApp } from './server.js';
+import { createTrustedBackendRequestToken } from './serviceAuth.js';
 import { isGatewayPublicPath, isGatewayPermissionAllowed, resolveGatewayCapability } from './apiCapabilityRegistry.js';
 
 const start = async app => {
@@ -472,5 +473,74 @@ test('gateway requires admin role for Inventory adjustment and signs import scop
     assert.equal(serviceRequestCount, 2);
   } finally {
     await Promise.all([gateway.close(), backend.close(), service.close()]);
+  }
+});
+
+
+test('tenant branch CRUD endpoints are registered and tenant admins are allowed by gateway policy', () => {
+  assert.equal(resolveGatewayCapability('GET', '/api/tenant/branches?page=1'), 'tenant.branches.read');
+  assert.equal(resolveGatewayCapability('POST', '/api/tenant/branches'), 'tenant.branches.manage');
+  assert.equal(resolveGatewayCapability('PATCH', '/api/tenant/branches/branch-1'), 'tenant.branches.manage');
+  assert.equal(resolveGatewayCapability('PATCH', '/api/tenant/branches/branch-1/status'), 'tenant.branches.manage');
+  assert.equal(resolveGatewayCapability('DELETE', '/api/tenant/branches/branch-1'), 'tenant.branches.manage');
+  for (const role of ['TENANT_ADMIN', 'TENANT_OWNER', 'OWNER']) {
+    assert.equal(isGatewayPermissionAllowed({ role }, 'tenant.branches.read'), true);
+    assert.equal(isGatewayPermissionAllowed({ role }, 'tenant.branches.manage'), true);
+  }
+  assert.equal(isGatewayPermissionAllowed({
+    role: 'TENANT_STAFF',
+    revokedPermissions: ['tenant.branches.manage'],
+    permissions: ['*']
+  }, 'tenant.branches.manage'), false);
+});
+
+test('trusted backend identity carries a selected tenant for uppercase platform ADMIN', () => {
+  const config = loadConfig({
+    NODE_ENV: 'test',
+    BACKEND_API_URL: 'http://127.0.0.1:8090',
+    GATEWAY_AUTH_SECRET: testSecrets.gateway,
+    CORS_ALLOWED_ORIGINS: 'http://localhost:3000'
+  });
+  const token = createTrustedBackendRequestToken({
+    user: { sub: 'platform-admin-1', role: 'ADMIN', tenantId: null },
+    targetTenantId: 'tenant-selected-7',
+    method: 'GET',
+    path: '/api/tenant/branches',
+    permission: 'tenant.branches.read',
+    requestId: 'branch-test-1'
+  }, config);
+  const claims = jwt.verify(token, testSecrets.gateway, {
+    algorithms: ['HS256'],
+    issuer: 'ashvin-pharmacy',
+    audience: 'pharma-backend-trusted',
+    subject: 'api-gateway'
+  });
+  assert.equal(claims.tenantId, 'tenant-selected-7');
+  assert.equal(claims.role, 'ADMIN');
+});
+
+test('gateway CORS preflight allows selected tenant and branch headers', async () => {
+  const app = createGatewayApp(loadConfig({
+    NODE_ENV: 'test',
+    BACKEND_API_URL: 'http://127.0.0.1:8090',
+    CORS_ALLOWED_ORIGINS: 'https://pharma-ui.onrender.com'
+  }));
+  const server = await start(app);
+  try {
+    const response = await fetch(`${server.url}/api/tenant/branches`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://pharma-ui.onrender.com',
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Request-Headers': 'x-tenant-id,x-branch-id,x-pharma-client'
+      }
+    });
+    assert.equal(response.status, 204);
+    const allowed = response.headers.get('access-control-allow-headers') || '';
+    assert.match(allowed.toLowerCase(), /x-tenant-id/);
+    assert.match(allowed.toLowerCase(), /x-branch-id/);
+    assert.match(allowed.toLowerCase(), /x-pharma-client/);
+  } finally {
+    await server.close();
   }
 });
