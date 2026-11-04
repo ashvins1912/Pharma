@@ -354,7 +354,7 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
     const existing = await StagedImportBatch.findOne({ tenantId, branchId, idempotencyKey: key });
     if (existing) {
       if (existing.fileSha256 !== fileSha256) throw Object.assign(new Error('Idempotency key was already used for another workbook.'), { statusCode: 409 });
-      return res.status(202).json({ jobId: existing.batchId, batchId: existing.batchId, status: 'READY', totalRecords: existing.totalRows, processedRecords: existing.totalRows, successfulRecords: existing.validRows, failedRecords: existing.invalidRows });
+      return res.status(202).json({ jobId: existing.batchId, batchId: existing.batchId, status: existing.status, totalRecords: existing.totalRows, processedRecords: existing.totalRows, successfulRecords: existing.validRows, failedRecords: existing.invalidRows });
     }
     const records = workbookRows(req.file.path);
     if (records.length !== approved.rowsDetected) throw Object.assign(new Error('Workbook row mapping changed between preview and staging. Preview the workbook again.'), { statusCode: 409 });
