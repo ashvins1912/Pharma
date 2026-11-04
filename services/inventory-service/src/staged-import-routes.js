@@ -242,7 +242,7 @@ async function unpublishRows(batch, rows, req) {
     await session.withTransaction(async () => {
       changed.length = 0;
       const baselineBatch = await StagedImportBatch.findById(batch._id).session(session).lean();
-      const batchIsReverting = baselineBatch?.status === 'REVERTING';
+      const batchRollbackState = ['REVERTING', 'REVERTED'].includes(baselineBatch?.status);
       let inventoryBaseline = [...(baselineBatch?.previewInventorySnapshot || [])];
       let productBaseline = [...(baselineBatch?.previewProductSnapshot || [])];
       for (const row of [...rows].sort((a,b) => Number(b.publication?.sequence || 0) - Number(a.publication?.sequence || 0))) {
@@ -296,7 +296,7 @@ async function unpublishRows(batch, rows, req) {
       const unpublishedRows = await StagedImportRow.countDocuments({ batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId, status: 'UNPUBLISHED' }).session(session);
       const publishableCount = total - invalidRows;
       await StagedImportBatch.updateOne({ _id: batch._id }, {
-        $set: { publishedRows, unpublishedRows, status: batchIsReverting ? 'REVERTING' : (publishedRows === 0 ? 'READY' : (publishedRows >= publishableCount ? 'PUBLISHED' : 'PARTIALLY_PUBLISHED')) }
+        $set: { publishedRows, unpublishedRows, status: batchRollbackState ? baselineBatch.status : (publishedRows === 0 ? 'READY' : (publishedRows >= publishableCount ? 'PUBLISHED' : 'PARTIALLY_PUBLISHED')) }
       }, { session });
       await Audit.create([{
         tenantId: batch.tenantId, branchId: batch.branchId, actor: actor(req),
