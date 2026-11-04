@@ -68,8 +68,6 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
     switch (status) {
       case 'REQUESTED':
         return (
-    <>
-      <CustomerStockWaitlist />
           <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">
             <span>⏳</span> Submitted & Pending
           </span>
@@ -126,7 +124,9 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
+    <>
+      <CustomerStockWaitlist />
+      <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
       
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
