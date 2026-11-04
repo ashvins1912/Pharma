@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import * as xlsx from 'xlsx';
 import AdminImportBatchManager from './AdminImportBatchManager';
 import apiClient from '../../api/apiClient';
@@ -12,10 +12,10 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   const { t } = useLanguage();
   const { addToast } = useToast();
   const { fetchMedicines } = useApp();
-  const refreshInventoryCatalogue = () => {
+  const refreshInventoryCatalogue = useCallback(() => {
     invalidatePublicCatalogCache();
     fetchMedicines();
-  };
+  }, [fetchMedicines]);
   const { isSuperAdmin, user } = useAuth();
   const authenticatedTenantId = String(user?.tenantId || user?.app_metadata?.tenantId || '').trim();
   const [targetTenantId, setTargetTenantId] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('pharma_import_target_tenant_id') || '') : '');
@@ -115,7 +115,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [importJob?.jobId, importJob?.status, fetchMedicines, addToast, pollError, isSuperAdmin, targetTenantId, targetBranchId]);
+  }, [importJob?.jobId, importJob?.status, refreshInventoryCatalogue, addToast, pollError, isSuperAdmin, targetTenantId, targetBranchId]);
 
   if (!isOpen) return null;
 
