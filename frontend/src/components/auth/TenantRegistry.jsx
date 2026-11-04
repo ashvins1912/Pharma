@@ -22,6 +22,7 @@ export default function TenantRegistry() {
   const role = String(user?.app_metadata?.role || user?.role || '').toUpperCase();
   const canManageBranches = ['TENANT_OWNER', 'TENANT_ADMIN', 'OWNER', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
   const [branches, setBranches] = useState([]);
+  const [usesTenantAsBranch, setUsesTenantAsBranch] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -37,6 +38,7 @@ export default function TenantRegistry() {
     try {
       const response = await apiClient.get('/api/tenant/branches?limit=100');
       setBranches(Array.isArray(response.data?.branches) ? response.data.branches : []);
+      setUsesTenantAsBranch(response.data?.usesTenantAsBranch === true);
     } catch (err) {
       setError(err?.response?.data?.message || err.message || 'Failed to fetch branches.');
     } finally {
@@ -153,12 +155,13 @@ export default function TenantRegistry() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={fetchBranches} disabled={loading} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-50">Refresh</button>
-          {canManageBranches && <button type="button" onClick={openCreate} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700">+ Add branch</button>}
+          {canManageBranches && !usesTenantAsBranch && <button type="button" onClick={openCreate} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700">+ Add branch</button>}
         </div>
       </div>
 
       {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>}
       {notice && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div>}
+      {usesTenantAsBranch && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900"><strong>Single-location mode:</strong> This tenant is also its main branch. Edit its address and geolocation in Tenant Profile. To add separate branches, turn off the option in Tenant Profile first.</div>}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-500">{branches.length} branch{branches.length === 1 ? '' : 'es'} registered</p>
@@ -179,17 +182,20 @@ export default function TenantRegistry() {
                     <h4 className="font-bold text-slate-900">{branch.name}</h4>
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">{branch.code}</span>
                     {branch.isDefault && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">DEFAULT</span>}
+                    {branch.isTenantLocation && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-bold text-violet-700">TENANT LOCATION</span>}
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${branch.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{branch.status}</span>
                   </div>
                   <p className="mt-1 text-sm text-slate-500">{address || 'Address not added'} · {branch.serviceRadiusKm != null ? `${branch.serviceRadiusKm} km service radius` : 'Service radius not configured'}</p>
                   <p className="mt-1 text-xs text-slate-400">{branch.phone || 'No phone'}{branch.email ? ` · ${branch.email}` : ''}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {branch.isTenantLocation ? <span className="self-center text-xs font-semibold text-slate-500">Managed from Tenant Profile</span> : <>
                   <button type="button" onClick={() => openEdit(branch)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Edit</button>
                   {branch.status === 'ACTIVE'
                     ? <button type="button" onClick={() => changeStatus(branch, 'INACTIVE')} className="rounded-lg border border-amber-200 px-3 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50">Deactivate</button>
                     : <button type="button" onClick={() => changeStatus(branch, 'ACTIVE')} className="rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50">Activate</button>}
                   <button type="button" onClick={() => archiveBranch(branch)} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Remove</button>
+                  </>}
                 </div>
               </article>;
             })}
