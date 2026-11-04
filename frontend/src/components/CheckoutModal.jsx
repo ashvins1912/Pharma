@@ -330,6 +330,8 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       const checkoutData = {
         tenantId: String(tenantId),
         branchId: activeTenant?.branchId || null,
+        fulfillmentCaseId: createdWaitlistCaseId || '',
+        fulfillmentState: createdWaitlistCaseId ? 'PARTIAL' : 'FULL',
         items: JSON.stringify(checkoutItems),
         addressId: selectedAddress._id || selectedAddress.id || '',
         deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
