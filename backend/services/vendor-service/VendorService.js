@@ -520,7 +520,7 @@ class VendorService {
             status: 'ACTIVE',
             contactEmail: vendorEmail,
             contactPhone: mobile,
-            address: { line1: street, city, state, pincode },
+            address: { street, city, state, pincode },
             gstNumber,
             drugLicenseNumber,
             timezone: 'Asia/Kolkata',
