@@ -57,8 +57,10 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       batchNumber: medicine.batchNumber || '',
       hsnSac: medicine.hsnSac || '',
       imageUrl: medicine.imageUrl || '',
-      stockQuantity: medicine.stockQuantity ?? medicine.stock ?? medicine.quantity ?? 0,
-      expiryDate: medicine.expiryDate ? new Date(medicine.expiryDate).toISOString().slice(0, 10) : ''
+      stockQuantity: medicine.batchAvailability?.[0]?.stockQuantity ?? medicine.stockQuantity ?? medicine.stock ?? medicine.quantity ?? 0,
+      price: medicine.batchAvailability?.[0]?.price ?? medicine.price ?? '',
+      batchNumber: medicine.batchAvailability?.[0]?.batchNumber ?? medicine.batchNumber ?? '',
+      expiryDate: (medicine.batchAvailability?.[0]?.expiryDate || medicine.expiryDate) ? new Date(medicine.batchAvailability?.[0]?.expiryDate || medicine.expiryDate).toISOString().slice(0, 10) : ''
     } : {
       name: '',
       brand: '',
