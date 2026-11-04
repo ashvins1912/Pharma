@@ -1324,7 +1324,7 @@ export const dataStore = {
             if (!Number.isFinite(catalogPrice) || catalogPrice < 0) throw inventoryError(`Invalid catalogue price for ${product.name}.`, 409);
             const configuredDiscount = Math.min(100, Math.max(0, Number(product.discountPercentage || 0)));
             const expectedUnitPrice = Math.round(catalogPrice * (1 - configuredDiscount / 100) * 100) / 100;
-            if (requested.unitPrice != null && Math.abs(requested.unitPrice - expectedUnitPrice) > 0.01 && Math.abs(requested.unitPrice - catalogPrice) > 0.01) {
+            if (requested.unitPrice != null && Math.abs(requested.unitPrice - expectedUnitPrice) > 0.01) {
                 throw inventoryError('The selected catalogue price has changed. Refresh the fulfilment options before confirming.', 409);
             }
             const basePrice = catalogPrice;
