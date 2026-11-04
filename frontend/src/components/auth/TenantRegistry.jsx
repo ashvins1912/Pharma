@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 const blankBranch = {
   name: '', code: '', phone: '', email: '',
   address: { street: '', city: '', state: '', pincode: '' },
+  geolocation: { latitude: '', longitude: '' },
   serviceRadiusKm: '', deliveryMode: '',
   minimumOrderValue: '', freeDeliveryAbove: '', deliveryFee: '',
   operatingHours: { open: '', close: '' }, isDefault: false
@@ -65,6 +66,12 @@ export default function TenantRegistry() {
     setForm({
       ...blankBranch, ...branch,
       address: { ...blankBranch.address, ...(branch.address || {}) },
+      geolocation: {
+        ...blankBranch.geolocation,
+        ...(branch.geolocation || {}),
+        latitude: branch.geolocation?.latitude ?? branch.address?.coordinates?.lat ?? '',
+        longitude: branch.geolocation?.longitude ?? branch.address?.coordinates?.lng ?? ''
+      },
       operatingHours: { ...blankBranch.operatingHours, ...(branch.operatingHours || {}) },
       isDefault: Boolean(branch.isDefault)
     });
@@ -75,6 +82,16 @@ export default function TenantRegistry() {
   const setField = (key, value) => setForm(current => ({ ...current, [key]: value }));
   const setAddress = (key, value) => setForm(current => ({ ...current, address: { ...current.address, [key]: value } }));
   const setHours = (key, value) => setForm(current => ({ ...current, operatingHours: { ...current.operatingHours, [key]: value } }));
+  const setGeo = (key, value) => setForm(current => ({ ...current, geolocation: { ...current.geolocation, [key]: value } }));
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) { setError('Location is not supported by this browser. Enter coordinates manually.'); return; }
+    setError('');
+    navigator.geolocation.getCurrentPosition(
+      position => setForm(current => ({ ...current, geolocation: { latitude: position.coords.latitude.toFixed(6), longitude: position.coords.longitude.toFixed(6) } })),
+      locationError => setError(locationError.code === 1 ? 'Location permission was denied. Enter coordinates manually or allow location access.' : 'Could not get your location. Check device location settings and try again.'),
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+    );
+  };
 
   const saveBranch = async event => {
     event.preventDefault();
@@ -201,6 +218,16 @@ export default function TenantRegistry() {
             <label><span className={labelClass}>City</span><input className={fieldClass} value={form.address?.city || ''} onChange={e => setAddress('city', e.target.value)} /></label>
             <label><span className={labelClass}>State</span><input className={fieldClass} value={form.address?.state || ''} onChange={e => setAddress('state', e.target.value)} /></label>
             <label><span className={labelClass}>PIN code</span><input className={fieldClass} value={form.address?.pincode || ''} onChange={e => setAddress('pincode', e.target.value)} /></label>
+            <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div><p className="text-sm font-bold text-slate-800">Branch geolocation</p><p className="text-xs text-slate-500">Coordinates are used to identify this branch on maps and for location-based services.</p></div>
+                <button type="button" onClick={useCurrentLocation} className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-700">Use current location</button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label><span className={labelClass}>Latitude</span><input type="number" step="any" min="-90" max="90" className={fieldClass} value={form.geolocation?.latitude ?? ''} onChange={e => setGeo('latitude', e.target.value)} placeholder="e.g. 12.971599" /></label>
+                <label><span className={labelClass}>Longitude</span><input type="number" step="any" min="-180" max="180" className={fieldClass} value={form.geolocation?.longitude ?? ''} onChange={e => setGeo('longitude', e.target.value)} placeholder="e.g. 77.594566" /></label>
+              </div>
+            </div>
             <label><span className={labelClass}>Service radius (km)</span><input type="number" min="0" step="0.1" className={fieldClass} value={form.serviceRadiusKm} onChange={e => setField('serviceRadiusKm', e.target.value)} /></label>
             <label><span className={labelClass}>Delivery mode</span><select className={fieldClass} value={form.deliveryMode || ''} onChange={e => setField('deliveryMode', e.target.value)}><option value="">Select delivery mode</option><option value="OWN_RIDER">Own rider</option><option value="THIRD_PARTY">Third party</option><option value="PICKUP">Customer pickup</option></select></label>
             <label><span className={labelClass}>Delivery fee (₹)</span><input type="number" min="0" className={fieldClass} value={form.deliveryFee} onChange={e => setField('deliveryFee', e.target.value)} /></label>
