@@ -1947,8 +1947,8 @@ export const dataStore = {
         return [...inMemoryOrders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     },
 
-    async getDeliveredOrdersPage(page = 1, limit = 5, { startDate = null, endDate = null } = {}) {
-        const filter = { orderStatus: 'Delivered' };
+    async getDeliveredOrdersPage(page = 1, limit = 5, { startDate = null, endDate = null, tenantId = null } = {}) {
+        let filter = { orderStatus: { $in: ['Delivered', 'delivered'] } };
         const start = startDate ? new Date(startDate) : null;
         const end = endDate ? new Date(endDate) : null;
         if (start && end && Number.isFinite(start.getTime()) && Number.isFinite(end.getTime()) && start < end) {
@@ -1966,7 +1966,7 @@ export const dataStore = {
             return { items, total, page: safePage };
         }
         const delivered = inMemoryOrders
-            .filter(order => order.orderStatus === 'Delivered' && (!filter.createdAt || (new Date(order.createdAt) >= filter.createdAt.$gte && new Date(order.createdAt) < filter.createdAt.$lt)))
+            .filter(order => ['Delivered', 'delivered'].includes(String(order.orderStatus || '')) && (!tenantId || String(order.tenantId || '') === String(tenantId)) && (!filter.createdAt || (new Date(order.createdAt) >= filter.createdAt.$gte && new Date(order.createdAt) < filter.createdAt.$lt)))
             .sort((a, b) => {
                 const createdAtDelta = new Date(b.createdAt) - new Date(a.createdAt);
                 return createdAtDelta || String(b._id || '').localeCompare(String(a._id || ''));
@@ -1978,14 +1978,14 @@ export const dataStore = {
         };
     },
 
-    async getCancelledOrdersPage(page = 1, limit = 10) {
-        const filter = {
+    async getCancelledOrdersPage(page = 1, limit = 10, { tenantId = null } = {}) {
+        let filter = {
             $or: [
-                { orderStatus: { $in: ['Cancelled', 'cancelled'] } },
+                { orderStatus: { $in: ['Cancelled', 'cancelled', 'CANCELLED'] } },
                 {
                     $and: [
                         { $or: [{ orderStatus: { $exists: false } }, { orderStatus: null }, { orderStatus: '' }] },
-                        { status: { $in: ['cancelled', 'Cancelled'] } }
+                        { status: { $in: ['cancelled', 'Cancelled', 'CANCELLED'] } }
                     ]
                 }
             ]
@@ -2004,7 +2004,7 @@ export const dataStore = {
             return { items, total, page: safePage };
         }
         const cancelled = inMemoryOrders
-            .filter(order => ['cancelled', 'Cancelled'].includes(String(order.orderStatus || order.status || '')))
+            .filter(order => ['cancelled', 'Cancelled', 'CANCELLED'].includes(String(order.orderStatus || order.status || '')) && (!tenantId || String(order.tenantId || '') === String(tenantId)))
             .sort((a, b) => {
                 const updatedAtDelta = new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
                 return updatedAtDelta || String(b._id || '').localeCompare(String(a._id || ''));
