@@ -178,7 +178,9 @@ async function publishRows(batch, rows, req) {
         });
         await inventory.save({ session });
         const inventoryAfter = snapshot(asPlain(inventory), liveInventoryFields);
+        const sequenceDoc = await StagedImportBatch.findOneAndUpdate({ _id: batch._id }, { $inc: { nextPublicationSequence: 1 } }, { new: true, session });
         const publication = {
+          sequence: sequenceDoc.nextPublicationSequence,
           productId: String(product._id), inventoryId: String(inventory._id),
           productCreated: !productBefore, inventoryCreated: !inventoryBefore,
           productBefore, productAfter, inventoryBefore, inventoryAfter,
@@ -219,7 +221,7 @@ async function unpublishRows(batch, rows, req) {
   const changed = [];
   try {
     await session.withTransaction(async () => {
-      for (const row of [...rows].sort((a,b) => (b.publishedAt || b.updatedAt) - (a.publishedAt || a.updatedAt))) {
+      for (const row of [...rows].sort((a,b) => Number(b.publication?.sequence || 0) - Number(a.publication?.sequence || 0))) {
         const fresh = await StagedImportRow.findOne({ _id: row._id, batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId }).session(session);
         const p = fresh?.publication;
         if (!fresh || fresh.status !== 'PUBLISHED' || !p) throw Object.assign(new Error('Only published rows can be unpublished.'), { statusCode: 409 });
