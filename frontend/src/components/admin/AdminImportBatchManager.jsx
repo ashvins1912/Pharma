@@ -78,7 +78,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
       if (action === 'publish') await apiClient.post(`${base}/publish`, { rowIds: selected }, { headers: stableHeaders });
       else await apiClient.post(`${base}/unpublish`, { rowIds: selected }, { headers: stableHeaders });
       await load();
-      if (action === 'publish') onInventoryChanged?.();
+      onInventoryChanged?.();
     } catch (e) {
       setError(e.response?.data?.message || 'Bulk operation failed. Refresh and review the selected rows.');
     } finally { setBusy(false); }
@@ -175,7 +175,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
                     <button type="button" onClick={() => setEditing(null)} className="rounded border px-2 py-1">Cancel</button>
                   </> : <>
                     {row.status !== 'PUBLISHED' && <button type="button" onClick={() => beginEdit(row)} className="rounded border px-2 py-1">Edit</button>}
-                    {row.status === 'PUBLISHED' ? <button type="button" onClick={() => rowAction(row,'unpublish')} disabled={busy || !publishingEnabled} className="rounded border border-amber-300 px-2 py-1 text-amber-800">Unpublish</button> : <button type="button" onClick={() => rowAction(row,'publish')} disabled={busy || !publishingEnabled || row.status === 'INVALID'} className="rounded bg-emerald-600 px-2 py-1 text-white disabled:opacity-40">Publish</button>}
+                    {row.status === 'PUBLISHED' ? <button type="button" onClick={() => rowAction(row,'unpublish')} disabled={busy || !canPublish} className="rounded border border-amber-300 px-2 py-1 text-amber-800">Unpublish</button> : <button type="button" onClick={() => rowAction(row,'publish')} disabled={busy || !canPublish || row.status === 'INVALID'} className="rounded bg-emerald-600 px-2 py-1 text-white disabled:opacity-40">Publish</button>}
                   </>}
                 </div></td>
               </tr>)}
