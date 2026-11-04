@@ -33,6 +33,14 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const [quoteError, setQuoteError] = useState('');
   const [people, setPeople] = useState([]);
   const [patientPuid, setPatientPuid] = useState('');
+  const [fulfillmentPlan, setFulfillmentPlan] = useState(null);
+  const [fulfillmentPlanSignature, setFulfillmentPlanSignature] = useState('');
+  const [fulfillmentConfirmed, setFulfillmentConfirmed] = useState(false);
+  const [alternativeChoices, setAlternativeChoices] = useState({});
+  const [waitDays, setWaitDays] = useState(3);
+  const [waitlistKey, setWaitlistKey] = useState('');
+  const [checkoutKey, setCheckoutKey] = useState('');
+  const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
   useEffect(() => {
     if (!isOpen || !user?.id) return;
     let cancelled = false;
@@ -48,6 +56,46 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     return () => { cancelled = true; };
   }, [isOpen, user?.id]);
 
+  const splitQuoteRequestId = useRef(0);
+  useEffect(() => {
+    if (!isOpen || !fulfillmentPlan?.customerDecisionRequired || !fulfillmentConfirmed) return undefined;
+    const requestId = ++splitQuoteRequestId.current;
+    const items = [];
+    for (const line of fulfillmentPlan.lines || []) {
+      if (line.fulfilNowQuantity > 0) items.push({ medicineId: line.productId, quantity: line.fulfilNowQuantity });
+      if (line.waitingQuantity > 0) {
+        const choice = alternativeChoices[line.productId];
+        if (choice && choice !== 'REMOVE') {
+          items.push({ medicineId: choice, quantity: line.waitingQuantity });
+        }
+      }
+    }
+    if (!items.length) {
+      setRewardQuote(null);
+      setQuoteError('');
+      setQuoteLoading(false);
+      return undefined;
+    }
+    setQuoteLoading(true);
+    setQuoteError('');
+    apiClient.post('/api/orders/checkout/quote', {
+      tenantId: tenantId || '',
+      items,
+      pointsToRedeem: usePoints ? Number(pointsRequested) || 0 : 0,
+      couponCode: appliedCoupon?.code || ''
+    }).then(response => {
+      if (requestId === splitQuoteRequestId.current) setRewardQuote(response.data);
+    }).catch(error => {
+      if (requestId === splitQuoteRequestId.current) {
+        setRewardQuote(null);
+        setQuoteError(error.response?.data?.message || error.message || 'Could not calculate the updated order total.');
+      }
+    }).finally(() => {
+      if (requestId === splitQuoteRequestId.current) setQuoteLoading(false);
+    });
+    return () => { splitQuoteRequestId.current += 1; };
+  }, [isOpen, fulfillmentPlan, fulfillmentConfirmed, alternativeChoices, tenantId, usePoints, pointsRequested, appliedCoupon?.code]);
+
   const quoteRequestId = useRef(0);
   const cartForQuote = JSON.stringify(cart.map(item => ({
     medicineId: item._id,
@@ -55,7 +103,20 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   })));
 
   useEffect(() => {
-    if (!isOpen || cart.length === 0) {
+    setFulfillmentPlan(null);
+    setFulfillmentPlanSignature('');
+    setFulfillmentConfirmed(false);
+    setAlternativeChoices({});
+    setWaitlistKey('');
+    setCheckoutKey('');
+  }, [cartForQuote]);
+
+  useEffect(() => {
+    setCheckoutKey('');
+  }, [alternativeChoices, waitDays, usePoints, pointsRequested, appliedCoupon?.code, selectedAddressId, patientPuid]);
+
+  useEffect(() => {
+    if (!isOpen || cart.length === 0 || (fulfillmentPlan?.customerDecisionRequired && fulfillmentConfirmed)) {
       setRewardQuote(null);
       return undefined;
     }
@@ -83,7 +144,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       }
     }, 250);
     return () => window.clearTimeout(timeout);
-  }, [isOpen, cartForQuote, cart.length, usePoints, pointsRequested, appliedCoupon?.code, tenantId]);
+  }, [isOpen, cartForQuote, cart.length, usePoints, pointsRequested, appliedCoupon?.code, tenantId, fulfillmentPlan, fulfillmentConfirmed]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -143,14 +204,141 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
     setErrorMsg('');
 
+    let fulfillmentPlanForCheckout = null;
+    let checkoutItems = cart.map(item => ({ medicineId: item._id || item.id, quantity: item.quantity }));
+    let pendingStockItems = [];
+    try {
+      setFulfillmentLoading(true);
+      const availability = await apiClient.post('/api/orders/fulfillment/preview', {
+        tenantId: String(tenantId),
+        branchId: activeTenant?.branchId || null,
+        items: checkoutItems
+      });
+      fulfillmentPlanForCheckout = availability.data;
+      const currentPlanSignature = JSON.stringify((availability.data.lines || []).map(line => ({
+        productId: line.productId, requested: line.requestedQuantity,
+        available: line.fulfilNowQuantity, waiting: line.waitingQuantity, unitPrice: line.unitPrice,
+        alternatives: (line.alternatives || []).map(option => ({ id: option.productId, price: option.discountedUnitPrice, listPrice: option.listPrice, requiresPharmacistApproval: option.requiresPharmacistApproval }))
+      })));
+      if (availability.data.customerDecisionRequired && (!fulfillmentConfirmed || currentPlanSignature !== fulfillmentPlanSignature)) {
+        setFulfillmentPlan(availability.data);
+        setFulfillmentPlanSignature(currentPlanSignature);
+        setWaitlistKey(current => current || (window.crypto?.randomUUID?.() || `wait-${Date.now()}-${Math.random().toString(36).slice(2)}`));
+        setFulfillmentConfirmed(false);
+        setFulfillmentLoading(false);
+        return;
+      }
+      if (!availability.data.customerDecisionRequired) {
+        setFulfillmentPlan(null);
+        setFulfillmentPlanSignature('');
+      }
+      if (availability.data.customerDecisionRequired) {
+        const selectedItems = [];
+        for (const line of availability.data.lines) {
+          if (line.fulfilNowQuantity > 0) selectedItems.push({ medicineId: line.productId, quantity: line.fulfilNowQuantity });
+          if (line.waitingQuantity > 0) {
+            const alternativeId = alternativeChoices[line.productId];
+            const alternative = line.alternatives?.find(item => item.productId === alternativeId);
+            if (alternativeId === 'REMOVE') {
+              // Customer explicitly chose to remove the unavailable quantity.
+            } else if (alternativeId && alternative && !alternative.requiresPharmacistApproval && alternative.availableQuantity >= line.waitingQuantity) {
+              selectedItems.push({ medicineId: alternative.productId, quantity: line.waitingQuantity, unitPrice: alternative.discountedUnitPrice });
+            } else if (alternativeId) {
+              throw new Error('The selected alternative no longer has enough stock. Please review the updated options.');
+            } else {
+              pendingStockItems.push({ ...(line.isListed ? { productId: line.productId } : {}), requestedName: line.name, composition: line.composition, strength: line.strength, dosageForm: line.dosageForm, requestedQuantity: line.waitingQuantity });
+            }
+          }
+        }
+        checkoutItems = selectedItems;
+      }
+    } catch (availabilityError) {
+      setFulfillmentLoading(false);
+      setErrorMsg(availabilityError.response?.data?.message || availabilityError.message || 'Could not verify live stock. Please try again.');
+      return;
+    } finally {
+      setFulfillmentLoading(false);
+    }
+
+    if (fulfillmentPlanForCheckout?.customerDecisionRequired && !checkoutItems.length && !pendingStockItems.length) {
+      setErrorMsg('No items remain in this order. Add another medicine or choose an available fulfilment option.');
+      return;
+    }
+    if (fulfillmentConfirmed && quoteLoading) {
+      setErrorMsg('Please wait while the updated fulfilment total is calculated.');
+      return;
+    }
+    if (fulfillmentConfirmed && quoteError) {
+      setErrorMsg(quoteError);
+      return;
+    }
+    if (!checkoutItems.length && !pendingStockItems.length) {
+      setErrorMsg('Choose at least one item to order or wait for stock.');
+      return;
+    }
+    if (pendingStockItems.length && !waitDays) {
+      setErrorMsg('Choose how long you are willing to wait for unavailable medicines.');
+      return;
+    }
+    if (pendingStockItems.length && !waitlistKey) {
+      setWaitlistKey(window.crypto?.randomUUID?.() || `wait-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      return;
+    }
+
+    if (!checkoutItems.length && pendingStockItems.length) {
+      if (prescriptionRequired) {
+        setErrorMsg('Prescription medicines that are entirely out of stock must be submitted through Medicine Request so the prescription can be safely linked to pharmacist review.');
+        return;
+      }
+      try {
+        await apiClient.post('/api/orders/fulfillment/waitlist', {
+          tenantId: String(tenantId), branchId: fulfillmentPlanForCheckout?.branchId || activeTenant?.branchId || null, items: pendingStockItems, waitDays,
+          sourceType: 'CHECKOUT', addressId: selectedAddress._id || selectedAddress.id || '',
+          deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
+          coordinates: selectedAddress.coordinates, addressDetails: selectedAddress, customerMobile: selectedAddress.mobile || user?.user_metadata?.mobile || '', orderedForName: (people.find((p) => p.puid === patientPuid)?.displayName) || user?.name || user?.email || 'Customer', prescriptionRequired, paymentMethod: 'Cash on Delivery (COD)', patientPuid
+        }, { headers: { 'Idempotency-Key': waitlistKey } });
+        addToast(`Your medicines are on the stock waitlist for ${waitDays} day(s). We will notify you when they are available.`, 'success');
+        clearCart();
+        setFulfillmentPlan(null);
+        setFulfillmentConfirmed(false);
+        setAlternativeChoices({});
+        setWaitlistKey('');
+        onClose();
+      } catch (waitError) {
+        setErrorMsg(waitError.response?.data?.message || waitError.message || 'Could not save your stock waitlist.');
+      }
+      return;
+    }
+
+    let createdWaitlistCaseId = null;
+    if (pendingStockItems.length && checkoutItems.length) {
+      try {
+        const waitlistResponse = await apiClient.post('/api/orders/fulfillment/waitlist', {
+          tenantId: String(tenantId), branchId: fulfillmentPlanForCheckout?.branchId || activeTenant?.branchId || null, items: pendingStockItems, waitDays,
+          sourceType: 'CHECKOUT',
+          addressId: selectedAddress._id || selectedAddress.id || '',
+          deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
+          coordinates: selectedAddress.coordinates, addressDetails: selectedAddress,
+          customerMobile: selectedAddress.mobile || user?.user_metadata?.mobile || '',
+          orderedForName: (people.find((p) => p.puid === patientPuid)?.displayName) || user?.name || user?.email || 'Customer',
+          prescriptionRequired, paymentMethod: 'Cash on Delivery (COD)', patientPuid
+        }, { headers: { 'Idempotency-Key': waitlistKey } });
+        createdWaitlistCaseId = waitlistResponse.data?.case?._id || null;
+        if (!createdWaitlistCaseId) throw new Error('The pending stock request was not saved.');
+      } catch (waitError) {
+        setErrorMsg(waitError.response?.data?.message || waitError.message || 'Could not save the pending stock items. Your order has not been placed.');
+        return;
+      }
+    }
+
     const result = await runAction(LOADING_ACTIONS.CREATE_ORDER, async () => {
       try {
       const checkoutData = {
         tenantId: String(tenantId),
-        items: JSON.stringify(cart.map(item => ({
-          medicineId: item._id || item.id,
-          quantity: item.quantity
-        }))),
+        branchId: activeTenant?.branchId || null,
+        fulfillmentCaseId: createdWaitlistCaseId || '',
+        fulfillmentState: createdWaitlistCaseId ? 'PARTIAL' : 'FULL',
+        items: JSON.stringify(checkoutItems),
         addressId: selectedAddress._id || selectedAddress.id || '',
         deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
         coordinates: selectedAddress.coordinates ? (typeof selectedAddress.coordinates === 'string' ? selectedAddress.coordinates : JSON.stringify(selectedAddress.coordinates)) : '',
@@ -167,8 +355,26 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       });
       if (prescriptionFile) formData.append('prescription', prescriptionFile);
 
-      const res = await apiClient.post('/api/orders/checkout', formData);
+      const checkoutIdempotencyKey = checkoutKey || (window.crypto?.randomUUID?.() || `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      if (!checkoutKey) setCheckoutKey(checkoutIdempotencyKey);
+      const res = await apiClient.post('/api/orders/checkout', formData, {
+        headers: { 'Idempotency-Key': checkoutIdempotencyKey }
+      });
       setRestockError('');
+      if (createdWaitlistCaseId) {
+        try {
+          const orderId = String(res.data.orderId || res.data.order?._id || '');
+          await apiClient.post(`/api/orders/fulfillment/waitlist/${createdWaitlistCaseId}/link-order`, {
+            orderId,
+            prescriptionRequired,
+            prescriptionUrl: res.data.order?.prescriptionUrl || null,
+            prescriptionId: res.data.order?.prescriptionId || null,
+            patientPuid: patientPuid || null
+          });
+        } catch (linkError) {
+          addToast('Your available items were ordered and the pending stock request was saved, but the two records could not be linked automatically. You can still track the waitlist separately.', 'warning');
+        }
+      }
 
       addToast(
         res.data.rewardNotice
@@ -177,13 +383,27 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         res.data.rewardNotice ? "warning" : "success"
       );
       clearCart();
+      setFulfillmentPlan(null);
+      setFulfillmentPlanSignature('');
+      setFulfillmentConfirmed(false);
+      setAlternativeChoices({});
+      setWaitlistKey('');
+      setCheckoutKey('');
       setUsePoints(false);
       setPointsRequested(0);
       setPrescriptionFile(null);
       onClose();
       if (onOrderPlaced) onOrderPlaced(res.data.order || { _id: res.data.orderId, finalTotal });
       } catch (err) {
-        setErrorMsg(err.message || "Checkout failed. Please verify cart items.");
+        if (createdWaitlistCaseId) {
+          await apiClient.post(`/api/orders/fulfillment/waitlist/${createdWaitlistCaseId}/cancel`).catch(() => {});
+          setWaitlistKey('');
+        }
+        setErrorMsg(err.response?.data?.message || err.message || "Checkout failed. Please verify cart items.");
+      if (err.response?.status === 409) {
+        setFulfillmentConfirmed(false);
+        setFulfillmentPlan(null);
+      }
         addToast(err.message || "Checkout failed", "error");
         return null;
       }
@@ -191,6 +411,45 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     return result;
   };
 
+
+  const handleConfirmFulfillmentChoices = async () => {
+    if (!fulfillmentPlan) return;
+    const selectedItems = [];
+    for (const line of fulfillmentPlan.lines || []) {
+      if (line.fulfilNowQuantity > 0) selectedItems.push({ medicineId: line.productId, quantity: line.fulfilNowQuantity });
+      if (line.waitingQuantity > 0) {
+        const alternativeId = alternativeChoices[line.productId];
+        const alternative = line.alternatives?.find(item => item.productId === alternativeId);
+        if (alternativeId && alternativeId !== 'REMOVE' && alternative
+          && !alternative.requiresPharmacistApproval
+          && alternative.availableQuantity >= line.waitingQuantity) {
+          selectedItems.push({ medicineId: alternative.productId, quantity: line.waitingQuantity });
+        }
+      }
+    }
+    if (selectedItems.length) {
+      setQuoteLoading(true);
+      try {
+        const response = await apiClient.post('/api/orders/checkout/quote', {
+          tenantId: String(tenantId),
+          items: selectedItems,
+          pointsToRedeem: usePoints ? Number(pointsRequested) || 0 : 0,
+          couponCode: appliedCoupon?.code || ''
+        });
+        setRewardQuote(response.data);
+        setQuoteError('');
+      } catch (error) {
+        setErrorMsg(error.response?.data?.message || error.message || 'Could not calculate the updated order total. Please try again.');
+        setQuoteLoading(false);
+        return;
+      } finally {
+        setQuoteLoading(false);
+      }
+    } else {
+      setRewardQuote(null);
+    }
+    setFulfillmentConfirmed(true);
+  };
 
   const addRestockItem = item => {
     if (!item.price || !item.stock) {
@@ -397,6 +656,46 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             </section>
           )}
 
+          {fulfillmentPlan?.customerDecisionRequired && (
+            <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+              <div>
+                <h3 className="text-sm font-black text-amber-950">Smart stock availability</h3>
+                <p className="mt-1 text-xs text-amber-900">We checked the selected pharmacy. You can receive available items now and choose what to do with the remaining quantity.</p>
+              </div>
+              {fulfillmentPlan.lines.filter(line => line.waitingQuantity > 0).map(line => (
+                <div key={line.productId} className="rounded-xl border border-amber-200 bg-white p-3 space-y-2">
+                  <div className="flex justify-between gap-2 text-xs">
+                    <strong className="text-slate-900">{line.name || 'Requested medicine'}</strong>
+                    <span className="text-amber-800">{line.waitingQuantity} pending</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600">Requested {line.requestedQuantity} · Available now {line.fulfilNowQuantity}</p>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input type="radio" name={`stock-${line.productId}`} checked={!alternativeChoices[line.productId]} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: '' })); setFulfillmentConfirmed(false); setCheckoutKey(''); }}/>
+                    Wait for the original medicine
+                  </label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input type="radio" name={`stock-${line.productId}`} checked={alternativeChoices[line.productId] === 'REMOVE'} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: 'REMOVE' })); setFulfillmentConfirmed(false); }}/>
+                    Remove the unavailable quantity from this order
+                  </label>
+                  {line.alternatives?.map(alternative => (
+                    <label key={alternative.productId} className="flex items-start gap-2 rounded-lg border border-emerald-100 p-2 text-xs">
+                      <input type="radio" name={`stock-${line.productId}`} disabled={alternative.requiresPharmacistApproval || alternative.availableQuantity < line.waitingQuantity} checked={alternativeChoices[line.productId] === alternative.productId} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: alternative.productId })); setFulfillmentConfirmed(false); setCheckoutKey(''); }}/>
+                      <span className="flex-1"><strong>{alternative.name}</strong><br/><span className="text-slate-500">{alternative.brand} · Available {alternative.availableQuantity}</span><br/><span className="font-bold text-emerald-700">₹{alternative.discountedUnitPrice.toFixed(2)} each</span>{alternative.listPrice > alternative.discountedUnitPrice ? <span className="ml-1 text-slate-400 line-through">₹{alternative.listPrice.toFixed(2)}</span> : null}{alternative.discountPercentage > 0 ? <span className="ml-1 text-emerald-700">({alternative.discountPercentage}% savings)</span> : null}{alternative.requiresPharmacistApproval ? <span className="block mt-1 text-amber-700">Pharmacist approval required — cannot substitute at checkout</span> : null}{alternative.availableQuantity < line.waitingQuantity ? <span className="block mt-1 text-amber-700">Not enough stock for the remaining quantity</span> : null}</span>
+                    </label>
+                  ))}
+                </div>
+              ))}
+              <div className="flex items-center justify-between gap-3">
+                <label htmlFor="stock-wait-days" className="text-xs font-bold text-amber-950">Wait for original stock</label>
+                <select id="stock-wait-days" value={waitDays} onChange={event => { setWaitDays(Number(event.target.value)); setFulfillmentConfirmed(false); }} className="rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs">
+                  {[1,2,3,4,5].map(days => <option key={days} value={days}>{days} day{days > 1 ? 's' : ''}</option>)}
+                </select>
+              </div>
+              <p className="text-[10px] text-amber-900">Alternatives are offered only when composition and strength match. Prescription-related substitutions may require pharmacist approval. No stock is reserved until checkout is confirmed.</p>
+              <button type="button" onClick={handleConfirmFulfillmentChoices} disabled={quoteLoading || fulfillmentLoading} className="w-full rounded-xl bg-amber-700 disabled:opacity-50 px-3 py-2.5 text-xs font-black text-white">{quoteLoading ? 'Updating order total…' : 'Confirm these fulfilment choices'}</button>
+            </section>
+          )}
+
           {/* Section 3: Payment Method & Totals */}
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -483,6 +782,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                 <span>{t('deliveryCharge')}</span>
                 <span className="text-emerald-600 font-bold">FREE</span>
               </div>
+              {fulfillmentPlan?.customerDecisionRequired && !fulfillmentConfirmed && <p className="text-[10px] text-amber-800">The payable total will be recalculated for the available items and your selected alternatives after you confirm these choices.</p>}
               <div className="border-t border-dashed border-slate-300 pt-2 flex justify-between items-center text-base font-black text-slate-900">
                 <span>{t('payableAmount')}:</span>
                 <span className="text-emerald-600 text-xl font-black">
@@ -509,8 +809,8 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             disabled={loading || !tenantId || !selectedAddress || cart.length === 0}
             className="w-full sm:w-2/3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold py-3 rounded-2xl text-xs shadow-lg shadow-emerald-600/25 transition cursor-pointer flex items-center justify-center gap-2"
           >
-            {loading && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
-            <span>{loading ? t('creatingOrder') : t('confirmCodOrder')}</span>
+            {(loading || fulfillmentLoading) && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+            <span>{loading ? t('creatingOrder') : fulfillmentPlan?.customerDecisionRequired && !fulfillmentConfirmed ? 'Review stock options' : t('confirmCodOrder')}</span>
             <span>✓</span>
           </button>
         </div>

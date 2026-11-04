@@ -11,7 +11,7 @@ const STAGES = [
 export default function OrderTrackingModal({ order, onClose }) {
   const { t, language } = useLanguage();
   const rawStatus = String(order?.orderStatus || order?.status || '').trim().toLowerCase();
-  if (!order || rawStatus === 'delivered') return null;
+  if (!order || (rawStatus === 'delivered' && order.fulfillmentState !== 'PARTIAL')) return null;
 
   const rawId = String(order?._id || order?.id || order?.orderId || order?.orderNumber || order?.trackingNumber || '').trim();
   const orderId = rawId
@@ -162,6 +162,35 @@ export default function OrderTrackingModal({ order, onClose }) {
               >
                 Call Rider
               </a>
+            </div>
+          )}
+
+          {order.fulfillmentState === 'PARTIAL' && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-950">
+              <strong>Split fulfilment in progress</strong>
+              <p className="mt-1 text-[11px] text-amber-800">
+                {rawStatus === 'delivered'
+                  ? 'The available items have been delivered. The remaining items are still being monitored for stock and will need your confirmation when available.'
+                  : 'Some items are being fulfilled now. The remaining items are on your stock waitlist and will need your confirmation when available.'}
+              </p>
+            </div>
+          )}
+          {order.fulfillmentState === 'CANCELLED_REMAINDER' && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-800">
+              <strong>Remaining items cancelled</strong>
+              <p className="mt-1 text-[11px] text-slate-600">The available items in this order were fulfilled. You cancelled the remaining out-of-stock items.</p>
+            </div>
+          )}
+          {order.fulfillmentState === 'EXPIRED_REMAINDER' && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-950">
+              <strong>Stock wait period expired</strong>
+              <p className="mt-1 text-[11px] text-amber-800">The available items were fulfilled, but the remaining items were not available before your selected wait window ended.</p>
+            </div>
+          )}
+          {order.fulfillmentState === 'COMPLETE' && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs text-emerald-950">
+              <strong>All split items fulfilled</strong>
+              <p className="mt-1 text-[11px] text-emerald-800">Every item from this split order has been confirmed and fulfilled.</p>
             </div>
           )}
 

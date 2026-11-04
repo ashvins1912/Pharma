@@ -123,6 +123,32 @@ export class NotificationService {
             }
         });
 
+        domainEvents.on('FULFILLMENT_STOCK_AVAILABLE', (evt) => {
+            const lines = Array.isArray(evt.payload?.lines) ? evt.payload.lines : [];
+            const summary = lines.map(line => `${line.name || 'Medicine'}: ${line.availableToConfirm}/${line.requestedQuantity}`).join(', ');
+            this.send({
+                tenantId: evt.tenantId, branchId: evt.branchId,
+                recipientUserId: evt.payload?.recipientUserId || null,
+                title: 'Your medicine is available',
+                body: `Stock is now available for waitlist ${evt.payload?.caseNumber || evt.entityId}. ${summary}. Review and confirm to reserve it.`,
+                eventType: 'FULFILLMENT_STOCK_AVAILABLE',
+                fulfillmentCaseId: evt.entityId,
+                channels: ['IN_APP', 'WHATSAPP']
+            });
+        });
+
+        domainEvents.on('FULFILLMENT_WAITLIST_EXPIRED', (evt) => {
+            this.send({
+                tenantId: evt.tenantId, branchId: evt.branchId,
+                recipientUserId: evt.payload?.recipientUserId || null,
+                title: 'Medicine waitlist expired',
+                body: `Your stock waitlist ${evt.payload?.caseNumber || evt.entityId} has expired. You can submit a new request if you still need the medicine.`,
+                eventType: 'FULFILLMENT_WAITLIST_EXPIRED',
+                fulfillmentCaseId: evt.entityId,
+                channels: ['IN_APP']
+            });
+        });
+
         domainEvents.on('ORDER_STATUS_CHANGED', (evt) => {
             const status = evt.payload?.newStatus || 'updated';
             this.send({
@@ -361,7 +387,7 @@ export class NotificationService {
             if (orderId && ['ORDER_CREATED', 'ORDER_ACCEPTED', 'ORDER_STATUS_CHANGED', 'RIDER_ASSIGNED', 'DELIVERY_STATUS_CHANGED', 'ORDER_DELIVERED', 'ORDER_DELIVERED_RATING_PROMPT', 'ORDER_OUT_FOR_DELIVERY_OTP_SENT', 'PROPOSAL_APPROVED'].includes(eventType)) {
                 void cacheService.publishEvent('order_status_changed', eventPayload, target);
             }
-            if (medicineRequestId || eventType.startsWith('MEDICINE_REQUEST') || eventType.startsWith('PROPOSAL_') || eventType.startsWith('REQUEST_')) {
+            if (medicineRequestId || eventType.startsWith('MEDICINE_REQUEST') || eventType.startsWith('PROPOSAL_') || eventType.startsWith('REQUEST_') || eventType.startsWith('FULFILLMENT_')) {
                 void cacheService.publishEvent('medicine_request_updated', eventPayload, target);
             }
         }

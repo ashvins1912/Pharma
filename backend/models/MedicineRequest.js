@@ -44,6 +44,23 @@ const deliverySlotSchema = new mongoose.Schema({
     label: { type: String, default: '' }
 }, { _id: false });
 
+const alternativeOfferSchema = new mongoose.Schema({
+    productId: { type: String, required: true },
+    medicineName: { type: String, required: true },
+    manufacturer: { type: String, default: '' },
+    composition: { type: String, default: '' },
+    strength: { type: String, default: '' },
+    dosageForm: { type: String, default: '' },
+    quantity: { type: Number, min: 1, required: true },
+    unitPrice: { type: Number, min: 0, required: true },
+    discountPercentage: { type: Number, min: 0, max: 100, default: 0 },
+    discountedUnitPrice: { type: Number, min: 0, required: true },
+    availableQuantity: { type: Number, min: 0, default: 0 },
+    requiresPrescription: { type: Boolean, default: false },
+    requiresPharmacistApproval: { type: Boolean, default: false },
+    customerConsentRequired: { type: Boolean, default: true }
+}, { _id: false });
+
 const pharmacyProposalSchema = new mongoose.Schema({
     productId: { type: String, default: null },
     medicineName: { type: String, default: '', trim: true },
@@ -67,7 +84,8 @@ const pharmacyProposalSchema = new mongoose.Schema({
         enum: ['Pending Verification', 'Verified', 'Rejected', 'Not Required'],
         default: 'Pending Verification'
     },
-    alternativeProduct: { type: String, default: '', trim: true }
+    alternativeProduct: { type: String, default: '', trim: true },
+    alternativeOffers: { type: [alternativeOfferSchema], default: [] }
 }, { _id: false });
 
 const prescriptionVerificationMedicineSchema = new mongoose.Schema({
@@ -154,6 +172,9 @@ const medicineRequestSchema = new mongoose.Schema({
         enum: [
             'REQUESTED',
             'UNDER_REVIEW',
+            'FULFILLMENT_PROCESSING',
+            'WAITING_FOR_STOCK',
+            'READY_FOR_CONFIRMATION',
             'PROPOSAL_SENT',
             'CUSTOMER_APPROVED',
             'CUSTOMER_REJECTED',
@@ -183,6 +204,10 @@ const medicineRequestSchema = new mongoose.Schema({
     rejectedAt: { type: Date, default: null },
 
     convertedOrderId: { type: mongoose.Schema.Types.Mixed, default: null, index: true },
+    fulfillmentCaseId: { type: String, default: null, index: true },
+    fulfillmentProcessingAt: { type: Date, default: null, index: true },
+    waitDays: { type: Number, min: 1, max: 5, default: null },
+    waitUntil: { type: Date, default: null, index: true },
 
     expiresAt: { type: Date, default: null, index: true },
 

@@ -6,6 +6,8 @@ import { replaceMedicineRequestPrescription } from '../../api/medicineRequestSer
 import { useActionLoading, LOADING_ACTIONS } from '../../context/LoadingContext';
 import Pagination from '../common/Pagination';
 import { useLanguage } from '../../context/LanguageContext';
+import apiClient from '../../api/apiClient';
+import CustomerStockWaitlist from './CustomerStockWaitlist';
 
 const DEFAULT_PAGINATION = { page: 1, pageSize: 10, limit: 10, total: 0, totalPages: 0, hasNextPage: false };
 
@@ -25,6 +27,8 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
   const { runAction, isActionLoading } = useActionLoading();
   const pagination = medicineRequestsPagination || DEFAULT_PAGINATION;
   const [updatingPrescriptionId, setUpdatingPrescriptionId] = useState(null);
+  const [waitDaysByRequest, setWaitDaysByRequest] = useState({});
+  const [waitingRequestId, setWaitingRequestId] = useState('');
 
   useEffect(() => {
     void loadUserMedicineRequests({ page: 1, statusGroup: 'ALL' });
@@ -35,13 +39,31 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
   const filteredRequests = medicineRequests.filter(r => {
     if (statusFilter === 'ALL') return true;
     if (statusFilter === 'ACTIVE') {
-      return ['REQUESTED', 'UNDER_REVIEW', 'PROPOSAL_SENT'].includes(r.status);
+      return ['REQUESTED', 'UNDER_REVIEW', 'PROPOSAL_SENT', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION'].includes(r.status);
     }
     if (statusFilter === 'COMPLETED') {
       return ['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(r.status);
     }
     return r.status === statusFilter;
   });
+
+  const handleWaitForStock = async request => {
+    if (waitingRequestId) return;
+    setWaitingRequestId(String(request._id));
+    try {
+      const key = window.crypto?.randomUUID?.() || `request-wait-${request._id}-${Date.now()}`;
+      await apiClient.post(`/api/orders/fulfillment/from-medicine-request/${request._id}`, {
+        waitDays: Number(waitDaysByRequest[request._id] || 3)
+      }, { headers: { 'Idempotency-Key': key } });
+      addToast('We will monitor stock for your selected wait period and notify you when it is available.', 'success');
+      await loadUserMedicineRequests({ page: 1, statusGroup: statusFilter });
+      window.dispatchEvent(new Event('stock-waitlist-updated'));
+    } catch (error) {
+      addToast(error.response?.data?.message || 'Could not add this medicine request to the stock waitlist.', 'error');
+    } finally {
+      setWaitingRequestId('');
+    }
+  };
 
   const handlePrescriptionReplacement = async (request, file) => {
     if (!file || updatingPrescriptionId) return;
@@ -77,6 +99,12 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
             <span>🔬</span> Pharmacist Reviewing
           </span>
         );
+      case 'FULFILLMENT_PROCESSING':
+        return <span className="bg-indigo-100 text-indigo-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">⚙️ Preparing split fulfilment</span>;
+      case 'WAITING_FOR_STOCK':
+        return <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">⏳ Waiting for stock</span>;
+      case 'READY_FOR_CONFIRMATION':
+        return <span className="bg-emerald-100 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">✓ Stock available — confirm order</span>;
       case 'PROPOSAL_SENT':
         return (
           <span className="bg-blue-100 text-blue-900 text-[10px] font-black px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 shadow-xs animate-pulse">
@@ -123,7 +151,9 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
+    <>
+      <CustomerStockWaitlist />
+      <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
       
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
@@ -397,6 +427,23 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                   </div>
                 )}
 
+                {isOwner && ['REQUESTED', 'UNDER_REVIEW', 'FULFILLMENT_PROCESSING'].includes(req.status) && !req.fulfillmentCaseId && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <div>
+                      <p className="text-xs font-extrabold text-amber-950">Prefer to wait for this medicine?</p>
+                      <p className="text-[10px] text-amber-800">We will check stock and alert you when it becomes available.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <select aria-label="Stock wait period" value={waitDaysByRequest[req._id] || 3} onChange={event => setWaitDaysByRequest(current => ({ ...current, [req._id]: Number(event.target.value) }))} className="rounded-lg border border-amber-300 bg-white px-2 py-2 text-xs">
+                        {[1,2,3,4,5].map(days => <option key={days} value={days}>{days} day{days > 1 ? 's' : ''}</option>)}
+                      </select>
+                      <button type="button" disabled={waitingRequestId === String(req._id)} onClick={() => handleWaitForStock(req)} className="rounded-lg bg-amber-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50">
+                        {waitingRequestId === String(req._id) ? 'Saving…' : 'Wait for stock'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Linked Order Action */}
                 {req.convertedOrderId && (
                   <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 text-xs">
@@ -437,5 +484,6 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
       )}
 
     </div>
+      </>
   );
 }
