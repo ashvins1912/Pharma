@@ -33,7 +33,7 @@ export default function OfferZoneBanner() {
   const { t } = useLanguage();
   const { addToCart } = useApp();
   const { user, loading: authLoading, isFullyAuthenticated } = useAuth();
-  const { tenantId, activeTenant } = useTenant();
+  const { tenantId, branchId, activeTenant } = useTenant();
   const { addToast } = useToast();
   const [items, setItems] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -43,7 +43,7 @@ export default function OfferZoneBanner() {
   const requestSequence = useRef(0);
   const displayedCacheKeyRef = useRef(null);
   const itemsPerPage = 4;
-  const cacheKey = user?.id && tenantId ? `${CACHE_PREFIX}${user.id}:${tenantId}` : null;
+  const cacheKey = user?.id && tenantId ? `${CACHE_PREFIX}${user.id}:${tenantId}:${branchId || ''}` : null;
 
   useEffect(() => {
     const sequence = ++requestSequence.current;
@@ -87,7 +87,7 @@ export default function OfferZoneBanner() {
     setLoadError('');
     setLoading(true);
 
-    apiClient.get('/api/surplus-savings', { params: { tenantId } })
+    apiClient.get('/api/surplus-savings', { params: { tenantId, branchId } })
       .then(({ data }) => {
         if (!active || sequence !== requestSequence.current) return;
         const nextItems = Array.isArray(data?.items) ? data.items : [];
