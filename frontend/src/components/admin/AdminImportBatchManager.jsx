@@ -189,7 +189,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
                   </>}
                 </div></td>
               </tr>)}
-            {!loading && !rows.length && <tr><td colSpan="9" className="p-5 text-center text-slate-500">No rows match this filter.</td></tr>}
+            {!loading && !rows.length && <tr><td colSpan="10" className="p-5 text-center text-slate-500">No rows match this filter.</td></tr>}
           </tbody>
         </table>
       </div>
