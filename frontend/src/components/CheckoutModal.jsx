@@ -203,7 +203,9 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       try {
         await apiClient.post('/api/orders/fulfillment/waitlist', {
           tenantId: String(tenantId), items: pendingStockItems, waitDays,
-          sourceType: 'CHECKOUT'
+          sourceType: 'CHECKOUT', addressId: selectedAddress._id || selectedAddress.id || '',
+          deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
+          coordinates: selectedAddress.coordinates, addressDetails: selectedAddress, paymentMethod: 'Cash on Delivery (COD)', patientPuid
         }, { headers: { 'Idempotency-Key': waitlistKey } });
         addToast(`Your medicines are on the stock waitlist for ${waitDays} day(s). We will notify you when they are available.`, 'success');
         clearCart();
@@ -246,7 +248,10 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         try {
           await apiClient.post('/api/orders/fulfillment/waitlist', {
             tenantId: String(tenantId), items: pendingStockItems, waitDays,
-            sourceType: 'CHECKOUT', parentOrderId: String(res.data.orderId || res.data.order?._id || '')
+            sourceType: 'CHECKOUT', parentOrderId: String(res.data.orderId || res.data.order?._id || ''),
+            addressId: selectedAddress._id || selectedAddress.id || '',
+            deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
+            coordinates: selectedAddress.coordinates, addressDetails: selectedAddress, paymentMethod: 'Cash on Delivery (COD)', patientPuid
           }, { headers: { 'Idempotency-Key': waitlistKey } });
         } catch (waitError) {
           waitlistSaved = false;
