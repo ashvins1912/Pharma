@@ -272,11 +272,16 @@ router.get('/discovery', async (req, res) => {
             limit: 100,
             userId: req.user?.sub || 'public-discovery'
         });
-        const rankedMedicines = await productDiscovery.getPrioritizedMedicines(
-            { categories, subCategories },
-            { activeCartSkus, priceTier },
-            { page: 1, limit: 100 }
-        );
+        let rankedMedicines = [];
+        try {
+            rankedMedicines = await productDiscovery.getPrioritizedMedicines(
+                { categories, subCategories },
+                { activeCartSkus, priceTier },
+                { page: 1, limit: 100 }
+            );
+        } catch (rankingError) {
+            console.warn('Product discovery ranking is unavailable; using live inventory ordering:', rankingError.message);
+        }
         const rankBySku = new Map(rankedMedicines.map((item, index) => [String(item.skuId || '').toUpperCase(), index]));
         const activeCartSet = new Set(activeCartSkus.map(sku => sku.toUpperCase()));
         let liveItems = (liveResult.items || []).filter(item => {
