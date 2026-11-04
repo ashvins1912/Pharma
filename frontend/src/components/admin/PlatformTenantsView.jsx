@@ -669,7 +669,7 @@ export default function PlatformTenantsView() {
                             type="button"
                             onClick={() => openInviteModal(tenantRow)}
                             className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer"
-                            title={tenantRow("inviteTenantAdministrator")}
+                            title={t("inviteTenantAdministrator")}
                           >
                             👤 Invite Admin
                           </button>
@@ -679,7 +679,7 @@ export default function PlatformTenantsView() {
                             type="button"
                             onClick={() => openDetailsModal(tenantRow)}
                             className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer"
-                            title={tenantRow("inspectTenantDetails")}
+                            title={t("inspectTenantDetails")}
                           >
                             👁️ Details
                           </button>
@@ -691,7 +691,7 @@ export default function PlatformTenantsView() {
                               disabled={isMutating}
                               onClick={() => handleToggleStatus(tenantRow, 'suspend')}
                               className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer disabled:opacity-50"
-                              title={tenantRow("suspendTenantOperations")}
+                              title={t("suspendTenantOperations")}
                             >
                               {isMutating ? '...' : '🚫 Suspend'}
                             </button>
@@ -703,7 +703,7 @@ export default function PlatformTenantsView() {
                               disabled={isMutating}
                               onClick={() => handleToggleStatus(tenantRow, 'activate')}
                               className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer disabled:opacity-50"
-                              title={tenantRow("reactivateTenant")}
+                              title={t("reactivateTenant")}
                             >
                               {isMutating ? '...' : '✅ Activate'}
                             </button>
