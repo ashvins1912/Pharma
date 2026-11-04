@@ -90,6 +90,7 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
       manufacturer: product.manufacturer,
       category: product.category,
       requiresPrescription: product.requiresPrescription,
+      baseCostPrice: product.baseCostPrice || 0, discountPercentage: product.discountPercentage || 0, marginTier: product.marginTier || 'LOW',
       price: priceBatch?.price ?? null,
       stockQuantity,
       reservedQuantity,
@@ -171,6 +172,7 @@ export async function searchInventoryProducts({
       description: product.description || '', imageUrl: product.imageUrl || '', hsnSac: product.hsnSac || '',
       manufacturer: product.manufacturer, brand: product.manufacturer, strength: product.strength, dosage: product.strength, dosageForm: product.form, form: product.form,
       category: product.category, requiresPrescription: product.requiresPrescription, isPrescriptionRequired: product.requiresPrescription,
+      baseCostPrice: product.baseCostPrice || 0, discountPercentage: product.discountPercentage || 0, marginTier: product.marginTier || 'LOW',
       mrp: price, sellingPrice: price, price, stockQuantity, reservedQuantity, availableQuantity,
       stock: stockQuantity, quantity: availableQuantity,
       stockStatus: availableQuantity > 10 ? 'IN_STOCK' : availableQuantity > 0 ? 'LOW_STOCK' : 'OUT_OF_STOCK',
@@ -216,6 +218,9 @@ const normalizeProductFields = input => ({
   description: String(input.description || '').trim(),
   imageUrl: String(input.imageUrl || '').trim(),
   hsnSac: String(input.hsnSac || '').trim(),
+  baseCostPrice: Number(input.baseCostPrice || 0),
+  discountPercentage: Number(input.discountPercentage || 0),
+  marginTier: ['LOW', 'MID', 'HIGH'].includes(input.marginTier) ? input.marginTier : 'LOW',
   requiresPrescription: input.requiresPrescription === true || input.isPrescriptionRequired === true
 });
 
@@ -234,7 +239,9 @@ export async function createProduct({ product: input = {}, tenantId, branchId, a
     throw error;
   }
   if (!fields.name || !sku || !Number.isSafeInteger(stockQuantity) || stockQuantity < 0
-    || !Number.isFinite(price) || price < 0 || (expiryDate && !Number.isFinite(expiryDate.getTime()))) {
+    || !Number.isFinite(price) || price < 0 || !Number.isFinite(fields.baseCostPrice) || fields.baseCostPrice < 0
+    || !Number.isFinite(fields.discountPercentage) || fields.discountPercentage < 0 || fields.discountPercentage > 100
+    || (expiryDate && !Number.isFinite(expiryDate.getTime()))) {
     const error = new Error('A product name, valid SKU, non-negative integer stock, and non-negative price are required.');
     error.statusCode = 400;
     throw error;
@@ -291,7 +298,7 @@ export async function updateProduct({ productId, product: input = {}, tenantId, 
         throw error;
       }
       const fields = normalizeProductFields(input);
-      const editableFields = ['name', 'genericName', 'strength', 'form', 'manufacturer', 'category', 'description', 'imageUrl', 'hsnSac', 'requiresPrescription'];
+      const editableFields = ['name', 'genericName', 'strength', 'form', 'manufacturer', 'category', 'description', 'imageUrl', 'hsnSac', 'baseCostPrice', 'discountPercentage', 'marginTier', 'requiresPrescription'];
       for (const field of editableFields) {
         if (Object.prototype.hasOwnProperty.call(input, field)
           || (field === 'genericName' && ('drug' in input || 'activeSalt' in input))
