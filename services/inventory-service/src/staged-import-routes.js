@@ -469,6 +469,7 @@ router.patch('/imports/batches/:batchId/rows/:rowId', requireServiceScope('inven
   await safeBatch(req.params.batchId, tenantId, branchId);
   const row = await StagedImportRow.findOne({ batchId: req.params.batchId, rowId: req.params.rowId, tenantId, branchId });
   if (!row) return res.status(404).json({ message: 'Import row was not found.' });
+  if (req.body?.expectedVersion !== undefined && Number(req.body.expectedVersion) !== row.version) return res.status(409).json({ message: 'This row was edited by another user. Reload it before saving your changes.' });
   if (row.status === 'PUBLISHED') return res.status(409).json({ message: 'Unpublish this row before editing it.' });
   if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) return res.status(400).json({ message: 'Provide row fields to update.' });
   const allowed = ['sku','name','genericName','strength','form','manufacturer','category','description','price','stockQuantity','batchNumber','expiryDate','requiresPrescription','imageUrl','baseCostPrice','marginTier'];
