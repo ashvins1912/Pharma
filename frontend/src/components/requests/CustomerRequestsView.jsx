@@ -52,7 +52,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
     setWaitingRequestId(String(request._id));
     try {
       const key = window.crypto?.randomUUID?.() || `request-wait-${request._id}-${Date.now()}`;
-      await apiClient.post(`/api/medicine-requests/${request._id}/waitlist`, {
+      await apiClient.post(`/api/orders/fulfillment/from-medicine-request/${request._id}`, {
         waitDays: Number(waitDaysByRequest[request._id] || 3)
       }, { headers: { 'Idempotency-Key': key } });
       addToast('We will monitor stock for your selected wait period and notify you when it is available.', 'success');
@@ -99,16 +99,12 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
             <span>🔬</span> Pharmacist Reviewing
           </span>
         );
-      case 'READY_FOR_CONFIRMATION':
-        return <span className="bg-emerald-100 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">✓ Stock ready · Confirm order</span>;
-      case 'WAITING_FOR_STOCK':
-        return <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full">Waiting for stock</span>;
-      case 'READY_FOR_CONFIRMATION':
-        return <span className="bg-emerald-100 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded-full">Stock available — confirm</span>;
       case 'FULFILLMENT_PROCESSING':
         return <span className="bg-indigo-100 text-indigo-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">⚙️ Preparing split fulfilment</span>;
       case 'WAITING_FOR_STOCK':
         return <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">⏳ Waiting for stock</span>;
+      case 'READY_FOR_CONFIRMATION':
+        return <span className="bg-emerald-100 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">✓ Stock available — confirm order</span>;
       case 'PROPOSAL_SENT':
         return (
           <span className="bg-blue-100 text-blue-900 text-[10px] font-black px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 shadow-xs animate-pulse">
@@ -431,7 +427,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
                   </div>
                 )}
 
-                {isOwner && ['REQUESTED', 'UNDER_REVIEW', 'PROPOSAL_SENT'].includes(req.status) && (
+                {isOwner && ['REQUESTED', 'UNDER_REVIEW', 'FULFILLMENT_PROCESSING'].includes(req.status) && !req.fulfillmentCaseId && (
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
                     <div>
                       <p className="text-xs font-extrabold text-amber-950">Prefer to wait for this medicine?</p>
