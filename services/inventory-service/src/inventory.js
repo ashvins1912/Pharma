@@ -115,7 +115,7 @@ export async function searchInventoryProducts({
   if (tenantId) filter.tenantId = String(tenantId).trim();
   if (category) filter.category = String(category).trim();
   if (normalizedQuery) {
-    const pattern = new RegExp(normalizedQuery.replace(/[.*+?^()|[\]{}\\]/g, '\\    const pattern = new RegExp(normalizedQuery.replace(/[.*+?^()|[\\]{}\\\\]/g, '\\\\$&'), 'i');'), 'i');
+    const pattern = new RegExp(normalizedQuery.replace(/[.*+?^()|[\]{}\\]/g, '\\$&'), 'i');
     filter.$or = [{ sku: pattern }, { name: pattern }, { genericName: pattern }, { manufacturer: pattern }, { category: pattern }];
   }
   const products = await Product.find(filter).sort({ name: 1 })
