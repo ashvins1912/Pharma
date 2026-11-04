@@ -83,7 +83,7 @@ The Render disk is for import/work files, not the authoritative inventory databa
 
 ### Inventory import publishing and production safety
 - `INVENTORY_IMPORTS_ENABLED` defaults to `false` in application code. The Render Inventory Service manifest explicitly enables publishing for the deployed service.
-- Before deploying that setting, confirm `INVENTORY_MONGO_URI` points to the dedicated Inventory database on a MongoDB replica set or sharded cluster. Publishing and rollback fail closed on standalone MongoDB because they require transactions.
+- Before deploying that setting, confirm `INVENTORY_MONGO_URI` points to the dedicated Inventory database on a MongoDB replica set or sharded cluster. Inventory product writes, stock adjustments, reservations, release/deduction, import publishing and rollback use transactions and fail closed on standalone MongoDB.
 - The preview endpoint is read-only and displays the verified tenant + branch target. Publishing requires explicit preview-fingerprint confirmation and rejects stale stock/catalogue snapshots.
 - Import upload, review, row editing, publish, unpublish and rollback are routed through API Gateway and require the signed tenant/branch scope plus `inventory.import`.
 - Each uploaded workbook is staged without changing live stock. Explicit publish applies product and inventory changes atomically and records before/after snapshots, import batch/row provenance and audit history.
