@@ -331,10 +331,22 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
     });
     const validRows = documents.filter(row => row.status === 'READY').length;
     const invalidRows = documents.length - validRows;
-    const batch = await StagedImportBatch.create({
-      batchId, tenantId, branchId, uploadedBy: actor(req), fileName: cleanName(req.file.originalname),
-      fileSha256, idempotencyKey: key, status: 'STAGING', totalRows: documents.length, validRows, invalidRows
-    });
+    let batch;
+    try {
+      batch = await StagedImportBatch.create({
+        batchId, tenantId, branchId, uploadedBy: actor(req), fileName: cleanName(req.file.originalname),
+        fileSha256, idempotencyKey: key, status: 'STAGING', totalRows: documents.length, validRows, invalidRows
+      });
+    } catch (error) {
+      if (error.code === 11000) {
+        const duplicate = await StagedImportBatch.findOne({ tenantId, branchId, idempotencyKey: key });
+        if (duplicate && duplicate.fileSha256 === fileSha256) {
+          return res.status(202).json({ jobId: duplicate.batchId, batchId: duplicate.batchId, status: duplicate.status, totalRecords: duplicate.totalRows, processedRecords: duplicate.totalRows, successfulRecords: duplicate.validRows, failedRecords: duplicate.invalidRows });
+        }
+        throw Object.assign(new Error('Idempotency key has already been used for a different workbook.'), { statusCode: 409 });
+      }
+      throw error;
+    }
     try {
       for (let i = 0; i < documents.length; i += 500) await StagedImportRow.insertMany(documents.slice(i, i + 500), { ordered: false });
       batch.status = 'READY';
