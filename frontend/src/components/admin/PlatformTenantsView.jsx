@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -70,6 +70,11 @@ export default function PlatformTenantsView() {
   const [invitedVendorResult, setInvitedVendorResult] = useState(null);
   const [resendingVendorId, setResendingVendorId] = useState(null);
   const [workspaceTenantId, setWorkspaceTenantId] = useState('');
+  const [workspaceTenantQuery, setWorkspaceTenantQuery] = useState('');
+  const [workspaceTenantSuggestions, setWorkspaceTenantSuggestions] = useState([]);
+  const [workspaceTenantSuggestionsOpen, setWorkspaceTenantSuggestionsOpen] = useState(false);
+  const [workspaceTenantSearchLoading, setWorkspaceTenantSearchLoading] = useState(false);
+  const workspaceTenantSearchRequest = useRef(0);
   const [compareTenantIds, setCompareTenantIds] = useState([]);
   const [compareDetails, setCompareDetails] = useState({});
   const [compareLoading, setCompareLoading] = useState(false);
@@ -108,9 +113,56 @@ export default function PlatformTenantsView() {
     }
   };
 
+  const loadWorkspaceTenantSuggestions = async (query = '') => {
+    const normalizedQuery = String(query || '').trim();
+    if (normalizedQuery && normalizedQuery.length < 2) return;
+    const requestId = ++workspaceTenantSearchRequest.current;
+    setWorkspaceTenantSearchLoading(true);
+    try {
+      const params = normalizedQuery
+        ? { q: normalizedQuery, limit: 20, sort: 'recent' }
+        : { limit: 5, sort: 'recent' };
+      const response = await apiClient.get('/api/v1/admin/tenants', { params });
+      if (requestId !== workspaceTenantSearchRequest.current) return;
+      const raw = response.data?.data || response.data?.tenants || response.data || [];
+      const items = Array.isArray(raw) ? raw : (raw.tenants || []);
+      setWorkspaceTenantSuggestions(items.filter(item => item && (item.id || item._id)));
+      setWorkspaceTenantSuggestionsOpen(true);
+    } catch (err) {
+      if (requestId === workspaceTenantSearchRequest.current) {
+        setWorkspaceTenantSuggestions([]);
+        setError(err?.response?.data?.message || err.message || 'Could not search platform tenants.');
+      }
+    } finally {
+      if (requestId === workspaceTenantSearchRequest.current) setWorkspaceTenantSearchLoading(false);
+    }
+  };
+
+  const handleWorkspaceTenantSearchKeyDown = event => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const query = workspaceTenantQuery.trim();
+    if (query.length < 2) {
+      setError('Enter at least 2 characters to search tenants.');
+      return;
+    }
+    setError('');
+    loadWorkspaceTenantSuggestions(query);
+  };
+
+  const selectWorkspaceTenant = tenant => {
+    const id = String(tenant.id || tenant._id || '');
+    if (!id) return;
+    setWorkspaceTenantId(id);
+    setWorkspaceTenantQuery(tenant.name || tenant.legalName || id);
+    setWorkspaceTenantSuggestionsOpen(false);
+    setError('');
+  };
+
   useEffect(() => {
     loadTenants();
     loadVendors();
+    loadWorkspaceTenantSuggestions('');
   }, []);
 
   useEffect(() => {
@@ -478,11 +530,38 @@ export default function PlatformTenantsView() {
       {platformTab === 'profile' ? (
         <section className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <label htmlFor="platform-profile-tenant" className="block text-xs font-black uppercase text-slate-600">Choose tenant to manage</label>
-            <select id="platform-profile-tenant" value={workspaceTenantId} onChange={event => setWorkspaceTenantId(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold" disabled={!safeTenants.length}>
-              <option value="">Select a tenant</option>
-              {safeTenants.map(tenant => <option key={tenant.id || tenant._id} value={tenant.id || tenant._id}>{tenant.name || tenant.legalName || tenant.id}</option>)}
-            </select>
+            <label htmlFor="platform-profile-tenant" className="block text-xs font-black uppercase text-slate-600">Search tenant to manage</label>
+            <div className="relative mt-2">
+              <input
+                id="platform-profile-tenant"
+                type="search"
+                autoComplete="off"
+                value={workspaceTenantQuery}
+                onChange={event => { setWorkspaceTenantQuery(event.target.value); setWorkspaceTenantId(''); setWorkspaceTenantSuggestionsOpen(true); }}
+                onFocus={() => setWorkspaceTenantSuggestionsOpen(true)}
+                onKeyDown={handleWorkspaceTenantSearchKeyDown}
+                placeholder="Type pharmacy name, slug, email or tenant ID; press Enter"
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-900"
+                aria-controls="platform-profile-tenant-suggestions"
+                aria-expanded={workspaceTenantSuggestionsOpen}
+              />
+              {workspaceTenantSuggestionsOpen && (
+                <div id="platform-profile-tenant-suggestions" role="listbox" className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
+                  {workspaceTenantSearchLoading ? <p className="px-3 py-3 text-xs text-slate-500">Searching tenants…</p> : workspaceTenantSuggestions.length ? workspaceTenantSuggestions.map(tenant => {
+                    const id = String(tenant.id || tenant._id);
+                    return (
+                      <button key={id} type="button" role="option" aria-selected={workspaceTenantId === id} onClick={() => selectWorkspaceTenant(tenant)} className="flex w-full flex-col items-start rounded-lg px-3 py-2 text-left hover:bg-blue-50">
+                        <span className="text-sm font-bold text-slate-900">{tenant.name || tenant.legalName || id}</span>
+                        <span className="mt-0.5 break-all font-mono text-[10px] text-slate-500">{id}</span>
+                        <span className="text-[10px] text-slate-400">{tenant.status || 'UNKNOWN'}{tenant.createdAt ? ` · Added ${new Date(tenant.createdAt).toLocaleDateString()}` : ''}</span>
+                      </button>
+                    );
+                  }) : <p className="px-3 py-3 text-xs text-slate-500">{workspaceTenantQuery.trim().length >= 2 ? 'No matching tenants. Try another name or ID.' : 'No recent tenants found.'}</p>}
+                  <div className="border-t border-slate-100 px-3 py-2 text-[10px] text-slate-400">Showing the 5 newest tenants initially. Enter at least 2 characters and press Enter to search.</div>
+                </div>
+              )}
+            </div>
+            {workspaceTenantId && <p className="mt-2 break-all text-xs text-slate-600">Selected Tenant ID: <code className="font-mono font-bold text-slate-900">{workspaceTenantId}</code></p>}
             <p className="mt-2 text-xs text-slate-500">Manage the selected tenant's persisted profile, edit policy, geolocation, personnel and branch registry in this workspace.</p>
           </div>
           {workspaceTenantId ? <TenantProfileDashboard key={workspaceTenantId} tenantId={workspaceTenantId} showTenantSelector={false} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Select a tenant to open its profile and branches.</div>}
