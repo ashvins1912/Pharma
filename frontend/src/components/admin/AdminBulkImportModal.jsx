@@ -125,7 +125,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       const formData = new FormData(); formData.append('excelFile', selectedFile);
       const response = await apiClient.post('/api/v1/inventory/imports/preview', formData, { headers: { 'Content-Type': 'multipart/form-data', ...getImportScopeHeaders() } });
       setPreviewData(response.data);
-      addToast('Server validated ' + response.data.rowsDetected + ' rows (' + response.data.validCount + ' valid)', 'info');
+      addToast('Mapped ' + response.data.rowsDetected + ' stock rows (' + response.data.validCount + ' ready, ' + response.data.errorsCount + ' need review)', 'info');
     } catch (error) {
       setFile(null); addToast(error.response?.data?.error?.message || error.response?.data?.message || error.message || 'Server-side validation failed.', 'error');
     } finally { setAnalyzing(false); }
@@ -147,7 +147,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       addToast(t('inventoryWritesDisabled'), 'warning');
       return;
     }
-    if (!previewData || previewData.rowsDetected === 0 || !file) {
+    if (!previewData || !previewData.validCount || previewData.validCount === 0 || !file) {
       addToast(t('noRecordsToImport'), 'warning');
       return;
     }
@@ -647,10 +647,10 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
                 <button
                   onClick={handleConfirmImport}
-                  disabled={!previewData.importsEnabled || committing || previewData.rowsDetected === 0 || !previewData.previewFingerprint}
+                  disabled={!previewData.importsEnabled || committing || previewData.validCount === 0 || !previewData.previewFingerprint}
                   className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md shadow-emerald-600/25 cursor-pointer transition flex items-center gap-1.5"
                 >
-                  <span>{!previewData.importsEnabled ? t('importWritesDisabled') : committing ? t('startingIngestion') : t('importRecords').replace('{count}', previewData.rowsDetected)}</span>
+                  <span>{!previewData.importsEnabled ? t('importWritesDisabled') : committing ? t('startingIngestion') : t('importRecords').replace('{count}', previewData.validCount)}</span>
                   <span>✓</span>
                 </button>
               </div>
