@@ -73,8 +73,6 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
 });
 
 const getVerifiedInventoryScope = req => {
-    const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
-    const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
     const tenantId = String(req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
     const branchId = String(req.user?.branchId || req.context?.branchId || '').trim();
     if (!tenantId || !branchId) {
