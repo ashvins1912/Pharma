@@ -171,7 +171,7 @@ router.post('/reservations', requireServiceScope('inventory.reserve'), asyncHand
 
 router.post('/reservations/:reservationId/release', requireServiceScope('inventory.release'), asyncHandler(async (req, res) => {
   const result = await transitionReservation(req.params.reservationId, 'RELEASED', {
-    ...getInventoryScope(req),
+    ...getInventoryScope(req, req.body || {}),
     actor: req.service.name,
     requestId: req.requestId,
     correlationId: req.correlationId
@@ -181,7 +181,7 @@ router.post('/reservations/:reservationId/release', requireServiceScope('invento
 
 router.post('/reservations/:reservationId/deduct', requireServiceScope('inventory.deduct'), asyncHandler(async (req, res) => {
   const result = await transitionReservation(req.params.reservationId, 'DEDUCTED', {
-    ...getInventoryScope(req),
+    ...getInventoryScope(req, req.body || {}),
     actor: req.service.name,
     requestId: req.requestId,
     correlationId: req.correlationId
