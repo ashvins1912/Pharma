@@ -23,6 +23,9 @@ const upload = multer({
 });
 const scope = req => ({ tenantId: req.service?.tenantId || null, branchId: req.service?.branchId || null });
 const actor = req => req.service?.userId || req.service?.name || 'unknown';
+const requirePublishEnabled = (_req, res, next) => config.importsEnabled
+  ? next()
+  : res.status(503).json({ code: 'INVENTORY_IMPORT_PUBLISH_DISABLED', message: 'Batch staging and review are available, but publishing is disabled. Enable INVENTORY_IMPORTS_ENABLED only in the isolated test environment to publish test rows.' });
 const cleanName = value => path.basename(String(value || 'upload.xlsx')).replace(/[^a-zA-Z0-9._-]/g, '_');
 const normHeader = value => String(value ?? '').trim().toLowerCase().replace(/[.\s_/-]+/g, '');
 const pick = (row, ...keys) => {
@@ -421,7 +424,7 @@ router.post('/imports/batches/:batchId/rows/edit-selected', requireServiceScope(
   return res.json({ updated: results.length, rowIds: results });
 }));
 
-router.post('/imports/batches/:batchId/publish', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
+router.post('/imports/batches/:batchId/publish', requireServiceScope('inventory.import'), requirePublishEnabled, asyncHandler(async (req, res) => {
   const { tenantId, branchId } = scope(req);
   const batch = await safeBatch(req.params.batchId, tenantId, branchId);
   const ids = [...new Set((req.body?.rowIds || []).map(String))];
@@ -433,7 +436,7 @@ router.post('/imports/batches/:batchId/publish', requireServiceScope('inventory.
   return res.json({ success: true, published, batch: latest });
 }));
 
-router.post('/imports/batches/:batchId/rows/:rowId/publish', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
+router.post('/imports/batches/:batchId/rows/:rowId/publish', requireServiceScope('inventory.import'), requirePublishEnabled, asyncHandler(async (req, res) => {
   const { tenantId, branchId } = scope(req);
   const batch = await safeBatch(req.params.batchId, tenantId, branchId);
   const row = await StagedImportRow.findOne({ batchId: batch.batchId, tenantId, branchId, rowId: req.params.rowId });
@@ -442,7 +445,7 @@ router.post('/imports/batches/:batchId/rows/:rowId/publish', requireServiceScope
   return res.json({ success: true, published });
 }));
 
-router.post('/imports/batches/:batchId/unpublish', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
+router.post('/imports/batches/:batchId/unpublish', requireServiceScope('inventory.import'), requirePublishEnabled, asyncHandler(async (req, res) => {
   const { tenantId, branchId } = scope(req);
   const batch = await safeBatch(req.params.batchId, tenantId, branchId);
   const ids = [...new Set((req.body?.rowIds || []).map(String))];
@@ -453,7 +456,7 @@ router.post('/imports/batches/:batchId/unpublish', requireServiceScope('inventor
   return res.json({ success: true, unpublished: changed });
 }));
 
-router.post('/imports/batches/:batchId/rollback', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
+router.post('/imports/batches/:batchId/rollback', requireServiceScope('inventory.import'), requirePublishEnabled, asyncHandler(async (req, res) => {
   const { tenantId, branchId } = scope(req);
   const batch = await safeBatch(req.params.batchId, tenantId, branchId);
   const rows = await StagedImportRow.find({ batchId: batch.batchId, tenantId, branchId, status: 'PUBLISHED' }).sort({ publishedAt: -1 });
