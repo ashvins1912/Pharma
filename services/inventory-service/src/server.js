@@ -27,7 +27,7 @@ app.use((req, res, next) => {
     res.set('Vary', 'Origin');
   }
   if (req.method === 'OPTIONS') {
-    res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    res.set('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS');
     res.set('Access-Control-Allow-Headers', 'Authorization,Content-Type,Idempotency-Key,X-Request-Id,X-Correlation-Id');
     return res.sendStatus(origin && config.corsOrigin === origin ? 204 : 403);
   }
