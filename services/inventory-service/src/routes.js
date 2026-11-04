@@ -86,6 +86,7 @@ router.get('/products/search', requireServiceScope('inventory.read'), asyncHandl
     category: req.query.category || '',
     hideRx: req.query.hideRx || false,
     includeOutOfStock: req.query.includeOutOfStock || false,
+    includeExpiredBatches: req.query.includeExpiredBatches || false,
     sort: req.query.sort || 'default',
     page: req.query.page || 1,
     limit: req.query.limit || 50
