@@ -18,7 +18,7 @@ const CACHE_TTL = 5 * 60 * 1000;
 
 export function AppProvider({ children }) {
   const { user, isSuperAdmin, isPharmacyOrAdmin, hasPermission, loading: authLoading, isFullyAuthenticated } = useAuth();
-  const { tenantId } = useTenant();
+  const { tenantId, branchId } = useTenant();
   const { addToast } = useToast();
   const { runAction } = useActionLoading();
 
@@ -272,7 +272,8 @@ export function AppProvider({ children }) {
       const params = {
         page,
         limit,
-        tenantId: String(tenantId)
+        tenantId: String(tenantId),
+        ...(branchId ? { branchId: String(branchId) } : {})
       };
       if (searchQuery) params.search = searchQuery;
       if (hideRx) params.hideRx = 'true';
@@ -316,7 +317,7 @@ export function AppProvider({ children }) {
     } finally {
       if (requestSequence === catalogRequestSequence.current) setLoadingMedicines(false);
     }
-  }, [searchQuery, hideRx, selectedCategory, sortOption, page, limit, tenantId]);
+  }, [searchQuery, hideRx, selectedCategory, sortOption, page, limit, tenantId, branchId]);
 
   useEffect(() => {
     fetchMedicines();
