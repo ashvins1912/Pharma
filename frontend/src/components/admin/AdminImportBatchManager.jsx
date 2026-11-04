@@ -188,7 +188,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
                     <button type="button" onClick={() => saveEdit(row)} disabled={busy} className="rounded bg-blue-600 px-2 py-1 text-white">Save</button>
                     <button type="button" onClick={() => setEditing(null)} className="rounded border px-2 py-1">Cancel</button>
                   </> : <>
-                    {row.status !== 'PUBLISHED' && <button type="button" onClick={() => beginEdit(row)} className="rounded border px-2 py-1">Edit</button>}
+                    {row.status !== 'PUBLISHED' && !['REVERTING', 'REVERTED'].includes(activeBatchStatus) && <button type="button" onClick={() => beginEdit(row)} className="rounded border px-2 py-1">Edit</button>}
                     {row.status === 'PUBLISHED' ? <button type="button" onClick={() => rowAction(row,'unpublish')} disabled={busy || !canPublish} className="rounded border border-amber-300 px-2 py-1 text-amber-800">Unpublish</button> : <button type="button" onClick={() => rowAction(row,'publish')} disabled={busy || !canPublish || row.status === 'INVALID'} className="rounded bg-emerald-600 px-2 py-1 text-white disabled:opacity-40">Publish</button>}
                   </>}
                 </div></td>
