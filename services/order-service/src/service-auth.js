@@ -6,12 +6,12 @@ const callerScopes = {
   'backend-platform': new Set(['orders.read', 'orders.create', 'orders.manage'])
 };
 
-export function createInventoryToken(scopes, userId) {
+export function createInventoryToken(scopes, userId, tenantId = null, branchId = null) {
   const allowedScopes = new Set(['inventory.read', 'inventory.reserve', 'inventory.release', 'inventory.deduct']);
   if (!Array.isArray(scopes) || scopes.length === 0 || scopes.some(scope => !allowedScopes.has(scope))) {
     throw new Error('Order Service requested an unsupported Inventory scope.');
   }
-  return jwt.sign({ scope: scopes.join(' '), userId }, config.serviceAuthSecret, {
+  return jwt.sign({ scope: scopes.join(' '), userId, tenantId: tenantId || null, branchId: branchId || null }, config.serviceAuthSecret, {
     algorithm: 'HS256',
     subject: 'order-service',
     issuer: config.serviceJwtIssuer,
