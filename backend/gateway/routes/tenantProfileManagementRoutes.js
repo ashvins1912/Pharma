@@ -96,6 +96,15 @@ router.patch('/profile', authenticateUser, async (req, res) => {
     const licenseNumber = typeof body.licenseNumber === 'string' ? body.licenseNumber.trim().toUpperCase() : undefined;
     const gstNumber = typeof body.gstNumber === 'string' ? body.gstNumber.trim().toUpperCase() : undefined;
     const address = body.address && typeof body.address === 'object' ? body.address : null;
+    const geolocation = body.geolocation && typeof body.geolocation === 'object' ? {
+      latitude: body.geolocation.latitude === '' || body.geolocation.latitude == null ? null : Number(body.geolocation.latitude),
+      longitude: body.geolocation.longitude === '' || body.geolocation.longitude == null ? null : Number(body.geolocation.longitude)
+    } : null;
+    if (geolocation) {
+      if ((geolocation.latitude == null) !== (geolocation.longitude == null)) return res.status(400).json({ success: false, code: 'INVALID_GEOLOCATION', message: 'Enter both latitude and longitude, or leave both empty.' });
+      if (geolocation.latitude != null && (!Number.isFinite(geolocation.latitude) || geolocation.latitude < -90 || geolocation.latitude > 90)) return res.status(400).json({ success: false, code: 'INVALID_GEOLOCATION', message: 'Latitude must be between -90 and 90.' });
+      if (geolocation.longitude != null && (!Number.isFinite(geolocation.longitude) || geolocation.longitude < -180 || geolocation.longitude > 180)) return res.status(400).json({ success: false, code: 'INVALID_GEOLOCATION', message: 'Longitude must be between -180 and 180.' });
+    }
     const contactEmail = typeof body.contactEmail === 'string' ? body.contactEmail.trim().toLowerCase() : undefined;
     const contactPhone = typeof body.contactPhone === 'string' ? body.contactPhone.trim() : undefined;
     if (contactEmail !== undefined && contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
@@ -111,6 +120,7 @@ router.patch('/profile', authenticateUser, async (req, res) => {
     if (gstNumber !== undefined) { tenant.gstNumber = gstNumber; changedFields.push('gstNumber'); }
     if (contactEmail !== undefined) { tenant.contactEmail = contactEmail; changedFields.push('contactEmail'); }
     if (contactPhone !== undefined) { tenant.contactPhone = contactPhone; changedFields.push('contactPhone'); }
+    if (geolocation) { tenant.geolocation = geolocation; changedFields.push('geolocation'); }
     if (address) {
       changedFields.push('address');
       tenant.address = {
@@ -140,7 +150,8 @@ router.patch('/profile', authenticateUser, async (req, res) => {
           id: String(tenant._id), shopName: tenant.name || '', legalName: tenant.legalName || '',
           licenseNumber: tenant.drugLicenseNumber || '', gstNumber: tenant.gstNumber || '',
           ownerDetails: { name: '', email: tenant.contactEmail || '', phone: tenant.contactPhone || '' },
-          address: { street: tenant.address?.street || '', city: tenant.address?.city || '', state: tenant.address?.state || '', zipCode: tenant.address?.pincode || '' }
+          address: { street: tenant.address?.street || '', city: tenant.address?.city || '', state: tenant.address?.state || '', zipCode: tenant.address?.pincode || '' },
+          geolocation: { latitude: tenant.geolocation?.latitude ?? null, longitude: tenant.geolocation?.longitude ?? null }
         }
       },
       message: 'Pharmacy details updated successfully.'
