@@ -27,6 +27,7 @@ import DataMartRefreshService from './services/DataMartRefreshService.js';
 import { authenticateUser, isAdmin } from './middleware/auth.js';
 import localDemoAuthRoutes from './routes/localDemoAuthRoutes.js';
 import { ensureAuthorizationCatalog } from './authorization/AuthorizationCatalogService.js';
+import { refreshStockWaitlistCases } from './services/intelligentFulfillment/waitlistMonitor.js';
 import internalGatewayRoutes from './routes/internalGatewayRoutes.js';
 import apiRoutes from './routes/apiRoutes.js';
 
@@ -86,6 +87,7 @@ const hasValidCoordinates = (coordinates) => {
 
 const dataMartRefreshService = new DataMartRefreshService();
 let isDataMartRefreshRunning = false;
+let isStockWaitlistRefreshRunning = false;
 const refreshDataMart = async () => {
     if (isDataMartRefreshRunning) return;
     isDataMartRefreshRunning = true;
@@ -99,12 +101,31 @@ const refreshDataMart = async () => {
     }
 };
 
+
+const refreshStockWaitlists = async () => {
+    if (isStockWaitlistRefreshRunning || !getIsConnected()) return;
+    isStockWaitlistRefreshRunning = true;
+    try {
+        const result = await refreshStockWaitlistCases({ limit: 250 });
+        if (result.ready || result.expired) {
+            console.info('Stock waitlist monitor completed:', JSON.stringify(result));
+        }
+    } catch (error) {
+        console.error('Stock waitlist monitor failed:', error);
+    } finally {
+        isStockWaitlistRefreshRunning = false;
+    }
+};
+
 connectDB()
     .then(async connected => {
         if (!connected) return;
         await dataStore.ensureCatalogSeeded();
         await ensureAuthorizationCatalog();
         await refreshDataMart();
+        await refreshStockWaitlists();
+        const stockWaitlistTimer = setInterval(() => void refreshStockWaitlists(), 60 * 1000);
+        stockWaitlistTimer.unref();
         const refreshTimer = setInterval(() => void refreshDataMart(), 15 * 60 * 1000);
         refreshTimer.unref();
     })
