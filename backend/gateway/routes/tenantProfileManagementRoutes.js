@@ -2,12 +2,15 @@ import express from 'express';
 import Tenant from '../../models/Tenant.js';
 import Vendor from '../../models/Vendor.js';
 import TenantMembership from '../../models/TenantMembership.js';
-import { authenticateUser, requirePlatformSuperAdmin } from '../../middleware/auth.js';
+import { authenticateUser } from '../../middleware/auth.js';
 
 const router = express.Router();
 const platformRoles = new Set(['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'ADMIN', 'admin']);
 const getRole = req => String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
 const isPlatformAdmin = req => platformRoles.has(getRole(req));
+const requireSuperAdmin = (req, res, next) => isPlatformAdmin(req)
+  ? next()
+  : res.status(403).json({ success: false, code: 'FORBIDDEN', message: 'Platform Super Administrator privileges required.' });
 
 async function resolveTenant(req, res) {
   const tenantId = isPlatformAdmin(req)
@@ -54,7 +57,7 @@ router.get('/profile/edit-policy', authenticateUser, async (req, res) => {
   }
 });
 
-router.patch('/profile/edit-policy', authenticateUser, requirePlatformSuperAdmin, async (req, res) => {
+router.patch('/profile/edit-policy', authenticateUser, requireSuperAdmin, async (req, res) => {
   try {
     const tenant = await resolveTenant(req, res);
     if (!tenant) return;
