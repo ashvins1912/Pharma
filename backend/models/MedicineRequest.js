@@ -175,8 +175,6 @@ const medicineRequestSchema = new mongoose.Schema({
             'FULFILLMENT_PROCESSING',
             'WAITING_FOR_STOCK',
             'READY_FOR_CONFIRMATION',
-            'WAITING_FOR_STOCK',
-            'READY_FOR_CONFIRMATION',
             'PROPOSAL_SENT',
             'CUSTOMER_APPROVED',
             'CUSTOMER_REJECTED',
@@ -206,7 +204,6 @@ const medicineRequestSchema = new mongoose.Schema({
     rejectedAt: { type: Date, default: null },
 
     convertedOrderId: { type: mongoose.Schema.Types.Mixed, default: null, index: true },
-    fulfillmentCaseId: { type: mongoose.Schema.Types.ObjectId, ref: 'FulfillmentCase', default: null, index: true },
     fulfillmentCaseId: { type: String, default: null, index: true },
     waitDays: { type: Number, min: 1, max: 5, default: null },
     waitUntil: { type: Date, default: null, index: true },
