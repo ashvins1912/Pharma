@@ -61,6 +61,20 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
   }
 
   for (const entry of cases) {
+    if (!entry.parentOrderId) {
+      const linkedOrder = await Order.findOne({
+        fulfillmentCaseId: String(entry._id),
+        userId: String(entry.customerId),
+        tenantId: String(entry.tenantId)
+      }).select('_id').lean();
+      if (linkedOrder) {
+        entry.parentOrderId = String(linkedOrder._id);
+        await FulfillmentCase.updateOne({ _id: entry._id, parentOrderId: null }, {
+          $set: { parentOrderId: String(linkedOrder._id) },
+          $push: { auditTrail: { action: 'PARTIAL_ORDER_LINK_RECOVERED', at: now, actorId: 'system', orderId: String(linkedOrder._id) } }
+        });
+      }
+    }
     if (entry.status === 'CONFIRMING' && entry.confirmingAt && new Date(entry.confirmingAt).getTime() < now.getTime() - 10 * 60 * 1000) {
       const recoveredOrder = entry.confirmationId ? await Order.findOne({ fulfillmentConfirmationId: entry.confirmationId }).lean() : null;
       if (recoveredOrder) {
