@@ -88,7 +88,7 @@ export default function TenantProfileDashboard() {
         contactPhone: draft.ownerDetails.phone
       });
       const updated = response.data?.data?.tenant || draft;
-      const next = { ...draft, ...updated, address: { ...draft.address, ...(updated.address || {}) } };
+      const next = { ...draft, ...updated, address: { ...draft.address, ...(updated.address || {}) }, ownerDetails: { ...draft.ownerDetails, ...(updated.ownerDetails || {}) } };
       setProfile(next);
       setDraft(next);
       setEditing(false);
