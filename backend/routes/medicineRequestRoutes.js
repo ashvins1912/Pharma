@@ -992,7 +992,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
                 if (!alternative || alternative.availableQuantity < line.waitingQuantity) {
                     throw Object.assign(new Error('The selected alternative is no longer available in the requested quantity. Refresh availability and choose again.'), { statusCode: 409 });
                 }
-                orderItems.push({ medicineId: alternative.productId, quantity: line.waitingQuantity });
+                orderItems.push({ medicineId: alternative.productId, quantity: line.waitingQuantity, unitPrice: alternative.discountedUnitPrice });
             } else {
                 waitingItems.push({
                     productId: line.isListed ? line.productId : null,
