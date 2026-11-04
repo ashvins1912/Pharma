@@ -107,7 +107,7 @@ const dynamicOrderService = new DynamicOrderService({
 const getErrorStatus = (error) => {
     if (error.statusCode) return error.statusCode;
     if (['CastError', 'ValidationError'].includes(error.name)) return 400;
-    if (['MongoServerError', 'MongoNetworkError', 'MongooseError'].includes(error.name)) return 503;
+    if (['MongoServerError', 'MongoNetworkError', 'MongooseError', 'MongoServerSelectionError', 'MongoTopologyClosedError', 'MongoNetworkTimeoutError'].includes(error.name)) return 503;
     return 500;
 };
 const resolveDispatchRider = async (riderId, orderId = null, tenantId) => {
@@ -1508,9 +1508,14 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
         }
         return res.json(await dataStore.getAllOrders());
     } catch (err) {
-        if (err.statusCode === 422) return res.status(422).json({ message: err.message });
-        if (err.statusCode === 503) return res.status(503).json({ message: 'Order search is temporarily unavailable. Please try again.' });
-        res.status(500).json({ message: "Failed to retrieve orders" });
+        const statusCode = getErrorStatus(err);
+        console.error('[OrderRoutes] Admin order retrieval failed:', err);
+        return res.status(statusCode).json({
+            code: err.code || (statusCode === 503 ? 'ORDER_STORAGE_UNAVAILABLE' : 'ORDER_RETRIEVAL_FAILED'),
+            message: statusCode === 503
+                ? 'Order history is temporarily unavailable. Please try again.'
+                : err.message || 'Failed to retrieve orders.'
+        });
     }
 });
 
