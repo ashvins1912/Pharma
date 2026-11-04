@@ -72,11 +72,17 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
   };
   const bulkAction = async action => {
     if (!selected.length || busy || !canPublish) return;
-    if (!window.confirm(`${action === 'publish' ? 'Publish' : 'Unpublish / revert'} ${selected.length} selected row(s)?`)) return;
+    const eligibleIds = rows
+      .filter(row => selected.includes(row.rowId) && (action === 'publish'
+        ? ['READY', 'UNPUBLISHED'].includes(row.status)
+        : row.status === 'PUBLISHED'))
+      .map(row => row.rowId);
+    if (!eligibleIds.length) return;
+    if (!window.confirm(`${action === 'publish' ? 'Publish' : 'Unpublish / revert'} ${eligibleIds.length} selected row(s)?`)) return;
     setBusy(true);
     try {
-      if (action === 'publish') await apiClient.post(`${base}/publish`, { rowIds: selected }, { headers: stableHeaders });
-      else await apiClient.post(`${base}/unpublish`, { rowIds: selected }, { headers: stableHeaders });
+      if (action === 'publish') await apiClient.post(`${base}/publish`, { rowIds: eligibleIds }, { headers: stableHeaders });
+      else await apiClient.post(`${base}/unpublish`, { rowIds: eligibleIds }, { headers: stableHeaders });
       await load();
       onInventoryChanged?.();
     } catch (e) {
