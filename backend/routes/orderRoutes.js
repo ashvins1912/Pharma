@@ -408,8 +408,15 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
         if (!tenantId || !items.length) return res.status(400).json({ message: 'Pharmacy and pending medicine items are required.' });
         if (!idempotencyKey || idempotencyKey.length > 128) return res.status(400).json({ message: 'A valid Idempotency-Key header is required.' });
         const { waitDays, waitUntil } = validateWaitWindow(req.body?.waitDays);
-        const normalizedWaitItems = items.map(item => ({ productId: String(item.productId || item.medicineId || ''), requestedQuantity: Number(item.requestedQuantity ?? item.waitingQuantity) })).sort((a, b) => a.productId.localeCompare(b.productId));
-        requestFingerprint = createHash('sha256').update(JSON.stringify({ tenantId, sourceType: req.body?.sourceType || 'CHECKOUT', sourceId: req.body?.sourceId || null, parentOrderId: req.body?.parentOrderId || null, waitDays, items: normalizedWaitItems })).digest('hex');
+        const selectedBranchId = String(req.body?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || '').trim();
+        const normalizedWaitItems = items.map(item => ({
+            productId: String(item.productId || item.medicineId || ''),
+            requestedName: String(item.requestedName || item.name || '').trim(),
+            composition: String(item.composition || '').trim(), strength: String(item.strength || '').trim(),
+            dosageForm: String(item.dosageForm || '').trim(),
+            requestedQuantity: Number(item.requestedQuantity ?? item.waitingQuantity)
+        })).sort((a, b) => a.productId.localeCompare(b.productId) || a.requestedName.localeCompare(b.requestedName));
+        requestFingerprint = createHash('sha256').update(JSON.stringify({ tenantId, branchId: selectedBranchId, sourceType: req.body?.sourceType || 'CHECKOUT', sourceId: req.body?.sourceId || null, parentOrderId: req.body?.parentOrderId || null, waitDays, items: normalizedWaitItems })).digest('hex');
         const ids = [...new Set(items.map(item => String(item.productId || item.medicineId || '')).filter(Boolean))];
         if (!items.every(item => {
             const productId = String(item.productId || item.medicineId || '');
@@ -421,8 +428,11 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
         const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
         if (!tenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
         const existing = await FulfillmentCase.findOne({ customerId: String(req.user.sub), tenantId, idempotencyKey }).lean();
-        if (existing) return res.status(200).json({ case: existing, alreadyCreated: true });
-        const inventory = ids.length ? await Medicine.find({ _id: { $in: ids }, tenantId }).select('_id name').lean() : [];
+        if (existing) {
+            if (existing.requestFingerprint !== requestFingerprint) return res.status(409).json({ message: 'This idempotency key was already used for a different waitlist request.' });
+            return res.status(200).json({ case: existing, alreadyCreated: true });
+        }
+        const inventory = ids.length ? await Medicine.find({ _id: { $in: ids }, tenantId, ...(selectedBranchId ? { branchId: selectedBranchId } : {}) }).select('_id name').lean() : [];
         if (inventory.length !== ids.length) return res.status(404).json({ message: 'One or more selected medicines are not listed by this pharmacy.' });
         const lines = items.map(item => {
             const productId = String(item.productId || item.medicineId || '');
@@ -443,7 +453,7 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
         const caseNumber = 'FUL-' + randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase();
         const created = await FulfillmentCase.create({
             caseNumber, customerId: String(req.user.sub), tenantId,
-            branchId: req.body?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || null,
+            branchId: selectedBranchId || null,
             sourceType: req.body?.sourceType === 'MEDICINE_REQUEST' ? 'MEDICINE_REQUEST' : 'CHECKOUT',
             sourceId: req.body?.sourceId ? String(req.body.sourceId) : null,
             parentOrderId: req.body?.parentOrderId ? String(req.body.parentOrderId) : null,
@@ -481,7 +491,7 @@ router.post('/fulfillment/waitlist/:id/link-order', authenticateUser, async (req
     try {
         const orderId = String(req.body?.orderId || '').trim();
         if (!mongoose.isValidObjectId(orderId)) return res.status(400).json({ message: 'A valid order ID is required.' });
-        const entry = await FulfillmentCase.findOne({ _id: req.params.id, customerId: String(req.user.sub) }).lean();
+        const entry = await FulfillmentCase.findOne({ _id: req.params.id, customerId: String(req.user.sub), status: { $in: ['WAITING_FOR_STOCK', 'PARTIALLY_FULFILLED', 'READY_FOR_CONFIRMATION'] } }).lean();
         if (!entry) return res.status(404).json({ message: 'Stock waitlist entry was not found.' });
         const order = await Order.findOne({
             _id: orderId,
