@@ -1,3 +1,29 @@
+const asPositiveQuantity = value => Number.isSafeInteger(value) && value > 0;
+const normalizeItems = items => {
+  if (!Array.isArray(items) || items.length === 0 || items.length > 100) {
+    const error = new Error('items must contain between 1 and 100 entries.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const aggregated = new Map();
+  for (const item of items) {
+    if (typeof item?.productId !== 'string' || !mongoose.isValidObjectId(item.productId) || !asPositiveQuantity(item.quantity)) {
+      const error = new Error('Each item requires a valid productId and positive integer quantity.');
+      error.statusCode = 400;
+      throw error;
+    }
+    const productId = item.productId.toLowerCase();
+    const quantity = (aggregated.get(productId) || 0) + item.quantity;
+    if (!asPositiveQuantity(quantity)) {
+      const error = new Error('Combined product quantity exceeds the supported range.');
+      error.statusCode = 400;
+      throw error;
+    }
+    aggregated.set(productId, quantity);
+  }
+  return [...aggregated].map(([productId, quantity]) => ({ productId, quantity }));
+};
+
 export async function lookupInventory({ productIds = [], skus = [], tenantId = null, branchId = null }) {
   if (!Array.isArray(productIds) || !Array.isArray(skus) || productIds.length + skus.length > 100) {
     const error = new Error('Lookup accepts at most 100 product IDs or SKUs.');
