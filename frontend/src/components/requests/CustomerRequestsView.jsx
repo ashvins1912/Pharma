@@ -103,6 +103,10 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
         return <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full">Waiting for stock</span>;
       case 'READY_FOR_CONFIRMATION':
         return <span className="bg-emerald-100 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded-full">Stock available — confirm</span>;
+      case 'FULFILLMENT_PROCESSING':
+        return <span className="bg-indigo-100 text-indigo-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">⚙️ Preparing split fulfilment</span>;
+      case 'WAITING_FOR_STOCK':
+        return <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">⏳ Waiting for stock</span>;
       case 'PROPOSAL_SENT':
         return (
           <span className="bg-blue-100 text-blue-900 text-[10px] font-black px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 shadow-xs animate-pulse">
