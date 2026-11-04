@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { verifyPharmaAccessToken, verifyGatewayTrustedRequestToken } from '../security/pharmaToken.js';
 import { authorizationService } from '../authorization/AuthorizationService.js';
 import { resolveApiCapability } from '../authorization/ApiCapabilityRegistry.js';
+import { env } from '../config/env.js';
 
 
 /**
@@ -65,7 +66,7 @@ export const authenticateUser = async (req, res, next, options = {}) => {
             return res.status(401).json({ success: false, code: 'INVALID_GATEWAY_TRUST', message: 'Gateway trust credential is invalid or expired.' });
         }
     }
-    if (process.env.REQUIRE_GATEWAY_TRUST === 'true' && !options.allowDirect) {
+    if (env.REQUIRE_GATEWAY_TRUST === 'true' && !options.allowDirect) {
         return res.status(401).json({ success: false, code: 'GATEWAY_TRUST_REQUIRED', message: 'Protected API access must come through the API Gateway.' });
     }
 
