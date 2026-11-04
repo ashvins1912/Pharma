@@ -1354,7 +1354,7 @@ export const dataStore = {
             tenantId: selectedTenantId,
             branchId: selectedBranchId,
             userId: orderData.userId,
-            idempotencyKey: `legacy-order-reservation:${orderData.idempotencyKey || orderId.toString()}`
+            idempotencyKey: `legacy-order-reservation:${orderId.toString()}`
         });
         if (inventoryReservation.status !== 'RESERVED' || !inventoryReservation.reservationId) {
             throw inventoryError('Inventory could not reserve the requested medicines. Refresh stock and retry.', 409);
