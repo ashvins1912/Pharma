@@ -523,6 +523,25 @@ router.post('/imports/batches/:batchId/rollback', requireServiceScope('inventory
   return res.json({ success: true, batchId: batch.batchId, status: 'REVERTED', revertedAt: new Date() });
 }));
 
+router.get('/imports/batches/:batchId/invalid-records/download', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
+  const { tenantId, branchId } = scope(req);
+  const batch = await safeBatch(req.params.batchId, tenantId, branchId);
+  const invalidRows = await StagedImportRow.find({
+    batchId: batch.batchId, tenantId, branchId, status: 'INVALID'
+  }).sort({ rowNumber: 1 }).lean();
+  const records = invalidRows.map(row => ({
+    ...row.originalRecord,
+    'Source Row Number': row.rowNumber,
+    'Validation Errors': (row.validationErrors || []).join(' | ')
+  }));
+  const workbook = xlsx.utils.book_new();
+  xlsx.utils.book_append_sheet(workbook, xlsx.utils.json_to_sheet(records), 'Rows Requiring Review');
+  const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.set('Content-Disposition', `attachment; filename="inventory-batch-${batch.batchId}-invalid.xlsx"`);
+  return res.send(buffer);
+}));
+
 router.get('/imports/batches/:batchId', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   const { tenantId, branchId } = scope(req);
   const batch = await safeBatch(req.params.batchId, tenantId, branchId);
