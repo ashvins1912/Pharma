@@ -7,6 +7,7 @@ const stagedImportBatchSchema = new mongoose.Schema({
   uploadedBy: { type: String, required: true },
   fileName: { type: String, required: true },
   fileSha256: { type: String, required: true },
+  idempotencyKey: { type: String, required: true },
   status: { type: String, enum: ['STAGING', 'READY', 'PARTIALLY_PUBLISHED', 'PUBLISHED', 'REVERTED', 'FAILED'], default: 'STAGING', index: true },
   totalRows: { type: Number, default: 0 },
   validRows: { type: Number, default: 0 },
@@ -16,6 +17,7 @@ const stagedImportBatchSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   completedAt: Date
 }, { timestamps: true });
+stagedImportBatchSchema.index({ tenantId: 1, branchId: 1, idempotencyKey: 1 }, { unique: true });
 stagedImportBatchSchema.index({ tenantId: 1, branchId: 1, createdAt: -1 });
 
 const stagedImportRowSchema = new mongoose.Schema({
