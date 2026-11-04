@@ -1021,6 +1021,14 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
                 return res.status(400).json({ message: 'Choose a stock wait period between 1 and 5 days.' });
             }
         }
+        if (waitingItems.length) {
+            const waitlistCoordinates = request.coordinates || request.addressDetails?.coordinates;
+            const waitlistAddress = String(request.deliveryAddress || request.addressDetails?.addressLine || '').trim();
+            if (!request.addressId || !waitlistAddress || !waitlistCoordinates
+                || !Number.isFinite(Number(waitlistCoordinates.lat)) || !Number.isFinite(Number(waitlistCoordinates.lng))) {
+                return res.status(409).json({ message: 'Add and verify a delivery address with a map pin before waiting for stock.' });
+            }
+        }
 
         const claim = await MedicineRequest.findOneAndUpdate(
             { _id: request._id, customerId, status: 'PROPOSAL_SENT' },
