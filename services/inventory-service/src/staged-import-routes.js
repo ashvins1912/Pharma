@@ -141,6 +141,14 @@ async function refreshBatchCounts(batchId, tenantId, branchId) {
 }
 const asPlain = doc => doc?.toObject ? doc.toObject() : doc;
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+const comparable = value => value instanceof Date ? value.toISOString()
+  : value && typeof value.toHexString === 'function' ? value.toHexString()
+    : value == null ? null : value;
+const samePreview = (current, expected, fields) => {
+  if (!current && !expected) return true;
+  if (!current || !expected) return false;
+  return fields.every(field => comparable(current[field]) === comparable(expected[field]));
+};
 const liveInventoryFields = ['tenantId','branchId','productId','sku','stockQuantity','reservedQuantity','price','batchNumber','expiryDate','warehouse'];
 const productFields = ['tenantId','sku','name','genericName','strength','form','manufacturer','category','description','imageUrl','requiresPrescription','baseCostPrice','marginTier','version','active'];
 function snapshot(doc, fields) {
