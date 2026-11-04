@@ -64,6 +64,8 @@ router.patch('/profile/edit-policy', authenticateUser, requirePlatformSuperAdmin
     tenant.set('settings.pharmacyProfileEditingEnabled', req.body.pharmacyCanEdit);
     tenant.set('settings.profileEditingPolicyUpdatedAt', new Date());
     tenant.set('settings.profileEditingPolicyUpdatedBy', String(req.user?.sub || req.user?.id || ''));
+    tenant.profileAudit.push({ action: 'PROFILE_EDIT_PERMISSION_CHANGED', changedFields: ['pharmacyProfileEditingEnabled'], actorId: String(req.user?.sub || req.user?.id || ''), actorRole: getRole(req), at: new Date() });
+    if (tenant.profileAudit.length > 100) tenant.profileAudit = tenant.profileAudit.slice(-100);
     await tenant.save();
     return res.json({ success: true, data: { pharmacyCanEdit: req.body.pharmacyCanEdit }, message: 'Pharmacy profile edit permission updated.' });
   } catch (error) {
@@ -94,11 +96,13 @@ router.patch('/profile', authenticateUser, async (req, res) => {
     if (shopName !== undefined && !shopName) {
       return res.status(400).json({ success: false, code: 'INVALID_PHARMACY_NAME', message: 'Pharmacy name cannot be empty.' });
     }
-    if (shopName !== undefined) tenant.name = shopName;
-    if (legalName !== undefined) tenant.legalName = legalName;
-    if (licenseNumber !== undefined) tenant.drugLicenseNumber = licenseNumber;
-    if (gstNumber !== undefined) tenant.gstNumber = gstNumber;
+    const changedFields = [];
+    if (shopName !== undefined) { tenant.name = shopName; changedFields.push('shopName'); }
+    if (legalName !== undefined) { tenant.legalName = legalName; changedFields.push('legalName'); }
+    if (licenseNumber !== undefined) { tenant.drugLicenseNumber = licenseNumber; changedFields.push('licenseNumber'); }
+    if (gstNumber !== undefined) { tenant.gstNumber = gstNumber; changedFields.push('gstNumber'); }
     if (address) {
+      changedFields.push('address');
       tenant.address = {
         street: String(address.street ?? tenant.address?.street ?? '').trim(),
         city: String(address.city ?? tenant.address?.city ?? '').trim(),
@@ -106,6 +110,8 @@ router.patch('/profile', authenticateUser, async (req, res) => {
         pincode: String(address.zipCode ?? address.pincode ?? tenant.address?.pincode ?? '').trim()
       };
     }
+    tenant.profileAudit.push({ action: 'PHARMACY_PROFILE_UPDATED', changedFields, actorId: String(req.user?.sub || req.user?.id || ''), actorRole: getRole(req), at: new Date() });
+    if (tenant.profileAudit.length > 100) tenant.profileAudit = tenant.profileAudit.slice(-100);
     await tenant.save();
 
     const vendor = await Vendor.findOne({ tenantId: String(tenant._id) }).sort({ updatedAt: -1 });
@@ -113,7 +119,7 @@ router.patch('/profile', authenticateUser, async (req, res) => {
       if (shopName !== undefined) vendor.companyName = shopName;
       if (licenseNumber !== undefined) vendor.drugLicenseNumber = licenseNumber;
       if (gstNumber !== undefined) vendor.gstNumber = gstNumber;
-      if (address) vendor.address = { ...vendor.address?.toObject?.(), ...tenant.address.toObject?.() || tenant.address };
+      if (address) vendor.address = { street: tenant.address.street || '', city: tenant.address.city || '', state: tenant.address.state || '', pincode: tenant.address.pincode || '' };
       await vendor.save();
     }
     return res.json({
