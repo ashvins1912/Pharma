@@ -185,7 +185,7 @@ export function isGatewayPermissionAllowed(user, permission) {
   if (revoked.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)))) return false;
 
   const role = user?.app_metadata?.role || user?.role;
-  if (['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return true;
+  if (['admin', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return true;
   // Tenant admins/owners may request the branch directory for their own tenant.
   // The backend route independently enforces active membership and branch scope.
   if (['tenant.branches.read', 'tenant.branches.manage'].includes(permission) && ['TENANT_ADMIN', 'TENANT_OWNER', 'OWNER'].includes(String(role || '').toUpperCase())) return true;
