@@ -6,11 +6,16 @@ import { useToast } from '../../context/ToastContext';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { invalidatePublicCatalogCache } from '../../api/publicCatalogCache';
 
 export default function AdminBulkImportModal({ isOpen, onClose }) {
   const { t } = useLanguage();
   const { addToast } = useToast();
   const { fetchMedicines } = useApp();
+  const refreshInventoryCatalogue = () => {
+    invalidatePublicCatalogCache();
+    fetchMedicines();
+  };
   const { isSuperAdmin, user } = useAuth();
   const authenticatedTenantId = String(user?.tenantId || user?.app_metadata?.tenantId || '').trim();
   const [targetTenantId, setTargetTenantId] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('pharma_import_target_tenant_id') || '') : '');
@@ -91,7 +96,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
         setPollError('');
         setImportJob(response.data);
         if (['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(response.data.status)) {
-          fetchMedicines();
+          refreshInventoryCatalogue();
           addToast(
             response.data.status === 'COMPLETED'
               ? 'Bulk inventory import completed successfully!'
@@ -192,7 +197,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     try {
       const response = await apiClient.post(`/api/v1/inventory/imports/batches/${importJob.batchId}/rollback`, {}, { headers: getImportScopeHeaders() });
       setImportJob(previous => ({ ...previous, status: response.data.status, revertedAt: response.data.revertedAt }));
-      fetchMedicines();
+      refreshInventoryCatalogue();
       addToast(t('batchReverted'), 'success');
     } catch (error) {
       addToast(error.response?.data?.message || t('rollbackBlocked'), 'error');
@@ -440,7 +445,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
         )}
 
         {!previewData && !importJob && targetBranchId && (
-          <AdminImportBatchManager batchId={null} headers={getImportScopeHeaders()} publishingEnabled={false} onInventoryChanged={fetchMedicines} />
+          <AdminImportBatchManager batchId={null} headers={getImportScopeHeaders()} publishingEnabled={false} onInventoryChanged={refreshInventoryCatalogue} />
         )}
 
         {/* Preview & Validation Report */}
