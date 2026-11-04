@@ -1260,7 +1260,8 @@ export const dataStore = {
                             throw inventoryError(`Invalid medicine ID: ${medicineId}`);
                         }
                         const medicineFilter = { _id: medicineId, tenantId: selectedTenantId };
-                        if (selectedBranchId) medicineFilter.branchId = selectedBranchId;
+                        if (orderData.branchScopeExplicit) medicineFilter.branchId = selectedBranchId || null;
+                        else if (selectedBranchId) medicineFilter.branchId = selectedBranchId;
                         const medicine = await Medicine.findOne(medicineFilter).session(session);
                         if (!medicine) throw inventoryError('The selected pharmacy does not have this medicine in its catalogue.', 404);
                         if (medicine.expiryDate && new Date(medicine.expiryDate) <= now) {
@@ -1276,6 +1277,7 @@ export const dataStore = {
                             _id: medicine._id,
                             expiryDate: { $gt: now },
                             tenantId: selectedTenantId,
+                            ...(orderData.branchScopeExplicit ? { branchId: selectedBranchId || null } : selectedBranchId ? { branchId: selectedBranchId } : {}),
                             $expr: {
                                 $gte: [
                                     {
@@ -1563,7 +1565,7 @@ export const dataStore = {
                 const quantity = requested.quantity;
                 const medicine = inMemoryMedicines.find(item => String(item._id) === medicineId
                     && String(item.tenantId || '') === selectedTenantId
-                    && (!selectedBranchId || String(item.branchId || '') === selectedBranchId));
+                    && (orderData.branchScopeExplicit ? String(item.branchId || '') === String(selectedBranchId || '') : (!selectedBranchId || String(item.branchId || '') === selectedBranchId)));
                 if (!medicine) throw inventoryError(`Medicine ${medicineId} was not found.`, 404);
                 if (medicine.expiryDate && new Date(medicine.expiryDate) <= now) {
                     throw inventoryError(`${medicine.name} is expired and cannot be ordered.`);
