@@ -197,7 +197,7 @@ async function publishRows(batch, rows, req) {
       ]).session(session);
       const totals = Object.fromEntries(counts.map(x => [x._id, x.count]));
       const total = await StagedImportRow.countDocuments({ batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId }).session(session);
-      const publishedCount = (totals.PUBLISHED || 0) + published.length;
+      const publishedCount = totals.PUBLISHED || 0;
       await StagedImportBatch.updateOne({ _id: batch._id }, {
         $set: { publishedRows: publishedCount, status: publishedCount >= total ? 'PUBLISHED' : 'PARTIALLY_PUBLISHED' }
       }, { session });
