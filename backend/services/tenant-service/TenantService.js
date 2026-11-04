@@ -481,14 +481,8 @@ export class TenantService {
 
     async getMembershipsForTenant(tenantId) {
         if (getIsConnected()) {
-            try {
-                const dbMemberships = await TenantMembership.find({ tenantId }).lean();
-                if (dbMemberships.length > 0) {
-                    return dbMemberships.map(m => ({ id: m._id, ...m }));
-                }
-            } catch (err) {
-                logger.warn('Failed to query TenantMembership for tenant from MongoDB', { error: err.message });
-            }
+            const dbMemberships = await TenantMembership.find({ tenantId: String(tenantId) }).lean();
+            return dbMemberships.map(m => ({ id: String(m._id), ...m }));
         }
         return Array.from(this.memberships.values()).filter(m => m.tenantId === String(tenantId));
     }
