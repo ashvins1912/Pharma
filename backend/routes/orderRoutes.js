@@ -36,6 +36,17 @@ const TENANT_STAFF_ROLES = new Set([
 ]);
 const getActorRole = req => String(req.user?.role || req.user?.app_metadata?.role || req.context?.role || '').toUpperCase();
 const getActorTenantId = req => req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId || null;
+const resolveTenantBranchId = async (tenantId, requestedBranchId, user = {}) => {
+    const branchId = String(requestedBranchId || user?.branchId || user?.app_metadata?.branchId || '').trim();
+    if (branchId) {
+        const branch = await TenantBranch.findOne({ _id: branchId, tenantId: String(tenantId), status: 'ACTIVE' }).select('_id').lean();
+        if (!branch) throw Object.assign(new Error('The selected branch is not active or does not belong to this pharmacy.'), { statusCode: 404 });
+        return String(branch._id);
+    }
+    const defaultBranch = await TenantBranch.findOne({ tenantId: String(tenantId), status: 'ACTIVE' })
+        .sort({ isDefault: -1, createdAt: 1 }).select('_id').lean();
+    return defaultBranch ? String(defaultBranch._id) : null;
+};
 const isPlatformOrderAdmin = req => ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(getActorRole(req));
 const isTenantOrderStaff = req => TENANT_STAFF_ROLES.has(getActorRole(req));
 const canTenantAccessOrder = (req, order) => {
@@ -363,12 +374,8 @@ router.post('/fulfillment/preview', authenticateUser, async (req, res) => {
         if (ids.some(id => !mongoose.isValidObjectId(id))) return res.status(400).json({ message: 'One or more cart products are invalid.' });
         const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
         if (!tenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
-        const branchId = String(req.body?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || '').trim();
-        if (branchId) {
-            const branch = await TenantBranch.findOne({ _id: branchId, tenantId, status: 'ACTIVE' }).select('_id').lean();
-            if (!branch) return res.status(404).json({ message: 'Selected pharmacy branch is unavailable.' });
-        }
-        const branchScope = branchId ? { branchId } : {};
+        const branchId = await resolveTenantBranchId(tenantId, req.body?.branchId, req.user);
+        const branchScope = { branchId: branchId || null };
         const inventory = await Medicine.find({ _id: { $in: ids }, tenantId, ...branchScope }).select('_id name sku code price basePrice stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean();
         const compositionKeys = [...new Set([...inventory.map(item => item.composition || item.genericName), ...items.map(item => item.composition || item.genericName)].map(value => String(value || '').trim()).filter(value => value && !['active compound', 'unknown', 'n/a', 'na'].includes(value.toLowerCase())))];
         const strengthKeys = [...new Set([...inventory.map(item => item.strength), ...items.map(item => item.strength)].map(value => String(value || '').trim()).filter(Boolean))];
@@ -414,7 +421,7 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
         if (!tenantId || !items.length) return res.status(400).json({ message: 'Pharmacy and pending medicine items are required.' });
         if (!idempotencyKey || idempotencyKey.length > 128) return res.status(400).json({ message: 'A valid Idempotency-Key header is required.' });
         const { waitDays, waitUntil } = validateWaitWindow(req.body?.waitDays);
-        const selectedBranchId = String(req.body?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || '').trim();
+        const selectedBranchId = await resolveTenantBranchId(tenantId, req.body?.branchId, req.user);
         const normalizedWaitItems = items.map(item => ({
             productId: String(item.productId || item.medicineId || ''),
             requestedName: String(item.requestedName || item.name || '').trim(),
@@ -790,6 +797,7 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
         if (!selectedTenant) {
             return res.status(404).json({ code: 'PHARMACY_UNAVAILABLE', message: 'The selected pharmacy is no longer available. Please choose another pharmacy.' });
         }
+        const selectedBranchId = await resolveTenantBranchId(selectedTenantId, req.body.branchId, req.user);
         const cartItems = parseCheckoutItems(req.body.items || req.body.cartItems);
         if (!Array.isArray(cartItems) || !cartItems.length) {
             return res.status(400).json({ message: 'Add at least one medicine to your order.' });
@@ -881,7 +889,8 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
         const order = await dataStore.reserveOrder({
             userId: req.user.sub,
             tenantId: selectedTenantId,
-            branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
+            branchId: selectedBranchId,
+            branchScopeExplicit: true,
             addressId: addressSnapshot?._id || addressId || null,
             customerName,
             customerMobile: addressSnapshot?.mobile || req.body.mobile || req.body.addressDetails?.mobile || req.body.addressDetails?.phone || req.user.user_metadata?.mobile || '',
