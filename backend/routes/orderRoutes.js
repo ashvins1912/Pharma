@@ -10,6 +10,7 @@ import Medicine from '../models/Medicine.js';
 import FulfillmentCase from '../models/FulfillmentCase.js';
 import MedicineRequest from '../models/MedicineRequest.js';
 import { buildIntelligentFulfillmentPlan, validateWaitWindow } from '../services/intelligentFulfillment/fulfillmentPlanner.js';
+import { refreshStockWaitlistCases } from '../services/intelligentFulfillment/waitlistMonitor.js';
 import { authenticateUser, isAdmin } from '../middleware/auth.js';
 import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
 import { getPrescription, removePrescription, savePrescription } from '../config/prescriptionStorage.js';
@@ -383,58 +384,13 @@ router.post('/fulfillment/preview', authenticateUser, async (req, res) => {
 router.get('/fulfillment/waitlist', authenticateUser, async (req, res) => {
     if (!getIsConnected()) return res.status(503).json({ message: 'Stock waitlist is temporarily unavailable.' });
     try {
-        const now = new Date();
+        const checkedAt = new Date();
+        await refreshStockWaitlistCases({ limit: 50, customerId: String(req.user.sub), now: checkedAt });
         const cases = await FulfillmentCase.find({
             customerId: String(req.user.sub),
             status: { $in: ['AWAITING_CUSTOMER_DECISION', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED', 'CONFIRMING'] }
-        }).sort({ createdAt: 1 }).limit(50).lean();
-        const refreshed = [];
-        for (const entry of cases) {
-            if (entry.waitUntil && new Date(entry.waitUntil) <= now) {
-                const expired = await FulfillmentCase.findOneAndUpdate(
-                    { _id: entry._id, customerId: String(req.user.sub), status: { $in: ['WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'] } },
-                    { $set: { status: 'EXPIRED', lastAvailabilityCheckAt: now }, $push: { auditTrail: { action: 'WAIT_WINDOW_EXPIRED', actorId: String(req.user.sub), at: now } } },
-                    { new: true }
-                ).lean();
-                if (expired) refreshed.push(expired);
-                continue;
-            }
-            if (!['WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'].includes(entry.status)) { refreshed.push(entry); continue; }
-            let hasAvailable = false;
-            let hasUnavailable = false;
-            const lines = [];
-            for (const line of entry.lines || []) {
-                const query = { tenantId: String(entry.tenantId), isActive: { $ne: false }, expiryDate: { $gt: now } };
-                if (entry.branchId) query.branchId = String(entry.branchId);
-                if (line.productId) query._id = line.productId;
-                else if (line.composition && line.strength) {
-                    query.composition = line.composition;
-                    query.strength = line.strength;
-                    if (line.dosageForm) query.dosageForm = line.dosageForm;
-                } else {
-                    const exactName = String(line.requestedName || line.name || '').trim();
-                    if (exactName) query.name = exactName;
-                    else { hasUnavailable = true; lines.push({ ...line, allocatedQuantity: 0, notifiedAvailableQuantity: 0 }); continue; }
-                }
-                const candidate = await Medicine.findOne(query).select('_id stockQuantity stock quantity reservedQuantity price').lean();
-                const physical = Number(candidate?.stockQuantity ?? candidate?.stock ?? candidate?.quantity ?? 0);
-                const available = candidate ? Math.max(0, physical - Number(candidate.reservedQuantity || 0)) : 0;
-                const allocatedQuantity = Math.min(Number(line.waitingQuantity || line.requestedQuantity || 0), available);
-                if (allocatedQuantity > 0) hasAvailable = true; else hasUnavailable = true;
-                lines.push({ ...line, productId: candidate?._id ? String(candidate._id) : line.productId, allocatedQuantity, notifiedAvailableQuantity: available, unitPrice: Number(candidate?.price ?? line.unitPrice ?? 0) });
-            }
-            const nextStatus = hasAvailable ? (hasUnavailable ? 'PARTIALLY_FULFILLED' : 'READY_FOR_CONFIRMATION') : 'WAITING_FOR_STOCK';
-            const becameReady = hasAvailable && !['READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'].includes(entry.status);
-            const updated = await FulfillmentCase.findOneAndUpdate(
-                { _id: entry._id, customerId: String(req.user.sub), status: entry.status },
-                { $set: { lines, status: nextStatus, lastAvailabilityCheckAt: now }, ...(becameReady ? { $push: { auditTrail: { action: 'STOCK_BECAME_AVAILABLE', actorId: 'system', at: now } } } : {}) },
-                { new: true }
-            ).lean();
-            const result = updated || entry;
-            refreshed.push(result);
-            if (becameReady) domainEvents.emitDomainEvent('FULFILLMENT_STOCK_READY', String(entry._id), { customerId: entry.customerId, caseNumber: entry.caseNumber, availableLines: lines.filter(line => Number(line.allocatedQuantity) > 0).length }, null, entry.tenantId, entry.branchId);
-        }
-        return res.json({ items: refreshed, checkedAt: now.toISOString() });
+        }).sort({ createdAt: -1 }).limit(50).lean();
+        return res.json({ items: cases, checkedAt: checkedAt.toISOString() });
     } catch (error) {
         console.error('Stock waitlist refresh failed:', error);
         return res.status(503).json({ message: 'Unable to load and refresh your stock waitlist.' });
