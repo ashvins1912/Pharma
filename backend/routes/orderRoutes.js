@@ -8,6 +8,7 @@ import Tenant from '../models/Tenant.js';
 import Rider from '../models/Rider.js';
 import Medicine from '../models/Medicine.js';
 import FulfillmentCase from '../models/FulfillmentCase.js';
+import MedicineRequest from '../models/MedicineRequest.js';
 import { buildIntelligentFulfillmentPlan, validateWaitWindow } from '../services/intelligentFulfillment/fulfillmentPlanner.js';
 import { authenticateUser, isAdmin } from '../middleware/auth.js';
 import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
@@ -469,6 +470,8 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
             addressId: waitlist.addressId, deliveryAddress: waitlist.deliveryAddress,
             addressDetails: waitlist.addressDetails || {}, coordinates: waitlist.coordinates,
             paymentMethod: waitlist.paymentMethod || 'Cash on Delivery (COD)',
+            source: waitlist.sourceType === 'MEDICINE_REQUEST' ? 'MEDICINE_REQUEST' : 'WEB',
+            fulfillmentCaseId: String(waitlist._id),
             prescriptionUrl: waitlist.prescriptionUrl || null, prescriptionId: waitlist.prescriptionId || null,
             patientPuid: waitlist.patientPuid || null,
             items: readyLines.map(line => ({ medicineId: line.productId, quantity: Number(line.allocatedQuantity) }))
@@ -486,6 +489,12 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
             },
             $push: { auditTrail: { action: 'AVAILABLE_STOCK_CONFIRMED', actorId: String(req.user.sub), at: new Date(), orderId: String(order._id), fulfilledLineCount: readyLines.length } }
         });
+        if (waitlist.sourceType === 'MEDICINE_REQUEST' && waitlist.sourceId) {
+            await MedicineRequest.updateOne({ _id: waitlist.sourceId, customerId: String(req.user.sub), fulfillmentCaseId: String(waitlist._id) }, {
+                $set: { status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'CONVERTED_TO_ORDER', convertedOrderId: String(order._id) },
+                $push: { auditTrail: { action: 'WAITLIST_STOCK_ORDER_CREATED', actorId: String(req.user.sub), role: 'Customer', timestamp: new Date(), notes: `Created order ${String(order._id)} from available waitlist stock.` } }
+            });
+        }
         return res.status(201).json({ order, waitlistCaseId: String(waitlist._id), remainingItems: remainingLines, message: 'Available stock has been reserved and a new order has been created.' });
     } catch (error) {
         return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to confirm available stock.' });
