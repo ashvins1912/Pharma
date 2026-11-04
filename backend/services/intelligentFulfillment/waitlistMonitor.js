@@ -1,6 +1,7 @@
 import FulfillmentCase from '../../models/FulfillmentCase.js';
 import Medicine from '../../models/Medicine.js';
 import MedicineRequest from '../../models/MedicineRequest.js';
+import Order from '../../models/Order.js';
 import { getIsConnected } from '../../config/db.js';
 import { domainEvents } from '../../shared/events/DomainEvents.js';
 
@@ -11,11 +12,33 @@ const available = medicine => Math.max(0,
 export async function refreshStockWaitlistCases({ limit = 250, now = new Date() } = {}) {
   if (!getIsConnected()) return { scanned: 0, ready: 0, expired: 0 };
   const cases = await FulfillmentCase.find({
-    status: { $in: ['WAITING_FOR_STOCK', 'PARTIALLY_FULFILLED', 'READY_FOR_CONFIRMATION'] }
+    status: { $in: ['WAITING_FOR_STOCK', 'PARTIALLY_FULFILLED', 'READY_FOR_CONFIRMATION', 'CONFIRMING'] }
   }).sort({ updatedAt: 1 }).limit(Math.max(1, Math.min(1000, Number(limit) || 250))).lean();
   let ready = 0;
   let expired = 0;
   for (const entry of cases) {
+    if (entry.status === 'CONFIRMING' && entry.confirmingAt && new Date(entry.confirmingAt).getTime() < now.getTime() - 10 * 60 * 1000) {
+      const recoveredOrder = entry.confirmationId ? await Order.findOne({ fulfillmentConfirmationId: entry.confirmationId }).lean() : null;
+      if (recoveredOrder) {
+        const confirmationLines = entry.confirmationLines || [];
+        const remainingLines = (entry.lines || []).map(line => {
+          const confirmed = confirmationLines.find(item => String(item.productId) === String(line.productId));
+          const quantity = Math.min(Number(confirmed?.allocatedQuantity || 0), Number(line.waitingQuantity || 0));
+          return { ...line, requestedQuantity: Math.max(0, Number(line.waitingQuantity || 0) - quantity), allocatedQuantity: 0, waitingQuantity: Math.max(0, Number(line.waitingQuantity || 0) - quantity), notifiedAvailableQuantity: 0 };
+        }).filter(line => line.requestedQuantity > 0);
+        await FulfillmentCase.updateOne({ _id: entry._id, status: 'CONFIRMING', confirmationId: entry.confirmationId }, {
+          $set: { lines: remainingLines, status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'FULFILLED', parentOrderId: String(recoveredOrder._id), confirmationId: null, confirmingAt: null, confirmationPreviousStatus: null, confirmationLines: [] },
+          $push: { auditTrail: { action: 'CONFIRMATION_RECOVERED', at: now, actorId: 'system', details: { orderId: String(recoveredOrder._id) } } }
+        });
+      } else {
+        await FulfillmentCase.updateOne({ _id: entry._id, status: 'CONFIRMING', confirmationId: entry.confirmationId }, {
+          $set: { status: entry.confirmationPreviousStatus || 'WAITING_FOR_STOCK', confirmationId: null, confirmingAt: null, confirmationPreviousStatus: null, confirmationLines: [], lastAvailabilityCheckAt: null },
+          $push: { auditTrail: { action: 'CONFIRMATION_CLAIM_RECOVERED', at: now, actorId: 'system' } }
+        });
+      }
+      continue;
+    }
+    if (entry.status === 'CONFIRMING') continue;
     const oldCheck = entry.lastAvailabilityCheckAt || null;
     if (entry.waitUntil && new Date(entry.waitUntil) <= now) {
       const result = await FulfillmentCase.updateOne({
