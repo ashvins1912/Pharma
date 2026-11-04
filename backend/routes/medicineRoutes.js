@@ -66,7 +66,7 @@ const getVerifiedInventoryScope = async req => {
     const role = String(req.user?.app_metadata?.role || req.user?.role || req.context?.role || '').toUpperCase();
     const platformRoles = new Set(['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN']);
     const inventoryRoles = new Set([
-        'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF',
+        'TENANT_OWNER', 'TENANT_ADMIN', 'OWNER', 'PHARMACIST', 'PHARMACY_STAFF',
         'INVENTORY_MANAGER', 'ORDER_MANAGER', 'BRANCH_ADMIN', 'PHARMACY'
     ]);
     if (!platformRoles.has(role) && !inventoryRoles.has(role)) {
