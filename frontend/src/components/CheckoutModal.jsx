@@ -70,7 +70,9 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       }
     }
     if (!items.length) {
-      setQuoteError('Remove at least one item or choose an available fulfilment option.');
+      setRewardQuote(null);
+      setQuoteError('');
+      setQuoteLoading(false);
       return undefined;
     }
     setQuoteLoading(true);
@@ -108,7 +110,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   }, [cartForQuote]);
 
   useEffect(() => {
-    if (!isOpen || cart.length === 0) {
+    if (!isOpen || cart.length === 0 || (fulfillmentPlan?.customerDecisionRequired && fulfillmentConfirmed)) {
       setRewardQuote(null);
       return undefined;
     }
@@ -136,7 +138,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       }
     }, 250);
     return () => window.clearTimeout(timeout);
-  }, [isOpen, cartForQuote, cart.length, usePoints, pointsRequested, appliedCoupon?.code, tenantId]);
+  }, [isOpen, cartForQuote, cart.length, usePoints, pointsRequested, appliedCoupon?.code, tenantId, fulfillmentPlan, fulfillmentConfirmed]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -256,8 +258,16 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       setErrorMsg('No items remain in this order. Add another medicine or choose an available fulfilment option.');
       return;
     }
+    if (fulfillmentConfirmed && quoteLoading) {
+      setErrorMsg('Please wait while the updated fulfilment total is calculated.');
+      return;
+    }
     if (fulfillmentConfirmed && quoteError) {
       setErrorMsg(quoteError);
+      return;
+    }
+    if (!checkoutItems.length && !pendingStockItems.length) {
+      setErrorMsg('Choose at least one item to order or wait for stock.');
       return;
     }
     if (pendingStockItems.length && !waitDays) {
