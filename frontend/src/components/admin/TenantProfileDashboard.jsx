@@ -39,7 +39,7 @@ export default function TenantProfileDashboard() {
     setProfileMissing(false);
     try {
       const response = await apiClient.get('/api/vendor/profile');
-      const tenant = response.data?.tenant || {};
+      const payload = response.data?.data || response.data || {};\n      const tenant = payload.tenant || {};
       setProfile({
         ...emptyProfile,
         ...tenant,
