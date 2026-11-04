@@ -8,6 +8,8 @@ import { getIsConnected } from '../config/db.js';
 import MedicineRequest from '../models/MedicineRequest.js';
 import UserAddress from '../models/UserAddress.js';
 import Tenant from '../models/Tenant.js';
+import FulfillmentCase from '../models/FulfillmentCase.js';
+import { validateWaitWindow } from '../services/intelligentFulfillment/fulfillmentPlanner.js';
 import { customerService } from '../services/customer-service/CustomerService.js';
 import prescriptionClient from '../services/prescription-service-client/PrescriptionClient.js';
 
@@ -762,6 +764,62 @@ router.get('/:id/scan-prescription', authenticateUser, authorizeRequestDetails, 
     }
 });
 
+
+
+router.post('/:id/waitlist', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, authorizeRequestDetails, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const request = req.authorizedMedicineRequest;
+        if (!request?.tenantId) return res.status(409).json({ message: 'Select a pharmacy before waiting for stock.' });
+        if (['CONVERTED_TO_ORDER', 'CUSTOMER_APPROVED', 'CANCELLED', 'CUSTOMER_REJECTED', 'PHARMACY_REJECTED', 'EXPIRED'].includes(request.status)) {
+            return res.status(409).json({ message: 'This medicine request cannot be placed on a stock waitlist in its current state.' });
+        }
+        const idempotencyKey = String(req.get('Idempotency-Key') || '').trim();
+        if (!idempotencyKey || idempotencyKey.length > 128) return res.status(400).json({ message: 'A valid Idempotency-Key header is required.' });
+        const { waitDays, waitUntil } = validateWaitWindow(req.body?.waitDays);
+        const existing = await FulfillmentCase.findOne({ customerId: String(req.user.sub), tenantId: String(request.tenantId), idempotencyKey }).lean();
+        if (existing) return res.json({ case: existing, alreadyCreated: true });
+        const requestedItems = Array.isArray(request.requestedItems) ? request.requestedItems : [];
+        if (!requestedItems.length) return res.status(400).json({ message: 'No medicine line items are available to wait for.' });
+        const lines = requestedItems.map((item, index) => ({
+            productId: item.productId || (mongoose.isValidObjectId(item.medicineId) ? String(item.medicineId) : null),
+            name: item.requestedName || item.name || `Requested medicine ${index + 1}`,
+            composition: item.composition || '',
+            strength: item.strength || '',
+            dosageForm: item.dosageForm || '',
+            manufacturer: item.manufacturer || '',
+            requestedQuantity: Number(item.quantity || 1),
+            allocatedQuantity: 0,
+            waitingQuantity: Number(item.quantity || 1),
+            customerDecision: 'ACCEPTED_ORIGINAL',
+            prescriptionRequired: Boolean(request.prescriptionId || request.prescriptionUrl)
+        }));
+        const caseNumber = 'FUL-' + randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase();
+        const created = await FulfillmentCase.create({
+            caseNumber, customerId: String(request.customerId), tenantId: String(request.tenantId),
+            branchId: request.branchId || null, sourceType: 'MEDICINE_REQUEST', sourceId: String(request._id),
+            addressId: request.addressId || null, deliveryAddress: request.deliveryAddress || '',
+            addressDetails: request.addressDetails || {}, coordinates: request.coordinates || null,
+            prescriptionUrl: request.prescriptionUrl || null, prescriptionId: request.prescriptionId || null,
+            patientPuid: request.patientPuid || null,
+            status: 'WAITING_FOR_STOCK', lines, waitDays, waitUntil, idempotencyKey,
+            auditTrail: [{ action: 'MEDICINE_REQUEST_WAITLISTED', actorId: String(req.user.sub), at: new Date(), waitDays, waitUntil }]
+        });
+        const updatedRequest = await MedicineRequest.findOneAndUpdate(
+            { _id: request._id, customerId: String(req.user.sub), status: request.status },
+            { $set: { status: 'WAITING_FOR_STOCK', fulfillmentCaseId: String(created._id), waitDays, waitUntil },
+              $push: { auditTrail: { action: 'WAITING_FOR_STOCK', actorId: String(req.user.sub), role: 'Customer', timestamp: new Date(), notes: `Customer requested a ${waitDays}-day stock wait window.` } } },
+            { new: true }
+        ).lean();
+        if (!updatedRequest) {
+            await FulfillmentCase.deleteOne({ _id: created._id, customerId: String(req.user.sub) });
+            return res.status(409).json({ message: 'Medicine request changed. Refresh and try again.' });
+        }
+        return res.status(201).json({ case: created.toObject(), request: updatedRequest, message: 'We will monitor availability for the selected wait period.' });
+    } catch (error) {
+        return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to create medicine stock waitlist.' });
+    }
+});
 
 // Customer approves proposal -> triggers idempotent order conversion
 router.post('/:id/approve', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
