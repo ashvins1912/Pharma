@@ -81,29 +81,25 @@ SERVICE_AUTH_SECRET
 ~~~
 The Render disk is for import/work files, not the authoritative inventory database.
 
-### Inventory import safety gate (default OFF)
-- `INVENTORY_IMPORTS_ENABLED` defaults to `false`. Do not enable it on production while validating the workflow.
-- The preview endpoint remains read-only and displays the signed tenant + branch target.
-- Import preview, write, status, retry and rollback requests validate the active tenant, persisted branch-to-tenant relationship and current user membership through the backend internal gateway.
-- Branch records are persisted in the TenantBranch registry; seeded branches are safely materialized into the registry and new/updated branches are persisted.
-- A write requires an explicit preview fingerprint confirmation. The fingerprint includes the workbook rows, tenant/branch identity and current stock snapshot; stale previews are rejected.
-- Writes require MongoDB replica-set transactions. Standalone MongoDB deployments fail closed; there is no non-transactional fallback.
-- Every import gets one persistent UUID batch ID. Inventory and product before/after snapshots are recorded in the same transaction as each applied chunk.
-- Batch rollback is tenant/branch scoped and refuses to overwrite stock, reservations or catalogue records changed after the import.
-- Interrupted workers are marked FAILED, never automatically replayed. Their committed chunks remain available for explicit rollback.
-- Retries share the original batch ID so the whole import can be reverted together.
+### Inventory import publishing and production safety
+- `INVENTORY_IMPORTS_ENABLED` defaults to `false` in application code. The Render Inventory Service manifest explicitly enables publishing for the deployed service.
+- Before deploying that setting, confirm `INVENTORY_MONGO_URI` points to the dedicated Inventory database on a MongoDB replica set or sharded cluster. Publishing and rollback fail closed on standalone MongoDB because they require transactions.
+- The preview endpoint is read-only and displays the verified tenant + branch target. Publishing requires explicit preview-fingerprint confirmation and rejects stale stock/catalogue snapshots.
+- Import upload, review, row editing, publish, unpublish and rollback are routed through API Gateway and require the signed tenant/branch scope plus `inventory.import`.
+- Each uploaded workbook is staged without changing live stock. Explicit publish applies product and inventory changes atomically and records before/after snapshots, import batch/row provenance and audit history.
+- Stock reads, availability checks, reservations, release and deduction all use Inventory Service. Availability is summed across non-expired lots for the selected tenant + branch; reservations allocate FEFO across lots and persist exact allocations for safe release/deduction.
+- Public storefront and admin inventory catalogues, plus single-product create/update/archive operations, use Inventory Service. The legacy `/api/medicines` bulk-upload mutation endpoints return HTTP 410; use the staged `/api/v1/inventory/imports` workflow.
+- Batch rollback refuses to overwrite inventory, reservations or catalogue records changed after publication. Use unpublish/rollback only after checking the batch audit history.
 
-Controlled test procedure:
-1. Deploy the code to an isolated test environment with a dedicated test tenant, branch and inventory database.
-2. Keep `INVENTORY_IMPORTS_ENABLED=false`; upload the synthetic template and verify the preview only.
-3. Verify tenant and branch IDs in the preview are the intended test scope.
-4. Only in that isolated test environment, set `INVENTORY_IMPORTS_ENABLED=true` and restart Inventory Service.
-5. Import the synthetic 3-row template (two lots for the same SKU and one second SKU); record the returned batch ID.
-6. Verify inventory by tenant + branch + SKU + batch number, then test rollback by that batch ID.
-7. Confirm original stock/prices are restored and the batch status is REVERTED. Try rollback from a different tenant/branch and expect 404.
-8. Keep the production setting disabled until all tests pass and a separate production upload is explicitly approved.
+Production rollout verification:
+1. Confirm the Inventory MongoDB deployment supports transactions and that the Render service uses the intended dedicated database.
+2. Deploy Inventory Service and API Gateway together; confirm both readiness checks are healthy.
+3. Upload a small reviewed workbook for one test SKU and the intended tenant/branch.
+4. Publish the row, then verify the same summed available quantity appears in the catalogue and medicine-request/order availability checks.
+5. Create a test order whose quantity spans two lots; verify FEFO reservation allocation, then cancel and confirm each lot's reserved quantity is restored.
+6. Verify dispatch deducts the exact allocated quantities. Finally, test unpublish/rollback against the test batch and confirm no newer inventory changes are overwritten.
 
-Never use the synthetic template against live inventory. Do not upload a live inventory workbook as part of this validation.
+Never use the synthetic template against live inventory. Use a dedicated test tenant, branch and database for integration validation.
 
 ## 5. Order Render
 File: services/order-service/render.yaml
