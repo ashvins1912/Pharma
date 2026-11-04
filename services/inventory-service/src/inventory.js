@@ -1,34 +1,3 @@
-import { randomUUID } from 'node:crypto';
-import mongoose from 'mongoose';
-import { Audit, Inventory, Product, Reservation } from './models.js';
-import { config } from './config.js';
-
-const asPositiveQuantity = value => Number.isSafeInteger(value) && value > 0;
-const normalizeItems = items => {
-  if (!Array.isArray(items) || items.length === 0 || items.length > 100) {
-    const error = new Error('items must contain between 1 and 100 entries.');
-    error.statusCode = 400;
-    throw error;
-  }
-  const aggregated = new Map();
-  for (const item of items) {
-    if (typeof item?.productId !== 'string' || !mongoose.isValidObjectId(item.productId) || !asPositiveQuantity(item.quantity)) {
-      const error = new Error('Each item requires a valid productId and positive integer quantity.');
-      error.statusCode = 400;
-      throw error;
-    }
-    const productId = item.productId.toLowerCase();
-    const quantity = (aggregated.get(productId) || 0) + item.quantity;
-    if (!asPositiveQuantity(quantity)) {
-      const error = new Error('Combined product quantity exceeds the supported range.');
-      error.statusCode = 400;
-      throw error;
-    }
-    aggregated.set(productId, quantity);
-  }
-  return [...aggregated].map(([productId, quantity]) => ({ productId, quantity }));
-};
-
 export async function lookupInventory({ productIds = [], skus = [], tenantId = null, branchId = null }) {
   if (!Array.isArray(productIds) || !Array.isArray(skus) || productIds.length + skus.length > 100) {
     const error = new Error('Lookup accepts at most 100 product IDs or SKUs.');
@@ -63,19 +32,12 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
   const byProductId = new Map();
   for (const row of inventories) {
     const key = String(row.productId);
-    if (row.expiryDate && new Date(row.expiryDate) < today) {
-      if (includeExpiredBatches === true || String(includeExpiredBatches).toLowerCase() === 'true') {
-        if (!expiredByProductId.has(key)) expiredByProductId.set(key, []);
-        expiredByProductId.get(key).push(row);
-      }
-      continue;
-    }
+    if (row.expiryDate && new Date(row.expiryDate) < today) continue;
     if (!byProductId.has(key)) byProductId.set(key, []);
     byProductId.get(key).push(row);
   }
   return products.map(product => {
     const batches = byProductId.get(String(product._id)) || [];
-    const expiredBatches = expiredByProductId.get(String(product._id)) || [];
     batches.sort((a, b) => {
       const ae = a.expiryDate ? new Date(a.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
       const be = b.expiryDate ? new Date(b.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
@@ -103,13 +65,6 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
       reservedQuantity,
       availableQuantity,
       batchCount: batches.length,
-      expiredStockQuantity: expiredBatches.reduce((sum, row) => sum + Number(row.stockQuantity || 0), 0),
-      expiredBatchAvailability: expiredBatches.map(row => ({
-        batchNumber: row.batchNumber || '', expiryDate: row.expiryDate || null,
-        stockQuantity: row.stockQuantity, reservedQuantity: row.reservedQuantity,
-        availableQuantity: Math.max(0, Number(row.stockQuantity || 0) - Number(row.reservedQuantity || 0)),
-        price: row.price
-      })),
       batchAvailability: batches.map(row => ({
         batchNumber: row.batchNumber || '',
         expiryDate: row.expiryDate || null,
@@ -162,13 +117,20 @@ export async function searchInventoryProducts({
   const expiredByProductId = new Map();
   const today = new Date(new Date().toISOString().slice(0, 10));
   for (const row of inventories) {
-    if (row.expiryDate && new Date(row.expiryDate) < today) continue;
     const key = String(row.productId);
+    if (row.expiryDate && new Date(row.expiryDate) < today) {
+      if (includeExpiredBatches === true || String(includeExpiredBatches).toLowerCase() === 'true') {
+        if (!expiredByProductId.has(key)) expiredByProductId.set(key, []);
+        expiredByProductId.get(key).push(row);
+      }
+      continue;
+    }
     if (!byProductId.has(key)) byProductId.set(key, []);
     byProductId.get(key).push(row);
   }
   const allItems = products.map(product => {
     const batches = byProductId.get(String(product._id)) || [];
+    const expiredBatches = expiredByProductId.get(String(product._id)) || [];
     batches.sort((a, b) => {
       const ae = a.expiryDate ? new Date(a.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
       const be = b.expiryDate ? new Date(b.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
@@ -195,6 +157,13 @@ export async function searchInventoryProducts({
       stockStatus: availableQuantity > 10 ? 'IN_STOCK' : availableQuantity > 0 ? 'LOW_STOCK' : 'OUT_OF_STOCK',
       batchNumber: listingBatch?.batchNumber || '', expiryDate: listingBatch?.expiryDate || null,
       batchCount: batches.length,
+      expiredStockQuantity: expiredBatches.reduce((sum, row) => sum + Number(row.stockQuantity || 0), 0),
+      expiredBatchAvailability: expiredBatches.map(row => ({
+        batchNumber: row.batchNumber || '', expiryDate: row.expiryDate || null,
+        stockQuantity: row.stockQuantity, reservedQuantity: row.reservedQuantity,
+        availableQuantity: Math.max(0, Number(row.stockQuantity || 0) - Number(row.reservedQuantity || 0)),
+        price: row.price
+      })),
       batchAvailability: batches.map(row => ({
         batchNumber: row.batchNumber || '', expiryDate: row.expiryDate || null,
         stockQuantity: row.stockQuantity, reservedQuantity: row.reservedQuantity,
