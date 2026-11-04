@@ -4079,6 +4079,9 @@ export const dataStore = {
                 throw inventoryError('A valid prescription is required for the selected product.', 409);
             }
             const basePrice = Number(selectedMedicine.price || unitPrice);
+            if (!Number.isFinite(unitPrice) || unitPrice < 0 || unitPrice > basePrice + 0.01) {
+                throw inventoryError('The proposed price must be valid and cannot exceed the current Inventory Service catalogue price.', 409);
+            }
             const baseCostPrice = Number(selectedMedicine.baseCostPrice) > 0 ? Number(selectedMedicine.baseCostPrice) : basePrice;
             reservedMedicineItems = [{
                 medicineId: new mongoose.Types.ObjectId(String(selectedMedicine.productId)),
