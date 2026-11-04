@@ -3523,11 +3523,11 @@ export const dataStore = {
             const candidates = await Medicine.find(alternativeQuery)
                 .select('_id name brand manufacturer composition strength dosageForm form price discountPercentage stockQuantity stock quantity reservedQuantity requiresPrescription isPrescriptionRequired')
                 .lean();
-            const norm = value => String(value || '').trim().toLowerCase().replace(/\\s+/g, ' ');
+            const norm = value => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
             alternativeOffers = candidates.flatMap(candidate => {
                 const sameComposition = requestedIdentity.composition && norm(candidate.composition) === norm(requestedIdentity.composition);
                 const sameStrength = requestedIdentity.strength && norm(candidate.strength) === norm(requestedIdentity.strength);
-                const sameForm = !requestedIdentity.dosageForm || norm(candidate.dosageForm || candidate.form) === norm(requestedIdentity.dosageForm);
+                const sameForm = requestedIdentity.dosageForm && norm(candidate.dosageForm || candidate.form) === norm(requestedIdentity.dosageForm);
                 if (!sameComposition || !sameStrength || !sameForm || String(candidate._id) === String(proposalData.productId || '')) return [];
                 const availableQuantity = Math.max(0, Number(candidate.stockQuantity ?? candidate.stock ?? candidate.quantity ?? 0) - Number(candidate.reservedQuantity || 0));
                 if (availableQuantity < quantity) return [];
