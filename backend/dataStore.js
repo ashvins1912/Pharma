@@ -4152,7 +4152,7 @@ export const dataStore = {
                 price: unitPrice,
                 basePrice,
                 baseCostPrice,
-                discountPercentage: Math.min(100, Math.max(0, Number(selectedMedicine.discountPercentage || 0))),
+                discountPercentage: basePrice > unitPrice ? roundCurrency((1 - unitPrice / basePrice) * 100) : 0,
                 marginTier: ['LOW', 'MID', 'HIGH'].includes(selectedMedicine.marginTier) ? selectedMedicine.marginTier : 'LOW',
                 name: selectedMedicine.name || chosenName,
                 sku: selectedMedicine.sku || ''
@@ -4161,7 +4161,7 @@ export const dataStore = {
                 orderId: String(orderId),
                 items: [{ productId: String(selectedMedicine.productId), quantity: chosenQuantity }],
                 tenantId, branchId, userId: customerId,
-                idempotencyKey: `medicine-request-order:${String(request._id)}`
+                idempotencyKey: `medicine-request-order:${String(orderId)}`
             });
             if (inventoryReservation.status !== 'RESERVED' || !inventoryReservation.reservationId) {
                 throw inventoryError('Inventory could not reserve the selected proposal product. Refresh the proposal and retry.', 409);
@@ -4226,9 +4226,10 @@ export const dataStore = {
         let createdOrder = null;
 
         if (getIsConnected()) {
-            const session = await mongoose.startSession();
+            let session;
             let updatedRequest;
             try {
+                session = await mongoose.startSession();
                 await session.withTransaction(async () => {
                     const [created] = await Order.create([orderData], { session });
                     createdOrder = created.toObject();
@@ -4281,7 +4282,7 @@ export const dataStore = {
                 }
                 throw error;
             } finally {
-                await session.endSession();
+                if (session) await session.endSession();
             }
 
             this.logAudit(customerId, 'CONVERT_REQUEST_TO_ORDER', 'ORDER', createdOrder._id.toString(), {
