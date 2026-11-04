@@ -82,12 +82,16 @@ export default function TenantSelector({ onTenantSelected }) {
       }
 
       setTenants(list);
-      
-      if (!tenantId && list.length > 0) {
+
+      if (scope === 'TENANT' && list.length === 1) {
+        // Ignore any stale customer-selected tenant stored in the browser.
+        setActiveTenant(list[0]);
+        setTenantId(list[0]._id);
+      } else if (!tenantId && list.length > 0) {
         setActiveTenant(list[0]);
         setTenantId(list[0]._id);
       } else if (tenantId && !activeTenant && list.length > 0) {
-        const found = list.find(t => String(t._id) === String(tenantId));
+        const found = list.find(item => String(item._id) === String(tenantId));
         if (found) setActiveTenant(found);
       }
     } catch (err) {
