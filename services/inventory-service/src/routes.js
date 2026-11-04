@@ -47,6 +47,9 @@ router.get('/products/search', requireServiceScope('inventory.read'), asyncHandl
     ...getInventoryScope(req, req.query),
     query: req.query.q || '',
     category: req.query.category || '',
+    hideRx: req.query.hideRx || false,
+    includeOutOfStock: req.query.includeOutOfStock || false,
+    sort: req.query.sort || 'default',
     page: req.query.page || 1,
     limit: req.query.limit || 50
   });
