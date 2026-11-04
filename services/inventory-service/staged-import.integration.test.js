@@ -124,7 +124,8 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(repeatedPublish.status, 200);
     assert.equal(await models.Inventory.countDocuments({ tenantId, branchId }), 1);
 
-    const unpublishOne = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/unpublish`, {
+    config.importsEnabled = false;
+    const unpublishOne = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/unpublish`,
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ rowIds: [first.rowId] })
     });
@@ -138,7 +139,8 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(repeatedUnpublish.status, 200);
     assert.equal(await models.Inventory.countDocuments({ tenantId, branchId }), 0);
 
-    const publishBoth = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/publish`, {
+    config.importsEnabled = true;
+    const publishBoth = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/publish`,
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ rowIds: rowsPayload.items.map(row => row.rowId) })
     });
@@ -146,6 +148,7 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(await models.Inventory.countDocuments({ tenantId, branchId }), 2);
     assert.equal(await models.Product.countDocuments({ tenantId }), 1);
 
+    config.importsEnabled = false;
     const rollback = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/rollback`, {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: '{}'
     });
