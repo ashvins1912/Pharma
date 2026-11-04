@@ -1314,7 +1314,7 @@ export const dataStore = {
                             price,
                             basePrice,
                             baseCostPrice: Number(medicine.baseCostPrice ?? price),
-                            discountPercentage: Number(medicine.discountPercentage || 0),
+                            discountPercentage,
                             marginTier: ['LOW', 'MID', 'HIGH'].includes(medicine.marginTier)
                                 ? medicine.marginTier
                                 : 'LOW',
@@ -1604,6 +1604,10 @@ export const dataStore = {
                     medicineId,
                     quantity,
                     price,
+                    basePrice,
+                    baseCostPrice: Number(medicine.baseCostPrice ?? price),
+                    discountPercentage,
+                    marginTier: ['LOW', 'MID', 'HIGH'].includes(medicine.marginTier) ? medicine.marginTier : 'LOW',
                     name: medicine.name,
                     sku: medicine.sku || medicine.code || ''
                 });
@@ -1613,6 +1617,10 @@ export const dataStore = {
                     name: medicine.name,
                     sku: medicine.sku || medicine.code || '',
                     price,
+                    basePrice,
+                    baseCostPrice: Number(medicine.baseCostPrice ?? price),
+                    discountPercentage,
+                    marginTier: ['LOW', 'MID', 'HIGH'].includes(medicine.marginTier) ? medicine.marginTier : 'LOW',
                     quantity,
                     stock: available - quantity
                 });
