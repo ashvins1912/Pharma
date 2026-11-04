@@ -34,13 +34,23 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date() 
     const ids = [...new Set((entry.lines || []).map(line => String(line.productId || '')).filter(Boolean))];
     const products = ids.length ? await Medicine.find({
       _id: { $in: ids }, tenantId: entry.tenantId
-    }).select('_id stockQuantity stock quantity reservedQuantity expiryDate isActive').lean() : [];
+    }).select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive').lean() : [];
     const byId = new Map(products.map(product => [String(product._id), product]));
     let anyAvailable = false;
     let allAvailable = true;
     let newlyAvailable = false;
     const lines = (entry.lines || []).map(line => {
-      const product = byId.get(String(line.productId));
+      let product = line.productId ? byId.get(String(line.productId)) : null;
+      if (!product && line.composition && line.strength) {
+        const matches = await Medicine.find({
+          tenantId: entry.tenantId, isActive: { $ne: false },
+          composition: line.composition, strength: line.strength,
+          ...(line.dosageForm ? { dosageForm: line.dosageForm } : {}),
+          ...(line.manufacturer ? { manufacturer: line.manufacturer } : {})
+        }).select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive').limit(2).lean();
+        // Never guess between multiple catalog matches. Keep the request pending for pharmacist review.
+        if (matches.length === 1) product = matches[0];
+      }
       const sellable = product && product.isActive !== false
         && (!product.expiryDate || new Date(product.expiryDate) > now);
       const quantity = sellable ? Math.min(Number(line.waitingQuantity || 0), available(product)) : 0;
@@ -48,7 +58,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date() 
       if (quantity > 0) anyAvailable = true;
       if (quantity < Number(line.waitingQuantity || 0)) allAvailable = false;
       if (quantity > previousNotified) newlyAvailable = true;
-      return { ...line, allocatedQuantity: quantity, notifiedAvailableQuantity: Math.max(previousNotified, quantity) };
+      return { ...line, ...(product?._id ? { productId: String(product._id), name: product.name || line.name } : {}), allocatedQuantity: quantity, notifiedAvailableQuantity: Math.max(previousNotified, quantity) };
     });
     const nextStatus = allAvailable ? 'READY_FOR_CONFIRMATION' : anyAvailable ? 'PARTIALLY_FULFILLED' : 'WAITING_FOR_STOCK';
     const result = await FulfillmentCase.updateOne({
