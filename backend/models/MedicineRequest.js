@@ -174,6 +174,7 @@ const medicineRequestSchema = new mongoose.Schema({
             'UNDER_REVIEW',
             'FULFILLMENT_PROCESSING',
             'WAITING_FOR_STOCK',
+            'READY_FOR_CONFIRMATION',
             'WAITING_FOR_STOCK',
             'READY_FOR_CONFIRMATION',
             'PROPOSAL_SENT',
