@@ -475,6 +475,37 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
 });
 
 
+router.post('/fulfillment/waitlist/:id/link-order', authenticateUser, async (req, res) => {
+    if (!getIsConnected()) return res.status(503).json({ message: 'Order linking is temporarily unavailable.' });
+    try {
+        const orderId = String(req.body?.orderId || '').trim();
+        if (!mongoose.isValidObjectId(orderId)) return res.status(400).json({ message: 'A valid order ID is required.' });
+        const entry = await FulfillmentCase.findOne({ _id: req.params.id, customerId: String(req.user.sub) }).lean();
+        if (!entry) return res.status(404).json({ message: 'Stock waitlist entry was not found.' });
+        const order = await Order.findOne({
+            _id: orderId,
+            userId: String(req.user.sub),
+            customerId: String(req.user.sub),
+            tenantId: String(entry.tenantId)
+        }).select('_id tenantId').lean();
+        if (!order) return res.status(404).json({ message: 'The order does not belong to this customer and pharmacy.' });
+        const linked = await FulfillmentCase.findOneAndUpdate({
+            _id: entry._id, customerId: String(req.user.sub),
+            $or: [{ parentOrderId: null }, { parentOrderId: String(order._id) }]
+        }, {
+            $set: { parentOrderId: String(order._id) },
+            $push: { auditTrail: { action: 'PARTIAL_ORDER_LINKED', actorId: String(req.user.sub), at: new Date(), orderId: String(order._id) } }
+        }, { new: true }).lean();
+        if (!linked) return res.status(409).json({ message: 'This waitlist is already linked to a different order.' });
+        await Order.updateOne({ _id: order._id, userId: String(req.user.sub), tenantId: entry.tenantId }, {
+            $set: { fulfillmentCaseId: String(entry._id), fulfillmentState: 'PARTIAL' }
+        });
+        return res.json({ case: linked, message: 'Pending items are linked to your partial order.' });
+    } catch (error) {
+        return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to link pending items to the order.' });
+    }
+});
+
 router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, res) => {
     if (!getIsConnected()) return res.status(503).json({ message: 'Stock waitlist confirmation is temporarily unavailable.' });
     let claimed = null;
