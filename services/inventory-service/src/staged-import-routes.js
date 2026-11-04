@@ -27,6 +27,7 @@ const requirePublishEnabled = (_req, res, next) => config.importsEnabled
   ? next()
   : res.status(503).json({ code: 'INVENTORY_IMPORT_PUBLISH_DISABLED', message: 'Batch staging and review are available, but publishing is disabled. Enable INVENTORY_IMPORTS_ENABLED only in the isolated test environment to publish test rows.' });
 const cleanName = value => path.basename(String(value || 'upload.xlsx')).replace(/[^a-zA-Z0-9._-]/g, '_');
+const escapeRegex = value => value.replace(/[.*+?^\${}()|[\]\\]/g, '\\const cleanName = value => path.basename(String(value || 'upload.xlsx')).replace(/[^a-zA-Z0-9._-]/g, '_');');
 const normHeader = value => String(value ?? '').trim().toLowerCase().replace(/[.\s_/-]+/g, '');
 const pick = (row, ...keys) => {
   for (const key of keys) {
@@ -123,6 +124,18 @@ const safeBatch = async (batchId, tenantId, branchId) => {
   if (!batch) throw Object.assign(new Error('Import batch was not found in this tenant and branch.'), { statusCode: 404 });
   return batch;
 };
+async function refreshBatchCounts(batchId, tenantId, branchId) {
+  const counts = await StagedImportRow.aggregate([
+    { $match: { batchId, tenantId, branchId } },
+    { $group: { _id: '$status', count: { $sum: 1 } } }
+  ]);
+  const values = Object.fromEntries(counts.map(item => [item._id, item.count]));
+  const invalidRows = values.INVALID || 0;
+  const totalRows = Object.values(values).reduce((sum, count) => sum + count, 0);
+  await StagedImportBatch.updateOne({ batchId, tenantId, branchId }, {
+    $set: { totalRows, invalidRows, validRows: totalRows - invalidRows }
+  });
+}
 const asPlain = doc => doc?.toObject ? doc.toObject() : doc;
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const liveInventoryFields = ['tenantId','branchId','productId','sku','stockQuantity','reservedQuantity','price','batchNumber','expiryDate','warehouse'];
@@ -360,7 +373,7 @@ router.get('/imports/batches/:batchId/rows', requireServiceScope('inventory.impo
   const filter = { batchId: req.params.batchId, tenantId, branchId };
   if (req.query.status) filter.status = String(req.query.status).toUpperCase();
   if (req.query.q) filter.$or = [
-    { 'normalized.sku': { $regex: String(req.query.q).slice(0, 80), $options: 'i' } },
+    { 'normalized.sku': { $regex: escapeRegex(String(req.query.q).slice(0, 80)), $options: 'i' } },
     { 'normalized.name': { $regex: String(req.query.q).slice(0, 80), $options: 'i' } }
   ];
   const [items, total] = await Promise.all([
@@ -400,6 +413,7 @@ router.patch('/imports/batches/:batchId/rows/:rowId', requireServiceScope('inven
   row.status = errors.length ? 'INVALID' : 'READY';
   row.version += 1;
   await row.save();
+  await refreshBatchCounts(row.batchId, tenantId, branchId);
   await Audit.create({ tenantId, branchId, actor: actor(req), operation: 'inventory.import.row.edited', details: { batchId: row.batchId, rowId: row.rowId, fields: Object.keys(patch), validationErrors: errors } });
   return res.json({ item: row });
 }));
@@ -423,6 +437,7 @@ router.post('/imports/batches/:batchId/rows/edit-selected', requireServiceScope(
     await row.save();
     results.push(row.rowId);
   }
+  await refreshBatchCounts(req.params.batchId, tenantId, branchId);
   return res.json({ updated: results.length, rowIds: results });
 }));
 
