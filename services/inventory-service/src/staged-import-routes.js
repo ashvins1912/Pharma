@@ -313,6 +313,7 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
       return res.status(202).json({ jobId: existing.batchId, batchId: existing.batchId, status: 'READY', totalRecords: existing.totalRows, processedRecords: existing.totalRows, successfulRecords: existing.validRows, failedRecords: existing.invalidRows });
     }
     const records = workbookRows(req.file.path);
+    if (records.length !== approved.rowsDetected) throw Object.assign(new Error('Workbook row mapping changed between preview and staging. Preview the workbook again.'), { statusCode: 409 });
     if (!records.length) throw Object.assign(new Error('Workbook contains no inventory rows.'), { statusCode: 400 });
     const batchId = randomUUID();
     const usedSkus = new Set();
