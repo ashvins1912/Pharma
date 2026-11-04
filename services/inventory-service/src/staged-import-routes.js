@@ -96,7 +96,7 @@ function normalizeRow(raw, tenantId, usedSkus) {
     const parsed = xlsx.SSF.parse_date_code(expiryRaw);
     if (parsed) expiryDate = new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
   } else if (expiryRaw) expiryDate = new Date(expiryRaw);
-  if (expiryRaw && (!expiryDate || !Number.isFinite(expiryDate.getTime()))) errors.push('Expiry date is invalid.');
+  if (expiryRaw && (!expiryDate || !Number.isFinite(expiryDate.getTime()))) { errors.push('Expiry date is invalid.'); expiryDate = null; }
   if (expiryDate && expiryDate.getTime() < new Date(new Date().toISOString().slice(0, 10)).getTime()) errors.push('Expired medicine batches cannot be published.');
   if (!sku && name) {
     do { sku = `${name.normalize('NFKD').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase().padEnd(2, 'X')}${randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase()}`; }
