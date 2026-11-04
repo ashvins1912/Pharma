@@ -141,6 +141,8 @@ export default function OrderHistoryView({ onTrackOrder }) {
                         {getStatusBadge(order.orderStatus)}
                         {order.fulfillmentState === 'PARTIAL' && <p className="mt-1 text-[10px] font-bold text-amber-700">Partially fulfilled · remaining items are being monitored for stock</p>}
                         {order.fulfillmentState === 'COMPLETE' && <p className="mt-1 text-[10px] font-bold text-emerald-700">All split items fulfilled</p>}
+                        {order.fulfillmentState === 'CANCELLED_REMAINDER' && <p className="mt-1 text-[10px] font-bold text-slate-600">Remaining items cancelled at your request</p>}
+                        {order.fulfillmentState === 'EXPIRED_REMAINDER' && <p className="mt-1 text-[10px] font-bold text-amber-700">Remaining items expired from the stock wait window</p>}
                         {order.parentOrderId && <p className="mt-1 text-[10px] font-semibold text-indigo-700">Part of order #{String(order.parentOrderId).slice(-6).toUpperCase()}</p>}
                       </td>
                       <td className="py-3.5 px-3 text-right">
@@ -186,6 +188,8 @@ export default function OrderHistoryView({ onTrackOrder }) {
                   </div>
                   {order.fulfillmentState === 'PARTIAL' && <p className="text-[10px] font-bold text-amber-700">Partially fulfilled · remaining items are being monitored for stock</p>}
                   {order.fulfillmentState === 'COMPLETE' && <p className="text-[10px] font-bold text-emerald-700">All split items fulfilled</p>}
+                  {order.fulfillmentState === 'CANCELLED_REMAINDER' && <p className="text-[10px] font-bold text-slate-600">Remaining items cancelled at your request</p>}
+                  {order.fulfillmentState === 'EXPIRED_REMAINDER' && <p className="text-[10px] font-bold text-amber-700">Remaining items expired from the stock wait window</p>}
                   {order.parentOrderId && <p className="text-[10px] font-semibold text-indigo-700">Part of order #{String(order.parentOrderId).slice(-6).toUpperCase()}</p>}
 
                   <p className="text-[11px] text-slate-600 line-clamp-2">
