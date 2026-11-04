@@ -6,9 +6,9 @@ import { useAuth } from '../../context/AuthContext';
 const blankBranch = {
   name: '', code: '', phone: '', email: '',
   address: { street: '', city: '', state: '', pincode: '' },
-  serviceRadiusKm: 10, deliveryMode: 'OWN_RIDER',
-  minimumOrderValue: 149, freeDeliveryAbove: 499, deliveryFee: 30,
-  operatingHours: { open: '08:00', close: '22:00' }, isDefault: false
+  serviceRadiusKm: '', deliveryMode: '',
+  minimumOrderValue: '', freeDeliveryAbove: '', deliveryFee: '',
+  operatingHours: { open: '', close: '' }, isDefault: false
 };
 
 const fieldClass = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100';
@@ -155,7 +155,7 @@ export default function TenantRegistry() {
                     {branch.isDefault && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">DEFAULT</span>}
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${branch.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{branch.status}</span>
                   </div>
-                  <p className="mt-1 text-sm text-slate-500">{address || 'Address not added'} · {branch.serviceRadiusKm ?? 10} km service radius</p>
+                  <p className="mt-1 text-sm text-slate-500">{address || 'Address not added'} · {branch.serviceRadiusKm != null ? `${branch.serviceRadiusKm} km service radius` : 'Service radius not configured'}</p>
                   <p className="mt-1 text-xs text-slate-400">{branch.phone || 'No phone'}{branch.email ? ` · ${branch.email}` : ''}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -192,12 +192,12 @@ export default function TenantRegistry() {
             <label><span className={labelClass}>State</span><input className={fieldClass} value={form.address?.state || ''} onChange={e => setAddress('state', e.target.value)} /></label>
             <label><span className={labelClass}>PIN code</span><input className={fieldClass} value={form.address?.pincode || ''} onChange={e => setAddress('pincode', e.target.value)} /></label>
             <label><span className={labelClass}>Service radius (km)</span><input type="number" min="0" step="0.1" className={fieldClass} value={form.serviceRadiusKm} onChange={e => setField('serviceRadiusKm', e.target.value)} /></label>
-            <label><span className={labelClass}>Delivery mode</span><select className={fieldClass} value={form.deliveryMode} onChange={e => setField('deliveryMode', e.target.value)}><option value="OWN_RIDER">Own rider</option><option value="THIRD_PARTY">Third party</option><option value="PICKUP">Customer pickup</option></select></label>
+            <label><span className={labelClass}>Delivery mode</span><select className={fieldClass} value={form.deliveryMode || ''} onChange={e => setField('deliveryMode', e.target.value)}><option value="">Select delivery mode</option><option value="OWN_RIDER">Own rider</option><option value="THIRD_PARTY">Third party</option><option value="PICKUP">Customer pickup</option></select></label>
             <label><span className={labelClass}>Delivery fee (₹)</span><input type="number" min="0" className={fieldClass} value={form.deliveryFee} onChange={e => setField('deliveryFee', e.target.value)} /></label>
             <label><span className={labelClass}>Minimum order (₹)</span><input type="number" min="0" className={fieldClass} value={form.minimumOrderValue} onChange={e => setField('minimumOrderValue', e.target.value)} /></label>
             <label><span className={labelClass}>Free delivery above (₹)</span><input type="number" min="0" className={fieldClass} value={form.freeDeliveryAbove} onChange={e => setField('freeDeliveryAbove', e.target.value)} /></label>
-            <label><span className={labelClass}>Opening time</span><input type="time" className={fieldClass} value={form.operatingHours?.open || '08:00'} onChange={e => setHours('open', e.target.value)} /></label>
-            <label><span className={labelClass}>Closing time</span><input type="time" className={fieldClass} value={form.operatingHours?.close || '22:00'} onChange={e => setHours('close', e.target.value)} /></label>
+            <label><span className={labelClass}>Opening time</span><input type="time" className={fieldClass} value={form.operatingHours?.open || ''} onChange={e => setHours('open', e.target.value)} /></label>
+            <label><span className={labelClass}>Closing time</span><input type="time" className={fieldClass} value={form.operatingHours?.close || ''} onChange={e => setHours('close', e.target.value)} /></label>
           </div>
           <label className="flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={Boolean(form.isDefault)} onChange={e => setField('isDefault', e.target.checked)} /> Set as default branch</label>
           {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
