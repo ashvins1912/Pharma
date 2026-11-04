@@ -86,7 +86,6 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
         const stock = Number(row.Stock || row.stock || row.Quantity || row.quantity);
 
         const rowErrors = [];
-        if (!sku || String(sku).trim() === '') rowErrors.push('Missing SKU');
         if (!name || String(name).trim() === '') rowErrors.push('Missing Medicine Name');
         if (isNaN(price) || price < 0) rowErrors.push('Invalid Price');
         if (isNaN(stock) || stock < 0 || !Number.isInteger(stock)) rowErrors.push('Invalid Stock');
@@ -314,7 +313,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
             </div>
 
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs text-slate-500 pt-2">
-              <span className="break-words">Required: SKU, Medicine Name, Price, Stock</span>
+              <span className="break-words">Required: Medicine Name, Price, Stock · SKU is optional (auto-generated when blank)</span>
               <button
                 type="button"
                 onClick={downloadSampleTemplate}
