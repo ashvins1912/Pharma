@@ -18,6 +18,47 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
   }).sort({ updatedAt: 1 }).limit(Math.max(1, Math.min(1000, Number(limit) || 250))).lean();
   let ready = 0;
   let expired = 0;
+
+  // Recover medicine-request confirmations if the process stopped after the
+  // order transaction committed but before the request record was finalized.
+  const staleRequests = await MedicineRequest.find({
+    status: 'FULFILLMENT_PROCESSING',
+    updatedAt: { $lt: new Date(now.getTime() - 10 * 60 * 1000) }
+  }).limit(100).lean();
+  for (const request of staleRequests) {
+    const order = await Order.findOne({ medicineRequestId: String(request._id) }).lean();
+    const waitlist = await FulfillmentCase.findOne({
+      sourceType: 'MEDICINE_REQUEST', sourceId: String(request._id),
+      status: { $nin: ['CANCELLED', 'EXPIRED', 'FULFILLED'] }
+    }).lean();
+    if (order) {
+      if (waitlist) {
+        await FulfillmentCase.updateOne({ _id: waitlist._id }, { $set: { parentOrderId: String(order._id) } });
+        await Order.updateOne({ _id: order._id, tenantId: request.tenantId }, {
+          $set: { fulfillmentCaseId: String(waitlist._id), fulfillmentState: 'PARTIAL' }
+        });
+      }
+      await MedicineRequest.updateOne({ _id: request._id, status: 'FULFILLMENT_PROCESSING' }, {
+        $set: {
+          status: 'CONVERTED_TO_ORDER',
+          convertedOrderId: String(order._id),
+          fulfillmentCaseId: waitlist?._id || null
+        },
+        $push: { auditTrail: { action: 'FULFILLMENT_CONFIRMATION_RECOVERED', actorId: 'System', role: 'System', timestamp: now, notes: 'Recovered committed order after an interrupted confirmation.' } }
+      });
+    } else if (waitlist) {
+      await MedicineRequest.updateOne({ _id: request._id, status: 'FULFILLMENT_PROCESSING' }, {
+        $set: { status: 'WAITING_FOR_STOCK', fulfillmentCaseId: waitlist._id },
+        $push: { auditTrail: { action: 'WAITLIST_CONFIRMATION_RECOVERED', actorId: 'System', role: 'System', timestamp: now, notes: 'Recovered the pending stock waitlist after an interrupted confirmation.' } }
+      });
+    } else {
+      await MedicineRequest.updateOne({ _id: request._id, status: 'FULFILLMENT_PROCESSING' }, {
+        $set: { status: 'PROPOSAL_SENT' },
+        $push: { auditTrail: { action: 'FULFILLMENT_CONFIRMATION_RESET', actorId: 'System', role: 'System', timestamp: now, notes: 'No committed order or waitlist was found; the proposal can be retried.' } }
+      });
+    }
+  }
+
   for (const entry of cases) {
     if (entry.status === 'CONFIRMING' && entry.confirmingAt && new Date(entry.confirmingAt).getTime() < now.getTime() - 10 * 60 * 1000) {
       const recoveredOrder = entry.confirmationId ? await Order.findOne({ fulfillmentConfirmationId: entry.confirmationId }).lean() : null;
