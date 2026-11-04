@@ -1367,9 +1367,10 @@ export const dataStore = {
         };
 
         if (getIsConnected()) {
-            const session = await mongoose.startSession();
+            let session;
             let createdOrder;
             try {
+                session = await mongoose.startSession();
                 await session.withTransaction(async () => {
                     const activeTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id settings.allowOfferWithCoupon settings.allowOfferWithRewards').session(session).lean();
                     if (!activeTenant) throw inventoryError('The selected pharmacy is not active.', 404);
@@ -1598,7 +1599,7 @@ export const dataStore = {
                 }
                 throw error;
             } finally {
-                await session.endSession();
+                if (session) await session.endSession();
             }
 
             this.logAudit(actor, 'ORDER_CREATED', 'ORDER', createdOrder._id.toString(), {
