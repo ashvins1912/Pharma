@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import apiClient from '../../api/apiClient';
+import { invalidatePublicCatalogCache } from '../../api/publicCatalogCache';
 import Pagination from '../common/Pagination';
 import { useLanguage } from '../../context/LanguageContext';
 import { useTenant } from '../../context/TenantContext';
@@ -9,6 +10,10 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
   const { t } = useLanguage();
   const { fetchMedicines, setAdminNewStockModalOpen } = useApp();
   const { tenantId, branchId } = useTenant();
+  const refreshStorefrontInventory = () => {
+    invalidatePublicCatalogCache();
+    fetchMedicines();
+  };
   const { addToast } = useToast();
   
   const [adminMeds, setAdminMeds] = useState([]);
@@ -51,7 +56,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
 
   useEffect(() => {
     loadAdminInventory(1, searchTerm);
-  }, [searchTerm]);
+  }, [searchTerm, tenantId, branchId]);
 
   const openMedicineForm = (medicine = null) => {
     if (!canManage) return;
@@ -95,7 +100,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       addToast(medicineDraft._id ? t('medicineUpdated') : t('medicineCreated'), 'success');
       setMedicineDraft(null);
       await loadAdminInventory(adminPage, searchTerm);
-      fetchMedicines();
+      refreshStorefrontInventory();
     } catch (err) {
       addToast(err.message || t('saveMedicineFailed'), 'error');
     } finally {
