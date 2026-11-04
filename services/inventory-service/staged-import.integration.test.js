@@ -137,6 +137,39 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(await models.Inventory.countDocuments({ tenantId, branchId }), 0);
     assert.equal(await models.Product.countDocuments({ tenantId }), 0);
 
+    const staleProduct = await models.Product.create({ tenantId, sku: 'TEST-STAGED-STALE', name: 'Before stale publish', version: 1 });
+    const staleInventory = await models.Inventory.create({
+      tenantId, branchId, productId: staleProduct._id, sku: 'TEST-STAGED-STALE',
+      stockQuantity: 10, reservedQuantity: 0, price: 10, batchNumber: 'STALE-LOT'
+    });
+    const staleWorkbook = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(staleWorkbook, xlsx.utils.json_to_sheet([
+      { SKU: 'TEST-STAGED-STALE', 'Medicine Name': 'After stale publish', Price: 12, Stock: 12, 'Batch Number': 'STALE-LOT' }
+    ]), 'Inventory');
+    const staleBytes = xlsx.write(staleWorkbook, { type: 'buffer', bookType: 'xlsx' });
+    const staleForm = new FormData();
+    staleForm.append('excelFile', new Blob([staleBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'stale-test.xlsx');
+    const stalePreviewResponse = await fetch(origin + '/api/v1/inventory/imports/preview', { method: 'POST', headers, body: staleForm });
+    const stalePreview = await stalePreviewResponse.json();
+    const staleStageForm = new FormData();
+    staleStageForm.append('excelFile', new Blob([staleBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'stale-test.xlsx');
+    staleStageForm.append('confirmImport', 'true');
+    staleStageForm.append('previewFingerprint', stalePreview.previewFingerprint);
+    const staleStageResponse = await fetch(origin + '/api/v1/inventory/imports', {
+      method: 'POST', headers: { ...headers, 'Idempotency-Key': 'staged-test-stale-baseline' }, body: staleStageForm
+    });
+    assert.equal(staleStageResponse.status, 202);
+    const staleBatch = await staleStageResponse.json();
+    await models.Inventory.updateOne({ _id: staleInventory._id }, { $set: { stockQuantity: 11 } });
+    const staleRowsResponse = await fetch(origin + `/api/v1/inventory/imports/batches/${staleBatch.batchId}/rows`, { headers });
+    const staleRows = await staleRowsResponse.json();
+    const stalePublishResponse = await fetch(origin + `/api/v1/inventory/imports/batches/${staleBatch.batchId}/publish`, {
+      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rowIds: staleRows.items.map(row => row.rowId) })
+    });
+    assert.equal(stalePublishResponse.status, 409);
+    assert.equal((await models.Inventory.findById(staleInventory._id).lean()).stockQuantity, 11);
+
     const duplicateUpload = await upload('/api/v1/inventory/imports', preview.previewFingerprint, 'staged-test-idempotency-1');
     assert.equal(duplicateUpload.status, 202);
     assert.equal((await duplicateUpload.json()).batchId, staged.batchId);
