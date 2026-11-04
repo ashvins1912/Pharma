@@ -440,6 +440,9 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
             idempotencyKey,
             auditTrail: [{ action: 'WAITLIST_CREATED', actorId: String(req.user.sub), at: new Date(), waitDays, waitUntil }]
         });
+        if (created.parentOrderId) {
+            await Order.updateOne({ _id: created.parentOrderId, userId: String(req.user.sub), tenantId }, { $set: { fulfillmentCaseId: String(created._id), fulfillmentState: 'PARTIAL' } });
+        }
         return res.status(201).json({ case: created.toObject(), message: 'Your stock waitlist request has been saved.' });
     } catch (error) {
         if (error.code === 11000) {
@@ -489,6 +492,9 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
             },
             $push: { auditTrail: { action: 'AVAILABLE_STOCK_CONFIRMED', actorId: String(req.user.sub), at: new Date(), orderId: String(order._id), fulfilledLineCount: readyLines.length } }
         });
+        if (waitlist.parentOrderId) {
+            await Order.updateOne({ _id: waitlist.parentOrderId, userId: String(req.user.sub), tenantId: waitlist.tenantId }, { $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' } });
+        }
         if (waitlist.sourceType === 'MEDICINE_REQUEST' && waitlist.sourceId) {
             await MedicineRequest.updateOne({ _id: waitlist.sourceId, customerId: String(req.user.sub), fulfillmentCaseId: String(waitlist._id) }, {
                 $set: { status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'CONVERTED_TO_ORDER', convertedOrderId: String(order._id) },
