@@ -340,7 +340,7 @@ async function unpublishRows(batch, rows, req) {
 
 router.post('/imports', requireServiceScope('inventory.import'), upload.single('excelFile'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'An Excel workbook is required.' });
-  if (!/\\.(xlsx|xls)$/i.test(req.file.originalname)) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(400).json({ message: 'Upload an .xlsx or .xls workbook.' }); }
+  if (!/\.(xlsx|xls)$/i.test(req.file.originalname)) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(400).json({ message: 'Upload an .xlsx or .xls workbook.' }); }
   const { tenantId, branchId } = scope(req);
   if (!tenantId || !branchId) { await fs.rm(req.file.path, { force: true }); return res.status(403).json({ message: 'Verified tenant and branch context is required.' }); }
   const key = String(req.get('idempotency-key') || '').trim();
