@@ -3634,34 +3634,32 @@ export const dataStore = {
         const alternativeIds = [...new Set((Array.isArray(proposalData.alternativeOffers) ? proposalData.alternativeOffers : [])
             .map(offer => String(offer?.productId || '').trim()).filter(id => mongoose.isValidObjectId(id)))].slice(0, 5);
         let alternativeOffers = [];
-        if (alternativeIds.length && getIsConnected() && request.tenantId) {
-            const alternativeQuery = {
-                _id: { $in: alternativeIds },
+        if (alternativeIds.length && getIsConnected() && request.tenantId && request.branchId) {
+            const inventoryResponse = await inventoryClient.lookup({
+                productIds: alternativeIds,
                 tenantId: String(request.tenantId),
-                isActive: { $ne: false },
-                expiryDate: { $gt: new Date() }
-            };
-            if (request.branchId) alternativeQuery.branchId = String(request.branchId);
-            const candidates = await Medicine.find(alternativeQuery)
-                .select('_id name brand manufacturer composition strength dosageForm form price discountPercentage stockQuantity stock quantity reservedQuantity requiresPrescription isPrescriptionRequired')
-                .lean();
+                branchId: String(request.branchId),
+                userId: actor?.userId || actor?.sub || 'pharmacy-admin'
+            });
+            const candidates = inventoryResponse.items || [];
             const norm = value => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
             alternativeOffers = candidates.flatMap(candidate => {
-                const sameComposition = requestedIdentity.composition && norm(candidate.composition) === norm(requestedIdentity.composition);
+                const composition = candidate.composition || candidate.genericName;
+                const sameComposition = requestedIdentity.composition && norm(composition) === norm(requestedIdentity.composition);
                 const sameStrength = requestedIdentity.strength && norm(candidate.strength) === norm(requestedIdentity.strength);
                 const sameForm = requestedIdentity.dosageForm && norm(candidate.dosageForm || candidate.form) === norm(requestedIdentity.dosageForm);
-                if (!sameComposition || !sameStrength || !sameForm || String(candidate._id) === String(proposalData.productId || '')) return [];
-                const availableQuantity = Math.max(0, Number(candidate.stockQuantity ?? candidate.stock ?? candidate.quantity ?? 0) - Number(candidate.reservedQuantity || 0));
+                if (!sameComposition || !sameStrength || !sameForm || String(candidate.productId) === String(proposalData.productId || '')) return [];
+                const availableQuantity = Math.max(0, Number(candidate.availableQuantity || 0));
                 if (availableQuantity < quantity) return [];
                 const unitPrice = Number(candidate.price || 0);
                 if (!Number.isFinite(unitPrice) || unitPrice < 0) return [];
                 const discountPercentage = Math.min(100, Math.max(0, Number(candidate.discountPercentage || 0)));
                 const discountedUnitPrice = Math.round(unitPrice * (1 - discountPercentage / 100) * 100) / 100;
                 return [{
-                    productId: String(candidate._id),
+                    productId: String(candidate.productId),
                     medicineName: candidate.name,
                     manufacturer: candidate.manufacturer || candidate.brand || '',
-                    composition: candidate.composition || '',
+                    composition,
                     strength: candidate.strength || '',
                     dosageForm: candidate.dosageForm || candidate.form || '',
                     quantity,
@@ -3669,8 +3667,8 @@ export const dataStore = {
                     discountPercentage,
                     discountedUnitPrice,
                     availableQuantity,
-                    requiresPrescription: Boolean(candidate.requiresPrescription ?? candidate.isPrescriptionRequired),
-                    requiresPharmacistApproval: Boolean(request.prescriptionId || request.prescriptionUrl || candidate.requiresPrescription || candidate.isPrescriptionRequired),
+                    requiresPrescription: Boolean(candidate.requiresPrescription),
+                    requiresPharmacistApproval: Boolean(request.prescriptionId || request.prescriptionUrl || candidate.requiresPrescription),
                     customerConsentRequired: true
                 }];
             }).sort((a, b) => a.discountedUnitPrice - b.discountedUnitPrice);
