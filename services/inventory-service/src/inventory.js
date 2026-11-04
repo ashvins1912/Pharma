@@ -106,27 +106,28 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
 }
 
 export async function searchInventoryProducts({
-  tenantId = null, branchId = null, query = '', category = '', page = 1, limit = 50
+  tenantId = null, branchId = null, query = '', category = '', hideRx = false,
+  includeOutOfStock = false, sort = 'default', page = 1, limit = 50
 } = {}) {
   const normalizedPage = Math.max(1, Math.floor(Number(page) || 1));
   const normalizedLimit = Math.min(100, Math.max(1, Math.floor(Number(limit) || 50)));
   const normalizedQuery = String(query || '').trim();
+  const isSearching = Boolean(normalizedQuery);
   const filter = { active: true };
   if (tenantId) filter.tenantId = String(tenantId).trim();
-  if (category) filter.category = String(category).trim();
-  if (normalizedQuery) {
-    const pattern = new RegExp(normalizedQuery.replace(/[.*+?^()|[\]{}\\]/g, '\\$&'), 'i');
+  if (category && category !== 'All') filter.category = String(category).trim();
+  if (hideRx === true || String(hideRx).toLowerCase() === 'true') filter.requiresPrescription = false;
+  if (isSearching) {
+    const escapedQuery = normalizedQuery.replace(/[.*+?^()|[\]{}\\]/g, '\\$&');
+    const pattern = new RegExp(escapedQuery, 'i');
     filter.$or = [{ sku: pattern }, { name: pattern }, { genericName: pattern }, { manufacturer: pattern }, { category: pattern }];
   }
-  const products = await Product.find(filter).sort({ name: 1 })
-    .skip((normalizedPage - 1) * normalizedLimit).limit(normalizedLimit).lean();
+  const products = await Product.find(filter).lean();
   const productIds = products.map(product => product._id);
   const inventoryFilter = { productId: { $in: productIds } };
   if (tenantId) inventoryFilter.tenantId = String(tenantId).trim();
   if (branchId) inventoryFilter.branchId = String(branchId).trim();
-  const [inventories, total] = await Promise.all([
-    Inventory.find(inventoryFilter).lean(), Product.countDocuments(filter)
-  ]);
+  const inventories = productIds.length ? await Inventory.find(inventoryFilter).lean() : [];
   const byProductId = new Map();
   const today = new Date(new Date().toISOString().slice(0, 10));
   for (const row of inventories) {
@@ -135,7 +136,7 @@ export async function searchInventoryProducts({
     if (!byProductId.has(key)) byProductId.set(key, []);
     byProductId.get(key).push(row);
   }
-  const items = products.map(product => {
+  const allItems = products.map(product => {
     const batches = byProductId.get(String(product._id)) || [];
     batches.sort((a, b) => {
       const ae = a.expiryDate ? new Date(a.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
@@ -149,7 +150,7 @@ export async function searchInventoryProducts({
     const listingBatch = batches[0];
     const price = priceBatch?.price ?? null;
     return {
-      listingId: listingBatch ? `${listingBatch.tenantId}:${listingBatch.branchId}:${String(product._id)}` : null,
+      listingId: listingBatch ? String(listingBatch.tenantId) + ':' + String(listingBatch.branchId) + ':' + String(product._id) : null,
       productId: String(product._id), productVersion: product.version, sku: product.sku,
       name: product.name, genericName: product.genericName, composition: product.genericName,
       manufacturer: product.manufacturer, strength: product.strength, dosageForm: product.form, form: product.form,
@@ -168,7 +169,24 @@ export async function searchInventoryProducts({
       branchId: listingBatch?.branchId || branchId || null
     };
   });
-  return { items, total, page: normalizedPage, limit: normalizedLimit, pages: Math.ceil(total / normalizedLimit) };
+  const visibleItems = !isSearching && !includeOutOfStock
+    ? allItems.filter(item => item.availableQuantity > 0)
+    : allItems;
+  const comparators = {
+    'price-asc': (a, b) => (a.price ?? Number.MAX_SAFE_INTEGER) - (b.price ?? Number.MAX_SAFE_INTEGER),
+    'price-desc': (a, b) => (b.price ?? -1) - (a.price ?? -1),
+    'name-asc': (a, b) => String(a.name).localeCompare(String(b.name)),
+    'stock-asc': (a, b) => a.availableQuantity - b.availableQuantity
+  };
+  visibleItems.sort(comparators[sort] || comparators['name-asc']);
+  const total = visibleItems.length;
+  const items = visibleItems.slice((normalizedPage - 1) * normalizedLimit, normalizedPage * normalizedLimit);
+  return {
+    items, total, page: normalizedPage, limit: normalizedLimit,
+    pages: Math.ceil(total / normalizedLimit) || 1,
+    isSearching,
+    outOfStockHidden: !isSearching && !includeOutOfStock
+  };
 }
 
 export async function reserveInventory({ orderId, items, idempotencyKey, actor, requestId, correlationId, tenantId = null, branchId = null }) {
