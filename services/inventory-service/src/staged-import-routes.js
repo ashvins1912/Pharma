@@ -262,6 +262,12 @@ async function publishRows(batch, rows, req) {
         details: { batchId: batch.batchId, rowIds: published }
       }], { session });
     });
+  } catch (error) {
+    if (error?.code === 11000) {
+      error.statusCode = 409;
+      error.message = 'A product or inventory batch with this identity was created concurrently. Refresh the batch before publishing again.';
+    }
+    throw error;
   } finally { await session.endSession(); }
   return published;
 }
