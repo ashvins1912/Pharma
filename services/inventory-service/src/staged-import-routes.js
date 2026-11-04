@@ -374,7 +374,7 @@ router.get('/imports/batches/:batchId/rows', requireServiceScope('inventory.impo
   if (req.query.status) filter.status = String(req.query.status).toUpperCase();
   if (req.query.q) filter.$or = [
     { 'normalized.sku': { $regex: escapeRegex(String(req.query.q).slice(0, 80)), $options: 'i' } },
-    { 'normalized.name': { $regex: String(req.query.q).slice(0, 80), $options: 'i' } }
+    { 'normalized.name': { $regex: escapeRegex(String(req.query.q).slice(0, 80)), $options: 'i' } }
   ];
   const [items, total] = await Promise.all([
     StagedImportRow.find(filter).sort({ rowNumber: 1 }).skip((page - 1) * limit).limit(limit).lean(),
