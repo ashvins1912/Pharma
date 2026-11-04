@@ -62,6 +62,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
   }
 
   for (const entry of cases) {
+    if (!entry.tenantId || !entry.branchId) continue;
     if (!entry.parentOrderId) {
       const linkedOrder = await Order.findOne({
         fulfillmentCaseId: String(entry._id),
