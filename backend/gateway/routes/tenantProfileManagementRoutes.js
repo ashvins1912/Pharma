@@ -153,7 +153,13 @@ router.patch('/profile', authenticateUser, async (req, res) => {
         longitude: tenant.geolocation?.longitude ?? null
       };
       const existingTenantBranch = await TenantBranch.findOne({ _id: String(tenant._id), tenantId: String(tenant._id) });
-      const branchCode = existingTenantBranch?.code || 'MAIN';
+      let branchCode = existingTenantBranch?.code || 'MAIN';
+      if (!existingTenantBranch) {
+        let suffix = 1;
+        while (await TenantBranch.exists({ tenantId: String(tenant._id), code: branchCode })) {
+          branchCode = `MAIN-${suffix++}`;
+        }
+      }
       await TenantBranch.findOneAndUpdate(
         { _id: String(tenant._id), tenantId: String(tenant._id) },
         { $set: {
