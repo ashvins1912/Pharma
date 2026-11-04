@@ -35,6 +35,11 @@ export const getMyProposals = async () => {
   return response.data?.proposals || [];
 };
 
+export const addMedicineRequestToStockWaitlist = async (id, waitDays) => {
+  const response = await apiClient.post(`/api/orders/fulfillment/from-medicine-request/${id}`, { waitDays });
+  return response.data;
+};
+
 export const getMedicineRequestById = async (id) => {
   const response = await apiClient.get(`/api/medicine-requests/${id}`);
   return response.data?.request || null;
