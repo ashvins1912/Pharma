@@ -72,13 +72,14 @@ export default function CustomerStockWaitlist() {
       </div>
       {items.map(entry => {
         const ready = ['READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'].includes(entry.status);
+        const confirming = entry.status === 'CONFIRMING';
         const until = entry.waitUntil ? new Date(entry.waitUntil).toLocaleString() : '';
         return (
           <article key={entry._id} className="rounded-xl border border-slate-200 p-3 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <strong className="text-xs text-slate-900">{entry.caseNumber}</strong>
               <span className={`rounded-full px-2 py-1 text-[10px] font-black ${ready ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>
-                {ready ? 'Stock available to confirm' : 'Waiting for stock'}
+                {confirming ? 'Creating your order…' : ready ? 'Stock available to confirm' : 'Waiting for stock'}
               </span>
             </div>
             {(entry.lines || []).map((line, index) => (
@@ -91,7 +92,7 @@ export default function CustomerStockWaitlist() {
             <p className="text-[10px] text-slate-500">Wait window ends: {until || 'Not specified'}</p>
             <div className="flex gap-2">
               {ready && <button type="button" disabled={busyId === String(entry._id)} onClick={() => confirm(entry)} className="flex-1 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50">{busyId === String(entry._id) ? 'Processing…' : 'Confirm available stock'}</button>}
-              <button type="button" disabled={busyId === String(entry._id)} onClick={() => cancel(entry)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 disabled:opacity-50">Cancel wait</button>
+              {!confirming && <button type="button" disabled={busyId === String(entry._id)} onClick={() => cancel(entry)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 disabled:opacity-50">Cancel wait</button>}
             </div>
           </article>
         );
