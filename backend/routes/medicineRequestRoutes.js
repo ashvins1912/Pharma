@@ -884,6 +884,43 @@ router.post('/:id/waitlist', authenticateUser, requirePermission('medicine_reque
     }
 });
 
+// Customer availability preview for every line in a multi-item medicine request.
+router.get('/:id/fulfillment/preview', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const request = await MedicineRequest.findOne({ _id: req.params.id, customerId: String(req.user.sub) }).lean();
+        if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
+        if (!request.tenantId) return res.status(409).json({ message: 'This request is not linked to a pharmacy. Select a pharmacy and submit a new request.' });
+        const ids = [...new Set((request.requestedItems || []).map(item => String(item.productId || item.medicineId || '')).filter(id => mongoose.isValidObjectId(id)))];
+        const branchId = request.branchId || null;
+        const scope = { tenantId: String(request.tenantId) };
+        if (branchId) scope.branchId = String(branchId);
+        const inventory = ids.length ? await Medicine.find({ _id: { $in: ids }, ...scope })
+            .select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean() : [];
+        const descriptors = (request.requestedItems || []).map(item => ({
+            medicineId: item.productId || (mongoose.isValidObjectId(item.medicineId) ? item.medicineId : undefined),
+            requestedName: item.requestedName, quantity: item.quantity,
+            composition: item.composition, strength: item.strength, dosageForm: item.dosageForm,
+            manufacturer: item.manufacturer,
+            requiresPrescription: Boolean(request.prescriptionId || request.prescriptionUrl)
+        }));
+        const compositionKeys = [...new Set(descriptors.map(item => String(item.composition || '').trim()).filter(Boolean))];
+        const strengthKeys = [...new Set(descriptors.map(item => String(item.strength || '').trim()).filter(Boolean))];
+        const catalog = compositionKeys.length && strengthKeys.length
+            ? await Medicine.find({
+                ...scope, isActive: { $ne: false }, _id: { $nin: ids },
+                composition: { $in: compositionKeys }, strength: { $in: strengthKeys },
+                expiryDate: { $gt: new Date() }
+            }).limit(100)
+                .select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean()
+            : [];
+        const plan = buildIntelligentFulfillmentPlan({ requestedItems: descriptors, inventory, catalog });
+        return res.json({ requestId: String(request._id), requestNumber: request.requestNumber, tenantId: request.tenantId, branchId, ...plan });
+    } catch (error) {
+        return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to check medicine request availability.' });
+    }
+});
+
 // Customer approves proposal -> triggers idempotent order conversion
 router.post('/:id/approve', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
     if (!requireDatabase(res)) return;
