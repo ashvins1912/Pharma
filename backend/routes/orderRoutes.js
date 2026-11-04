@@ -450,6 +450,14 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
             return res.status(200).json({ case: existing, alreadyCreated: true });
         }
         const inventory = ids.length ? await Medicine.find({ _id: { $in: ids }, tenantId, branchId: selectedBranchId || null }).select('_id name').lean() : [];
+        let waitlistCoordinates = req.body?.coordinates || null;
+        if (typeof waitlistCoordinates === 'string') {
+            try { waitlistCoordinates = JSON.parse(waitlistCoordinates); } catch { waitlistCoordinates = null; }
+        }
+        const waitlistAddress = String(req.body?.deliveryAddress || req.body?.addressDetails?.addressLine || '').trim();
+        if (!req.body?.addressId || !waitlistAddress || !hasValidCoordinates(waitlistCoordinates)) {
+            return res.status(400).json({ message: 'A saved delivery address with a verified map pin is required before waiting for stock.' });
+        }
         if (inventory.length !== ids.length) return res.status(404).json({ message: 'One or more selected medicines are not listed by this pharmacy.' });
         const lines = items.map(item => {
             const productId = String(item.productId || item.medicineId || '');
@@ -475,9 +483,9 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
             sourceId: req.body?.sourceId ? String(req.body.sourceId) : null,
             parentOrderId: req.body?.parentOrderId ? String(req.body.parentOrderId) : null,
             addressId: req.body?.addressId || null,
-            deliveryAddress: String(req.body?.deliveryAddress || '').trim(),
+            deliveryAddress: waitlistAddress,
             addressDetails: req.body?.addressDetails || {},
-            coordinates: req.body?.coordinates || null,
+            coordinates: waitlistCoordinates,
             customerMobile: String(req.body?.customerMobile || req.body?.mobile || '').trim(),
             orderedForName: String(req.body?.orderedForName || '').trim(),
             prescriptionRequired: Boolean(req.body?.prescriptionRequired),
