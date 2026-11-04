@@ -36,7 +36,7 @@ const pick = (row, ...keys) => {
   }
   return undefined;
 };
-function normalizeRow(raw, tenantId, usedSkus) {
+function normalizeRow(raw, usedSkus) {
   const name = String(pick(raw, 'Medicine Name', 'medicineName', 'name', 'Name', 'Product Name', 'Item Name') ?? '').trim();
   let sku = String(pick(raw, 'SKU', 'sku', 'Product SKU', 'Barcode', 'Code', 'Item Code') ?? '').trim().toUpperCase();
   const priceRaw = pick(raw, 'Price', 'price', 'MRP/Pk', 'MRP Per Pack', 'MRP', 'Selling Price');
@@ -344,7 +344,7 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
     const usedSkus = new Set();
     const seenKeys = new Set();
     const documents = records.map((originalRecord, index) => {
-      const { normalized, errors } = normalizeRow(originalRecord, tenantId, usedSkus);
+      const { normalized, errors } = normalizeRow(originalRecord, usedSkus);
       const keyValue = JSON.stringify([normalized.sku, normalized.batchNumber || '']);
       if (seenKeys.has(keyValue)) errors.push('Duplicate SKU + medicine batch number in this upload.');
       seenKeys.add(keyValue);
