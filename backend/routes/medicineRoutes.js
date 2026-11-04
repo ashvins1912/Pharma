@@ -9,15 +9,6 @@ import { inventoryClient } from '../services/inventory-client/InventoryClient.js
 import { tenantService } from '../services/tenant-service/TenantService.js';
 
 const router = express.Router();
-const importFileLimit = Number.parseInt(process.env.INVENTORY_IMPORT_MAX_FILE_BYTES || '', 10);
-const uploadMemory = multer({
-    storage: multer.memoryStorage(),
-    limits: {
-        fileSize: Number.isInteger(importFileLimit) && importFileLimit > 0
-            ? importFileLimit
-            : 100 * 1024 * 1024
-    }
-});
 const productDiscovery = new ProductDiscoveryService();
 const searchMetricIngestion = new SearchMetricIngestionService();
 const publicMedicine = medicine => {
@@ -30,9 +21,6 @@ const publicMedicine = medicine => {
         quantity: availableQuantity
     };
 };
-
-const getErrorStatus = error => error.statusCode
-    || (error.name === 'ValidationError' || error.name === 'CastError' ? 400 : 500);
 
 // Full inventory and CRUD are protected by inventory.read / inventory.write capabilities.
 router.get('/admin/inventory', authenticateUser, async (req, res) => {
