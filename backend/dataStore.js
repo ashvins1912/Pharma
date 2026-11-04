@@ -4117,12 +4117,21 @@ export const dataStore = {
             ? `${chosenName} ${chosenStrength}`
             : chosenName;
         let selectedMedicine = null;
-        if (selectedProductId && getIsConnected()) {
-            selectedMedicine = await Medicine.findOne({ _id: selectedProductId, tenantId: String(request.tenantId) })
-                .select('_id name sku code price discountPercentage stockQuantity stock quantity reservedQuantity expiryDate isActive requiresPrescription isPrescriptionRequired')
-                .lean();
-            if (!selectedMedicine || selectedMedicine.isActive === false || (selectedMedicine.expiryDate && new Date(selectedMedicine.expiryDate) <= new Date())) {
-                throw inventoryError('The selected catalogue product is no longer available from this pharmacy.', 409);
+        let inventoryReservation = null;
+        let reservedMedicineItems = [];
+        if (selectedProductId) {
+            if (!getIsConnected()) throw inventoryError('Order persistence is unavailable. This catalogue product cannot be reserved.', 503);
+            const tenantId = String(request.tenantId || '').trim();
+            const branchId = String(request.branchId || user?.branchId || '').trim();
+            if (!tenantId || !branchId || !mongoose.isValidObjectId(selectedProductId)) {
+                throw inventoryError('The selected catalogue product requires a valid pharmacy tenant and branch.', 400);
+            }
+            const catalog = await inventoryClient.lookup({
+                productIds: [String(selectedProductId)], tenantId, branchId, userId: customerId
+            });
+            selectedMedicine = catalog.items?.[0] || null;
+            if (!selectedMedicine || Number(selectedMedicine.availableQuantity || 0) < chosenQuantity) {
+                throw inventoryError('The selected catalogue product is no longer available in the required quantity from this branch.', 409);
             }
             if (selectedAlternative) {
                 const currentDiscount = Math.min(100, Math.max(0, Number(selectedMedicine.discountPercentage || 0)));
@@ -4132,8 +4141,30 @@ export const dataStore = {
                     throw inventoryError('The alternative offer price changed. Ask the pharmacy to refresh the proposal before approving.', 409);
                 }
             }
-            if (Boolean(selectedMedicine.requiresPrescription ?? selectedMedicine.isPrescriptionRequired) && !request.prescriptionUrl && !request.prescriptionId) {
+            if (Boolean(selectedMedicine.requiresPrescription) && !request.prescriptionUrl && !request.prescriptionId) {
                 throw inventoryError('A valid prescription is required for the selected product.', 409);
+            }
+            const basePrice = Number(selectedMedicine.price || unitPrice);
+            const baseCostPrice = Number(selectedMedicine.baseCostPrice) > 0 ? Number(selectedMedicine.baseCostPrice) : basePrice;
+            reservedMedicineItems = [{
+                medicineId: new mongoose.Types.ObjectId(String(selectedMedicine.productId)),
+                quantity: chosenQuantity,
+                price: unitPrice,
+                basePrice,
+                baseCostPrice,
+                discountPercentage: Math.min(100, Math.max(0, Number(selectedMedicine.discountPercentage || 0))),
+                marginTier: ['LOW', 'MID', 'HIGH'].includes(selectedMedicine.marginTier) ? selectedMedicine.marginTier : 'LOW',
+                name: selectedMedicine.name || chosenName,
+                sku: selectedMedicine.sku || ''
+            }];
+            inventoryReservation = await inventoryClient.reserve({
+                orderId: String(orderId),
+                items: [{ productId: String(selectedMedicine.productId), quantity: chosenQuantity }],
+                tenantId, branchId, userId: customerId,
+                idempotencyKey: `medicine-request-order:${String(request._id)}`
+            });
+            if (inventoryReservation.status !== 'RESERVED' || !inventoryReservation.reservationId) {
+                throw inventoryError('Inventory could not reserve the selected proposal product. Refresh the proposal and retry.', 409);
             }
         }
 
@@ -4142,7 +4173,8 @@ export const dataStore = {
                 name: itemName,
                 productName: chosenName,
                 productId: selectedProductId,
-                sku: selectedMedicine?.sku || selectedMedicine?.code || (selectedProductId ? 'CATALOGUE' : 'MR-ARRANGED'),
+                medicineId: selectedProductId || null,
+                sku: selectedMedicine?.sku || (selectedProductId ? 'CATALOGUE' : 'MR-ARRANGED'),
                 quantity: chosenQuantity,
                 unitPrice: unitPrice,
                 price: unitPrice,
@@ -4158,7 +4190,11 @@ export const dataStore = {
             customerName: request.customerName,
             customerMobile: request.customerPhone || '',
             items: orderItems,
-            medicineItems: selectedProductId ? [{ medicineId: selectedProductId, quantity: chosenQuantity, price: unitPrice, name: chosenName, sku: selectedMedicine?.sku || selectedMedicine?.code || '' }] : [],
+            medicineItems: reservedMedicineItems,
+            tenantId: request.tenantId || null,
+            branchId: request.branchId || user?.branchId || null,
+            inventoryReservationId: inventoryReservation?.reservationId || null,
+            inventoryReservationStatus: inventoryReservation ? 'RESERVED' : null,
             prescriptionUrl: request.prescriptionUrl || null,
             prescriptionId: request.prescriptionId || null,
             patientPuid: request.patientPuid || null,
@@ -4194,22 +4230,6 @@ export const dataStore = {
             let updatedRequest;
             try {
                 await session.withTransaction(async () => {
-                    if (selectedProductId) {
-                        const quantity = chosenQuantity;
-                        const reserved = await Medicine.findOneAndUpdate({
-                            _id: selectedProductId,
-                            tenantId: String(request.tenantId),
-                            isActive: { $ne: false },
-                            expiryDate: { $gt: now },
-                            $expr: {
-                                $gte: [
-                                    { $subtract: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, { $ifNull: ['$reservedQuantity', 0] }] },
-                                    quantity
-                                ]
-                            }
-                        }, { $inc: { reservedQuantity: quantity } }, { new: true, session });
-                        if (!reserved) throw inventoryError('The selected product stock changed or is insufficient. Please review the proposal again.', 409);
-                    }
                     const [created] = await Order.create([orderData], { session });
                     createdOrder = created.toObject();
                     updatedRequest = await MedicineRequest.findOneAndUpdate(
@@ -4247,6 +4267,19 @@ export const dataStore = {
                     ).lean();
                     if (!updatedRequest) throw inventoryError('This medicine request was already processed. Refresh your requests and orders.', 409);
                 });
+            } catch (error) {
+                if (inventoryReservation?.reservationId) {
+                    try {
+                        await inventoryClient.release(inventoryReservation.reservationId, {
+                            tenantId: request.tenantId, branchId: request.branchId || user?.branchId,
+                            userId: customerId,
+                            idempotencyKey: `medicine-request-release-after-failure:${String(request._id)}`
+                        });
+                    } catch (releaseError) {
+                        console.error('Medicine request conversion failed and inventory release also failed:', releaseError.message);
+                    }
+                }
+                throw error;
             } finally {
                 await session.endSession();
             }
