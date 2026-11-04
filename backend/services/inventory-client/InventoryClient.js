@@ -75,6 +75,12 @@ export const inventoryClient = {
     return Boolean(baseUrl());
   },
 
+  async getAudits({ tenantId, branchId, page = 1, limit = 50, userId = 'backend' } = {}) {
+    return request('GET', '/api/v1/inventory/audits', {
+      userId, params: { tenantId, branchId, page, limit }
+    });
+  },
+
   async searchProducts({ tenantId = null, branchId = null, query = '', category = '', hideRx = false, includeOutOfStock = false, includeExpiredBatches = false, sort = 'default', page = 1, limit = 50, userId = 'backend' } = {}) {
     return request('GET', '/api/v1/inventory/products/search', {
       userId,
