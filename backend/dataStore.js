@@ -3802,7 +3802,7 @@ export const dataStore = {
     },
 
     // CRITICAL IDEMPOTENT ORDER CONVERSION
-    async approveMedicineProposalAndConvertToOrder(id, arg2 = '', arg3) {
+    async approveMedicineProposalAndConvertToOrder(id, arg2 = '', arg3, selectedProductIdArg = null) {
         let approvalNote = '';
         let user = null;
         if (arg2 && typeof arg2 === 'object' && (arg2.sub || arg2.id || arg2.email)) {
@@ -3860,6 +3860,25 @@ export const dataStore = {
         if (!proposal || !proposal.totalPrice || proposal.totalPrice <= 0) {
             throw inventoryError('The pharmacy proposal is missing valid pricing.', 400);
         }
+        const selectedProductId = String(selectedProductIdArg || proposal.productId || '').trim() || null;
+        const selectedAlternative = selectedProductId && selectedProductId !== String(proposal.productId || '')
+            ? (proposal.alternativeOffers || []).find(offer => String(offer.productId) === selectedProductId)
+            : null;
+        if (selectedProductId && selectedProductId !== String(proposal.productId || '') && !selectedAlternative) {
+            throw inventoryError('The selected alternative is not part of this pharmacy proposal.', 400);
+        }
+        const chosenName = selectedAlternative?.medicineName || proposal.medicineName;
+        const chosenManufacturer = selectedAlternative?.manufacturer || proposal.manufacturer || '';
+        const chosenStrength = selectedAlternative?.strength || proposal.strength || '';
+        const chosenForm = selectedAlternative?.dosageForm || proposal.dosageForm || '';
+        const chosenQuantity = Number(selectedAlternative?.quantity || proposal.quantity);
+        const chosenUnitPrice = Number(selectedAlternative?.discountedUnitPrice ?? proposal.unitPrice ?? 0);
+        const orderTotal = selectedAlternative
+            ? Math.round(chosenUnitPrice * chosenQuantity * 100) / 100
+            : Math.max(0, Math.round(Number(proposal.totalPrice) * 100) / 100);
+        if (!Number.isSafeInteger(chosenQuantity) || chosenQuantity < 1 || !Number.isFinite(chosenUnitPrice) || chosenUnitPrice < 0 || orderTotal <= 0) {
+            throw inventoryError('The selected product offer has invalid quantity or pricing.', 400);
+        }
 
         let prescriptionVerification = {
             status: request.prescriptionId || request.prescriptionUrl ? 'REVIEW_REQUIRED' : 'NOT_REQUIRED',
@@ -3881,12 +3900,12 @@ export const dataStore = {
                     prescriptionId: request.prescriptionId,
                     patientPuid: request.patientPuid || null,
                     items: [{
-                        productId: proposal.productId || null,
-                        name: proposal.medicineName || '',
-                        productName: proposal.medicineName || '',
-                        strength: proposal.strength || '',
-                        form: proposal.dosageForm || '',
-                        quantity: proposal.quantity
+                        productId: selectedProductId,
+                        name: chosenName || '',
+                        productName: chosenName || '',
+                        strength: chosenStrength,
+                        form: chosenForm,
+                        quantity: chosenQuantity
                     }],
                     userId: customerId,
                     tenantId: request.tenantId || user?.tenantId || null,
@@ -3923,19 +3942,30 @@ export const dataStore = {
             ? new mongoose.Types.ObjectId()
             : `ord-mr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
-        const orderTotal = Math.max(0, Math.round(Number(proposal.totalPrice) * 100) / 100);
-
-        const unitPrice = proposal.unitPrice || Math.round((orderTotal / proposal.quantity) * 100) / 100;
-        const itemName = proposal.medicineName && proposal.strength && !proposal.medicineName.toLowerCase().includes(proposal.strength.toLowerCase())
-            ? `${proposal.medicineName} ${proposal.strength}`
-            : proposal.medicineName;
+        const unitPrice = chosenUnitPrice || Math.round((orderTotal / chosenQuantity) * 100) / 100;
+        const itemName = chosenName && chosenStrength && !chosenName.toLowerCase().includes(chosenStrength.toLowerCase())
+            ? `${chosenName} ${chosenStrength}`
+            : chosenName;
+        let selectedMedicine = null;
+        if (selectedProductId && getIsConnected()) {
+            selectedMedicine = await Medicine.findOne({ _id: selectedProductId, tenantId: String(request.tenantId) })
+                .select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive requiresPrescription isPrescriptionRequired')
+                .lean();
+            if (!selectedMedicine || selectedMedicine.isActive === false || (selectedMedicine.expiryDate && new Date(selectedMedicine.expiryDate) <= new Date())) {
+                throw inventoryError('The selected catalogue product is no longer available from this pharmacy.', 409);
+            }
+            if (Boolean(selectedMedicine.requiresPrescription ?? selectedMedicine.isPrescriptionRequired) && !request.prescriptionUrl && !request.prescriptionId) {
+                throw inventoryError('A valid prescription is required for the selected product.', 409);
+            }
+        }
 
         const orderItems = [
             {
                 name: itemName,
                 productName: proposal.medicineName,
-                sku: 'MR-ARRANGED',
-                quantity: proposal.quantity,
+                productId: selectedProductId,
+                sku: selectedMedicine?.sku || selectedMedicine?.code || (selectedProductId ? 'CATALOGUE' : 'MR-ARRANGED'),
+                quantity: chosenQuantity,
                 unitPrice: unitPrice,
                 price: unitPrice,
                 totalPrice: orderTotal
@@ -3950,11 +3980,11 @@ export const dataStore = {
             customerName: request.customerName,
             customerMobile: request.customerPhone || '',
             items: orderItems,
-            medicineItems: [],
+            medicineItems: selectedProductId ? [{ medicineId: selectedProductId, quantity: chosenQuantity, price: unitPrice, name: chosenName, sku: selectedMedicine?.sku || selectedMedicine?.code || '' }] : [],
             prescriptionUrl: request.prescriptionUrl || null,
             prescriptionId: request.prescriptionId || null,
             patientPuid: request.patientPuid || null,
-            prescriptionRequired: Boolean(request.prescriptionId || request.prescriptionUrl),
+            prescriptionRequired: Boolean(request.prescriptionId || request.prescriptionUrl || selectedMedicine?.requiresPrescription || selectedMedicine?.isPrescriptionRequired),
             prescriptionVerification,
             subtotal: orderTotal,
             totalAmount: orderTotal,
@@ -3982,42 +4012,66 @@ export const dataStore = {
         let createdOrder = null;
 
         if (getIsConnected()) {
-            const [created] = await Order.create([orderData]);
-            createdOrder = created.toObject();
-
-            const updatedRequest = await MedicineRequest.findOneAndUpdate(
-                { _id: request._id, status: 'PROPOSAL_SENT' },
-                {
-                    $set: {
-                        status: 'CONVERTED_TO_ORDER',
-                        approvedAt: now,
-                        convertedOrderId: createdOrder._id.toString(),
-                        customerResponse: {
-                            respondedAt: now,
-                            responseNote: approvalNote || 'Customer approved pharmacy proposal'
-                        }
-                    },
-                    $push: {
-                        auditTrail: [
-                            {
-                                action: 'CUSTOMER_APPROVED',
-                                actorId: customerId,
-                                role: 'Customer',
-                                timestamp: now,
-                                notes: 'Customer approved proposal'
-                            },
-                            {
-                                action: 'REQUEST_CONVERTED_TO_ORDER',
-                                actorId: customerId,
-                                role: 'Customer',
-                                timestamp: now,
-                                notes: `Converted to active Order #${createdOrder._id.toString()}`
+            const session = await mongoose.startSession();
+            let updatedRequest;
+            try {
+                await session.withTransaction(async () => {
+                    if (selectedProductId) {
+                        const quantity = chosenQuantity;
+                        const reserved = await Medicine.findOneAndUpdate({
+                            _id: selectedProductId,
+                            tenantId: String(request.tenantId),
+                            isActive: { $ne: false },
+                            expiryDate: { $gt: now },
+                            $expr: {
+                                $gte: [
+                                    { $subtract: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, { $ifNull: ['$reservedQuantity', 0] }] },
+                                    quantity
+                                ]
                             }
-                        ]
+                        }, { $inc: { reservedQuantity: quantity } }, { new: true, session });
+                        if (!reserved) throw inventoryError('The selected product stock changed or is insufficient. Please review the proposal again.', 409);
                     }
-                },
-                { new: true }
-            ).lean();
+                    const [created] = await Order.create([orderData], { session });
+                    createdOrder = created.toObject();
+                    updatedRequest = await MedicineRequest.findOneAndUpdate(
+                        { _id: request._id, status: 'PROPOSAL_SENT', convertedOrderId: null },
+                        {
+                            $set: {
+                                status: 'CONVERTED_TO_ORDER',
+                                approvedAt: now,
+                                convertedOrderId: createdOrder._id.toString(),
+                                customerResponse: {
+                                    respondedAt: now,
+                                    responseNote: approvalNote || 'Customer approved pharmacy proposal'
+                                }
+                            },
+                            $push: {
+                                auditTrail: [
+                                    {
+                                        action: 'CUSTOMER_APPROVED',
+                                        actorId: customerId,
+                                        role: 'Customer',
+                                        timestamp: now,
+                                        notes: selectedAlternative ? 'Customer accepted an explicitly selected alternative product.' : 'Customer approved pharmacy proposal.'
+                                    },
+                                    {
+                                        action: 'REQUEST_CONVERTED_TO_ORDER',
+                                        actorId: customerId,
+                                        role: 'Customer',
+                                        timestamp: now,
+                                        notes: `Converted to active Order #${createdOrder._id.toString()}`
+                                    }
+                                ]
+                            }
+                        },
+                        { new: true, session }
+                    ).lean();
+                    if (!updatedRequest) throw inventoryError('This medicine request was already processed. Refresh your requests and orders.', 409);
+                });
+            } finally {
+                await session.endSession();
+            }
 
             this.logAudit(customerId, 'CONVERT_REQUEST_TO_ORDER', 'ORDER', createdOrder._id.toString(), {
                 requestNumber: request.requestNumber,
