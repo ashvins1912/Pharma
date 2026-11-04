@@ -28,6 +28,9 @@ export default function TenantProfileDashboard() {
   const { user } = useAuth();
   const role = String(user?.app_metadata?.role || user?.role || '').toUpperCase();
   const isSuperAdmin = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'ADMIN'].includes(role);
+  const [availableTenants, setAvailableTenants] = useState([]);
+  const [selectedTenantId, setSelectedTenantId] = useState('');
+  const [tenantsLoading, setTenantsLoading] = useState(false);
   const [profile, setProfile] = useState(emptyProfile);
   const [draft, setDraft] = useState(emptyProfile);
   const [personnel, setPersonnel] = useState([]);
@@ -42,12 +45,16 @@ export default function TenantProfileDashboard() {
   const [notice, setNotice] = useState('');
 
   const loadProfile = useCallback(async () => {
+    if (isSuperAdmin && !selectedTenantId) {
+      setProfile(emptyProfile); setDraft(emptyProfile); setPersonnel([]); setProfileMissing(false);
+      setLoading(false); return;
+    }
     setLoading(true);
     setError('');
     try {
       const [profileResponse, policyResponse] = await Promise.all([
-        apiClient.get('/api/v1/vendor/profile'),
-        apiClient.get('/api/v1/vendor/profile/edit-policy')
+        apiClient.get('/api/v1/vendor/profile', { params: isSuperAdmin ? { tenantId: selectedTenantId } : undefined }),
+        apiClient.get('/api/v1/vendor/profile/edit-policy', { params: isSuperAdmin ? { tenantId: selectedTenantId } : undefined })
       ]);
       const payload = profileResponse.data?.data || profileResponse.data || {};
       const tenant = payload.tenant || {};
@@ -69,7 +76,25 @@ export default function TenantProfileDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isSuperAdmin, selectedTenantId]);
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    let cancelled = false;
+    setTenantsLoading(true);
+    apiClient.get('/api/v1/admin/tenants')
+      .then(response => {
+        if (cancelled) return;
+        const raw = response.data?.data || response.data?.tenants || response.data || [];
+        const items = Array.isArray(raw) ? raw : (raw.tenants || []);
+        const valid = items.filter(item => item && (item.id || item._id));
+        setAvailableTenants(valid);
+        setSelectedTenantId(current => current && valid.some(item => String(item.id || item._id) === String(current)) ? current : String(valid[0]?.id || valid[0]?._id || ''));
+      })
+      .catch(err => { if (!cancelled) setError(err?.response?.data?.message || err.message || 'Could not load platform tenants.'); })
+      .finally(() => { if (!cancelled) setTenantsLoading(false); });
+    return () => { cancelled = true; };
+  }, [isSuperAdmin]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
 
@@ -123,7 +148,7 @@ export default function TenantProfileDashboard() {
     setError('');
     setNotice('');
     try {
-      const response = await apiClient.patch('/api/v1/vendor/profile/edit-policy', { pharmacyCanEdit: enabled });
+      const response = await apiClient.patch('/api/v1/vendor/profile/edit-policy', { ...(isSuperAdmin ? { tenantId: selectedTenantId } : {}), pharmacyCanEdit: enabled });
       setPharmacyCanEdit(response.data?.data?.pharmacyCanEdit === true);
       setNotice(enabled ? 'Pharmacy editing has been enabled.' : 'Pharmacy editing has been disabled.');
     } catch (err) {
@@ -135,6 +160,17 @@ export default function TenantProfileDashboard() {
 
   return (
     <div className="space-y-6">
+      {isSuperAdmin && (
+        <section className="rounded-3xl border border-violet-200 bg-white p-5 shadow-sm">
+          <label className="block text-xs font-black uppercase tracking-wide text-slate-600" htmlFor="super-admin-tenant-select">Select pharmacy tenant</label>
+          <select id="super-admin-tenant-select" value={selectedTenantId} onChange={event => { setSelectedTenantId(event.target.value); setEditing(false); setError(''); setNotice(''); }} disabled={tenantsLoading || availableTenants.length === 0} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-900">
+            {availableTenants.length === 0 && <option value="">{tenantsLoading ? 'Loading tenants…' : 'No tenants available'}</option>}
+            {availableTenants.map(tenant => <option key={tenant.id || tenant._id} value={tenant.id || tenant._id}>{tenant.name || tenant.legalName || tenant.id || tenant._id} · {tenant.status || 'UNKNOWN'}</option>)}
+          </select>
+          <p className="mt-2 text-xs text-slate-500">Profile, edit permissions, personnel and branches below are loaded only for this selected tenant.</p>
+        </section>
+      )}
+
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
@@ -263,7 +299,7 @@ export default function TenantProfileDashboard() {
 
       <section className="space-y-3">
         <div><h3 className="text-lg font-black text-slate-900">Tenant branches</h3><p className="text-sm text-slate-500">Create and activate branches for this pharmacy.</p></div>
-        <TenantRegistry key={branchRegistryVersion} />
+        <TenantRegistry key={`${branchRegistryVersion}-${selectedTenantId}`} tenantId={isSuperAdmin ? selectedTenantId : undefined} />
       </section>
     </div>
   );
