@@ -54,7 +54,7 @@ export function createBackendAuthToken(gatewayConfig = config, scope = 'identity
 
 
 export function createTrustedBackendRequestToken(
-    { user, method, path, permission = null, requestId },
+    { user, targetTenantId = null, method, path, permission = null, requestId },
     gatewayConfig = config
 ) {
   if (!gatewayConfig.gatewayAuthSecret ||
@@ -68,6 +68,7 @@ export function createTrustedBackendRequestToken(
   }
 
   const role = user?.app_metadata?.role || user?.role || 'customer';
+  const isPlatformUser = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
 
   return jwt.sign({
     trust: 'gateway-authenticated-request',
@@ -81,7 +82,7 @@ export function createTrustedBackendRequestToken(
     permissions: user.permissions || user.app_metadata?.permissions || [],
     revokedPermissions: user.revokedPermissions || user.app_metadata?.revokedPermissions || [],
     permissionVersion: user.permissionVersion || 1,
-    tenantId: user.tenantId || user.app_metadata?.tenantId || null,
+    tenantId: (isPlatformUser && targetTenantId ? String(targetTenantId).trim() : user.tenantId || user.app_metadata?.tenantId || null),
     branchId: user.branchId || null,
     scope: user.scope || 'CUSTOMER',
     aal: user.aal || 'aal1',
