@@ -1,6 +1,7 @@
 // Comprehensive in-memory and MongoDB data store layer
 import { getIsConnected } from './config/db.js';
 import mongoose from 'mongoose';
+import { createHash } from 'node:crypto';
 import Medicine from './models/Medicine.js';
 import Order from './models/Order.js';
 import Coupon from './models/Coupon.js';
@@ -1231,6 +1232,52 @@ export const dataStore = {
                 quantity: existing.quantity + quantity,
                 unitPrice: unitPrice ?? existing.unitPrice
             });
+        }
+
+        const idempotencyKey = String(orderData.idempotencyKey || '').trim();
+        if (idempotencyKey && idempotencyKey.length > 200) {
+            throw inventoryError('Idempotency-Key must be 200 characters or fewer.', 400);
+        }
+        const requestFingerprint = idempotencyKey ? createHash('sha256').update(JSON.stringify({
+            tenantId: selectedTenantId,
+            branchId: selectedBranchId || null,
+            items: [...quantities.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([medicineId, item]) => ({
+                medicineId, quantity: item.quantity, unitPrice: item.unitPrice
+            })),
+            addressId: String(orderData.addressId || ''),
+            deliveryAddress: String(orderData.deliveryAddress || ''),
+            coordinates: orderData.coordinates || null,
+            patientPuid: String(orderData.patientPuid || ''),
+            couponCode: String(orderData.couponCode || ''),
+            pointsToRedeem: requestedPoints,
+            prescriptionId: String(orderData.prescriptionId || ''),
+            prescriptionUrl: String(orderData.prescriptionUrl || '')
+        })).digest('hex') : null;
+
+        if (idempotencyKey) {
+            if (getIsConnected()) {
+                const existingOrder = await Order.findOne({
+                    userId: String(orderData.userId), tenantId: selectedTenantId, idempotencyKey
+                }).lean();
+                if (existingOrder) {
+                    if (existingOrder.requestFingerprint !== requestFingerprint) {
+                        throw inventoryError('This Idempotency-Key was already used for a different order.', 409);
+                    }
+                    return { ...existingOrder, replayed: true };
+                }
+            } else {
+                const existingOrder = inMemoryOrders.find(order =>
+                    String(order.userId) === String(orderData.userId)
+                    && String(order.tenantId) === selectedTenantId
+                    && order.idempotencyKey === idempotencyKey
+                );
+                if (existingOrder) {
+                    if (existingOrder.requestFingerprint !== requestFingerprint) {
+                        throw inventoryError('This Idempotency-Key was already used for a different order.', 409);
+                    }
+                    return { ...existingOrder, replayed: true };
+                }
+            }
         }
 
         const now = new Date();
