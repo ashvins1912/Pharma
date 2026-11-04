@@ -931,38 +931,45 @@ export const dataStore = {
     },
 
     async getInventoryAlerts(lowStockThreshold = 3, expiringThresholdDays = 30, { tenantId, branchId } = {}) {
-        let query = {};
-        if (tenantId) query.tenantId = tenantId;
-        if (branchId) query.branchId = branchId;
+        const scopeTenantId = String(tenantId || '').trim();
+        const scopeBranchId = String(branchId || '').trim();
+        if (!scopeTenantId || !scopeBranchId) throw inventoryError('Tenant and branch are required for inventory alerts.', 400);
+        const allMeds = [];
+        let page = 1;
+        let pages = 1;
+        do {
+            const result = await inventoryClient.searchProducts({
+                tenantId: scopeTenantId, branchId: scopeBranchId,
+                includeOutOfStock: true, includeExpiredBatches: true,
+                page, limit: 100, userId: 'inventory-alerts'
+            });
+            allMeds.push(...(result.items || []));
+            pages = Number(result.pages || 1);
+            page += 1;
+        } while (page <= pages && page <= 50);
 
-        // Inspect tenant-scoped medicines including out of stock for admin alerts
-        const inventory = getIsConnected() ? await Medicine.find(query) : inMemoryMedicines.filter(m => {
-            if (tenantId && String(m.tenantId || '') !== String(tenantId)) return false;
-            if (branchId && String(m.branchId || '') !== String(branchId)) return false;
-            return true;
-        });
-        const allMeds = inventory.map(formatMedicine);
         const now = new Date();
-
         const expired = [];
         const expiringSoon = [];
         const lowStock = [];
-
         for (const med of allMeds) {
-            const exp = new Date(med.expiryDate);
-            const daysLeft = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 3600 * 24));
-
-            if (daysLeft <= 0) {
-                expired.push({ ...med, daysLeft });
-            } else if (daysLeft <= expiringThresholdDays) {
-                expiringSoon.push({ ...med, daysLeft });
+            for (const batch of med.expiredBatchAvailability || []) {
+                const expiryDate = batch.expiryDate ? new Date(batch.expiryDate) : null;
+                const daysLeft = expiryDate ? Math.ceil((expiryDate.getTime() - now.getTime()) / 86400000) : null;
+                expired.push({ ...med, batchNumber: batch.batchNumber, expiryDate: batch.expiryDate, stock: Number(batch.availableQuantity || 0), availableQuantity: Number(batch.availableQuantity || 0), daysLeft });
             }
-
-            if (med.stock <= lowStockThreshold) {
-                lowStock.push(med);
+            for (const batch of med.batchAvailability || []) {
+                if (!batch.expiryDate) continue;
+                const expiryDate = new Date(batch.expiryDate);
+                const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / 86400000);
+                if (daysLeft > 0 && daysLeft <= expiringThresholdDays) {
+                    expiringSoon.push({ ...med, batchNumber: batch.batchNumber, expiryDate: batch.expiryDate, stock: Number(batch.availableQuantity || 0), availableQuantity: Number(batch.availableQuantity || 0), daysLeft });
+                }
+            }
+            if (Number(med.availableQuantity || 0) <= lowStockThreshold) {
+                lowStock.push({ ...med, stock: Number(med.availableQuantity || 0) });
             }
         }
-
         return {
             expiredCount: expired.length,
             expiringSoonCount: expiringSoon.length,
