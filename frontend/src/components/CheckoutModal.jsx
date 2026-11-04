@@ -211,7 +211,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           tenantId: String(tenantId), items: pendingStockItems, waitDays,
           sourceType: 'CHECKOUT', addressId: selectedAddress._id || selectedAddress.id || '',
           deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
-          coordinates: selectedAddress.coordinates, addressDetails: selectedAddress, paymentMethod: 'Cash on Delivery (COD)', patientPuid
+          coordinates: selectedAddress.coordinates, addressDetails: selectedAddress, customerMobile: selectedAddress.mobile || user?.user_metadata?.mobile || '', orderedForName: (people.find((p) => p.puid === patientPuid)?.displayName) || user?.name || user?.email || 'Customer', prescriptionRequired, paymentMethod: 'Cash on Delivery (COD)', patientPuid
         }, { headers: { 'Idempotency-Key': waitlistKey } });
         addToast(`Your medicines are on the stock waitlist for ${waitDays} day(s). We will notify you when they are available.`, 'success');
         clearCart();
