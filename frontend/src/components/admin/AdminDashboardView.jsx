@@ -62,6 +62,10 @@ export default function AdminDashboardView() {
   const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen, setAdminBulkImportModalOpen, setAdminNewStockModalOpen } = useApp();
   const [adminTab, setAdminTab] = useState('tenantProfile');
 
+  useEffect(() => {
+    if (canViewTenants && adminTab === 'tenantProfile') setAdminTab('tenants');
+  }, [canViewTenants, adminTab]);
+
   // Navigation visibility and component rendering share these exact permission gates.
   const canViewFulfillment = hasPermission('orders.read') && hasPermission('orders.manage');
   const canViewAdminRequests = hasPermission('medicine_requests.read')
@@ -604,6 +608,7 @@ export default function AdminDashboardView() {
             </button>
           )}
 
+          {!isSuperAdmin && (
           <button
             onClick={() => setAdminTab('tenantProfile')}
             className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
@@ -615,6 +620,7 @@ export default function AdminDashboardView() {
             <span>🏢</span>
             <span>{t('tenantProfileBranches')}</span>
           </button>
+          )}
         </div>
       </div>
 
@@ -631,7 +637,7 @@ export default function AdminDashboardView() {
       {adminTab === 'matrix' && isSuperAdmin && (
         <RoleFeatureMatrixTab />
       )}
-      {adminTab === 'tenantProfile' && (
+      {adminTab === 'tenantProfile' && !isSuperAdmin && (
         <TenantProfileDashboard />
       )}
       {adminTab === 'csquare' && canViewCSquare && <AdminCSquareTab />}
