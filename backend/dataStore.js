@@ -1322,24 +1322,27 @@ export const dataStore = {
             }
             const catalogPrice = Number(product.price);
             if (!Number.isFinite(catalogPrice) || catalogPrice < 0) throw inventoryError(`Invalid catalogue price for ${product.name}.`, 409);
-            if (requested.unitPrice != null && Math.abs(requested.unitPrice - catalogPrice) > 0.01) {
+            const configuredDiscount = Math.min(100, Math.max(0, Number(product.discountPercentage || 0)));
+            const expectedUnitPrice = Math.round(catalogPrice * (1 - configuredDiscount / 100) * 100) / 100;
+            if (requested.unitPrice != null && Math.abs(requested.unitPrice - expectedUnitPrice) > 0.01 && Math.abs(requested.unitPrice - catalogPrice) > 0.01) {
                 throw inventoryError('The selected catalogue price has changed. Refresh the fulfilment options before confirming.', 409);
             }
             const basePrice = catalogPrice;
-            const discountPercentage = Number(product.discountPercentage || 0);
+            const salePrice = requested.unitPrice != null ? Number(requested.unitPrice) : expectedUnitPrice;
+            const discountPercentage = basePrice > 0 ? Math.round((1 - salePrice / basePrice) * 10000) / 100 : 0;
             const rawCost = Number(product.baseCostPrice);
             const baseCostPrice = Number.isFinite(rawCost) && rawCost > 0 ? rawCost : catalogPrice;
             const marginTier = ['LOW', 'MID', 'HIGH'].includes(product.marginTier) ? product.marginTier : 'LOW';
             const productObjectId = new mongoose.Types.ObjectId(medicineId);
-            totalAmountForOrder += catalogPrice * quantity;
+            totalAmountForOrder += salePrice * quantity;
             medicineItemsForOrder.push({
-                medicineId: productObjectId, quantity, price: catalogPrice, basePrice,
+                medicineId: productObjectId, quantity, price: salePrice, basePrice,
                 baseCostPrice, discountPercentage, marginTier,
                 name: product.name, sku: product.sku || ''
             });
             itemSnapshotsForOrder.push({
                 _id: medicineId, medicineId: productObjectId, name: product.name,
-                sku: product.sku || '', price: catalogPrice, basePrice,
+                sku: product.sku || '', price: salePrice, basePrice,
                 baseCostPrice, discountPercentage, marginTier, quantity,
                 stock: Math.max(0, Number(product.availableQuantity || 0) - quantity)
             });
