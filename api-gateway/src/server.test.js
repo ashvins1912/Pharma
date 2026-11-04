@@ -80,7 +80,8 @@ test('intelligent order and medicine-request waitlist endpoints require explicit
     ['POST', '/api/orders/fulfillment/preview'],
     ['POST', '/api/orders/fulfillment/waitlist'],
     ['POST', '/api/orders/fulfillment/waitlist/6acab8869852d76d01a594e7/confirm'],
-    ['POST', '/api/orders/fulfillment/waitlist/6acab8869852d76d01a594e7/cancel']
+    ['POST', '/api/orders/fulfillment/waitlist/6acab8869852d76d01a594e7/cancel'],
+    ['POST', '/api/orders/fulfillment/waitlist/6acab8869852d76d01a594e7/link-order']
   ];
   for (const [method, path] of orderRoutes) {
     assert.equal(resolveGatewayCapability(method, path), 'orders.create', `${method} ${path}`);
