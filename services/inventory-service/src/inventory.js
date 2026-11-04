@@ -192,6 +192,211 @@ export async function searchInventoryProducts({
   };
 }
 
+const normalizeProductFields = input => ({
+  name: String(input.name || '').trim(),
+  genericName: String(input.genericName ?? input.drug ?? input.activeSalt ?? '').trim(),
+  strength: String(input.strength ?? input.dosage ?? '').trim(),
+  form: String(input.form ?? input.dosageForm ?? '').trim(),
+  manufacturer: String(input.manufacturer ?? input.brand ?? '').trim(),
+  category: String(input.category || 'General Medicine').trim(),
+  description: String(input.description || '').trim(),
+  imageUrl: String(input.imageUrl || '').trim(),
+  hsnSac: String(input.hsnSac || '').trim(),
+  requiresPrescription: input.requiresPrescription === true || input.isPrescriptionRequired === true
+});
+
+export async function createProduct({ product: input = {}, tenantId, branchId, actor, requestId, correlationId } = {}) {
+  const scopeTenantId = typeof tenantId === 'string' ? tenantId.trim() : '';
+  const scopeBranchId = typeof branchId === 'string' ? branchId.trim() : '';
+  const fields = normalizeProductFields(input);
+  const sku = String(input.sku || ('MED-' + randomUUID().replace(/-/g, '').slice(0, 10))).trim().toUpperCase();
+  const stockQuantity = Number(input.stockQuantity ?? input.stock ?? input.quantity ?? 0);
+  const price = Number(input.sellingPrice ?? input.price ?? 0);
+  const batchNumber = String(input.batchNumber || '').trim();
+  const expiryDate = input.expiryDate ? new Date(input.expiryDate) : null;
+  if (!scopeTenantId || !scopeBranchId) {
+    const error = new Error('Verified tenantId and branchId are required to create a product.');
+    error.statusCode = 403;
+    throw error;
+  }
+  if (!fields.name || !sku || !Number.isSafeInteger(stockQuantity) || stockQuantity < 0
+    || !Number.isFinite(price) || price < 0 || (expiryDate && !Number.isFinite(expiryDate.getTime()))) {
+    const error = new Error('A product name, valid SKU, non-negative integer stock, and non-negative price are required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const session = await mongoose.startSession();
+  let result;
+  try {
+    await session.withTransaction(async () => {
+      const [created] = await Product.create([{
+        tenantId: scopeTenantId, sku, ...fields, version: 1, active: true
+      }], { session });
+      const [inventory] = await Inventory.create([{
+        tenantId: scopeTenantId, branchId: scopeBranchId, productId: created._id, sku,
+        stockQuantity, reservedQuantity: 0, price, batchNumber, expiryDate
+      }], { session });
+      result = {
+        _id: String(created._id), productId: String(created._id), sku, ...fields,
+        price, stockQuantity, reservedQuantity: 0, availableQuantity: stockQuantity,
+        batchNumber, expiryDate: inventory.expiryDate || null, tenantId: scopeTenantId, branchId: scopeBranchId
+      };
+      await Audit.create([{
+        tenantId: scopeTenantId, branchId: scopeBranchId, actor: actor || 'system',
+        operation: 'create_product', requestId, correlationId,
+        productId: created._id, sku, details: { result }
+      }], { session });
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      const conflict = new Error('This SKU already exists in the selected tenant.');
+      conflict.statusCode = 409;
+      throw conflict;
+    }
+    throw error;
+  } finally { await session.endSession(); }
+  return result;
+}
+
+export async function updateProduct({ productId, product: input = {}, tenantId, branchId, actor, requestId, correlationId } = {}) {
+  const scopeTenantId = typeof tenantId === 'string' ? tenantId.trim() : '';
+  const scopeBranchId = typeof branchId === 'string' ? branchId.trim() : '';
+  if (!scopeTenantId || !scopeBranchId || !mongoose.isValidObjectId(productId)) {
+    const error = new Error('Verified tenantId, branchId and a valid productId are required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const session = await mongoose.startSession();
+  let result;
+  try {
+    await session.withTransaction(async () => {
+      const product = await Product.findOne({ _id: productId, tenantId: scopeTenantId }).session(session);
+      if (!product) {
+        const error = new Error('Product was not found in this tenant.');
+        error.statusCode = 404;
+        throw error;
+      }
+      const fields = normalizeProductFields(input);
+      const editableFields = ['name', 'genericName', 'strength', 'form', 'manufacturer', 'category', 'description', 'imageUrl', 'hsnSac', 'requiresPrescription'];
+      for (const field of editableFields) {
+        if (Object.prototype.hasOwnProperty.call(input, field)
+          || (field === 'genericName' && ('drug' in input || 'activeSalt' in input))
+          || (field === 'strength' && 'dosage' in input)
+          || (field === 'form' && 'dosageForm' in input)
+          || (field === 'manufacturer' && 'brand' in input)
+          || (field === 'requiresPrescription' && 'isPrescriptionRequired' in input)) {
+          product[field] = fields[field];
+        }
+      }
+      product.version = Number(product.version || 1) + 1;
+      await product.save({ session });
+
+      const hasStock = input.stockQuantity !== undefined || input.stock !== undefined || input.quantity !== undefined;
+      const hasPrice = input.price !== undefined || input.sellingPrice !== undefined;
+      let inventory = null;
+      if (hasStock || hasPrice || input.expiryDate !== undefined || input.batchNumber !== undefined) {
+        const batches = await Inventory.find({
+          tenantId: scopeTenantId, branchId: scopeBranchId, productId: product._id
+        }).session(session);
+        const requestedBatch = input.batchNumber === undefined ? null : String(input.batchNumber || '').trim();
+        if (requestedBatch === null && batches.length > 1) {
+          const error = new Error('Select a batch number before changing stock for a multi-batch product.');
+          error.statusCode = 409;
+          throw error;
+        }
+        inventory = requestedBatch === null ? batches[0] || null
+          : batches.find(row => String(row.batchNumber || '') === requestedBatch) || null;
+        if (!inventory) {
+          const batchNumber = requestedBatch ?? '';
+          inventory = new Inventory({
+            tenantId: scopeTenantId, branchId: scopeBranchId, productId: product._id,
+            sku: product.sku, batchNumber, reservedQuantity: 0, stockQuantity: 0,
+            price: Number(input.sellingPrice ?? input.price ?? 0)
+          });
+        }
+        if (hasStock) {
+          const nextStock = Number(input.stockQuantity ?? input.stock ?? input.quantity);
+          if (!Number.isSafeInteger(nextStock) || nextStock < Number(inventory.reservedQuantity || 0)) {
+            const error = new Error('Stock must be a non-negative integer and cannot be lower than reserved stock.');
+            error.statusCode = 409;
+            throw error;
+          }
+          inventory.stockQuantity = nextStock;
+        }
+        if (hasPrice) {
+          const nextPrice = Number(input.sellingPrice ?? input.price);
+          if (!Number.isFinite(nextPrice) || nextPrice < 0) {
+            const error = new Error('Price must be a non-negative number.');
+            error.statusCode = 400;
+            throw error;
+          }
+          inventory.price = nextPrice;
+        }
+        if (input.expiryDate) {
+          const expiry = new Date(input.expiryDate);
+          if (!Number.isFinite(expiry.getTime())) {
+            const error = new Error('Expiry date is invalid.');
+            error.statusCode = 400;
+            throw error;
+          }
+          inventory.expiryDate = expiry;
+        }
+        inventory.sku = product.sku;
+        await inventory.save({ session });
+      }
+      result = {
+        _id: String(product._id), productId: String(product._id), sku: product.sku,
+        ...normalizeProductFields(product.toObject()),
+        ...(inventory ? {
+          price: inventory.price, stockQuantity: inventory.stockQuantity,
+          reservedQuantity: inventory.reservedQuantity,
+          availableQuantity: Math.max(0, inventory.stockQuantity - inventory.reservedQuantity),
+          batchNumber: inventory.batchNumber, expiryDate: inventory.expiryDate || null
+        } : {}),
+        tenantId: scopeTenantId, branchId: scopeBranchId
+      };
+      await Audit.create([{
+        tenantId: scopeTenantId, branchId: scopeBranchId, actor: actor || 'system',
+        operation: 'update_product', requestId, correlationId,
+        productId: product._id, sku: product.sku, details: { result }
+      }], { session });
+    });
+  } finally { await session.endSession(); }
+  return result;
+}
+
+export async function archiveProduct({ productId, tenantId, branchId, actor, requestId, correlationId } = {}) {
+  const scopeTenantId = typeof tenantId === 'string' ? tenantId.trim() : '';
+  const scopeBranchId = typeof branchId === 'string' ? branchId.trim() : '';
+  if (!scopeTenantId || !scopeBranchId || !mongoose.isValidObjectId(productId)) {
+    const error = new Error('Verified tenantId, branchId and a valid productId are required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const session = await mongoose.startSession();
+  let result;
+  try {
+    await session.withTransaction(async () => {
+      const product = await Product.findOne({ _id: productId, tenantId: scopeTenantId }).session(session);
+      if (!product) {
+        const error = new Error('Product was not found in this tenant.');
+        error.statusCode = 404;
+        throw error;
+      }
+      product.active = false;
+      product.version = Number(product.version || 1) + 1;
+      await product.save({ session });
+      result = { productId: String(product._id), sku: product.sku, active: false };
+      await Audit.create([{
+        tenantId: scopeTenantId, branchId: scopeBranchId, actor: actor || 'system',
+        operation: 'archive_product', requestId, correlationId,
+        productId: product._id, sku: product.sku, details: { result }
+      }], { session });
+    });
+  } finally { await session.endSession(); }
+  return result;
+}
+
 export async function reserveInventory({ orderId, items, idempotencyKey, actor, requestId, correlationId, tenantId = null, branchId = null }) {
   const normalizedOrderId = typeof orderId === 'string' ? orderId.trim() : '';
   const normalizedIdempotencyKey = typeof idempotencyKey === 'string' ? idempotencyKey.trim() : '';
