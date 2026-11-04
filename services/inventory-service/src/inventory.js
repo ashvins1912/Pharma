@@ -136,7 +136,7 @@ export async function searchInventoryProducts({
   if (isSearching) {
     const escapedQuery = normalizedQuery.replace(/[.*+?^()|[\]{}\\]/g, '\\$&');
     const pattern = new RegExp(escapedQuery, 'i');
-    filter.$or = [{ sku: pattern }, { name: pattern }, { genericName: pattern }, { manufacturer: pattern }, { category: pattern }];
+    filter.$or = [{ sku: pattern }, { name: pattern }, { genericName: pattern }, { manufacturer: pattern }, { category: pattern }, { strength: pattern }, { form: pattern }];
   }
   const products = await Product.find(filter).lean();
   const productIds = products.map(product => product._id);
