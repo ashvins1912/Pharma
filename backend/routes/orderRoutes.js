@@ -1,5 +1,5 @@
 import express from 'express';
-import { scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
@@ -7,6 +7,8 @@ import Order from '../models/Order.js';
 import Tenant from '../models/Tenant.js';
 import Rider from '../models/Rider.js';
 import Medicine from '../models/Medicine.js';
+import FulfillmentCase from '../models/FulfillmentCase.js';
+import { buildIntelligentFulfillmentPlan, validateWaitWindow } from '../services/intelligentFulfillment/fulfillmentPlanner.js';
 import { authenticateUser, isAdmin } from '../middleware/auth.js';
 import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
 import { getPrescription, removePrescription, savePrescription } from '../config/prescriptionStorage.js';
@@ -339,6 +341,120 @@ router.get('/', authenticateUser, async (req, res) => {
     } catch (error) {
         console.error('Order retrieval failed:', error);
         return res.status(500).json({ error: 'Could not fetch orders.' });
+    }
+});
+
+
+/**
+ * Availability is advisory only. The final checkout reservation remains the
+ * atomic source of truth; preview never holds stock or promises availability.
+ */
+router.post('/fulfillment/preview', authenticateUser, async (req, res) => {
+    if (!getIsConnected()) return res.status(503).json({ message: 'Live inventory is temporarily unavailable.' });
+    try {
+        const tenantId = String(req.body?.tenantId || '').trim();
+        if (!tenantId) return res.status(400).json({ code: 'PHARMACY_SELECTION_REQUIRED', message: 'Select a pharmacy first.' });
+        const items = parseCheckoutItems(req.body?.items || req.body?.cartItems);
+        if (!Array.isArray(items) || !items.length) return res.status(400).json({ message: 'Add at least one medicine.' });
+        const ids = [...new Set(items.map(item => String(item.medicineId || item._id || item.id || '')).filter(Boolean))];
+        if (ids.some(id => !mongoose.isValidObjectId(id))) return res.status(400).json({ message: 'One or more cart products are invalid.' });
+        const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!tenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
+        const inventory = await Medicine.find({ _id: { $in: ids }, tenantId }).select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean();
+        const compositionKeys = [...new Set(inventory.map(item => String(item.composition || item.genericName || '').trim()).filter(Boolean))];
+        const strengthKeys = [...new Set(inventory.map(item => String(item.strength || '').trim()).filter(Boolean))];
+        const catalog = compositionKeys.length && strengthKeys.length
+            ? await Medicine.find({
+                tenantId, isActive: { $ne: false },
+                _id: { $nin: ids },
+                composition: { $in: compositionKeys },
+                strength: { $in: strengthKeys },
+                expiryDate: { $gt: new Date() }
+            }).limit(100).select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean()
+            : [];
+        const plan = buildIntelligentFulfillmentPlan({ requestedItems: items, inventory, catalog });
+        return res.json({ ...plan, tenantId, branchId: req.body?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || null });
+    } catch (error) {
+        return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to calculate fulfilment options.' });
+    }
+});
+
+router.get('/fulfillment/waitlist', authenticateUser, async (req, res) => {
+    if (!getIsConnected()) return res.status(503).json({ message: 'Stock waitlist is temporarily unavailable.' });
+    try {
+        const cases = await FulfillmentCase.find({
+            customerId: String(req.user.sub),
+            status: { $in: ['AWAITING_CUSTOMER_DECISION', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'] }
+        }).sort({ createdAt: -1 }).limit(50).lean();
+        return res.json({ items: cases });
+    } catch (error) {
+        return res.status(503).json({ message: 'Unable to load your stock waitlist.' });
+    }
+});
+
+router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
+    if (!getIsConnected()) return res.status(503).json({ message: 'Stock waitlist is temporarily unavailable.' });
+    try {
+        const tenantId = String(req.body?.tenantId || '').trim();
+        const items = Array.isArray(req.body?.items) ? req.body.items : [];
+        const idempotencyKey = String(req.get('Idempotency-Key') || '').trim();
+        if (!tenantId || !items.length) return res.status(400).json({ message: 'Pharmacy and pending medicine items are required.' });
+        if (!idempotencyKey || idempotencyKey.length > 128) return res.status(400).json({ message: 'A valid Idempotency-Key header is required.' });
+        const { waitDays, waitUntil } = validateWaitWindow(req.body?.waitDays);
+        const ids = [...new Set(items.map(item => String(item.productId || item.medicineId || '')).filter(Boolean))];
+        if (!ids.length || ids.some(id => !mongoose.isValidObjectId(id))) return res.status(400).json({ message: 'Pending items must reference valid catalogue products.' });
+        const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!tenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
+        const existing = await FulfillmentCase.findOne({ customerId: String(req.user.sub), tenantId, idempotencyKey }).lean();
+        if (existing) return res.status(200).json({ case: existing, alreadyCreated: true });
+        const inventory = await Medicine.find({ _id: { $in: ids }, tenantId }).select('_id name').lean();
+        if (inventory.length !== ids.length) return res.status(404).json({ message: 'One or more requested medicines are not listed by this pharmacy.' });
+        const lines = items.map(item => {
+            const productId = String(item.productId || item.medicineId);
+            const requestedQuantity = Number(item.requestedQuantity ?? item.waitingQuantity);
+            if (!Number.isSafeInteger(requestedQuantity) || requestedQuantity < 1) throw Object.assign(new Error('Waiting quantity must be a positive whole number.'), { statusCode: 400 });
+            const product = inventory.find(row => String(row._id) === productId);
+            return {
+                productId, name: product.name, requestedQuantity,
+                allocatedQuantity: 0, waitingQuantity: requestedQuantity,
+                customerDecision: 'ACCEPTED_ORIGINAL'
+            };
+        });
+        const caseNumber = 'FUL-' + randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase();
+        const created = await FulfillmentCase.create({
+            caseNumber, customerId: String(req.user.sub), tenantId,
+            branchId: req.body?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || null,
+            sourceType: req.body?.sourceType === 'MEDICINE_REQUEST' ? 'MEDICINE_REQUEST' : 'CHECKOUT',
+            sourceId: req.body?.sourceId ? String(req.body.sourceId) : null,
+            parentOrderId: req.body?.parentOrderId ? String(req.body.parentOrderId) : null,
+            status: 'WAITING_FOR_STOCK', lines, waitDays, waitUntil,
+            idempotencyKey,
+            auditTrail: [{ action: 'WAITLIST_CREATED', actorId: String(req.user.sub), at: new Date(), waitDays, waitUntil }]
+        });
+        return res.status(201).json({ case: created.toObject(), message: 'Your stock waitlist request has been saved.' });
+    } catch (error) {
+        if (error.code === 11000) {
+            const existing = await FulfillmentCase.findOne({ customerId: String(req.user.sub), tenantId: String(req.body?.tenantId || ''), idempotencyKey: String(req.get('Idempotency-Key') || '') }).lean();
+            if (existing) return res.status(200).json({ case: existing, alreadyCreated: true });
+        }
+        return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to save stock waitlist request.' });
+    }
+});
+
+router.post('/fulfillment/waitlist/:id/cancel', authenticateUser, async (req, res) => {
+    if (!getIsConnected()) return res.status(503).json({ message: 'Stock waitlist is temporarily unavailable.' });
+    try {
+        const updated = await FulfillmentCase.findOneAndUpdate({
+            _id: req.params.id, customerId: String(req.user.sub),
+            status: { $in: ['WAITING_FOR_STOCK', 'AWAITING_CUSTOMER_DECISION', 'READY_FOR_CONFIRMATION'] }
+        }, {
+            $set: { status: 'CANCELLED' },
+            $push: { auditTrail: { action: 'WAITLIST_CANCELLED', actorId: String(req.user.sub), at: new Date() } }
+        }, { new: true }).lean();
+        if (!updated) return res.status(404).json({ message: 'Active stock waitlist entry not found.' });
+        return res.json({ case: updated, message: 'Stock waitlist entry cancelled.' });
+    } catch {
+        return res.status(503).json({ message: 'Unable to cancel stock waitlist entry.' });
     }
 });
 
