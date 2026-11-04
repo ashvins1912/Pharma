@@ -62,10 +62,6 @@ export default function AdminDashboardView() {
   const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen, setAdminBulkImportModalOpen, setAdminNewStockModalOpen } = useApp();
   const [adminTab, setAdminTab] = useState('tenantProfile');
 
-  useEffect(() => {
-    if (canViewTenants && adminTab === 'tenantProfile') setAdminTab('tenants');
-  }, [canViewTenants, adminTab]);
-
   // Navigation visibility and component rendering share these exact permission gates.
   const canViewFulfillment = hasPermission('orders.read') && hasPermission('orders.manage');
   const canViewAdminRequests = hasPermission('medicine_requests.read')
@@ -81,6 +77,10 @@ export default function AdminDashboardView() {
   const canManageRoutes = hasPermission('delivery.manage') && hasPermission('orders.manage');
   const canViewAudits = hasPermission('inventory.read');
   const canViewTenants = isSuperAdmin && hasPermission('tenants.read');
+
+  useEffect(() => {
+    if (canViewTenants && adminTab === 'tenantProfile') setAdminTab('tenants');
+  }, [canViewTenants, adminTab]);
   const canManagePlatformAccess = isSuperAdmin && hasPermission('users.manage');
   const canReadWhatsApp = hasPermission('whatsapp.read');
   const canManageWhatsApp = hasPermission('whatsapp.manage');
