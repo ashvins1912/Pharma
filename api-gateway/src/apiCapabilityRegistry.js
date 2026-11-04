@@ -136,6 +136,10 @@ const CAPABILITIES = [
   ['POST', /^\/api\/v1\/integrations(?:\/|$)/, 'csquare.manage'],
   ['GET', /^\/api\/v1\/notifications(?:\/|$)/, 'profile.read'],
   ['POST', /^\/api\/v1\/notifications(?:\/|$)/, 'profile.write'],
+  // Tenant-scoped pharmacy profile reads are explicitly available to that tenant's admins/owners.
+  ['GET', /^\/api\/v1\/vendor\/profile(?:\/edit-policy)?$/, 'tenant.profile.read'],
+  ['PATCH', /^\/api\/v1\/vendor\/profile$/, 'profile.write'],
+  ['PATCH', /^\/api\/v1\/vendor\/profile\/edit-policy$/, 'tenants.manage'],
   ['GET', /^\/api\/v1\/vendors?(?:\/|$)/, 'tenants.read'],
   ['PATCH', /^\/api\/v1\/vendor\/profile$/, 'profile.write'],
   ['GET', /^\/api\/v1\/vendor\/profile\/edit-policy$/, 'tenants.read'],
@@ -189,9 +193,10 @@ export function isGatewayPermissionAllowed(user, permission) {
 
   const role = user?.app_metadata?.role || user?.role;
   if (['admin', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return true;
-  // Tenant admins/owners may request the branch directory for their own tenant.
-  // The backend route independently enforces active membership and branch scope.
-  if (['tenant.branches.read', 'tenant.branches.manage'].includes(permission) && ['TENANT_ADMIN', 'TENANT_OWNER', 'OWNER'].includes(String(role || '').toUpperCase())) return true;
+  // Tenant admins/owners may read only their own pharmacy profile and branch directory.
+  // The backend independently enforces active membership and tenant scope.
+  const tenantRole = ['TENANT_ADMIN', 'TENANT_OWNER', 'OWNER'].includes(String(role || '').toUpperCase());
+  if (tenantRole && ['tenant.profile.read', 'tenant.branches.read', 'tenant.branches.manage'].includes(permission)) return true;
   return permissions.includes('*')
     || permissions.includes(permission)
     || permissions.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)));
