@@ -249,55 +249,57 @@ router.get('/discovery', async (req, res) => {
         if (!tenantId || !branchId) {
             return res.status(400).json({ code: 'PHARMACY_BRANCH_REQUIRED', message: 'Select a pharmacy branch for product discovery.' });
         }
-        const rankedMedicines = await productDiscovery.getPrioritizedMedicines(
-            {
-                categories,
-                subCategories,
-                maxPrice,
-                isRxRequired: parseBoolean(req.query.isRxRequired)
-            },
-            { activeCartSkus, priceTier },
-            { page: req.query.page, limit: req.query.limit }
-        );
-        const skuIds = [...new Set(rankedMedicines.map(item => String(item.skuId || item.sku || '').trim()).filter(Boolean))];
-        const liveInventory = skuIds.length ? await inventoryClient.lookup({
-            skus: skuIds, tenantId, branchId, userId: req.user?.sub || 'public-discovery'
-        }) : { items: [] };
-        const inventoryBySku = new Map((liveInventory.items || []).map(item => [String(item.sku || '').toUpperCase(), item]));
-        const data = rankedMedicines.flatMap(item => {
-            const live = inventoryBySku.get(String(item.skuId || item.sku || '').toUpperCase());
-            if (!live || Number(live.availableQuantity || 0) <= 0) return [];
-            const listPrice = Number(live.price || 0);
-            const discountPercentage = Math.min(100, Math.max(0, Number(live.discountPercentage || 0)));
-            const sellingPrice = Math.round(listPrice * (1 - discountPercentage / 100) * 100) / 100;
-            return [{
-                ...item,
-                _id: String(live.productId),
-                productId: String(live.productId),
-                skuId: live.sku,
-                name: live.name,
-                manufacturer: live.manufacturer,
-                composition: live.genericName,
-                strength: live.strength,
-                dosageForm: live.form,
-                imageUrl: live.imageUrl || item.imageUrl || '',
-                isRxRequired: Boolean(live.requiresPrescription),
-                stockQuantity: live.stockQuantity,
-                reservedQuantity: live.reservedQuantity,
-                availableQuantity: live.availableQuantity,
-                basePrice: listPrice,
-                price: sellingPrice,
-                sellingPrice,
-                discountPercentage,
-                pricing: {
-                    ...(item.pricing || {}),
-                    listPrice,
-                    currentPrice: sellingPrice,
-                    discountPercentage
-                }
-            }];
+        const page = Math.max(1, Number(req.query.page) || 1);
+        const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+        const isRxRequired = parseBoolean(req.query.isRxRequired);
+        const liveResult = await inventoryClient.searchProducts({
+            tenantId, branchId,
+            query: String(req.query.search || '').trim(),
+            category: categories.length === 1 ? categories[0] : '',
+            hideRx: false,
+            includeOutOfStock: false,
+            sort: 'default',
+            page: 1,
+            limit: 100,
+            userId: req.user?.sub || 'public-discovery'
         });
-        return res.json({ count: data.length, data });
+        const rankedMedicines = await productDiscovery.getPrioritizedMedicines(
+            { categories, subCategories },
+            { activeCartSkus, priceTier },
+            { page: 1, limit: 100 }
+        );
+        const rankBySku = new Map(rankedMedicines.map((item, index) => [String(item.skuId || '').toUpperCase(), index]));
+        const activeCartSet = new Set(activeCartSkus.map(sku => sku.toUpperCase()));
+        let liveItems = (liveResult.items || []).filter(item => {
+            if (activeCartSet.has(String(item.sku || '').toUpperCase())) return false;
+            if (isRxRequired !== undefined && Boolean(item.requiresPrescription) !== isRxRequired) return false;
+            const currentPrice = Number(item.sellingPrice ?? item.price ?? 0);
+            if (maxPrice !== undefined && currentPrice > maxPrice) return false;
+            if (categories.length && !categories.some(category => String(item.category || '').toLowerCase() === category.toLowerCase())) return false;
+            return true;
+        });
+        liveItems.sort((left, right) => {
+            const leftRank = rankBySku.get(String(left.sku || '').toUpperCase());
+            const rightRank = rankBySku.get(String(right.sku || '').toUpperCase());
+            if (leftRank === undefined && rightRank === undefined) return String(left.name || '').localeCompare(String(right.name || ''));
+            if (leftRank === undefined) return 1;
+            if (rightRank === undefined) return -1;
+            return leftRank - rightRank;
+        });
+        const total = liveItems.length;
+        const data = liveItems.slice((page - 1) * limit, page * limit).map(item => ({
+            ...item,
+            skuId: item.sku,
+            isRxRequired: Boolean(item.requiresPrescription),
+            pricing: {
+                currentPrice: Number(item.sellingPrice ?? item.price ?? 0),
+                listPrice: Number(item.basePrice ?? item.price ?? 0),
+                discountPercentage: Number(item.discountPercentage || 0),
+                priceTier: item.marginTier || 'LOW'
+            }
+        }));
+
+        return res.json({ count: total, page, limit, totalPages: Math.ceil(total / limit) || 1, data });
     } catch (error) {
         console.error('Prioritized medicine discovery failed:', error);
         return res.status(error.statusCode || 500).json({
