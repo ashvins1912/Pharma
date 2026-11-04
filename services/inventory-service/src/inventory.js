@@ -113,6 +113,7 @@ export async function searchInventoryProducts({
   const normalizedLimit = Math.min(100, Math.max(1, Math.floor(Number(limit) || 50)));
   const normalizedQuery = String(query || '').trim();
   const isSearching = Boolean(normalizedQuery);
+  const showOutOfStock = includeOutOfStock === true || String(includeOutOfStock).toLowerCase() === 'true';
   const filter = { active: true };
   if (tenantId) filter.tenantId = String(tenantId).trim();
   if (category && category !== 'All') filter.category = String(category).trim();
@@ -151,11 +152,12 @@ export async function searchInventoryProducts({
     const price = priceBatch?.price ?? null;
     return {
       listingId: listingBatch ? String(listingBatch.tenantId) + ':' + String(listingBatch.branchId) + ':' + String(product._id) : null,
-      productId: String(product._id), productVersion: product.version, sku: product.sku,
-      name: product.name, genericName: product.genericName, composition: product.genericName,
-      manufacturer: product.manufacturer, strength: product.strength, dosageForm: product.form, form: product.form,
-      category: product.category, requiresPrescription: product.requiresPrescription,
+      _id: String(product._id), productId: String(product._id), productVersion: product.version, sku: product.sku,
+      name: product.name, genericName: product.genericName, composition: product.genericName, drug: product.genericName, activeSalt: product.genericName,
+      manufacturer: product.manufacturer, brand: product.manufacturer, strength: product.strength, dosage: product.strength, dosageForm: product.form, form: product.form,
+      category: product.category, requiresPrescription: product.requiresPrescription, isPrescriptionRequired: product.requiresPrescription,
       mrp: price, sellingPrice: price, price, stockQuantity, reservedQuantity, availableQuantity,
+      stock: stockQuantity, quantity: availableQuantity,
       stockStatus: availableQuantity > 10 ? 'IN_STOCK' : availableQuantity > 0 ? 'LOW_STOCK' : 'OUT_OF_STOCK',
       batchNumber: listingBatch?.batchNumber || '', expiryDate: listingBatch?.expiryDate || null,
       batchCount: batches.length,
@@ -169,7 +171,7 @@ export async function searchInventoryProducts({
       branchId: listingBatch?.branchId || branchId || null
     };
   });
-  const visibleItems = !isSearching && !includeOutOfStock
+  const visibleItems = !isSearching && !showOutOfStock
     ? allItems.filter(item => item.availableQuantity > 0)
     : allItems;
   const comparators = {
@@ -185,7 +187,7 @@ export async function searchInventoryProducts({
     items, total, page: normalizedPage, limit: normalizedLimit,
     pages: Math.ceil(total / normalizedLimit) || 1,
     isSearching,
-    outOfStockHidden: !isSearching && !includeOutOfStock
+    outOfStockHidden: !isSearching && !showOutOfStock
   };
 }
 
