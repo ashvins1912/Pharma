@@ -7,7 +7,7 @@ const testMongoUri = process.env.INVENTORY_TEST_MONGO_URI;
 process.env.SERVICE_AUTH_SECRET = process.env.SERVICE_AUTH_SECRET || 'test-only-inventory-service-secret-1234567890';
 process.env.INVENTORY_MONGO_URI = testMongoUri || 'mongodb://127.0.0.1:27017/pharma-inventory-batch-test';
 
-const [{ Product, Inventory, Reservation, Audit }, { lookupInventory, reserveInventory, transitionReservation }] = await Promise.all([
+const [{ Product, Inventory, Reservation, Audit }, { lookupInventory, searchInventoryProducts, reserveInventory, transitionReservation }] = await Promise.all([
   import('./src/models.js'),
   import('./src/inventory.js')
 ]);
@@ -43,6 +43,12 @@ test('inventory lookup aggregates active batches and reservation allocates/relea
     assert.equal(lookup[0].availableQuantity, 15);
     assert.equal(lookup[0].batchCount, 2);
     assert.deepEqual(lookup[0].batchAvailability.map(batch => batch.batchNumber), ['LOT-FEFO-1', 'LOT-FEFO-2']);
+    const search = await searchInventoryProducts({ tenantId, branchId, query: 'Batch Stock Test' });
+    assert.equal(search.items[0].stockQuantity, 15);
+    assert.equal(search.items[0].availableQuantity, 15);
+    assert.equal(search.items[0].batchCount, 2);
+    const otherBranchLookup = await lookupInventory({ skus: [product.sku], tenantId, branchId: 'different-branch' });
+    assert.equal(otherBranchLookup[0].availableQuantity, 50);
 
     const reservation = await reserveInventory({
       orderId: 'ORD-BATCH-FEFO-1',
