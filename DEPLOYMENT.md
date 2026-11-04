@@ -99,6 +99,220 @@ Production rollout verification:
 5. Create a test order whose quantity spans two lots; verify FEFO reservation allocation, then cancel and confirm each lot's reserved quantity is restored.
 6. Verify dispatch deducts the exact allocated quantities. Finally, test unpublish/rollback against the test batch and confirm no newer inventory changes are overwritten.
 
+Never use the synthetic template against live inventory. Use a dedicated test tenant, branch and database for integration validation.
+
+## 5. Order Render
+File: services/order-service/render.yaml
+
+~~~text
+runtime: node
+type: private service
+rootDir: services/order-service
+healthCheckPath: /ready
+database: pharma_orders
+prescription reconciliation interval: 10000 ms
+reconciliation batch size: 20
+~~~
+
+Required:
+~~~text
+ORDER_MONGO_URI
+SERVICE_AUTH_SECRET
+INVENTORY_SERVICE_URL
+PRESCRIPTION_SERVICE_URL
+~~~
+
+## 6. Prescription API + worker
+File: services/prescription-service/render.yaml
+
+Two processes are required.
+
+API:
+~~~text
+runtime: python
+rootDir: services/prescription-service
+build: pip install -r requirements.txt
+start: uvicorn main:app --host 0.0.0.0 --port \${PORT:-10000}
+health: /health
+~~~
+
+Worker:
+~~~text
+runtime: python
+rootDir: services/prescription-service
+build: pip install -r requirements.txt
+start: python -m app.workers
+~~~
+
+Shared configuration:
+~~~text
+MONGO_URI
+PRESCRIPTION_DB_NAME=pharma_prescriptions
+PRESCRIPTION_ENCRYPTION_KEY
+SERVICE_AUTH_SECRET
+SERVICE_JWT_ISSUER=ashvin-pharmacy
+SERVICE_JWT_AUDIENCE=prescription-service
+PRESCRIPTION_MAX_RETRIES=3
+~~~
+
+Worker:
+~~~text
+WORKER_ID
+PROCESSING_LEASE_SECONDS=600
+HEARTBEAT_INTERVAL_SECONDS=45
+~~~
+
+Never expose the worker publicly.
+
+## 7. Backend platform API
+Backend is the private platform/orchestration boundary.
+
+Typical local configuration:
+~~~text
+PORT=8090
+MONGO_URI=mongodb://localhost:27017/pharma
+PRESCRIPTION_SERVICE_URL=http://localhost:8000
+SERVICE_AUTH_SECRET=<secret>
+~~~
+
+There is no current standalone backend Render manifest in the repository. If backend production deployment is required, deploy it as a private service rather than restoring the old root combined application.
+
+## 8. Frontend
+Directory: frontend/
+
+Build:
+~~~bash
+cd frontend
+npm install
+npm run build
+~~~
+
+Environment:
+~~~text
+VITE_API_URL=/api
+VITE_DEV_API_PROXY=http://localhost:8080
+VITE_FRONTEND_URL=http://localhost:3000
+VITE_SUPABASE_URL=<Google OAuth broker URL>
+VITE_SUPABASE_ANON_KEY=<browser-safe Supabase key>
+~~~
+
+Do not put private keys, service secrets or Supabase service-role keys in frontend variables.
+
+## 9. Pharma JWT production keys
+Backend application sessions use RS256.
+
+Required:
+~~~text
+PHARMA_JWT_PRIVATE_KEY
+PHARMA_JWT_PUBLIC_KEY
+PHARMA_JWT_ISSUER=pharma-auth
+PHARMA_JWT_AUDIENCE=pharma-api
+PHARMA_ACCESS_TOKEN_TTL=1h
+~~~
+
+The **same RSA key pair** must be configured on both services:
+- Backend: `PHARMA_JWT_PRIVATE_KEY` + `PHARMA_JWT_PUBLIC_KEY`
+- API Gateway: `PHARMA_JWT_PUBLIC_KEY` only
+
+The Backend signs Pharma access/refresh JWTs with the private key. The Gateway verifies access JWTs with the matching public key. **Never configure the private key on the Gateway or frontend.** If the Gateway public key is missing, protected APIs must not be considered operational.
+
+
+Generate:
+~~~bash
+openssl genrsa -out pharma-private.pem 3072
+openssl rsa -in pharma-private.pem -pubout -out pharma-public.pem
+~~~
+Store PEM values only as server-side secrets. Never commit them.
+Production intentionally fails when required signing keys are absent. Development can create an ephemeral key pair.
+
+## 10. Secrets that never reach the frontend
+Never expose:
+- MongoDB credentials
+- SERVICE_AUTH_SECRET
+- GATEWAY_AUTH_SECRET
+- Pharma private signing key
+- prescription encryption key
+- SMTP passwords
+- Supabase service-role key
+- third-party API secrets
+
+## 11. CORS
+CORS is controlled at the public Gateway.
+
+Production example:
+~~~text
+CORS_ALLOWED_ORIGINS=https://pharma-ui.onrender.com
+~~~
+For a custom domain, use that exact origin.
+
+Never use *.
+Do not include paths in allowed origins. Preflight OPTIONS must work.
+
+
+## 11A. Browser authentication security contract
+The browser talks to the API Gateway through the frontend's same-origin `/api/*` rewrite for session-bound and protected APIs. The sanitized public storefront catalog is the exception: the frontend calls `VITE_API_GATEWAY_URL` directly so a static-site rewrite failure cannot break landing-page medicine loading. This endpoint does not require a session cookie or an inventory permission. The Gateway is the browser trust boundary.
+
+Set `CORS_ALLOWED_ORIGINS` on the Gateway to the exact storefront origin (for example, `https://pharma-ui.onrender.com`).
+
+Anonymous startup:
+~~~text
+GET /api/v1/auth/me -> 401 (expected anonymous state; no refresh is triggered)
+GET https://pharma-api-gateway.onrender.com/api/medicines?page=1&limit=16 -> 200
+~~~
+
+Authenticated startup:
+~~~text
+POST /api/v1/auth/login -> HttpOnly access/refresh cookies + XSRF-TOKEN
+GET /api/v1/auth/me -> 200
+protected APIs -> Gateway JWT verification -> RBAC -> trusted backend credential -> backend
+~~~
+
+Session recovery:
+~~~text
+protected request -> 401
+one refresh request -> rotated HttpOnly session cookies
+original request retried once with the fresh cookie
+~~~
+
+State-changing browser requests are protected at the Gateway with exact-origin/Fetch-Metadata checks and a double-submit `XSRF-TOKEN` header. The backend retains its own CSRF middleware for direct/internal compatibility. Production session cookies use `Secure; HttpOnly; SameSite=Lax; Path=/`. Refresh sessions are persisted server-side, rotated on every refresh, revoked on logout, and replacement lifetime is bounded by the original refresh session expiry. Legacy refresh tokens are bootstrapped on first use and then rotated.
+
+Do not reintroduce automatic CSRF bootstrap, automatic retries for catalog failures, or browser access to the private backend. The expected anonymous `/auth/me` 401 is not an outage.
+
+## 12. Health checks
+~~~text
+Gateway       /ready
+Inventory     /ready
+Order         /ready
+Prescription  /health
+~~~
+
+For the current Render topology, `ashvin-pharmacy-platform` is a private service. The Gateway must reach it over Render's private network; do not point `BACKEND_API_URL` at the frontend or an obsolete public API hostname.
+
+After deployment verify:
+1. process is running
+2. health endpoint passes
+3. DB connection works
+4. service authentication works
+5. Gateway can route to the private service
+
+A green Render process alone is not a production smoke test.
+
+## 13. Deployment sequence
+1. Validate main.
+2. Deploy/verify Inventory.
+3. Deploy/verify Order.
+4. Deploy/verify Prescription API.
+5. Deploy/verify Prescription Worker.
+6. Deploy/verify private Backend if changed.
+7. Deploy/verify Gateway and private target URLs.
+8. Deploy frontend with correct API origin.
+9. Run public Gateway smoke tests.
+10. Verify authentication, authorization, tenant isolation and critical business flows.
+
+When a service contract changes, deploy a compatible provider before switching the Gateway to it.
+
+## 14. Required smoke tests
+
 ### Authentication
 - Email login creates Pharma HttpOnly session.
 - Google exchange creates Pharma session.
