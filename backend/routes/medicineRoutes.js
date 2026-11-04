@@ -281,7 +281,9 @@ router.get('/audits', authenticateUser, async (req, res) => {
     try {
         const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
         const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
-        res.json(await dataStore.getInventoryAudits(page, limit));
+        const tenantId = req.context?.tenantId || req.user?.tenantId || req.user?.app_metadata?.tenantId;
+        const branchId = req.context?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId;
+        res.json(await dataStore.getInventoryAudits(page, limit, { tenantId, branchId }));
     } catch (err) {
         console.error('Inventory audit list failed:', err);
         res.status(500).json({ message: "Failed to fetch audit logs" });
