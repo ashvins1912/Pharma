@@ -1162,16 +1162,21 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
         });
     } catch (error) {
         if (createdOrder?._id) {
-            // The inventory reservation/order transaction has committed. Never reopen
-            // the proposal and risk creating a second order if a later update fails.
+            // The stock reservation/order transaction has committed. Reconcile linked
+            // records, but never reopen the proposal and risk a duplicate order.
+            const linkResults = waitlistCase?._id ? await Promise.allSettled([
+                FulfillmentCase.updateOne({ _id: waitlistCase._id, customerId, tenantId }, { $set: { parentOrderId: String(createdOrder._id) } }),
+                Order.updateOne({ _id: createdOrder._id, userId: customerId, tenantId }, { $set: { fulfillmentCaseId: String(waitlistCase._id), fulfillmentState: 'PARTIAL' } })
+            ]) : [];
             const recovered = await MedicineRequest.findOneAndUpdate(
                 { _id: req.params.id, customerId: String(req.user.sub), status: 'FULFILLMENT_PROCESSING' },
                 { $set: { status: 'CONVERTED_TO_ORDER', convertedOrderId: String(createdOrder._id), fulfillmentCaseId: waitlistCase?._id || null, fulfillmentProcessingAt: null } },
                 { new: true }
             ).lean().catch(() => null);
+            const linkRecoveryRequired = linkResults.some(result => result.status === 'rejected');
             return res.status(202).json({
                 success: true, order: createdOrder, request: recovered,
-                waitlist: waitlistCase, recoveryRequired: !recovered,
+                waitlist: waitlistCase, recoveryRequired: !recovered || linkRecoveryRequired,
                 message: 'Your available medicines were reserved and an order was created. Refresh your requests to see the latest fulfilment status.'
             });
         }
