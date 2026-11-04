@@ -1,5 +1,4 @@
 import express from 'express';
-import { createHash, randomUUID } from 'node:crypto';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
@@ -7,7 +6,7 @@ import { getIsConnected } from '../config/db.js';
 import { authenticateUser } from '../middleware/auth.js';
 import ProductDiscoveryService from '../services/ProductDiscoveryService.js';
 import SearchMetricIngestionService from '../services/SearchMetricIngestionService.js';
-import { cacheService } from '../services/cache/CacheService.js';
+import { inventoryClient } from '../services/inventory-client/InventoryClient.js';
 
 const router = express.Router();
 const importFileLimit = Number.parseInt(process.env.INVENTORY_IMPORT_MAX_FILE_BYTES || '', 10);
@@ -35,30 +34,6 @@ const publicMedicine = medicine => {
 const getErrorStatus = error => error.statusCode
     || (error.name === 'ValidationError' || error.name === 'CastError' ? 400 : 500);
 
-const PUBLIC_CATALOG_VERSION_KEY = 'public-medicines:catalog-version';
-const PUBLIC_CATALOG_TTL_SECONDS = 10;
-
-async function getPublicCatalogVersion() {
-    const existing = await cacheService.get(PUBLIC_CATALOG_VERSION_KEY);
-    if (typeof existing === 'string' && existing) return existing;
-    const version = randomUUID();
-    await cacheService.set(PUBLIC_CATALOG_VERSION_KEY, version, 24 * 60 * 60);
-    return version;
-}
-
-async function invalidatePublicCatalog() {
-    await cacheService.set(PUBLIC_CATALOG_VERSION_KEY, randomUUID(), 24 * 60 * 60);
-}
-
-function publicCatalogCacheKey(version, tenantId, query) {
-    const digest = createHash('sha256').update(JSON.stringify({
-        tenantId,
-        query: Object.fromEntries(Object.entries(query).sort(([a], [b]) => a.localeCompare(b)))
-    })).digest('hex');
-    return `public-medicines:v:${version}:${digest}`;
-}
-
-
 // Full inventory and CRUD are protected by inventory.read / inventory.write capabilities.
 router.get('/admin/inventory', authenticateUser, async (req, res) => {
     try {
@@ -71,7 +46,26 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
         if (!isPlatformAdmin && !tenantId) {
             return res.status(403).json({ message: 'An active pharmacy tenant is required to view inventory.' });
         }
-        res.json(await dataStore.getMedicines(search, false, category, sort, page, limit, true, tenantId));
+        const result = await inventoryClient.searchProducts({
+            tenantId,
+            branchId: req.query.branchId || req.context?.branchId || null,
+            query: search || '',
+            category: category === 'All' ? '' : category || '',
+            sort: sort || 'default',
+            page: page || 1,
+            limit: limit || 16,
+            includeOutOfStock: true,
+            userId: req.user?.sub || 'inventory-admin'
+        });
+        res.json({
+            medicines: result.items || [],
+            total: result.total || 0,
+            page: result.page || Number(page) || 1,
+            limit: result.limit || Number(limit) || 16,
+            totalPages: result.pages || 1,
+            isSearching: Boolean(search && String(search).trim()),
+            outOfStockHidden: false
+        });
     } catch (error) {
         console.error('Admin inventory retrieval failed:', error);
         res.status(500).json({ message: 'Failed to retrieve admin inventory.' });
@@ -81,7 +75,6 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
 router.post('/', authenticateUser, async (req, res) => {
     try {
         const medicine = await dataStore.createMedicine(req.body || {});
-        await invalidatePublicCatalog();
         res.status(201).json(medicine);
     } catch (error) {
         console.error('Medicine creation failed:', error);
@@ -122,49 +115,49 @@ router.get('/', async (req, res) => {
                 message: 'Select a pharmacy to view its medicine catalogue.'
             });
         }
-        // Only cache non-search public catalog reads. Search requests have impression
-        // ingestion side effects and should continue to execute normally.
-        const cacheEligible = !(typeof search === 'string' && search.trim())
-            && paginate !== 'false';
-        let cacheKey = null;
-        if (cacheEligible) {
-            const version = await getPublicCatalogVersion();
-            cacheKey = publicCatalogCacheKey(version, tenantId, { hideRx, category, sort, page, limit, paginate });
-            const cached = await cacheService.get(cacheKey);
-            if (cached !== null && cached !== undefined) {
-                res.set('X-Pharma-Cache', 'HIT');
-                return res.json(cached);
-            }
-        }
-
-        const result = await dataStore.getMedicines(
-            search,
-            hideRx,
-            category,
-            sort,
-            page,
-            limit,
-            false,
-            tenantId
-        );
-        const medicines = result.medicines.map(publicMedicine);
-        if (typeof search === 'string' && search.trim() && getIsConnected()) {
-            const skuIds = result.medicines
-                .map(medicine => medicine.sku || medicine.code)
-                .filter(skuId => typeof skuId === 'string' && skuId.trim());
+        // Inventory Service is authoritative for product metadata, batch stock,
+        // reservations, expiry and price. Do not cache this response: an import
+        // publish must be reflected on the next catalogue read.
+        const result = await inventoryClient.searchProducts({
+            tenantId,
+            branchId: req.query.branchId || req.context?.branchId || null,
+            query: search || '',
+            category: category === 'All' ? '' : category || '',
+            hideRx: hideRx === 'true' || hideRx === true,
+            sort: sort || 'default',
+            page: page || 1,
+            limit: limit || 16,
+            includeOutOfStock: false,
+            userId: req.context?.userId || 'public-catalog'
+        });
+        const medicines = (result.items || []).map(publicMedicine);
+        if (typeof search === 'string' && search.trim()) {
+            const skuIds = medicines.map(medicine => medicine.sku || medicine.code)
+                .filter(sku => typeof sku === 'string' && sku.trim());
             void searchMetricIngestion.recordImpressionsForSkus({ skuIds })
                 .catch(error => console.error('Medicine search impression recording failed:', error));
         }
-
-        const response = paginate === 'false' ? medicines : { ...result, medicines };
-        if (cacheEligible && cacheKey) {
-            await cacheService.set(cacheKey, response, PUBLIC_CATALOG_TTL_SECONDS);
-            res.set('X-Pharma-Cache', 'MISS');
-        }
-        return res.json(response);
-    } catch (err) {
-        console.error("Error fetching medicines:", err);
-        res.status(500).json({ message: "Failed to fetch medicines" });
+        if (paginate === 'false') return res.json(medicines);
+        return res.json({
+            medicines,
+            total: result.total || 0,
+            page: result.page || Number(page) || 1,
+            limit: result.limit || Number(limit) || 16,
+            totalPages: result.pages || 1,
+            isSearching: Boolean(search && String(search).trim()),
+            outOfStockHidden: result.outOfStockHidden ?? !(search && String(search).trim())
+        });
+    } catch (error) {
+        console.error('Inventory Service public catalogue retrieval failed:', {
+            code: error.code || error.name,
+            statusCode: error.statusCode || null
+        });
+        return res.status(error.statusCode || 503).json({
+            code: error.code || 'INVENTORY_SERVICE_UNAVAILABLE',
+            message: error.statusCode && error.statusCode < 500
+                ? error.message
+                : 'The medicine catalogue is temporarily unavailable.'
+        });
     }
 });
 
