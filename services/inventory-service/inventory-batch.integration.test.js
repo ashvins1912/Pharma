@@ -34,6 +34,7 @@ test('inventory lookup aggregates active batches and reservation allocates/relea
       { tenantId, branchId, productId: product._id, sku: product.sku, batchNumber: 'LOT-FEFO-1', stockQuantity: 5, reservedQuantity: 0, price: 10, expiryDate: firstExpiry },
       { tenantId, branchId, productId: product._id, sku: product.sku, batchNumber: 'LOT-FEFO-2', stockQuantity: 10, reservedQuantity: 0, price: 11, expiryDate: secondExpiry },
       { tenantId, branchId, productId: product._id, sku: product.sku, batchNumber: 'LOT-EXPIRED', stockQuantity: 100, reservedQuantity: 0, price: 1, expiryDate: expiredDate }
+      { tenantId, branchId: 'different-branch', productId: product._id, sku: product.sku, batchNumber: 'OTHER-BRANCH', stockQuantity: 50, reservedQuantity: 0, price: 2, expiryDate: secondExpiry }
     ]);
 
     const lookup = await lookupInventory({ skus: [product.sku], tenantId, branchId });
