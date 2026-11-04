@@ -1109,6 +1109,9 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     previewFingerprint,
     inventorySnapshot,
     productSnapshot,
+    // Internal only: the staging route reuses the exact parsed source rows so
+    // the workbook is not parsed a second time during the same upload request.
+    sourceRows: rows,
     tenantId,
     branchId,
     rowsDetected: rows.length,
