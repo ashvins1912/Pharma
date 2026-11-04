@@ -59,12 +59,12 @@ const getVerifiedInventoryScope = async req => {
     const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
     const tenantId = String(
         req.user?.tenantId || req.user?.app_metadata?.tenantId
-        || (isPlatformAdmin ? req.get('x-tenant-id') || req.body?.tenantId : '')
+        || (isPlatformAdmin ? req.get('x-tenant-id') || req.query?.tenantId || req.body?.tenantId : '')
         || ''
     ).trim();
     const branchId = String(
         req.user?.branchId || req.context?.branchId
-        || req.get('x-branch-id') || req.body?.branchId || ''
+        || req.get('x-branch-id') || req.query?.branchId || req.body?.branchId || ''
     ).trim();
     if (!tenantId || !branchId) {
         const error = new Error('Select an authorized pharmacy tenant and branch before changing catalogue inventory.');
