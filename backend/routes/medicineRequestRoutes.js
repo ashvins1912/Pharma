@@ -813,7 +813,7 @@ router.get('/:id/fulfillment-options', authenticateUser, requirePermission('medi
                 const listPrice = Math.max(unitPrice, Number(product.basePrice ?? unitPrice));
                 const discountPercentage = listPrice > unitPrice
                     ? Math.round((1 - unitPrice / listPrice) * 10000) / 100
-                    : Math.min(100, Math.max(0, Number(product.discountPercentage || 0)));
+                    : 0;
                 return {
                     productId: String(product._id), medicineName: product.name,
                     manufacturer: product.manufacturer || product.brand || '',
