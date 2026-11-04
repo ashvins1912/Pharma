@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { approveProposal, confirmMedicineRequestFulfillment, previewMedicineRequestFulfillment, rejectProposal } from '../../api/medicineRequestService';
+import { approveProposal, confirmMedicineRequestFulfillment, previewMedicineRequestFulfillment, rejectProposal, getCustomerStockWaitlist, confirmCustomerStockWaitlist, cancelCustomerStockWaitlist } from '../../api/medicineRequestService';
 import { useLanguage } from '../../context/LanguageContext';
 
 export default function CustomerProposalModal({ request, isOpen, onClose, onOrderCreated }) {
@@ -23,6 +23,9 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
   const [waitDays, setWaitDays] = useState(3);
   const [fulfillmentChoices, setFulfillmentChoices] = useState({});
   const [selectedOfferProductId, setSelectedOfferProductId] = useState('');
+  const [stockWaitlistCase, setStockWaitlistCase] = useState(null);
+  const [waitlistLoading, setWaitlistLoading] = useState(false);
+  const [waitlistActionLoading, setWaitlistActionLoading] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -31,6 +34,25 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
     setRejectReason('');
     setSelectedOfferProductId(request?.pharmacyProposal?.productId || '');
   }, [isOpen, request?._id]);
+
+  useEffect(() => {
+    if (!isOpen || !request?._id || !request?.fulfillmentCaseId
+      || !['WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION', 'CONVERTED_TO_ORDER'].includes(request.status)) {
+      setStockWaitlistCase(null);
+      return undefined;
+    }
+    let active = true;
+    setWaitlistLoading(true);
+    getCustomerStockWaitlist()
+      .then(items => {
+        if (active) setStockWaitlistCase(items.find(item => String(item._id) === String(request.fulfillmentCaseId)) || null);
+      })
+      .catch(error => {
+        if (active) addToast(error.response?.data?.message || 'Could not refresh stock availability.', 'warning');
+      })
+      .finally(() => { if (active) setWaitlistLoading(false); });
+    return () => { active = false; };
+  }, [isOpen, request?._id, request?.fulfillmentCaseId, request?.status]);
 
   useEffect(() => {
     if (!isOpen || !request?._id || request.status !== 'PROPOSAL_SENT') return undefined;
@@ -100,6 +122,54 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
       previewMedicineRequestFulfillment(request._id).then(setAvailabilityPlan).catch(() => {});
     } finally {
       setApproving(false);
+    }
+  };
+
+  const handleRefreshStockWaitlist = async () => {
+    if (waitlistLoading || waitlistActionLoading) return;
+    try {
+      setWaitlistLoading(true);
+      const items = await getCustomerStockWaitlist();
+      setStockWaitlistCase(items.find(item => String(item._id) === String(request.fulfillmentCaseId)) || null);
+      addToast('Stock availability refreshed.', 'success');
+      await loadUserMedicineRequests();
+    } catch (error) {
+      addToast(error.response?.data?.message || 'Could not refresh stock availability.', 'error');
+    } finally {
+      setWaitlistLoading(false);
+    }
+  };
+
+  const handleConfirmAvailableWaitlistStock = async () => {
+    if (!stockWaitlistCase?._id || waitlistActionLoading) return;
+    try {
+      setWaitlistActionLoading(true);
+      const result = await confirmCustomerStockWaitlist(stockWaitlistCase._id);
+      addToast(result.message || 'Available stock has been ordered.', 'success');
+      await Promise.all([loadUserMedicineRequests(), loadUserOrders()]);
+      if (result.order && onOrderCreated) onOrderCreated(result.order);
+      const cases = await getCustomerStockWaitlist();
+      setStockWaitlistCase(cases.find(item => String(item._id) === String(request.fulfillmentCaseId)) || null);
+    } catch (error) {
+      addToast(error.response?.data?.message || 'Could not confirm the available stock. Please refresh and retry.', 'error');
+      await handleRefreshStockWaitlist();
+    } finally {
+      setWaitlistActionLoading(false);
+    }
+  };
+
+  const handleCancelStockWaitlist = async () => {
+    if (!stockWaitlistCase?._id || waitlistActionLoading) return;
+    try {
+      setWaitlistActionLoading(true);
+      await cancelCustomerStockWaitlist(stockWaitlistCase._id);
+      setStockWaitlistCase(null);
+      addToast('Stock waitlist cancelled.', 'info');
+      await loadUserMedicineRequests();
+    } catch (error) {
+      addToast(error.response?.data?.message || 'Could not cancel the stock waitlist.', 'error');
+    } finally {
+      setWaitlistActionLoading(false);
     }
   };
 
@@ -333,7 +403,39 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
             <p className="text-[10px] text-indigo-900">Stock is checked again when you confirm. Alternatives require your consent; prescription medicines cannot be automatically substituted.</p>
           </section>
         )}
-        {request.status === 'WAITING_FOR_STOCK' && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">This request is waiting for the selected pharmacy to replenish stock.</div>}
+        {['WAITING_FOR_STOCK', 'CONVERTED_TO_ORDER'].includes(request.status) && request.fulfillmentCaseId && (
+          <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+            <div>
+              <h4 className="text-sm font-black text-amber-950">Stock refill tracking</h4>
+              <p className="mt-1 text-xs text-amber-900">{stockWaitlistCase?.status === 'READY_FOR_CONFIRMATION' || stockWaitlistCase?.status === 'PARTIALLY_FULFILLED'
+                ? 'Some or all requested stock is available. Confirm only the quantity currently available.'
+                : 'We are checking this pharmacy for the requested medicines. You will need to confirm before a new order is created.'}</p>
+            </div>
+            {stockWaitlistCase && <>
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="font-bold text-amber-950">Status: {stockWaitlistCase.status.replaceAll('_', ' ')}</span>
+                <span className="text-amber-800">Wait until {new Date(stockWaitlistCase.waitUntil).toLocaleString()}</span>
+              </div>
+              {(stockWaitlistCase.lines || []).map((line, index) => (
+                <div key={line.productId || line.requestedName || index} className="flex items-center justify-between gap-3 rounded-xl bg-white border border-amber-100 p-2 text-xs">
+                  <span className="font-semibold text-slate-800">{line.name || line.requestedName}</span>
+                  <span className="text-slate-600">{Number(line.allocatedQuantity || 0)} available / {Number(line.waitingQuantity || line.requestedQuantity || 0)} pending</span>
+                </div>
+              ))}
+            </>}
+            {!stockWaitlistCase && <p className="text-xs text-amber-800">{waitlistLoading ? 'Refreshing stock status…' : 'The latest waitlist status is not available yet. Refresh to check again.'}</p>}
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={handleRefreshStockWaitlist} disabled={waitlistLoading || waitlistActionLoading} className="flex-1 rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-950 disabled:opacity-50">{waitlistLoading ? 'Checking…' : 'Check stock again'}</button>
+              {stockWaitlistCase && ['READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'].includes(stockWaitlistCase.status) && (
+                <button type="button" onClick={handleConfirmAvailableWaitlistStock} disabled={waitlistActionLoading} className="flex-1 rounded-xl bg-emerald-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50">{waitlistActionLoading ? 'Confirming…' : 'Confirm available stock'}</button>
+              )}
+              {stockWaitlistCase && ['WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'].includes(stockWaitlistCase.status) && (
+                <button type="button" onClick={handleCancelStockWaitlist} disabled={waitlistActionLoading} className="rounded-xl px-3 py-2 text-xs font-bold text-rose-700 hover:bg-white disabled:opacity-50">Cancel waitlist</button>
+              )}
+            </div>
+          </section>
+        )}
+        {request.status === 'WAITING_FOR_STOCK' && !request.fulfillmentCaseId && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">This request is waiting for the selected pharmacy to replenish stock.</div>}
 
         {/* Expiration Note */}
         {request.expiresAt && !isExpired && !isApproved && (
