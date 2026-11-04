@@ -130,7 +130,8 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     });
     assert.equal(unpublishOne.status, 200);
     assert.equal(await models.Inventory.countDocuments({ tenantId, branchId }), 0);
-    assert.equal(await models.Product.countDocuments({ tenantId }), 0);
+    assert.equal(await models.Product.countDocuments({ tenantId }), 1);
+    assert.equal((await models.Product.findOne({ tenantId, sku: 'TEST-STAGED-001' }).lean()).active, false);
     const repeatedUnpublish = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/unpublish`, {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ rowIds: [first.rowId] })
     });
@@ -151,7 +152,8 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(rollback.status, 200);
     assert.equal((await rollback.json()).status, 'REVERTED');
     assert.equal(await models.Inventory.countDocuments({ tenantId, branchId }), 0);
-    assert.equal(await models.Product.countDocuments({ tenantId }), 0);
+    assert.equal(await models.Product.countDocuments({ tenantId }), 1);
+    assert.equal((await models.Product.findOne({ tenantId, sku: 'TEST-STAGED-001' }).lean()).active, false);
 
     const staleProduct = await models.Product.create({ tenantId, sku: 'TEST-STAGED-STALE', name: 'Before stale publish', version: 1 });
     const staleInventory = await models.Inventory.create({
