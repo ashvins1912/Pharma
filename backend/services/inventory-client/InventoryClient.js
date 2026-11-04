@@ -132,18 +132,20 @@ export const inventoryClient = {
     });
   },
 
-  async release(reservationId, { userId = 'backend', idempotencyKey } = {}) {
+  async release(reservationId, { tenantId, branchId, userId = 'backend', idempotencyKey } = {}) {
     return request('POST', `/api/v1/inventory/reservations/${encodeURIComponent(reservationId)}/release`, {
       userId,
       scopes: ['inventory.release'],
+      data: { tenantId, branchId },
       idempotencyKey
     });
   },
 
-  async deduct(reservationId, { userId = 'backend', idempotencyKey } = {}) {
+  async deduct(reservationId, { tenantId, branchId, userId = 'backend', idempotencyKey } = {}) {
     return request('POST', `/api/v1/inventory/reservations/${encodeURIComponent(reservationId)}/deduct`, {
       userId,
       scopes: ['inventory.deduct'],
+      data: { tenantId, branchId },
       idempotencyKey
     });
   }
