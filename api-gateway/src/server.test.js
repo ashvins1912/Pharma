@@ -87,6 +87,8 @@ test('intelligent order and medicine-request waitlist endpoints require explicit
   }
   assert.equal(resolveGatewayCapability('GET', '/api/orders/fulfillment/waitlist'), 'orders.read');
   assert.equal(resolveGatewayCapability('POST', '/api/medicine-requests/6acab8869852d76d01a594e7/waitlist'), 'medicine_requests.decide');
+  assert.equal(resolveGatewayCapability('GET', '/api/medicine-requests/6acab8869852d76d01a594e7/fulfillment/preview'), 'medicine_requests.decide');
+  assert.equal(resolveGatewayCapability('POST', '/api/medicine-requests/6acab8869852d76d01a594e7/fulfillment/confirm'), 'medicine_requests.decide');
   assert.equal(resolveGatewayCapability('GET', '/api/admin/medicine-requests/6acab8869852d76d01a594e7/fulfillment-options'), 'medicine_requests.read');
 });
 
