@@ -382,6 +382,7 @@ router.post('/fulfillment/preview', authenticateUser, async (req, res) => {
             })))
             : [];
         const catalog = [...new Map(catalogResults.flatMap(result => result.items || [])
+            .filter(product => compositionKeys.some(composition => String(product.genericName || product.composition || '').trim().toLowerCase() === composition.toLowerCase()))
             .filter(product => strengthKeys.some(strength => String(product.strength || '').trim().toLowerCase() === strength.toLowerCase()))
             .filter(product => !ids.includes(String(product.productId)))
             .map(product => [String(product.productId), product])).values()];
