@@ -1507,6 +1507,7 @@ export const dataStore = {
                         paymentMethod: orderData.paymentMethod || 'Cash on Delivery (COD)',
                         source: orderData.source || 'DIRECT',
                         fulfillmentCaseId: orderData.fulfillmentCaseId || null,
+                        fulfillmentConfirmationId: orderData.fulfillmentConfirmationId || null,
                         orderStatus: 'Pending_Review',
                         statusHistory: [statusEntry]
                     }], { session });
@@ -1614,6 +1615,7 @@ export const dataStore = {
                 paymentMethod: orderData.paymentMethod || 'Cash on Delivery (COD)',
                 source: orderData.source || 'DIRECT',
                 fulfillmentCaseId: orderData.fulfillmentCaseId || null,
+                fulfillmentConfirmationId: orderData.fulfillmentConfirmationId || null,
                 orderStatus: 'Pending_Review',
                 statusHistory: [statusEntry],
                 createdAt: now,
