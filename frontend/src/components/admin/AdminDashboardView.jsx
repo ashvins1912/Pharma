@@ -22,6 +22,7 @@ import { getAdminMedicineRequests, getAdminPendingMedicineRequestCount } from '.
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import Pagination from '../common/Pagination';
+import './AdminDashboardView.css';
 
 function PendingMedicineRequestsNotice({ count, onOpen }) {
   const { t } = useLanguage();
@@ -221,7 +222,7 @@ export default function AdminDashboardView() {
 
   if (role === 'pharmacy' && canViewAdminRequests) {
     return (
-      <div className="min-w-0 space-y-6 animate-fade-in">
+      <div className="dashboard-shell min-w-0 space-y-5 animate-fade-in">
         <div className="bg-slate-950 text-white rounded-3xl p-6 shadow-md">
           <span className="text-[11px] font-black uppercase tracking-wider text-blue-400">
             {t('pharmacyReview')}
@@ -251,7 +252,7 @@ export default function AdminDashboardView() {
     <div className="min-w-0 space-y-6 animate-fade-in">
       
       {/* Top Banner & Metric Cards */}
-      <div className="bg-slate-950 text-white rounded-3xl p-6 shadow-md space-y-5">
+      <div className="dashboard-hero bg-slate-950 text-white rounded-3xl p-4 sm:p-5 shadow-md space-y-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div>
             <span className="text-[11px] font-black uppercase tracking-wider text-blue-400">
@@ -307,7 +308,7 @@ export default function AdminDashboardView() {
         </div>
 
         {/* 4 Metric Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-slate-800">
+        <div className="dashboard-metrics grid grid-cols-2 md:grid-cols-4 gap-3 text-slate-800">
           {canViewFulfillment && (<div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
             <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
               All Orders
@@ -379,7 +380,7 @@ export default function AdminDashboardView() {
       )}
 
       {/* Dispensary Command Center & Operations Hub - Wrapped Grid */}
-      <div className="bg-white dark:bg-gray-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200 dark:border-gray-800 space-y-3">
+      <div className="dashboard-workspace bg-white dark:bg-gray-900 rounded-3xl p-3 sm:p-4 shadow-sm border border-slate-200 dark:border-gray-800 space-y-3">
         <div className="flex items-center justify-between px-1">
           <div>
             <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -392,10 +393,10 @@ export default function AdminDashboardView() {
           </span>
         </div>
 
-        <div className="flex flex-wrap gap-2 pt-1">
+        <div className="dashboard-workspace-nav flex flex-wrap gap-2 pt-1" role="group" aria-label="Operations workspaces">
           {canViewFulfillment && <button
             onClick={() => setAdminTab('fulfillment')}
-            className={`px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+            className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
               adminTab === 'fulfillment'
                 ? 'bg-blue-600 text-white shadow-md'
                 : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
