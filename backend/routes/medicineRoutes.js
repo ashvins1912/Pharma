@@ -85,7 +85,6 @@ router.post('/', authenticateUser, async (req, res) => {
 router.put('/:medicineId', authenticateUser, async (req, res) => {
     try {
         const medicine = await dataStore.updateMedicine(req.params.medicineId, req.body || {});
-        await invalidatePublicCatalog();
         res.json(medicine);
     } catch (error) {
         console.error('Medicine update failed:', error);
