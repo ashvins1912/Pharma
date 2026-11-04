@@ -62,7 +62,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
   const saveEdit = async row => {
     setBusy(true);
     try {
-      await apiClient.patch(`${base}/rows/${encodeURIComponent(row.rowId)}`, draft, { headers: stableHeaders, timeout: 30000 });
+      await apiClient.patch(`${base}/rows/${encodeURIComponent(row.rowId)}`, { ...draft, expectedVersion: row.version }, { headers: stableHeaders, timeout: 30000 });
       setEditing(null);
       await load();
     } catch (e) {
