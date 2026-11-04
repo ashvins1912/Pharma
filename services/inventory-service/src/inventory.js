@@ -209,8 +209,8 @@ export async function searchInventoryProducts({
     ? allItems.filter(item => item.availableQuantity > 0)
     : allItems;
   const comparators = {
-    'price-asc': (a, b) => (a.price ?? Number.MAX_SAFE_INTEGER) - (b.price ?? Number.MAX_SAFE_INTEGER),
-    'price-desc': (a, b) => (b.price ?? -1) - (a.price ?? -1),
+    'price-asc': (a, b) => (a.sellingPrice ?? a.price ?? Number.MAX_SAFE_INTEGER) - (b.sellingPrice ?? b.price ?? Number.MAX_SAFE_INTEGER),
+    'price-desc': (a, b) => (b.sellingPrice ?? b.price ?? -1) - (a.sellingPrice ?? a.price ?? -1),
     'name-asc': (a, b) => String(a.name).localeCompare(String(b.name)),
     'stock-asc': (a, b) => a.availableQuantity - b.availableQuantity
   };
@@ -315,6 +315,12 @@ export async function updateProduct({ productId, product: input = {}, tenantId, 
         throw error;
       }
       const fields = normalizeProductFields(input);
+      if (!Number.isFinite(fields.baseCostPrice) || fields.baseCostPrice < 0
+        || !Number.isFinite(fields.discountPercentage) || fields.discountPercentage < 0 || fields.discountPercentage > 100) {
+        const error = new Error('Base cost must be non-negative and discount percentage must be between 0 and 100.');
+        error.statusCode = 400;
+        throw error;
+      }
       const editableFields = ['name', 'genericName', 'strength', 'form', 'manufacturer', 'category', 'description', 'imageUrl', 'hsnSac', 'baseCostPrice', 'discountPercentage', 'marginTier', 'requiresPrescription'];
       for (const field of editableFields) {
         if (Object.prototype.hasOwnProperty.call(input, field)
