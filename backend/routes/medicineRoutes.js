@@ -7,6 +7,7 @@ import { authenticateUser } from '../middleware/auth.js';
 import ProductDiscoveryService from '../services/ProductDiscoveryService.js';
 import SearchMetricIngestionService from '../services/SearchMetricIngestionService.js';
 import { inventoryClient } from '../services/inventory-client/InventoryClient.js';
+import { tenantService } from '../services/tenant-service/TenantService.js';
 
 const router = express.Router();
 const importFileLimit = Number.parseInt(process.env.INVENTORY_IMPORT_MAX_FILE_BYTES || '', 10);
@@ -72,20 +73,35 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
     }
 });
 
-const getVerifiedInventoryScope = req => {
-    const tenantId = String(req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
-    const branchId = String(req.user?.branchId || req.context?.branchId || '').trim();
+const getVerifiedInventoryScope = async req => {
+    const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+    const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+    const tenantId = String(
+        req.user?.tenantId || req.user?.app_metadata?.tenantId
+        || (isPlatformAdmin ? req.get('x-tenant-id') || req.body?.tenantId : '')
+        || ''
+    ).trim();
+    const branchId = String(
+        req.user?.branchId || req.context?.branchId
+        || req.get('x-branch-id') || req.body?.branchId || ''
+    ).trim();
     if (!tenantId || !branchId) {
         const error = new Error('Select an authorized pharmacy tenant and branch before changing catalogue inventory.');
         error.statusCode = 403;
         throw error;
     }
-    return { tenantId, branchId, isPlatformAdmin };
+    const branch = await tenantService.getBranchById(branchId);
+    if (!branch || String(branch.tenantId) !== tenantId) {
+        const error = new Error('The selected branch does not belong to the authorized pharmacy tenant.');
+        error.statusCode = 403;
+        throw error;
+    }
+    return { tenantId, branchId };
 };
 
 router.post('/', authenticateUser, async (req, res) => {
     try {
-        const scope = getVerifiedInventoryScope(req);
+        const scope = await getVerifiedInventoryScope(req);
         const result = await inventoryClient.createProduct({
             product: req.body || {},
             tenantId: scope.tenantId,
