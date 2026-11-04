@@ -445,7 +445,7 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
         const order = await dataStore.reserveOrder({
             userId: req.user.sub,
             tenantId: selectedTenantId,
-            branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
+            branchId: req.body.branchId || req.user.branchId || req.user.app_metadata?.branchId || null,
             addressId: addressSnapshot?._id || addressId || null,
             customerName,
             customerMobile: addressSnapshot?.mobile || req.body.mobile || req.body.addressDetails?.mobile || req.body.addressDetails?.phone || req.user.user_metadata?.mobile || '',
