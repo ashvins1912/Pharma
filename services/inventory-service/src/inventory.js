@@ -154,7 +154,7 @@ export async function searchInventoryProducts({
       listingId: listingBatch ? String(listingBatch.tenantId) + ':' + String(listingBatch.branchId) + ':' + String(product._id) : null,
       _id: String(product._id), productId: String(product._id), productVersion: product.version, sku: product.sku,
       name: product.name, genericName: product.genericName, composition: product.genericName, drug: product.genericName, activeSalt: product.genericName,
-      description: product.description || '', imageUrl: product.imageUrl || '',
+      description: product.description || '', imageUrl: product.imageUrl || '', hsnSac: product.hsnSac || '',
       manufacturer: product.manufacturer, brand: product.manufacturer, strength: product.strength, dosage: product.strength, dosageForm: product.form, form: product.form,
       category: product.category, requiresPrescription: product.requiresPrescription, isPrescriptionRequired: product.requiresPrescription,
       mrp: price, sellingPrice: price, price, stockQuantity, reservedQuantity, availableQuantity,
