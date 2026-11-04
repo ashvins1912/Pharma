@@ -402,7 +402,7 @@ router.get('/fulfillment/waitlist', authenticateUser, async (req, res) => {
         await refreshStockWaitlistCases({ limit: 50, customerId: String(req.user.sub), now: checkedAt });
         const cases = await FulfillmentCase.find({
             customerId: String(req.user.sub),
-            status: { $in: ['AWAITING_CUSTOMER_DECISION', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED', 'CONFIRMING'] }
+            status: { $in: ['AWAITING_CUSTOMER_DECISION', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED', 'CONFIRMING', 'FULFILLED', 'EXPIRED', 'CANCELLED'] }
         }).sort({ createdAt: -1 }).limit(50).lean();
         return res.json({ items: cases, checkedAt: checkedAt.toISOString() });
     } catch (error) {
