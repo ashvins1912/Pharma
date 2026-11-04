@@ -564,7 +564,7 @@ export default function PlatformTenantsView() {
             {workspaceTenantId && <p className="mt-2 break-all text-xs text-slate-600">Selected Tenant ID: <code className="font-mono font-bold text-slate-900">{workspaceTenantId}</code></p>}
             <p className="mt-2 text-xs text-slate-500">Manage the selected tenant's persisted profile, edit policy, geolocation, personnel and branch registry in this workspace.</p>
           </div>
-          {workspaceTenantId ? <TenantProfileDashboard key={workspaceTenantId} tenantId={workspaceTenantId} showTenantSelector={false} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Select a tenant to open its profile and branches.</div>}
+          {workspaceTenantId ? <TenantProfileDashboard key={workspaceTenantId} platformTenantId={workspaceTenantId} showTenantSelector={false} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Select a tenant to open its profile and branches.</div>}
         </section>
       ) : platformTab === 'compare' ? (
         <section className="space-y-4">
