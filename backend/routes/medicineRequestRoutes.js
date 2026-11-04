@@ -7,6 +7,7 @@ import { authenticateUser, requirePermission } from '../middleware/auth.js';
 import { getPrescription, savePrescription } from '../config/prescriptionStorage.js';
 import { getIsConnected } from '../config/db.js';
 import MedicineRequest from '../models/MedicineRequest.js';
+import Medicine from '../models/Medicine.js';
 import UserAddress from '../models/UserAddress.js';
 import Tenant from '../models/Tenant.js';
 import FulfillmentCase from '../models/FulfillmentCase.js';
@@ -766,6 +767,57 @@ router.get('/:id/scan-prescription', authenticateUser, authorizeRequestDetails, 
 });
 
 
+
+
+router.get('/:id/fulfillment-options', authenticateUser, requirePermission('medicine_requests.read'), authorizeRequestDetails, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    if (!isStaff(req.user)) return res.status(403).json({ message: 'Pharmacy staff access is required.' });
+    try {
+        const request = req.authorizedMedicineRequest;
+        if (!request?.tenantId) return res.status(409).json({ message: 'This request is not linked to an active pharmacy.' });
+        const results = [];
+        for (let index = 0; index < (request.requestedItems || []).length; index += 1) {
+            const item = request.requestedItems[index];
+            if (!item.composition || !item.strength) {
+                results.push({ itemIndex: index, requestedName: item.requestedName, options: [], reason: 'Composition and strength are required before safe alternatives can be suggested.' });
+                continue;
+            }
+            const query = {
+                tenantId: String(request.tenantId),
+                isActive: { $ne: false },
+                composition: String(item.composition).trim(),
+                strength: String(item.strength).trim(),
+                expiryDate: { $gt: new Date() }
+            };
+            if (item.dosageForm) query.dosageForm = String(item.dosageForm).trim();
+            if (request.branchId) query.branchId = String(request.branchId);
+            const products = await Medicine.find(query).limit(25).select('_id name brand manufacturer composition strength dosageForm form price discountPercentage stockQuantity stock quantity reservedQuantity requiresPrescription isPrescriptionRequired expiryDate').lean();
+            const options = products.map(product => {
+                const physical = Number(product.stockQuantity ?? product.stock ?? product.quantity ?? 0);
+                const availableQuantity = Math.max(0, physical - Number(product.reservedQuantity || 0));
+                const discountPercentage = Math.min(100, Math.max(0, Number(product.discountPercentage || 0)));
+                const unitPrice = Number(product.price || 0);
+                return {
+                    productId: String(product._id), medicineName: product.name,
+                    manufacturer: product.manufacturer || product.brand || '',
+                    composition: product.composition || '', strength: product.strength || '',
+                    dosageForm: product.dosageForm || product.form || '',
+                    unitPrice, discountPercentage,
+                    discountedUnitPrice: Math.round(unitPrice * (1 - discountPercentage / 100) * 100) / 100,
+                    availableQuantity,
+                    requiresPrescription: Boolean(product.requiresPrescription ?? product.isPrescriptionRequired),
+                    requiresPharmacistApproval: Boolean(item.source === 'PRESCRIPTION_EXTRACTED' || request.prescriptionId || request.prescriptionUrl),
+                    customerConsentRequired: true
+                };
+            }).filter(option => option.availableQuantity > 0 && option.unitPrice >= 0)
+              .sort((a, b) => a.discountedUnitPrice - b.discountedUnitPrice);
+            results.push({ itemIndex: index, requestedName: item.requestedName, requestedQuantity: item.quantity, options });
+        }
+        return res.json({ requestId: String(request._id), tenantId: String(request.tenantId), items: results });
+    } catch (error) {
+        return res.status(error.statusCode || 503).json({ message: 'Unable to calculate safe fulfilment options.' });
+    }
+});
 
 router.post('/:id/waitlist', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, authorizeRequestDetails, async (req, res) => {
     if (!requireDatabase(res)) return;
