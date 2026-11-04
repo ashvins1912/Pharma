@@ -5,6 +5,9 @@ const editableFields = ['sku', 'name', 'price', 'stockQuantity', 'batchNumber', 
 
 export default function AdminImportBatchManager({ batchId, headers, onInventoryChanged, publishingEnabled = false }) {
   const [rows, setRows] = useState([]);
+  const [activeBatchId, setActiveBatchId] = useState(batchId || '');
+  const [batchItems, setBatchItems] = useState([]);
+  const [serverPublishingEnabled, setServerPublishingEnabled] = useState(false);
   const [selected, setSelected] = useState([]);
   const [status, setStatus] = useState('');
   const [query, setQuery] = useState('');
@@ -18,10 +21,20 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
   const [error, setError] = useState('');
   const headersKey = JSON.stringify(headers || {});
   const stableHeaders = useMemo(() => headers || {}, [headersKey]);
-  const base = `/api/v1/inventory/imports/batches/${encodeURIComponent(batchId)}`;
+  const base = activeBatchId ? `/api/v1/inventory/imports/batches/${encodeURIComponent(activeBatchId)}` : '';
+  useEffect(() => { if (batchId) setActiveBatchId(batchId); }, [batchId]);
+  const canPublish = publishingEnabled || serverPublishingEnabled;
+  const loadBatches = useCallback(async () => {
+    try {
+      const response = await apiClient.get('/api/v1/inventory/imports/batches', { params: { page: 1, limit: 20 }, headers: stableHeaders });
+      setBatchItems(response.data.items || []);
+      setServerPublishingEnabled(response.data.publishEnabled === true);
+      setError('');
+    } catch (e) { setError(e.response?.data?.message || 'Could not load previous import batches.'); }
+  }, [stableHeaders]);
 
   const load = useCallback(async () => {
-    if (!batchId) return;
+    if (!activeBatchId) return;
     setLoading(true);
     try {
       const response = await apiClient.get(`${base}/rows`, { params: { page, limit: 50, status: status || undefined, q: query || undefined }, headers: stableHeaders });
@@ -35,9 +48,9 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     } finally {
       setLoading(false);
     }
-  }, [batchId, base, stableHeaders, page, status, query]);
+  }, [activeBatchId, base, stableHeaders, page, status, query]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { if (activeBatchId) void load(); else void loadBatches(); }, [activeBatchId, load, loadBatches]);
 
   const allVisibleSelected = rows.length > 0 && rows.every(row => selected.includes(row.rowId));
   const toggleAll = checked => setSelected(checked ? rows.map(row => row.rowId) : []);
@@ -58,7 +71,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     } finally { setBusy(false); }
   };
   const bulkAction = async action => {
-    if (!selected.length || busy || !publishingEnabled) return;
+    if (!selected.length || busy || !canPublish) return;
     if (!window.confirm(`${action === 'publish' ? 'Publish' : 'Unpublish / revert'} ${selected.length} selected row(s)?`)) return;
     setBusy(true);
     try {
@@ -71,7 +84,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     } finally { setBusy(false); }
   };
   const rowAction = async (row, action) => {
-    if (busy || !publishingEnabled) return;
+    if (busy || !canPublish) return;
     const message = action === 'publish' ? `Publish row ${row.rowNumber}?` : `Unpublish and revert row ${row.rowNumber}?`;
     if (!window.confirm(message)) return;
     setBusy(true);
@@ -86,7 +99,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     } finally { setBusy(false); }
   };
   const revertBatch = async () => {
-    if (!publishingEnabled) return;
+    if (!canPublish) return;
     if (!window.confirm('Revert every published row in this batch? Rows changed by another operation will be protected and may block the transaction.')) return;
     setBusy(true);
     try {
@@ -98,16 +111,26 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     } finally { setBusy(false); }
   };
 
+  if (!activeBatchId) return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4 space-y-3">
+      <div><h3 className="text-sm font-black text-slate-900">Previous inventory upload batches</h3><p className="text-[11px] text-slate-500">Open a batch to review, edit, publish or revert its individual records.</p></div>
+      {error && <p role="alert" className="rounded-lg bg-rose-50 p-2 text-xs text-rose-700">{error}</p>}
+      {!batchItems.length ? <p className="rounded-lg bg-slate-50 p-4 text-center text-xs text-slate-500">No saved import batches for this branch yet.</p> : <div className="divide-y rounded-xl border border-slate-200">{batchItems.map(item => <div key={item.batchId} className="flex flex-wrap items-center justify-between gap-2 p-3"><div className="min-w-0"><p className="break-all text-xs font-bold text-slate-800">{item.fileName || item.batchId}</p><p className="text-[10px] text-slate-500">{item.batchId} · {item.totalRows} rows · {item.publishedRows || 0} published · {item.invalidRows || 0} invalid</p><span className="text-[10px] font-bold text-blue-700">{item.status}</span></div><button type="button" onClick={() => { setActiveBatchId(item.batchId); setPage(1); setStatus(''); setQuery(''); }} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">Open batch</button></div>)}</div>}
+      <button type="button" onClick={loadBatches} className="rounded-lg border px-3 py-2 text-xs font-bold">Refresh batches</button>
+    </section>
+  );
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
+          <button type="button" onClick={() => { setActiveBatchId(''); setSelected([]); setEditing(null); }} className="mb-1 text-[11px] font-bold text-blue-700">← All batches</button>
           <h3 className="text-sm font-black text-slate-900">Batch records · review & publish</h3>
           <p className="text-[11px] text-slate-500">{total.toLocaleString()} rows · staged records do not affect live stock until published</p>
         </div>
-        <button type="button" onClick={revertBatch} disabled={busy || !publishingEnabled} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Revert published batch</button>
+        <button type="button" onClick={revertBatch} disabled={busy || !canPublish} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Revert published batch</button>
       </div>
-      {!publishingEnabled && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">Publishing, unpublishing and reverting are disabled by the Inventory Service. Enable INVENTORY_IMPORTS_ENABLED only in the isolated test environment to exercise live test-stock changes.</p>}
+      {!canPublish && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">Publishing, unpublishing and reverting are disabled by the Inventory Service. Enable INVENTORY_IMPORTS_ENABLED only in the isolated test environment to exercise live test-stock changes.</p>}
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-2">
         <input value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} placeholder="Search SKU or medicine" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs" />
         <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }} className="rounded-lg border border-slate-200 px-3 py-2 text-xs">
@@ -118,8 +141,8 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={allVisibleSelected} onChange={e => toggleAll(e.target.checked)} /> Select page</label>
         <span className="text-[11px] text-slate-500">{selected.length} selected</span>
-        <button type="button" onClick={() => bulkAction('publish')} disabled={!selected.length || busy || !publishingEnabled} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">Publish selected</button>
-        <button type="button" onClick={() => bulkAction('unpublish')} disabled={!selected.length || busy || !publishingEnabled || !rows.some(r => selected.includes(r.rowId) && r.status === 'PUBLISHED')} className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-bold text-amber-800 disabled:opacity-40">Unpublish / revert selected</button>
+        <button type="button" onClick={() => bulkAction('publish')} disabled={!selected.length || busy || !canPublish} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">Publish selected</button>
+        <button type="button" onClick={() => bulkAction('unpublish')} disabled={!selected.length || busy || !canPublish || !rows.some(r => selected.includes(r.rowId) && r.status === 'PUBLISHED')} className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-bold text-amber-800 disabled:opacity-40">Unpublish / revert selected</button>
       </div>
       {error && <p role="alert" className="rounded-lg bg-rose-50 p-2 text-xs text-rose-700">{error}</p>}
       <div className="overflow-x-auto rounded-xl border border-slate-200">
