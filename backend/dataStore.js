@@ -1283,7 +1283,7 @@ export const dataStore = {
             itemSnapshotsForOrder.push({
                 _id: medicineId, medicineId: productObjectId, name: product.name,
                 sku: product.sku || '', price,
-                baseCostPrice: Number(product.baseCostPrice ?? price),
+                baseCostPrice,
                 discountPercentage: Number(product.discountPercentage || 0),
                 marginTier: ['LOW', 'MID', 'HIGH'].includes(product.marginTier) ? product.marginTier : 'LOW',
                 quantity, stock: Math.max(0, Number(product.availableQuantity || 0) - quantity)
