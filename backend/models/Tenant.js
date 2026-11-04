@@ -28,6 +28,10 @@ const tenantSchema = new mongoose.Schema({
         allowOfferWithCoupon: { type: Boolean, default: false },
         allowCouponWithRewards: { type: Boolean, default: true },
         allowOfferWithRewards: { type: Boolean, default: false },
+        // Only platform Super Admin can change this tenant-level edit permission.
+        pharmacyProfileEditingEnabled: { type: Boolean, default: false },
+        profileEditingPolicyUpdatedAt: { type: Date, default: null },
+        profileEditingPolicyUpdatedBy: { type: String, default: null },
         smtp: {
             host: { type: String, trim: true },
             port: { type: Number },
