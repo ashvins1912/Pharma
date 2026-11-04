@@ -156,12 +156,12 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
           <div className="flex items-start justify-between gap-3">
             <div>
               <h4 className="font-extrabold text-sm sm:text-base text-slate-900">
-                {proposal?.medicineName || request.requestedItems?.[0]?.requestedName}
+                {selectedName}
               </h4>
               <p className="text-xs text-slate-600 mt-0.5 font-medium">
-                {proposal?.dosageForm && <span>{proposal.dosageForm} • </span>}
-                {proposal?.strength && <span>{proposal.strength} • </span>}
-                {proposal?.manufacturer && <span>Mfg: {proposal.manufacturer}</span>}
+                {(selectedOffer?.dosageForm || proposal?.dosageForm) && <span>{selectedOffer?.dosageForm || proposal.dosageForm} • </span>}
+                {(selectedOffer?.strength || proposal?.strength) && <span>{selectedOffer?.strength || proposal.strength} • </span>}
+                {(selectedOffer?.manufacturer || proposal?.manufacturer) && <span>Mfg: {selectedOffer?.manufacturer || proposal.manufacturer}</span>}
               </p>
             </div>
             <div className="text-right">
