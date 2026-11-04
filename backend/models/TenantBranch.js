@@ -14,7 +14,10 @@ const tenantBranchSchema = new mongoose.Schema({
     freeDeliveryAbove: { type: Number, min: 0, default: 499 },
     deliveryFee: { type: Number, min: 0, default: 30 },
     operatingHours: { type: mongoose.Schema.Types.Mixed, default: { open: '08:00', close: '22:00' } },
-    status: { type: String, enum: ['ACTIVE', 'INACTIVE', 'SUSPENDED'], default: 'ACTIVE', index: true }
+    status: { type: String, enum: ['ACTIVE', 'INACTIVE', 'SUSPENDED'], default: 'ACTIVE', index: true },
+    isDefault: { type: Boolean, default: false, index: true },
+    archivedAt: { type: Date, default: null },
+    archivedBy: { type: String, default: null }
 }, { timestamps: true });
 
 tenantBranchSchema.index({ tenantId: 1, code: 1 }, { unique: true });
