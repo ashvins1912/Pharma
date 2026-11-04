@@ -8,6 +8,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
   const [activeBatchId, setActiveBatchId] = useState(batchId || '');
   const [batchItems, setBatchItems] = useState([]);
   const [serverPublishingEnabled, setServerPublishingEnabled] = useState(false);
+  const [activeBatchStatus, setActiveBatchStatus] = useState('');
   const [selected, setSelected] = useState([]);
   const [status, setStatus] = useState('');
   const [query, setQuery] = useState('');
@@ -22,7 +23,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
   const headersKey = JSON.stringify(headers || {});
   const stableHeaders = useMemo(() => JSON.parse(headersKey), [headersKey]);
   const base = activeBatchId ? `/api/v1/inventory/imports/batches/${encodeURIComponent(activeBatchId)}` : '';
-  const canPublish = publishingEnabled || serverPublishingEnabled;
+  const canPublish = (publishingEnabled || serverPublishingEnabled) && !['REVERTING', 'REVERTED', 'FAILED', 'STAGING'].includes(activeBatchStatus);
   const loadBatches = useCallback(async () => {
     try {
       const response = await apiClient.get('/api/v1/inventory/imports/batches', { params: { page: 1, limit: 20 }, headers: stableHeaders });
@@ -36,7 +37,11 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     if (!activeBatchId) return;
     setLoading(true);
     try {
-      const response = await apiClient.get(`${base}/rows`, { params: { page, limit: 50, status: status || undefined, q: query || undefined }, headers: stableHeaders });
+      const [response, batchResponse] = await Promise.all([
+        apiClient.get(`${base}/rows`, { params: { page, limit: 50, status: status || undefined, q: query || undefined }, headers: stableHeaders }),
+        apiClient.get(base, { headers: stableHeaders })
+      ]);
+      setActiveBatchStatus(batchResponse.data.batch?.status || '');
       setRows(response.data.items || []);
       setTotal(response.data.total || 0);
       setPages(response.data.pages || 1);
@@ -131,7 +136,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
         <div>
           <button type="button" onClick={() => { setActiveBatchId(''); setSelected([]); setEditing(null); }} className="mb-1 text-[11px] font-bold text-blue-700">← All batches</button>
           <h3 className="text-sm font-black text-slate-900">Batch records · review & publish</h3>
-          <p className="text-[11px] text-slate-500">{total.toLocaleString()} rows · staged records do not affect live stock until published</p>
+          <p className="text-[11px] text-slate-500">{total.toLocaleString()} rows · batch status: {activeBatchStatus || 'loading'} · staged records do not affect live stock until published</p>
         </div>
         <button type="button" onClick={revertBatch} disabled={busy || !canPublish} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Revert published batch</button>
       </div>
