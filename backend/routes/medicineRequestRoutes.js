@@ -943,8 +943,32 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
     try {
         const requestId = req.params.id;
         const customerId = String(req.user.sub);
-        const request = await MedicineRequest.findOne({ _id: requestId, customerId }).lean();
+        let request = await MedicineRequest.findOne({ _id: requestId, customerId }).lean();
         if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
+        if (request.status === 'FULFILLMENT_PROCESSING') {
+            const existingOrder = await Order.findOne({
+                medicineRequestId: String(request._id), userId: customerId, tenantId: String(request.tenantId || '')
+            }).sort({ createdAt: -1 }).lean();
+            if (existingOrder) {
+                const recovered = await MedicineRequest.findOneAndUpdate(
+                    { _id: request._id, customerId, status: 'FULFILLMENT_PROCESSING' },
+                    { $set: { status: 'CONVERTED_TO_ORDER', convertedOrderId: String(existingOrder._id), fulfillmentProcessingAt: null } },
+                    { new: true }
+                ).lean();
+                return res.status(200).json({ success: true, order: existingOrder, request: recovered || request, alreadyProcessed: true, recoveryRequired: !recovered, message: 'Your order was already created and has been reconciled.' });
+            }
+            const processingAge = request.fulfillmentProcessingAt ? Date.now() - new Date(request.fulfillmentProcessingAt).getTime() : Number.POSITIVE_INFINITY;
+            if (processingAge < 10 * 60 * 1000) {
+                return res.status(409).json({ message: 'This medicine request is already being processed. Please wait a moment and refresh.' });
+            }
+            const released = await MedicineRequest.findOneAndUpdate(
+                { _id: request._id, customerId, status: 'FULFILLMENT_PROCESSING', fulfillmentProcessingAt: request.fulfillmentProcessingAt || null },
+                { $set: { status: 'PROPOSAL_SENT', fulfillmentProcessingAt: null } },
+                { new: true }
+            ).lean();
+            if (!released) return res.status(409).json({ message: 'This medicine request is being updated. Refresh and try again.' });
+            request = released;
+        }
         if (request.status === 'CONVERTED_TO_ORDER' || request.status === 'WAITING_FOR_STOCK') {
             return res.status(200).json({ request, alreadyProcessed: true, message: 'This medicine request already has a fulfilment plan.' });
         }
@@ -990,6 +1014,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
         const decisions = req.body?.decisions && typeof req.body.decisions === 'object' ? req.body.decisions : {};
         const orderItems = [];
         const waitingItems = [];
+        const requestCoordinates = request.coordinates || request.addressDetails?.coordinates || null;
         for (const line of plan.lines) {
             if (line.fulfilNowQuantity > 0) orderItems.push({ medicineId: line.productId, quantity: line.fulfilNowQuantity });
             if (line.waitingQuantity <= 0) continue;
@@ -1016,6 +1041,9 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
             }
         }
         if (waitingItems.length) {
+            if (!request.addressId || !request.deliveryAddress?.trim() || !hasValidCoordinates(requestCoordinates)) {
+                throw Object.assign(new Error('Add a verified delivery address with a map pin before placing a stock waitlist.'), { statusCode: 409 });
+            }
             const waitDays = Number(req.body?.waitDays);
             if (!Number.isInteger(waitDays) || waitDays < 1 || waitDays > 5) {
                 return res.status(400).json({ message: 'Choose a stock wait period between 1 and 5 days.' });
@@ -1032,7 +1060,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
 
         const claim = await MedicineRequest.findOneAndUpdate(
             { _id: request._id, customerId, status: 'PROPOSAL_SENT' },
-            { $set: { status: 'FULFILLMENT_PROCESSING' } },
+            { $set: { status: 'FULFILLMENT_PROCESSING', fulfillmentProcessingAt: new Date() } },
             { new: true }
         ).lean();
         if (!claim) return res.status(409).json({ message: 'This request is already being processed. Refresh your requests.' });
@@ -1048,7 +1076,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
                 addressId: request.addressId || null,
                 deliveryAddress: request.deliveryAddress || '',
                 addressDetails: request.addressDetails || {},
-                coordinates: request.coordinates || null,
+                coordinates: requestCoordinates,
                 customerMobile: request.customerPhone || '',
                 orderedForName: request.customerName || 'Customer',
                 prescriptionRequired: Boolean(request.prescriptionId || request.prescriptionUrl),
@@ -1076,7 +1104,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
         }
 
         if (orderItems.length) {
-            const coordinates = request.coordinates || request.addressDetails?.coordinates;
+            const coordinates = requestCoordinates;
             if (!coordinates || !Number.isFinite(Number(coordinates.lat)) || !Number.isFinite(Number(coordinates.lng))) {
                 throw Object.assign(new Error('A verified delivery map pin is required before ordering available medicines. Please update your delivery address.'), { statusCode: 409 });
             }
@@ -1115,6 +1143,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
             {
                 $set: {
                     status: finalStatus,
+                    fulfillmentProcessingAt: null,
                     convertedOrderId: createdOrder?._id ? String(createdOrder._id) : null,
                     fulfillmentCaseId: waitlistCase?._id || null,
                     approvedAt: new Date(),
@@ -1137,7 +1166,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
             // the proposal and risk creating a second order if a later update fails.
             const recovered = await MedicineRequest.findOneAndUpdate(
                 { _id: req.params.id, customerId: String(req.user.sub), status: 'FULFILLMENT_PROCESSING' },
-                { $set: { status: 'CONVERTED_TO_ORDER', convertedOrderId: String(createdOrder._id), fulfillmentCaseId: waitlistCase?._id || null } },
+                { $set: { status: 'CONVERTED_TO_ORDER', convertedOrderId: String(createdOrder._id), fulfillmentCaseId: waitlistCase?._id || null, fulfillmentProcessingAt: null } },
                 { new: true }
             ).lean().catch(() => null);
             return res.status(202).json({
@@ -1150,7 +1179,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
             await FulfillmentCase.updateOne({ _id: waitlistCase._id }, { $set: { status: 'CANCELLED' } }).catch(() => {});
         }
         if (claimed) {
-            await MedicineRequest.updateOne({ _id: req.params.id, customerId: String(req.user.sub), status: 'FULFILLMENT_PROCESSING' }, { $set: { status: 'PROPOSAL_SENT' } }).catch(() => {});
+            await MedicineRequest.updateOne({ _id: req.params.id, customerId: String(req.user.sub), status: 'FULFILLMENT_PROCESSING' }, { $set: { status: 'PROPOSAL_SENT', fulfillmentProcessingAt: null } }).catch(() => {});
         }
         return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to confirm medicine request fulfilment.' });
     }
