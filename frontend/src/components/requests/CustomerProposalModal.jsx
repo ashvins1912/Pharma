@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { confirmMedicineRequestFulfillment, previewMedicineRequestFulfillment, rejectProposal } from '../../api/medicineRequestService';
+import { approveProposal, confirmMedicineRequestFulfillment, previewMedicineRequestFulfillment, rejectProposal } from '../../api/medicineRequestService';
 import { useLanguage } from '../../context/LanguageContext';
 
 export default function CustomerProposalModal({ request, isOpen, onClose, onOrderCreated }) {
@@ -32,6 +32,22 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
     setSelectedOfferProductId(request?.pharmacyProposal?.productId || '');
   }, [isOpen, request?._id]);
 
+  useEffect(() => {
+    if (!isOpen || !request?._id || request.status !== 'PROPOSAL_SENT') return undefined;
+    let active = true;
+    setAvailabilityLoading(true);
+    setAvailabilityError('');
+    setAvailabilityPlan(null);
+    setFulfillmentChoices({});
+    previewMedicineRequestFulfillment(request._id)
+      .then(plan => { if (active) setAvailabilityPlan(plan); })
+      .catch(error => {
+        if (active) setAvailabilityError(error.response?.data?.message || error.message || 'Could not check live stock.');
+      })
+      .finally(() => { if (active) setAvailabilityLoading(false); });
+    return () => { active = false; };
+  }, [isOpen, request?._id, request?.status]);
+
   if (!isOpen || !request) return null;
 
   const proposal = request.pharmacyProposal;
@@ -53,8 +69,26 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
     if (approving) return;
     try {
       setApproving(true);
-      const res = await approveProposal(request._id, approvalNote, selectedOfferProductId || null);
-      addToast(res.message || 'Proposal approved and converted into an order!', 'success');
+      const multiLine = (availabilityPlan?.lines?.length || 0) > 1;
+      const waitingQuantity = Number(availabilityPlan?.summary?.quantityWaiting || 0);
+      const selectedAlternativeIsInPlan = availabilityPlan?.lines?.some(line =>
+        line.alternatives?.some(option => String(option.productId) === String(selectedOfferProductId))
+      );
+      let res;
+      if (multiLine || waitingQuantity > 0) {
+        const decisions = { ...fulfillmentChoices };
+        if (selectedAlternativeIsInPlan && availabilityPlan.lines.length === 1) {
+          decisions[availabilityPlan.lines[0].productId] = { alternativeProductId: selectedOfferProductId };
+        }
+        res = await confirmMedicineRequestFulfillment(request._id, {
+          approvalNote,
+          decisions,
+          waitDays
+        });
+      } else {
+        res = await approveProposal(request._id, approvalNote, selectedOfferProductId || null);
+      }
+      addToast(res.message || 'Your fulfilment choices have been confirmed.', 'success');
       await loadUserMedicineRequests();
       await loadUserOrders();
       if (onOrderCreated && res.order) onOrderCreated(res.order);
@@ -186,7 +220,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
           )}
         </div>
 
-        {(proposal?.alternativeOffers || []).length > 0 && canDecide && (
+        {(proposal?.alternativeOffers || []).length > 0 && canDecide && (request.requestedItems?.length || 0) <= 1 && (
           <section className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-2">
             <h4 className="text-xs font-black text-emerald-950">Choose your medicine offer</h4>
             {proposal.productId && (
