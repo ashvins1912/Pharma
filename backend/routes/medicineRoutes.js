@@ -90,9 +90,12 @@ const getVerifiedInventoryScope = async req => {
         error.statusCode = 403;
         throw error;
     }
-    const branch = await tenantService.getBranchById(branchId);
-    if (!branch || String(branch.tenantId) !== tenantId) {
-        const error = new Error('The selected branch does not belong to the authorized pharmacy tenant.');
+    const [tenant, branch] = await Promise.all([
+        tenantService.getTenantById(tenantId),
+        tenantService.getBranchById(branchId)
+    ]);
+    if (!tenant || tenant.status !== 'ACTIVE' || !branch || branch.status !== 'ACTIVE' || String(branch.tenantId) !== tenantId) {
+        const error = new Error('An active tenant and its active branch are required for inventory changes.');
         error.statusCode = 403;
         throw error;
     }
