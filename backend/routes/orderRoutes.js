@@ -1429,20 +1429,15 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
                 { status: String(req.query.status).toLowerCase() }
             ];
             if (req.query.status === 'Delivered' || req.query.status === 'Cancelled') {
-                try {
-                    const [items, total] = await Promise.all([
-                        Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
-                        Order.countDocuments(filter)
-                    ]);
-                    await sanitizeTenantRiderReferences(items);
-                    return res.json(paginationResult(items, total, page, limit));
-                } catch (dbErr) {
-                    const result = req.query.status === 'Delivered'
-                        ? await dataStore.getDeliveredOrdersPage(page, limit, { tenantId: String(tenantId) })
-                        : await dataStore.getCancelledOrdersPage(page, limit, { tenantId: String(tenantId) });
-                    await sanitizeTenantRiderReferences(result.items || []);
-                    return res.json(paginationResult(result.items, result.total, result.page || page, limit));
-                }
+                const result = req.query.status === 'Delivered'
+                    ? await dataStore.getDeliveredOrdersPage(page, limit, {
+                        tenantId: String(tenantId),
+                        startDate: req.query.startDate,
+                        endDate: req.query.endDate
+                    })
+                    : await dataStore.getCancelledOrdersPage(page, limit, { tenantId: String(tenantId) });
+                await sanitizeTenantRiderReferences(result.items || []);
+                return res.json(paginationResult(result.items, result.total, result.page || page, limit));
             }
             const orders = await Order.find(filter).sort({ createdAt: -1, _id: -1 }).lean().catch(() => []);
             await sanitizeTenantRiderReferences(orders);
@@ -1467,20 +1462,23 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
                 { orderStatus: req.query.status },
                 { status: String(req.query.status).toLowerCase() }
             ];
-            try {
-                const [items, total] = await Promise.all([
-                    Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
-                    Order.countDocuments(filter)
-                ]);
-                await sanitizeTenantRiderReferences(items);
-                return res.json(paginationResult(items, total, page, limit));
-            } catch (dbErr) {
+            if (req.query.status === 'Delivered' || req.query.status === 'Cancelled') {
                 const result = req.query.status === 'Delivered'
-                    ? await dataStore.getDeliveredOrdersPage(page, limit, { tenantId })
+                    ? await dataStore.getDeliveredOrdersPage(page, limit, {
+                        tenantId,
+                        startDate: req.query.startDate,
+                        endDate: req.query.endDate
+                    })
                     : await dataStore.getCancelledOrdersPage(page, limit, { tenantId });
                 await sanitizeTenantRiderReferences(result.items || []);
                 return res.json(paginationResult(result.items, result.total, result.page || page, limit));
             }
+            const [items, total] = await Promise.all([
+                Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+                Order.countDocuments(filter)
+            ]);
+            await sanitizeTenantRiderReferences(items);
+            return res.json(paginationResult(items, total, page, limit));
         }
         if (req.query.search !== undefined) {
             const { type, value } = classifyOrderSearch(req.query.search);
