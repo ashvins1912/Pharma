@@ -11,7 +11,7 @@ const available = medicine => Math.max(0,
 export async function refreshStockWaitlistCases({ limit = 250, now = new Date() } = {}) {
   if (!getIsConnected()) return { scanned: 0, ready: 0, expired: 0 };
   const cases = await FulfillmentCase.find({
-    status: { $in: ['WAITING_FOR_STOCK', 'PARTIALLY_FULFILLED'] }
+    status: { $in: ['WAITING_FOR_STOCK', 'PARTIALLY_FULFILLED', 'READY_FOR_CONFIRMATION'] }
   }).sort({ updatedAt: 1 }).limit(Math.max(1, Math.min(1000, Number(limit) || 250))).lean();
   let ready = 0;
   let expired = 0;
@@ -73,8 +73,9 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date() 
     });
     if (result.modifiedCount && newlyAvailable) {
       ready += 1;
-      if (entry.sourceType === 'MEDICINE_REQUEST' && entry.sourceId && allAvailable) {
-        await MedicineRequest.updateOne({ _id: entry.sourceId, fulfillmentCaseId: String(entry._id), status: 'WAITING_FOR_STOCK' }, { $set: { status: 'READY_FOR_CONFIRMATION' }, $push: { auditTrail: { action: 'STOCK_AVAILABLE', actorId: 'System', role: 'System', timestamp: now, notes: 'Requested stock is available for customer confirmation.' } } });
+      if (entry.sourceType === 'MEDICINE_REQUEST' && entry.sourceId) {
+        const requestStatus = allAvailable ? 'READY_FOR_CONFIRMATION' : 'WAITING_FOR_STOCK';
+        await MedicineRequest.updateOne({ _id: entry.sourceId, fulfillmentCaseId: String(entry._id), status: { $in: ['WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION'] } }, { $set: { status: requestStatus }, $push: { auditTrail: { action: allAvailable ? 'STOCK_AVAILABLE' : 'STOCK_AVAILABILITY_CHANGED', actorId: 'System', role: 'System', timestamp: now, notes: allAvailable ? 'Requested stock is available for customer confirmation.' : 'Available quantity changed; customer confirmation is required.' } } });
       }
       domainEvents.emitDomainEvent('FULFILLMENT_STOCK_AVAILABLE', entry.caseNumber, {
         recipientUserId: entry.customerId,
