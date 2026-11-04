@@ -23,13 +23,14 @@ function ProfileField({ label, value }) {
   );
 }
 
-export default function TenantProfileDashboard() {
+export default function TenantProfileDashboard({ tenantId: platformTenantId = '', showTenantSelector = true } = {}) {
   const { t } = useLanguage();
   const { user } = useAuth();
   const role = String(user?.app_metadata?.role || user?.role || '').toUpperCase();
   const isSuperAdmin = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'ADMIN'].includes(role);
   const [availableTenants, setAvailableTenants] = useState([]);
-  const [selectedTenantId, setSelectedTenantId] = useState('');
+  const [internalTenantId, setInternalTenantId] = useState('');
+  const selectedTenantId = platformTenantId || internalTenantId;
   const [tenantsLoading, setTenantsLoading] = useState(false);
   const [profile, setProfile] = useState(emptyProfile);
   const [draft, setDraft] = useState(emptyProfile);
@@ -86,7 +87,7 @@ export default function TenantProfileDashboard() {
   }, [isSuperAdmin, selectedTenantId]);
 
   useEffect(() => {
-    if (!isSuperAdmin) return;
+    if (!isSuperAdmin || !showTenantSelector || platformTenantId) return;
     let cancelled = false;
     setTenantsLoading(true);
     apiClient.get('/api/v1/admin/tenants')
@@ -101,7 +102,7 @@ export default function TenantProfileDashboard() {
       .catch(err => { if (!cancelled) setError(err?.response?.data?.message || err.message || 'Could not load platform tenants.'); })
       .finally(() => { if (!cancelled) setTenantsLoading(false); });
     return () => { cancelled = true; };
-  }, [isSuperAdmin]);
+  }, [isSuperAdmin, showTenantSelector, platformTenantId]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
 
@@ -168,10 +169,10 @@ export default function TenantProfileDashboard() {
 
   return (
     <div className="space-y-6">
-      {isSuperAdmin && (
+      {isSuperAdmin && showTenantSelector && !platformTenantId && (
         <section className="rounded-3xl border border-violet-200 bg-white p-5 shadow-sm">
           <label className="block text-xs font-black uppercase tracking-wide text-slate-600" htmlFor="super-admin-tenant-select">Select pharmacy tenant</label>
-          <select id="super-admin-tenant-select" value={selectedTenantId} onChange={event => { setSelectedTenantId(event.target.value); setEditing(false); setError(''); setNotice(''); }} disabled={tenantsLoading || availableTenants.length === 0} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-900">
+          <select id="super-admin-tenant-select" value={selectedTenantId} onChange={event => { setInternalTenantId(event.target.value); setEditing(false); setError(''); setNotice(''); }} disabled={tenantsLoading || availableTenants.length === 0} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-900">
             {availableTenants.length === 0 && <option value="">{tenantsLoading ? 'Loading tenants…' : 'No tenants available'}</option>}
             {availableTenants.map(tenant => <option key={tenant.id || tenant._id} value={tenant.id || tenant._id}>{tenant.name || tenant.legalName || tenant.id || tenant._id} · {tenant.status || 'UNKNOWN'}</option>)}
           </select>
