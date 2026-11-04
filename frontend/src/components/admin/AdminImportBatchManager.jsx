@@ -16,13 +16,15 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
   const [draft, setDraft] = useState({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const headersKey = JSON.stringify(headers || {});
+  const stableHeaders = useMemo(() => headers || {}, [headersKey]);
   const base = `/api/v1/inventory/imports/batches/${encodeURIComponent(batchId)}`;
 
   const load = useCallback(async () => {
     if (!batchId) return;
     setLoading(true);
     try {
-      const response = await apiClient.get(`${base}/rows`, { params: { page, limit: 50, status: status || undefined, q: query || undefined }, headers });
+      const response = await apiClient.get(`${base}/rows`, { params: { page, limit: 50, status: status || undefined, q: query || undefined }, headers: stableHeaders });
       setRows(response.data.items || []);
       setTotal(response.data.total || 0);
       setPages(response.data.pages || 1);
@@ -33,7 +35,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     } finally {
       setLoading(false);
     }
-  }, [batchId, base, headers, page, status, query]);
+  }, [batchId, base, stableHeaders, page, status, query]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -48,7 +50,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
   const saveEdit = async row => {
     setBusy(true);
     try {
-      await apiClient.patch(`${base}/rows/${encodeURIComponent(row.rowId)}`, draft, { headers });
+      await apiClient.patch(`${base}/rows/${encodeURIComponent(row.rowId)}`, draft, { headers: stableHeaders });
       setEditing(null);
       await load();
     } catch (e) {
@@ -60,8 +62,8 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     if (!window.confirm(`${action === 'publish' ? 'Publish' : 'Unpublish / revert'} ${selected.length} selected row(s)?`)) return;
     setBusy(true);
     try {
-      if (action === 'publish') await apiClient.post(`${base}/publish`, { rowIds: selected }, { headers });
-      else await apiClient.post(`${base}/unpublish`, { rowIds: selected }, { headers });
+      if (action === 'publish') await apiClient.post(`${base}/publish`, { rowIds: selected }, { headers: stableHeaders });
+      else await apiClient.post(`${base}/unpublish`, { rowIds: selected }, { headers: stableHeaders });
       await load();
       if (action === 'publish') onInventoryChanged?.();
     } catch (e) {
@@ -74,8 +76,8 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     if (!window.confirm(message)) return;
     setBusy(true);
     try {
-      if (action === 'publish') await apiClient.post(`${base}/rows/${encodeURIComponent(row.rowId)}/publish`, {}, { headers });
-      else await apiClient.post(`${base}/unpublish`, { rowIds: [row.rowId] }, { headers });
+      if (action === 'publish') await apiClient.post(`${base}/rows/${encodeURIComponent(row.rowId)}/publish`, {}, { headers: stableHeaders });
+      else await apiClient.post(`${base}/unpublish`, { rowIds: [row.rowId] }, { headers: stableHeaders });
       await load();
       if (action === 'publish') onInventoryChanged?.();
       else onInventoryChanged?.();
