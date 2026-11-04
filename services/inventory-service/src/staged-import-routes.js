@@ -54,16 +54,11 @@ function workbookRows(filePath) {
       if (!cells.some(v => v !== '' && v !== null && v !== undefined)) continue;
       const raw = Object.fromEntries(headers.map((h, j) => [h, cells[j] ?? '']));
       const name = String(pick(raw, 'Item Name') ?? '').trim();
-      if (!name) continue;
       const price = pick(raw, 'MRP/Pk', 'MRP / Pk', 'MRP');
       const total = pick(raw, 'Tot.Bal.Qty', 'Tot Bal Qty', 'Total Balance Qty');
       const store = pick(raw, 'Str.Qty', 'Store Qty');
       const godown = pick(raw, 'Gdwn.Qty', 'Godown Qty');
-      if (![price, total, pick(raw, 'MRP')].some(v => v !== undefined && v !== '' && Number.isFinite(Number(v)))) {
-        category = name;
-        continue;
-      }
-      records.push({
+      const mapped = {
         ...raw, SKU: String(pick(raw, 'Code', 'SKU') ?? '').trim(),
         'Medicine Name': name, Price: Number(price ?? pick(raw, 'MRP') ?? 0),
         Stock: total !== undefined && total !== '' ? Number(total) : Number(store || 0) + Number(godown || 0),
@@ -71,7 +66,16 @@ function workbookRows(filePath) {
         'Expiry Date': pick(raw, 'Exp Dt', 'Expiry Date') ?? '',
         Form: String(pick(raw, 'Packing', 'Form') ?? '').trim(),
         Category: category, 'Source Row Number': i + 1
-      });
+      };
+      if (!name) {
+        if (Object.values(raw).some(value => value !== '' && value !== null && value !== undefined)) records.push(mapped);
+        continue;
+      }
+      if (![price, total, pick(raw, 'MRP')].some(v => v !== undefined && v !== '' && Number.isFinite(Number(v)))) {
+        category = name;
+        continue;
+      }
+      records.push(mapped);
     }
     return records;
   }
