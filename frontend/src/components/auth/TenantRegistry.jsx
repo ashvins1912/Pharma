@@ -16,7 +16,7 @@ const blankBranch = {
 const fieldClass = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100';
 const labelClass = 'mb-1 block text-xs font-bold text-slate-600';
 
-export default function TenantRegistry() {
+export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
   const { t } = useLanguage();
   const { user } = useAuth();
   const role = String(user?.app_metadata?.role || user?.role || '').toUpperCase();
@@ -36,7 +36,7 @@ export default function TenantRegistry() {
     setLoading(true);
     setError('');
     try {
-      const response = await apiClient.get('/api/tenant/branches?limit=100');
+      const response = await apiClient.get('/api/tenant/branches', { params: { limit: 100, ...(selectedTenantId ? { tenantId: selectedTenantId } : {}) } });
       setBranches(Array.isArray(response.data?.branches) ? response.data.branches : []);
       setUsesTenantAsBranch(response.data?.usesTenantAsBranch === true);
     } catch (err) {
@@ -44,7 +44,7 @@ export default function TenantRegistry() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedTenantId]);
 
   useEffect(() => { fetchBranches(); }, [fetchBranches]);
 
