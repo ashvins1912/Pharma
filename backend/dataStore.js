@@ -759,47 +759,70 @@ export const dataStore = {
         return inMemoryAuditLogs.slice(0, 50);
     },
 
-    async getInventoryAudits(page = 1, limit = 10) {
+    async getInventoryAudits(page = 1, limit = 10, { tenantId, branchId } = {}) {
+        const scopeTenantId = String(tenantId || '').trim();
+        const scopeBranchId = String(branchId || '').trim();
+        if (!scopeTenantId || !scopeBranchId) throw inventoryError('Tenant and branch are required for inventory audit history.', 400);
         const parsedLimit = Math.min(50, Math.max(1, Number(limit) || 10));
         const parsedPage = Math.max(1, Number(page) || 1);
+        const inventoryAudits = [];
+        let cursor = 1;
+        let pages = 1;
+        do {
+            const result = await inventoryClient.getAudits({
+                tenantId: scopeTenantId, branchId: scopeBranchId,
+                page: cursor, limit: 100, userId: 'inventory-audit-history'
+            });
+            inventoryAudits.push(...(result.items || []));
+            pages = Number(result.pages || 1);
+            cursor += 1;
+        } while (cursor <= pages && cursor <= 50);
+        const mappedAudits = inventoryAudits.map(entry => {
+            const details = entry.details || {};
+            const result = details.result || {};
+            return {
+                eventType: String(entry.operation || 'INVENTORY').toUpperCase(),
+                importId: details.importBatchId || details.batchId || null,
+                orderId: details.orderId || null,
+                timestamp: entry.createdAt || entry.updatedAt || new Date(),
+                sku: entry.sku || result.sku || '—',
+                name: details.name || result.name || 'Inventory item',
+                quantity: Number(details.quantity ?? result.stockQuantity ?? 0),
+                previousStock: details.before?.stockQuantity ?? null,
+                newStock: details.after?.stockQuantity ?? result.stockQuantity ?? null,
+                previousPrice: details.before?.price ?? null,
+                newPrice: details.after?.price ?? result.price ?? null,
+                adminId: entry.actor || 'Inventory Service',
+                branchId: entry.branchId,
+                tenantId: entry.tenantId,
+                details
+            };
+        });
         const deliveredOrders = getIsConnected()
-            ? await Order.find({ orderStatus: 'Delivered' })
+            ? await Order.find({ orderStatus: 'Delivered', tenantId: scopeTenantId, branchId: scopeBranchId })
                 .select('_id deliveredAt createdAt customerName statusHistory medicineItems items')
-                .sort({ deliveredAt: -1, createdAt: -1 })
-                .lean()
-            : inMemoryOrders.filter(order => order.orderStatus === 'Delivered' && (!filter.createdAt || (new Date(order.createdAt) >= filter.createdAt.$gte && new Date(order.createdAt) < filter.createdAt.$lt)))
-                .sort((a, b) => new Date(b.deliveredAt || b.createdAt) - new Date(a.deliveredAt || a.createdAt));
+                .sort({ deliveredAt: -1, createdAt: -1 }).lean()
+            : [];
         const deliveryAudits = deliveredOrders.flatMap(order => {
             const actor = order.statusHistory?.findLast?.(entry => entry.newStatus === 'Delivered')?.changedBy || 'Delivery';
             return getOrderInventoryItems(order).map(item => ({
-                eventType: 'DELIVERY',
-                importId: `ORDER-${String(order._id).slice(-8).toUpperCase()}`,
-                orderId: String(order._id),
-                timestamp: order.deliveredAt || order.createdAt,
-                sku: item.sku || item.code || '—',
-                name: item.name || item.productName || 'Medicine',
-                quantity: Number(item.quantity) || 0,
-                previousStock: null,
-                newStock: null,
+                eventType: 'DELIVERY', importId: `ORDER-${String(order._id).slice(-8).toUpperCase()}`,
+                orderId: String(order._id), timestamp: order.deliveredAt || order.createdAt,
+                sku: item.sku || item.code || '—', name: item.name || item.productName || 'Medicine',
+                quantity: Number(item.quantity) || 0, previousStock: null, newStock: null,
                 previousPrice: Number(item.price ?? item.unitPrice) || 0,
-                newPrice: Number(item.price ?? item.unitPrice) || 0,
-                adminId: actor
+                newPrice: Number(item.price ?? item.unitPrice) || 0, adminId: actor
             }));
         });
-        const allAudits = [...inMemoryInventoryAudits, ...deliveryAudits].sort(
-            (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-        );
+        const allAudits = [...mappedAudits, ...deliveryAudits, ...inMemoryInventoryAudits]
+            .sort((left, right) => new Date(right.timestamp) - new Date(left.timestamp));
         const total = allAudits.length;
         const totalPages = Math.ceil(total / parsedLimit) || 1;
         const currentPage = Math.min(parsedPage, totalPages);
         return {
             items: allAudits.slice((currentPage - 1) * parsedLimit, currentPage * parsedLimit),
-            page: currentPage,
-            limit: parsedLimit,
-            total,
-            totalPages,
-            hasNextPage: currentPage < totalPages,
-            hasPreviousPage: currentPage > 1
+            page: currentPage, limit: parsedLimit, total, totalPages,
+            hasNextPage: currentPage < totalPages, hasPreviousPage: currentPage > 1
         };
     },
 
