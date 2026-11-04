@@ -125,7 +125,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     setFile(selectedFile); setAnalyzing(true); setPreviewData(null); setImportJob(null); setImportIdempotencyKey(''); setPollError('');
     try {
       const formData = new FormData(); formData.append('excelFile', selectedFile);
-      const response = await apiClient.post('/api/v1/inventory/imports/preview', formData, { headers: { 'Content-Type': 'multipart/form-data', ...getImportScopeHeaders() } });
+      const response = await apiClient.post('/api/v1/inventory/imports/preview', formData, { headers: { 'Content-Type': 'multipart/form-data', ...getImportScopeHeaders() }, timeout: 60000 });
       setPreviewData(response.data);
       addToast('Mapped ' + response.data.rowsDetected + ' stock rows (' + response.data.validCount + ' ready, ' + response.data.errorsCount + ' need review)', 'info');
     } catch (error) {
