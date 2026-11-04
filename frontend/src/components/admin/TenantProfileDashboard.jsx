@@ -72,6 +72,7 @@ export default function TenantProfileDashboard() {
   const address = [profile.address.street, profile.address.city, profile.address.state, profile.address.zipCode].filter(Boolean).join(', ');
   const updateDraft = (field, value) => setDraft(current => ({ ...current, [field]: value }));
   const updateAddress = (field, value) => setDraft(current => ({ ...current, address: { ...current.address, [field]: value } }));
+  const updateOwner = (field, value) => setDraft(current => ({ ...current, ownerDetails: { ...current.ownerDetails, [field]: value } }));
 
   const saveProfile = async event => {
     event.preventDefault();
@@ -82,7 +83,9 @@ export default function TenantProfileDashboard() {
       const response = await apiClient.patch('/api/v1/vendor/profile', {
         shopName: draft.shopName, legalName: draft.legalName,
         licenseNumber: draft.licenseNumber, gstNumber: draft.gstNumber,
-        address: draft.address
+        address: draft.address,
+        contactEmail: draft.ownerDetails.email,
+        contactPhone: draft.ownerDetails.phone
       });
       const updated = response.data?.data?.tenant || draft;
       const next = { ...draft, ...updated, address: { ...draft.address, ...(updated.address || {}) } };
@@ -177,6 +180,11 @@ export default function TenantProfileDashboard() {
             ].map(([field, label]) => (
               <label key={field} className="space-y-1 text-xs font-bold text-slate-600">{label}
                 <input value={draft.address[field] || ''} onChange={event => updateAddress(field, event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm font-medium text-slate-900" />
+              </label>
+            ))}
+            {[['email', 'Contact email'], ['phone', 'Contact phone']].map(([field, label]) => (
+              <label key={field} className="space-y-1 text-xs font-bold text-slate-600">{label}
+                <input type={field === 'email' ? 'email' : 'tel'} value={draft.ownerDetails[field] || ''} onChange={event => updateOwner(field, event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm font-medium text-slate-900" />
               </label>
             ))}
             <div className="flex flex-wrap gap-2 sm:col-span-2">
