@@ -300,56 +300,24 @@ export default function PlatformTenantsView() {
     }
   };
 
-  // Open Details Modal
+  // Load only persisted tenant details. Never manufacture demo branches or memberships.
   const openDetailsModal = async (tenant) => {
     setSelectedTenant(tenant);
     setDetailsModalOpen(true);
     setTenantDetails(null);
+    setError('');
     try {
       setLoadingDetails(true);
       const res = await apiClient.get(`/api/v1/admin/tenants/${tenant.id}`);
       const data = res.data?.data || res.data || {};
-      if (!data.branches || data.branches.length === 0) {
-        data.branches = [
-          {
-            id: 'branch-1',
-            name: `${tenant.name || 'Pharmacy'} - Downtown Flagship Branch`,
-            address: { street: '123 Main Street', city: tenant.city || 'San Francisco', pincode: '94105' },
-            serviceRadiusKm: 12,
-            minimumOrderValue: 150
-          },
-          {
-            id: 'branch-2',
-            name: `${tenant.name || 'Pharmacy'} - Northside Express Hub`,
-            address: { street: '456 Health Ave', city: tenant.city || 'San Francisco', pincode: '94108' },
-            serviceRadiusKm: 15,
-            minimumOrderValue: 200
-          }
-        ];
-      }
-      if (!data.memberships || data.memberships.length === 0) {
-        data.memberships = [
-          { id: 'm-1', email: tenant.email || 'owner@pharmacy.com', role: 'TENANT_ADMIN', status: 'ACTIVE' },
-          { id: 'm-2', email: 'manager@pharmacy.com', role: 'MANAGER', status: 'ACTIVE' }
-        ];
-      }
-      setTenantDetails(data);
-    } catch (err) {
-      // Fallback data if request fails
       setTenantDetails({
-        branches: [
-          {
-            id: 'branch-1',
-            name: `${tenant.name || 'Pharmacy'} - Flagship Dispensary`,
-            address: { street: '123 Main Street', city: tenant.city || 'San Francisco', pincode: '94105' },
-            serviceRadiusKm: 10,
-            minimumOrderValue: 150
-          }
-        ],
-        memberships: [
-          { id: 'm-1', email: 'owner@pharmacy.com', role: 'TENANT_ADMIN', status: 'ACTIVE' }
-        ]
+        ...data,
+        branches: Array.isArray(data.branches) ? data.branches : [],
+        memberships: Array.isArray(data.memberships) ? data.memberships : []
       });
+    } catch (err) {
+      setTenantDetails(null);
+      setError(err?.response?.data?.error?.message || err?.response?.data?.message || err.message || 'Could not load this tenant. No sample data has been substituted.');
     } finally {
       setLoadingDetails(false);
     }
@@ -1207,7 +1175,9 @@ export default function PlatformTenantsView() {
                   )}
                 </div>
               </div>
-            ) : null}
+            ) : (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800">Tenant details are unavailable. Refresh and try again; no placeholder branch or membership data is displayed.</div>
+            )}
 
             <div className="flex justify-end pt-2 border-t border-slate-100">
               <button
