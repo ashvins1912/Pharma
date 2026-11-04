@@ -396,7 +396,7 @@ router.get('/imports/batches', requireServiceScope('inventory.import'), asyncHan
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
   const filter = { tenantId, branchId };
   const [items, total] = await Promise.all([
-    StagedImportBatch.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+    StagedImportBatch.find(filter).select('batchId tenantId branchId uploadedBy fileName status totalRows validRows invalidRows publishedRows unpublishedRows createdAt completedAt').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
     StagedImportBatch.countDocuments(filter)
   ]);
   return res.json({ items, page, limit, total, pages: Math.ceil(total / limit), publishEnabled: config.importsEnabled });
@@ -414,7 +414,7 @@ router.get('/imports/batches/:batchId/rows', requireServiceScope('inventory.impo
     { 'normalized.name': { $regex: escapeRegex(String(req.query.q).slice(0, 80)), $options: 'i' } }
   ];
   const [items, total] = await Promise.all([
-    StagedImportRow.find(filter).sort({ rowNumber: 1 }).skip((page - 1) * limit).limit(limit).lean(),
+    StagedImportRow.find(filter).select('batchId tenantId branchId rowId rowNumber originalRecord normalized validationErrors status version publishedAt publishedBy createdAt updatedAt').sort({ rowNumber: 1 }).skip((page - 1) * limit).limit(limit).lean(),
     StagedImportRow.countDocuments(filter)
   ]);
   return res.json({ items, page, limit, total, pages: Math.ceil(total / limit) });
@@ -576,7 +576,15 @@ router.get('/imports/batches/:batchId', requireServiceScope('inventory.import'),
     { $match: { batchId: batch.batchId, tenantId, branchId } },
     { $group: { _id: '$status', count: { $sum: 1 } } }
   ]);
-  return res.json({ batch, counts: Object.fromEntries(counts.map(x => [x._id, x.count])) });
+  return res.json({
+    batch: {
+      batchId: batch.batchId, fileName: batch.fileName, status: batch.status,
+      totalRows: batch.totalRows, validRows: batch.validRows, invalidRows: batch.invalidRows,
+      publishedRows: batch.publishedRows, unpublishedRows: batch.unpublishedRows,
+      uploadedBy: batch.uploadedBy, createdAt: batch.createdAt, completedAt: batch.completedAt
+    },
+    counts: Object.fromEntries(counts.map(x => [x._id, x.count]))
+  });
 }));
 
 export default router;
