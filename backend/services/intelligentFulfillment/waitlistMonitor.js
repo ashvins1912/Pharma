@@ -166,7 +166,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
       const listPrice = Math.max(unitPrice, Number(product?.basePrice ?? unitPrice));
       const discountPercentage = listPrice > unitPrice
         ? Math.round((1 - unitPrice / listPrice) * 10000) / 100
-        : Math.min(100, Math.max(0, Number(product?.discountPercentage || 0)));
+        : 0;
       return { ...line, ...(product?._id ? { productId: String(product._id), name: product.name || line.name } : {}), allocatedQuantity: quantity, notifiedAvailableQuantity: quantity, unitPrice: roundPrice(unitPrice), listPrice: roundPrice(listPrice), discountPercentage };
     }));
     const nextStatus = allAvailable ? 'READY_FOR_CONFIRMATION' : anyAvailable ? 'PARTIALLY_FULFILLED' : 'WAITING_FOR_STOCK';
