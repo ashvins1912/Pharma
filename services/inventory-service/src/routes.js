@@ -5,7 +5,7 @@ import express from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import { config } from './config.js';
-import { ImportJob } from './models.js';
+import { ImportJob, Audit } from './models.js';
 import {
   buildFailureWorkbook,
   createImportJob,
@@ -77,6 +77,23 @@ router.delete('/products/:productId', requireServiceScope('inventory.write'), as
     correlationId: req.correlationId
   });
   return res.json(result);
+}));
+
+router.get('/audits', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
+  const { tenantId, branchId } = getInventoryScope(req, req.query || {});
+  if (!tenantId || !branchId) {
+    const error = new Error('Verified tenantId and branchId are required for inventory audit history.');
+    error.statusCode = 403;
+    throw error;
+  }
+  const page = Math.max(1, Math.floor(Number(req.query.page) || 1));
+  const limit = Math.min(100, Math.max(1, Math.floor(Number(req.query.limit) || 50)));
+  const filter = { tenantId: String(tenantId), branchId: String(branchId) };
+  const [total, items] = await Promise.all([
+    Audit.countDocuments(filter),
+    Audit.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean()
+  ]);
+  return res.json({ items, total, page, limit, pages: Math.ceil(total / limit) || 1 });
 }));
 
 router.get('/products/search', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
