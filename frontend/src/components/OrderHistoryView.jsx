@@ -152,7 +152,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                             {isActionLoading(LOADING_ACTIONS.CANCEL_ORDER) ? 'Cancelling...' : t('cancel')}
                           </button>
                         )}
-                        {!['Delivered', 'Cancelled', 'Rejected'].includes(order.orderStatus) && (
+                        {(!['Delivered', 'Cancelled', 'Rejected'].includes(order.orderStatus) || order.fulfillmentState === 'PARTIAL') && (
                           <button
                             onClick={() => trackOrder(order)}
                             disabled={isActionLoading(LOADING_ACTIONS.TRACK_ORDER)} className="bg-blue-50 hover:bg-blue-100 disabled:opacity-60 disabled:cursor-wait text-blue-700 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition"
