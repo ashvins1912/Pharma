@@ -395,6 +395,7 @@ router.get('/fulfillment/waitlist', authenticateUser, async (req, res) => {
 
 router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
     if (!getIsConnected()) return res.status(503).json({ message: 'Stock waitlist is temporarily unavailable.' });
+    let requestFingerprint = null;
     try {
         const tenantId = String(req.body?.tenantId || '').trim();
         const items = Array.isArray(req.body?.items) ? req.body.items : [];
@@ -403,7 +404,7 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
         if (!idempotencyKey || idempotencyKey.length > 128) return res.status(400).json({ message: 'A valid Idempotency-Key header is required.' });
         const { waitDays, waitUntil } = validateWaitWindow(req.body?.waitDays);
         const normalizedWaitItems = items.map(item => ({ productId: String(item.productId || item.medicineId || ''), requestedQuantity: Number(item.requestedQuantity ?? item.waitingQuantity) })).sort((a, b) => a.productId.localeCompare(b.productId));
-        const requestFingerprint = createHash('sha256').update(JSON.stringify({ tenantId, sourceType: req.body?.sourceType || 'CHECKOUT', sourceId: req.body?.sourceId || null, parentOrderId: req.body?.parentOrderId || null, waitDays, items: normalizedWaitItems })).digest('hex');
+        requestFingerprint = createHash('sha256').update(JSON.stringify({ tenantId, sourceType: req.body?.sourceType || 'CHECKOUT', sourceId: req.body?.sourceId || null, parentOrderId: req.body?.parentOrderId || null, waitDays, items: normalizedWaitItems })).digest('hex');
         const ids = [...new Set(items.map(item => String(item.productId || item.medicineId || '')).filter(Boolean))];
         if (!ids.length || ids.some(id => !mongoose.isValidObjectId(id))) return res.status(400).json({ message: 'Pending items must reference valid catalogue products.' });
         const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
