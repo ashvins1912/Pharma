@@ -4009,7 +4009,7 @@ export const dataStore = {
         const orderItems = [
             {
                 name: itemName,
-                productName: proposal.medicineName,
+                productName: chosenName,
                 productId: selectedProductId,
                 sku: selectedMedicine?.sku || selectedMedicine?.code || (selectedProductId ? 'CATALOGUE' : 'MR-ARRANGED'),
                 quantity: chosenQuantity,
