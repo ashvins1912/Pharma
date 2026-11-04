@@ -496,6 +496,7 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
             coordinates: req.body?.coordinates || null,
             customerMobile: String(req.body?.customerMobile || req.body?.mobile || '').trim(),
             orderedForName: String(req.body?.orderedForName || '').trim(),
+            prescriptionRequired: Boolean(req.body?.prescriptionRequired),
             paymentMethod: req.body?.paymentMethod || 'Cash on Delivery (COD)',
             prescriptionUrl: req.body?.prescriptionUrl || null,
             prescriptionId: req.body?.prescriptionId || null,
