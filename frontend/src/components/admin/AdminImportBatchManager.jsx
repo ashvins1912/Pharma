@@ -82,7 +82,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     setBusy(true);
     try {
       if (action === 'publish') await apiClient.post(`${base}/publish`, { rowIds: eligibleIds }, { headers: stableHeaders, timeout: 60000 });
-      else await apiClient.post(`${base}/unpublish`, { rowIds: eligibleIds }, { headers: stableHeaders });
+      else await apiClient.post(`${base}/unpublish`, { rowIds: eligibleIds }, { headers: stableHeaders, timeout: 60000 });
       await load();
       onInventoryChanged?.();
     } catch (e) {
@@ -95,7 +95,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     if (!window.confirm(message)) return;
     setBusy(true);
     try {
-      if (action === 'publish') await apiClient.post(`${base}/rows/${encodeURIComponent(row.rowId)}/publish`, {}, { headers: stableHeaders });
+      if (action === 'publish') await apiClient.post(`${base}/rows/${encodeURIComponent(row.rowId)}/publish`, {}, { headers: stableHeaders, timeout: 60000 });
       else await apiClient.post(`${base}/unpublish`, { rowIds: [row.rowId] }, { headers: stableHeaders, timeout: 60000 });
       await load();
       if (action === 'publish') onInventoryChanged?.();
