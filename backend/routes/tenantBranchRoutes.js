@@ -46,7 +46,7 @@ async function resolveScope(req, res, { requireAdmin = false } = {}) {
     res.status(404).json({ success: false, code: 'TENANT_NOT_FOUND', message: 'The selected active pharmacy tenant was not found.' });
     return null;
   }
-  return { tenantId, platform, membership };
+  return { tenantId, platform, membership, tenant };
 }
 
 function normalizeBranchPayload(body = {}) {
@@ -103,7 +103,7 @@ router.get('/', async (req, res) => {
       ? all
       : all.filter(branch => String(branch.id || branch._id) === String(scope.membership.branchId));
     const total = branches.length;
-    return res.json({ success: true, branches: branches.slice((page - 1) * limit, page * limit), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+    return res.json({ success: true, usesTenantAsBranch: scope.tenant.usesTenantAsBranch === true, branches: branches.slice((page - 1) * limit, page * limit), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
   } catch (error) {
     return res.status(503).json({ success: false, code: 'TENANT_BRANCH_REGISTRY_UNAVAILABLE', message: 'Pharmacy branches are temporarily unavailable.' });
   }
@@ -113,6 +113,7 @@ router.post('/', async (req, res) => {
   try {
     const scope = await resolveScope(req, res, { requireAdmin: true });
     if (!scope) return;
+    if (scope.tenant.usesTenantAsBranch === true) return res.status(409).json({ success: false, code: 'TENANT_IS_MAIN_BRANCH', message: 'This pharmacy is using its tenant location as its main branch. Turn off that option in Tenant Profile before adding separate branches.' });
     const data = normalizeBranchPayload(req.body);
     const invalid = validateBranch(data);
     if (invalid) return res.status(400).json({ success: false, code: 'INVALID_BRANCH', message: invalid });
@@ -143,6 +144,7 @@ router.patch('/:branchId', async (req, res) => {
     if (!scope) return;
     const branch = await TenantBranch.findOne({ _id: clean(req.params.branchId), tenantId: scope.tenantId }).lean();
     if (!branch) return res.status(404).json({ success: false, code: 'BRANCH_NOT_FOUND', message: 'Branch not found for this pharmacy.' });
+    if (branch.isTenantLocation) return res.status(409).json({ success: false, code: 'TENANT_LOCATION_MANAGED_BY_PROFILE', message: 'Edit the tenant profile to change this main branch location.' });
     const data = normalizeBranchPayload({ ...branch, ...req.body, geolocation: { ...(branch.geolocation || {}), ...(req.body?.geolocation || {}) }, address: { ...branch.address, ...req.body?.address }, operatingHours: { ...branch.operatingHours, ...req.body?.operatingHours } });
     const invalid = validateBranch(data);
     if (invalid) return res.status(400).json({ success: false, code: 'INVALID_BRANCH', message: invalid });
@@ -169,6 +171,7 @@ router.patch('/:branchId/status', async (req, res) => {
     if (!['ACTIVE', 'INACTIVE', 'SUSPENDED'].includes(status)) return res.status(400).json({ success: false, code: 'INVALID_BRANCH_STATUS', message: 'Choose ACTIVE, INACTIVE or SUSPENDED.' });
     const branch = await TenantBranch.findOne({ _id: clean(req.params.branchId), tenantId: scope.tenantId }).lean();
     if (!branch) return res.status(404).json({ success: false, code: 'BRANCH_NOT_FOUND', message: 'Branch not found for this pharmacy.' });
+    if (branch.isTenantLocation) return res.status(409).json({ success: false, code: 'TENANT_LOCATION_MANAGED_BY_PROFILE', message: 'Change the tenant branch setting in Tenant Profile instead of deactivating the tenant location.' });
     if (status !== 'ACTIVE' && branch.isDefault) {
       const replacement = await TenantBranch.findOne({ tenantId: scope.tenantId, status: 'ACTIVE', _id: { $ne: branch._id } }).sort({ createdAt: 1 }).lean();
       if (!replacement) return res.status(409).json({ success: false, code: 'LAST_ACTIVE_BRANCH', message: 'Add or activate another branch before deactivating the only active branch.' });
@@ -187,6 +190,7 @@ router.delete('/:branchId', async (req, res) => {
     if (!scope) return;
     const branch = await TenantBranch.findOne({ _id: clean(req.params.branchId), tenantId: scope.tenantId }).lean();
     if (!branch) return res.status(404).json({ success: false, code: 'BRANCH_NOT_FOUND', message: 'Branch not found for this pharmacy.' });
+    if (branch.isTenantLocation) return res.status(409).json({ success: false, code: 'TENANT_LOCATION_MANAGED_BY_PROFILE', message: 'Change the tenant branch setting in Tenant Profile instead of removing the tenant location.' });
     // Branches are never hard-deleted: historical orders, inventory, prescriptions and audit references must remain resolvable.
     if (branch.isDefault) {
       const replacement = await TenantBranch.findOne({ tenantId: scope.tenantId, status: 'ACTIVE', _id: { $ne: branch._id } }).sort({ createdAt: 1 }).lean();
