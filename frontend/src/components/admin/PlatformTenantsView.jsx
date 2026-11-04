@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import TenantProfileDashboard from './TenantProfileDashboard';
 
 export default function PlatformTenantsView() {
   const { t } = useLanguage();
@@ -49,7 +50,7 @@ export default function PlatformTenantsView() {
   const [issuedInvitation, setIssuedInvitation] = useState(null);
 
   // Vendor Onboarding State
-  const [platformTab, setPlatformTab] = useState('tenants'); // 'tenants' | 'vendors'
+  const [platformTab, setPlatformTab] = useState('tenants'); // platform-wide tenant workspace tabs
   const [vendors, setVendors] = useState([]);
   const [loadingVendors, setLoadingVendors] = useState(false);
   const [vendorModalOpen, setVendorModalOpen] = useState(false);
@@ -68,6 +69,10 @@ export default function PlatformTenantsView() {
   const [vendorError, setVendorError] = useState('');
   const [invitedVendorResult, setInvitedVendorResult] = useState(null);
   const [resendingVendorId, setResendingVendorId] = useState(null);
+  const [workspaceTenantId, setWorkspaceTenantId] = useState('');
+  const [compareTenantIds, setCompareTenantIds] = useState([]);
+  const [compareDetails, setCompareDetails] = useState({});
+  const [compareLoading, setCompareLoading] = useState(false);
 
   // Status toggle confirmation
   const [statusActionPending, setStatusActionPending] = useState(null); // { tenantId, action: 'suspend' | 'activate' }
@@ -107,6 +112,20 @@ export default function PlatformTenantsView() {
     loadTenants();
     loadVendors();
   }, []);
+
+  useEffect(() => {
+    if (platformTab !== 'compare' || compareTenantIds.length < 2) return;
+    let cancelled = false;
+    setCompareLoading(true);
+    Promise.all(compareTenantIds.map(async id => {
+      const response = await apiClient.get(`/api/v1/admin/tenants/${id}`);
+      return [id, response.data?.data || response.data || {}];
+    }))
+      .then(entries => { if (!cancelled) setCompareDetails(Object.fromEntries(entries)); })
+      .catch(err => { if (!cancelled) setError(err?.response?.data?.message || err.message || 'Could not load tenant comparison details.'); })
+      .finally(() => { if (!cancelled) setCompareLoading(false); });
+    return () => { cancelled = true; };
+  }, [platformTab, compareTenantIds]);
 
   // Filtered tenants calculation
   const safeTenants = Array.isArray(tenants) ? tenants : [];
@@ -448,36 +467,57 @@ export default function PlatformTenantsView() {
         </div>
       )}
 
-      {/* Main Tab Navigation between Tenants Directory & Vendor Onboarding Invitations */}
+      {/* Unified Super Admin tenant workspace */}
       <div className="flex border-b border-slate-200 gap-2 sm:gap-4 overflow-x-auto no-scrollbar max-w-full">
-        <button
-          type="button"
-          onClick={() => setPlatformTab('tenants')}
-          className={`pb-3 text-xs font-black transition cursor-pointer flex items-center gap-2 border-b-2 ${
-            platformTab === 'tenants'
-              ? 'border-blue-600 text-blue-700'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <span>🏢</span>
-          <span>Tenants Directory ({totalCount})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setPlatformTab('vendors')}
-          className={`pb-3 text-xs font-black transition cursor-pointer flex items-center gap-2 border-b-2 ${
-            platformTab === 'vendors'
-              ? 'border-teal-600 text-teal-700'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <span>✉️</span>
-          <span>Vendor Onboarding Invitations ({vendors.length})</span>
-        </button>
+        <button type="button" onClick={() => setPlatformTab('tenants')} className={`pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'tenants' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>🏢 Tenants Directory ({totalCount})</button>
+        <button type="button" onClick={() => setPlatformTab('profile')} className={`pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'profile' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>🏥 Tenant Profile & Branches</button>
+        <button type="button" onClick={() => setPlatformTab('compare')} className={`pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'compare' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>⚖️ Compare Tenants ({compareTenantIds.length})</button>
+        <button type="button" onClick={() => setPlatformTab('vendors')} className={`pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'vendors' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500'}`}>✉️ Vendor Invitations ({vendors.length})</button>
       </div>
 
-      {platformTab === 'tenants' ? (
+      {platformTab === 'profile' ? (
+        <section className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <label htmlFor="platform-profile-tenant" className="block text-xs font-black uppercase text-slate-600">Choose tenant to manage</label>
+            <select id="platform-profile-tenant" value={workspaceTenantId} onChange={event => setWorkspaceTenantId(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold" disabled={!safeTenants.length}>
+              <option value="">Select a tenant</option>
+              {safeTenants.map(tenant => <option key={tenant.id || tenant._id} value={tenant.id || tenant._id}>{tenant.name || tenant.legalName || tenant.id}</option>)}
+            </select>
+            <p className="mt-2 text-xs text-slate-500">Manage the selected tenant's persisted profile, edit policy, geolocation, personnel and branch registry in this workspace.</p>
+          </div>
+          {workspaceTenantId ? <TenantProfileDashboard key={workspaceTenantId} tenantId={workspaceTenantId} showTenantSelector={false} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Select a tenant to open its profile and branches.</div>}
+        </section>
+      ) : platformTab === 'compare' ? (
+        <section className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 className="text-sm font-black text-slate-900">Compare selected tenants</h3>
+            <p className="mt-1 text-xs text-slate-500">Select at least two tenants from the directory. Comparison uses each tenant's persisted profile, branches and membership records.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {safeTenants.filter(tenant => compareTenantIds.includes(String(tenant.id || tenant._id))).map(tenant => <span key={tenant.id || tenant._id} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold">{tenant.name || tenant.id}</span>)}
+              {compareTenantIds.length < 2 && <span className="text-xs text-amber-700">Choose at least two tenants in the Tenants Directory.</span>}
+            </div>
+          </div>
+          {compareLoading ? <div className="rounded-2xl bg-white p-8 text-center text-sm text-slate-500">Loading comparison data…</div> : compareTenantIds.length >= 2 ? (
+            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+              <table className="w-full min-w-[720px] text-left text-xs">
+                <thead><tr className="border-b bg-slate-50"><th className="p-3">Attribute</th>{compareTenantIds.map(id => <th className="p-3" key={id}>{safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.name || id}</th>)}</tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {[
+                    ['Tenant ID', id => id],
+                    ['Status', id => safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.status || '—'],
+                    ['Legal name', id => compareDetails[id]?.tenant?.legalName || safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.legalName || '—'],
+                    ['Contact email', id => compareDetails[id]?.tenant?.contactEmail || safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.contactEmail || '—'],
+                    ['Contact phone', id => compareDetails[id]?.tenant?.contactPhone || safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.contactPhone || '—'],
+                    ['Branches', id => Array.isArray(compareDetails[id]?.branches) ? compareDetails[id].branches.length : 'Not available'],
+                    ['Memberships', id => Array.isArray(compareDetails[id]?.memberships) ? compareDetails[id].memberships.length : 'Not available'],
+                    ['Tenant as main branch', id => compareDetails[id]?.tenant?.usesTenantAsBranch === true ? 'Yes' : 'No / Not configured']
+                  ].map(([label, value]) => <tr key={label}><th className="p-3 font-bold text-slate-600">{label}</th>{compareTenantIds.map(id => <td key={id} className="p-3 text-slate-800">{value(id)}</td>)}</tr>)}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </section>
+      ) : platformTab === 'tenants' ? (
         <>
           {/* Filter and Search Bar */}
           <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm min-w-0 overflow-hidden">
@@ -591,6 +631,7 @@ export default function PlatformTenantsView() {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold uppercase tracking-wider text-[10px]">
+                  <th className="py-3 px-3">Compare</th>
                   <th className="py-3 px-4">{t('pharmacyTenant')}</th>
                   <th className="py-3 px-4">{t('systemIdentifiers')}</th>
                   <th className="py-3 px-4">{t('operatingStatus')}</th>
@@ -608,6 +649,7 @@ export default function PlatformTenantsView() {
 
                   return (
                     <tr key={tenantRow.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-3"><input type="checkbox" aria-label={`Compare ${tenantRow.name}`} checked={compareTenantIds.includes(String(tenantRow.id))} onChange={event => setCompareTenantIds(current => event.target.checked ? (current.length < 4 ? [...current, String(tenantRow.id)] : current) : current.filter(id => id !== String(tenantRow.id)))} disabled={!compareTenantIds.includes(String(tenantRow.id)) && compareTenantIds.length >= 4} /></td>
                       {/* Name & Legal */}
                       <td className="py-3.5 px-4">
                         <div className="font-extrabold text-slate-900 text-sm">{tenantRow.name}</div>
