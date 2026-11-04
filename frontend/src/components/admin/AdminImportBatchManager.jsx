@@ -9,6 +9,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
   const [batchItems, setBatchItems] = useState([]);
   const [serverPublishingEnabled, setServerPublishingEnabled] = useState(false);
   const [activeBatchStatus, setActiveBatchStatus] = useState('');
+  const [activeStockOperation, setActiveStockOperation] = useState('SET');
   const [selected, setSelected] = useState([]);
   const [status, setStatus] = useState('');
   const [query, setQuery] = useState('');
@@ -46,6 +47,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
         apiClient.get(base, { headers: stableHeaders })
       ]);
       setActiveBatchStatus(batchResponse.data.batch?.status || '');
+      setActiveStockOperation(batchResponse.data.batch?.stockOperation || 'SET');
       setRows(response.data.items || []);
       setTotal(response.data.total || 0);
       setPages(response.data.pages || 1);
@@ -156,7 +158,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <button type="button" onClick={() => { setActiveBatchId(''); setSelected([]); setEditing(null); }} className="mb-1 text-[11px] font-bold text-blue-700">← All batches</button>
-          <h3 className="text-sm font-black text-slate-900">Batch records · review & publish</h3>
+          <h3 className="text-sm font-black text-slate-900">Stock {activeStockOperation === 'ADD' ? 'refill' : 'physical count update'} · review & publish</h3>
           <p className="text-[11px] text-slate-500">{total.toLocaleString()} rows · batch status: {activeBatchStatus || 'loading'} · staged records do not affect live stock until published</p>
         </div>
         <button type="button" onClick={revertBatch} disabled={busy || !canRevertBatch} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Revert published batch</button>
@@ -188,7 +190,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
       <div className="overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full min-w-[1080px] text-left text-[11px]">
           <thead className="bg-slate-50 text-slate-500"><tr>
-            <th className="p-2">Select</th><th className="p-2">Row</th><th className="p-2">SKU</th><th className="p-2">Medicine</th><th className="p-2">Price</th><th className="p-2">Stock</th><th className="p-2">Batch / expiry</th><th className="p-2">Category / manufacturer</th><th className="p-2">Status / errors</th><th className="p-2">Actions</th>
+            <th className="p-2">Select</th><th className="p-2">Row</th><th className="p-2">SKU</th><th className="p-2">Medicine</th><th className="p-2">Price</th><th className="p-2">Current / incoming / after</th><th className="p-2">Batch / expiry</th><th className="p-2">Category / manufacturer</th><th className="p-2">Status / errors</th><th className="p-2">Actions</th>
           </tr></thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? <tr><td colSpan="10" className="p-5 text-center text-slate-500">Loading batch rows…</td></tr> :
@@ -205,7 +207,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
                   <td className="p-2 font-mono">{row.normalized?.sku}</td>
                   <td className="p-2 font-semibold">{row.normalized?.name}</td>
                   <td className="p-2">₹{row.normalized?.price}</td>
-                  <td className="p-2">{row.normalized?.stockQuantity}</td>
+                  <td className="p-2"><div>Current: <strong>{row.normalized?.currentStockQuantity ?? 0}</strong></div><div>Incoming: <strong>{row.normalized?.stockQuantity ?? 0}</strong></div><div>After: <strong>{row.normalized?.plannedStockQuantity ?? row.normalized?.stockQuantity ?? 0}</strong></div></td>
                   <td className="p-2">{row.normalized?.batchNumber || '—'}<div className="text-[10px] text-slate-500">{row.normalized?.expiryDate && Number.isFinite(new Date(row.normalized.expiryDate).getTime()) ? new Date(row.normalized.expiryDate).toLocaleDateString() : 'No expiry'}</div></td><td className="p-2">{row.normalized?.category || '—'}<div className="text-[10px] text-slate-500">{row.normalized?.manufacturer || '—'}</div><div className="text-[10px] text-slate-500">Cost: {row.normalized?.baseCostPrice ?? '—'} · {row.normalized?.marginTier || 'LOW'}</div></td>
                 </>}
                 <td className="p-2"><span className={`rounded px-2 py-1 font-bold ${row.status === 'PUBLISHED' ? 'bg-emerald-50 text-emerald-700' : row.status === 'INVALID' ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-700'}`}>{row.status}</span>{row.validationErrors?.length > 0 && <ul className="mt-1 list-disc pl-4 text-rose-700">{row.validationErrors.map((item,i)=><li key={i}>{item}</li>)}</ul>}</td>

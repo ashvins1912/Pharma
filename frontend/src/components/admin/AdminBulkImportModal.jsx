@@ -70,7 +70,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   }, [isOpen, scopeTenantId, user?.branchId, user?.app_metadata?.branchId]);
 
   const [file, setFile] = useState(null);
-  const [stockMode, setStockMode] = useState('REPLACE');
+  const [stockMode, setStockMode] = useState('SET');
   const [analyzing, setAnalyzing] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [previewData, setPreviewData] = useState(null);
@@ -124,7 +124,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     }
     setFile(selectedFile); setAnalyzing(true); setPreviewData(null); setImportJob(null); setImportIdempotencyKey(''); setPollError('');
     try {
-      const formData = new FormData(); formData.append('excelFile', selectedFile);
+      const formData = new FormData(); formData.append('excelFile', selectedFile); formData.append('stockMode', stockMode);
       const response = await apiClient.post('/api/v1/inventory/imports/preview', formData, { headers: { 'Content-Type': 'multipart/form-data', ...getImportScopeHeaders() }, timeout: 60000 });
       setPreviewData(response.data);
       addToast('Mapped ' + response.data.rowsDetected + ' stock rows (' + response.data.validCount + ' ready, ' + response.data.errorsCount + ' need review)', 'info');
@@ -432,7 +432,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
               <label htmlFor="inventory-stock-mode" className="block text-xs font-bold text-amber-900">{t('stockUpdateBehaviour')}</label>
               <select id="inventory-stock-mode" value={stockMode} onChange={event => setStockMode(event.target.value)} className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-slate-800">
-                <option value="REPLACE">{t('replaceBatchQuantity')}</option>
+                <option value="ADD">Stock refill — add received quantity</option>
+                <option value="SET">Physical stock update — set counted quantity</option>
               </select>
               <p className="text-[11px] text-amber-900">{t('inventoryImportRules')}</p>
             </div>
