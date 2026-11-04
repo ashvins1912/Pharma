@@ -100,7 +100,7 @@ router.get('/products/:productId', requireServiceScope('inventory.read'), asyncH
 }));
 
 router.get('/:productId', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
-  const result = await lookupInventory({ productIds: [req.params.productId], ...getInventoryScope(req) });
+  const result = await lookupInventory({ productIds: [req.params.productId], ...getInventoryScope(req, req.query) });
   if (!result.length) return res.status(404).json({ message: 'Inventory item was not found.' });
   return res.json(result[0]);
 }));
