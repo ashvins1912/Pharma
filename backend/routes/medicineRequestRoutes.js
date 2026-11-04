@@ -1040,6 +1040,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
                 waitDays: Number(req.body.waitDays),
                 waitUntil: new Date(now.getTime() + Number(req.body.waitDays) * 86400000),
                 idempotencyKey: 'medicine-request:' + String(request._id) + ':' + new mongoose.Types.ObjectId().toString(),
+                requestFingerprint: 'medicine-request:' + String(request._id) + ':' + new mongoose.Types.ObjectId().toString(),
                 auditTrail: [{ action: 'MEDICINE_REQUEST_WAITLISTED', actorId: customerId, at: now, waitDays: Number(req.body.waitDays) }]
             });
         }
@@ -1068,7 +1069,9 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
                 coordinates,
                 paymentMethod: 'Cash on Delivery (COD)',
                 source: 'MEDICINE_REQUEST',
-                medicineRequestId: String(request._id)
+                medicineRequestId: String(request._id),
+                fulfillmentCaseId: waitlistCase?._id ? String(waitlistCase._id) : null,
+                fulfillmentState: waitlistCase ? 'PARTIAL' : 'FULL'
             }, 'Customer medicine request fulfilment');
         }
         if (waitlistCase && createdOrder?._id) {
