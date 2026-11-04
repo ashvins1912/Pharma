@@ -4,9 +4,11 @@ import { useToast } from '../../context/ToastContext';
 import apiClient from '../../api/apiClient';
 import Pagination from '../common/Pagination';
 import { useLanguage } from '../../context/LanguageContext';
+import { useTenant } from '../../context/TenantContext';
 export default function AdminInventoryTable({ onOpenBulkImport, canManage = false, canImport = false }) {
   const { t } = useLanguage();
   const { fetchMedicines, setAdminNewStockModalOpen } = useApp();
+  const { tenantId, branchId } = useTenant();
   const { addToast } = useToast();
   
   const [adminMeds, setAdminMeds] = useState([]);
@@ -25,7 +27,9 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
         params: {
           search,
           page,
-          limit: 20
+          limit: 20,
+          tenantId,
+          branchId
         }
       });
       if (res.data && res.data.medicines) {
@@ -84,9 +88,9 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
     try {
       setSavingMedicine(true);
       if (medicineDraft._id) {
-        await apiClient.put(`/api/medicines/${encodeURIComponent(medicineDraft._id)}`, medicineDraft);
+        await apiClient.put(`/api/medicines/${encodeURIComponent(medicineDraft._id)}`, { ...medicineDraft, tenantId, branchId });
       } else {
-        await apiClient.post('/api/medicines', medicineDraft);
+        await apiClient.post('/api/medicines', { ...medicineDraft, tenantId, branchId });
       }
       addToast(medicineDraft._id ? t('medicineUpdated') : t('medicineCreated'), 'success');
       setMedicineDraft(null);
@@ -103,7 +107,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
     if (!canManage) return;
     if (!window.confirm(`Archive ${medicine.name} from the customer store?`)) return;
     try {
-      await apiClient.delete(`/api/medicines/${encodeURIComponent(medicine._id)}`);
+      await apiClient.delete(`/api/medicines/${encodeURIComponent(medicine._id)}`, { params: { tenantId, branchId } });
       addToast(t('medicineArchived'), 'success');
       await loadAdminInventory(adminPage, searchTerm);
       fetchMedicines();
