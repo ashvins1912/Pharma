@@ -1,5 +1,6 @@
 import FulfillmentCase from '../../models/FulfillmentCase.js';
 import Medicine from '../../models/Medicine.js';
+import MedicineRequest from '../../models/MedicineRequest.js';
 import { getIsConnected } from '../../config/db.js';
 import { domainEvents } from '../../shared/events/DomainEvents.js';
 
@@ -25,6 +26,9 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date() 
       });
       if (result.modifiedCount) {
         expired += 1;
+        if (entry.sourceType === 'MEDICINE_REQUEST' && entry.sourceId) {
+          await MedicineRequest.updateOne({ _id: entry.sourceId, fulfillmentCaseId: String(entry._id), status: 'WAITING_FOR_STOCK' }, { $set: { status: 'EXPIRED' }, $push: { auditTrail: { action: 'WAITLIST_EXPIRED', actorId: 'System', role: 'System', timestamp: now, notes: 'The selected stock wait window expired.' } } });
+        }
         domainEvents.emitDomainEvent('FULFILLMENT_WAITLIST_EXPIRED', entry.caseNumber, {
           recipientUserId: entry.customerId, caseNumber: entry.caseNumber
         }, 'system', entry.tenantId, entry.branchId);
@@ -69,6 +73,9 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date() 
     });
     if (result.modifiedCount && newlyAvailable) {
       ready += 1;
+      if (entry.sourceType === 'MEDICINE_REQUEST' && entry.sourceId && allAvailable) {
+        await MedicineRequest.updateOne({ _id: entry.sourceId, fulfillmentCaseId: String(entry._id), status: 'WAITING_FOR_STOCK' }, { $set: { status: 'READY_FOR_CONFIRMATION' }, $push: { auditTrail: { action: 'STOCK_AVAILABLE', actorId: 'System', role: 'System', timestamp: now, notes: 'Requested stock is available for customer confirmation.' } } });
+      }
       domainEvents.emitDomainEvent('FULFILLMENT_STOCK_AVAILABLE', entry.caseNumber, {
         recipientUserId: entry.customerId,
         caseNumber: entry.caseNumber,
