@@ -64,7 +64,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
     }
     const ids = [...new Set((entry.lines || []).map(line => String(line.productId || '')).filter(Boolean))];
     const products = ids.length ? await Medicine.find({
-      _id: { $in: ids }, tenantId: entry.tenantId, ...(entry.branchId ? { branchId: entry.branchId } : {})
+      _id: { $in: ids }, tenantId: entry.tenantId, branchId: entry.branchId || null
     }) .select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive price discountPercentage').lean() : [];
     const byId = new Map(products.map(product => [String(product._id), product]));
     let anyAvailable = false;
@@ -74,7 +74,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
       let product = line.productId ? byId.get(String(line.productId)) : null;
       if (!product && line.composition && line.strength) {
         const matches = await Medicine.find({
-          tenantId: entry.tenantId, ...(entry.branchId ? { branchId: entry.branchId } : {}), isActive: { $ne: false },
+          tenantId: entry.tenantId, branchId: entry.branchId || null, isActive: { $ne: false },
           composition: line.composition, strength: line.strength,
           ...(line.dosageForm ? { dosageForm: line.dosageForm } : {}),
           ...(line.manufacturer ? { manufacturer: line.manufacturer } : {})
