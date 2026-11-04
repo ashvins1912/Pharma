@@ -35,6 +35,13 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
     error.statusCode = 400;
     throw error;
   }
+  const scopeTenantId = typeof tenantId === 'string' ? tenantId.trim() : '';
+  const scopeBranchId = typeof branchId === 'string' ? branchId.trim() : '';
+  if (!scopeTenantId || !scopeBranchId) {
+    const error = new Error('Verified tenantId and branchId are required for inventory lookup.');
+    error.statusCode = 403;
+    throw error;
+  }
   if (productIds.some(id => typeof id !== 'string' || !mongoose.isValidObjectId(id))
     || skus.some(sku => typeof sku !== 'string' || !sku.trim())) {
     const error = new Error('Lookup product IDs and SKUs must be valid non-empty strings.');
@@ -46,11 +53,11 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
   if (skus.length) filters.push({ sku: { $in: skus.map(sku => String(sku).trim().toUpperCase()) } });
   if (!filters.length) return [];
   const productFilter = { $or: filters, active: true };
-  if (tenantId) productFilter.tenantId = String(tenantId).trim();
+  productFilter.tenantId = scopeTenantId;
   const products = await Product.find(productFilter).lean();
   const inventoryFilter = { productId: { $in: products.map(product => product._id) } };
-  if (tenantId) inventoryFilter.tenantId = String(tenantId).trim();
-  if (branchId) inventoryFilter.branchId = String(branchId).trim();
+  inventoryFilter.tenantId = scopeTenantId;
+  inventoryFilter.branchId = scopeBranchId;
   const inventories = await Inventory.find(inventoryFilter).lean();
   const today = new Date(new Date().toISOString().slice(0, 10));
   const byProductId = new Map();
@@ -99,8 +106,8 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
       listingId: listingBatch ? `${listingBatch.tenantId}:${listingBatch.branchId}:${String(product._id)}` : null,
       batchNumber: listingBatch?.batchNumber || '',
       expiryDate: listingBatch?.expiryDate || null,
-      tenantId: listingBatch?.tenantId || tenantId || product.tenantId,
-      branchId: listingBatch?.branchId || branchId || null
+      tenantId: listingBatch?.tenantId || scopeTenantId,
+      branchId: listingBatch?.branchId || scopeBranchId
     };
   });
 }
@@ -109,13 +116,20 @@ export async function searchInventoryProducts({
   tenantId = null, branchId = null, query = '', category = '', hideRx = false,
   includeOutOfStock = false, sort = 'default', page = 1, limit = 50
 } = {}) {
+  const scopeTenantId = typeof tenantId === 'string' ? tenantId.trim() : '';
+  const scopeBranchId = typeof branchId === 'string' ? branchId.trim() : '';
+  if (!scopeTenantId || !scopeBranchId) {
+    const error = new Error('Verified tenantId and branchId are required for inventory catalogue search.');
+    error.statusCode = 403;
+    throw error;
+  }
   const normalizedPage = Math.max(1, Math.floor(Number(page) || 1));
   const normalizedLimit = Math.min(100, Math.max(1, Math.floor(Number(limit) || 50)));
   const normalizedQuery = String(query || '').trim();
   const isSearching = Boolean(normalizedQuery);
   const showOutOfStock = includeOutOfStock === true || String(includeOutOfStock).toLowerCase() === 'true';
   const filter = { active: true };
-  if (tenantId) filter.tenantId = String(tenantId).trim();
+  filter.tenantId = scopeTenantId;
   if (category && category !== 'All') filter.category = String(category).trim();
   if (hideRx === true || String(hideRx).toLowerCase() === 'true') filter.requiresPrescription = false;
   if (isSearching) {
@@ -126,8 +140,8 @@ export async function searchInventoryProducts({
   const products = await Product.find(filter).lean();
   const productIds = products.map(product => product._id);
   const inventoryFilter = { productId: { $in: productIds } };
-  if (tenantId) inventoryFilter.tenantId = String(tenantId).trim();
-  if (branchId) inventoryFilter.branchId = String(branchId).trim();
+  inventoryFilter.tenantId = scopeTenantId;
+  inventoryFilter.branchId = scopeBranchId;
   const inventories = productIds.length ? await Inventory.find(inventoryFilter).lean() : [];
   const byProductId = new Map();
   const today = new Date(new Date().toISOString().slice(0, 10));
@@ -168,8 +182,8 @@ export async function searchInventoryProducts({
         availableQuantity: Math.max(0, Number(row.stockQuantity || 0) - Number(row.reservedQuantity || 0)),
         price: row.price
       })),
-      tenantId: listingBatch?.tenantId || tenantId || product.tenantId,
-      branchId: listingBatch?.branchId || branchId || null
+      tenantId: listingBatch?.tenantId || scopeTenantId,
+      branchId: listingBatch?.branchId || scopeBranchId
     };
   });
   const visibleItems = !isSearching && !showOutOfStock
