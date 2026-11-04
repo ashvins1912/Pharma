@@ -369,7 +369,7 @@ router.post('/fulfillment/preview', authenticateUser, async (req, res) => {
             if (!branch) return res.status(404).json({ message: 'Selected pharmacy branch is unavailable.' });
         }
         const branchScope = branchId ? { branchId } : {};
-        const inventory = await Medicine.find({ _id: { $in: ids }, tenantId, ...branchScope }).select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean();
+        const inventory = await Medicine.find({ _id: { $in: ids }, tenantId, ...branchScope }).select('_id name sku code price basePrice stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean();
         const compositionKeys = [...new Set(inventory.map(item => String(item.composition || item.genericName || '').trim()).filter(Boolean))];
         const strengthKeys = [...new Set(inventory.map(item => String(item.strength || '').trim()).filter(Boolean))];
         const catalog = compositionKeys.length && strengthKeys.length
