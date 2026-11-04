@@ -282,6 +282,26 @@ export const API_CAPABILITIES = [
     permission: 'inventory.import'
   },
   {
+    method: 'POST',
+    pattern: /^\/api\/v1\/inventory\/imports\/preview$/,
+    permission: 'inventory.import'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/inventory\/imports\/batches(?:\/[^/]+(?:\/rows|\/invalid-records\/download)?)?$/,
+    permission: 'inventory.import'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/v1\/inventory\/imports\/batches\/[^/]+\/rows\/[^/]+$/,
+    permission: 'inventory.import'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/inventory\/imports\/batches\/[^/]+\/(?:publish|unpublish|rollback|rows\/edit-selected|rows\/[^/]+\/publish)$/,
+    permission: 'inventory.import'
+  },
+  {
     method: 'GET',
     pattern: /^\/api\/v1\/inventory\/imports\/[^/]+(?:\/failures(?:\/download)?)?$/,
     permission: 'inventory.import'

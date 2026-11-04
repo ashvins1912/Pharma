@@ -62,23 +62,40 @@ function readImportRows(sheet) {
     if (!cells.some(value => value !== '' && value !== null && value !== undefined)) continue;
     const source = Object.fromEntries(headers.map((header, column) => [header, cells[column] ?? '']));
     const name = String(get(source, 'Item Name') ?? '').trim();
-    if (!name) continue;
-
     const mrp = get(source, 'MRP/Pk', 'MRP / Pk', 'MRP');
     const unitMrp = get(source, 'MRP');
     const totalQty = get(source, 'Tot.Bal.Qty', 'Tot Bal Qty', 'Total Balance Qty');
     const storeQty = get(source, 'Str.Qty', 'Store Qty');
     const godownQty = get(source, 'Gdwn.Qty', 'Godown Qty');
+    const calculatedQty = isNumber(totalQty)
+      ? Number(totalQty)
+      : (isNumber(storeQty) ? Number(storeQty) : 0) + (isNumber(godownQty) ? Number(godownQty) : 0);
+
+    // Retain incomplete detail rows for correction in the batch review UI.
+    // Only completely blank rows are skipped; category headings still update context.
+    if (!name) {
+      if (Object.values(source).some(value => value !== '' && value !== null && value !== undefined)) {
+        records.push({
+          ...source,
+          SKU: String(get(source, 'Code', 'SKU') ?? '').trim(),
+          'Medicine Name': '',
+          Price: isNumber(mrp) ? Number(mrp) : (isNumber(unitMrp) ? Number(unitMrp) : ''),
+          Stock: calculatedQty,
+          'Batch Number': String(get(source, 'Batch No', 'Batch Number') ?? '').trim(),
+          'Expiry Date': get(source, 'Exp Dt', 'Expiry Date') ?? '',
+          Form: String(get(source, 'Packing', 'Form') ?? '').trim(),
+          Category: currentCategory,
+          'Source Row Number': index + 1
+        });
+      }
+      continue;
+    }
 
     // Category/group headings have no batch, price or stock values.
     if (!isNumber(mrp) && !isNumber(unitMrp) && !isNumber(totalQty)) {
       currentCategory = name;
       continue;
     }
-
-    const calculatedQty = isNumber(totalQty)
-      ? Number(totalQty)
-      : (isNumber(storeQty) ? Number(storeQty) : 0) + (isNumber(godownQty) ? Number(godownQty) : 0);
     const mapped = {
       ...source,
       SKU: String(get(source, 'Code', 'SKU') ?? '').trim(),
@@ -1054,7 +1071,13 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     seen.add(key);
     valid.push({ ...item, value });
   }
-  const skus = [...new Set(valid.map(item => item.value.sku))];
+  // Include SKUs from invalid rows too. A user may correct an invalid field
+  // later; its publish baseline must still reflect the live product/stock that
+  // existed when the workbook was reviewed.
+  const skus = [...new Set(normalized.map(item => (
+    item.parsed.value?.sku
+    || String(valueOf(item.originalRecord, 'SKU', 'sku', 'Sku', 'Product SKU', 'Barcode', 'Code', 'Item Code') || '').trim().toUpperCase()
+  )).filter(Boolean))];
   const inventory = skus.length ? await Inventory.find({ tenantId, branchId, sku: { $in: skus } }).select('sku batchNumber stockQuantity reservedQuantity price updatedAt').lean() : [];
   const products = skus.length ? await Product.find({ tenantId, sku: { $in: skus } }).select('sku version updatedAt').lean() : [];
   const inventorySnapshot = inventory.map(item => ({ sku: item.sku, batchNumber: item.batchNumber || '', stockQuantity: item.stockQuantity, reservedQuantity: item.reservedQuantity, price: item.price, updatedAt: item.updatedAt || null }))
@@ -1092,6 +1115,9 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     previewFingerprint,
     inventorySnapshot,
     productSnapshot,
+    // Internal only: the staging route reuses the exact parsed source rows so
+    // the workbook is not parsed a second time during the same upload request.
+    sourceRows: rows,
     tenantId,
     branchId,
     rowsDetected: rows.length,

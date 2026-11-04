@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import * as xlsx from 'xlsx';
+import AdminImportBatchManager from './AdminImportBatchManager';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useApp } from '../../context/AppContext';
@@ -80,7 +81,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
   // Status Polling for active import jobs
   useEffect(() => {
-    if (pollError || !importJob?.jobId || !['QUEUED', 'PROCESSING'].includes(importJob.status)) return undefined;
+    if (pollError || !importJob?.jobId || !['QUEUED', 'PROCESSING', 'STAGING'].includes(importJob.status)) return undefined;
     let cancelled = false;
 
     const pollStatus = async () => {
@@ -124,7 +125,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     setFile(selectedFile); setAnalyzing(true); setPreviewData(null); setImportJob(null); setImportIdempotencyKey(''); setPollError('');
     try {
       const formData = new FormData(); formData.append('excelFile', selectedFile);
-      const response = await apiClient.post('/api/v1/inventory/imports/preview', formData, { headers: { 'Content-Type': 'multipart/form-data', ...getImportScopeHeaders() } });
+      const response = await apiClient.post('/api/v1/inventory/imports/preview', formData, { headers: { 'Content-Type': 'multipart/form-data', ...getImportScopeHeaders() }, timeout: 60000 });
       setPreviewData(response.data);
       addToast('Mapped ' + response.data.rowsDetected + ' stock rows (' + response.data.validCount + ' ready, ' + response.data.errorsCount + ' need review)', 'info');
     } catch (error) {
@@ -144,11 +145,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       addToast(t('selectTenantBranchImport'), 'warning');
       return;
     }
-    if (!previewData?.importsEnabled) {
-      addToast(t('inventoryWritesDisabled'), 'warning');
-      return;
-    }
-    if (!previewData || !previewData.validCount || previewData.validCount === 0 || !file) {
+    if (!previewData || !previewData.rowsDetected || previewData.rowsDetected === 0 || !file) {
       addToast(t('noRecordsToImport'), 'warning');
       return;
     }
@@ -207,7 +204,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     if (!importJob?.jobId) return;
     try {
       const response = await apiClient.get(
-        `/api/v1/inventory/imports/${importJob.jobId}/failures/download`,
+        `/api/v1/inventory/imports/batches/${importJob.batchId}/invalid-records/download`,
         { responseType: 'blob', headers: getImportScopeHeaders() }
       );
       const url = URL.createObjectURL(response.data);
@@ -442,6 +439,10 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
           </div>
         )}
 
+        {!previewData && !importJob && targetBranchId && (
+          <AdminImportBatchManager batchId={null} headers={getImportScopeHeaders()} publishingEnabled={false} onInventoryChanged={fetchMedicines} />
+        )}
+
         {/* Preview & Validation Report */}
         {previewData && (
           <div className="py-4 space-y-4 animate-fade-in">
@@ -452,9 +453,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
             </div>
             {previewData.importsEnabled !== true && (
               <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 space-y-1">
-                <p className="font-extrabold">Inventory imports are disabled by the inventory service.</p>
-                <p>You can review this preview, but no stock will be changed. To enable controlled imports, set <code className="rounded bg-amber-100 px-1">INVENTORY_IMPORTS_ENABLED=true</code> in the Inventory Service environment on Render, then redeploy that service and preview this workbook again.</p>
-                <p className="font-semibold">The server enforces this setting; enabling the button alone cannot bypass it.</p>
+                <p className="font-extrabold">Staged review mode</p>
+                <p>Uploading stores a separate batch and its rows only. Live catalogue and inventory are unchanged until you explicitly publish selected rows.</p>
               </div>
             )}
             {/* Metric Summary Cards */}
@@ -482,8 +482,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
               <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 space-y-3" aria-live="polite">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="text-sm font-black text-slate-900">
-                    {['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(importJob.status)
-                      ? '✓ Import Completed'
+                    {['COMPLETED', 'COMPLETED_WITH_ERRORS', 'READY', 'PARTIALLY_PUBLISHED', 'PUBLISHED'].includes(importJob.status)
+                      ? (importJob.status === 'READY' ? '✓ Batch staged — awaiting review' : '✓ Import Batch Updated')
                       : importJob.status === 'REVERTED'
                         ? t('importBatchReverted')
                         : importJob.status === 'FAILED'
@@ -506,7 +506,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                 </p>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <p className="rounded-xl bg-white p-2.5 text-emerald-800">
-                    Successful: <strong>{importJob.successfulRecords || 0}</strong>
+                    Ready for review: <strong>{importJob.successfulRecords || 0}</strong>
                     {importJob.insertedRecords !== undefined && (
                       <span className="text-[10px] text-slate-500 block">
                         ({importJob.insertedRecords || 0} new, {importJob.updatedRecords || 0} updated)
@@ -514,7 +514,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                     )}
                   </p>
                   <p className="rounded-xl bg-white p-2.5 text-rose-800">
-                    Failed: <strong>{importJob.failedRecords || 0}</strong>
+                    Invalid rows: <strong>{importJob.failedRecords || 0}</strong>
                   </p>
                 </div>
                 {importJob.errorMessage && (
@@ -537,7 +537,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                     📥 Download Failed Records (.xlsx)
                   </button>
                 )}
-                {importJob.batchId && ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'].includes(importJob.status) && (
+                {importJob.batchId && ['READY', 'PARTIALLY_PUBLISHED', 'PUBLISHED', 'COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'].includes(importJob.status) && (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
                     <p className="text-xs text-amber-900 break-all">{t('importBatchId')}: <strong>{importJob.batchId}</strong></p>
                     <button
@@ -549,10 +549,13 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                     </button>
                   </div>
                 )}
+                {importJob.batchId && !['FAILED','REVERTED'].includes(importJob.status) && (
+                  <AdminImportBatchManager batchId={importJob.batchId} headers={getImportScopeHeaders()} publishingEnabled={previewData.importsEnabled === true} onInventoryChanged={fetchMedicines} />
+                )}
                 {importJob.status === 'REVERTED' && (
                   <p className="text-xs font-bold text-emerald-800">{t('batchRevertedMessage')}</p>
                 )}
-                {['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED', 'REVERTED'].includes(importJob.status) && (
+                {['READY', 'PARTIALLY_PUBLISHED', 'PUBLISHED', 'COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED', 'REVERTED'].includes(importJob.status) && (
                   <button
                     type="button"
                     onClick={() => {
@@ -654,10 +657,10 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
                 <button
                   onClick={handleConfirmImport}
-                  disabled={previewData.importsEnabled !== true || committing || previewData.validCount === 0 || !previewData.previewFingerprint}
+                  disabled={committing || previewData.rowsDetected === 0 || !previewData.previewFingerprint}
                   className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md shadow-emerald-600/25 cursor-pointer transition flex items-center gap-1.5"
                 >
-                  <span>{previewData.importsEnabled !== true ? 'Imports disabled in service configuration' : committing ? t('startingIngestion') : t('importRecords').replace('{count}', previewData.validCount)}</span>
+                  <span>{committing ? 'Staging records…' : `Stage ${previewData.rowsDetected} records for review`}</span>
                   <span>✓</span>
                 </button>
               </div>

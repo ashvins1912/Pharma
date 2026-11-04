@@ -4,7 +4,8 @@ import multer from 'multer';
 import mongoose from 'mongoose';
 import { config, validateConfig } from './config.js';
 import routes from './routes.js';
-import { recoverImportJobs } from './imports.js';
+import stagedImportRoutes from './staged-import-routes.js';
+import { StagedImportBatch, StagedImportRow } from './staged-import-models.js';
 import { Audit, ImportBatch, ImportBatchSnapshot, ImportFailure, ImportJob, Inventory, Product, Reservation } from './models.js';
 
 validateConfig();
@@ -26,7 +27,7 @@ app.use((req, res, next) => {
     res.set('Vary', 'Origin');
   }
   if (req.method === 'OPTIONS') {
-    res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    res.set('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS');
     res.set('Access-Control-Allow-Headers', 'Authorization,Content-Type,Idempotency-Key,X-Request-Id,X-Correlation-Id');
     return res.sendStatus(origin && config.corsOrigin === origin ? 204 : 403);
   }
@@ -49,6 +50,9 @@ app.get('/ready', (_req, res) => {
   const ready = mongoose.connection.readyState === 1;
   res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not-ready', database: ready ? 'connected' : 'disconnected' });
 });
+// Staged import routes are mounted first so uploads are stored for review only.
+// Live catalogue and stock writes happen exclusively through explicit publish actions.
+app.use('/api/v1/inventory', stagedImportRoutes);
 app.use('/api/v1/inventory', routes);
 app.use((error, req, res, _next) => {
   const status = error.statusCode
@@ -78,11 +82,18 @@ await Promise.all([
   Reservation.init(),
   ImportJob.init(),
   ImportBatch.init(),
+  StagedImportBatch.init(),
+  StagedImportRow.init(),
   ImportBatchSnapshot.init(),
   ImportFailure.init(),
   Audit.init()
 ]);
-await recoverImportJobs();
+// Mark abandoned staging requests as failed after a restart; rows remain available for inspection.
+await StagedImportBatch.updateMany({ status: 'STAGING', updatedAt: { $lt: new Date(Date.now() - 10 * 60 * 1000) } }, {
+  $set: { status: 'FAILED' }
+});
+// The legacy immediate-write import worker is intentionally not started.
+// All new uploads use the staged batch workflow and require explicit publish.
 
 const server = app.listen(config.port, '0.0.0.0', () => {
   console.info(`Inventory Service listening on port ${config.port}`);

@@ -46,6 +46,29 @@ test('storefront medicine catalog is public and does not require inventory RBAC'
   assert.equal(resolveGatewayCapability('POST', '/api/medicines'), 'inventory.write');
 });
 
+test('staged inventory batch APIs require the explicit inventory.import capability', () => {
+  const batch = '/api/v1/inventory/imports/batches/550e8400-e29b-41d4-a716-446655440000';
+  const protectedRoutes = [
+    ['POST', '/api/v1/inventory/imports/preview'],
+    ['GET', '/api/v1/inventory/imports/batches'],
+    ['GET', batch],
+    ['GET', `${batch}/rows`],
+    ['GET', `${batch}/invalid-records/download`],
+    ['PATCH', `${batch}/rows/550e8400-e29b-41d4-a716-446655440000%3A2`],
+    ['POST', `${batch}/publish`],
+    ['POST', `${batch}/unpublish`],
+    ['POST', `${batch}/rollback`],
+    ['POST', `${batch}/rows/edit-selected`],
+    ['POST', `${batch}/rows/550e8400-e29b-41d4-a716-446655440000%3A2/publish`]
+  ];
+  for (const [method, path] of protectedRoutes) {
+    assert.equal(resolveGatewayCapability(method, path), 'inventory.import', `${method} ${path}`);
+  }
+  assert.equal(isGatewayPermissionAllowed({ role: 'TENANT_ADMIN', permissions: ['inventory.import'] }, 'inventory.import'), true);
+  assert.equal(isGatewayPermissionAllowed({ role: 'TENANT_ADMIN', permissions: ['inventory.read'] }, 'inventory.import'), false);
+  assert.equal(resolveGatewayCapability('DELETE', `${batch}/rows/550e8400-e29b-41d4-a716-446655440000%3A2`), null);
+});
+
 test('delivery OTP verification requires delivery management permission', () => {
   assert.equal(resolveGatewayCapability('POST', '/api/orders/6accca6691b2129986259f9c/verify-delivery'), 'delivery.manage');
   assert.equal(isGatewayPermissionAllowed({ role: 'TENANT_ADMIN', permissions: ['delivery.manage'] }, 'delivery.manage'), true);

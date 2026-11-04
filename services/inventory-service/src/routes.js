@@ -152,6 +152,7 @@ router.post('/imports/preview', requireServiceScope('inventory.import'), upload.
     const preview = await previewImportFile({ filePath: req.file.path, tenantId, branchId });
     const publicPreview = { ...preview };
     delete publicPreview.catalogSkus;
+    delete publicPreview.sourceRows;
     return res.json({ ...publicPreview, importsEnabled: config.importsEnabled });
   }
   finally { await fs.rm(req.file.path, { force: true }).catch(() => {}); }
