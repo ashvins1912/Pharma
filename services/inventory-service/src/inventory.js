@@ -115,7 +115,7 @@ export async function searchInventoryProducts({
   if (tenantId) filter.tenantId = String(tenantId).trim();
   if (category) filter.category = String(category).trim();
   if (normalizedQuery) {
-    const pattern = new RegExp(normalizedQuery.replace(/[.*+?^()|[\\]{}\\\\]/g, '\\\\$&'), 'i');
+    const pattern = new RegExp(normalizedQuery.replace(/[.*+?^()|[\]{}\\]/g, '\\    const pattern = new RegExp(normalizedQuery.replace(/[.*+?^()|[\\]{}\\\\]/g, '\\\\$&'), 'i');'), 'i');
     filter.$or = [{ sku: pattern }, { name: pattern }, { genericName: pattern }, { manufacturer: pattern }, { category: pattern }];
   }
   const products = await Product.find(filter).sort({ name: 1 })
@@ -278,6 +278,11 @@ export async function reserveInventory({ orderId, items, idempotencyKey, actor, 
 }
 
 export async function transitionReservation(reservationId, targetStatus, { actor, requestId, correlationId, tenantId = null, branchId = null } = {}) {
+  if (!tenantId || !branchId) {
+    const error = new Error('Verified tenantId and branchId are required to transition a reservation.');
+    error.statusCode = 403;
+    throw error;
+  }
   if (!['RELEASED', 'DEDUCTED'].includes(targetStatus)) {
     const error = new Error('Unsupported reservation transition.');
     error.statusCode = 400;
