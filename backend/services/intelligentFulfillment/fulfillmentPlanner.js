@@ -20,7 +20,7 @@ const scoreAlternative = (requested, candidate) => {
   // must be known and identical. Missing metadata is never treated as a match.
   if (!requestedComposition || !candidateComposition || requestedComposition !== candidateComposition) return null;
   if (!requestedStrength || !candidateStrength || requestedStrength !== candidateStrength) return null;
-  if (requestedForm && candidateForm && requestedForm !== candidateForm) return null;
+  if (!requestedForm || !candidateForm || requestedForm !== candidateForm) return null;
   if (Boolean(requested.requiresPrescription) !== Boolean(candidate.requiresPrescription ?? candidate.isPrescriptionRequired)) return null;
   const price = Number(candidate.price || 0);
   if (!Number.isFinite(price) || price < 0) return null;
