@@ -260,7 +260,7 @@ router.get('/discovery', async (req, res) => {
         }
         const page = Math.max(1, Number(req.query.page) || 1);
         const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
-        const isRxRequired = parseBoolean(req.query.isRxRequired);
+        const isRxRequired = req.query.isRxRequired === undefined ? null : parseBoolean(req.query.isRxRequired);
         const liveResult = await inventoryClient.searchProducts({
             tenantId, branchId,
             query: String(req.query.search || '').trim(),
@@ -286,7 +286,7 @@ router.get('/discovery', async (req, res) => {
         const activeCartSet = new Set(activeCartSkus.map(sku => sku.toUpperCase()));
         let liveItems = (liveResult.items || []).filter(item => {
             if (activeCartSet.has(String(item.sku || '').toUpperCase())) return false;
-            if (isRxRequired !== undefined && Boolean(item.requiresPrescription) !== isRxRequired) return false;
+            if (isRxRequired !== null && Boolean(item.requiresPrescription) !== isRxRequired) return false;
             const currentPrice = Number(item.sellingPrice ?? item.price ?? 0);
             if (maxPrice !== undefined && currentPrice > maxPrice) return false;
             if (categories.length && !categories.some(category => String(item.category || '').toLowerCase() === category.toLowerCase())) return false;
