@@ -149,6 +149,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
     setErrorMsg('');
 
+    let fulfillmentPlanForCheckout = null;
     let checkoutItems = cart.map(item => ({ medicineId: item._id || item.id, quantity: item.quantity }));
     let pendingStockItems = [];
     try {
@@ -157,6 +158,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         tenantId: String(tenantId),
         items: checkoutItems
       });
+      fulfillmentPlanForCheckout = availability.data;
       if (availability.data.customerDecisionRequired && !fulfillmentConfirmed) {
         setFulfillmentPlan(availability.data);
         setWaitlistKey(current => current || (window.crypto?.randomUUID?.() || `wait-${Date.now()}-${Math.random().toString(36).slice(2)}`));
