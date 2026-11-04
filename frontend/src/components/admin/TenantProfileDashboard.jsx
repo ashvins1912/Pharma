@@ -299,7 +299,9 @@ export default function TenantProfileDashboard() {
 
       <section className="space-y-3">
         <div><h3 className="text-lg font-black text-slate-900">Tenant branches</h3><p className="text-sm text-slate-500">Create and activate branches for this pharmacy.</p></div>
-        <TenantRegistry key={`${branchRegistryVersion}-${selectedTenantId}`} tenantId={isSuperAdmin ? selectedTenantId : undefined} />
+        {isSuperAdmin && !selectedTenantId
+          ? <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">Select a tenant above to view its branch registry.</p>
+          : <TenantRegistry key={`${branchRegistryVersion}-${selectedTenantId}`} tenantId={isSuperAdmin ? selectedTenantId : undefined} />}
       </section>
     </div>
   );
