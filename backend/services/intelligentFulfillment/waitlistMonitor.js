@@ -56,6 +56,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
       });
       if (result.modifiedCount) {
         expired += 1;
+        if (entry.parentOrderId) await Order.updateOne({ _id: entry.parentOrderId, tenantId: entry.tenantId }, { $set: { fulfillmentState: 'EXPIRED_REMAINDER' } });
         if (entry.sourceType === 'MEDICINE_REQUEST' && entry.sourceId) {
           await MedicineRequest.updateOne({ _id: entry.sourceId, fulfillmentCaseId: String(entry._id), status: { $in: ['WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION'] } }, { $set: { status: 'EXPIRED' }, $push: { auditTrail: { action: 'WAITLIST_EXPIRED', actorId: 'System', role: 'System', timestamp: now, notes: 'The selected stock wait window expired.' } } });
         }
