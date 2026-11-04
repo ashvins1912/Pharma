@@ -43,7 +43,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date() 
     let anyAvailable = false;
     let allAvailable = true;
     let newlyAvailable = false;
-    const lines = (entry.lines || []).map(line => {
+    const lines = await Promise.all((entry.lines || []).map(async line => {
       let product = line.productId ? byId.get(String(line.productId)) : null;
       if (!product && line.composition && line.strength) {
         const matches = await Medicine.find({
@@ -63,7 +63,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date() 
       if (quantity < Number(line.waitingQuantity || 0)) allAvailable = false;
       if (quantity > previousNotified) newlyAvailable = true;
       return { ...line, ...(product?._id ? { productId: String(product._id), name: product.name || line.name } : {}), allocatedQuantity: quantity, notifiedAvailableQuantity: Math.max(previousNotified, quantity) };
-    });
+    }));
     const nextStatus = allAvailable ? 'READY_FOR_CONFIRMATION' : anyAvailable ? 'PARTIALLY_FULFILLED' : 'WAITING_FOR_STOCK';
     const result = await FulfillmentCase.updateOne({
       _id: entry._id, status: entry.status, lastAvailabilityCheckAt: oldCheck
