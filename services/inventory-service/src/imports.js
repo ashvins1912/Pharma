@@ -1071,7 +1071,13 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     seen.add(key);
     valid.push({ ...item, value });
   }
-  const skus = [...new Set(valid.map(item => item.value.sku))];
+  // Include SKUs from invalid rows too. A user may correct an invalid field
+  // later; its publish baseline must still reflect the live product/stock that
+  // existed when the workbook was reviewed.
+  const skus = [...new Set(normalized.map(item => (
+    item.parsed.value?.sku
+    || String(valueOf(item.originalRecord, 'SKU', 'sku', 'Sku', 'Product SKU', 'Barcode', 'Code', 'Item Code') || '').trim().toUpperCase()
+  )).filter(Boolean))];
   const inventory = skus.length ? await Inventory.find({ tenantId, branchId, sku: { $in: skus } }).select('sku batchNumber stockQuantity reservedQuantity price updatedAt').lean() : [];
   const products = skus.length ? await Product.find({ tenantId, sku: { $in: skus } }).select('sku version updatedAt').lean() : [];
   const inventorySnapshot = inventory.map(item => ({ sku: item.sku, batchNumber: item.batchNumber || '', stockQuantity: item.stockQuantity, reservedQuantity: item.reservedQuantity, price: item.price, updatedAt: item.updatedAt || null }))
