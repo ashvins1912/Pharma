@@ -21,7 +21,12 @@ export default function CustomerStockWaitlist() {
     }
   }, [addToast]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    const refresh = () => { void load(); };
+    window.addEventListener('stock-waitlist-updated', refresh);
+    return () => window.removeEventListener('stock-waitlist-updated', refresh);
+  }, [load]);
 
   const confirm = async entry => {
     if (busyId) return;
