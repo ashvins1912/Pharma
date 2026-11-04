@@ -1302,7 +1302,7 @@ export const dataStore = {
                         const basePrice = Math.max(catalogPrice, Number(medicine.basePrice ?? catalogPrice));
                         const discountPercentage = basePrice > catalogPrice
                             ? roundCurrency((1 - catalogPrice / basePrice) * 100)
-                            : Math.min(100, Math.max(0, Number(medicine.discountPercentage || 0)));
+                            : 0;
                         if (requested.unitPrice != null && Math.abs(requested.unitPrice - catalogPrice) > 0.01) {
                             throw inventoryError('The selected catalogue price has changed. Refresh the fulfilment options before confirming.', 409);
                         }
