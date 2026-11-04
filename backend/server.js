@@ -127,6 +127,7 @@ app.use('/vendors', vendorRouter);
 app.use('/vendor', vendorRouter);
 app.use('/api/vendors', vendorRouter);
 app.use('/api/vendor', vendorRouter);
+app.use('/api/v1/vendor', vendorRouter);
 
 // Ashvin Platform API Gateway (v1 Multi-Tenant Engine)
 app.use('/api', apiRoutes);
