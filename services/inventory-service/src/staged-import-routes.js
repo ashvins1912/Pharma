@@ -357,13 +357,17 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
     const batchId = randomUUID();
     const usedSkus = new Set();
     const seenKeys = new Set();
+    const stockOperation = req.body?.stockMode === 'ADD' ? 'ADD' : 'SET';
     const documents = records.map((originalRecord, index) => {
       const { normalized, errors } = normalizeRow(originalRecord, usedSkus, tenantId);
       const existingBatch = (approved.inventorySnapshot || []).find(item =>
         item.sku === normalized.sku && (item.batchNumber || '') === (normalized.batchNumber || '')
       );
-      if (existingBatch && Number(existingBatch.reservedQuantity || 0) > normalized.stockQuantity) {
-        errors.push('New stock is below the quantity already reserved for this batch.');
+      const currentStockQuantity = Number(existingBatch?.stockQuantity || 0);
+      normalized.currentStockQuantity = currentStockQuantity;
+      normalized.plannedStockQuantity = stockOperation === 'ADD' ? currentStockQuantity + Number(normalized.stockQuantity || 0) : Number(normalized.stockQuantity || 0);
+      if (existingBatch && Number(existingBatch.reservedQuantity || 0) > normalized.plannedStockQuantity) {
+        errors.push('Resulting stock would be below the quantity already reserved for this batch.');
       }
       const keyValue = JSON.stringify([normalized.sku, normalized.batchNumber || '']);
       if (seenKeys.has(keyValue)) errors.push('Duplicate SKU + medicine batch number in this upload.');
@@ -381,7 +385,7 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
     try {
       batch = await StagedImportBatch.create({
         batchId, tenantId, branchId, uploadedBy: actor(req), fileName: cleanName(req.file.originalname),
-        fileSha256, idempotencyKey: key, stockOperation: req.body?.stockMode === 'ADD' ? 'ADD' : 'SET', previewInventorySnapshot: approved.inventorySnapshot,
+        fileSha256, idempotencyKey: key, stockOperation, previewInventorySnapshot: approved.inventorySnapshot,
         previewProductSnapshot: approved.productSnapshot, status: 'STAGING', totalRows: documents.length, validRows, invalidRows
       });
     } catch (error) {
@@ -473,6 +477,7 @@ router.patch('/imports/batches/:batchId/rows/:rowId', requireServiceScope('inven
   else if (next.baseCostPrice !== null && next.baseCostPrice !== undefined) next.baseCostPrice = Number(next.baseCostPrice);
   next.marginTier = String(next.marginTier || 'LOW').toUpperCase();
   next.batchNumber = String(next.batchNumber || '').trim();
+  next.plannedStockQuantity = batch.stockOperation === 'ADD' ? Number(next.currentStockQuantity || 0) + next.stockQuantity : next.stockQuantity;
   const errors = [];
   if (!next.sku) errors.push('SKU is required.');
   if (!next.name) errors.push('Medicine name is required.');
@@ -621,7 +626,7 @@ router.get('/imports/batches/:batchId', requireServiceScope('inventory.import'),
   ]);
   return res.json({
     batch: {
-      batchId: batch.batchId, fileName: batch.fileName, status: batch.status,
+      batchId: batch.batchId, fileName: batch.fileName, status: batch.status, stockOperation: batch.stockOperation || 'SET',
       totalRows: batch.totalRows, validRows: batch.validRows, invalidRows: batch.invalidRows,
       publishedRows: batch.publishedRows, unpublishedRows: batch.unpublishedRows, stockOperation: batch.stockOperation || 'SET',
       uploadedBy: batch.uploadedBy, createdAt: batch.createdAt, completedAt: batch.completedAt
