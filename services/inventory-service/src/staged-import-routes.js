@@ -107,8 +107,8 @@ const samePreview = (current, expected, fields) => {
   if (!current || !expected) return false;
   return fields.every(field => comparable(current[field]) === comparable(expected[field]));
 };
-const liveInventoryFields = ['tenantId','branchId','productId','sku','stockQuantity','reservedQuantity','price','batchNumber','expiryDate','warehouse'];
-const productFields = ['tenantId','sku','name','genericName','strength','form','manufacturer','category','description','imageUrl','requiresPrescription','baseCostPrice','marginTier','version','active'];
+const liveInventoryFields = ['tenantId','branchId','productId','sku','stockQuantity','reservedQuantity','price','batchNumber','expiryDate','warehouse','sourceImportBatchId','sourceImportRowId'];
+const productFields = ['tenantId','sku','name','genericName','strength','form','manufacturer','category','description','imageUrl','requiresPrescription','baseCostPrice','marginTier','version','lastImportBatchId','lastImportRowId','active'];
 function snapshot(doc, fields) {
   if (!doc) return null;
   const out = {};
@@ -152,7 +152,8 @@ async function publishRows(batch, rows, req) {
         Object.assign(product, {
           name: v.name, genericName: v.genericName, strength: v.strength, form: v.form,
           manufacturer: v.manufacturer, category: v.category, description: v.description,
-          imageUrl: v.imageUrl, requiresPrescription: v.requiresPrescription, baseCostPrice: v.baseCostPrice ?? undefined, marginTier: v.marginTier || 'LOW', active: true,
+          imageUrl: v.imageUrl, requiresPrescription: v.requiresPrescription, baseCostPrice: v.baseCostPrice ?? undefined, marginTier: v.marginTier || 'LOW',
+          lastImportBatchId: batch.batchId, lastImportRowId: fresh.rowId, active: true,
           version: Number(product.version || 0) + 1
         });
         await product.save({ session });
@@ -176,7 +177,8 @@ async function publishRows(batch, rows, req) {
         });
         Object.assign(inventory, {
           sku: v.sku, price: v.price, stockQuantity: v.stockQuantity,
-          batchNumber: v.batchNumber || '', expiryDate: v.expiryDate || null
+          batchNumber: v.batchNumber || '', expiryDate: v.expiryDate || null,
+          sourceImportBatchId: batch.batchId, sourceImportRowId: fresh.rowId
         });
         await inventory.save({ session });
         const inventoryAfter = snapshot(asPlain(inventory), liveInventoryFields);
