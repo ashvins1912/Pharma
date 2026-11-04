@@ -100,7 +100,7 @@ export function normalizeImportRow(row) {
 async function generateUniqueSku(productName, tenantId, reservedSkus) {
   const prefix = String(productName || '')
     .normalize('NFKD')
-    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '')
     .slice(0, 2)
