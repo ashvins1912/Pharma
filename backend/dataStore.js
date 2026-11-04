@@ -1329,7 +1329,7 @@ export const dataStore = {
                             price,
                             basePrice,
                             baseCostPrice: Number(medicine.baseCostPrice ?? price),
-                            discountPercentage: Number(medicine.discountPercentage || 0),
+                            discountPercentage,
                             marginTier: ['LOW', 'MID', 'HIGH'].includes(medicine.marginTier)
                                 ? medicine.marginTier
                                 : 'LOW',
