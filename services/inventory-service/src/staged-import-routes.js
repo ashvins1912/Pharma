@@ -273,9 +273,14 @@ async function unpublishRows(batch, rows, req) {
         }
         if (p.productCreated) {
           const refs = await Inventory.exists({ tenantId: batch.tenantId, productId: product._id }).session(session);
-          if (refs) throw Object.assign(new Error('Product is now used by other inventory rows and cannot be removed safely.'), { statusCode: 409 });
-          await Product.deleteOne({ _id: product._id }).session(session);
-          productBaseline = productBaseline.filter(item => item.sku !== fresh.normalized.sku);
+          if (refs) throw Object.assign(new Error('Product is now used by other inventory rows and cannot be safely unpublished.'), { statusCode: 409 });
+          // Preserve product IDs referenced by historical orders; hide the newly
+          // created catalogue record instead of physically deleting it.
+          product.active = false;
+          product.version = Number(product.version || 0) + 1;
+          await product.save({ session });
+          productBaseline = productBaseline.filter(item => item.sku !== product.sku);
+          productBaseline.push({ sku: product.sku, version: product.version, updatedAt: product.updatedAt || null });
         } else {
           Object.assign(product, p.productBefore);
           await product.save({ session });
