@@ -835,7 +835,7 @@ router.post('/:id/waitlist', authenticateUser, requirePermission('medicine_reque
         const requestedItems = Array.isArray(request.requestedItems) ? request.requestedItems : [];
         if (!requestedItems.length) return res.status(400).json({ message: 'No medicine line items are available to wait for.' });
         const lines = requestedItems.map((item, index) => ({
-            productId: item.productId || (mongoose.isValidObjectId(item.medicineId) ? String(item.medicineId) : null),
+            productId: mongoose.isValidObjectId(item.productId) ? String(item.productId) : (mongoose.isValidObjectId(item.medicineId) ? String(item.medicineId) : null),
             name: item.requestedName || item.name || `Requested medicine ${index + 1}`,
             composition: item.composition || '',
             strength: item.strength || '',
