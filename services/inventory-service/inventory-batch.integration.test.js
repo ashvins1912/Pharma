@@ -24,7 +24,7 @@ test('inventory lookup aggregates active batches and reservation allocates/relea
 
   try {
     const product = await Product.create({
-      tenantId, sku: 'BATCH-STOCK-001', name: 'Batch Stock Test Medicine', active: true, version: 1
+      tenantId, sku: 'BATCH-STOCK-001', name: 'Batch Stock Test Medicine', active: true, version: 1, discountPercentage: 10, baseCostPrice: 7, marginTier: 'MID'
     });
     const today = new Date(new Date().toISOString().slice(0, 10));
     const firstExpiry = new Date(today); firstExpiry.setUTCDate(firstExpiry.getUTCDate() + 30);
@@ -49,6 +49,9 @@ test('inventory lookup aggregates active batches and reservation allocates/relea
     assert.equal(search.items[0].stockQuantity, 15);
     assert.equal(search.items[0].availableQuantity, 15);
     assert.equal(search.items[0].batchCount, 2);
+    assert.equal(search.items[0].basePrice, 10);
+    assert.equal(search.items[0].sellingPrice, 9);
+    assert.equal(search.items[0].discountPercentage, 10);
     const otherBranchLookup = await lookupInventory({ skus: [product.sku], tenantId, branchId: 'different-branch' });
     assert.equal(otherBranchLookup[0].availableQuantity, 50);
 
@@ -91,11 +94,12 @@ test('inventory lookup aggregates active batches and reservation allocates/relea
       product: {
         name: 'Manual Product Test', sku: 'MANUAL-CREATE-001', brand: 'Test Labs',
         drug: 'Test Ingredient', category: 'General Medicine',
-        price: 8, stockQuantity: 2, batchNumber: 'MANUAL-LOT'
+        price: 8, stockQuantity: 2, batchNumber: 'MANUAL-LOT', discountPercentage: 5
       }
     });
     assert.equal(manuallyCreated.sku, 'MANUAL-CREATE-001');
     assert.equal(manuallyCreated.availableQuantity, 2);
+    assert.equal(manuallyCreated.discountPercentage, 5);
     const manuallyUpdated = await updateProduct({
       productId: manuallyCreated.productId, tenantId, branchId, actor: 'inventory-batch-test',
       product: { name: 'Manual Product Updated', batchNumber: 'MANUAL-LOT', price: 9, stockQuantity: 4 }
