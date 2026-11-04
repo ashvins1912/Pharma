@@ -80,6 +80,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     setQuoteError('');
     apiClient.post('/api/orders/checkout/quote', {
       tenantId: tenantId || '',
+      branchId: activeTenant?.branchId || '',
       items,
       pointsToRedeem: usePoints ? Number(pointsRequested) || 0 : 0,
       couponCode: appliedCoupon?.code || ''
