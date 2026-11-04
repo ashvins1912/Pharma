@@ -1947,61 +1947,99 @@ export const dataStore = {
         return [...inMemoryOrders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     },
 
-    async getDeliveredOrdersPage(page = 1, limit = 5, { startDate = null, endDate = null, tenantId = null } = {}) {
-        let filter = {
+    async getDeliveredOrdersPage(page = 1, limit = 10, { startDate = null, endDate = null, tenantId = null } = {}) {
+        const deliveredStatuses = [
+            'Delivered', 'delivered', 'DELIVERED',
+            'Completed', 'completed', 'COMPLETED',
+            'Delivered_Order', 'delivered_order', 'DELIVERED_ORDER'
+        ];
+        const deliveredStatusSet = new Set(deliveredStatuses.map(status => status.toLowerCase()));
+        const safeLimit = Math.min(50, Math.max(1, Number(limit) || 10));
+        const requestedPage = Math.max(1, Number(page) || 1);
+        const statusMissing = {
             $or: [
-                { orderStatus: { $in: ['Delivered', 'delivered', 'DELIVERED'] } },
-                {
-                    $and: [
-                        { $or: [{ orderStatus: { $exists: false } }, { orderStatus: null }, { orderStatus: '' }] },
-                        { status: { $in: ['Delivered', 'delivered', 'DELIVERED'] } }
-                    ]
-                }
+                { orderStatus: { $exists: false } },
+                { orderStatus: null },
+                { orderStatus: '' }
             ]
         };
+        let filter = {
+            $or: [
+                { orderStatus: { $in: deliveredStatuses } },
+                { $and: [statusMissing, { status: { $in: deliveredStatuses } }] }
+            ]
+        };
+
         const start = startDate ? new Date(startDate) : null;
         const end = endDate ? new Date(endDate) : null;
-        if (start && end && Number.isFinite(start.getTime()) && Number.isFinite(end.getTime()) && start < end) {
-            filter.createdAt = { $gte: start, $lt: end };
+        const hasValidStart = start && Number.isFinite(start.getTime());
+        const hasValidEnd = end && Number.isFinite(end.getTime());
+        if (hasValidStart || hasValidEnd) {
+            filter.createdAt = {
+                ...(hasValidStart ? { $gte: start } : {}),
+                ...(hasValidEnd ? { $lt: end } : {})
+            };
         }
+
         if (getIsConnected()) {
             if (tenantId) filter = { $and: [filter, { tenantId: String(tenantId) }] };
             const total = await Order.countDocuments(filter);
-            const safePage = Math.min(page, Math.max(Math.ceil(total / limit), 1));
+            const safePage = Math.min(requestedPage, Math.max(Math.ceil(total / safeLimit), 1));
             const items = await Order.find(filter)
                 .sort({ createdAt: -1, _id: -1 })
-                .skip((safePage - 1) * limit)
-                .limit(limit)
+                .skip((safePage - 1) * safeLimit)
+                .limit(safeLimit)
                 .lean();
             return { items, total, page: safePage };
         }
+
         const delivered = inMemoryOrders
-            .filter(order => ['Delivered', 'delivered', 'DELIVERED'].includes(String(order.orderStatus || order.status || '')) && (!tenantId || String(order.tenantId || '') === String(tenantId)) && (!filter.createdAt || (new Date(order.createdAt) >= filter.createdAt.$gte && new Date(order.createdAt) < filter.createdAt.$lt)))
+            .filter(order => {
+                if (tenantId && String(order.tenantId || '') !== String(tenantId)) return false;
+                const rawStatus = order.orderStatus == null || String(order.orderStatus).trim() === ''
+                    ? order.status
+                    : order.orderStatus;
+                if (!deliveredStatusSet.has(String(rawStatus || '').trim().toLowerCase())) return false;
+                const createdAt = new Date(order.createdAt);
+                if (hasValidStart && (!Number.isFinite(createdAt.getTime()) || createdAt < start)) return false;
+                if (hasValidEnd && (!Number.isFinite(createdAt.getTime()) || createdAt >= end)) return false;
+                return true;
+            })
             .sort((a, b) => {
                 const createdAtDelta = new Date(b.createdAt) - new Date(a.createdAt);
                 return createdAtDelta || String(b._id || '').localeCompare(String(a._id || ''));
             });
+        const total = delivered.length;
+        const safePage = Math.min(requestedPage, Math.max(Math.ceil(total / safeLimit), 1));
         return {
-            items: delivered.slice((Math.min(page, Math.max(Math.ceil(delivered.length / limit), 1)) - 1) * limit, Math.min(page, Math.max(Math.ceil(delivered.length / limit), 1)) * limit),
-            total: delivered.length,
-            page: Math.min(page, Math.max(Math.ceil(delivered.length / limit), 1))
+            items: delivered.slice((safePage - 1) * safeLimit, safePage * safeLimit),
+            total,
+            page: safePage
         };
     },
 
     async getCancelledOrdersPage(page = 1, limit = 10, { tenantId = null } = {}) {
-        let filter = {
-            $or: [
-                { orderStatus: { $in: ['Cancelled', 'cancelled', 'CANCELLED'] } },
-                {
-                    $and: [
-                        { $or: [{ orderStatus: { $exists: false } }, { orderStatus: null }, { orderStatus: '' }] },
-                        { status: { $in: ['cancelled', 'Cancelled', 'CANCELLED'] } }
-                    ]
-                }
-            ]
-        };
+        const cancelledStatuses = [
+            'Cancelled', 'cancelled', 'CANCELLED',
+            'Cancelled_Order', 'cancelled_order', 'CANCELLED_ORDER'
+        ];
+        const cancelledStatusSet = new Set(cancelledStatuses.map(status => status.toLowerCase()));
         const safeLimit = Math.min(50, Math.max(1, Number(limit) || 10));
         const requestedPage = Math.max(1, Number(page) || 1);
+        const statusMissing = {
+            $or: [
+                { orderStatus: { $exists: false } },
+                { orderStatus: null },
+                { orderStatus: '' }
+            ]
+        };
+        let filter = {
+            $or: [
+                { orderStatus: { $in: cancelledStatuses } },
+                { $and: [statusMissing, { status: { $in: cancelledStatuses } }] }
+            ]
+        };
+
         if (getIsConnected()) {
             if (tenantId) filter = { $and: [filter, { tenantId: String(tenantId) }] };
             const total = await Order.countDocuments(filter);
@@ -2013,8 +2051,15 @@ export const dataStore = {
                 .lean();
             return { items, total, page: safePage };
         }
+
         const cancelled = inMemoryOrders
-            .filter(order => ['cancelled', 'Cancelled', 'CANCELLED'].includes(String(order.orderStatus || order.status || '')) && (!tenantId || String(order.tenantId || '') === String(tenantId)))
+            .filter(order => {
+                if (tenantId && String(order.tenantId || '') !== String(tenantId)) return false;
+                const rawStatus = order.orderStatus == null || String(order.orderStatus).trim() === ''
+                    ? order.status
+                    : order.orderStatus;
+                return cancelledStatusSet.has(String(rawStatus || '').trim().toLowerCase());
+            })
             .sort((a, b) => {
                 const updatedAtDelta = new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
                 return updatedAtDelta || String(b._id || '').localeCompare(String(a._id || ''));
