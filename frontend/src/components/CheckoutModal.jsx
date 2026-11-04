@@ -149,7 +149,6 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
     setErrorMsg('');
 
-    let fulfillmentPlanForCheckout = null;
     let checkoutItems = cart.map(item => ({ medicineId: item._id || item.id, quantity: item.quantity }));
     let pendingStockItems = [];
     try {
@@ -158,7 +157,6 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         tenantId: String(tenantId),
         items: checkoutItems
       });
-      fulfillmentPlanForCheckout = availability.data;
       if (availability.data.customerDecisionRequired && !fulfillmentConfirmed) {
         setFulfillmentPlan(availability.data);
         setWaitlistKey(current => current || (window.crypto?.randomUUID?.() || `wait-${Date.now()}-${Math.random().toString(36).slice(2)}`));
@@ -173,7 +171,9 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           if (line.waitingQuantity > 0) {
             const alternativeId = alternativeChoices[line.productId];
             const alternative = line.alternatives?.find(item => item.productId === alternativeId);
-            if (alternative && alternative.availableQuantity >= line.waitingQuantity) {
+            if (alternativeId === 'REMOVE') {
+              // Customer explicitly chose to remove the unavailable quantity.
+            } else if (alternative && alternative.availableQuantity >= line.waitingQuantity) {
               selectedItems.push({ medicineId: alternative.productId, quantity: line.waitingQuantity });
             } else {
               pendingStockItems.push({ productId: line.productId, requestedQuantity: line.waitingQuantity });
@@ -243,7 +243,6 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
       const res = await apiClient.post('/api/orders/checkout', formData);
       setRestockError('');
-      let waitlistSaved = true;
       if (pendingStockItems.length) {
         try {
           await apiClient.post('/api/orders/fulfillment/waitlist', {
@@ -254,7 +253,6 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             coordinates: selectedAddress.coordinates, addressDetails: selectedAddress, paymentMethod: 'Cash on Delivery (COD)', patientPuid
           }, { headers: { 'Idempotency-Key': waitlistKey } });
         } catch (waitError) {
-          waitlistSaved = false;
           addToast('Your available items were ordered, but the remaining items could not be added to the waitlist. Please create a medicine request for them.', 'warning');
         }
       }
@@ -510,6 +508,10 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                   <label className="flex items-center gap-2 text-xs">
                     <input type="radio" name={`stock-${line.productId}`} checked={!alternativeChoices[line.productId]} onChange={() => setAlternativeChoices(current => ({ ...current, [line.productId]: '' }))}/>
                     Wait for the original medicine
+                  </label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input type="radio" name={`stock-${line.productId}`} checked={alternativeChoices[line.productId] === 'REMOVE'} onChange={() => setAlternativeChoices(current => ({ ...current, [line.productId]: 'REMOVE' }))}/>
+                    Remove the unavailable quantity from this order
                   </label>
                   {line.alternatives?.map(alternative => (
                     <label key={alternative.productId} className="flex items-start gap-2 rounded-lg border border-emerald-100 p-2 text-xs">
