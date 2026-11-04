@@ -387,7 +387,7 @@ export class NotificationService {
             if (orderId && ['ORDER_CREATED', 'ORDER_ACCEPTED', 'ORDER_STATUS_CHANGED', 'RIDER_ASSIGNED', 'DELIVERY_STATUS_CHANGED', 'ORDER_DELIVERED', 'ORDER_DELIVERED_RATING_PROMPT', 'ORDER_OUT_FOR_DELIVERY_OTP_SENT', 'PROPOSAL_APPROVED'].includes(eventType)) {
                 void cacheService.publishEvent('order_status_changed', eventPayload, target);
             }
-            if (medicineRequestId || eventType.startsWith('MEDICINE_REQUEST') || eventType.startsWith('PROPOSAL_') || eventType.startsWith('REQUEST_')) {
+            if (medicineRequestId || eventType.startsWith('MEDICINE_REQUEST') || eventType.startsWith('PROPOSAL_') || eventType.startsWith('REQUEST_') || eventType.startsWith('FULFILLMENT_')) {
                 void cacheService.publishEvent('medicine_request_updated', eventPayload, target);
             }
         }
