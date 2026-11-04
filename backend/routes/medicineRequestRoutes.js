@@ -7,7 +7,7 @@ import { authenticateUser, requirePermission } from '../middleware/auth.js';
 import { getPrescription, savePrescription } from '../config/prescriptionStorage.js';
 import { getIsConnected } from '../config/db.js';
 import MedicineRequest from '../models/MedicineRequest.js';
-import Medicine from '../models/Medicine.js';
+import { inventoryClient } from '../services/inventory-client/InventoryClient.js';
 import Order from '../models/Order.js';
 import UserAddress from '../models/UserAddress.js';
 import Tenant from '../models/Tenant.js';
@@ -29,6 +29,28 @@ const resolveRequestBranchId = async (tenantId, requestedBranchId, user = {}) =>
     const defaultBranch = await TenantBranch.findOne({ tenantId: String(tenantId), status: 'ACTIVE' })
         .sort({ isDefault: -1, createdAt: 1 }).select('_id').lean();
     return defaultBranch ? String(defaultBranch._id) : null;
+};
+
+const loadInventoryFulfillmentData = async ({ tenantId, branchId, productIds = [], requestedItems = [], userId }) => {
+    if (!tenantId || !branchId) throw Object.assign(new Error('Select an active pharmacy branch to check medicine availability.'), { statusCode: 400 });
+    const inventoryResponse = productIds.length
+        ? await inventoryClient.lookup({ productIds, tenantId, branchId, userId })
+        : { items: [] };
+    const inventory = inventoryResponse.items || [];
+    const compositionKeys = [...new Set(requestedItems.map(item => String(item.composition || item.genericName || '').trim()).filter(Boolean))];
+    const strengthKeys = [...new Set(requestedItems.map(item => String(item.strength || '').trim()).filter(Boolean))];
+    const catalogResults = compositionKeys.length
+        ? await Promise.all(compositionKeys.map(composition => inventoryClient.searchProducts({
+            tenantId, branchId, query: composition, includeOutOfStock: true, limit: 100, userId
+        })))
+        : [];
+    const excluded = new Set(productIds.map(String));
+    const catalog = [...new Map(catalogResults.flatMap(result => result.items || [])
+        .filter(product => compositionKeys.some(composition => String(product.genericName || product.composition || '').trim().toLowerCase() === composition.toLowerCase()))
+        .filter(product => strengthKeys.some(strength => String(product.strength || '').trim().toLowerCase() === strength.toLowerCase()))
+        .filter(product => !excluded.has(String(product.productId)))
+        .map(product => [String(product.productId), product])).values()];
+    return { inventory, catalog };
 };
 
 const requireDatabase = (res) => {
@@ -796,33 +818,30 @@ router.get('/:id/fulfillment-options', authenticateUser, requirePermission('medi
                 results.push({ itemIndex: index, requestedName: item.requestedName, options: [], reason: 'Composition, strength and dosage form are required before safe alternatives can be suggested.' });
                 continue;
             }
-            const query = {
-                tenantId: String(request.tenantId),
-                isActive: { $ne: false },
-                composition: String(item.composition).trim(),
-                strength: String(item.strength).trim(),
-                expiryDate: { $gt: new Date() }
-            };
-            if (item.dosageForm) query.dosageForm = String(item.dosageForm).trim();
-            if (request.branchId) query.branchId = String(request.branchId);
-            const products = await Medicine.find(query).limit(25).select('_id name brand manufacturer composition strength dosageForm form price basePrice discountPercentage stockQuantity stock quantity reservedQuantity requiresPrescription isPrescriptionRequired expiryDate').lean();
+            const branchId = await resolveRequestBranchId(request.tenantId, request.branchId, req.user);
+            const result = await inventoryClient.searchProducts({
+                tenantId: String(request.tenantId), branchId,
+                query: String(item.composition).trim(), includeOutOfStock: true, limit: 100,
+                userId: req.user.sub
+            });
+            const products = (result.items || []).filter(product =>
+                String(product.genericName || product.composition || '').trim().toLowerCase() === String(item.composition).trim().toLowerCase()
+                && String(product.strength || '').trim().toLowerCase() === String(item.strength).trim().toLowerCase()
+                && String(product.dosageForm || product.form || '').trim().toLowerCase() === String(item.dosageForm).trim().toLowerCase()
+            );
             const options = products.map(product => {
-                const physical = Number(product.stockQuantity ?? product.stock ?? product.quantity ?? 0);
-                const availableQuantity = Math.max(0, physical - Number(product.reservedQuantity || 0));
                 const unitPrice = Number(product.price || 0);
-                const listPrice = Math.max(unitPrice, Number(product.basePrice ?? unitPrice));
-                const discountPercentage = listPrice > unitPrice
-                    ? Math.round((1 - unitPrice / listPrice) * 10000) / 100
-                    : 0;
+                const discountPercentage = Math.min(100, Math.max(0, Number(product.discountPercentage || 0)));
+                const discountedUnitPrice = Math.round(unitPrice * (1 - discountPercentage / 100) * 100) / 100;
                 return {
-                    productId: String(product._id), medicineName: product.name,
+                    productId: String(product.productId), medicineName: product.name,
                     manufacturer: product.manufacturer || product.brand || '',
-                    composition: product.composition || '', strength: product.strength || '',
+                    composition: product.composition || product.genericName || '', strength: product.strength || '',
                     dosageForm: product.dosageForm || product.form || '',
-                    unitPrice, listPrice, discountPercentage,
-                    discountedUnitPrice: unitPrice,
-                    availableQuantity,
-                    requiresPrescription: Boolean(product.requiresPrescription ?? product.isPrescriptionRequired),
+                    unitPrice, listPrice: unitPrice, discountPercentage,
+                    discountedUnitPrice,
+                    availableQuantity: Number(product.availableQuantity || 0),
+                    requiresPrescription: Boolean(product.requiresPrescription),
                     requiresPharmacistApproval: Boolean(item.source === 'PRESCRIPTION_EXTRACTED' || request.prescriptionId || request.prescriptionUrl),
                     customerConsentRequired: true
                 };
@@ -908,11 +927,6 @@ router.get('/:id/fulfillment/preview', authenticateUser, requirePermission('medi
         const request = await MedicineRequest.findOne({ _id: req.params.id, customerId: String(req.user.sub) }).lean();
         if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
         if (!request.tenantId) return res.status(409).json({ message: 'This request is not linked to a pharmacy. Select a pharmacy and submit a new request.' });
-        const ids = [...new Set((request.requestedItems || []).map(item => String(item.productId || item.medicineId || '')).filter(id => mongoose.isValidObjectId(id)))];
-        const branchId = await resolveRequestBranchId(request.tenantId, request.branchId, req.user);
-        const scope = { tenantId: String(request.tenantId), branchId: branchId || null };
-        const inventory = ids.length ? await Medicine.find({ _id: { $in: ids }, ...scope })
-            .select('_id name sku code price basePrice stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean() : [];
         const descriptors = (request.requestedItems || []).map(item => ({
             medicineId: item.productId || (mongoose.isValidObjectId(item.medicineId) ? item.medicineId : undefined),
             requestedName: item.requestedName, quantity: item.quantity,
@@ -920,17 +934,12 @@ router.get('/:id/fulfillment/preview', authenticateUser, requirePermission('medi
             manufacturer: item.manufacturer,
             requiresPrescription: Boolean(request.prescriptionId || request.prescriptionUrl)
         }));
-        const compositionKeys = [...new Set(descriptors.map(item => String(item.composition || '').trim()).filter(Boolean))];
-        const strengthKeys = [...new Set(descriptors.map(item => String(item.strength || '').trim()).filter(Boolean))];
-        const catalog = compositionKeys.length && strengthKeys.length
-            ? await Medicine.find({
-                ...scope, isActive: { $ne: false }, _id: { $nin: ids },
-                composition: { $in: compositionKeys }, strength: { $in: strengthKeys },
-                expiryDate: { $gt: new Date() }
-            }).limit(100)
-                .select('_id name sku code price basePrice stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean()
-            : [];
-        const plan = buildIntelligentFulfillmentPlan({ requestedItems: descriptors, inventory, catalog });
+        const ids = [...new Set(descriptors.map(item => String(item.medicineId || '')).filter(id => mongoose.isValidObjectId(id)))];
+        const branchId = await resolveRequestBranchId(request.tenantId, request.branchId, req.user);
+        const { inventory, catalog } = await loadInventoryFulfillmentData({
+            productIds: ids, tenantId: String(request.tenantId), branchId, requestedItems: descriptors, userId: req.user.sub
+        });
+
         return res.json({ requestId: String(request._id), requestNumber: request.requestNumber, tenantId: request.tenantId, branchId, ...plan });
     } catch (error) {
         return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to check medicine request availability.' });
@@ -999,21 +1008,10 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
             requiresPrescription: Boolean(request.prescriptionId || request.prescriptionUrl)
         }));
         const ids = [...new Set(requestedItems.map(item => String(item.medicineId || '')).filter(id => mongoose.isValidObjectId(id)))];
-        const inventory = ids.length ? await Medicine.find({ _id: { $in: ids }, ...scope })
-            .select('_id name sku code price basePrice stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand')
-            .lean() : [];
-        const compositionKeys = [...new Set(requestedItems.map(item => String(item.composition || '').trim()).filter(Boolean))];
-        const strengthKeys = [...new Set(requestedItems.map(item => String(item.strength || '').trim()).filter(Boolean))];
-        const catalog = compositionKeys.length && strengthKeys.length
-            ? await Medicine.find({
-                ...scope, isActive: { $ne: false }, _id: { $nin: ids },
-                composition: { $in: compositionKeys }, strength: { $in: strengthKeys },
-                expiryDate: { $gt: new Date() }
-            }).limit(100)
-                .select('_id name sku code price basePrice stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand')
-                .lean()
-            : [];
-        const plan = buildIntelligentFulfillmentPlan({ requestedItems, inventory, catalog });
+        const { inventory, catalog } = await loadInventoryFulfillmentData({
+            productIds: ids, tenantId, branchId, requestedItems, userId: customerId
+        });
+
         const decisions = req.body?.decisions && typeof req.body.decisions === 'object' ? req.body.decisions : {};
         const orderItems = [];
         const waitingItems = [];
