@@ -7,6 +7,8 @@ const stagedImportBatchSchema = new mongoose.Schema({
   uploadedBy: { type: String, required: true },
   fileName: { type: String, required: true },
   fileSha256: { type: String, required: true },
+  previewInventorySnapshot: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  previewProductSnapshot: { type: [mongoose.Schema.Types.Mixed], default: [] },
   idempotencyKey: { type: String, required: true },
   status: { type: String, enum: ['STAGING', 'READY', 'PARTIALLY_PUBLISHED', 'PUBLISHED', 'REVERTED', 'FAILED'], default: 'STAGING', index: true },
   totalRows: { type: Number, default: 0 },
