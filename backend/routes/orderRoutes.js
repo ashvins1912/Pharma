@@ -1514,7 +1514,9 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
             code: err.code || (statusCode === 503 ? 'ORDER_STORAGE_UNAVAILABLE' : 'ORDER_RETRIEVAL_FAILED'),
             message: statusCode === 503
                 ? 'Order history is temporarily unavailable. Please try again.'
-                : err.message || 'Failed to retrieve orders.'
+                : statusCode === 400
+                    ? err.message
+                    : 'Failed to retrieve orders.'
         });
     }
 });
