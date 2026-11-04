@@ -41,11 +41,11 @@ jobs:
         run: npm --workspace services/inventory-service test
         env:
           INVENTORY_TEST_MONGO_URI: mongodb://127.0.0.1:27017/?replicaSet=rs0
-      - name: Run full repository tests
-        run: npm test
-        env:
-          INVENTORY_TEST_MONGO_URI: mongodb://127.0.0.1:27017/?replicaSet=rs0
       - name: Build frontend
         run: npm run build
       - name: Type-check frontend
         run: npm run lint
+      - name: Run full repository tests
+        run: npm test
+        env:
+          INVENTORY_TEST_MONGO_URI: mongodb://127.0.0.1:27017/?replicaSet=rs0
