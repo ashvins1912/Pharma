@@ -215,8 +215,9 @@ async function publishRows(batch, rows, req) {
       const totals = Object.fromEntries(counts.map(x => [x._id, x.count]));
       const total = await StagedImportRow.countDocuments({ batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId }).session(session);
       const publishedCount = totals.PUBLISHED || 0;
+      const publishableCount = total - (totals.INVALID || 0);
       await StagedImportBatch.updateOne({ _id: batch._id }, {
-        $set: { publishedRows: publishedCount, status: publishedCount >= total ? 'PUBLISHED' : 'PARTIALLY_PUBLISHED' }
+        $set: { publishedRows: publishedCount, status: publishedCount >= publishableCount ? 'PUBLISHED' : 'PARTIALLY_PUBLISHED' }
       }, { session });
       await Audit.create([{
         tenantId: batch.tenantId, branchId: batch.branchId, actor: actor(req),
@@ -271,8 +272,10 @@ async function unpublishRows(batch, rows, req) {
       }
       const total = await StagedImportRow.countDocuments({ batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId }).session(session);
       const publishedRows = await StagedImportRow.countDocuments({ batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId, status: 'PUBLISHED' }).session(session);
+      const invalidRows = await StagedImportRow.countDocuments({ batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId, status: 'INVALID' }).session(session);
+      const publishableCount = total - invalidRows;
       await StagedImportBatch.updateOne({ _id: batch._id }, {
-        $set: { publishedRows, status: publishedRows === 0 ? 'READY' : (publishedRows === total ? 'PUBLISHED' : 'PARTIALLY_PUBLISHED') }
+        $set: { publishedRows, status: publishedRows === 0 ? 'READY' : (publishedRows >= publishableCount ? 'PUBLISHED' : 'PARTIALLY_PUBLISHED') }
       }, { session });
       await Audit.create([{
         tenantId: batch.tenantId, branchId: batch.branchId, actor: actor(req),
@@ -340,7 +343,7 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
   } finally { await fs.rm(req.file.path, { force: true }).catch(() => {}); }
 }));
 
-router.get('/imports/:jobId', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
+router.get('/imports/:jobId([0-9a-fA-F-]{36})', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   const { tenantId, branchId } = scope(req);
   const batch = await StagedImportBatch.findOne({ batchId: req.params.jobId, tenantId, branchId }).lean();
   if (!batch) return res.status(404).json({ message: 'Import batch was not found.' });
