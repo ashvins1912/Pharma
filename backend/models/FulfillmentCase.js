@@ -1,8 +1,12 @@
 import mongoose from 'mongoose';
 
 const fulfillmentLineSchema = new mongoose.Schema({
-  productId: { type: String, required: true },
+  productId: { type: String, default: null },
   name: { type: String, default: '' },
+  composition: { type: String, default: '' },
+  strength: { type: String, default: '' },
+  dosageForm: { type: String, default: '' },
+  manufacturer: { type: String, default: '' },
   requestedQuantity: { type: Number, required: true, min: 1 },
   allocatedQuantity: { type: Number, default: 0, min: 0 },
   waitingQuantity: { type: Number, default: 0, min: 0 },
