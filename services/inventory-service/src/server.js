@@ -4,6 +4,8 @@ import multer from 'multer';
 import mongoose from 'mongoose';
 import { config, validateConfig } from './config.js';
 import routes from './routes.js';
+import stagedImportRoutes from './staged-import-routes.js';
+import { StagedImportBatch, StagedImportRow } from './staged-import-models.js';
 import { recoverImportJobs } from './imports.js';
 import { Audit, ImportBatch, ImportBatchSnapshot, ImportFailure, ImportJob, Inventory, Product, Reservation } from './models.js';
 
@@ -49,6 +51,9 @@ app.get('/ready', (_req, res) => {
   const ready = mongoose.connection.readyState === 1;
   res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not-ready', database: ready ? 'connected' : 'disconnected' });
 });
+// Staged import routes are mounted first so uploads are stored for review only.
+// Live catalogue and stock writes happen exclusively through explicit publish actions.
+app.use('/api/v1/inventory', stagedImportRoutes);
 app.use('/api/v1/inventory', routes);
 app.use((error, req, res, _next) => {
   const status = error.statusCode
@@ -78,6 +83,8 @@ await Promise.all([
   Reservation.init(),
   ImportJob.init(),
   ImportBatch.init(),
+  StagedImportBatch.init(),
+  StagedImportRow.init(),
   ImportBatchSnapshot.init(),
   ImportFailure.init(),
   Audit.init()
