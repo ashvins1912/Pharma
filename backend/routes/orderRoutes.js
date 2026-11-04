@@ -716,7 +716,7 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
         if (!claimed) return res.status(409).json({ message: 'Another confirmation is already in progress. Refresh your waitlist.' });
         try {
             const order = await dataStore.reserveOrder({
-                userId: String(req.user.sub), tenantId: claimed.tenantId, branchId: claimed.branchId,
+                userId: String(req.user.sub), tenantId: claimed.tenantId, branchId: claimed.branchId, branchScopeExplicit: true,
                 addressId: claimed.addressId, deliveryAddress: claimed.deliveryAddress,
                 addressDetails: claimed.addressDetails || {}, coordinates: claimed.coordinates,
                 paymentMethod: claimed.paymentMethod || 'Cash on Delivery (COD)',
