@@ -1,24 +1,14 @@
 import express from 'express';
-import { createHash, randomUUID } from 'node:crypto';
-import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
 import { getIsConnected } from '../config/db.js';
 import { authenticateUser } from '../middleware/auth.js';
 import ProductDiscoveryService from '../services/ProductDiscoveryService.js';
 import SearchMetricIngestionService from '../services/SearchMetricIngestionService.js';
-import { cacheService } from '../services/cache/CacheService.js';
+import { inventoryClient } from '../services/inventory-client/InventoryClient.js';
+import { tenantService } from '../services/tenant-service/TenantService.js';
 
 const router = express.Router();
-const importFileLimit = Number.parseInt(process.env.INVENTORY_IMPORT_MAX_FILE_BYTES || '', 10);
-const uploadMemory = multer({
-    storage: multer.memoryStorage(),
-    limits: {
-        fileSize: Number.isInteger(importFileLimit) && importFileLimit > 0
-            ? importFileLimit
-            : 100 * 1024 * 1024
-    }
-});
 const productDiscovery = new ProductDiscoveryService();
 const searchMetricIngestion = new SearchMetricIngestionService();
 const publicMedicine = medicine => {
@@ -32,82 +22,114 @@ const publicMedicine = medicine => {
     };
 };
 
-const getErrorStatus = error => error.statusCode
-    || (error.name === 'ValidationError' || error.name === 'CastError' ? 400 : 500);
-
-const PUBLIC_CATALOG_VERSION_KEY = 'public-medicines:catalog-version';
-const PUBLIC_CATALOG_TTL_SECONDS = 10;
-
-async function getPublicCatalogVersion() {
-    const existing = await cacheService.get(PUBLIC_CATALOG_VERSION_KEY);
-    if (typeof existing === 'string' && existing) return existing;
-    const version = randomUUID();
-    await cacheService.set(PUBLIC_CATALOG_VERSION_KEY, version, 24 * 60 * 60);
-    return version;
-}
-
-async function invalidatePublicCatalog() {
-    await cacheService.set(PUBLIC_CATALOG_VERSION_KEY, randomUUID(), 24 * 60 * 60);
-}
-
-function publicCatalogCacheKey(version, tenantId, query) {
-    const digest = createHash('sha256').update(JSON.stringify({
-        tenantId,
-        query: Object.fromEntries(Object.entries(query).sort(([a], [b]) => a.localeCompare(b)))
-    })).digest('hex');
-    return `public-medicines:v:${version}:${digest}`;
-}
-
-
 // Full inventory and CRUD are protected by inventory.read / inventory.write capabilities.
 router.get('/admin/inventory', authenticateUser, async (req, res) => {
     try {
         const { search, category, sort, page, limit } = req.query;
-        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
-        const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
-        const tenantId = isPlatformAdmin
-            ? String(req.query.tenantId || '').trim() || null
-            : String(req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
-        if (!isPlatformAdmin && !tenantId) {
-            return res.status(403).json({ message: 'An active pharmacy tenant is required to view inventory.' });
-        }
-        res.json(await dataStore.getMedicines(search, false, category, sort, page, limit, true, tenantId));
+        const scope = await getVerifiedInventoryScope(req);
+        const result = await inventoryClient.searchProducts({
+            ...scope,
+            query: search || '',
+            category: category === 'All' ? '' : category || '',
+            sort: sort || 'default',
+            page: page || 1,
+            limit: limit || 16,
+            includeOutOfStock: true,
+            userId: req.user?.sub || 'inventory-admin'
+        });
+        return res.json({
+            medicines: result.items || [],
+            total: result.total || 0,
+            page: result.page || Number(page) || 1,
+            limit: result.limit || Number(limit) || 16,
+            totalPages: result.pages || 1,
+            isSearching: Boolean(search && String(search).trim()),
+            outOfStockHidden: false
+        });
     } catch (error) {
         console.error('Admin inventory retrieval failed:', error);
-        res.status(500).json({ message: 'Failed to retrieve admin inventory.' });
+        return res.status(error.statusCode || 503).json({
+            message: error.message || 'Failed to retrieve admin inventory.'
+        });
     }
 });
 
+const getVerifiedInventoryScope = async req => {
+    const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+    const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+    const tenantId = String(
+        req.user?.tenantId || req.user?.app_metadata?.tenantId
+        || (isPlatformAdmin ? req.get('x-tenant-id') || req.query?.tenantId || req.body?.tenantId : '')
+        || ''
+    ).trim();
+    const branchId = String(
+        req.user?.branchId || req.context?.branchId
+        || (isPlatformAdmin ? req.get('x-branch-id') || req.query?.branchId || req.body?.branchId : '')
+        || ''
+    ).trim();
+    if (!tenantId || !branchId) {
+        const error = new Error('Select an authorized pharmacy tenant and branch before changing catalogue inventory.');
+        error.statusCode = 403;
+        throw error;
+    }
+    const [tenant, branch] = await Promise.all([
+        tenantService.getTenantById(tenantId),
+        tenantService.getBranchById(branchId)
+    ]);
+    if (!tenant || tenant.status !== 'ACTIVE' || !branch || branch.status !== 'ACTIVE' || String(branch.tenantId) !== tenantId) {
+        const error = new Error('An active tenant and its active branch are required for inventory changes.');
+        error.statusCode = 403;
+        throw error;
+    }
+    return { tenantId, branchId };
+};
+
 router.post('/', authenticateUser, async (req, res) => {
     try {
-        const medicine = await dataStore.createMedicine(req.body || {});
-        await invalidatePublicCatalog();
-        res.status(201).json(medicine);
+        const scope = await getVerifiedInventoryScope(req);
+        const result = await inventoryClient.createProduct({
+            product: req.body || {},
+            tenantId: scope.tenantId,
+            branchId: scope.branchId,
+            userId: req.user.sub
+        });
+        return res.status(201).json(result);
     } catch (error) {
-        console.error('Medicine creation failed:', error);
-        res.status(getErrorStatus(error)).json({ message: error.message || 'Failed to create medicine.' });
+        console.error('Inventory Service product creation failed:', error);
+        return res.status(error.statusCode || 503).json({ message: error.message || 'Could not create inventory product.' });
     }
 });
 
 router.put('/:medicineId', authenticateUser, async (req, res) => {
     try {
-        const medicine = await dataStore.updateMedicine(req.params.medicineId, req.body || {});
-        await invalidatePublicCatalog();
-        res.json(medicine);
+        const scope = await getVerifiedInventoryScope(req);
+        const result = await inventoryClient.updateProduct({
+            productId: req.params.medicineId,
+            product: req.body || {},
+            tenantId: scope.tenantId,
+            branchId: scope.branchId,
+            userId: req.user.sub
+        });
+        return res.json(result);
     } catch (error) {
-        console.error('Medicine update failed:', error);
-        res.status(getErrorStatus(error)).json({ message: error.message || 'Failed to update medicine.' });
+        console.error('Inventory Service product update failed:', error);
+        return res.status(error.statusCode || 503).json({ message: error.message || 'Could not update inventory product.' });
     }
 });
 
 router.delete('/:medicineId', authenticateUser, async (req, res) => {
     try {
-        const result = await dataStore.deleteMedicine(req.params.medicineId);
-        await invalidatePublicCatalog();
-        res.json(result);
+        const scope = await getVerifiedInventoryScope(req);
+        const result = await inventoryClient.archiveProduct({
+            productId: req.params.medicineId,
+            tenantId: scope.tenantId,
+            branchId: scope.branchId,
+            userId: req.user.sub
+        });
+        return res.json(result);
     } catch (error) {
-        console.error('Medicine archival failed:', error);
-        res.status(getErrorStatus(error)).json({ message: error.message || 'Failed to delete medicine.' });
+        console.error('Inventory Service product archival failed:', error);
+        return res.status(error.statusCode || 503).json({ message: error.message || 'Could not archive inventory product.' });
     }
 });
 
@@ -122,49 +144,49 @@ router.get('/', async (req, res) => {
                 message: 'Select a pharmacy to view its medicine catalogue.'
             });
         }
-        // Only cache non-search public catalog reads. Search requests have impression
-        // ingestion side effects and should continue to execute normally.
-        const cacheEligible = !(typeof search === 'string' && search.trim())
-            && paginate !== 'false';
-        let cacheKey = null;
-        if (cacheEligible) {
-            const version = await getPublicCatalogVersion();
-            cacheKey = publicCatalogCacheKey(version, tenantId, { hideRx, category, sort, page, limit, paginate });
-            const cached = await cacheService.get(cacheKey);
-            if (cached !== null && cached !== undefined) {
-                res.set('X-Pharma-Cache', 'HIT');
-                return res.json(cached);
-            }
-        }
-
-        const result = await dataStore.getMedicines(
-            search,
-            hideRx,
-            category,
-            sort,
-            page,
-            limit,
-            false,
-            tenantId
-        );
-        const medicines = result.medicines.map(publicMedicine);
-        if (typeof search === 'string' && search.trim() && getIsConnected()) {
-            const skuIds = result.medicines
-                .map(medicine => medicine.sku || medicine.code)
-                .filter(skuId => typeof skuId === 'string' && skuId.trim());
+        // Inventory Service is authoritative for product metadata, batch stock,
+        // reservations, expiry and price. Do not cache this response: an import
+        // publish must be reflected on the next catalogue read.
+        const result = await inventoryClient.searchProducts({
+            tenantId,
+            branchId: req.query.branchId || req.context?.branchId || null,
+            query: search || '',
+            category: category === 'All' ? '' : category || '',
+            hideRx: hideRx === 'true' || hideRx === true,
+            sort: sort || 'default',
+            page: page || 1,
+            limit: limit || 16,
+            includeOutOfStock: false,
+            userId: req.context?.userId || 'public-catalog'
+        });
+        const medicines = (result.items || []).map(publicMedicine);
+        if (typeof search === 'string' && search.trim()) {
+            const skuIds = medicines.map(medicine => medicine.sku || medicine.code)
+                .filter(sku => typeof sku === 'string' && sku.trim());
             void searchMetricIngestion.recordImpressionsForSkus({ skuIds })
                 .catch(error => console.error('Medicine search impression recording failed:', error));
         }
-
-        const response = paginate === 'false' ? medicines : { ...result, medicines };
-        if (cacheEligible && cacheKey) {
-            await cacheService.set(cacheKey, response, PUBLIC_CATALOG_TTL_SECONDS);
-            res.set('X-Pharma-Cache', 'MISS');
-        }
-        return res.json(response);
-    } catch (err) {
-        console.error("Error fetching medicines:", err);
-        res.status(500).json({ message: "Failed to fetch medicines" });
+        if (paginate === 'false') return res.json(medicines);
+        return res.json({
+            medicines,
+            total: result.total || 0,
+            page: result.page || Number(page) || 1,
+            limit: result.limit || Number(limit) || 16,
+            totalPages: result.pages || 1,
+            isSearching: Boolean(search && String(search).trim()),
+            outOfStockHidden: result.outOfStockHidden ?? !(search && String(search).trim())
+        });
+    } catch (error) {
+        console.error('Inventory Service public catalogue retrieval failed:', {
+            code: error.code || error.name,
+            statusCode: error.statusCode || null
+        });
+        return res.status(error.statusCode || 503).json({
+            code: error.code || 'INVENTORY_SERVICE_UNAVAILABLE',
+            message: error.statusCode && error.statusCode < 500
+                ? error.message
+                : 'The medicine catalogue is temporarily unavailable.'
+        });
     }
 });
 
@@ -264,44 +286,16 @@ const setLegacyImportDeprecation = res => {
     res.set('Sunset', '2027-01-01');
     res.set('Link', '</api/v1/inventory/imports>; rel="successor-version"');
 };
+const legacyImportGone = (_req, res) => {
+    setLegacyImportDeprecation(res);
+    return res.status(410).json({
+        code: 'LEGACY_INVENTORY_IMPORT_DISABLED',
+        message: 'This legacy import path is disabled. Use the staged Inventory Service workflow at /api/v1/inventory/imports.'
+    });
+};
 
 // Start a durable background import job (Legacy).
-router.post('/imports', authenticateUser, uploadMemory.single('excelFile'), async (req, res) => {
-    setLegacyImportDeprecation(res);
-    try {
-        if (!req.file?.buffer) return res.status(400).json({ message: 'No Excel file provided.' });
-        if (!/\.(xlsx|xls)$/i.test(req.file.originalname)) {
-            return res.status(400).json({ message: 'Upload an .xlsx or .xls workbook.' });
-        }
-        const { createInventoryImport, enqueueInventoryImport } =
-            await import('../services/InventoryImportService.js');
-        const job = await createInventoryImport({
-            fileName: req.file.originalname,
-            buffer: req.file.buffer,
-            adminId: req.user.sub
-        });
-        enqueueInventoryImport(job._id);
-        return res.status(202).json({
-            importId: String(job._id),
-            status: job.status,
-            totalRecords: 0,
-            processedRecords: 0,
-            successfulRecords: 0,
-            failedRecords: 0,
-            failedFileAvailable: false
-        });
-    } catch (error) {
-        console.error('Inventory import job creation failed:', {
-            adminId: req.user?.sub,
-            fileName: req.file?.originalname,
-            code: error.code || error.name,
-            message: error.message
-        });
-        return res.status(error.statusCode || 500).json({
-            message: error.statusCode ? error.message : 'Could not start inventory import.'
-        });
-    }
-});
+router.post('/imports', authenticateUser, legacyImportGone);
 
 router.get('/imports/:importId/status', authenticateUser, async (req, res) => {
     setLegacyImportDeprecation(res);
@@ -364,78 +358,15 @@ router.get('/imports/:importId/failed-records', authenticateUser, async (req, re
     }
 });
 
-router.post('/imports/:importId/retry', authenticateUser, async (req, res) => {
-    setLegacyImportDeprecation(res);
-    if (!mongoose.isValidObjectId(req.params.importId)) {
-        return res.status(404).json({ message: 'Inventory import was not found.' });
-    }
-    try {
-        const { retryInventoryImport } = await import('../services/InventoryImportService.js');
-        const job = await retryInventoryImport(req.params.importId, req.user.sub);
-        if (!job) return res.status(404).json({ message: 'A retryable import was not found.' });
-        return res.status(202).json({ importId: String(job._id), status: 'QUEUED' });
-    } catch (error) {
-        console.error('Inventory import retry failed:', error);
-        return res.status(500).json({ message: 'Could not retry inventory import.' });
-    }
-});
+router.post('/imports/:importId/retry', authenticateUser, legacyImportGone);
 
 // Workbook preview is chunked and returns only a small preview/error sample.
-router.post('/validate-import', authenticateUser, uploadMemory.single('excelFile'), async (req, res) => {
-    setLegacyImportDeprecation(res);
-    try {
-        if (!req.file || !req.file.buffer) {
-            return res.status(400).json({ message: "No Excel file provided." });
-        }
-        const { previewInventoryWorkbook } = await import('../services/InventoryImportService.js');
-        return res.json(previewInventoryWorkbook(req.file.buffer));
-    } catch (err) {
-        console.error("Workbook validation error:", err);
-        res.status(400).json({ message: "Workbook validation failed: " + err.message });
-    }
-});
+router.post('/validate-import', authenticateUser, legacyImportGone);
 
 // Confirm and commit validated Excel rows (Requirement 6)
-router.post('/confirm-import', authenticateUser, async (req, res) => {
-    setLegacyImportDeprecation(res);
-    try {
-        const { rows } = req.body;
-        if (!Array.isArray(rows) || rows.length === 0) {
-            return res.status(400).json({ message: "No valid rows provided for import." });
-        }
-        const { createInventoryImportFromRows } = await import('../services/InventoryImportService.js');
-        const job = await createInventoryImportFromRows({
-            rows,
-            fileName: 'Confirmed_inventory_rows.xlsx',
-            adminId: req.user.sub
-        });
-        return res.status(202).json({ importId: String(job._id), status: job.status });
-    } catch (err) {
-        console.error("Import confirmation error:", err);
-        res.status(500).json({ message: "Failed to import rows: " + err.message });
-    }
-});
+router.post('/confirm-import', authenticateUser, legacyImportGone);
 
 // Direct single-step Excel upload
-router.post('/upload-excel', authenticateUser, uploadMemory.single('excelFile'), async (req, res) => {
-    setLegacyImportDeprecation(res);
-    try {
-        if (!req.file || !req.file.buffer) {
-            return res.status(400).json({ message: "No Excel file provided." });
-        }
-        const { createInventoryImport, enqueueInventoryImport } =
-            await import('../services/InventoryImportService.js');
-        const job = await createInventoryImport({
-            fileName: req.file.originalname,
-            buffer: req.file.buffer,
-            adminId: req.user.sub
-        });
-        enqueueInventoryImport(job._id);
-        return res.status(202).json({ importId: String(job._id), status: job.status });
-    } catch (e) {
-        console.error("Direct Excel upload error:", e);
-        res.status(500).json({ message: "Excel import data stream parsing failed: " + e.message });
-    }
-});
+router.post('/upload-excel', authenticateUser, legacyImportGone);
 
 export default router;
