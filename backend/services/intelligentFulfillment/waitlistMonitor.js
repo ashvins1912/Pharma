@@ -76,11 +76,16 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
         const matches = await Medicine.find({
           tenantId: entry.tenantId, branchId: entry.branchId || null, isActive: { $ne: false },
           composition: line.composition, strength: line.strength,
-          ...(line.dosageForm ? { dosageForm: line.dosageForm } : {}),
-          ...(line.manufacturer ? { manufacturer: line.manufacturer } : {})
-        }).select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive price discountPercentage').limit(2).lean();
-        // Never guess between multiple catalog matches. Keep the request pending for pharmacist review.
-        if (matches.length === 1) product = matches[0];
+          ...(line.dosageForm ? { dosageForm: line.dosageForm } : {})
+        }).select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive price discountPercentage').limit(10).lean();
+        // Manufacturer is a preference, not a clinical identity requirement. Prefer
+        // a unique exact-manufacturer match; otherwise accept only one unambiguous
+        // composition/strength/form match and never guess between multiple products.
+        const manufacturerMatches = line.manufacturer
+          ? matches.filter(item => String(item.manufacturer || '').trim().toLowerCase() === String(line.manufacturer).trim().toLowerCase())
+          : [];
+        if (manufacturerMatches.length === 1) product = manufacturerMatches[0];
+        else if (matches.length === 1) product = matches[0];
       }
       if (!product && !line.composition && !line.strength && line.requestedName) {
         const matches = await Medicine.find({
