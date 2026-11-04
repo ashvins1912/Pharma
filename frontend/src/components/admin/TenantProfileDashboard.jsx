@@ -37,6 +37,7 @@ export default function TenantProfileDashboard() {
   const [pharmacyCanEdit, setPharmacyCanEdit] = useState(false);
   const [policySaving, setPolicySaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [branchRegistryVersion, setBranchRegistryVersion] = useState(0);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -109,6 +110,7 @@ export default function TenantProfileDashboard() {
       setDraft(next);
       setEditing(false);
       setNotice(response.data?.message || 'Pharmacy details saved.');
+      setBranchRegistryVersion(version => version + 1);
     } catch (err) {
       setError(err?.response?.data?.message || 'Pharmacy details could not be saved.');
     } finally {
@@ -261,7 +263,7 @@ export default function TenantProfileDashboard() {
 
       <section className="space-y-3">
         <div><h3 className="text-lg font-black text-slate-900">Tenant branches</h3><p className="text-sm text-slate-500">Create and activate branches for this pharmacy.</p></div>
-        <TenantRegistry />
+        <TenantRegistry key={branchRegistryVersion} />
       </section>
     </div>
   );
