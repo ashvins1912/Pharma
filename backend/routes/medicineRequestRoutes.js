@@ -1,5 +1,5 @@
 import express from 'express';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
@@ -830,8 +830,12 @@ router.post('/:id/waitlist', authenticateUser, requirePermission('medicine_reque
         const idempotencyKey = String(req.get('Idempotency-Key') || '').trim();
         if (!idempotencyKey || idempotencyKey.length > 128) return res.status(400).json({ message: 'A valid Idempotency-Key header is required.' });
         const { waitDays, waitUntil } = validateWaitWindow(req.body?.waitDays);
+        const requestFingerprint = createHash('sha256').update(JSON.stringify({ sourceId: String(request._id), waitDays, requestedItems: (request.requestedItems || []).map(item => ({ name: item.requestedName, composition: item.composition, strength: item.strength, dosageForm: item.dosageForm, quantity: item.quantity })) })).digest('hex');
         const existing = await FulfillmentCase.findOne({ customerId: String(req.user.sub), tenantId: String(request.tenantId), idempotencyKey }).lean();
-        if (existing) return res.json({ case: existing, alreadyCreated: true });
+        if (existing) {
+            if (existing.requestFingerprint !== requestFingerprint) return res.status(409).json({ message: 'This idempotency key was already used for a different request.' });
+            return res.json({ case: existing, alreadyCreated: true });
+        }
         const requestedItems = Array.isArray(request.requestedItems) ? request.requestedItems : [];
         if (!requestedItems.length) return res.status(400).json({ message: 'No medicine line items are available to wait for.' });
         const lines = requestedItems.map((item, index) => ({
@@ -855,7 +859,7 @@ router.post('/:id/waitlist', authenticateUser, requirePermission('medicine_reque
             addressDetails: request.addressDetails || {}, coordinates: request.coordinates || null,
             prescriptionUrl: request.prescriptionUrl || null, prescriptionId: request.prescriptionId || null,
             patientPuid: request.patientPuid || null,
-            status: 'WAITING_FOR_STOCK', lines, waitDays, waitUntil, idempotencyKey,
+            status: 'WAITING_FOR_STOCK', lines, waitDays, waitUntil, idempotencyKey, requestFingerprint,
             auditTrail: [{ action: 'MEDICINE_REQUEST_WAITLISTED', actorId: String(req.user.sub), at: new Date(), waitDays, waitUntil }]
         });
         const updatedRequest = await MedicineRequest.findOneAndUpdate(
