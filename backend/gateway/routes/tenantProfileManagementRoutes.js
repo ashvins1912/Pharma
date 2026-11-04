@@ -126,7 +126,6 @@ router.patch('/profile', authenticateUser, async (req, res) => {
       if (shopName !== undefined) vendor.companyName = shopName;
       if (licenseNumber !== undefined) vendor.drugLicenseNumber = licenseNumber;
       if (gstNumber !== undefined) vendor.gstNumber = gstNumber;
-      if (contactEmail !== undefined) vendor.email = contactEmail;
       if (contactPhone !== undefined) vendor.mobile = contactPhone;
       if (address) vendor.address = { street: tenant.address.street || '', city: tenant.address.city || '', state: tenant.address.state || '', pincode: tenant.address.pincode || '' };
       await vendor.save();
