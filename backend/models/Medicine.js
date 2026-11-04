@@ -12,6 +12,8 @@ const medicineSchema = new mongoose.Schema({
     description: { type: String, default: "" },
     composition: { type: String, default: "Active Compound" },
     strength: { type: String, default: '', trim: true, index: true },
+    dosageForm: { type: String, default: '', trim: true },
+    strength: { type: String, default: '', trim: true, index: true },
     dosageForm: { type: String, default: '', trim: true, index: true },
     price: { type: Number, required: true, min: 0 },
     basePrice: { type: Number, min: 0 },
