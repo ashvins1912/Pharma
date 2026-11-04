@@ -72,33 +72,65 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
     }
 });
 
+const getVerifiedInventoryScope = req => {
+    const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+    const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+    const tenantId = String(req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
+    const branchId = String(req.user?.branchId || req.context?.branchId || '').trim();
+    if (!tenantId || !branchId) {
+        const error = new Error('Select an authorized pharmacy tenant and branch before changing catalogue inventory.');
+        error.statusCode = 403;
+        throw error;
+    }
+    return { tenantId, branchId, isPlatformAdmin };
+};
+
 router.post('/', authenticateUser, async (req, res) => {
     try {
-        const medicine = await dataStore.createMedicine(req.body || {});
-        res.status(201).json(medicine);
+        const scope = getVerifiedInventoryScope(req);
+        const result = await inventoryClient.createProduct({
+            product: req.body || {},
+            tenantId: scope.tenantId,
+            branchId: scope.branchId,
+            userId: req.user.sub
+        });
+        return res.status(201).json(result);
     } catch (error) {
-        console.error('Medicine creation failed:', error);
-        res.status(getErrorStatus(error)).json({ message: error.message || 'Failed to create medicine.' });
+        console.error('Inventory Service product creation failed:', error);
+        return res.status(error.statusCode || 503).json({ message: error.message || 'Could not create inventory product.' });
     }
 });
 
 router.put('/:medicineId', authenticateUser, async (req, res) => {
     try {
-        const medicine = await dataStore.updateMedicine(req.params.medicineId, req.body || {});
-        res.json(medicine);
+        const scope = getVerifiedInventoryScope(req);
+        const result = await inventoryClient.updateProduct({
+            productId: req.params.medicineId,
+            product: req.body || {},
+            tenantId: scope.tenantId,
+            branchId: scope.branchId,
+            userId: req.user.sub
+        });
+        return res.json(result);
     } catch (error) {
-        console.error('Medicine update failed:', error);
-        res.status(getErrorStatus(error)).json({ message: error.message || 'Failed to update medicine.' });
+        console.error('Inventory Service product update failed:', error);
+        return res.status(error.statusCode || 503).json({ message: error.message || 'Could not update inventory product.' });
     }
 });
 
 router.delete('/:medicineId', authenticateUser, async (req, res) => {
     try {
-        const result = await dataStore.deleteMedicine(req.params.medicineId);
-        res.json(result);
+        const scope = getVerifiedInventoryScope(req);
+        const result = await inventoryClient.archiveProduct({
+            productId: req.params.medicineId,
+            tenantId: scope.tenantId,
+            branchId: scope.branchId,
+            userId: req.user.sub
+        });
+        return res.json(result);
     } catch (error) {
-        console.error('Medicine archival failed:', error);
-        res.status(getErrorStatus(error)).json({ message: error.message || 'Failed to delete medicine.' });
+        console.error('Inventory Service product archival failed:', error);
+        return res.status(error.statusCode || 503).json({ message: error.message || 'Could not archive inventory product.' });
     }
 });
 
