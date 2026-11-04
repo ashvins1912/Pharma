@@ -65,9 +65,6 @@ export function normalizeImportRow(row) {
     }
   }
 
-  if (!sku) {
-    return { error: 'SKU is required and must not be empty.', errorType: 'VALIDATION_ERROR', field: 'SKU' };
-  }
   if (!name) {
     return { error: 'Medicine name is required.', errorType: 'VALIDATION_ERROR', field: 'Medicine Name' };
   }
@@ -111,6 +108,30 @@ export function normalizeImportRow(row) {
       expiryDate
     }
   };
+}
+
+// Generate a tenant-unique six-character SKU when the spreadsheet omits one.
+async function generateUniqueSku(productName, tenantId, reservedSkus) {
+  const prefix = String(productName || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 2)
+    .padEnd(2, 'X');
+
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const suffix = randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase();
+    const sku = `${prefix}${suffix}`;
+    if (reservedSkus.has(sku)) continue;
+    const existing = await Product.exists({ tenantId, sku });
+    if (!existing) {
+      reservedSkus.add(sku);
+      return sku;
+    }
+  }
+
+  throw new Error(`Could not generate a unique SKU for "${productName}". Please retry the import.`);
 }
 
 export const classifyImportError = error => {
@@ -205,6 +226,7 @@ async function saveBatch(job, batch, batchId, seenSkus) {
   const failures = [];
   const valid = [];
   const batchSkus = new Set();
+  const generatedSkus = new Set();
   const tenantId = job.tenantId;
   const branchId = job.branchId;
   const stockMode = job.stockMode || 'REPLACE';
@@ -227,6 +249,28 @@ async function saveBatch(job, batch, batchId, seenSkus) {
         retryable: false
       });
       continue;
+    }
+
+    if (!normalized.value.sku) {
+      try {
+        normalized.value.sku = await generateUniqueSku(normalized.value.name, tenantId, generatedSkus);
+      } catch (error) {
+        failures.push({
+          tenantId,
+          branchId,
+          jobId: job._id,
+          batchId,
+          rowNumber: record.rowNumber,
+          sku: '',
+          productName: normalized.value.name,
+          originalRecord: record.originalRecord,
+          reason: error.message,
+          errorType: 'DATABASE_ERROR',
+          technicalCode: 'SKU_GENERATION_FAILED',
+          retryable: true
+        });
+        continue;
+      }
     }
 
     const importKey = JSON.stringify([normalized.value.sku, normalized.value.batchNumber || '']);
