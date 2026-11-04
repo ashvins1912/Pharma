@@ -3,6 +3,7 @@ import { getIsConnected } from './config/db.js';
 import mongoose from 'mongoose';
 import { createHash } from 'node:crypto';
 import Medicine from './models/Medicine.js';
+import { inventoryClient } from './services/inventory-client/InventoryClient.js';
 import Order from './models/Order.js';
 import Coupon from './models/Coupon.js';
 import UserProfile from './models/UserProfile.js';
@@ -1198,6 +1199,7 @@ export const dataStore = {
     async reserveOrder(orderData, actor = 'Customer') {
         const selectedTenantId = String(orderData.tenantId || '').trim();
         const selectedBranchId = String(orderData.branchId || '').trim();
+        if (!selectedBranchId) throw inventoryError('Select an active pharmacy branch before placing an order.', 400);
         if (!selectedTenantId) throw inventoryError('Select an active pharmacy before creating an order.', 400);
         if (!orderData.userId) throw inventoryError('An authenticated customer is required to create an order.', 401);
         if (!orderData.deliveryAddress?.trim() || !hasValidCoordinates(orderData.coordinates)) {
@@ -1280,6 +1282,72 @@ export const dataStore = {
             }
         }
 
+        if (!getIsConnected()) throw inventoryError('Order persistence is unavailable. No order was created.', 503);
+        if (!inventoryClient.isConfigured()) throw inventoryError('Inventory Service is unavailable. No order was created.', 503);
+        const productIds = [...quantities.keys()];
+        if (productIds.some(id => !mongoose.isValidObjectId(id))) {
+            throw inventoryError('Every order item must reference a valid medicine in the selected pharmacy catalogue.', 400);
+        }
+        const catalog = await inventoryClient.lookup({
+            productIds, tenantId: selectedTenantId, branchId: selectedBranchId, userId: orderData.userId
+        });
+        const productsById = new Map((catalog.items || []).map(item => [String(item.productId), item]));
+        if (productsById.size !== productIds.length) {
+            throw inventoryError('One or more medicines are not available in the selected pharmacy branch.', 404);
+        }
+        const medicineItemsForOrder = [];
+        const itemSnapshotsForOrder = [];
+        let totalAmountForOrder = 0;
+        let prescriptionRequiredForOrder = false;
+        for (const [medicineId, requested] of quantities) {
+            const quantity = requested.quantity;
+            const product = productsById.get(medicineId);
+            if (!product) throw inventoryError('The selected pharmacy does not have this medicine in its branch catalogue.', 404);
+            if (Number(product.availableQuantity || 0) < quantity) {
+                throw inventoryError(`Insufficient available stock for ${product.name}.`, 409);
+            }
+            const requiresPrescription = Boolean(product.requiresPrescription);
+            prescriptionRequiredForOrder ||= requiresPrescription;
+            if (requiresPrescription && !orderData.prescriptionUrl) {
+                throw inventoryError(`A prescription is required for ${product.name}.`);
+            }
+            const catalogPrice = Number(product.price);
+            if (!Number.isFinite(catalogPrice) || catalogPrice < 0) throw inventoryError(`Invalid catalogue price for ${product.name}.`, 409);
+            if (requested.unitPrice != null && Math.abs(requested.unitPrice - catalogPrice) > 0.01) {
+                throw inventoryError('The selected catalogue price has changed. Refresh the fulfilment options before confirming.', 409);
+            }
+            const basePrice = catalogPrice;
+            const discountPercentage = Number(product.discountPercentage || 0);
+            const rawCost = Number(product.baseCostPrice);
+            const baseCostPrice = Number.isFinite(rawCost) && rawCost > 0 ? rawCost : catalogPrice;
+            const marginTier = ['LOW', 'MID', 'HIGH'].includes(product.marginTier) ? product.marginTier : 'LOW';
+            const productObjectId = new mongoose.Types.ObjectId(medicineId);
+            totalAmountForOrder += catalogPrice * quantity;
+            medicineItemsForOrder.push({
+                medicineId: productObjectId, quantity, price: catalogPrice, basePrice,
+                baseCostPrice, discountPercentage, marginTier,
+                name: product.name, sku: product.sku || ''
+            });
+            itemSnapshotsForOrder.push({
+                _id: medicineId, medicineId: productObjectId, name: product.name,
+                sku: product.sku || '', price: catalogPrice, basePrice,
+                baseCostPrice, discountPercentage, marginTier, quantity,
+                stock: Math.max(0, Number(product.availableQuantity || 0) - quantity)
+            });
+        }
+        const orderId = new mongoose.Types.ObjectId();
+        const inventoryReservation = await inventoryClient.reserve({
+            orderId: orderId.toString(),
+            items: medicineItemsForOrder.map(item => ({ productId: String(item.medicineId), quantity: item.quantity })),
+            tenantId: selectedTenantId,
+            branchId: selectedBranchId,
+            userId: orderData.userId,
+            idempotencyKey: `legacy-order-reservation:${orderData.idempotencyKey || orderId.toString()}`
+        });
+        if (inventoryReservation.status !== 'RESERVED' || !inventoryReservation.reservationId) {
+            throw inventoryError('Inventory could not reserve the requested medicines. Refresh stock and retry.', 409);
+        }
+
         const now = new Date();
         const statusEntry = {
             previousStatus: null,
@@ -1296,94 +1364,10 @@ export const dataStore = {
                 await session.withTransaction(async () => {
                     const activeTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id settings.allowOfferWithCoupon settings.allowOfferWithRewards').session(session).lean();
                     if (!activeTenant) throw inventoryError('The selected pharmacy is not active.', 404);
-                    const medicineItems = [];
-                    const itemSnapshots = [];
-                    let totalAmount = 0;
-                    let prescriptionRequired = false;
-
-                    for (const [medicineId, requested] of quantities) {
-                        const quantity = requested.quantity;
-                        if (!mongoose.isValidObjectId(medicineId)) {
-                            throw inventoryError(`Invalid medicine ID: ${medicineId}`);
-                        }
-                        const medicineFilter = { _id: medicineId, tenantId: selectedTenantId };
-                        if (orderData.branchScopeExplicit) medicineFilter.branchId = selectedBranchId || null;
-                        else if (selectedBranchId) medicineFilter.branchId = selectedBranchId;
-                        const medicine = await Medicine.findOne(medicineFilter).session(session);
-                        if (!medicine) throw inventoryError('The selected pharmacy does not have this medicine in its catalogue.', 404);
-                        if (medicine.expiryDate && new Date(medicine.expiryDate) <= now) {
-                            throw inventoryError(`${medicine.name} is expired and cannot be ordered.`);
-                        }
-                        const medicineRequiresPrescription = Boolean(medicine.isPrescriptionRequired ?? medicine.requiresPrescription);
-                        prescriptionRequired ||= medicineRequiresPrescription;
-                        if (medicineRequiresPrescription && !orderData.prescriptionUrl) {
-                            throw inventoryError(`A prescription is required for ${medicine.name}.`);
-                        }
-
-                        const reservationFilter = {
-                            _id: medicine._id,
-                            expiryDate: { $gt: now },
-                            tenantId: selectedTenantId,
-                            ...(orderData.branchScopeExplicit ? { branchId: selectedBranchId || null } : selectedBranchId ? { branchId: selectedBranchId } : {}),
-                            $expr: {
-                                $gte: [
-                                    {
-                                        $subtract: [
-                                            { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
-                                            { $ifNull: ['$reservedQuantity', 0] }
-                                        ]
-                                    },
-                                    quantity
-                                ]
-                            }
-                        };
-                        const reserved = await Medicine.findOneAndUpdate(reservationFilter, {
-                            $inc: { reservedQuantity: quantity }
-                        }, { new: true, session });
-
-                        if (!reserved) {
-                            throw inventoryError(`Insufficient available stock for ${medicine.name}.`, 409);
-                        }
-
-                        const catalogPrice = Number(medicine.price);
-                        const basePrice = Math.max(catalogPrice, Number(medicine.basePrice ?? catalogPrice));
-                        const discountPercentage = basePrice > catalogPrice
-                            ? roundCurrency((1 - catalogPrice / basePrice) * 100)
-                            : 0;
-                        if (requested.unitPrice != null && Math.abs(requested.unitPrice - catalogPrice) > 0.01) {
-                            throw inventoryError('The selected catalogue price has changed. Refresh the fulfilment options before confirming.', 409);
-                        }
-                        const price = requested.unitPrice == null ? catalogPrice : catalogPrice;
-                        totalAmount += price * quantity;
-                        medicineItems.push({
-                            medicineId: medicine._id,
-                            quantity,
-                            price,
-                            basePrice,
-                            baseCostPrice: Number(medicine.baseCostPrice ?? price),
-                            discountPercentage,
-                            marginTier: ['LOW', 'MID', 'HIGH'].includes(medicine.marginTier)
-                                ? medicine.marginTier
-                                : 'LOW',
-                            name: medicine.name,
-                            sku: medicine.sku || medicine.code || ''
-                        });
-                        itemSnapshots.push({
-                            _id: medicine._id.toString(),
-                            medicineId: medicine._id,
-                            name: medicine.name,
-                            sku: medicine.sku || medicine.code || '',
-                            price,
-                            basePrice,
-                            baseCostPrice: Number(medicine.baseCostPrice ?? price),
-                            discountPercentage,
-                            marginTier: ['LOW', 'MID', 'HIGH'].includes(medicine.marginTier)
-                                ? medicine.marginTier
-                                : 'LOW',
-                            quantity,
-                            stock: Math.max(0, getPhysicalStock(medicine) - getReservedStock(medicine) - quantity)
-                        });
-                    }
+                    const medicineItems = medicineItemsForOrder.map(item => ({ ...item }));
+                    const itemSnapshots = itemSnapshotsForOrder.map(item => ({ ...item }));
+                    let totalAmount = totalAmountForOrder;
+                    let prescriptionRequired = prescriptionRequiredForOrder;
 
                     let surplusDiscountApplied = 0;
                     const appliedSurplusCampaigns = [];
@@ -1470,7 +1454,6 @@ export const dataStore = {
                         isDiscounted: couponRate > 0 || Number(item.discountPercentage || 0) > 0 || Number(item.surplusSavingsDiscount || 0) > 0
                     }));
                     const earnedPoints = profitMarginRewardEngine.calculateEarnedPoints(rewardItems);
-                    const orderId = new mongoose.Types.ObjectId();
                     let allowedPoints = 0;
                     let pointsDiscount = 0;
                     let redemptionWarning = null;
@@ -1538,6 +1521,8 @@ export const dataStore = {
                         customerId: orderData.userId,
                         tenantId: selectedTenantId,
                         branchId: orderData.branchId || null,
+                        inventoryReservationId: inventoryReservation.reservationId,
+                        inventoryReservationStatus: 'RESERVED',
                         addressId: orderData.addressId || null,
                         customerName: orderData.customerName,
                         orderedByName: orderData.customerName || 'Valued Customer',
@@ -1590,6 +1575,19 @@ export const dataStore = {
                     createdOrder = order.toObject({ virtuals: true });
                     createdOrder.rewardNotice = redemptionWarning;
                 });
+            } catch (error) {
+                try {
+                    await inventoryClient.release(inventoryReservation.reservationId, {
+                        tenantId: selectedTenantId, branchId: selectedBranchId, userId: orderData.userId,
+                        idempotencyKey: `legacy-order-release-after-create-failure:${orderId.toString()}`
+                    });
+                } catch (releaseError) {
+                    console.error('Order creation failed and Inventory reservation release also failed:', {
+                        orderId: orderId.toString(), reservationId: inventoryReservation.reservationId,
+                        error: releaseError.message
+                    });
+                }
+                throw error;
             } finally {
                 await session.endSession();
             }
