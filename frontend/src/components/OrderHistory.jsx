@@ -4,14 +4,14 @@ import { useAuth } from '../context/AuthContext';
 import Pagination from './common/Pagination';
 import { useLanguage } from '../context/LanguageContext';
 
-const formatDate = (date) => {
+const formatDate = (date, t, language) => {
   const parsedDate = new Date(date);
   return Number.isNaN(parsedDate.getTime())
     ? t('dateUnavailable')
     : parsedDate.toLocaleDateString(language, { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
-const getItemName = (item) => item.name || item.productName || t('itemsLabel');
+const getItemName = (item, t) => item.name || item.productName || t('itemsLabel');
 const PAGE_SIZE = 10;
 
 const normalizeHistoryResponse = (data, requestedPage) => {
@@ -167,7 +167,7 @@ export default function OrderHistory() {
                     <p className="break-all text-xs font-extrabold text-slate-900">
                       Order ID: <span className="font-semibold text-slate-600">{id || 'Unavailable'}</span>
                     </p>
-                    <p className="mt-1 text-xs text-slate-500">Placed {formatDate(order.createdAt)}</p>
+                    <p className="mt-1 text-xs text-slate-500">Placed {formatDate(order.createdAt, t, language)}</p>
                   </div>
                   <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
@@ -188,8 +188,8 @@ export default function OrderHistory() {
                   {items.length ? (
                     <ul className="space-y-1.5">
                       {items.map((item, index) => (
-                        <li key={`${getItemName(item)}-${index}`} className="flex min-w-0 justify-between gap-3 text-xs text-slate-600">
-                          <span className="min-w-0 break-words">{getItemName(item)} <span className="whitespace-nowrap">× {item.quantity || 1}</span></span>
+                        <li key={`${getItemName(item, t)}-${index}`} className="flex min-w-0 justify-between gap-3 text-xs text-slate-600">
+                          <span className="min-w-0 break-words">{getItemName(item, t)} <span className="whitespace-nowrap">× {item.quantity || 1}</span></span>
                           {(item.totalPrice != null || item.price != null || item.unitPrice != null) && (
                             <span className="shrink-0 whitespace-nowrap font-semibold text-slate-700">
                               ₹{Number(item.totalPrice ?? (item.price ?? item.unitPrice) * (item.quantity || 1)).toLocaleString('en-IN')}
