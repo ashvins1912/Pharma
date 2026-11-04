@@ -494,6 +494,8 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
             deliveryAddress: String(req.body?.deliveryAddress || '').trim(),
             addressDetails: req.body?.addressDetails || {},
             coordinates: req.body?.coordinates || null,
+            customerMobile: String(req.body?.customerMobile || req.body?.mobile || '').trim(),
+            orderedForName: String(req.body?.orderedForName || '').trim(),
             paymentMethod: req.body?.paymentMethod || 'Cash on Delivery (COD)',
             prescriptionUrl: req.body?.prescriptionUrl || null,
             prescriptionId: req.body?.prescriptionId || null,
@@ -596,6 +598,10 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
                 addressDetails: claimed.addressDetails || {}, coordinates: claimed.coordinates,
                 paymentMethod: claimed.paymentMethod || 'Cash on Delivery (COD)',
                 source: claimed.sourceType === 'MEDICINE_REQUEST' ? 'MEDICINE_REQUEST' : 'WEB',
+                medicineRequestId: claimed.sourceType === 'MEDICINE_REQUEST' ? claimed.sourceId : null,
+                customerName: claimed.orderedForName || 'Customer',
+                customerMobile: claimed.customerMobile || '',
+                orderedForName: claimed.orderedForName || 'Customer',
                 fulfillmentCaseId: String(claimed._id),
                 fulfillmentConfirmationId: confirmationId,
                 prescriptionUrl: claimed.prescriptionUrl || null, prescriptionId: claimed.prescriptionId || null,
@@ -630,7 +636,7 @@ router.post('/fulfillment/waitlist/:id/cancel', authenticateUser, async (req, re
     try {
         const updated = await FulfillmentCase.findOneAndUpdate({
             _id: req.params.id, customerId: String(req.user.sub),
-            status: { $in: ['WAITING_FOR_STOCK', 'AWAITING_CUSTOMER_DECISION', 'READY_FOR_CONFIRMATION'] }
+            status: { $in: ['WAITING_FOR_STOCK', 'AWAITING_CUSTOMER_DECISION', 'READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'] }
         }, {
             $set: { status: 'CANCELLED' },
             $push: { auditTrail: { action: 'WAITLIST_CANCELLED', actorId: String(req.user.sub), at: new Date() } }
@@ -639,7 +645,7 @@ router.post('/fulfillment/waitlist/:id/cancel', authenticateUser, async (req, re
         if (updated.parentOrderId) await Order.updateOne({ _id: updated.parentOrderId, userId: String(req.user.sub), tenantId: updated.tenantId }, { $set: { fulfillmentState: 'PARTIAL' } });
         if (updated.sourceType === 'MEDICINE_REQUEST' && updated.sourceId) {
             await MedicineRequest.updateOne({ _id: updated.sourceId, customerId: String(req.user.sub), fulfillmentCaseId: String(updated._id) }, {
-                $set: { status: 'CANCELLED' },
+                $set: { status: updated.parentOrderId ? 'CONVERTED_TO_ORDER' : 'CANCELLED' },
                 $push: { auditTrail: { action: 'WAITLIST_CANCELLED', actorId: String(req.user.sub), role: 'Customer', timestamp: new Date(), notes: 'Customer cancelled the stock waitlist.' } }
             });
         }
