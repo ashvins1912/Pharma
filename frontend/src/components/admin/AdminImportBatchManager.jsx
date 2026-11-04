@@ -146,12 +146,12 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
       </div>
       {error && <p role="alert" className="rounded-lg bg-rose-50 p-2 text-xs text-rose-700">{error}</p>}
       <div className="overflow-x-auto rounded-xl border border-slate-200">
-        <table className="w-full min-w-[980px] text-left text-[11px]">
+        <table className="w-full min-w-[1080px] text-left text-[11px]">
           <thead className="bg-slate-50 text-slate-500"><tr>
-            <th className="p-2">Select</th><th className="p-2">Row</th><th className="p-2">SKU</th><th className="p-2">Medicine</th><th className="p-2">Price</th><th className="p-2">Stock</th><th className="p-2">Batch</th><th className="p-2">Status / errors</th><th className="p-2">Actions</th>
+            <th className="p-2">Select</th><th className="p-2">Row</th><th className="p-2">SKU</th><th className="p-2">Medicine</th><th className="p-2">Price</th><th className="p-2">Stock</th><th className="p-2">Batch / expiry</th><th className="p-2">Category / manufacturer</th><th className="p-2">Status / errors</th><th className="p-2">Actions</th>
           </tr></thead>
           <tbody className="divide-y divide-slate-100">
-            {loading ? <tr><td colSpan="9" className="p-5 text-center text-slate-500">Loading batch rows…</td></tr> :
+            {loading ? <tr><td colSpan="10" className="p-5 text-center text-slate-500">Loading batch rows…</td></tr> :
               rows.map(row => <tr key={row.rowId} className="align-top">
                 <td className="p-2"><input type="checkbox" checked={selected.includes(row.rowId)} onChange={e => toggleRow(row.rowId, e.target.checked)} /></td>
                 <td className="p-2">{row.rowNumber}</td>
@@ -160,13 +160,13 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
                   <td className="p-2"><input value={draft.name} onChange={e => setDraft(v => ({...v,name:e.target.value}))} className="w-44 rounded border p-1" /></td>
                   <td className="p-2"><input type="number" min="0" value={draft.price} onChange={e => setDraft(v => ({...v,price:e.target.value}))} className="w-20 rounded border p-1" /></td>
                   <td className="p-2"><input type="number" min="0" step="1" value={draft.stockQuantity} onChange={e => setDraft(v => ({...v,stockQuantity:e.target.value}))} className="w-20 rounded border p-1" /></td>
-                  <td className="p-2"><input value={draft.batchNumber} onChange={e => setDraft(v => ({...v,batchNumber:e.target.value}))} className="w-24 rounded border p-1" /></td>
+                  <td className="p-2 space-y-1"><input value={draft.batchNumber} onChange={e => setDraft(v => ({...v,batchNumber:e.target.value}))} className="w-24 rounded border p-1" /><input type="date" value={draft.expiryDate ? new Date(draft.expiryDate).toISOString().slice(0,10) : ''} onChange={e => setDraft(v => ({...v,expiryDate:e.target.value}))} className="w-28 rounded border p-1" /></td><td className="p-2 space-y-1"><input value={draft.category} onChange={e => setDraft(v => ({...v,category:e.target.value}))} className="w-28 rounded border p-1" placeholder="Category" /><input value={draft.manufacturer} onChange={e => setDraft(v => ({...v,manufacturer:e.target.value}))} className="w-28 rounded border p-1" placeholder="Manufacturer" /></td>
                 </> : <>
                   <td className="p-2 font-mono">{row.normalized?.sku}</td>
                   <td className="p-2 font-semibold">{row.normalized?.name}</td>
                   <td className="p-2">₹{row.normalized?.price}</td>
                   <td className="p-2">{row.normalized?.stockQuantity}</td>
-                  <td className="p-2">{row.normalized?.batchNumber || '—'}</td>
+                  <td className="p-2">{row.normalized?.batchNumber || '—'}<div className="text-[10px] text-slate-500">{row.normalized?.expiryDate ? new Date(row.normalized.expiryDate).toLocaleDateString() : 'No expiry'}</div></td><td className="p-2">{row.normalized?.category || '—'}<div className="text-[10px] text-slate-500">{row.normalized?.manufacturer || '—'}</div></td>
                 </>}
                 <td className="p-2"><span className={`rounded px-2 py-1 font-bold ${row.status === 'PUBLISHED' ? 'bg-emerald-50 text-emerald-700' : row.status === 'INVALID' ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-700'}`}>{row.status}</span>{row.validationErrors?.length > 0 && <ul className="mt-1 list-disc pl-4 text-rose-700">{row.validationErrors.map((item,i)=><li key={i}>{item}</li>)}</ul>}</td>
                 <td className="p-2"><div className="flex flex-wrap gap-1">
