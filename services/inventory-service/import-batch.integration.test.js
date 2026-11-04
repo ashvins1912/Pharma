@@ -113,7 +113,8 @@ test('controlled import preview, chunked batch ledger and rollback restore the e
       tenantId,
       branchId,
       stockMode: 'REPLACE',
-      previewFingerprint: preview.previewFingerprint
+      previewFingerprint: preview.previewFingerprint,
+      approvedPreview: preview
     });
     assert.ok(job.batchId);
 
@@ -165,7 +166,8 @@ test('controlled import preview, chunked batch ledger and rollback restore the e
         tenantId,
         branchId,
         stockMode: 'REPLACE',
-        previewFingerprint: stalePreview.previewFingerprint
+        previewFingerprint: stalePreview.previewFingerprint,
+        approvedPreview: stalePreview
       }),
       error => error.statusCode === 409 && error.code === 'PREVIEW_FINGERPRINT_MISMATCH'
     );
@@ -184,7 +186,8 @@ test('controlled import preview, chunked batch ledger and rollback restore the e
       tenantId,
       branchId,
       stockMode: 'REPLACE',
-      previewFingerprint: laterPreview.previewFingerprint
+      previewFingerprint: laterPreview.previewFingerprint,
+      approvedPreview: laterPreview
     });
     assert.equal((await waitForJob(laterJob._id)).status, 'COMPLETED');
     await models.Inventory.updateOne(
