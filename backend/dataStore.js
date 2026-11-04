@@ -3504,6 +3504,52 @@ export const dataStore = {
             expiresAt = new Date(Date.now() + 48 * 3600000);
         }
 
+        const requestedIdentity = request.requestedItems?.[0] || {};
+        const alternativeIds = [...new Set((Array.isArray(proposalData.alternativeOffers) ? proposalData.alternativeOffers : [])
+            .map(offer => String(offer?.productId || '').trim()).filter(id => mongoose.isValidObjectId(id)))].slice(0, 5);
+        let alternativeOffers = [];
+        if (alternativeIds.length && getIsConnected() && request.tenantId) {
+            const alternativeQuery = {
+                _id: { $in: alternativeIds },
+                tenantId: String(request.tenantId),
+                isActive: { $ne: false },
+                expiryDate: { $gt: new Date() }
+            };
+            if (request.branchId) alternativeQuery.branchId = String(request.branchId);
+            const candidates = await Medicine.find(alternativeQuery)
+                .select('_id name brand manufacturer composition strength dosageForm form price discountPercentage stockQuantity stock quantity reservedQuantity requiresPrescription isPrescriptionRequired')
+                .lean();
+            const norm = value => String(value || '').trim().toLowerCase().replace(/\\s+/g, ' ');
+            alternativeOffers = candidates.flatMap(candidate => {
+                const sameComposition = requestedIdentity.composition && norm(candidate.composition) === norm(requestedIdentity.composition);
+                const sameStrength = requestedIdentity.strength && norm(candidate.strength) === norm(requestedIdentity.strength);
+                const sameForm = !requestedIdentity.dosageForm || norm(candidate.dosageForm || candidate.form) === norm(requestedIdentity.dosageForm);
+                if (!sameComposition || !sameStrength || !sameForm || String(candidate._id) === String(proposalData.productId || '')) return [];
+                const availableQuantity = Math.max(0, Number(candidate.stockQuantity ?? candidate.stock ?? candidate.quantity ?? 0) - Number(candidate.reservedQuantity || 0));
+                if (availableQuantity < quantity) return [];
+                const unitPrice = Number(candidate.price || 0);
+                if (!Number.isFinite(unitPrice) || unitPrice < 0) return [];
+                const discountPercentage = Math.min(100, Math.max(0, Number(candidate.discountPercentage || 0)));
+                const discountedUnitPrice = Math.round(unitPrice * (1 - discountPercentage / 100) * 100) / 100;
+                return [{
+                    productId: String(candidate._id),
+                    medicineName: candidate.name,
+                    manufacturer: candidate.manufacturer || candidate.brand || '',
+                    composition: candidate.composition || '',
+                    strength: candidate.strength || '',
+                    dosageForm: candidate.dosageForm || candidate.form || '',
+                    quantity,
+                    unitPrice,
+                    discountPercentage,
+                    discountedUnitPrice,
+                    availableQuantity,
+                    requiresPrescription: Boolean(candidate.requiresPrescription ?? candidate.isPrescriptionRequired),
+                    requiresPharmacistApproval: Boolean(request.prescriptionId || request.prescriptionUrl || candidate.requiresPrescription || candidate.isPrescriptionRequired),
+                    customerConsentRequired: true
+                }];
+            }).sort((a, b) => a.discountedUnitPrice - b.discountedUnitPrice);
+        }
+
         const proposal = {
             productId: proposalData.productId || null,
             medicineName,
@@ -3520,6 +3566,7 @@ export const dataStore = {
             deliverySlot,
             prescriptionStatus,
             alternativeProduct: String(proposalData.alternativeProduct || '').trim(),
+            alternativeOffers,
             prescriptionItems: request.prescriptionVerification?.medicines || []
         };
 
