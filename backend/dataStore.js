@@ -814,7 +814,7 @@ export const dataStore = {
                 newPrice: Number(item.price ?? item.unitPrice) || 0, adminId: actor
             }));
         });
-        const allAudits = [...mappedAudits, ...deliveryAudits, ...inMemoryInventoryAudits]
+        const allAudits = [...mappedAudits, ...deliveryAudits, ...inMemoryInventoryAudits.filter(audit => String(audit.tenantId || '') === scopeTenantId && String(audit.branchId || '') === scopeBranchId)]
             .sort((left, right) => new Date(right.timestamp) - new Date(left.timestamp));
         const total = allAudits.length;
         const totalPages = Math.ceil(total / parsedLimit) || 1;
