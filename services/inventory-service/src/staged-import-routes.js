@@ -510,9 +510,15 @@ router.post('/imports/batches/:batchId/unpublish', requireServiceScope('inventor
 router.post('/imports/batches/:batchId/rollback', requireServiceScope('inventory.import'), requirePublishEnabled, asyncHandler(async (req, res) => {
   const { tenantId, branchId } = scope(req);
   const batch = await safeBatch(req.params.batchId, tenantId, branchId);
-  const rows = await StagedImportRow.find({ batchId: batch.batchId, tenantId, branchId, status: 'PUBLISHED' }).sort({ publishedAt: -1 });
-  if (rows.length) await unpublishRows(batch, rows, req);
-  await StagedImportBatch.updateOne({ _id: batch._id }, { $set: { status: 'REVERTED' } });
+  const rows = await StagedImportRow.find({ batchId: batch.batchId, tenantId, branchId, status: 'PUBLISHED' })
+    .sort({ publicationSequence: -1, publishedAt: -1 }).lean();
+  // Revert in bounded transactions so large workbooks do not exceed MongoDB's
+  // transaction lifetime. Each chunk is atomic and retries continue from the
+  // still-published rows if a later chunk encounters a concurrency conflict.
+  for (let offset = 0; offset < rows.length; offset += 200) {
+    await unpublishRows(batch, rows.slice(offset, offset + 200), req);
+  }
+  await StagedImportBatch.updateOne({ _id: batch._id }, { $set: { status: 'REVERTED', publishedRows: 0 } });
   await Audit.create({ tenantId, branchId, actor: actor(req), operation: 'inventory.import.batch.reverted', details: { batchId: batch.batchId } });
   return res.json({ success: true, batchId: batch.batchId, status: 'REVERTED', revertedAt: new Date() });
 }));
