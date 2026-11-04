@@ -27,6 +27,7 @@ const fulfillmentCaseSchema = new mongoose.Schema({
   sourceType: { type: String, enum: ['CHECKOUT', 'MEDICINE_REQUEST', 'ORDER'], required: true, index: true },
   sourceId: { type: String, default: null, index: true },
   parentOrderId: { type: String, default: null, index: true },
+  childOrderIds: { type: [String], default: [] },
   addressId: { type: mongoose.Schema.Types.ObjectId, ref: 'UserAddress', default: null },
   deliveryAddress: { type: String, default: '' },
   addressDetails: { type: mongoose.Schema.Types.Mixed, default: {} },
