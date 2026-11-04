@@ -23,7 +23,7 @@ function hasScopePermission(user, scope) {
   if (revoked.some(item => permissionNames.some(name =>
     item === name || (item.endsWith('.*') && name.startsWith(item.slice(0, -1)))
   ))) return false;
-  if (['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return true;
+  if (['admin', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return true;
   if (role === 'customer' && (
     scope.startsWith('customer.profile.')
     || ['orders.create', 'orders.read', 'prescription.read', 'prescription.write'].includes(scope)
@@ -53,7 +53,7 @@ function createServiceHandler({ audience, getScope, target, includeCustomerProfi
     }
     if (validateTenantBranch) {
       const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
-      const isPlatformUser = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+      const isPlatformUser = ['admin', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
       const tenantId = String((isPlatformUser ? req.get('x-tenant-id') : req.user?.tenantId || req.user?.app_metadata?.tenantId) || '').trim();
       const signedBranchId = req.user?.branchId || req.user?.app_metadata?.branchId;
       // The UI may select a different branch within the user's tenant. Prefer
