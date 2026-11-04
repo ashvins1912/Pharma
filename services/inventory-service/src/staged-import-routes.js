@@ -362,7 +362,7 @@ router.get('/imports/batches', requireServiceScope('inventory.import'), asyncHan
     StagedImportBatch.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
     StagedImportBatch.countDocuments(filter)
   ]);
-  return res.json({ items, page, limit, total, pages: Math.ceil(total / limit) });
+  return res.json({ items, page, limit, total, pages: Math.ceil(total / limit), publishEnabled: config.importsEnabled });
 }));
 
 router.get('/imports/batches/:batchId/rows', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
