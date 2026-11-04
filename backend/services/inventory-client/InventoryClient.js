@@ -75,10 +75,10 @@ export const inventoryClient = {
     return Boolean(baseUrl());
   },
 
-  async searchProducts({ tenantId = null, branchId = null, query = '', category = '', page = 1, limit = 50, userId = 'backend' } = {}) {
+  async searchProducts({ tenantId = null, branchId = null, query = '', category = '', hideRx = false, includeOutOfStock = false, sort = 'default', page = 1, limit = 50, userId = 'backend' } = {}) {
     return request('GET', '/api/v1/inventory/products/search', {
       userId,
-      params: { tenantId, branchId, q: query, category, page, limit }
+      params: { tenantId, branchId, q: query, category, hideRx, includeOutOfStock, sort, page, limit }
     });
   },
 
