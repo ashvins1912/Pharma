@@ -561,3 +561,183 @@ html.dark .admin-screen :where(.overflow-x-auto) {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Fluid readability and touch sizing across phones, laptops and large displays. */
+.dashboard-shell {
+  max-width: 1920px;
+  padding-inline: clamp(0.5rem, 1.25vw, 1.75rem);
+}
+
+.dashboard-hero {
+  font-size: clamp(0.9375rem, 0.22vw + 0.875rem, 1.125rem);
+}
+
+.dashboard-nav-group {
+  padding: clamp(0.8rem, 0.8vw, 1.15rem);
+}
+
+.dashboard-nav-group-title {
+  font-size: clamp(0.75rem, 0.12vw + 0.72rem, 0.875rem);
+  letter-spacing: 0.055em;
+  margin-bottom: 0.8rem;
+}
+
+.dashboard-nav-group-items {
+  gap: clamp(0.55rem, 0.45vw, 0.8rem);
+}
+
+.dashboard-nav-group .dashboard-nav-item {
+  min-height: clamp(48px, 3.2vw, 58px);
+  padding: 0.7rem 0.85rem !important;
+  font-size: clamp(0.8125rem, 0.18vw + 0.77rem, 0.9375rem);
+  line-height: 1.35;
+  gap: 0.65rem;
+}
+
+.dashboard-nav-group .dashboard-nav-item > span:first-child {
+  flex-basis: 1.5rem;
+  width: 1.5rem;
+  font-size: 1.2rem;
+}
+
+.admin-screen {
+  font-size: clamp(0.9375rem, 0.22vw + 0.875rem, 1.125rem);
+  line-height: 1.55;
+  gap: clamp(1rem, 1.35vw, 1.6rem);
+}
+
+.admin-screen :where(h1) {
+  font-size: clamp(1.5rem, 1.05vw + 1.15rem, 2.15rem);
+}
+
+.admin-screen :where(h2) {
+  font-size: clamp(1.25rem, 0.72vw + 1rem, 1.75rem);
+}
+
+.admin-screen :where(h3) {
+  font-size: clamp(1.1rem, 0.48vw + 0.95rem, 1.45rem);
+}
+
+.admin-screen :where(h4) {
+  font-size: clamp(1rem, 0.3vw + 0.9rem, 1.2rem);
+}
+
+/* Tailwind's small fixed text utilities were too small on desktop displays. */
+.admin-screen :where(.text-xs) {
+  font-size: clamp(0.8125rem, 0.16vw + 0.77rem, 0.9375rem);
+  line-height: 1.45;
+}
+
+.admin-screen :where(.text-sm) {
+  font-size: clamp(0.9rem, 0.18vw + 0.85rem, 1.0625rem);
+  line-height: 1.5;
+}
+
+.admin-screen :where(.text-base) {
+  font-size: clamp(1rem, 0.22vw + 0.94rem, 1.1875rem);
+  line-height: 1.45;
+}
+
+.admin-screen :where([class~="text-[10px]"]) {
+  font-size: clamp(0.75rem, 0.12vw + 0.72rem, 0.875rem);
+  line-height: 1.4;
+}
+
+.admin-screen :where([class~="text-[11px]"]) {
+  font-size: clamp(0.8125rem, 0.14vw + 0.77rem, 0.9rem);
+  line-height: 1.45;
+}
+
+.admin-screen :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-height: clamp(46px, 3vw, 54px);
+  padding: 0.7rem 0.85rem;
+  font-size: clamp(0.9375rem, 0.18vw + 0.89rem, 1.0625rem);
+}
+
+.admin-screen :where(button) {
+  min-height: clamp(44px, 2.8vw, 52px);
+  padding-block: 0.65rem;
+  font-size: clamp(0.875rem, 0.16vw + 0.83rem, 1rem);
+}
+
+.admin-screen :where(th, td) {
+  padding-block: clamp(0.7rem, 0.6vw, 1rem);
+  padding-inline: clamp(0.75rem, 0.8vw, 1.1rem);
+}
+
+.admin-screen :where(article, .admin-panel) {
+  border-radius: clamp(1rem, 1vw, 1.35rem);
+}
+
+@media (min-width: 1440px) {
+  .dashboard-content {
+    gap: 1.6rem;
+  }
+
+  .admin-screen--matrix table,
+  .admin-screen--tenants table,
+  .admin-screen--audits table {
+    min-width: 900px;
+  }
+
+  .admin-screen :where(.overflow-x-auto) {
+    scrollbar-width: auto;
+  }
+}
+
+@media (max-width: 767px) {
+  .dashboard-shell {
+    padding-inline: 0.35rem;
+  }
+
+  .dashboard-nav-group-title {
+    font-size: 0.75rem;
+  }
+
+  .dashboard-nav-group .dashboard-nav-item {
+    min-height: 50px;
+    padding: 0.65rem 0.6rem !important;
+    font-size: 0.78rem;
+  }
+
+  .admin-screen {
+    font-size: 0.9375rem;
+    line-height: 1.55;
+  }
+
+  .admin-screen :where(.text-xs) {
+    font-size: 0.8125rem;
+  }
+
+  .admin-screen :where(.text-sm) {
+    font-size: 0.9rem;
+  }
+
+  .admin-screen :where([class~="text-[10px]"]) {
+    font-size: 0.75rem;
+  }
+
+  .admin-screen :where([class~="text-[11px]"]) {
+    font-size: 0.8rem;
+  }
+
+  .admin-screen :where(button) {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 380px) {
+  .dashboard-shell {
+    padding-inline: 0.2rem;
+  }
+
+  .dashboard-nav-group .dashboard-nav-item {
+    font-size: 0.75rem;
+    padding-inline: 0.5rem !important;
+  }
+
+  .admin-screen :where(button) {
+    font-size: 0.8125rem;
+  }
+}
+
