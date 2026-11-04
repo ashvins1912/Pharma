@@ -238,7 +238,7 @@ export default function AdminDashboardView() {
           count={pendingMedicineRequestCount}
           onOpen={() => document.getElementById('admin-medicine-requests')?.scrollIntoView({ behavior: 'smooth' })}
         />
-        <div id="admin-medicine-requests">
+        <div id="admin-medicine-requests" className="admin-screen admin-screen--requests">
           <AdminMedicineRequestsTab initialData={initialMedicineRequests} initialLoading={medicinePreloadLoading} onPendingCountRefresh={loadPendingMedicineRequestCount} />
         </div>
         {canViewSurplusSavings && (
@@ -646,7 +646,8 @@ export default function AdminDashboardView() {
           )}
 
             </div>
-          </section>        </div>
+          </section>
+        </div>
       </div>
 
       {/* Tab Content Display */}
@@ -668,7 +669,7 @@ export default function AdminDashboardView() {
       )}
       {adminTab === 'csquare' && canViewCSquare && <div className="admin-screen admin-screen--csquare"><AdminCSquareTab /></div>}
       {adminTab === 'promotions' && canViewPromotions && <div className="admin-screen admin-screen--promotions"><CustomerPromotionsView canManage={hasPermission('promotions.manage')} /></div>}
-      {adminTab === 'surplusSavings' && canViewSurplusSavings && <SurplusSavingsManager canManage={hasPermission('promotions.manage')} />}
+      {adminTab === 'surplusSavings' && canViewSurplusSavings && <div className="admin-screen admin-screen--surplus-savings"><SurplusSavingsManager canManage={hasPermission('promotions.manage')} /></div>}
 
       {adminTab === 'fulfillment' && canViewFulfillment && (
         <div className="admin-screen admin-screen--fulfillment space-y-3">
