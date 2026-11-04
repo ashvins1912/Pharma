@@ -42,7 +42,7 @@ async function resolveScope(req, res, { requireAdmin = false } = {}) {
     }
   }
   const tenant = await tenantService.getTenantById(tenantId);
-  if (!tenant || tenant.status !== 'ACTIVE') {
+  if (!tenant || (!platform && tenant.status !== 'ACTIVE')) {
     res.status(404).json({ success: false, code: 'TENANT_NOT_FOUND', message: 'The selected active pharmacy tenant was not found.' });
     return null;
   }
