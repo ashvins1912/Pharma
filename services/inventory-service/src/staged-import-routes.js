@@ -85,6 +85,9 @@ function normalizeRow(raw, tenantId, usedSkus) {
   const stockRaw = pick(raw, 'Stock', 'stock', 'Tot.Bal.Qty', 'Total Balance Qty', 'Quantity', 'Stock Quantity');
   const price = Number(priceRaw);
   const stockQuantity = Number(stockRaw);
+  const baseCostRaw = pick(raw, 'Base Cost Price', 'baseCostPrice', 'Cost Price', 'Base Price');
+  const baseCostPrice = baseCostRaw === undefined || baseCostRaw === '' ? null : Number(baseCostRaw);
+  const marginTier = String(pick(raw, 'Margin Tier', 'marginTier') || 'LOW').trim().toUpperCase();
   const errors = [];
   if (!name) errors.push('Medicine name is required.');
   if (priceRaw === undefined || priceRaw === '' || !Number.isFinite(price) || price < 0) errors.push('Price must be a valid non-negative number.');
@@ -113,7 +116,7 @@ function normalizeRow(raw, tenantId, usedSkus) {
     description: String(pick(raw, 'Description', 'description') || '').trim(),
     imageUrl: String(pick(raw, 'Image URL', 'imageUrl') || '').trim(),
     requiresPrescription: ['true', 'yes', '1'].includes(String(pick(raw, 'Requires Prescription', 'requiresPrescription') || '').toLowerCase()),
-    price, stockQuantity,
+    price, stockQuantity, baseCostPrice, marginTier,
     batchNumber: String(pick(raw, 'Batch Number', 'batchNumber', 'Batch No', 'Batch') || '').trim(),
     expiryDate
   };
@@ -174,7 +177,7 @@ async function publishRows(batch, rows, req) {
         Object.assign(product, {
           name: v.name, genericName: v.genericName, strength: v.strength, form: v.form,
           manufacturer: v.manufacturer, category: v.category, description: v.description,
-          imageUrl: v.imageUrl, requiresPrescription: v.requiresPrescription, active: true,
+          imageUrl: v.imageUrl, requiresPrescription: v.requiresPrescription, baseCostPrice: v.baseCostPrice ?? undefined, marginTier: v.marginTier || 'LOW', active: true,
           version: Number(product.version || 0) + 1
         });
         await product.save({ session });
@@ -413,19 +416,23 @@ router.patch('/imports/batches/:batchId/rows/:rowId', requireServiceScope('inven
   if (!row) return res.status(404).json({ message: 'Import row was not found.' });
   if (row.status === 'PUBLISHED') return res.status(409).json({ message: 'Unpublish this row before editing it.' });
   if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) return res.status(400).json({ message: 'Provide row fields to update.' });
-  const allowed = ['sku','name','genericName','strength','form','manufacturer','category','description','price','stockQuantity','batchNumber','expiryDate','requiresPrescription','imageUrl'];
+  const allowed = ['sku','name','genericName','strength','form','manufacturer','category','description','price','stockQuantity','batchNumber','expiryDate','requiresPrescription','imageUrl','baseCostPrice','marginTier'];
   const patch = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowed.includes(key)));
   const next = { ...row.normalized, ...patch };
   next.sku = String(next.sku || '').trim().toUpperCase();
   next.name = String(next.name || '').trim();
   next.price = Number(next.price);
   next.stockQuantity = Number(next.stockQuantity);
+  if (next.baseCostPrice !== null && next.baseCostPrice !== undefined && next.baseCostPrice !== '') next.baseCostPrice = Number(next.baseCostPrice);
+  next.marginTier = String(next.marginTier || 'LOW').toUpperCase();
   next.batchNumber = String(next.batchNumber || '').trim();
   const errors = [];
   if (!next.sku) errors.push('SKU is required.');
   if (!next.name) errors.push('Medicine name is required.');
   if (!Number.isFinite(next.price) || next.price < 0) errors.push('Price must be a non-negative number.');
   if (!Number.isSafeInteger(next.stockQuantity) || next.stockQuantity < 0) errors.push('Stock must be a non-negative integer.');
+  if (next.baseCostPrice !== null && next.baseCostPrice !== undefined && (!Number.isFinite(next.baseCostPrice) || next.baseCostPrice < 0)) errors.push('Base cost price must be a non-negative number.');
+  if (!['LOW','MID','HIGH'].includes(next.marginTier)) errors.push('Margin tier must be LOW, MID or HIGH.');
   if (next.expiryDate && !Number.isFinite(new Date(next.expiryDate).getTime())) errors.push('Expiry date is invalid.');
   if (next.expiryDate && new Date(next.expiryDate) < new Date(new Date().toISOString().slice(0,10))) errors.push('Expired medicine batches cannot be published.');
   const duplicate = await StagedImportRow.findOne({ batchId: row.batchId, tenantId, branchId, rowId: { $ne: row.rowId }, 'normalized.sku': next.sku, 'normalized.batchNumber': next.batchNumber });
