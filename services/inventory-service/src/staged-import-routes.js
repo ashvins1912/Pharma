@@ -25,7 +25,7 @@ const scope = req => ({ tenantId: req.service?.tenantId || null, branchId: req.s
 const actor = req => req.service?.userId || req.service?.name || 'unknown';
 const requirePublishEnabled = (_req, res, next) => config.importsEnabled
   ? next()
-  : res.status(503).json({ code: 'INVENTORY_IMPORT_PUBLISH_DISABLED', message: 'Batch staging and review are available, but publishing is disabled. Enable INVENTORY_IMPORTS_ENABLED only in the isolated test environment to publish test rows.' });
+  : res.status(503).json({ code: 'INVENTORY_IMPORT_PUBLISH_DISABLED', message: 'Batch staging and review are available, but publishing is disabled by deployment configuration. Enable it only after confirming transaction-capable MongoDB and an approved rollout.' });
 const cleanName = value => path.basename(String(value || 'upload.xlsx')).replace(/[^a-zA-Z0-9._-]/g, '_');
 const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, character => `\\${character}`);
 const normHeader = value => String(value ?? '').trim().toLowerCase().replace(/[.\s_/-]+/g, '');
