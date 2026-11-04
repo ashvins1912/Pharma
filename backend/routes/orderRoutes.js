@@ -728,7 +728,6 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
                 addressDetails: claimed.addressDetails || {}, coordinates: claimed.coordinates,
                 paymentMethod: claimed.paymentMethod || 'Cash on Delivery (COD)',
                 source: claimed.sourceType === 'MEDICINE_REQUEST' ? 'MEDICINE_REQUEST' : 'WEB',
-                medicineRequestId: claimed.sourceType === 'MEDICINE_REQUEST' ? claimed.sourceId : null,
                 customerName: claimed.orderedForName || 'Customer',
                 customerMobile: claimed.customerMobile || '',
                 orderedForName: claimed.orderedForName || 'Customer',
