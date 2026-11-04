@@ -146,9 +146,15 @@ function snapshot(doc, fields) {
   for (const key of fields) out[key] = doc[key] ?? null;
   return out;
 }
+async function assertTransactionSupport() {
+  if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) throw Object.assign(new Error('Inventory database is unavailable.'), { statusCode: 503 });
+  const hello = await mongoose.connection.db.admin().command({ hello: 1 });
+  if (!hello.setName && hello.msg !== 'isdbgrid') throw Object.assign(new Error('Publishing and rollback require MongoDB replica-set or sharded-cluster transactions.'), { statusCode: 503, code: 'IMPORT_TRANSACTIONS_REQUIRED' });
+}
 async function publishRows(batch, rows, req) {
   if (!rows.length) throw Object.assign(new Error('Select at least one row to publish.'), { statusCode: 400 });
   if (rows.length > 200) throw Object.assign(new Error('Publish at most 200 rows per request. Use multiple batches for larger selections.'), { statusCode: 413 });
+  await assertTransactionSupport();
   const session = await mongoose.startSession();
   const published = [];
   try {
@@ -231,6 +237,7 @@ async function publishRows(batch, rows, req) {
 async function unpublishRows(batch, rows, req) {
   if (!rows.length) throw Object.assign(new Error('Select at least one published row.'), { statusCode: 400 });
   if (rows.length > 200) throw Object.assign(new Error('Unpublish at most 200 rows per request.'), { statusCode: 413 });
+  await assertTransactionSupport();
   const session = await mongoose.startSession();
   const changed = [];
   try {
