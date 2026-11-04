@@ -154,6 +154,46 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
   });
   app.use('/api', async (req, res, next) => {
     const currentUrl = req.originalUrl || req.url || '';
+    const currentPath = currentUrl.split('?')[0];
+    const isNearbyDiscovery = req.method === 'GET' && currentPath === '/api/tenants/nearby';
+    const hasSessionCredential = Boolean(
+      req.get('authorization')?.startsWith('Bearer ')
+      || req.get('cookie')?.match(/(?:^|;\\s*)access_token=/)
+    );
+
+    // Preserve public discovery for customers, but never let an authenticated
+    // tenant session use the public route to enumerate other pharmacies.
+    if (isNearbyDiscovery && hasSessionCredential) {
+      return authenticateUser(req, res, async () => {
+        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+        const isPlatformUser = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const tenantId = String(req.user?.app_metadata?.tenantId || req.user?.tenantId || '').trim();
+        if (!isPlatformUser && tenantId) {
+          const permission = 'profile.read';
+          if (!isGatewayPermissionAllowed(req.user, permission)) {
+            return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access to your pharmacy profile is denied.' }, requestId: req.requestId });
+          }
+          try {
+            const trustedToken = createTrustedBackendRequestToken({
+              user: req.user,
+              method: req.method,
+              path: currentUrl,
+              permission,
+              requestId: req.requestId
+            }, gatewayConfig);
+            req.gatewayTrusted = true;
+            return proxyRequest(req, res, gatewayConfig.backendApiUrl, `Bearer ${trustedToken}`, gatewayConfig, 'Backend');
+          } catch (error) {
+            console.error('API Gateway could not create tenant-scoped nearby credential:', { requestId: req.requestId, code: error.code || error.name });
+            return res.status(503).json({ success: false, error: { code: 'TRUSTED_REQUEST_UNAVAILABLE', message: 'Tenant-scoped pharmacy discovery is unavailable.' }, requestId: req.requestId });
+          }
+        }
+        // Customers retain the public discovery response. Platform admins may
+        // use their existing platform-scoped tooling without tenant filtering.
+        return proxyRequest(req, res, gatewayConfig.backendApiUrl, null, gatewayConfig, 'Backend');
+      });
+    }
+
     if (publicApiPath(req.method, currentUrl)
       || (!gatewayConfig.orderServiceUrl && currentUrl.startsWith('/api/v1/orders'))) {
       // Public catalog endpoints and unconfigured order service fallback
