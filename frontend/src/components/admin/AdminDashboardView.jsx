@@ -249,7 +249,7 @@ export default function AdminDashboardView() {
   }
 
   return (
-    <div className="min-w-0 space-y-6 animate-fade-in">
+    <div className="dashboard-shell min-w-0 space-y-6 animate-fade-in">
       
       {/* Top Banner & Metric Cards */}
       <div className="dashboard-hero bg-slate-950 text-white rounded-3xl p-4 sm:p-5 shadow-md space-y-4">
@@ -393,7 +393,7 @@ export default function AdminDashboardView() {
           </span>
         </div>
 
-        <div className="dashboard-workspace-nav flex flex-wrap gap-2 pt-1" role="group" aria-label="Operations workspaces">
+        <div className="dashboard-workspace-nav flex flex-wrap gap-2 pt-1" role="navigation" aria-label="Admin operations navigation">
           <section className="dashboard-nav-group" aria-label="Orders & fulfilment">
             <h4 className="dashboard-nav-group-title">Orders & fulfilment</h4>
             <div className="dashboard-nav-group-items">
@@ -650,6 +650,7 @@ export default function AdminDashboardView() {
       </div>
 
       {/* Tab Content Display */}
+      <main className="dashboard-content" id="admin-workspace-content" tabIndex="-1">
       {adminTab === 'tenants' && canViewTenants && (
         <PlatformTenantsView />
       )}
@@ -844,6 +845,7 @@ export default function AdminDashboardView() {
 
 
 
+      </main>
     </div>
   );
 }
