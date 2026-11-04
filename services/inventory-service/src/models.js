@@ -57,7 +57,12 @@ const reservationSchema = new mongoose.Schema({
   items: [{
     productId: { type: mongoose.Schema.Types.ObjectId, required: true },
     sku: { type: 'string', required: true },
-    quantity: { type: 'number', required: true, min: 1 }
+    quantity: { type: 'number', required: true, min: 1 },
+    allocations: [{
+      inventoryId: { type: mongoose.Schema.Types.ObjectId, required: true },
+      batchNumber: { type: 'string', default: '' },
+      quantity: { type: 'number', required: true, min: 1 }
+    }]
   }]
 }, { timestamps: true });
 
