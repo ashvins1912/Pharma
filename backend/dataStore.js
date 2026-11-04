@@ -1196,6 +1196,7 @@ export const dataStore = {
 
     async reserveOrder(orderData, actor = 'Customer') {
         const selectedTenantId = String(orderData.tenantId || '').trim();
+        const selectedBranchId = String(orderData.branchId || '').trim();
         if (!selectedTenantId) throw inventoryError('Select an active pharmacy before creating an order.', 400);
         if (!orderData.userId) throw inventoryError('An authenticated customer is required to create an order.', 401);
         if (!orderData.deliveryAddress?.trim() || !hasValidCoordinates(orderData.coordinates)) {
@@ -1249,6 +1250,7 @@ export const dataStore = {
                             throw inventoryError(`Invalid medicine ID: ${medicineId}`);
                         }
                         const medicineFilter = { _id: medicineId, tenantId: selectedTenantId };
+                        if (selectedBranchId) medicineFilter.branchId = selectedBranchId;
                         const medicine = await Medicine.findOne(medicineFilter).session(session);
                         if (!medicine) throw inventoryError('The selected pharmacy does not have this medicine in its catalogue.', 404);
                         if (medicine.expiryDate && new Date(medicine.expiryDate) <= now) {
@@ -1542,7 +1544,8 @@ export const dataStore = {
 
             for (const [medicineId, quantity] of quantities) {
                 const medicine = inMemoryMedicines.find(item => String(item._id) === medicineId
-                    && String(item.tenantId || '') === selectedTenantId);
+                    && String(item.tenantId || '') === selectedTenantId
+                    && (!selectedBranchId || String(item.branchId || '') === selectedBranchId));
                 if (!medicine) throw inventoryError(`Medicine ${medicineId} was not found.`, 404);
                 if (medicine.expiryDate && new Date(medicine.expiryDate) <= now) {
                     throw inventoryError(`${medicine.name} is expired and cannot be ordered.`);
