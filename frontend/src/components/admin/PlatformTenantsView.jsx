@@ -587,8 +587,19 @@ export default function PlatformTenantsView() {
                     ['Legal name', id => compareDetails[id]?.legalName || safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.legalName || '—'],
                     ['Contact email', id => compareDetails[id]?.contactEmail || safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.contactEmail || '—'],
                     ['Contact phone', id => compareDetails[id]?.contactPhone || safeTenants.find(tenant => String(tenant.id || tenant._id) === id)?.contactPhone || '—'],
+                    ['Registered address', id => {
+                      const address = compareDetails[id]?.address || {};
+                      return [address.street, address.city, address.state, address.pincode].filter(Boolean).join(', ') || '—';
+                    }],
+                    ['Geolocation', id => {
+                      const point = compareDetails[id]?.geolocation || {};
+                      return point.latitude != null && point.longitude != null ? `${point.latitude}, ${point.longitude}` : 'Not configured';
+                    }],
                     ['Branches', id => Array.isArray(compareDetails[id]?.branches) ? compareDetails[id].branches.length : 'Not available'],
+                    ['Active branches', id => Array.isArray(compareDetails[id]?.branches) ? compareDetails[id].branches.filter(branch => String(branch.status || '').toUpperCase() === 'ACTIVE').length : 'Not available'],
+                    ['Branch locations', id => Array.isArray(compareDetails[id]?.branches) && compareDetails[id].branches.length ? compareDetails[id].branches.map(branch => [branch.name || branch.code, branch.address?.city, branch.address?.state].filter(Boolean).join(' · ')).join(' | ') : 'No branch records'],
                     ['Memberships', id => Array.isArray(compareDetails[id]?.memberships) ? compareDetails[id].memberships.length : 'Not available'],
+                    ['Active memberships', id => Array.isArray(compareDetails[id]?.memberships) ? compareDetails[id].memberships.filter(member => String(member.status || '').toUpperCase() === 'ACTIVE').length : 'Not available'],
                     ['Tenant as main branch', id => compareDetails[id]?.usesTenantAsBranch === true ? 'Yes' : 'No / Not configured']
                   ].map(([label, value]) => <tr key={label}><th className="p-3 font-bold text-slate-600">{label}</th>{compareTenantIds.map(id => <td key={id} className="p-3 text-slate-800">{value(id)}</td>)}</tr>)}
                 </tbody>
