@@ -477,6 +477,25 @@ test('gateway requires admin role for Inventory adjustment and signs import scop
 });
 
 
+test('pharmacy profile reads are available to tenant admins but policy changes remain Super Admin-only', () => {
+  assert.equal(resolveGatewayCapability('GET', '/api/v1/vendor/profile'), 'tenant.profile.read');
+  assert.equal(resolveGatewayCapability('GET', '/api/v1/vendor/profile/edit-policy'), 'tenant.profile.read');
+  assert.equal(resolveGatewayCapability('PATCH', '/api/v1/vendor/profile'), 'profile.write');
+  assert.equal(resolveGatewayCapability('PATCH', '/api/v1/vendor/profile/edit-policy'), 'tenants.manage');
+
+  for (const role of ['TENANT_ADMIN', 'TENANT_OWNER', 'OWNER']) {
+    assert.equal(isGatewayPermissionAllowed({ role }, 'tenant.profile.read'), true);
+    assert.equal(isGatewayPermissionAllowed({ role }, 'tenants.manage'), false);
+  }
+  assert.equal(isGatewayPermissionAllowed({
+    role: 'TENANT_ADMIN',
+    permissions: ['*'],
+    revokedPermissions: ['tenant.profile.read']
+  }, 'tenant.profile.read'), false);
+  assert.equal(isGatewayPermissionAllowed({ role: 'SUPER_ADMIN' }, 'tenant.profile.read'), true);
+  assert.equal(isGatewayPermissionAllowed({ role: 'SUPER_ADMIN' }, 'tenants.manage'), true);
+});
+
 test('tenant branch CRUD endpoints are registered and tenant admins are allowed by gateway policy', () => {
   assert.equal(resolveGatewayCapability('GET', '/api/tenant/branches?page=1'), 'tenant.branches.read');
   assert.equal(resolveGatewayCapability('POST', '/api/tenant/branches'), 'tenant.branches.manage');
