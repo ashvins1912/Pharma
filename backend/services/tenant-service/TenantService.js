@@ -193,8 +193,8 @@ export class TenantService {
                     { name: pattern }, { legalName: pattern }, { slug: pattern },
                     { code: pattern }, { contactEmail: pattern }, { contactPhone: pattern }
                 ];
-                const idMatch = { _id: search };
-                query.$or = mongoose.isValidObjectId(search) ? [...fields, idMatch] : fields;
+                const idMatch = { _id: new RegExp(escapeRegex(search), 'i') };
+                query.$or = [...fields, idMatch];
             }
             let cursor = Tenant.find(query);
             if (sortRecent) cursor = cursor.sort({ createdAt: -1, _id: -1 });
