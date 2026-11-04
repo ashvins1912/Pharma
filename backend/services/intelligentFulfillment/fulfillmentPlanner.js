@@ -23,7 +23,7 @@ const scoreAlternative = (requested, candidate) => {
   if (!candidateComposition || unknownCompositions.has(candidateComposition) || requestedComposition !== candidateComposition) return null;
   if (!requestedStrength || !candidateStrength || requestedStrength !== candidateStrength) return null;
   if (!requestedForm || !candidateForm || requestedForm !== candidateForm) return null;
-  if (Boolean(requested.requiresPrescription) !== Boolean(candidate.requiresPrescription ?? candidate.isPrescriptionRequired)) return null;
+  if (Boolean(requested.requiresPrescription || requested.isPrescriptionRequired) !== Boolean(candidate.requiresPrescription || candidate.isPrescriptionRequired)) return null;
   const price = Number(candidate.price || 0);
   if (!Number.isFinite(price) || price < 0) return null;
   return {
@@ -40,7 +40,7 @@ const scoreAlternative = (requested, candidate) => {
       ? Math.round((1 - price / Number(candidate.basePrice)) * 10000) / 100
       : 0,
     discountedUnitPrice: roundMoney(price),
-    requiresPharmacistApproval: Boolean(requested.requiresPrescription || candidate.requiresPrescription || candidate.isPrescriptionRequired),
+    requiresPharmacistApproval: Boolean(requested.requiresPrescription || requested.isPrescriptionRequired || candidate.requiresPrescription || candidate.isPrescriptionRequired),
     substitutionRequiresCustomerConsent: true
   };
 };
