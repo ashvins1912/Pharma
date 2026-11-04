@@ -347,7 +347,7 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
       if (existing.fileSha256 !== fileSha256) throw Object.assign(new Error('Idempotency key was already used for another workbook.'), { statusCode: 409 });
       return res.status(202).json({ jobId: existing.batchId, batchId: existing.batchId, status: existing.status, totalRecords: existing.totalRows, processedRecords: existing.totalRows, successfulRecords: existing.validRows, failedRecords: existing.invalidRows });
     }
-    const approved = await previewImportFile({ filePath: req.file.path, tenantId, branchId });
+    const approved = await previewImportFile({ filePath: req.file.path, tenantId, branchId, stockMode: req.body?.stockMode });
     if (approved.previewFingerprint !== req.body.previewFingerprint) {
       throw Object.assign(new Error('The workbook differs from the reviewed preview. Preview it again before staging.'), { statusCode: 409 });
     }
