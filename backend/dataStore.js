@@ -1299,17 +1299,20 @@ export const dataStore = {
                         }
 
                         const catalogPrice = Number(medicine.price);
-                        const discountPercentage = Math.min(100, Math.max(0, Number(medicine.discountPercentage || 0)));
-                        const discountedCatalogPrice = roundCurrency(catalogPrice * (1 - discountPercentage / 100));
-                        if (requested.unitPrice != null && Math.abs(requested.unitPrice - discountedCatalogPrice) > 0.01) {
-                            throw inventoryError('The selected discounted product price has changed. Refresh the fulfilment options before confirming.', 409);
+                        const basePrice = Math.max(catalogPrice, Number(medicine.basePrice ?? catalogPrice));
+                        const discountPercentage = basePrice > catalogPrice
+                            ? roundCurrency((1 - catalogPrice / basePrice) * 100)
+                            : Math.min(100, Math.max(0, Number(medicine.discountPercentage || 0)));
+                        if (requested.unitPrice != null && Math.abs(requested.unitPrice - catalogPrice) > 0.01) {
+                            throw inventoryError('The selected catalogue price has changed. Refresh the fulfilment options before confirming.', 409);
                         }
-                        const price = requested.unitPrice == null ? catalogPrice : discountedCatalogPrice;
+                        const price = requested.unitPrice == null ? catalogPrice : catalogPrice;
                         totalAmount += price * quantity;
                         medicineItems.push({
                             medicineId: medicine._id,
                             quantity,
                             price,
+                            basePrice,
                             baseCostPrice: Number(medicine.baseCostPrice ?? price),
                             discountPercentage: Number(medicine.discountPercentage || 0),
                             marginTier: ['LOW', 'MID', 'HIGH'].includes(medicine.marginTier)
@@ -1324,6 +1327,7 @@ export const dataStore = {
                             name: medicine.name,
                             sku: medicine.sku || medicine.code || '',
                             price,
+                            basePrice,
                             baseCostPrice: Number(medicine.baseCostPrice ?? price),
                             discountPercentage: Number(medicine.discountPercentage || 0),
                             marginTier: ['LOW', 'MID', 'HIGH'].includes(medicine.marginTier)
@@ -1587,12 +1591,14 @@ export const dataStore = {
                 medicine.reservedQuantity = currentReserved + quantity;
                 reservedMedicines.push({ medicine, quantity });
                 const catalogPrice = Number(medicine.price);
-                const discountPercentage = Math.min(100, Math.max(0, Number(medicine.discountPercentage || 0)));
-                const discountedCatalogPrice = roundCurrency(catalogPrice * (1 - discountPercentage / 100));
-                if (requested.unitPrice != null && Math.abs(requested.unitPrice - discountedCatalogPrice) > 0.01) {
-                    throw inventoryError('The selected discounted product price has changed. Refresh the fulfilment options before confirming.', 409);
+                const basePrice = Math.max(catalogPrice, Number(medicine.basePrice ?? catalogPrice));
+                const discountPercentage = basePrice > catalogPrice
+                    ? roundCurrency((1 - catalogPrice / basePrice) * 100)
+                    : Math.min(100, Math.max(0, Number(medicine.discountPercentage || 0)));
+                if (requested.unitPrice != null && Math.abs(requested.unitPrice - catalogPrice) > 0.01) {
+                    throw inventoryError('The selected catalogue price has changed. Refresh the fulfilment options before confirming.', 409);
                 }
-                const price = requested.unitPrice == null ? catalogPrice : discountedCatalogPrice;
+                const price = requested.unitPrice == null ? catalogPrice : catalogPrice;
                 totalAmount += price * quantity;
                 medicineItems.push({
                     medicineId,
