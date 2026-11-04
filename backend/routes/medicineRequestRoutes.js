@@ -925,6 +925,7 @@ router.get('/:id/fulfillment/preview', authenticateUser, requirePermission('medi
 router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
     if (!requireDatabase(res)) return;
     let waitlistCase = null;
+    let createdOrder = null;
     let claimed = false;
     try {
         const requestId = req.params.id;
@@ -1038,18 +1039,17 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
                 })),
                 waitDays: Number(req.body.waitDays),
                 waitUntil: new Date(now.getTime() + Number(req.body.waitDays) * 86400000),
-                idempotencyKey: 'medicine-request:' + String(request._id),
+                idempotencyKey: 'medicine-request:' + String(request._id) + ':' + new mongoose.Types.ObjectId().toString(),
                 auditTrail: [{ action: 'MEDICINE_REQUEST_WAITLISTED', actorId: customerId, at: now, waitDays: Number(req.body.waitDays) }]
             });
         }
 
-        let order = null;
         if (orderItems.length) {
             const coordinates = request.coordinates || request.addressDetails?.coordinates;
             if (!coordinates || !Number.isFinite(Number(coordinates.lat)) || !Number.isFinite(Number(coordinates.lng))) {
                 throw Object.assign(new Error('A verified delivery map pin is required before ordering available medicines. Please update your delivery address.'), { statusCode: 409 });
             }
-            order = await dataStore.reserveOrder({
+            createdOrder = await dataStore.reserveOrder({
                 userId: customerId,
                 tenantId,
                 branchId,
@@ -1071,32 +1071,46 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
                 medicineRequestId: String(request._id)
             }, 'Customer medicine request fulfilment');
         }
-        if (waitlistCase && order?._id) {
-            await FulfillmentCase.updateOne({ _id: waitlistCase._id }, { $set: { parentOrderId: String(order._id) } });
+        if (waitlistCase && createdOrder?._id) {
+            await FulfillmentCase.updateOne({ _id: waitlistCase._id }, { $set: { parentOrderId: String(createdOrder._id) } });
         }
-        const finalStatus = order ? 'CONVERTED_TO_ORDER' : 'WAITING_FOR_STOCK';
+        const finalStatus = createdOrder ? 'CONVERTED_TO_ORDER' : 'WAITING_FOR_STOCK';
         const updatedRequest = await MedicineRequest.findOneAndUpdate(
             { _id: request._id, customerId, status: 'FULFILLMENT_PROCESSING' },
             {
                 $set: {
                     status: finalStatus,
-                    convertedOrderId: order?._id ? String(order._id) : null,
+                    convertedOrderId: createdOrder?._id ? String(createdOrder._id) : null,
                     fulfillmentCaseId: waitlistCase?._id || null,
                     approvedAt: new Date(),
                     customerResponse: { respondedAt: new Date(), responseNote: 'Customer confirmed intelligent fulfilment options.' }
                 },
-                $push: { auditTrail: { action: order ? 'SPLIT_FULFILLMENT_ORDER_CREATED' : 'MEDICINE_REQUEST_WAITLISTED', actorId: customerId, role: 'Customer', timestamp: new Date(), notes: 'Customer confirmed available stock and waitlist choices.' } }
+                $push: { auditTrail: { action: createdOrder ? 'SPLIT_FULFILLMENT_ORDER_CREATED' : 'MEDICINE_REQUEST_WAITLISTED', actorId: customerId, role: 'Customer', timestamp: new Date(), notes: 'Customer confirmed available stock and waitlist choices.' } }
             },
             { new: true }
         ).lean();
         return res.status(201).json({
-            success: true, order, request: updatedRequest, waitlist: waitlistCase,
+            success: true, order: createdOrder, request: updatedRequest, waitlist: waitlistCase,
             planSummary: plan.summary,
-            message: order && waitlistCase ? 'Available medicines were ordered and the remaining quantity was added to your stock waitlist.'
-                : order ? 'Available medicines were ordered successfully.'
+            message: createdOrder && waitlistCase ? 'Available medicines were ordered and the remaining quantity was added to your stock waitlist.'
+                : createdOrder ? 'Available medicines were ordered successfully.'
                 : 'Your medicine request is now waiting for stock.'
         });
     } catch (error) {
+        if (createdOrder?._id) {
+            // The inventory reservation/order transaction has committed. Never reopen
+            // the proposal and risk creating a second order if a later update fails.
+            const recovered = await MedicineRequest.findOneAndUpdate(
+                { _id: req.params.id, customerId: String(req.user.sub), status: 'FULFILLMENT_PROCESSING' },
+                { $set: { status: 'CONVERTED_TO_ORDER', convertedOrderId: String(createdOrder._id), fulfillmentCaseId: waitlistCase?._id || null } },
+                { new: true }
+            ).lean().catch(() => null);
+            return res.status(202).json({
+                success: true, order: createdOrder, request: recovered,
+                waitlist: waitlistCase, recoveryRequired: !recovered,
+                message: 'Your available medicines were reserved and an order was created. Refresh your requests to see the latest fulfilment status.'
+            });
+        }
         if (waitlistCase) {
             await FulfillmentCase.updateOne({ _id: waitlistCase._id }, { $set: { status: 'CANCELLED' } }).catch(() => {});
         }
