@@ -168,6 +168,7 @@ const orderSchema = new mongoose.Schema({
         default: 'DIRECT'
     },
     medicineRequestId: { type: String, default: null },
+    fulfillmentCaseId: { type: String, default: null, index: true },
     addressId: { type: mongoose.Schema.Types.ObjectId, ref: 'UserAddress', default: null },
     deliverySlot: { type: Object, default: null },
     rider: {
