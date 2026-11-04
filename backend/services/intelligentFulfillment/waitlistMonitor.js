@@ -1,0 +1,75 @@
+import FulfillmentCase from '../../models/FulfillmentCase.js';
+import Medicine from '../../models/Medicine.js';
+import { getIsConnected } from '../../config/db.js';
+import { domainEvents } from '../../shared/events/DomainEvents.js';
+
+const available = medicine => Math.max(0,
+  Number(medicine?.stockQuantity ?? medicine?.stock ?? medicine?.quantity ?? 0)
+  - Number(medicine?.reservedQuantity || 0));
+
+export async function refreshStockWaitlistCases({ limit = 250, now = new Date() } = {}) {
+  if (!getIsConnected()) return { scanned: 0, ready: 0, expired: 0 };
+  const cases = await FulfillmentCase.find({
+    status: { $in: ['WAITING_FOR_STOCK', 'PARTIALLY_FULFILLED'] }
+  }).sort({ updatedAt: 1 }).limit(Math.max(1, Math.min(1000, Number(limit) || 250))).lean();
+  let ready = 0;
+  let expired = 0;
+  for (const entry of cases) {
+    const oldCheck = entry.lastAvailabilityCheckAt || null;
+    if (entry.waitUntil && new Date(entry.waitUntil) <= now) {
+      const result = await FulfillmentCase.updateOne({
+        _id: entry._id, status: entry.status, lastAvailabilityCheckAt: oldCheck
+      }, {
+        $set: { status: 'EXPIRED', lastAvailabilityCheckAt: now },
+        $push: { auditTrail: { action: 'WAITLIST_EXPIRED', at: now, actorId: 'system' } }
+      });
+      if (result.modifiedCount) {
+        expired += 1;
+        domainEvents.emitDomainEvent('FULFILLMENT_WAITLIST_EXPIRED', entry.caseNumber, {
+          recipientUserId: entry.customerId, caseNumber: entry.caseNumber
+        }, 'system', entry.tenantId, entry.branchId);
+      }
+      continue;
+    }
+    const ids = [...new Set((entry.lines || []).map(line => String(line.productId || '')).filter(Boolean))];
+    const products = ids.length ? await Medicine.find({
+      _id: { $in: ids }, tenantId: entry.tenantId
+    }).select('_id stockQuantity stock quantity reservedQuantity expiryDate isActive').lean() : [];
+    const byId = new Map(products.map(product => [String(product._id), product]));
+    let anyAvailable = false;
+    let allAvailable = true;
+    let newlyAvailable = false;
+    const lines = (entry.lines || []).map(line => {
+      const product = byId.get(String(line.productId));
+      const sellable = product && product.isActive !== false
+        && (!product.expiryDate || new Date(product.expiryDate) > now);
+      const quantity = sellable ? Math.min(Number(line.waitingQuantity || 0), available(product)) : 0;
+      const previousNotified = Number(line.notifiedAvailableQuantity || 0);
+      if (quantity > 0) anyAvailable = true;
+      if (quantity < Number(line.waitingQuantity || 0)) allAvailable = false;
+      if (quantity > previousNotified) newlyAvailable = true;
+      return { ...line, allocatedQuantity: quantity, notifiedAvailableQuantity: Math.max(previousNotified, quantity) };
+    });
+    const nextStatus = allAvailable ? 'READY_FOR_CONFIRMATION' : anyAvailable ? 'PARTIALLY_FULFILLED' : 'WAITING_FOR_STOCK';
+    const result = await FulfillmentCase.updateOne({
+      _id: entry._id, status: entry.status, lastAvailabilityCheckAt: oldCheck
+    }, {
+      $set: { lines, status: nextStatus, lastAvailabilityCheckAt: now },
+      ...(newlyAvailable ? { $push: { auditTrail: { action: 'STOCK_AVAILABILITY_UPDATED', at: now, actorId: 'system', details: { status: nextStatus } } } } : {})
+    });
+    if (result.modifiedCount && newlyAvailable) {
+      ready += 1;
+      domainEvents.emitDomainEvent('FULFILLMENT_STOCK_AVAILABLE', entry.caseNumber, {
+        recipientUserId: entry.customerId,
+        caseNumber: entry.caseNumber,
+        status: nextStatus,
+        lines: lines.map(line => ({
+          name: line.name,
+          requestedQuantity: line.waitingQuantity,
+          availableToConfirm: line.allocatedQuantity
+        }))
+      }, 'system', entry.tenantId, entry.branchId);
+    }
+  }
+  return { scanned: cases.length, ready, expired };
+}
