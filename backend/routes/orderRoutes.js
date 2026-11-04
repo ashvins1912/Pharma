@@ -385,7 +385,7 @@ router.get('/fulfillment/waitlist', authenticateUser, async (req, res) => {
     try {
         const cases = await FulfillmentCase.find({
             customerId: String(req.user.sub),
-            status: { $in: ['AWAITING_CUSTOMER_DECISION', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'] }
+            status: { $in: ['AWAITING_CUSTOMER_DECISION', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED', 'CONFIRMING'] }
         }).sort({ createdAt: -1 }).limit(50).lean();
         return res.json({ items: cases });
     } catch (error) {
