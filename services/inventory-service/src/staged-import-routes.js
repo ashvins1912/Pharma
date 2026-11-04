@@ -321,9 +321,8 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
   const key = String(req.get('idempotency-key') || '').trim();
   if (!key || key.length > 128) { await fs.rm(req.file.path, { force: true }); return res.status(400).json({ message: 'A valid Idempotency-Key header is required.' }); }
   try {
-    const approved = await previewImportFile({ filePath: req.file.path, tenantId, branchId });
-    if (req.body?.confirmImport !== 'true' || approved.previewFingerprint !== req.body?.previewFingerprint) {
-      throw Object.assign(new Error('The workbook differs from the reviewed preview. Preview it again before staging.'), { statusCode: 409 });
+    if (req.body?.confirmImport !== 'true' || typeof req.body?.previewFingerprint !== 'string' || !req.body.previewFingerprint.trim()) {
+      throw Object.assign(new Error('Review the server preview and explicitly confirm it before staging.'), { statusCode: 400 });
     }
     const fileBytes = await fs.readFile(req.file.path);
     const fileSha256 = createHash('sha256').update(fileBytes).digest('hex');
@@ -331,6 +330,10 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
     if (existing) {
       if (existing.fileSha256 !== fileSha256) throw Object.assign(new Error('Idempotency key was already used for another workbook.'), { statusCode: 409 });
       return res.status(202).json({ jobId: existing.batchId, batchId: existing.batchId, status: existing.status, totalRecords: existing.totalRows, processedRecords: existing.totalRows, successfulRecords: existing.validRows, failedRecords: existing.invalidRows });
+    }
+    const approved = await previewImportFile({ filePath: req.file.path, tenantId, branchId });
+    if (approved.previewFingerprint !== req.body.previewFingerprint) {
+      throw Object.assign(new Error('The workbook differs from the reviewed preview. Preview it again before staging.'), { statusCode: 409 });
     }
     const records = approved.sourceRows || [];
     if (records.length !== approved.rowsDetected) throw Object.assign(new Error('Workbook row mapping changed between preview and staging. Preview the workbook again.'), { statusCode: 409 });
