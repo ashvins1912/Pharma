@@ -125,7 +125,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
     const ids = [...new Set((entry.lines || []).map(line => String(line.productId || '')).filter(Boolean))];
     const products = ids.length ? await Medicine.find({
       _id: { $in: ids }, tenantId: entry.tenantId, branchId: entry.branchId || null
-    }) .select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive price discountPercentage').lean() : [];
+    }) .select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive price basePrice discountPercentage').lean() : [];
     const byId = new Map(products.map(product => [String(product._id), product]));
     let anyAvailable = false;
     let allAvailable = true;
@@ -162,10 +162,12 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
       if (quantity > 0) anyAvailable = true;
       if (quantity < Number(line.waitingQuantity || 0)) allAvailable = false;
       if (quantity > previousNotified) newlyAvailable = true;
-      const basePrice = Number(product?.price ?? line.unitPrice ?? 0);
-      const discountPercentage = Math.min(100, Math.max(0, Number(product?.discountPercentage || 0)));
-      const unitPrice = roundPrice(basePrice * (1 - discountPercentage / 100));
-      return { ...line, ...(product?._id ? { productId: String(product._id), name: product.name || line.name } : {}), allocatedQuantity: quantity, notifiedAvailableQuantity: quantity, unitPrice };
+      const unitPrice = Number(product?.price ?? line.unitPrice ?? 0);
+      const listPrice = Math.max(unitPrice, Number(product?.basePrice ?? unitPrice));
+      const discountPercentage = listPrice > unitPrice
+        ? Math.round((1 - unitPrice / listPrice) * 10000) / 100
+        : Math.min(100, Math.max(0, Number(product?.discountPercentage || 0)));
+      return { ...line, ...(product?._id ? { productId: String(product._id), name: product.name || line.name } : {}), allocatedQuantity: quantity, notifiedAvailableQuantity: quantity, unitPrice: roundPrice(unitPrice), listPrice: roundPrice(listPrice), discountPercentage };
     }));
     const nextStatus = allAvailable ? 'READY_FOR_CONFIRMATION' : anyAvailable ? 'PARTIALLY_FULFILLED' : 'WAITING_FOR_STOCK';
     const result = await FulfillmentCase.updateOne({
