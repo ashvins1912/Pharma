@@ -386,7 +386,7 @@ router.post('/fulfillment/preview', authenticateUser, async (req, res) => {
                 composition: { $in: compositionKeys },
                 strength: { $in: strengthKeys },
                 expiryDate: { $gt: new Date() }
-            }).limit(100).select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean()
+            }).limit(100).select('_id name sku code price basePrice stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean()
             : [];
         const plan = buildIntelligentFulfillmentPlan({ requestedItems: items, inventory, catalog });
         return res.json({ ...plan, tenantId, branchId: branchId || null });
