@@ -804,129 +804,32 @@ export const dataStore = {
     },
 
     // Medicines: Supports server-side pagination & "out-of-stock only on search" logic
-    async getMedicines(search = '', hideRx = false, category = 'All', sort = 'default', page = 1, limit = 16, includeOutOfStock = false, tenantId = null) {
-        const isSearching = Boolean(search && search.toString().trim() !== '');
-        const parsedPage = Math.max(1, Number(page) || 1);
-        const parsedLimit = Math.max(1, Number(limit) || 16);
-
-        if (getIsConnected()) {
-            const filter = {};
-            filter.isActive = { $ne: false };
-            // Public storefront reads must be scoped to the pharmacy selected by
-            // the customer. A missing tenant remains unscoped only for explicit
-            // platform-admin inventory calls.
-            if (tenantId) filter.tenantId = String(tenantId);
-            if (isSearching) {
-                const escapedSearch = search.toString().trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                filter.$or = [
-                    { name: { $regex: escapedSearch, $options: 'i' } },
-                    { brand: { $regex: escapedSearch, $options: 'i' } },
-                    { composition: { $regex: escapedSearch, $options: 'i' } },
-                    { sku: { $regex: escapedSearch, $options: 'i' } }
-                ];
-            } else if (!includeOutOfStock) {
-                filter.expiryDate = { $gt: new Date() };
-                filter.$expr = {
-                    $gt: [
-                        {
-                            $subtract: [
-                                { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
-                                { $ifNull: ['$reservedQuantity', 0] }
-                            ]
-                        },
-                        0
-                    ]
-                };
-            }
-            if (hideRx === 'true' || hideRx === true) {
-                filter.$nor = [{ isPrescriptionRequired: true }, { requiresPrescription: true }];
-            }
-            if (category && category !== 'All') filter.category = category;
-
-            const sortOptions = {
-                'price-asc': { price: 1 },
-                'price-desc': { price: -1 },
-                'name-asc': { name: 1 },
-                'stock-asc': { stockQuantity: 1 },
-                default: { name: 1 }
-            };
-            const [total, medicines] = await Promise.all([
-                Medicine.countDocuments(filter),
-                Medicine.find(filter)
-                    .sort(sortOptions[sort] || sortOptions.default)
-                    .skip((parsedPage - 1) * parsedLimit)
-                    .limit(parsedLimit)
-            ]);
-            return {
-                medicines: medicines.map(formatMedicine),
-                total,
-                page: parsedPage,
-                limit: parsedLimit,
-                totalPages: Math.ceil(total / parsedLimit) || 1,
-                isSearching,
-                outOfStockHidden: !isSearching && !includeOutOfStock
-            };
+    async getMedicines(search = '', hideRx = false, category = 'All', sort = 'default', page = 1, limit = 16, includeOutOfStock = false, tenantId = null, branchId = null) {
+        const scopeTenantId = String(tenantId || '').trim();
+        const scopeBranchId = String(branchId || '').trim();
+        if (!scopeTenantId || !scopeBranchId) {
+            throw inventoryError('Tenant and branch are required for catalogue reads.', 400);
         }
-
-        let filtered = inMemoryMedicines;
-        if (tenantId) filtered = filtered.filter(m => String(m.tenantId || '') === String(tenantId));
-
-        // RULE: If search query is provided, out-of-stock items can display (with SOLD OUT badge).
-        // If not searching, out-of-stock items are hidden from general browsing!
-        if (!isSearching && !includeOutOfStock) {
-            filtered = filtered.filter(m => {
-                if (m.isActive === false) return false;
-                const stock = getPhysicalStock(m) - getReservedStock(m);
-                return stock > 0 && !m.isExpired;
-            });
-        } else {
-            filtered = filtered.filter(m => m.isActive !== false);
-        }
-
-        if (isSearching) {
-            const s = search.toString().toLowerCase().trim();
-            filtered = filtered.filter(m =>
-                m.name.toLowerCase().includes(s) ||
-                m.brand.toLowerCase().includes(s) ||
-                (m.composition && m.composition.toLowerCase().includes(s)) ||
-                (m.sku && m.sku.toLowerCase().includes(s))
-            );
-        }
-
-        if (hideRx === 'true' || hideRx === true) {
-            filtered = filtered.filter(m => !m.requiresPrescription);
-        }
-
-        if (category && category !== 'All') {
-            filtered = filtered.filter(m => m.category === category);
-        }
-
-        // Sorting
-        if (sort === 'price-asc') {
-            filtered = [...filtered].sort((a, b) => a.price - b.price);
-        } else if (sort === 'price-desc') {
-            filtered = [...filtered].sort((a, b) => b.price - a.price);
-        } else if (sort === 'name-asc') {
-            filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
-        } else if (sort === 'stock-asc') {
-            filtered = [...filtered].sort((a, b) =>
-                (getPhysicalStock(a) - getReservedStock(a)) - (getPhysicalStock(b) - getReservedStock(b)));
-        }
-
-        // Pagination Calculations
-        const total = filtered.length;
-        const totalPages = Math.ceil(total / parsedLimit) || 1;
-        const startIndex = (parsedPage - 1) * parsedLimit;
-        const paginatedMedicines = filtered.slice(startIndex, startIndex + parsedLimit).map(formatMedicine);
-
+        const result = await inventoryClient.searchProducts({
+            tenantId: scopeTenantId,
+            branchId: scopeBranchId,
+            query: search || '',
+            hideRx: hideRx === true || String(hideRx).toLowerCase() === 'true',
+            category: category && category !== 'All' ? category : '',
+            sort: sort || 'default',
+            page: Math.max(1, Number(page) || 1),
+            limit: Math.max(1, Math.min(100, Number(limit) || 16)),
+            includeOutOfStock: includeOutOfStock === true || String(includeOutOfStock).toLowerCase() === 'true',
+            userId: 'backend-catalogue'
+        });
         return {
-            medicines: paginatedMedicines,
-            total,
-            page: parsedPage,
-            limit: parsedLimit,
-            totalPages,
-            isSearching,
-            outOfStockHidden: !isSearching && !includeOutOfStock
+            medicines: result.items || [],
+            total: Number(result.total || 0),
+            page: Number(result.page || page || 1),
+            limit: Number(result.limit || limit || 16),
+            totalPages: Number(result.pages || 1),
+            isSearching: Boolean(search && String(search).trim()),
+            outOfStockHidden: Boolean(result.outOfStockHidden)
         };
     },
 
