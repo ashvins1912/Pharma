@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { approveProposal, rejectProposal } from '../../api/medicineRequestService';
+import { confirmMedicineRequestFulfillment, previewMedicineRequestFulfillment, rejectProposal } from '../../api/medicineRequestService';
 import { useLanguage } from '../../context/LanguageContext';
 
 export default function CustomerProposalModal({ request, isOpen, onClose, onOrderCreated }) {
@@ -17,6 +17,11 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
   const [rejectReason, setRejectReason] = useState('');
   const [approvalNote, setApprovalNote] = useState('');
   const [showApprovalConfirm, setShowApprovalConfirm] = useState(false);
+  const [availabilityPlan, setAvailabilityPlan] = useState(null);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState('');
+  const [waitDays, setWaitDays] = useState(3);
+  const [fulfillmentChoices, setFulfillmentChoices] = useState({});
   const [selectedOfferProductId, setSelectedOfferProductId] = useState('');
 
   useEffect(() => {
@@ -52,12 +57,13 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
       addToast(res.message || 'Proposal approved and converted into an order!', 'success');
       await loadUserMedicineRequests();
       await loadUserOrders();
-      if (onOrderCreated && res.order) {
-        onOrderCreated(res.order);
-      }
+      if (onOrderCreated && res.order) onOrderCreated(res.order);
       onClose();
     } catch (err) {
-      addToast(err.message || 'Unable to approve this proposal right now. Please try again.', 'error');
+      addToast(err.response?.data?.message || err.message || 'Unable to confirm fulfilment right now. Please try again.', 'error');
+      setShowApprovalConfirm(false);
+      setAvailabilityPlan(null);
+      previewMedicineRequestFulfillment(request._id).then(setAvailabilityPlan).catch(() => {});
     } finally {
       setApproving(false);
     }
@@ -274,6 +280,27 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
           </span>
         </div>
 
+        {availabilityLoading && request.status === 'PROPOSAL_SENT' && <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">Checking current pharmacy stock and fulfilment options…</div>}
+        {availabilityError && request.status === 'PROPOSAL_SENT' && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{availabilityError} Retry by closing and reopening this proposal.</div>}
+        {availabilityPlan && request.status === 'PROPOSAL_SENT' && (
+          <section className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4 space-y-3">
+            <div><h4 className="text-sm font-black text-indigo-950">Smart fulfilment options</h4><p className="mt-1 text-xs text-indigo-800">{availabilityPlan.summary.quantityAvailableNow} quantity available now · {availabilityPlan.summary.quantityWaiting} quantity may need to wait</p></div>
+            {availabilityPlan.lines.map(line => (
+              <div key={line.productId} className="rounded-xl border border-indigo-100 bg-white p-3 space-y-2">
+                <div className="flex items-start justify-between gap-2 text-xs"><strong className="text-slate-900">{line.name || 'Requested medicine'}</strong><span className={line.waitingQuantity ? 'text-amber-700 font-bold' : 'text-emerald-700 font-bold'}>{line.fulfilNowQuantity} / {line.requestedQuantity} available</span></div>
+                {line.fulfilNowQuantity > 0 && <p className="text-[11px] text-slate-600">Available now: {line.fulfilNowQuantity} × ₹{Number(line.unitPrice || 0).toFixed(2)}</p>}
+                {line.waitingQuantity > 0 && <>
+                  <label className="flex items-center gap-2 text-xs text-slate-700"><input type="radio" name={`request-alt-${line.productId}`} checked={!fulfillmentChoices[line.productId]?.alternativeProductId} onChange={() => setFulfillmentChoices(current => ({ ...current, [line.productId]: {} }))}/>Wait for the original medicine ({line.waitingQuantity})</label>
+                  {line.alternatives?.map(alternative => <label key={alternative.productId} className="flex items-start gap-2 rounded-lg border border-emerald-100 p-2 text-xs"><input type="radio" name={`request-alt-${line.productId}`} checked={fulfillmentChoices[line.productId]?.alternativeProductId === alternative.productId} onChange={() => setFulfillmentChoices(current => ({ ...current, [line.productId]: { alternativeProductId: alternative.productId } }))}/><span><strong>{alternative.name}</strong><br/><span className="text-slate-500">{alternative.brand} · {alternative.availableQuantity} available</span><br/><span className="font-bold text-emerald-700">₹{alternative.discountedUnitPrice.toFixed(2)} each</span>{alternative.discountPercentage > 0 ? <span className="ml-1 text-emerald-700">· {alternative.discountPercentage}% offer</span> : null}{alternative.requiresPharmacistApproval ? <span className="block text-amber-700">Pharmacist review required; automatic substitution is not permitted.</span> : null}</span></label>)}
+                </>}
+              </div>
+            ))}
+            {availabilityPlan.summary.quantityWaiting > 0 && <div className="flex items-center justify-between gap-3"><label htmlFor="request-wait-days" className="text-xs font-bold text-indigo-950">Wait for original stock</label><select id="request-wait-days" value={waitDays} onChange={event => setWaitDays(Number(event.target.value))} className="rounded-lg border border-indigo-200 bg-white px-2 py-1.5 text-xs">{[1,2,3,4,5].map(days => <option key={days} value={days}>{days} day{days > 1 ? 's' : ''}</option>)}</select></div>}
+            <p className="text-[10px] text-indigo-900">Stock is checked again when you confirm. Alternatives require your consent; prescription medicines cannot be automatically substituted.</p>
+          </section>
+        )}
+        {request.status === 'WAITING_FOR_STOCK' && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">This request is waiting for the selected pharmacy to replenish stock.</div>}
+
         {/* Expiration Note */}
         {request.expiresAt && !isExpired && !isApproved && (
           <div className="text-[11px] text-slate-400 text-center font-medium">
@@ -307,7 +334,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
                   <button
                     type="button"
                     onClick={handleApprove}
-                    disabled={approving}
+                    disabled={approving || availabilityLoading || !availabilityPlan || Boolean(availabilityError)}
                     className="rounded-xl bg-emerald-700 px-4 py-2 text-xs font-black text-white disabled:opacity-50"
                   >
                     {approving ? t('processing') : t('confirmCreateOrder')}
