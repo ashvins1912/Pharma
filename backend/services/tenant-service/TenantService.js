@@ -436,6 +436,7 @@ export class TenantService {
             operatingHours: data.operatingHours || { open: '08:00', close: '22:00' },
             status: 'ACTIVE',
             isDefault: Boolean(data.isDefault),
+            isTenantLocation: Boolean(data.isTenantLocation),
             createdAt: new Date().toISOString()
         };
         if (getIsConnected()) {
