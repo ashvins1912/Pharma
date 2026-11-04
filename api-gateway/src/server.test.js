@@ -75,6 +75,21 @@ test('delivery OTP verification requires delivery management permission', () => 
   assert.equal(isGatewayPermissionAllowed({ role: 'TENANT_ADMIN', permissions: ['orders.read'] }, 'delivery.manage'), false);
 });
 
+test('intelligent order and medicine-request waitlist endpoints require explicit capabilities', () => {
+  const orderRoutes = [
+    ['POST', '/api/orders/fulfillment/preview'],
+    ['POST', '/api/orders/fulfillment/waitlist'],
+    ['POST', '/api/orders/fulfillment/waitlist/6acab8869852d76d01a594e7/confirm'],
+    ['POST', '/api/orders/fulfillment/waitlist/6acab8869852d76d01a594e7/cancel']
+  ];
+  for (const [method, path] of orderRoutes) {
+    assert.equal(resolveGatewayCapability(method, path), 'orders.create', `${method} ${path}`);
+  }
+  assert.equal(resolveGatewayCapability('GET', '/api/orders/fulfillment/waitlist'), 'orders.read');
+  assert.equal(resolveGatewayCapability('POST', '/api/medicine-requests/6acab8869852d76d01a594e7/waitlist'), 'medicine_requests.decide');
+  assert.equal(resolveGatewayCapability('GET', '/api/admin/medicine-requests/6acab8869852d76d01a594e7/fulfillment-options'), 'medicine_requests.read');
+});
+
 test('admin medicine request proposal requires the proposal capability', () => {
   const path = '/api/admin/medicine-requests/6acab8869852d76d01a594e7/proposal';
   assert.equal(resolveGatewayCapability('POST', path), 'medicine_requests.proposal');
