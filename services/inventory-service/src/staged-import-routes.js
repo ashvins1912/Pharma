@@ -537,7 +537,7 @@ router.post('/imports/batches/:batchId/rows/:rowId/publish', requireServiceScope
   return res.json({ success: true, published });
 }));
 
-router.post('/imports/batches/:batchId/unpublish', requireServiceScope('inventory.import'), requirePublishEnabled, asyncHandler(async (req, res) => {
+router.post('/imports/batches/:batchId/unpublish', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   const { tenantId, branchId } = scope(req);
   const batch = await safeBatch(req.params.batchId, tenantId, branchId);
   const ids = [...new Set((req.body?.rowIds || []).map(String))];
@@ -548,7 +548,7 @@ router.post('/imports/batches/:batchId/unpublish', requireServiceScope('inventor
   return res.json({ success: true, unpublished: changed });
 }));
 
-router.post('/imports/batches/:batchId/rollback', requireServiceScope('inventory.import'), requirePublishEnabled, asyncHandler(async (req, res) => {
+router.post('/imports/batches/:batchId/rollback', requireServiceScope('inventory.import'), asyncHandler(async (req, res) => {
   const { tenantId, branchId } = scope(req);
   const batch = await safeBatch(req.params.batchId, tenantId, branchId);
   if (batch.status === 'REVERTED') return res.json({ success: true, batchId: batch.batchId, status: 'REVERTED', revertedAt: batch.updatedAt });
