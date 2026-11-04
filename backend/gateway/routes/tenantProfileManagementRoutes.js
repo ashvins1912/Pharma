@@ -118,8 +118,8 @@ router.patch('/profile', authenticateUser, async (req, res) => {
     }
     if (usesTenantAsBranch) {
       const separateBranches = await TenantBranch.find({ tenantId: String(tenant._id), status: 'ACTIVE', isTenantLocation: { $ne: true } }).select('_id name').lean();
-      if (separateBranches.length) {
-        return res.status(409).json({ success: false, code: 'SEPARATE_BRANCHES_EXIST', message: 'Archive or deactivate separate branches before switching to use the tenant as its only branch.' });
+      if (separateBranches.length > 1) {
+        return res.status(409).json({ success: false, code: 'SEPARATE_BRANCHES_EXIST', message: 'More than one branch is active. Deactivate or archive all but one branch, then switch to tenant-as-main-branch mode. The remaining branch will become the tenant location.' });
       }
     }
     const changedFields = [];
@@ -152,7 +152,9 @@ router.patch('/profile', authenticateUser, async (req, res) => {
         latitude: tenant.geolocation?.latitude ?? null,
         longitude: tenant.geolocation?.longitude ?? null
       };
-      const existingTenantBranch = await TenantBranch.findOne({ _id: String(tenant._id), tenantId: String(tenant._id) });
+      const existingTenantBranch = await TenantBranch.findOne({ tenantId: String(tenant._id), isTenantLocation: true })
+        || await TenantBranch.findOne({ tenantId: String(tenant._id), status: 'ACTIVE', isTenantLocation: { $ne: true } });
+      const tenantBranchId = String(existingTenantBranch?._id || tenant._id);
       let branchCode = existingTenantBranch?.code || 'MAIN';
       if (!existingTenantBranch) {
         let suffix = 1;
@@ -161,18 +163,18 @@ router.patch('/profile', authenticateUser, async (req, res) => {
         }
       }
       await TenantBranch.findOneAndUpdate(
-        { _id: String(tenant._id), tenantId: String(tenant._id) },
+        { _id: tenantBranchId, tenantId: String(tenant._id) },
         { $set: {
           tenantId: String(tenant._id), name: shopName ?? tenant.name, code: branchCode,
           phone: contactPhone ?? tenant.contactPhone ?? '', email: contactEmail ?? tenant.contactEmail ?? '',
           address: branchAddress, geolocation: branchGeo, isTenantLocation: true,
-          isDefault: true, status: 'ACTIVE'
-        }, $setOnInsert: { _id: String(tenant._id) } },
+          isDefault: true, status: 'ACTIVE', archivedAt: null, archivedBy: null
+        }, $setOnInsert: { _id: tenantBranchId } },
         { upsert: true, new: true, runValidators: true }
       );
     } else if (tenant.usesTenantAsBranch === false) {
       await TenantBranch.updateOne(
-        { _id: String(tenant._id), tenantId: String(tenant._id), isTenantLocation: true },
+        { tenantId: String(tenant._id), isTenantLocation: true },
         { $set: { status: 'INACTIVE', isDefault: false, archivedAt: new Date(), archivedBy: String(req.user?.sub || req.user?.id || '') } }
       );
     }
