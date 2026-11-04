@@ -29,7 +29,7 @@ const scoreAlternative = (requested, candidate) => {
   const listPrice = Math.max(price, Number(candidate.basePrice ?? price));
   const discountPercentage = listPrice > price
     ? Math.round((1 - price / listPrice) * 10000) / 100
-    : Math.min(100, Math.max(0, Number(candidate.discountPercentage || 0)));
+    : 0;
   return {
     productId: String(candidate._id),
     name: candidate.name,
