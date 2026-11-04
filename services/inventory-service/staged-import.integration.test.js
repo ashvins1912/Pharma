@@ -112,6 +112,12 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(publishOne.status, 200);
     assert.equal(await models.Inventory.countDocuments({ tenantId, branchId }), 1);
     assert.equal(await models.Product.countDocuments({ tenantId }), 1);
+    const publishedInventory = await models.Inventory.findOne({ tenantId, branchId, sku: 'TEST-STAGED-001', batchNumber: 'TEST-LOT-A' }).lean();
+    const publishedProduct = await models.Product.findOne({ tenantId, sku: 'TEST-STAGED-001' }).lean();
+    assert.equal(publishedInventory.sourceImportBatchId, staged.batchId);
+    assert.equal(publishedInventory.sourceImportRowId, first.rowId);
+    assert.equal(publishedProduct.lastImportBatchId, staged.batchId);
+    assert.equal(publishedProduct.lastImportRowId, first.rowId);
 
     const unpublishOne = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/unpublish`, {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
