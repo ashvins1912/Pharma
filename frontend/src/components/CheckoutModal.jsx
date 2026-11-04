@@ -190,6 +190,10 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       setFulfillmentLoading(false);
     }
 
+    if (fulfillmentPlanForCheckout?.customerDecisionRequired && !checkoutItems.length && !pendingStockItems.length) {
+      setErrorMsg('No items remain in this order. Add another medicine or choose an available fulfilment option.');
+      return;
+    }
     if (pendingStockItems.length && !waitDays) {
       setErrorMsg('Choose how long you are willing to wait for unavailable medicines.');
       return;
