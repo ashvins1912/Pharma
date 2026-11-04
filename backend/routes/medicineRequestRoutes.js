@@ -921,6 +921,192 @@ router.get('/:id/fulfillment/preview', authenticateUser, requirePermission('medi
     }
 });
 
+// Customer confirms a stock-aware split for a medicine request.
+router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    let waitlistCase = null;
+    let claimed = false;
+    try {
+        const requestId = req.params.id;
+        const customerId = String(req.user.sub);
+        const request = await MedicineRequest.findOne({ _id: requestId, customerId }).lean();
+        if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
+        if (request.status === 'CONVERTED_TO_ORDER' || request.status === 'WAITING_FOR_STOCK') {
+            return res.status(200).json({ request, alreadyProcessed: true, message: 'This medicine request already has a fulfilment plan.' });
+        }
+        if (request.status !== 'PROPOSAL_SENT') return res.status(409).json({ message: 'A current pharmacy proposal is required before confirming fulfilment choices.' });
+        if (request.expiresAt && new Date(request.expiresAt) <= new Date()) return res.status(409).json({ message: 'This pharmacy proposal has expired. Ask the pharmacy to refresh it.' });
+        if (!request.tenantId) return res.status(409).json({ message: 'This medicine request is not linked to an active pharmacy.' });
+
+        const tenantId = String(request.tenantId);
+        const branchId = request.branchId ? String(request.branchId) : null;
+        const scope = { tenantId };
+        if (branchId) scope.branchId = branchId;
+        const requestedItems = (request.requestedItems?.length ? request.requestedItems : [{
+            requestedName: request.pharmacyProposal?.medicineName || 'Requested medicine',
+            productId: request.pharmacyProposal?.productId || null,
+            strength: request.pharmacyProposal?.strength || '',
+            dosageForm: request.pharmacyProposal?.dosageForm || '',
+            composition: '',
+            quantity: request.pharmacyProposal?.quantity || 1
+        }]).map(item => ({
+            medicineId: item.productId || (mongoose.isValidObjectId(item.medicineId) ? item.medicineId : undefined),
+            requestedName: item.requestedName,
+            composition: item.composition,
+            strength: item.strength,
+            dosageForm: item.dosageForm,
+            quantity: Number(item.quantity),
+            requiresPrescription: Boolean(request.prescriptionId || request.prescriptionUrl)
+        }));
+        const ids = [...new Set(requestedItems.map(item => String(item.medicineId || '')).filter(id => mongoose.isValidObjectId(id)))];
+        const inventory = ids.length ? await Medicine.find({ _id: { $in: ids }, ...scope })
+            .select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand')
+            .lean() : [];
+        const compositionKeys = [...new Set(requestedItems.map(item => String(item.composition || '').trim()).filter(Boolean))];
+        const strengthKeys = [...new Set(requestedItems.map(item => String(item.strength || '').trim()).filter(Boolean))];
+        const catalog = compositionKeys.length && strengthKeys.length
+            ? await Medicine.find({
+                ...scope, isActive: { $ne: false }, _id: { $nin: ids },
+                composition: { $in: compositionKeys }, strength: { $in: strengthKeys },
+                expiryDate: { $gt: new Date() }
+            }).limit(100)
+                .select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand')
+                .lean()
+            : [];
+        const plan = buildIntelligentFulfillmentPlan({ requestedItems, inventory, catalog });
+        const decisions = req.body?.decisions && typeof req.body.decisions === 'object' ? req.body.decisions : {};
+        const orderItems = [];
+        const waitingItems = [];
+        for (const line of plan.lines) {
+            if (line.fulfilNowQuantity > 0) orderItems.push({ medicineId: line.productId, quantity: line.fulfilNowQuantity });
+            if (line.waitingQuantity <= 0) continue;
+            const decision = decisions[line.productId] || {};
+            const alternativeId = String(decision.alternativeProductId || '');
+            if (alternativeId) {
+                if (request.prescriptionId || request.prescriptionUrl) {
+                    throw Object.assign(new Error('Prescription medicines cannot be substituted through automatic customer selection. Ask the pharmacist to review the alternative.'), { statusCode: 409 });
+                }
+                const alternative = line.alternatives.find(item => item.productId === alternativeId);
+                if (!alternative || alternative.availableQuantity < line.waitingQuantity) {
+                    throw Object.assign(new Error('The selected alternative is no longer available in the requested quantity. Refresh availability and choose again.'), { statusCode: 409 });
+                }
+                orderItems.push({ medicineId: alternative.productId, quantity: line.waitingQuantity });
+            } else {
+                waitingItems.push({
+                    productId: line.isListed ? line.productId : null,
+                    requestedName: line.name || line.productId,
+                    composition: line.composition || '',
+                    strength: line.strength || '',
+                    dosageForm: line.dosageForm || '',
+                    requestedQuantity: line.waitingQuantity
+                });
+            }
+        }
+        if (waitingItems.length) {
+            const waitDays = Number(req.body?.waitDays);
+            if (!Number.isInteger(waitDays) || waitDays < 1 || waitDays > 5) {
+                return res.status(400).json({ message: 'Choose a stock wait period between 1 and 5 days.' });
+            }
+        }
+
+        const claim = await MedicineRequest.findOneAndUpdate(
+            { _id: request._id, customerId, status: 'PROPOSAL_SENT' },
+            { $set: { status: 'FULFILLMENT_PROCESSING' } },
+            { new: true }
+        ).lean();
+        if (!claim) return res.status(409).json({ message: 'This request is already being processed. Refresh your requests.' });
+        claimed = true;
+
+        if (waitingItems.length) {
+            const now = new Date();
+            waitlistCase = await FulfillmentCase.create({
+                caseNumber: 'FUL-' + new mongoose.Types.ObjectId().toString().slice(-10).toUpperCase(),
+                customerId, tenantId, branchId,
+                sourceType: 'MEDICINE_REQUEST',
+                sourceId: String(request._id),
+                status: 'WAITING_FOR_STOCK',
+                lines: waitingItems.map(item => ({
+                    productId: item.productId,
+                    name: item.requestedName,
+                    requestedName: item.requestedName,
+                    composition: item.composition,
+                    strength: item.strength,
+                    dosageForm: item.dosageForm,
+                    requestedQuantity: item.requestedQuantity,
+                    waitingQuantity: item.requestedQuantity,
+                    customerDecision: 'ACCEPTED_ORIGINAL'
+                })),
+                waitDays: Number(req.body.waitDays),
+                waitUntil: new Date(now.getTime() + Number(req.body.waitDays) * 86400000),
+                idempotencyKey: 'medicine-request:' + String(request._id),
+                auditTrail: [{ action: 'MEDICINE_REQUEST_WAITLISTED', actorId: customerId, at: now, waitDays: Number(req.body.waitDays) }]
+            });
+        }
+
+        let order = null;
+        if (orderItems.length) {
+            const coordinates = request.coordinates || request.addressDetails?.coordinates;
+            if (!coordinates || !Number.isFinite(Number(coordinates.lat)) || !Number.isFinite(Number(coordinates.lng))) {
+                throw Object.assign(new Error('A verified delivery map pin is required before ordering available medicines. Please update your delivery address.'), { statusCode: 409 });
+            }
+            order = await dataStore.reserveOrder({
+                userId: customerId,
+                tenantId,
+                branchId,
+                addressId: request.addressId || null,
+                customerName: request.customerName || 'Customer',
+                customerMobile: request.customerPhone || '',
+                items: orderItems,
+                pointsToRedeem: 0,
+                couponCode: '',
+                prescriptionUrl: request.prescriptionUrl || null,
+                prescriptionId: request.prescriptionId || null,
+                patientPuid: request.patientPuid || null,
+                orderedForName: request.customerName || 'Customer',
+                deliveryAddress: request.deliveryAddress,
+                addressDetails: request.addressDetails || {},
+                coordinates,
+                paymentMethod: 'Cash on Delivery (COD)',
+                source: 'MEDICINE_REQUEST',
+                medicineRequestId: String(request._id)
+            }, 'Customer medicine request fulfilment');
+        }
+        if (waitlistCase && order?._id) {
+            await FulfillmentCase.updateOne({ _id: waitlistCase._id }, { $set: { parentOrderId: String(order._id) } });
+        }
+        const finalStatus = order ? 'CONVERTED_TO_ORDER' : 'WAITING_FOR_STOCK';
+        const updatedRequest = await MedicineRequest.findOneAndUpdate(
+            { _id: request._id, customerId, status: 'FULFILLMENT_PROCESSING' },
+            {
+                $set: {
+                    status: finalStatus,
+                    convertedOrderId: order?._id ? String(order._id) : null,
+                    fulfillmentCaseId: waitlistCase?._id || null,
+                    approvedAt: new Date(),
+                    customerResponse: { respondedAt: new Date(), responseNote: 'Customer confirmed intelligent fulfilment options.' }
+                },
+                $push: { auditTrail: { action: order ? 'SPLIT_FULFILLMENT_ORDER_CREATED' : 'MEDICINE_REQUEST_WAITLISTED', actorId: customerId, role: 'Customer', timestamp: new Date(), notes: 'Customer confirmed available stock and waitlist choices.' } }
+            },
+            { new: true }
+        ).lean();
+        return res.status(201).json({
+            success: true, order, request: updatedRequest, waitlist: waitlistCase,
+            planSummary: plan.summary,
+            message: order && waitlistCase ? 'Available medicines were ordered and the remaining quantity was added to your stock waitlist.'
+                : order ? 'Available medicines were ordered successfully.'
+                : 'Your medicine request is now waiting for stock.'
+        });
+    } catch (error) {
+        if (waitlistCase) {
+            await FulfillmentCase.updateOne({ _id: waitlistCase._id }, { $set: { status: 'CANCELLED' } }).catch(() => {});
+        }
+        if (claimed) {
+            await MedicineRequest.updateOne({ _id: req.params.id, customerId: String(req.user.sub), status: 'FULFILLMENT_PROCESSING' }, { $set: { status: 'PROPOSAL_SENT' } }).catch(() => {});
+        }
+        return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to confirm medicine request fulfilment.' });
+    }
+});
+
 // Customer approves proposal -> triggers idempotent order conversion
 router.post('/:id/approve', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
     if (!requireDatabase(res)) return;
