@@ -506,7 +506,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                 </p>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <p className="rounded-xl bg-white p-2.5 text-emerald-800">
-                    Successful: <strong>{importJob.successfulRecords || 0}</strong>
+                    Ready for review: <strong>{importJob.successfulRecords || 0}</strong>
                     {importJob.insertedRecords !== undefined && (
                       <span className="text-[10px] text-slate-500 block">
                         ({importJob.insertedRecords || 0} new, {importJob.updatedRecords || 0} updated)
@@ -514,7 +514,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                     )}
                   </p>
                   <p className="rounded-xl bg-white p-2.5 text-rose-800">
-                    Failed: <strong>{importJob.failedRecords || 0}</strong>
+                    Invalid rows: <strong>{importJob.failedRecords || 0}</strong>
                   </p>
                 </div>
                 {importJob.errorMessage && (
