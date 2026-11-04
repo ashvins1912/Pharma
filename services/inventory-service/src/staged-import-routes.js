@@ -130,6 +130,7 @@ async function publishRows(batch, rows, req) {
     await session.withTransaction(async () => {
       published.length = 0;
       const baselineBatch = await StagedImportBatch.findById(batch._id).session(session).lean();
+      if (!baselineBatch || ['REVERTING', 'REVERTED'].includes(baselineBatch.status)) throw Object.assign(new Error('This batch is being reverted or has already been reverted. Publish is blocked.'), { statusCode: 409 });
       let inventoryBaseline = [...(baselineBatch?.previewInventorySnapshot || [])];
       let productBaseline = [...(baselineBatch?.previewProductSnapshot || [])];
       for (const row of rows) {
@@ -241,6 +242,7 @@ async function unpublishRows(batch, rows, req) {
     await session.withTransaction(async () => {
       changed.length = 0;
       const baselineBatch = await StagedImportBatch.findById(batch._id).session(session).lean();
+      const batchIsReverting = baselineBatch?.status === 'REVERTING';
       let inventoryBaseline = [...(baselineBatch?.previewInventorySnapshot || [])];
       let productBaseline = [...(baselineBatch?.previewProductSnapshot || [])];
       for (const row of [...rows].sort((a,b) => Number(b.publication?.sequence || 0) - Number(a.publication?.sequence || 0))) {
@@ -294,7 +296,7 @@ async function unpublishRows(batch, rows, req) {
       const unpublishedRows = await StagedImportRow.countDocuments({ batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId, status: 'UNPUBLISHED' }).session(session);
       const publishableCount = total - invalidRows;
       await StagedImportBatch.updateOne({ _id: batch._id }, {
-        $set: { publishedRows, unpublishedRows, status: publishedRows === 0 ? 'READY' : (publishedRows >= publishableCount ? 'PUBLISHED' : 'PARTIALLY_PUBLISHED') }
+        $set: { publishedRows, unpublishedRows, status: batchIsReverting ? 'REVERTING' : (publishedRows === 0 ? 'READY' : (publishedRows >= publishableCount ? 'PUBLISHED' : 'PARTIALLY_PUBLISHED')) }
       }, { session });
       await Audit.create([{
         tenantId: batch.tenantId, branchId: batch.branchId, actor: actor(req),
@@ -547,6 +549,8 @@ router.post('/imports/batches/:batchId/unpublish', requireServiceScope('inventor
 router.post('/imports/batches/:batchId/rollback', requireServiceScope('inventory.import'), requirePublishEnabled, asyncHandler(async (req, res) => {
   const { tenantId, branchId } = scope(req);
   const batch = await safeBatch(req.params.batchId, tenantId, branchId);
+  if (batch.status === 'REVERTED') return res.json({ success: true, batchId: batch.batchId, status: 'REVERTED', revertedAt: batch.updatedAt });
+  await StagedImportBatch.updateOne({ _id: batch._id, status: { $ne: 'REVERTED' } }, { $set: { status: 'REVERTING' } });
   const rows = (await StagedImportRow.find({ batchId: batch.batchId, tenantId, branchId, status: 'PUBLISHED' }).lean())
     .sort((left, right) => Number(right.publication?.sequence || 0) - Number(left.publication?.sequence || 0));
   // Revert in bounded transactions so large workbooks do not exceed MongoDB's
