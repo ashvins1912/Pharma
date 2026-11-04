@@ -52,6 +52,12 @@ test('inventory lookup aggregates active batches and reservation allocates/relea
     assert.equal(search.items[0].basePrice, 10);
     assert.equal(search.items[0].sellingPrice, 9);
     assert.equal(search.items[0].discountPercentage, 10);
+    const alertSearch = await searchInventoryProducts({
+      tenantId, branchId, query: 'Batch Stock Test', includeOutOfStock: true, includeExpiredBatches: true
+    });
+    assert.equal(alertSearch.items[0].availableQuantity, 15);
+    assert.equal(alertSearch.items[0].expiredStockQuantity, 100);
+    assert.deepEqual(alertSearch.items[0].expiredBatchAvailability.map(batch => batch.batchNumber), ['LOT-EXPIRED']);
     const otherBranchLookup = await lookupInventory({ skus: [product.sku], tenantId, branchId: 'different-branch' });
     assert.equal(otherBranchLookup[0].availableQuantity, 50);
 
