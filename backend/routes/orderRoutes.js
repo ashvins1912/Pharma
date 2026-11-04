@@ -487,13 +487,20 @@ router.post('/fulfillment/waitlist/:id/link-order', authenticateUser, async (req
             userId: String(req.user.sub),
             customerId: String(req.user.sub),
             tenantId: String(entry.tenantId)
-        }).select('_id tenantId').lean();
+        }).select('_id tenantId prescriptionUrl prescriptionId patientPuid customerMobile orderedForName').lean();
         if (!order) return res.status(404).json({ message: 'The order does not belong to this customer and pharmacy.' });
         const linked = await FulfillmentCase.findOneAndUpdate({
             _id: entry._id, customerId: String(req.user.sub),
             $or: [{ parentOrderId: null }, { parentOrderId: String(order._id) }]
         }, {
-            $set: { parentOrderId: String(order._id) },
+            $set: {
+                parentOrderId: String(order._id),
+                prescriptionUrl: order.prescriptionUrl || null,
+                prescriptionId: order.prescriptionId || null,
+                patientPuid: order.patientPuid || null,
+                customerMobile: order.customerMobile || '',
+                orderedForName: order.orderedForName || ''
+            },
             $push: { auditTrail: { action: 'PARTIAL_ORDER_LINKED', actorId: String(req.user.sub), at: new Date(), orderId: String(order._id) } }
         }, { new: true }).lean();
         if (!linked) return res.status(409).json({ message: 'This waitlist is already linked to a different order.' });
