@@ -56,6 +56,10 @@ function normalizeBranchPayload(body = {}) {
     code: clean(body.code).toUpperCase(),
     phone: clean(body.phone),
     email: clean(body.email).toLowerCase(),
+    geolocation: {
+      latitude: body.geolocation?.latitude === '' || body.geolocation?.latitude == null ? null : Number(body.geolocation.latitude),
+      longitude: body.geolocation?.longitude === '' || body.geolocation?.longitude == null ? null : Number(body.geolocation.longitude)
+    },
     address: {
       street: clean(address.street),
       city: clean(address.city),
@@ -77,6 +81,10 @@ function normalizeBranchPayload(body = {}) {
 function validateBranch(data) {
   if (!data.name || !data.code) return 'Branch name and branch code are required.';
   if (!/^[A-Z0-9][A-Z0-9_-]{1,19}$/.test(data.code)) return 'Branch code must be 2–20 characters and contain only letters, numbers, hyphens or underscores.';
+  const { latitude, longitude } = data.geolocation;
+  if ((latitude == null) !== (longitude == null)) return 'Enter both latitude and longitude, or leave both empty.';
+  if (latitude != null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)) return 'Latitude must be between -90 and 90.';
+  if (longitude != null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)) return 'Longitude must be between -180 and 180.';
   for (const key of ['serviceRadiusKm', 'minimumOrderValue', 'freeDeliveryAbove', 'deliveryFee']) {
     if (!Number.isFinite(data[key]) || data[key] < 0) return 'Delivery and service values must be valid non-negative numbers.';
   }
@@ -135,7 +143,7 @@ router.patch('/:branchId', async (req, res) => {
     if (!scope) return;
     const branch = await TenantBranch.findOne({ _id: clean(req.params.branchId), tenantId: scope.tenantId }).lean();
     if (!branch) return res.status(404).json({ success: false, code: 'BRANCH_NOT_FOUND', message: 'Branch not found for this pharmacy.' });
-    const data = normalizeBranchPayload({ ...branch, ...req.body, address: { ...branch.address, ...req.body?.address }, operatingHours: { ...branch.operatingHours, ...req.body?.operatingHours } });
+    const data = normalizeBranchPayload({ ...branch, ...req.body, geolocation: { ...(branch.geolocation || {}), ...(req.body?.geolocation || {}) }, address: { ...branch.address, ...req.body?.address }, operatingHours: { ...branch.operatingHours, ...req.body?.operatingHours } });
     const invalid = validateBranch(data);
     if (invalid) return res.status(400).json({ success: false, code: 'INVALID_BRANCH', message: invalid });
     const duplicate = await TenantBranch.findOne({ tenantId: scope.tenantId, code: data.code, _id: { $ne: branch._id } }).lean();
