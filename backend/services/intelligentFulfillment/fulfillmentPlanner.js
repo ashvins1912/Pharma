@@ -26,6 +26,10 @@ const scoreAlternative = (requested, candidate) => {
   if (Boolean(requested.requiresPrescription || requested.isPrescriptionRequired) !== Boolean(candidate.requiresPrescription || candidate.isPrescriptionRequired)) return null;
   const price = Number(candidate.price || 0);
   if (!Number.isFinite(price) || price < 0) return null;
+  const listPrice = Math.max(price, Number(candidate.basePrice ?? price));
+  const discountPercentage = listPrice > price
+    ? Math.round((1 - price / listPrice) * 10000) / 100
+    : Math.min(100, Math.max(0, Number(candidate.discountPercentage || 0)));
   return {
     productId: String(candidate._id),
     name: candidate.name,
@@ -35,11 +39,9 @@ const scoreAlternative = (requested, candidate) => {
     dosageForm: candidate.dosageForm || candidate.form || '',
     unitPrice: price,
     availableQuantity: availableStock(candidate),
-    listPrice: Number(candidate.basePrice ?? price) > price ? Number(candidate.basePrice) : price,
-    discountPercentage: Number(candidate.basePrice ?? price) > roundMoney(price * (1 - Math.min(100, Math.max(0, Number(candidate.discountPercentage || 0))) / 100))
-      ? Math.round((1 - (price * (1 - Math.min(100, Math.max(0, Number(candidate.discountPercentage || 0))) / 100)) / Number(candidate.basePrice ?? price)) * 10000) / 100
-      : Math.min(100, Math.max(0, Number(candidate.discountPercentage || 0))),
-    discountedUnitPrice: roundMoney(price * (1 - Math.min(100, Math.max(0, Number(candidate.discountPercentage || 0))) / 100)),
+    listPrice,
+    discountPercentage,
+    discountedUnitPrice: roundMoney(price),
     requiresPharmacistApproval: Boolean(requested.requiresPrescription || requested.isPrescriptionRequired || candidate.requiresPrescription || candidate.isPrescriptionRequired),
     substitutionRequiresCustomerConsent: true
   };
