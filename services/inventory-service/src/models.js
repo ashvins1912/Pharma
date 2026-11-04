@@ -15,6 +15,8 @@ const productSchema = new mongoose.Schema({
   marginTier: { type: 'string', enum: ['LOW', 'MID', 'HIGH'], default: 'LOW' },
   requiresPrescription: { type: 'boolean', default: false },
   version: { type: 'number', default: 1 },
+  lastImportBatchId: { type: 'string', default: null },
+  lastImportRowId: { type: 'string', default: null },
   active: { type: 'boolean', default: true }
 }, { timestamps: true });
 
@@ -30,11 +32,14 @@ const inventorySchema = new mongoose.Schema({
   price: { type: 'number', required: true, min: 0 },
   batchNumber: { type: 'string', default: '' },
   expiryDate: { type: 'date', default: null },
-  warehouse: { type: 'string', default: 'default' }
+  warehouse: { type: 'string', default: 'default' },
+  sourceImportBatchId: { type: 'string', default: null },
+  sourceImportRowId: { type: 'string', default: null }
 }, { timestamps: true });
 
 inventorySchema.index({ tenantId: 1, branchId: 1, productId: 1, batchNumber: 1 }, { unique: true });
 inventorySchema.index({ tenantId: 1, branchId: 1, sku: 1 });
+inventorySchema.index({ tenantId: 1, branchId: 1, sourceImportBatchId: 1 });
 
 inventorySchema.virtual('availableQuantity').get(function () {
   return Math.max(0, this.stockQuantity - this.reservedQuantity);
