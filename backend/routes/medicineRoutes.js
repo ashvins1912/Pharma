@@ -95,7 +95,6 @@ router.put('/:medicineId', authenticateUser, async (req, res) => {
 router.delete('/:medicineId', authenticateUser, async (req, res) => {
     try {
         const result = await dataStore.deleteMedicine(req.params.medicineId);
-        await invalidatePublicCatalog();
         res.json(result);
     } catch (error) {
         console.error('Medicine archival failed:', error);
