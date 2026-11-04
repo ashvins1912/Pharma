@@ -442,7 +442,7 @@ router.post('/', authenticateUser, requirePermission('medicine_requests.create')
                     idempotencyKey: req.get('idempotency-key') || `medicine-request:${customerId}:${Date.now()}`,
                     userId: customerId,
                     tenantId: selectedTenantId,
-                    branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
+                    branchId: req.body.branchId || req.user.branchId || req.user.app_metadata?.branchId || null,
                     role: req.user.app_metadata?.role || req.user.role || 'customer',
                     patientPuid
                 });
