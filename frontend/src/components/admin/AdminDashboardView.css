@@ -741,3 +741,137 @@ html.dark .admin-screen :where(.overflow-x-auto) {
   }
 }
 
+/* Platform tenant directory: prevent long governance heading and tabs colliding on phones. */
+.admin-screen--tenants .platform-tenants-view {
+  min-width: 0;
+  width: 100%;
+}
+
+.admin-screen--tenants .platform-directory-header {
+  align-items: flex-start;
+}
+
+.admin-screen--tenants .platform-directory-heading {
+  flex: 1 1 32rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.admin-screen--tenants .platform-directory-title {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  text-wrap: balance;
+  line-height: 1.18;
+}
+
+.admin-screen--tenants .platform-directory-description {
+  max-width: 68ch;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+
+.admin-screen--tenants .platform-directory-actions {
+  flex: 0 1 auto;
+  max-width: 100%;
+  align-items: stretch;
+}
+
+.admin-screen--tenants .platform-directory-actions button {
+  white-space: normal;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.admin-screen--tenants .platform-directory-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 0.5rem;
+  width: 100%;
+  overflow: visible;
+  padding-bottom: 0;
+}
+
+.admin-screen--tenants .platform-directory-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0.65rem 0.75rem;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  border-bottom-width: 2px;
+}
+
+@media (max-width: 900px) {
+  .admin-screen--tenants .platform-directory-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-screen--tenants .platform-directory-heading {
+    flex-basis: auto;
+    width: 100%;
+  }
+
+  .admin-screen--tenants .platform-directory-actions {
+    width: 100%;
+  }
+
+  .admin-screen--tenants .platform-directory-actions button {
+    flex: 1 1 220px;
+  }
+
+  .admin-screen--tenants .platform-directory-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-screen--tenants .platform-directory-title {
+    font-size: 1.3rem;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+  }
+
+  .admin-screen--tenants .platform-directory-description {
+    font-size: 0.8125rem;
+  }
+
+  .admin-screen--tenants .platform-directory-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-screen--tenants .platform-directory-actions button {
+    width: 100%;
+    min-height: 48px;
+  }
+
+  .admin-screen--tenants .platform-directory-tabs {
+    gap: 0.4rem;
+  }
+
+  .admin-screen--tenants .platform-directory-tab {
+    min-height: 56px;
+    padding: 0.6rem 0.45rem;
+    font-size: 0.8125rem;
+  }
+}
+
+@media (max-width: 340px) {
+  .admin-screen--tenants .platform-directory-tabs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-screen--tenants .platform-directory-tab {
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
+
