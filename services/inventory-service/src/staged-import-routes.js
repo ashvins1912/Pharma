@@ -27,7 +27,7 @@ const requirePublishEnabled = (_req, res, next) => config.importsEnabled
   ? next()
   : res.status(503).json({ code: 'INVENTORY_IMPORT_PUBLISH_DISABLED', message: 'Batch staging and review are available, but publishing is disabled. Enable INVENTORY_IMPORTS_ENABLED only in the isolated test environment to publish test rows.' });
 const cleanName = value => path.basename(String(value || 'upload.xlsx')).replace(/[^a-zA-Z0-9._-]/g, '_');
-const escapeRegex = value => value.replace(/[.*+?^\${}()|[\]\\]/g, '\\const cleanName = value => path.basename(String(value || 'upload.xlsx')).replace(/[^a-zA-Z0-9._-]/g, '_');');
+const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, character => `\\${character}`);
 const normHeader = value => String(value ?? '').trim().toLowerCase().replace(/[.\s_/-]+/g, '');
 const pick = (row, ...keys) => {
   for (const key of keys) {
