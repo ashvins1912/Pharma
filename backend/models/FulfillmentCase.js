@@ -15,6 +15,8 @@ const fulfillmentLineSchema = new mongoose.Schema({
   notifiedAvailableQuantity: { type: Number, default: 0, min: 0 },
   customerDecision: { type: String, enum: ['PENDING', 'ACCEPTED_ORIGINAL', 'ACCEPTED_ALTERNATIVE', 'REMOVED', 'CANCELLED'], default: 'PENDING' },
   unitPrice: { type: Number, min: 0, default: 0 },
+  listPrice: { type: Number, min: 0, default: 0 },
+  discountPercentage: { type: Number, min: 0, max: 100, default: 0 },
   quotedUnitPrice: { type: Number, min: 0, default: 0 },
   prescriptionRequired: { type: Boolean, default: false }
 }, { _id: false });
