@@ -45,6 +45,7 @@ const fulfillmentCaseSchema = new mongoose.Schema({
   confirmationLines: { type: [mongoose.Schema.Types.Mixed], default: [] },
   notificationState: { type: String, enum: ['NOT_SENT', 'SENT', 'FAILED'], default: 'NOT_SENT' },
   idempotencyKey: { type: String, required: true },
+  requestFingerprint: { type: String, required: true },
   auditTrail: { type: [mongoose.Schema.Types.Mixed], default: [] }
 }, { timestamps: true });
 
