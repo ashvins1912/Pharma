@@ -14,6 +14,7 @@ const stagedImportBatchSchema = new mongoose.Schema({
   invalidRows: { type: Number, default: 0 },
   publishedRows: { type: Number, default: 0 },
   unpublishedRows: { type: Number, default: 0 },
+  nextPublicationSequence: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
   completedAt: Date
 }, { timestamps: true });
@@ -32,6 +33,7 @@ const stagedImportRowSchema = new mongoose.Schema({
   status: { type: String, enum: ['INVALID', 'READY', 'PUBLISHED', 'UNPUBLISHED', 'REVERTED'], default: 'READY', index: true },
   version: { type: Number, default: 1 },
   publishedAt: Date,
+  publicationSequence: { type: Number, default: 0 },
   publishedBy: String,
   publication: { type: mongoose.Schema.Types.Mixed, default: null },
   history: { type: [mongoose.Schema.Types.Mixed], default: [] }
