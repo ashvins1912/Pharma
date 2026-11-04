@@ -149,7 +149,7 @@ router.post('/imports/preview', requireServiceScope('inventory.import'), upload.
   const { tenantId, branchId } = getInventoryScope(req);
   if (!tenantId || !branchId) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(403).json({ message: 'Verified tenant and branch selection is required.' }); }
   try {
-    const preview = await previewImportFile({ filePath: req.file.path, tenantId, branchId });
+    const preview = await previewImportFile({ filePath: req.file.path, tenantId, branchId, stockMode: req.body?.stockMode });
     const publicPreview = { ...preview };
     delete publicPreview.catalogSkus;
     delete publicPreview.sourceRows;
