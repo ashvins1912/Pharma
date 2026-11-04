@@ -580,6 +580,13 @@ router.post('/fulfillment/waitlist/:id/cancel', authenticateUser, async (req, re
             $push: { auditTrail: { action: 'WAITLIST_CANCELLED', actorId: String(req.user.sub), at: new Date() } }
         }, { new: true }).lean();
         if (!updated) return res.status(404).json({ message: 'Active stock waitlist entry not found.' });
+        if (updated.parentOrderId) await Order.updateOne({ _id: updated.parentOrderId, userId: String(req.user.sub), tenantId: updated.tenantId }, { $set: { fulfillmentState: 'PARTIAL' } });
+        if (updated.sourceType === 'MEDICINE_REQUEST' && updated.sourceId) {
+            await MedicineRequest.updateOne({ _id: updated.sourceId, customerId: String(req.user.sub), fulfillmentCaseId: String(updated._id) }, {
+                $set: { status: 'CANCELLED' },
+                $push: { auditTrail: { action: 'WAITLIST_CANCELLED', actorId: String(req.user.sub), role: 'Customer', timestamp: new Date(), notes: 'Customer cancelled the stock waitlist.' } }
+            });
+        }
         return res.json({ case: updated, message: 'Stock waitlist entry cancelled.' });
     } catch {
         return res.status(503).json({ message: 'Unable to cancel stock waitlist entry.' });
