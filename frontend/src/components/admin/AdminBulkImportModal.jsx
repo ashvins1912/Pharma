@@ -75,6 +75,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   const [previewData, setPreviewData] = useState(null);
   const [showErrorsOnly, setShowErrorsOnly] = useState(false);
   const [importJob, setImportJob] = useState(null);
+  const [importIdempotencyKey, setImportIdempotencyKey] = useState('');
   const [pollError, setPollError] = useState('');
 
   // Status Polling for active import jobs
@@ -120,7 +121,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       addToast(t('selectTenantBranch'), 'warning');
       return;
     }
-    setFile(selectedFile); setAnalyzing(true); setPreviewData(null); setImportJob(null); setPollError('');
+    setFile(selectedFile); setAnalyzing(true); setPreviewData(null); setImportJob(null); setImportIdempotencyKey(''); setPollError('');
     try {
       const formData = new FormData(); formData.append('excelFile', selectedFile);
       const response = await apiClient.post('/api/v1/inventory/imports/preview', formData, { headers: { 'Content-Type': 'multipart/form-data', ...getImportScopeHeaders() } });
@@ -154,8 +155,11 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
     setCommitting(true);
     try {
-      const idempotencyKey = globalThis.crypto?.randomUUID?.()
-        || `import-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+      // Keep the same key after a network timeout: the server may already have
+      // queued the job, and a retry must retrieve that job rather than duplicate it.
+      const idempotencyKey = importIdempotencyKey || (globalThis.crypto?.randomUUID?.()
+        || `import-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`);
+      if (!importIdempotencyKey) setImportIdempotencyKey(idempotencyKey);
 
       const formData = new FormData();
       formData.append('excelFile', file);
@@ -168,7 +172,8 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
           'Content-Type': 'multipart/form-data',
           'Idempotency-Key': idempotencyKey,
           ...getImportScopeHeaders()
-        }
+        },
+        timeout: 110000
       });
 
       setImportJob(res.data);
