@@ -393,7 +393,7 @@ export default function AdminDashboardView() {
           </span>
         </div>
 
-        <div className="dashboard-workspace-nav flex flex-wrap gap-2 pt-1" role="group" aria-label="Operations workspaces">
+        <div className="dashboard-workspace-nav flex flex-wrap gap-2 pt-1" role="group" aria-label="Operations workspaces">\n          <section className="dashboard-nav-group" aria-label="Orders & fulfilment">\n            <h4 className="dashboard-nav-group-title">Orders & fulfilment</h4>\n            <div className="dashboard-nav-group-items">\n
           {canViewFulfillment && <button
             onClick={() => setAdminTab('fulfillment')}
             className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
@@ -457,7 +457,7 @@ export default function AdminDashboardView() {
             </button>
           )}
 
-          {canViewPromotions && (
+          \n            </div>\n          </section>\n          <section className="dashboard-nav-group" aria-label="Sales & finance">\n            <h4 className="dashboard-nav-group-title">Sales & finance</h4>\n            <div className="dashboard-nav-group-items">\n{canViewPromotions && (
             <button
               onClick={() => setAdminTab('promotions')}
               className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
@@ -511,7 +511,7 @@ export default function AdminDashboardView() {
             </button>
           )}
 
-          {canViewInventory && (
+          \n            </div>\n          </section>\n          <section className="dashboard-nav-group" aria-label="Inventory & logistics">\n            <h4 className="dashboard-nav-group-title">Inventory & logistics</h4>\n            <div className="dashboard-nav-group-items">\n{canViewInventory && (
             <button
               onClick={() => setAdminTab('inventory')}
               className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
@@ -553,7 +553,7 @@ export default function AdminDashboardView() {
             </button>
           )}
 
-          {canViewTenants && (
+          \n            </div>\n          </section>\n          <section className="dashboard-nav-group" aria-label="Platform administration">\n            <h4 className="dashboard-nav-group-title">Platform administration</h4>\n            <div className="dashboard-nav-group-items">\n{canViewTenants && (
             <button
               onClick={() => setAdminTab('tenants')}
               className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
@@ -622,7 +622,7 @@ export default function AdminDashboardView() {
             <span>{t('tenantProfileBranches')}</span>
           </button>
           )}
-        </div>
+\n            </div>\n          </section>        </div>
       </div>
 
       {/* Tab Content Display */}
@@ -723,7 +723,7 @@ export default function AdminDashboardView() {
 
       {adminTab === 'inventory' && canViewInventory && (
         <AdminInventoryTable
-          onOpenBulkImport={() => setImportModalOpen(true)}
+          onOpenBulkImport={() => setAdminBulkImportModalOpen(true)}
           canManage={canAccessOperations || isSuperAdmin || hasPermission('inventory.write') || hasPermission('*')}
           canImport={canImportInventory}
         />
