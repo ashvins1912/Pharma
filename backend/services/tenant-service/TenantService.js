@@ -175,18 +175,45 @@ export class TenantService {
     }
 
     async getTenants(filter = {}) {
+        const search = String(filter.search || '').trim();
+        if (search && search.length < 2) {
+            const error = new Error('Enter at least 2 characters to search tenants.');
+            error.statusCode = 400;
+            throw error;
+        }
+        const limit = filter.limit == null ? null : Math.min(50, Math.max(1, Number(filter.limit) || 5));
+        const sortRecent = filter.sort === 'recent' || filter.sort === 'createdAt';
+        const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         if (getIsConnected()) {
-            // A connected database is authoritative, including when it contains
-            // zero tenants. Never mix local/demo memory records into platform data.
             const query = {};
             if (filter.status) query.status = filter.status;
-            const dbTenants = await Tenant.find(query).lean();
+            if (search) {
+                const pattern = new RegExp(escapeRegex(search), 'i');
+                const fields = [
+                    { name: pattern }, { legalName: pattern }, { slug: pattern },
+                    { code: pattern }, { contactEmail: pattern }, { contactPhone: pattern }
+                ];
+                const idMatch = { _id: search };
+                query.$or = mongoose.isValidObjectId(search) ? [...fields, idMatch] : fields;
+            }
+            let cursor = Tenant.find(query);
+            if (sortRecent) cursor = cursor.sort({ createdAt: -1, _id: -1 });
+            if (limit) cursor = cursor.limit(limit);
+            const dbTenants = await cursor.lean();
             return dbTenants.map(t => ({ id: String(t._id), ...t }));
         }
         let list = Array.from(this.tenants.values());
         if (filter.status) list = list.filter(t => t.status === filter.status);
+        if (search) {
+            const needle = search.toLowerCase();
+            list = list.filter(t => [t.name, t.legalName, t.slug, t.code, t.contactEmail, t.contactPhone, t.id]
+                .some(value => String(value || '').toLowerCase().includes(needle)));
+        }
+        if (sortRecent) list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+        if (limit) list = list.slice(0, limit);
         return list;
     }
+
     async getTenantById(tenantId) {
         if (!tenantId) return null;
         if (getIsConnected()) {
