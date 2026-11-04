@@ -351,7 +351,8 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
     try {
       batch = await StagedImportBatch.create({
         batchId, tenantId, branchId, uploadedBy: actor(req), fileName: cleanName(req.file.originalname),
-        fileSha256, idempotencyKey: key, status: 'STAGING', totalRows: documents.length, validRows, invalidRows
+        fileSha256, idempotencyKey: key, previewInventorySnapshot: approved.inventorySnapshot,
+        previewProductSnapshot: approved.productSnapshot, status: 'STAGING', totalRows: documents.length, validRows, invalidRows
       });
     } catch (error) {
       if (error.code === 11000) {
