@@ -1439,7 +1439,7 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
                 } catch (dbErr) {
                     const result = req.query.status === 'Delivered'
                         ? await dataStore.getDeliveredOrdersPage(page, limit, { tenantId: String(tenantId) })
-                        : await dataStore.getCancelledOrdersPage(page, limit);
+                        : await dataStore.getCancelledOrdersPage(page, limit, { tenantId: String(tenantId) });
                     await sanitizeTenantRiderReferences(result.items || []);
                     return res.json(paginationResult(result.items, result.total, result.page || page, limit));
                 }
@@ -1477,7 +1477,7 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
             } catch (dbErr) {
                 const result = req.query.status === 'Delivered'
                     ? await dataStore.getDeliveredOrdersPage(page, limit, { tenantId })
-                    : await dataStore.getCancelledOrdersPage(page, limit);
+                    : await dataStore.getCancelledOrdersPage(page, limit, { tenantId });
                 await sanitizeTenantRiderReferences(result.items || []);
                 return res.json(paginationResult(result.items, result.total, result.page || page, limit));
             }
