@@ -427,6 +427,14 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
             sourceType: req.body?.sourceType === 'MEDICINE_REQUEST' ? 'MEDICINE_REQUEST' : 'CHECKOUT',
             sourceId: req.body?.sourceId ? String(req.body.sourceId) : null,
             parentOrderId: req.body?.parentOrderId ? String(req.body.parentOrderId) : null,
+            addressId: req.body?.addressId || null,
+            deliveryAddress: String(req.body?.deliveryAddress || '').trim(),
+            addressDetails: req.body?.addressDetails || {},
+            coordinates: req.body?.coordinates || null,
+            paymentMethod: req.body?.paymentMethod || 'Cash on Delivery (COD)',
+            prescriptionUrl: req.body?.prescriptionUrl || null,
+            prescriptionId: req.body?.prescriptionId || null,
+            patientPuid: req.body?.patientPuid || null,
             status: 'WAITING_FOR_STOCK', lines, waitDays, waitUntil,
             idempotencyKey,
             auditTrail: [{ action: 'WAITLIST_CREATED', actorId: String(req.user.sub), at: new Date(), waitDays, waitUntil }]
@@ -438,6 +446,49 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
             if (existing) return res.status(200).json({ case: existing, alreadyCreated: true });
         }
         return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to save stock waitlist request.' });
+    }
+});
+
+
+router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, res) => {
+    if (!getIsConnected()) return res.status(503).json({ message: 'Stock waitlist confirmation is temporarily unavailable.' });
+    try {
+        const waitlist = await FulfillmentCase.findOne({
+            _id: req.params.id, customerId: String(req.user.sub),
+            status: { $in: ['READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'] },
+            waitUntil: { $gt: new Date() }
+        }).lean();
+        if (!waitlist) return res.status(404).json({ message: 'No active stock-ready waitlist entry was found.' });
+        if (!waitlist.addressId || !waitlist.deliveryAddress || !hasValidCoordinates(waitlist.coordinates)) {
+            return res.status(409).json({ message: 'Please update a verified delivery address before confirming this stock-ready request.' });
+        }
+        const readyLines = (waitlist.lines || []).filter(line => Number(line.allocatedQuantity || 0) > 0);
+        if (!readyLines.length) return res.status(409).json({ message: 'No requested quantity is currently available.' });
+        const order = await dataStore.reserveOrder({
+            userId: String(req.user.sub), tenantId: waitlist.tenantId, branchId: waitlist.branchId,
+            addressId: waitlist.addressId, deliveryAddress: waitlist.deliveryAddress,
+            addressDetails: waitlist.addressDetails || {}, coordinates: waitlist.coordinates,
+            paymentMethod: waitlist.paymentMethod || 'Cash on Delivery (COD)',
+            prescriptionUrl: waitlist.prescriptionUrl || null, prescriptionId: waitlist.prescriptionId || null,
+            patientPuid: waitlist.patientPuid || null,
+            items: readyLines.map(line => ({ medicineId: line.productId, quantity: Number(line.allocatedQuantity) }))
+        }, 'Customer stock waitlist confirmation');
+        const remainingLines = (waitlist.lines || []).map(line => {
+            const allocated = Math.min(Number(line.allocatedQuantity || 0), Number(line.waitingQuantity || 0));
+            return { ...line, requestedQuantity: Math.max(0, Number(line.waitingQuantity || 0) - allocated), allocatedQuantity: 0, waitingQuantity: Math.max(0, Number(line.waitingQuantity || 0) - allocated), notifiedAvailableQuantity: 0 };
+        }).filter(line => line.requestedQuantity > 0);
+        await FulfillmentCase.updateOne({ _id: waitlist._id, customerId: String(req.user.sub), status: waitlist.status }, {
+            $set: {
+                lines: remainingLines,
+                status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'FULFILLED',
+                parentOrderId: String(order._id),
+                lastAvailabilityCheckAt: new Date()
+            },
+            $push: { auditTrail: { action: 'AVAILABLE_STOCK_CONFIRMED', actorId: String(req.user.sub), at: new Date(), orderId: String(order._id), fulfilledLineCount: readyLines.length } }
+        });
+        return res.status(201).json({ order, waitlistCaseId: String(waitlist._id), remainingItems: remainingLines, message: 'Available stock has been reserved and a new order has been created.' });
+    } catch (error) {
+        return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to confirm available stock.' });
     }
 });
 
