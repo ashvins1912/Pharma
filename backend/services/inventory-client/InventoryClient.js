@@ -82,6 +82,26 @@ export const inventoryClient = {
     });
   },
 
+  async createProduct({ product, tenantId, branchId, userId = 'backend' }) {
+    return request('POST', '/api/v1/inventory/products', {
+      userId, scopes: ['inventory.write'],
+      data: { product, tenantId, branchId }
+    });
+  },
+
+  async updateProduct({ productId, product, tenantId, branchId, userId = 'backend' }) {
+    return request('PATCH', `/api/v1/inventory/products/${encodeURIComponent(productId)}`, {
+      userId, scopes: ['inventory.write'],
+      data: { ...product, tenantId, branchId }
+    });
+  },
+
+  async archiveProduct({ productId, tenantId, branchId, userId = 'backend' }) {
+    return request('DELETE', `/api/v1/inventory/products/${encodeURIComponent(productId)}`, {
+      userId, scopes: ['inventory.write'], params: { tenantId, branchId }
+    });
+  },
+
   async getProductById(productId, { tenantId = null, branchId = null, userId = 'backend' } = {}) {
     const params = { tenantId, branchId };
     return request('GET', `/api/v1/inventory/${encodeURIComponent(productId)}`, { userId, params });
