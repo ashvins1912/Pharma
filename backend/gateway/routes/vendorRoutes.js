@@ -81,6 +81,10 @@ router.get('/profile', authenticateUser, async (req, res) => {
                     legalName: tenant.legalName || '',
                     licenseNumber: tenant.drugLicenseNumber || '',
                     gstNumber: tenant.gstNumber || '',
+                    geolocation: {
+                        latitude: tenant.geolocation?.latitude ?? null,
+                        longitude: tenant.geolocation?.longitude ?? null
+                    },
                     address: {
                         street: address.street || address.line1 || '',
                         city: address.city || '',
