@@ -912,7 +912,7 @@ router.get('/:id/fulfillment/preview', authenticateUser, requirePermission('medi
         const branchId = await resolveRequestBranchId(request.tenantId, request.branchId, req.user);
         const scope = { tenantId: String(request.tenantId), branchId: branchId || null };
         const inventory = ids.length ? await Medicine.find({ _id: { $in: ids }, ...scope })
-            .select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean() : [];
+            .select('_id name sku code price basePrice stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean() : [];
         const descriptors = (request.requestedItems || []).map(item => ({
             medicineId: item.productId || (mongoose.isValidObjectId(item.medicineId) ? item.medicineId : undefined),
             requestedName: item.requestedName, quantity: item.quantity,
@@ -928,7 +928,7 @@ router.get('/:id/fulfillment/preview', authenticateUser, requirePermission('medi
                 composition: { $in: compositionKeys }, strength: { $in: strengthKeys },
                 expiryDate: { $gt: new Date() }
             }).limit(100)
-                .select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean()
+                .select('_id name sku code price basePrice stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean()
             : [];
         const plan = buildIntelligentFulfillmentPlan({ requestedItems: descriptors, inventory, catalog });
         return res.json({ requestId: String(request._id), requestNumber: request.requestNumber, tenantId: request.tenantId, branchId, ...plan });
@@ -1000,7 +1000,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
         }));
         const ids = [...new Set(requestedItems.map(item => String(item.medicineId || '')).filter(id => mongoose.isValidObjectId(id)))];
         const inventory = ids.length ? await Medicine.find({ _id: { $in: ids }, ...scope })
-            .select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand')
+            .select('_id name sku code price basePrice stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand')
             .lean() : [];
         const compositionKeys = [...new Set(requestedItems.map(item => String(item.composition || '').trim()).filter(Boolean))];
         const strengthKeys = [...new Set(requestedItems.map(item => String(item.strength || '').trim()).filter(Boolean))];
@@ -1010,7 +1010,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
                 composition: { $in: compositionKeys }, strength: { $in: strengthKeys },
                 expiryDate: { $gt: new Date() }
             }).limit(100)
-                .select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand')
+                .select('_id name sku code price basePrice stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand')
                 .lean()
             : [];
         const plan = buildIntelligentFulfillmentPlan({ requestedItems, inventory, catalog });
