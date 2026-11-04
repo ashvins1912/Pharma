@@ -62,13 +62,20 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
   const today = new Date(new Date().toISOString().slice(0, 10));
   const byProductId = new Map();
   for (const row of inventories) {
-    if (row.expiryDate && new Date(row.expiryDate) < today) continue;
     const key = String(row.productId);
+    if (row.expiryDate && new Date(row.expiryDate) < today) {
+      if (includeExpiredBatches === true || String(includeExpiredBatches).toLowerCase() === 'true') {
+        if (!expiredByProductId.has(key)) expiredByProductId.set(key, []);
+        expiredByProductId.get(key).push(row);
+      }
+      continue;
+    }
     if (!byProductId.has(key)) byProductId.set(key, []);
     byProductId.get(key).push(row);
   }
   return products.map(product => {
     const batches = byProductId.get(String(product._id)) || [];
+    const expiredBatches = expiredByProductId.get(String(product._id)) || [];
     batches.sort((a, b) => {
       const ae = a.expiryDate ? new Date(a.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
       const be = b.expiryDate ? new Date(b.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
@@ -96,6 +103,13 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
       reservedQuantity,
       availableQuantity,
       batchCount: batches.length,
+      expiredStockQuantity: expiredBatches.reduce((sum, row) => sum + Number(row.stockQuantity || 0), 0),
+      expiredBatchAvailability: expiredBatches.map(row => ({
+        batchNumber: row.batchNumber || '', expiryDate: row.expiryDate || null,
+        stockQuantity: row.stockQuantity, reservedQuantity: row.reservedQuantity,
+        availableQuantity: Math.max(0, Number(row.stockQuantity || 0) - Number(row.reservedQuantity || 0)),
+        price: row.price
+      })),
       batchAvailability: batches.map(row => ({
         batchNumber: row.batchNumber || '',
         expiryDate: row.expiryDate || null,
@@ -115,7 +129,7 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
 
 export async function searchInventoryProducts({
   tenantId = null, branchId = null, query = '', category = '', hideRx = false,
-  includeOutOfStock = false, sort = 'default', page = 1, limit = 50
+  includeOutOfStock = false, includeExpiredBatches = false, sort = 'default', page = 1, limit = 50
 } = {}) {
   const scopeTenantId = typeof tenantId === 'string' ? tenantId.trim() : '';
   const scopeBranchId = typeof branchId === 'string' ? branchId.trim() : '';
@@ -145,6 +159,7 @@ export async function searchInventoryProducts({
   inventoryFilter.branchId = scopeBranchId;
   const inventories = productIds.length ? await Inventory.find(inventoryFilter).lean() : [];
   const byProductId = new Map();
+  const expiredByProductId = new Map();
   const today = new Date(new Date().toISOString().slice(0, 10));
   for (const row of inventories) {
     if (row.expiryDate && new Date(row.expiryDate) < today) continue;
