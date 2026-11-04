@@ -55,6 +55,44 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     return () => { cancelled = true; };
   }, [isOpen, user?.id]);
 
+  const splitQuoteRequestId = useRef(0);
+  useEffect(() => {
+    if (!isOpen || !fulfillmentPlan?.customerDecisionRequired || !fulfillmentConfirmed) return undefined;
+    const requestId = ++splitQuoteRequestId.current;
+    const items = [];
+    for (const line of fulfillmentPlan.lines || []) {
+      if (line.fulfilNowQuantity > 0) items.push({ medicineId: line.productId, quantity: line.fulfilNowQuantity });
+      if (line.waitingQuantity > 0) {
+        const choice = alternativeChoices[line.productId];
+        if (choice && choice !== 'REMOVE') {
+          items.push({ medicineId: choice, quantity: line.waitingQuantity });
+        }
+      }
+    }
+    if (!items.length) {
+      setQuoteError('Remove at least one item or choose an available fulfilment option.');
+      return undefined;
+    }
+    setQuoteLoading(true);
+    setQuoteError('');
+    apiClient.post('/api/orders/checkout/quote', {
+      tenantId: tenantId || '',
+      items,
+      pointsToRedeem: usePoints ? Number(pointsRequested) || 0 : 0,
+      couponCode: appliedCoupon?.code || ''
+    }).then(response => {
+      if (requestId === splitQuoteRequestId.current) setRewardQuote(response.data);
+    }).catch(error => {
+      if (requestId === splitQuoteRequestId.current) {
+        setRewardQuote(null);
+        setQuoteError(error.response?.data?.message || error.message || 'Could not calculate the updated order total.');
+      }
+    }).finally(() => {
+      if (requestId === splitQuoteRequestId.current) setQuoteLoading(false);
+    });
+    return () => { splitQuoteRequestId.current += 1; };
+  }, [isOpen, fulfillmentPlan, fulfillmentConfirmed, alternativeChoices, tenantId, usePoints, pointsRequested, appliedCoupon?.code]);
+
   const quoteRequestId = useRef(0);
   const cartForQuote = JSON.stringify(cart.map(item => ({
     medicineId: item._id,
@@ -216,6 +254,10 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
     if (fulfillmentPlanForCheckout?.customerDecisionRequired && !checkoutItems.length && !pendingStockItems.length) {
       setErrorMsg('No items remain in this order. Add another medicine or choose an available fulfilment option.');
+      return;
+    }
+    if (fulfillmentConfirmed && quoteError) {
+      setErrorMsg(quoteError);
       return;
     }
     if (pendingStockItems.length && !waitDays) {
@@ -716,6 +758,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                 <span>{t('deliveryCharge')}</span>
                 <span className="text-emerald-600 font-bold">FREE</span>
               </div>
+              {fulfillmentPlan?.customerDecisionRequired && !fulfillmentConfirmed && <p className="text-[10px] text-amber-800">The payable total will be recalculated for the available items and your selected alternatives after you confirm these choices.</p>}
               <div className="border-t border-dashed border-slate-300 pt-2 flex justify-between items-center text-base font-black text-slate-900">
                 <span>{t('payableAmount')}:</span>
                 <span className="text-emerald-600 text-xl font-black">
