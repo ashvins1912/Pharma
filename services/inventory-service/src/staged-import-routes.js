@@ -558,6 +558,13 @@ router.get('/imports/batches/:batchId/invalid-records/download', requireServiceS
   }).sort({ rowNumber: 1 }).lean();
   const records = invalidRows.map(row => ({
     ...row.originalRecord,
+    SKU: row.normalized?.sku ?? row.originalRecord?.SKU ?? '',
+    'Medicine Name': row.normalized?.name ?? row.originalRecord?.['Medicine Name'] ?? '',
+    Price: row.normalized?.price ?? row.originalRecord?.Price ?? '',
+    Stock: row.normalized?.stockQuantity ?? row.originalRecord?.Stock ?? '',
+    'Batch Number': row.normalized?.batchNumber ?? row.originalRecord?.['Batch Number'] ?? '',
+    'Expiry Date': row.normalized?.expiryDate ?? row.originalRecord?.['Expiry Date'] ?? '',
+    Category: row.normalized?.category ?? row.originalRecord?.Category ?? '',
     'Source Row Number': row.rowNumber,
     'Validation Errors': (row.validationErrors || []).join(' | ')
   }));
