@@ -51,7 +51,9 @@ test('only proposes alternatives with matching composition, strength and compati
     now
   });
   assert.deepEqual(plan.lines[0].alternatives.map(item => item.productId), ['alternative-good']);
-  assert.equal(plan.lines[0].alternatives[0].discountedUnitPrice, 72);
+  assert.equal(plan.lines[0].alternatives[0].discountedUnitPrice, 80);
+  assert.equal(plan.lines[0].alternatives[0].listPrice, 100);
+  assert.equal(plan.lines[0].alternatives[0].discountPercentage, 20);
   assert.equal(plan.lines[0].alternatives[0].discountPercentage, 28);
   assert.equal(plan.lines[0].alternatives[0].substitutionRequiresCustomerConsent, true);
 });
