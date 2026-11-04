@@ -736,9 +736,38 @@ export async function createImportJob({
   // The route passes the server-generated preview produced from this exact upload.
   // Reusing it avoids a second XLSX parse and duplicate full-catalogue lookups.
   if (!approvedPreview || approvedPreview.previewFingerprint !== previewFingerprint
-    || approvedPreview.tenantId !== tenantId || approvedPreview.branchId !== branchId) {
+    || approvedPreview.tenantId !== tenantId || approvedPreview.branchId !== branchId
+    || !Array.isArray(approvedPreview.catalogSkus)) {
     await fs.rm(file.path, { force: true }).catch(() => {});
     const error = new Error('The approved server preview is missing or does not match this tenant and branch. Preview the workbook again.');
+    error.statusCode = 409;
+    error.code = 'PREVIEW_FINGERPRINT_MISMATCH';
+    throw error;
+  }
+
+  // Recheck the stock/catalogue baseline without reopening or reparsing the
+  // uploaded workbook. The worker also performs per-batch snapshot checks.
+  const [currentInventory, currentProducts] = approvedPreview.catalogSkus.length
+    ? await Promise.all([
+      Inventory.find({
+        tenantId, branchId, sku: { $in: approvedPreview.catalogSkus }
+      }).select('sku batchNumber stockQuantity reservedQuantity price updatedAt').lean(),
+      Product.find({
+        tenantId, sku: { $in: approvedPreview.catalogSkus }
+      }).select('sku version updatedAt').lean()
+    ])
+    : [[], []];
+  const currentInventorySnapshot = currentInventory.map(item => ({
+    sku: item.sku, batchNumber: item.batchNumber || '', stockQuantity: item.stockQuantity,
+    reservedQuantity: item.reservedQuantity, price: item.price, updatedAt: item.updatedAt || null
+  })).sort((left, right) => JSON.stringify([left.sku, left.batchNumber]).localeCompare(JSON.stringify([right.sku, right.batchNumber])));
+  const currentProductSnapshot = currentProducts.map(item => ({
+    sku: item.sku, version: item.version, updatedAt: item.updatedAt || null
+  })).sort((left, right) => left.sku.localeCompare(right.sku));
+  if (JSON.stringify(currentInventorySnapshot) !== JSON.stringify(approvedPreview.inventorySnapshot)
+    || JSON.stringify(currentProductSnapshot) !== JSON.stringify(approvedPreview.productSnapshot)) {
+    await fs.rm(file.path, { force: true }).catch(() => {});
+    const error = new Error('Inventory or catalogue changed after preview. Preview the workbook again before importing.');
     error.statusCode = 409;
     error.code = 'PREVIEW_FINGERPRINT_MISMATCH';
     throw error;
@@ -1071,6 +1100,7 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     warningsCount: 0,
     errors: errors.slice(0, 100),
     previewRows,
+    catalogSkus: skus,
     stockMode: 'REPLACE'
   };
 }
