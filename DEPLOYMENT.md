@@ -88,6 +88,7 @@ The Render disk is for import/work files, not the authoritative inventory databa
 - Import upload, review, row editing, publish, unpublish and rollback are routed through API Gateway and require the signed tenant/branch scope plus `inventory.import`.
 - Each uploaded workbook is staged without changing live stock. Explicit publish applies product and inventory changes atomically and records before/after snapshots, import batch/row provenance and audit history.
 - Stock reads, availability checks, reservations, release and deduction all use Inventory Service. Availability is summed across non-expired lots for the selected tenant + branch; reservations allocate FEFO across lots and persist exact allocations for safe release/deduction.
+- Public storefront and admin inventory catalogues, plus single-product create/update/archive operations, use Inventory Service. The legacy `/api/medicines` bulk-upload endpoints are deprecated; use the staged `/api/v1/inventory/imports` workflow.
 - Batch rollback refuses to overwrite inventory, reservations or catalogue records changed after publication. Use unpublish/rollback only after checking the batch audit history.
 
 Production rollout verification:
