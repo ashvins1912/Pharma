@@ -81,7 +81,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
 
   // Status Polling for active import jobs
   useEffect(() => {
-    if (pollError || !importJob?.jobId || !['QUEUED', 'PROCESSING'].includes(importJob.status)) return undefined;
+    if (pollError || !importJob?.jobId || !['QUEUED', 'PROCESSING', 'STAGING'].includes(importJob.status)) return undefined;
     let cancelled = false;
 
     const pollStatus = async () => {
