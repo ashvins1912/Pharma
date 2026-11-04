@@ -200,7 +200,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             } else if (alternativeId) {
               throw new Error('The selected alternative no longer has enough stock. Please review the updated options.');
             } else {
-              pendingStockItems.push({ productId: line.productId, requestedQuantity: line.waitingQuantity });
+              pendingStockItems.push({ ...(line.isListed ? { productId: line.productId } : {}), requestedName: line.name, composition: line.composition, strength: line.strength, dosageForm: line.dosageForm, requestedQuantity: line.waitingQuantity });
             }
           }
         }
@@ -234,7 +234,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       }
       try {
         await apiClient.post('/api/orders/fulfillment/waitlist', {
-          tenantId: String(tenantId), items: pendingStockItems, waitDays,
+          tenantId: String(tenantId), branchId: fulfillmentPlanForCheckout?.branchId || activeTenant?.branchId || null, items: pendingStockItems, waitDays,
           sourceType: 'CHECKOUT', addressId: selectedAddress._id || selectedAddress.id || '',
           deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
           coordinates: selectedAddress.coordinates, addressDetails: selectedAddress, customerMobile: selectedAddress.mobile || user?.user_metadata?.mobile || '', orderedForName: (people.find((p) => p.puid === patientPuid)?.displayName) || user?.name || user?.email || 'Customer', prescriptionRequired, paymentMethod: 'Cash on Delivery (COD)', patientPuid
