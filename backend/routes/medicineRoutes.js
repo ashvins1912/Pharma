@@ -1,5 +1,4 @@
 import express from 'express';
-import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
 import { getIsConnected } from '../config/db.js';
@@ -298,44 +297,16 @@ const setLegacyImportDeprecation = res => {
     res.set('Sunset', '2027-01-01');
     res.set('Link', '</api/v1/inventory/imports>; rel="successor-version"');
 };
+const legacyImportGone = (_req, res) => {
+    setLegacyImportDeprecation(res);
+    return res.status(410).json({
+        code: 'LEGACY_INVENTORY_IMPORT_DISABLED',
+        message: 'This legacy import path is disabled. Use the staged Inventory Service workflow at /api/v1/inventory/imports.'
+    });
+};
 
 // Start a durable background import job (Legacy).
-router.post('/imports', authenticateUser, uploadMemory.single('excelFile'), async (req, res) => {
-    setLegacyImportDeprecation(res);
-    try {
-        if (!req.file?.buffer) return res.status(400).json({ message: 'No Excel file provided.' });
-        if (!/\.(xlsx|xls)$/i.test(req.file.originalname)) {
-            return res.status(400).json({ message: 'Upload an .xlsx or .xls workbook.' });
-        }
-        const { createInventoryImport, enqueueInventoryImport } =
-            await import('../services/InventoryImportService.js');
-        const job = await createInventoryImport({
-            fileName: req.file.originalname,
-            buffer: req.file.buffer,
-            adminId: req.user.sub
-        });
-        enqueueInventoryImport(job._id);
-        return res.status(202).json({
-            importId: String(job._id),
-            status: job.status,
-            totalRecords: 0,
-            processedRecords: 0,
-            successfulRecords: 0,
-            failedRecords: 0,
-            failedFileAvailable: false
-        });
-    } catch (error) {
-        console.error('Inventory import job creation failed:', {
-            adminId: req.user?.sub,
-            fileName: req.file?.originalname,
-            code: error.code || error.name,
-            message: error.message
-        });
-        return res.status(error.statusCode || 500).json({
-            message: error.statusCode ? error.message : 'Could not start inventory import.'
-        });
-    }
-});
+router.post('/imports', authenticateUser, legacyImportGone);
 
 router.get('/imports/:importId/status', authenticateUser, async (req, res) => {
     setLegacyImportDeprecation(res);
@@ -398,78 +369,15 @@ router.get('/imports/:importId/failed-records', authenticateUser, async (req, re
     }
 });
 
-router.post('/imports/:importId/retry', authenticateUser, async (req, res) => {
-    setLegacyImportDeprecation(res);
-    if (!mongoose.isValidObjectId(req.params.importId)) {
-        return res.status(404).json({ message: 'Inventory import was not found.' });
-    }
-    try {
-        const { retryInventoryImport } = await import('../services/InventoryImportService.js');
-        const job = await retryInventoryImport(req.params.importId, req.user.sub);
-        if (!job) return res.status(404).json({ message: 'A retryable import was not found.' });
-        return res.status(202).json({ importId: String(job._id), status: 'QUEUED' });
-    } catch (error) {
-        console.error('Inventory import retry failed:', error);
-        return res.status(500).json({ message: 'Could not retry inventory import.' });
-    }
-});
+router.post('/imports/:importId/retry', authenticateUser, legacyImportGone);
 
 // Workbook preview is chunked and returns only a small preview/error sample.
-router.post('/validate-import', authenticateUser, uploadMemory.single('excelFile'), async (req, res) => {
-    setLegacyImportDeprecation(res);
-    try {
-        if (!req.file || !req.file.buffer) {
-            return res.status(400).json({ message: "No Excel file provided." });
-        }
-        const { previewInventoryWorkbook } = await import('../services/InventoryImportService.js');
-        return res.json(previewInventoryWorkbook(req.file.buffer));
-    } catch (err) {
-        console.error("Workbook validation error:", err);
-        res.status(400).json({ message: "Workbook validation failed: " + err.message });
-    }
-});
+router.post('/validate-import', authenticateUser, legacyImportGone);
 
 // Confirm and commit validated Excel rows (Requirement 6)
-router.post('/confirm-import', authenticateUser, async (req, res) => {
-    setLegacyImportDeprecation(res);
-    try {
-        const { rows } = req.body;
-        if (!Array.isArray(rows) || rows.length === 0) {
-            return res.status(400).json({ message: "No valid rows provided for import." });
-        }
-        const { createInventoryImportFromRows } = await import('../services/InventoryImportService.js');
-        const job = await createInventoryImportFromRows({
-            rows,
-            fileName: 'Confirmed_inventory_rows.xlsx',
-            adminId: req.user.sub
-        });
-        return res.status(202).json({ importId: String(job._id), status: job.status });
-    } catch (err) {
-        console.error("Import confirmation error:", err);
-        res.status(500).json({ message: "Failed to import rows: " + err.message });
-    }
-});
+router.post('/confirm-import', authenticateUser, legacyImportGone);
 
 // Direct single-step Excel upload
-router.post('/upload-excel', authenticateUser, uploadMemory.single('excelFile'), async (req, res) => {
-    setLegacyImportDeprecation(res);
-    try {
-        if (!req.file || !req.file.buffer) {
-            return res.status(400).json({ message: "No Excel file provided." });
-        }
-        const { createInventoryImport, enqueueInventoryImport } =
-            await import('../services/InventoryImportService.js');
-        const job = await createInventoryImport({
-            fileName: req.file.originalname,
-            buffer: req.file.buffer,
-            adminId: req.user.sub
-        });
-        enqueueInventoryImport(job._id);
-        return res.status(202).json({ importId: String(job._id), status: job.status });
-    } catch (e) {
-        console.error("Direct Excel upload error:", e);
-        res.status(500).json({ message: "Excel import data stream parsing failed: " + e.message });
-    }
-});
+router.post('/upload-excel', authenticateUser, legacyImportGone);
 
 export default router;
