@@ -393,7 +393,11 @@ export default function AdminDashboardView() {
           </span>
         </div>
 
-        <div className="dashboard-workspace-nav flex flex-wrap gap-2 pt-1" role="group" aria-label="Operations workspaces">\n          <section className="dashboard-nav-group" aria-label="Orders & fulfilment">\n            <h4 className="dashboard-nav-group-title">Orders & fulfilment</h4>\n            <div className="dashboard-nav-group-items">\n
+        <div className="dashboard-workspace-nav flex flex-wrap gap-2 pt-1" role="group" aria-label="Operations workspaces">
+          <section className="dashboard-nav-group" aria-label="Orders & fulfilment">
+            <h4 className="dashboard-nav-group-title">Orders & fulfilment</h4>
+            <div className="dashboard-nav-group-items">
+
           {canViewFulfillment && <button
             onClick={() => setAdminTab('fulfillment')}
             className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
@@ -457,7 +461,13 @@ export default function AdminDashboardView() {
             </button>
           )}
 
-          \n            </div>\n          </section>\n          <section className="dashboard-nav-group" aria-label="Sales & finance">\n            <h4 className="dashboard-nav-group-title">Sales & finance</h4>\n            <div className="dashboard-nav-group-items">\n{canViewPromotions && (
+          
+            </div>
+          </section>
+          <section className="dashboard-nav-group" aria-label="Sales & finance">
+            <h4 className="dashboard-nav-group-title">Sales & finance</h4>
+            <div className="dashboard-nav-group-items">
+{canViewPromotions && (
             <button
               onClick={() => setAdminTab('promotions')}
               className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
@@ -511,7 +521,13 @@ export default function AdminDashboardView() {
             </button>
           )}
 
-          \n            </div>\n          </section>\n          <section className="dashboard-nav-group" aria-label="Inventory & logistics">\n            <h4 className="dashboard-nav-group-title">Inventory & logistics</h4>\n            <div className="dashboard-nav-group-items">\n{canViewInventory && (
+          
+            </div>
+          </section>
+          <section className="dashboard-nav-group" aria-label="Inventory & logistics">
+            <h4 className="dashboard-nav-group-title">Inventory & logistics</h4>
+            <div className="dashboard-nav-group-items">
+{canViewInventory && (
             <button
               onClick={() => setAdminTab('inventory')}
               className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
@@ -553,7 +569,13 @@ export default function AdminDashboardView() {
             </button>
           )}
 
-          \n            </div>\n          </section>\n          <section className="dashboard-nav-group" aria-label="Platform administration">\n            <h4 className="dashboard-nav-group-title">Platform administration</h4>\n            <div className="dashboard-nav-group-items">\n{canViewTenants && (
+          
+            </div>
+          </section>
+          <section className="dashboard-nav-group" aria-label="Platform administration">
+            <h4 className="dashboard-nav-group-title">Platform administration</h4>
+            <div className="dashboard-nav-group-items">
+{canViewTenants && (
             <button
               onClick={() => setAdminTab('tenants')}
               className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
@@ -622,7 +644,9 @@ export default function AdminDashboardView() {
             <span>{t('tenantProfileBranches')}</span>
           </button>
           )}
-\n            </div>\n          </section>        </div>
+
+            </div>
+          </section>        </div>
       </div>
 
       {/* Tab Content Display */}
