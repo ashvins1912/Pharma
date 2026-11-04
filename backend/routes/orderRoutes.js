@@ -406,23 +406,31 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
         const normalizedWaitItems = items.map(item => ({ productId: String(item.productId || item.medicineId || ''), requestedQuantity: Number(item.requestedQuantity ?? item.waitingQuantity) })).sort((a, b) => a.productId.localeCompare(b.productId));
         requestFingerprint = createHash('sha256').update(JSON.stringify({ tenantId, sourceType: req.body?.sourceType || 'CHECKOUT', sourceId: req.body?.sourceId || null, parentOrderId: req.body?.parentOrderId || null, waitDays, items: normalizedWaitItems })).digest('hex');
         const ids = [...new Set(items.map(item => String(item.productId || item.medicineId || '')).filter(Boolean))];
-        if (!ids.length || ids.some(id => !mongoose.isValidObjectId(id))) return res.status(400).json({ message: 'Pending items must reference valid catalogue products.' });
+        if (!items.every(item => {
+            const productId = String(item.productId || item.medicineId || '');
+            const requestedName = String(item.requestedName || item.name || '').trim();
+            const requestedQuantity = Number(item.requestedQuantity ?? item.waitingQuantity);
+            return (productId ? mongoose.isValidObjectId(productId) : requestedName.length > 1)
+                && Number.isSafeInteger(requestedQuantity) && requestedQuantity > 0;
+        })) return res.status(400).json({ message: 'Each waitlist item needs a catalogue product or requested medicine name and a positive whole-number quantity.' });
         const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
         if (!tenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
         const existing = await FulfillmentCase.findOne({ customerId: String(req.user.sub), tenantId, idempotencyKey }).lean();
-        if (existing) {
-            if (existing.requestFingerprint !== requestFingerprint) return res.status(409).json({ message: 'This idempotency key was already used for a different waitlist request.' });
-            return res.status(200).json({ case: existing, alreadyCreated: true });
-        }
-        const inventory = await Medicine.find({ _id: { $in: ids }, tenantId }).select('_id name').lean();
-        if (inventory.length !== ids.length) return res.status(404).json({ message: 'One or more requested medicines are not listed by this pharmacy.' });
+        if (existing) return res.status(200).json({ case: existing, alreadyCreated: true });
+        const inventory = ids.length ? await Medicine.find({ _id: { $in: ids }, tenantId }).select('_id name').lean() : [];
+        if (inventory.length !== ids.length) return res.status(404).json({ message: 'One or more selected medicines are not listed by this pharmacy.' });
         const lines = items.map(item => {
-            const productId = String(item.productId || item.medicineId);
+            const productId = String(item.productId || item.medicineId || '');
             const requestedQuantity = Number(item.requestedQuantity ?? item.waitingQuantity);
-            if (!Number.isSafeInteger(requestedQuantity) || requestedQuantity < 1) throw Object.assign(new Error('Waiting quantity must be a positive whole number.'), { statusCode: 400 });
-            const product = inventory.find(row => String(row._id) === productId);
+            const product = productId ? inventory.find(row => String(row._id) === productId) : null;
             return {
-                productId, name: product.name, requestedQuantity,
+                productId: productId || null,
+                name: product?.name || String(item.requestedName || item.name || '').trim(),
+                requestedName: String(item.requestedName || item.name || product?.name || '').trim(),
+                composition: String(item.composition || '').trim(),
+                strength: String(item.strength || '').trim(),
+                dosageForm: String(item.dosageForm || '').trim(),
+                requestedQuantity,
                 allocatedQuantity: 0, waitingQuantity: requestedQuantity,
                 customerDecision: 'ACCEPTED_ORIGINAL'
             };
