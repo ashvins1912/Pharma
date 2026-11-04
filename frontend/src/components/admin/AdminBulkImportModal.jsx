@@ -418,7 +418,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
             </div>
 
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs text-slate-500 pt-2">
-              <span className="break-words">{t('requiredColumns')}</span>
+              <span className="break-words">Required: Medicine Name, Price, Stock · SKU is optional (auto-generated when blank)</span>
               <button
                 type="button"
                 onClick={downloadSampleTemplate}
