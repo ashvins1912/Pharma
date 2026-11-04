@@ -370,8 +370,8 @@ router.post('/fulfillment/preview', authenticateUser, async (req, res) => {
         }
         const branchScope = branchId ? { branchId } : {};
         const inventory = await Medicine.find({ _id: { $in: ids }, tenantId, ...branchScope }).select('_id name sku code price basePrice stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean();
-        const compositionKeys = [...new Set(inventory.map(item => String(item.composition || item.genericName || '').trim()).filter(Boolean))];
-        const strengthKeys = [...new Set(inventory.map(item => String(item.strength || '').trim()).filter(Boolean))];
+        const compositionKeys = [...new Set([...inventory.map(item => item.composition || item.genericName), ...items.map(item => item.composition || item.genericName)].map(value => String(value || '').trim()).filter(value => value && !['active compound', 'unknown', 'n/a', 'na'].includes(value.toLowerCase())))];
+        const strengthKeys = [...new Set([...inventory.map(item => item.strength), ...items.map(item => item.strength)].map(value => String(value || '').trim()).filter(Boolean))];
         const catalog = compositionKeys.length && strengthKeys.length
             ? await Medicine.find({
                 tenantId, ...branchScope, isActive: { $ne: false },
