@@ -302,7 +302,7 @@ router.post('/', authenticateUser, async (req, res) => {
             pointsToRedeem: Number(req.body.pointsToRedeem || 0)
         }, req.user.user_metadata?.name || req.user.email || 'Customer');
 
-        return res.status(201).json({ order });
+        return res.status(order?.replayed ? 200 : 201).json({ order });
     } catch (error) {
         if (error.statusCode) {
             return res.status(error.statusCode).json({ code: error.code || 'ORDER_CHECKOUT_FAILED', error: error.message, message: error.message });
@@ -811,6 +811,8 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             return res.status(404).json({ code: 'PHARMACY_UNAVAILABLE', message: 'The selected pharmacy is no longer available. Please choose another pharmacy.' });
         }
         const selectedBranchId = await resolveTenantBranchId(selectedTenantId, req.body.branchId, req.user);
+        const idempotencyKey = String(req.get('Idempotency-Key') || req.body.idempotencyKey || randomUUID()).trim();
+        if (idempotencyKey.length > 200) return res.status(400).json({ message: 'Idempotency-Key must be 200 characters or fewer.' });
         const cartItems = parseCheckoutItems(req.body.items || req.body.cartItems);
         if (!Array.isArray(cartItems) || !cartItems.length) {
             return res.status(400).json({ message: 'Add at least one medicine to your order.' });
@@ -906,6 +908,7 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             branchScopeExplicit: true,
             fulfillmentCaseId: req.body.fulfillmentCaseId || null,
             fulfillmentState: req.body.fulfillmentState || 'FULL',
+            idempotencyKey,
             addressId: addressSnapshot?._id || addressId || null,
             customerName,
             customerMobile: addressSnapshot?.mobile || req.body.mobile || req.body.addressDetails?.mobile || req.body.addressDetails?.phone || req.user.user_metadata?.mobile || '',
