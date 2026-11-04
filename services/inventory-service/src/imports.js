@@ -30,17 +30,86 @@ const valueOf = (row, ...keys) => {
   return undefined;
 };
 
+// Read both the standard import template and pharmacy stock exports whose
+// title row appears before the actual column-header row.
+function readImportRows(sheet) {
+  const matrix = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
+  const normalizeHeader = value => String(value ?? '').trim().toLowerCase().replace(/[.\s_/-]+/g, '');
+  const headerIndex = matrix.findIndex(row => {
+    const headers = row.map(normalizeHeader);
+    return headers.includes('itemname') && (headers.includes('code') || headers.includes('sku'));
+  });
+
+  if (headerIndex < 0) {
+    return xlsx.utils.sheet_to_json(sheet, { defval: '', raw: false })
+      .map((row, index) => ({ ...row, 'Source Row Number': index + 2 }));
+  }
+
+  const headers = matrix[headerIndex].map(value => String(value ?? '').trim());
+  const get = (record, ...names) => {
+    for (const name of names) {
+      const key = Object.keys(record).find(candidate => normalizeHeader(candidate) === normalizeHeader(name));
+      if (key && record[key] !== '' && record[key] !== null && record[key] !== undefined) return record[key];
+    }
+    return undefined;
+  };
+  const isNumber = value => value !== '' && value !== null && value !== undefined && Number.isFinite(Number(value));
+
+  let currentCategory = 'General Medicine';
+  const records = [];
+  for (let index = headerIndex + 1; index < matrix.length; index += 1) {
+    const cells = matrix[index] || [];
+    if (!cells.some(value => value !== '' && value !== null && value !== undefined)) continue;
+    const source = Object.fromEntries(headers.map((header, column) => [header, cells[column] ?? '']));
+    const name = String(get(source, 'Item Name') ?? '').trim();
+    if (!name) continue;
+
+    const mrp = get(source, 'MRP/Pk', 'MRP / Pk', 'MRP');
+    const unitMrp = get(source, 'MRP');
+    const totalQty = get(source, 'Tot.Bal.Qty', 'Tot Bal Qty', 'Total Balance Qty');
+    const storeQty = get(source, 'Str.Qty', 'Store Qty');
+    const godownQty = get(source, 'Gdwn.Qty', 'Godown Qty');
+
+    // Category/group headings have no batch, price or stock values.
+    if (!isNumber(mrp) && !isNumber(unitMrp) && !isNumber(totalQty)) {
+      currentCategory = name;
+      continue;
+    }
+
+    const calculatedQty = isNumber(totalQty)
+      ? Number(totalQty)
+      : (isNumber(storeQty) ? Number(storeQty) : 0) + (isNumber(godownQty) ? Number(godownQty) : 0);
+    const mapped = {
+      ...source,
+      SKU: String(get(source, 'Code', 'SKU') ?? '').trim(),
+      'Medicine Name': name,
+      Price: isNumber(mrp) ? Number(mrp) : (isNumber(unitMrp) ? Number(unitMrp) : ''),
+      Stock: calculatedQty,
+      'Batch Number': String(get(source, 'Batch No', 'Batch Number') ?? '').trim(),
+      'Expiry Date': get(source, 'Exp Dt', 'Expiry Date') ?? '',
+      Form: String(get(source, 'Packing', 'Form') ?? '').trim(),
+      Category: currentCategory,
+      'Source Row Number': index + 1
+    };
+
+    // A stock row must have a usable product name, price and quantity.
+    // Invalid detail rows are retained so preview reports them instead of silently dropping them.
+    records.push(mapped);
+  }
+  return records;
+}
+
 export function normalizeImportRow(row) {
-  const rawSku = valueOf(row, 'SKU', 'sku', 'Sku', 'Product SKU', 'Barcode');
+  const rawSku = valueOf(row, 'SKU', 'sku', 'Sku', 'Product SKU', 'Barcode', 'Code', 'Item Code');
   const sku = String(rawSku !== undefined && rawSku !== null ? rawSku : '').trim().toUpperCase();
 
-  const rawName = valueOf(row, 'Medicine Name', 'medicineName', 'name', 'Name', 'Product Name', 'productName');
+  const rawName = valueOf(row, 'Medicine Name', 'medicineName', 'name', 'Name', 'Product Name', 'productName', 'Item Name');
   const name = String(rawName !== undefined && rawName !== null ? rawName : '').trim();
 
-  const rawPrice = valueOf(row, 'Price', 'price', 'MRP', 'mrp', 'Selling Price', 'sellingPrice');
+  const rawPrice = valueOf(row, 'Price', 'price', 'MRP/Pk', 'MRP Per Pack', 'MRP', 'mrp', 'Selling Price', 'sellingPrice');
   const price = rawPrice !== undefined && rawPrice !== null && String(rawPrice).trim() !== '' ? Number(rawPrice) : NaN;
 
-  const rawStock = valueOf(row, 'Stock', 'stock', 'Quantity', 'quantity', 'Stock Quantity', 'stockQuantity');
+  const rawStock = valueOf(row, 'Stock', 'stock', 'Tot.Bal.Qty', 'Total Balance Qty', 'Total Balance Quantity', 'Quantity', 'quantity', 'Stock Quantity', 'stockQuantity');
   const stockQuantity = rawStock !== undefined && rawStock !== null && String(rawStock).trim() !== '' ? Number(rawStock) : NaN;
 
   const rawBaseCost = valueOf(row, 'Base Cost Price', 'baseCostPrice', 'Cost Price', 'costPrice', 'Base Price', 'basePrice');
@@ -51,7 +120,7 @@ export function normalizeImportRow(row) {
   const rawMarginTier = valueOf(row, 'Margin Tier', 'marginTier');
   const marginTier = rawMarginTier ? String(rawMarginTier).trim().toUpperCase() : 'LOW';
 
-  const rawExpiry = valueOf(row, 'Expiry Date', 'expiryDate', 'Expiry', 'expiry');
+  const rawExpiry = valueOf(row, 'Expiry Date', 'expiryDate', 'Expiry', 'expiry', 'Exp Dt');
   let expiryDate = null;
   if (rawExpiry !== undefined && rawExpiry !== null && rawExpiry !== '') {
     if (rawExpiry instanceof Date) {
@@ -94,7 +163,7 @@ export function normalizeImportRow(row) {
       name,
       genericName: String(valueOf(row, 'Generic Name', 'genericName') || '').trim(),
       strength: String(valueOf(row, 'Strength', 'strength') || '').trim(),
-      form: String(valueOf(row, 'Form', 'form', 'Dosage Form', 'dosageForm') || '').trim(),
+      form: String(valueOf(row, 'Form', 'form', 'Dosage Form', 'dosageForm', 'Packing') || '').trim(),
       manufacturer: String(valueOf(row, 'Manufacturer', 'manufacturer', 'Brand', 'brand') || 'Pharmaceutical Standard').trim(),
       category: String(valueOf(row, 'Category', 'category') || 'General Medicine').trim(),
       description: String(valueOf(row, 'Description', 'description') || '').trim(),
@@ -104,7 +173,7 @@ export function normalizeImportRow(row) {
       stockQuantity,
       baseCostPrice: baseCostPrice ?? undefined,
       marginTier,
-      batchNumber: String(valueOf(row, 'Batch Number', 'batchNumber', 'Batch', 'batch') || '').trim(),
+      batchNumber: String(valueOf(row, 'Batch Number', 'batchNumber', 'Batch', 'batch', 'Batch No') || '').trim(),
       expiryDate
     }
   };
@@ -529,7 +598,7 @@ async function processJob(job) {
   const workbook = xlsx.readFile(job.filePath, { cellDates: true });
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
   if (!firstSheet) throw new Error('Workbook does not contain a worksheet.');
-  const rows = xlsx.utils.sheet_to_json(firstSheet, { defval: '', raw: false });
+  const rows = readImportRows(firstSheet);
   const currentPreview = await previewImportFile({ filePath: job.filePath, tenantId: job.tenantId, branchId: job.branchId });
   if (currentPreview.previewFingerprint !== job.previewFingerprint) {
     const error = new Error('The workbook no longer matches the approved preview. No inventory changes were applied.');
@@ -932,13 +1001,13 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     error.statusCode = 400;
     throw error;
   }
-  const rows = xlsx.utils.sheet_to_json(sheet, { defval: '', raw: false });
+  const rows = readImportRows(sheet);
   if (!rows.length) {
     const error = new Error('Workbook contains no data rows.');
     error.statusCode = 400;
     throw error;
   }
-  const normalized = rows.map((row, index) => ({ rowNumber: index + 2, originalRecord: row, parsed: normalizeImportRow(row) }));
+  const normalized = rows.map((row, index) => ({ rowNumber: Number(row['Source Row Number']) || index + 2, originalRecord: row, parsed: normalizeImportRow(row) }));
   const seen = new Set();
   const valid = [];
   const errors = [];
