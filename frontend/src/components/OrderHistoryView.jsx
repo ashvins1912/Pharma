@@ -22,7 +22,10 @@ export default function OrderHistoryView({ onTrackOrder }) {
     .replace(/_/g, ' ')
     .toLowerCase();
   const editableStatuses = ['pending review', 'approved', 'processing order'];
-  const activeOrders = orders.filter(order => !['delivered', 'cancelled', 'rejected', 'completed'].includes(getNormalizedStatus(order)));
+  const activeOrders = orders.filter(order =>
+    !['cancelled', 'rejected', 'completed'].includes(getNormalizedStatus(order))
+    && (getNormalizedStatus(order) !== 'delivered' || order.fulfillmentState === 'PARTIAL')
+  );
   const isReadyToDispatch = (order) => getNormalizedStatus(order) === 'ready to dispatch';
 
   const cancelOrder = async (order) => {
