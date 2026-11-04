@@ -167,7 +167,11 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
       return authenticateUser(req, res, async () => {
         const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
         const isPlatformUser = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const isTenantRole = ['TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACY', 'PHARMACIST', 'PHARMACY_STAFF'].includes(role);
         const tenantId = String(req.user?.app_metadata?.tenantId || req.user?.tenantId || '').trim();
+        if (isTenantRole && !tenantId) {
+          return res.status(403).json({ success: false, error: { code: 'TENANT_CONTEXT_REQUIRED', message: 'Your pharmacy session is missing its tenant identity.' }, requestId: req.requestId });
+        }
         if (!isPlatformUser && tenantId) {
           const permission = 'profile.read';
           if (!isGatewayPermissionAllowed(req.user, permission)) {
