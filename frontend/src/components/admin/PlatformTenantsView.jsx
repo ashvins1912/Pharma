@@ -395,26 +395,26 @@ export default function PlatformTenantsView() {
   };
 
   return (
-    <div className="w-full min-w-0 max-w-full space-y-6 animate-fade-in text-slate-800 overflow-x-hidden">
+    <div className="platform-tenants-view w-full min-w-0 max-w-full space-y-6 animate-fade-in text-slate-800 overflow-x-hidden">
       
       {/* Platform Control Header Card */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-4 sm:p-6 shadow-md space-y-4 overflow-hidden">
-        <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 min-w-0">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-blue-400">
+        <div className="platform-directory-header flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 min-w-0">
+          <div className="platform-directory-heading min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-black uppercase tracking-wider text-blue-400">
               <span>{t('platformVendorName')}</span>
               <span aria-hidden="true">·</span>
               <span className="text-emerald-400">{t('platformScope')}</span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-black tracking-tight mt-1">
+            <h2 className="platform-directory-title text-xl sm:text-2xl font-black tracking-tight mt-1">
               Multi-Tenant Pharmacy Directory & Access Governance
             </h2>
-            <p className="text-xs text-slate-300 mt-0.5 max-w-2xl">
+            <p className="platform-directory-description text-xs text-slate-300 mt-0.5 max-w-2xl">
               Super Admin authority to provision regional pharmacy tenants, configure isolation boundaries, govern operational lifecycle states, and issue cryptographically bound tenant administrator credentials.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 min-w-0">
+          <div className="platform-directory-actions flex flex-wrap items-center gap-2 min-w-0">
             <button
               type="button"
               onClick={() => {
@@ -520,11 +520,11 @@ export default function PlatformTenantsView() {
       )}
 
       {/* Unified Super Admin tenant workspace */}
-      <div className="flex border-b border-slate-200 gap-2 sm:gap-4 overflow-x-auto no-scrollbar max-w-full">
-        <button type="button" onClick={() => setPlatformTab('tenants')} className={`pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'tenants' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>🏢 Tenants Directory ({totalCount})</button>
-        <button type="button" onClick={() => setPlatformTab('profile')} className={`pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'profile' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>🏥 Tenant Profile & Branches</button>
-        <button type="button" onClick={() => setPlatformTab('compare')} className={`pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'compare' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>⚖️ Compare Tenants ({compareTenantIds.length})</button>
-        <button type="button" onClick={() => setPlatformTab('vendors')} className={`pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'vendors' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500'}`}>✉️ Vendor Invitations ({vendors.length})</button>
+      <div className="platform-directory-tabs flex border-b border-slate-200 gap-2 sm:gap-4 overflow-x-auto no-scrollbar max-w-full">
+        <button className="platform-directory-tab" type="button" onClick={() => setPlatformTab('tenants')} className={`pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'tenants' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>🏢 Tenants Directory ({totalCount})</button>
+        <button className="platform-directory-tab" type="button" onClick={() => setPlatformTab('profile')} className={`pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'profile' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>🏥 Tenant Profile & Branches</button>
+        <button className="platform-directory-tab" type="button" onClick={() => setPlatformTab('compare')} className={`pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'compare' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>⚖️ Compare Tenants ({compareTenantIds.length})</button>
+        <button className="platform-directory-tab" type="button" onClick={() => setPlatformTab('vendors')} className={`pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'vendors' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500'}`}>✉️ Vendor Invitations ({vendors.length})</button>
       </div>
 
       {platformTab === 'profile' ? (
