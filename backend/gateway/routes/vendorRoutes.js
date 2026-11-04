@@ -16,8 +16,104 @@ import { onboardingLimiter } from '../../middleware/rateLimiter.js';
 import { sendSuccess, sendError } from '../../shared/responses.js';
 import { setSessionCookies } from '../../security/sessionCookie.js';
 import { authService } from '../../services/identity-service/AuthService.js';
+import TenantMembership from '../../models/TenantMembership.js';
+import UserProfile from '../../models/UserProfile.js';
+import Tenant from '../../models/Tenant.js';
+import Vendor from '../../models/Vendor.js';
 
 const router = express.Router();
+
+/**
+ * GET /vendor/profile
+ * Returns the authenticated tenant's persisted profile and its own personnel.
+ * Tenant users are always scoped from their signed identity + active membership;
+ * only platform administrators may select a tenant through X-Tenant-Id.
+ */
+router.get('/profile', authenticateUser, async (req, res) => {
+    try {
+        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+        const platformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const tenantId = platformAdmin
+            ? String(req.get('x-tenant-id') || req.query.tenantId || '').trim()
+            : String(req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
+
+        if (!tenantId) {
+            return sendError(res, { code: 'TENANT_CONTEXT_REQUIRED', message: 'Select an authorized pharmacy tenant first.', statusCode: 403, req });
+        }
+
+        if (!platformAdmin) {
+            const membership = await TenantMembership.findOne({
+                userId: String(req.user?.sub || req.user?.id || req.user?.userId || ''),
+                tenantId,
+                status: 'ACTIVE'
+            }).lean();
+            if (!membership) {
+                return sendError(res, { code: 'TENANT_MEMBERSHIP_REQUIRED', message: 'An active membership for this pharmacy is required.', statusCode: 403, req });
+            }
+        }
+
+        const tenant = await Tenant.findOne({ _id: tenantId, status: { $ne: 'DISABLED' } }).lean();
+        if (!tenant) {
+            return sendError(res, { code: 'TENANT_PROFILE_NOT_FOUND', message: 'The selected pharmacy profile was not found.', statusCode: 404, req });
+        }
+
+        const [vendor, personnel] = await Promise.all([
+            Vendor.findOne({ tenantId }).sort({ onboardingCompletedAt: -1, updatedAt: -1 }).lean(),
+            UserProfile.find({ tenantId, status: 'ACTIVE' })
+                .select('userId name firstName lastName email role roles')
+                .sort({ createdAt: 1 }).lean()
+        ]);
+
+        const address = tenant.address || vendor?.address || {};
+        const owner = personnel.find(member => ['TENANT_OWNER', 'TENANT_ADMIN', 'OWNER'].includes(String(member.role || '').toUpperCase()))
+            || personnel[0] || null;
+        const ownerDetails = {
+            name: owner?.name || [owner?.firstName, owner?.lastName].filter(Boolean).join(' '),
+            email: owner?.email || tenant.contactEmail || vendor?.email || '',
+            phone: tenant.contactPhone || vendor?.mobile || ''
+        };
+        return sendSuccess(res, {
+            data: {
+                profileConfigured: Boolean(tenant.name || tenant.legalName || tenant.drugLicenseNumber || tenant.contactEmail),
+                tenant: {
+                    id: String(tenant._id),
+                    shopName: tenant.name || '',
+                    legalName: tenant.legalName || '',
+                    licenseNumber: tenant.drugLicenseNumber || '',
+                    gstNumber: tenant.gstNumber || '',
+                    address: {
+                        street: address.street || address.line1 || '',
+                        city: address.city || '',
+                        state: address.state || '',
+                        zipCode: address.zipCode || address.pincode || ''
+                    },
+                    ownerDetails,
+                    status: tenant.status || '',
+                    slug: tenant.slug || '',
+                    code: tenant.code || '',
+                    timezone: tenant.timezone || '',
+                    currency: tenant.currency || ''
+                },
+                personnel: personnel.map(member => ({
+                    id: String(member._id),
+                    name: member.name || [member.firstName, member.lastName].filter(Boolean).join(' '),
+                    email: member.email || '',
+                    role: member.role || (member.roles || [])[0] || ''
+                }))
+            },
+            message: 'Tenant profile retrieved successfully.',
+            statusCode: 200,
+            req
+        });
+    } catch (err) {
+        return sendError(res, {
+            code: 'TENANT_PROFILE_UNAVAILABLE',
+            message: 'The pharmacy profile is temporarily unavailable.',
+            statusCode: 503,
+            req
+        });
+    }
+});
 
 /**
  * -----------------------------------------------------------
