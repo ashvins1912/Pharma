@@ -709,7 +709,7 @@ class VendorService {
         if (tenantDoc.usesTenantAsBranch && !getIsConnected()) {
             await tenantService.createBranch(tenantId, {
                 id: tenantId, name: companyName, code: 'MAIN', phone: mobile, email: vendorEmail,
-                address: { street, city, state, pincode }, geolocation: { latitude, longitude }, isDefault: true
+                address: { street, city, state, pincode }, geolocation: { latitude, longitude }, isDefault: true, isTenantLocation: true
             });
         }
         await tenantService.assignMembership(userId, tenantId, null, 'TENANT_ADMIN', membershipDoc.permissions);
@@ -764,7 +764,8 @@ class VendorService {
                 id: tenantId,
                 name: companyName,
                 slug: tenantSlug,
-                status: 'ACTIVE'
+                status: 'ACTIVE',
+                usesTenantAsBranch: tenantDoc.usesTenantAsBranch
             },
             user: {
                 id: userId,
