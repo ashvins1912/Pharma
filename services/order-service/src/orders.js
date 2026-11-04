@@ -186,7 +186,9 @@ const inventoryRequest = async (path, data, idempotencyKey) => {
         : path.endsWith('/deduct')
           ? ['inventory.deduct']
         : ['inventory.read'],
-    'order-service'
+    'order-service',
+    data?.tenantId || null,
+    data?.branchId || null
   );
   try {
     const response = await axios.post(`${config.inventoryServiceUrl}/api/v1/inventory${path}`, data, {
@@ -420,7 +422,7 @@ export async function createOrder(body, user) {
       }
     }
     try {
-      await inventoryRequest(`/reservations/${encodeURIComponent(reservation.reservationId)}/release`, {});
+      await inventoryRequest(`/reservations/${encodeURIComponent(reservation.reservationId)}/release`, { tenantId: request.tenantId, branchId: request.branchId });
     } catch (releaseError) {
       console.error('Order creation failed and its Inventory reservation could not be released:', {
         orderNumber,
@@ -495,10 +497,10 @@ export async function transitionOrder(orderNumber, newStatus, user) {
   }
   let inventoryEvent = null;
   if (newStatus === 'Cancelled' || newStatus === 'Rejected') {
-    await inventoryRequest(`/reservations/${encodeURIComponent(order.reservationId)}/release`, {});
+    await inventoryRequest(`/reservations/${encodeURIComponent(order.reservationId)}/release`, { tenantId: order.tenantId, branchId: order.branchId });
     inventoryEvent = 'OrderInventoryReleased';
   } else if (newStatus === 'Dispatched') {
-    await inventoryRequest(`/reservations/${encodeURIComponent(order.reservationId)}/deduct`, {});
+    await inventoryRequest(`/reservations/${encodeURIComponent(order.reservationId)}/deduct`, { tenantId: order.tenantId, branchId: order.branchId });
     inventoryEvent = 'OrderInventoryDeducted';
   }
   order.orderStatus = newStatus;
@@ -594,6 +596,8 @@ export async function updateFulfillmentGate(orderNumber, {
       const reservation = await inventoryRequest('/reservations', {
         orderId: order.orderNumber,
         items: order.items.map(item => ({ productId: item.productId, quantity: item.quantity })),
+        tenantId: order.tenantId,
+        branchId: order.branchId,
         idempotencyKey: `order-re-reserve:${order.orderNumber}:${order.version || 1}`
       }, `order-re-reserve:${order.orderNumber}:${order.version || 1}`);
       order.reservationId = reservation.reservationId;
