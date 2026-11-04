@@ -8,6 +8,7 @@ import bcrypt from '../../security/hasher.js';
 import mongoose from 'mongoose';
 import Vendor from '../../models/Vendor.js';
 import Tenant from '../../models/Tenant.js';
+import TenantBranch from '../../models/TenantBranch.js';
 import TenantMembership from '../../models/TenantMembership.js';
 import UserProfile from '../../models/UserProfile.js';
 import { getIsConnected, getTransactionsSupported } from '../../config/db.js';
@@ -521,6 +522,8 @@ class VendorService {
             contactEmail: vendorEmail,
             contactPhone: mobile,
             address: { street, city, state, pincode },
+            geolocation: { latitude, longitude },
+            usesTenantAsBranch: submission.usesTenantAsBranch !== false,
             gstNumber,
             drugLicenseNumber,
             timezone: 'Asia/Kolkata',
@@ -589,6 +592,21 @@ class VendorService {
                 if (session) {
                     session.startTransaction();
                     await Tenant.create([tenantDoc], { session });
+                    if (tenantDoc.usesTenantAsBranch) {
+                        await TenantBranch.create([{
+                            _id: tenantId,
+                            tenantId,
+                            name: companyName,
+                            code: 'MAIN',
+                            phone: mobile,
+                            email: vendorEmail,
+                            address: { street, city, state, pincode },
+                            geolocation: { latitude, longitude },
+                            isTenantLocation: true,
+                            isDefault: true,
+                            status: 'ACTIVE'
+                        }], { session });
+                    }
                     await UserProfile.findOneAndUpdate(
                         { normalizedEmail: vendorEmail },
                         { $set: userDoc },
@@ -613,6 +631,21 @@ class VendorService {
                 } else {
                     // Fallback to sequential updates
                     await Tenant.create(tenantDoc);
+                    if (tenantDoc.usesTenantAsBranch) {
+                        await TenantBranch.create({
+                            _id: tenantId,
+                            tenantId,
+                            name: companyName,
+                            code: 'MAIN',
+                            phone: mobile,
+                            email: vendorEmail,
+                            address: { street, city, state, pincode },
+                            geolocation: { latitude, longitude },
+                            isTenantLocation: true,
+                            isDefault: true,
+                            status: 'ACTIVE'
+                        });
+                    }
                     await UserProfile.findOneAndUpdate(
                         { normalizedEmail: vendorEmail },
                         { $set: userDoc },
@@ -673,6 +706,12 @@ class VendorService {
 
         // Register in TenantService
         await tenantService.createTenant(tenantDoc);
+        if (tenantDoc.usesTenantAsBranch && !getIsConnected()) {
+            await tenantService.createBranch(tenantId, {
+                id: tenantId, name: companyName, code: 'MAIN', phone: mobile, email: vendorEmail,
+                address: { street, city, state, pincode }, geolocation: { latitude, longitude }, isDefault: true
+            });
+        }
         await tenantService.assignMembership(userId, tenantId, null, 'TENANT_ADMIN', membershipDoc.permissions);
 
         const completedAtIso = new Date().toISOString();
