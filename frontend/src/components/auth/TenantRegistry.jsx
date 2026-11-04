@@ -176,13 +176,14 @@ export default function TenantRegistry() {
         </div>}
       </div>
 
-      {modalOpen && <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 p-3 sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby="branch-dialog-title">
-        <form onSubmit={saveBranch} className="my-4 w-full max-w-3xl space-y-5 rounded-3xl bg-white p-5 shadow-2xl sm:p-7">
-          <div className="flex items-start justify-between gap-4">
-            <div><h3 id="branch-dialog-title" className="text-xl font-black text-slate-900">{editingId ? 'Edit branch' : 'Add pharmacy branch'}</h3><p className="mt-1 text-sm text-slate-500">Branch details are scoped to the authenticated tenant.</p></div>
-            <button type="button" onClick={() => setModalOpen(false)} className="rounded-lg px-3 py-1 text-xl text-slate-400 hover:bg-slate-100" aria-label="Close">×</button>
+      {modalOpen && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-slate-950/60 p-2 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="branch-dialog-title">
+        <form onSubmit={saveBranch} className="flex max-h-[calc(100vh-1rem)] max-h-[calc(100dvh-1rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-3xl">
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-7 sm:py-5">
+            <div className="min-w-0"><h3 id="branch-dialog-title" className="text-xl font-black text-slate-900">{editingId ? 'Edit branch' : 'Add pharmacy branch'}</h3><p className="mt-1 text-sm text-slate-500">Branch details are scoped to the authenticated tenant.</p></div>
+            <button type="button" onClick={() => setModalOpen(false)} className="shrink-0 rounded-lg px-3 py-1 text-xl text-slate-400 hover:bg-slate-100" aria-label="Close">×</button>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-7 sm:py-5">
+            <div className="grid gap-4 sm:grid-cols-2">
             <label><span className={labelClass}>Branch name *</span><input required maxLength={100} className={fieldClass} value={form.name} onChange={e => setField('name', e.target.value)} /></label>
             <label><span className={labelClass}>Branch code *</span><input required maxLength={20} className={fieldClass} value={form.code} onChange={e => setField('code', e.target.value.toUpperCase())} /></label>
             <label><span className={labelClass}>Phone</span><input className={fieldClass} value={form.phone || ''} onChange={e => setField('phone', e.target.value)} /></label>
@@ -198,10 +199,13 @@ export default function TenantRegistry() {
             <label><span className={labelClass}>Free delivery above (₹)</span><input type="number" min="0" className={fieldClass} value={form.freeDeliveryAbove} onChange={e => setField('freeDeliveryAbove', e.target.value)} /></label>
             <label><span className={labelClass}>Opening time</span><input type="time" className={fieldClass} value={form.operatingHours?.open || ''} onChange={e => setHours('open', e.target.value)} /></label>
             <label><span className={labelClass}>Closing time</span><input type="time" className={fieldClass} value={form.operatingHours?.close || ''} onChange={e => setHours('close', e.target.value)} /></label>
+            </div>
+            <div className="mt-4 space-y-3">
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={Boolean(form.isDefault)} onChange={e => setField('isDefault', e.target.checked)} /> Set as default branch</label>
+              {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+            </div>
           </div>
-          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={Boolean(form.isDefault)} onChange={e => setField('isDefault', e.target.checked)} /> Set as default branch</label>
-          {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
-          <div className="flex flex-col-reverse justify-end gap-2 border-t border-slate-100 pt-4 sm:flex-row">
+          <div className="flex shrink-0 flex-col-reverse justify-end gap-2 border-t border-slate-100 bg-white px-4 py-3 sm:flex-row sm:px-7 sm:py-4">
             <button type="button" onClick={() => setModalOpen(false)} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold text-slate-700">Cancel</button>
             <button type="submit" disabled={saving} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Saving…' : editingId ? 'Save changes' : 'Create branch'}</button>
           </div>
