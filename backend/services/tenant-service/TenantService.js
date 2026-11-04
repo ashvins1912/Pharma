@@ -414,13 +414,10 @@ export class TenantService {
             email: data.email || tenant.email,
             address: {
                 street: data.address?.street || '',
-                city: data.address?.city || 'Indore',
-                state: data.address?.state || 'Madhya Pradesh',
+                city: data.address?.city || '',
+                state: data.address?.state || '',
                 pincode: data.address?.pincode || '',
-                coordinates: {
-                    lat: Number(data.address?.coordinates?.lat || 22.7196),
-                    lng: Number(data.address?.coordinates?.lng || 75.8577)
-                }
+                ...(data.address?.coordinates ? { coordinates: data.address.coordinates } : {})
             },
             serviceRadiusKm: Number(data.serviceRadiusKm) || 10.0,
             deliveryMode: data.deliveryMode || 'OWN_RIDER',
@@ -429,6 +426,7 @@ export class TenantService {
             deliveryFee: Number(data.deliveryFee) || 30,
             operatingHours: data.operatingHours || { open: '08:00', close: '22:00' },
             status: 'ACTIVE',
+            isDefault: Boolean(data.isDefault),
             createdAt: new Date().toISOString()
         };
         if (getIsConnected()) {
