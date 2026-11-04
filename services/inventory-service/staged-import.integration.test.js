@@ -140,7 +140,7 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(await models.Inventory.countDocuments({ tenantId, branchId }), 0);
 
     config.importsEnabled = true;
-    const publishBoth = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/publish`,
+    const publishBoth = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/publish` , {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ rowIds: rowsPayload.items.map(row => row.rowId) })
     });
