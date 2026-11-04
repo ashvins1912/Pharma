@@ -510,8 +510,8 @@ router.post('/imports/batches/:batchId/unpublish', requireServiceScope('inventor
 router.post('/imports/batches/:batchId/rollback', requireServiceScope('inventory.import'), requirePublishEnabled, asyncHandler(async (req, res) => {
   const { tenantId, branchId } = scope(req);
   const batch = await safeBatch(req.params.batchId, tenantId, branchId);
-  const rows = await StagedImportRow.find({ batchId: batch.batchId, tenantId, branchId, status: 'PUBLISHED' })
-    .sort({ publicationSequence: -1, publishedAt: -1 }).lean();
+  const rows = (await StagedImportRow.find({ batchId: batch.batchId, tenantId, branchId, status: 'PUBLISHED' }).lean())
+    .sort((left, right) => Number(right.publication?.sequence || 0) - Number(left.publication?.sequence || 0));
   // Revert in bounded transactions so large workbooks do not exceed MongoDB's
   // transaction lifetime. Each chunk is atomic and retries continue from the
   // still-published rows if a later chunk encounters a concurrency conflict.
