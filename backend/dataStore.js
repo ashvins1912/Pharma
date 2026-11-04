@@ -2,6 +2,7 @@
 import { getIsConnected } from './config/db.js';
 import mongoose from 'mongoose';
 import Medicine from './models/Medicine.js';
+import { inventoryClient } from './services/inventory-client/InventoryClient.js';
 import Order from './models/Order.js';
 import Coupon from './models/Coupon.js';
 import UserProfile from './models/UserProfile.js';
