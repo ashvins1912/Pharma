@@ -7,6 +7,7 @@ import TenantRegistry from '../auth/TenantRegistry';
 const emptyProfile = {
   shopName: '', legalName: '', licenseNumber: '', gstNumber: '',
   address: { street: '', city: '', state: '', zipCode: '' },
+  geolocation: { latitude: '', longitude: '' },
   ownerDetails: { name: '', email: '', phone: '' }
 };
 
@@ -52,6 +53,7 @@ export default function TenantProfileDashboard() {
         ...emptyProfile,
         ...tenant,
         address: { ...emptyProfile.address, ...(tenant.address || {}) },
+        geolocation: { ...emptyProfile.geolocation, ...(tenant.geolocation || {}) },
         ownerDetails: { ...emptyProfile.ownerDetails, ...(tenant.ownerDetails || {}) }
       };
       setProfile(nextProfile);
@@ -73,6 +75,16 @@ export default function TenantProfileDashboard() {
   const updateDraft = (field, value) => setDraft(current => ({ ...current, [field]: value }));
   const updateAddress = (field, value) => setDraft(current => ({ ...current, address: { ...current.address, [field]: value } }));
   const updateOwner = (field, value) => setDraft(current => ({ ...current, ownerDetails: { ...current.ownerDetails, [field]: value } }));
+  const updateGeolocation = (field, value) => setDraft(current => ({ ...current, geolocation: { ...current.geolocation, [field]: value } }));
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) { setError('Location is not supported by this browser. Enter coordinates manually.'); return; }
+    setError('');
+    navigator.geolocation.getCurrentPosition(
+      position => setDraft(current => ({ ...current, geolocation: { latitude: position.coords.latitude.toFixed(6), longitude: position.coords.longitude.toFixed(6) } })),
+      locationError => setError(locationError.code === 1 ? 'Location permission was denied. Enter coordinates manually or allow location access.' : 'Could not get your location. Check device location settings and try again.'),
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+    );
+  };
 
   const saveProfile = async event => {
     event.preventDefault();
@@ -84,6 +96,7 @@ export default function TenantProfileDashboard() {
         shopName: draft.shopName, legalName: draft.legalName,
         licenseNumber: draft.licenseNumber, gstNumber: draft.gstNumber,
         address: draft.address,
+        geolocation: draft.geolocation,
         contactEmail: draft.ownerDetails.email,
         contactPhone: draft.ownerDetails.phone
       });
@@ -187,6 +200,20 @@ export default function TenantProfileDashboard() {
                 <input type={field === 'email' ? 'email' : 'tel'} value={draft.ownerDetails[field] || ''} onChange={event => updateOwner(field, event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm font-medium text-slate-900" />
               </label>
             ))}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:col-span-2">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div><p className="text-sm font-bold text-slate-800">Pharmacy geolocation</p><p className="text-xs text-slate-500">Set the registered pharmacy's map coordinates.</p></div>
+                <button type="button" onClick={useCurrentLocation} className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-700">Use current location</button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1 text-xs font-bold text-slate-600">Latitude
+                  <input type="number" step="any" min="-90" max="90" value={draft.geolocation?.latitude ?? ''} onChange={event => updateGeolocation('latitude', event.target.value)} placeholder="e.g. 12.971599" className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm font-medium text-slate-900" />
+                </label>
+                <label className="space-y-1 text-xs font-bold text-slate-600">Longitude
+                  <input type="number" step="any" min="-180" max="180" value={draft.geolocation?.longitude ?? ''} onChange={event => updateGeolocation('longitude', event.target.value)} placeholder="e.g. 77.594566" className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm font-medium text-slate-900" />
+                </label>
+              </div>
+            </div>
             <div className="flex flex-wrap gap-2 sm:col-span-2">
               <button type="submit" disabled={saving} className="rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Saving…' : 'Save pharmacy details'}</button>
               <button type="button" disabled={saving} onClick={() => { setDraft(profile); setEditing(false); }} className="rounded-xl bg-slate-100 px-5 py-3 text-sm font-bold text-slate-700">Cancel</button>
@@ -199,6 +226,7 @@ export default function TenantProfileDashboard() {
             <ProfileField label="Drug licence number" value={profile.licenseNumber} />
             <ProfileField label="GST number" value={profile.gstNumber} />
             <ProfileField label="Registered address" value={address} />
+            <ProfileField label="Geolocation" value={profile.geolocation?.latitude != null && profile.geolocation?.longitude != null ? `${profile.geolocation.latitude}, ${profile.geolocation.longitude}` : ''} />
             <ProfileField label="Owner / contact" value={profile.ownerDetails.name} />
             <ProfileField label="Contact email" value={profile.ownerDetails.email} />
             <ProfileField label="Contact phone" value={profile.ownerDetails.phone} />
