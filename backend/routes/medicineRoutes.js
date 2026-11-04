@@ -39,17 +39,9 @@ const getErrorStatus = error => error.statusCode
 router.get('/admin/inventory', authenticateUser, async (req, res) => {
     try {
         const { search, category, sort, page, limit } = req.query;
-        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
-        const isPlatformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
-        const tenantId = isPlatformAdmin
-            ? String(req.user?.tenantId || req.user?.app_metadata?.tenantId || req.query.tenantId || '').trim() || null
-            : String(req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
-        if (!isPlatformAdmin && !tenantId) {
-            return res.status(403).json({ message: 'An active pharmacy tenant is required to view inventory.' });
-        }
+        const scope = await getVerifiedInventoryScope(req);
         const result = await inventoryClient.searchProducts({
-            tenantId,
-            branchId: req.user?.branchId || req.context?.branchId || null,
+            ...scope,
             query: search || '',
             category: category === 'All' ? '' : category || '',
             sort: sort || 'default',
@@ -58,7 +50,7 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
             includeOutOfStock: true,
             userId: req.user?.sub || 'inventory-admin'
         });
-        res.json({
+        return res.json({
             medicines: result.items || [],
             total: result.total || 0,
             page: result.page || Number(page) || 1,
@@ -69,7 +61,9 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
         });
     } catch (error) {
         console.error('Admin inventory retrieval failed:', error);
-        res.status(500).json({ message: 'Failed to retrieve admin inventory.' });
+        return res.status(error.statusCode || 503).json({
+            message: error.message || 'Failed to retrieve admin inventory.'
+        });
     }
 });
 
