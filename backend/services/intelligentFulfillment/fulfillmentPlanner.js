@@ -11,6 +11,8 @@ const isSellable = (medicine, now) => medicine
 
 const scoreAlternative = (requested, candidate) => {
   const requestedComposition = normalized(requested.composition || requested.genericName);
+  const unknownCompositions = new Set(['active compound', 'unknown', 'not specified', 'n/a', 'na']);
+  if (!requestedComposition || unknownCompositions.has(requestedComposition)) return null;
   const candidateComposition = normalized(candidate.composition || candidate.genericName);
   const requestedStrength = normalized(requested.strength);
   const candidateStrength = normalized(candidate.strength);
@@ -18,7 +20,7 @@ const scoreAlternative = (requested, candidate) => {
   const candidateForm = normalized(candidate.dosageForm || candidate.form);
   // Clinical equivalence is deliberately conservative: composition and strength
   // must be known and identical. Missing metadata is never treated as a match.
-  if (!requestedComposition || !candidateComposition || requestedComposition !== candidateComposition) return null;
+  if (!candidateComposition || unknownCompositions.has(candidateComposition) || requestedComposition !== candidateComposition) return null;
   if (!requestedStrength || !candidateStrength || requestedStrength !== candidateStrength) return null;
   if (!requestedForm || !candidateForm || requestedForm !== candidateForm) return null;
   if (Boolean(requested.requiresPrescription) !== Boolean(candidate.requiresPrescription ?? candidate.isPrescriptionRequired)) return null;
