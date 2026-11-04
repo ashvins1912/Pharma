@@ -560,11 +560,7 @@ router.post('/fulfillment/from-medicine-request/:id', authenticateUser, async (r
         const tenantId = String(request.tenantId);
         const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
         if (!tenant) return res.status(404).json({ message: 'The selected pharmacy is unavailable.' });
-        const branchId = request.branchId ? String(request.branchId) : null;
-        if (branchId) {
-            const branch = await TenantBranch.findOne({ _id: branchId, tenantId, status: 'ACTIVE' }).select('_id').lean();
-            if (!branch) return res.status(404).json({ message: 'The selected pharmacy branch is unavailable.' });
-        }
+        const branchId = await resolveTenantBranchId(tenantId, request.branchId, req.user);
         const address = request.addressId ? await dataStore.getUserAddress(req.user.sub, request.addressId) : null;
         const deliveryAddress = String(request.deliveryAddress || address?.addressLine || '').trim();
         const coordinates = request.coordinates || address?.coordinates || null;
@@ -590,7 +586,10 @@ router.post('/fulfillment/from-medicine-request/:id', authenticateUser, async (r
         const idempotencyKey = `medicine-request:${String(request._id)}`;
         const requestFingerprint = createHash('sha256').update(JSON.stringify({ requestId: String(request._id), tenantId, waitDays, items })).digest('hex');
         const duplicate = await FulfillmentCase.findOne({ customerId: String(req.user.sub), tenantId, idempotencyKey }).lean();
-        if (duplicate) return res.status(200).json({ case: duplicate, alreadyCreated: true });
+        if (duplicate) {
+            if (duplicate.requestFingerprint !== requestFingerprint) return res.status(409).json({ message: 'This medicine request already has a different stock waitlist.' });
+            return res.status(200).json({ case: duplicate, alreadyCreated: true });
+        }
         const caseNumber = 'FUL-' + randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase();
         const created = await FulfillmentCase.create({
             caseNumber, customerId: String(req.user.sub), tenantId, branchId,
