@@ -48,8 +48,8 @@ export function buildIntelligentFulfillmentPlan({ requestedItems, inventory, cat
   }
   const inventoryById = new Map((inventory || []).map(item => [String(item._id), item]));
   const seen = new Map();
-  for (const item of requestedItems) {
-    const productId = String(item.medicineId || item.productId || item._id || '');
+  for (const [itemIndex, item] of requestedItems.entries()) {
+    const productId = String(item.medicineId || item.productId || item._id || (item.requestedName ? `request-line-${itemIndex + 1}` : ''));
     const quantity = Number(item.quantity);
     if (!productId || !Number.isSafeInteger(quantity) || quantity < 1) {
       throw Object.assign(new Error('Every item needs a product ID and a positive whole-number quantity.'), { statusCode: 400 });
@@ -58,12 +58,18 @@ export function buildIntelligentFulfillmentPlan({ requestedItems, inventory, cat
   }
   const lines = [];
   for (const [productId, requestedQuantity] of seen) {
-    const medicine = inventoryById.get(productId);
-    if (!medicine) {
-      lines.push({ productId, requestedQuantity, availableQuantity: 0, fulfilNowQuantity: 0, waitingQuantity: requestedQuantity, availability: 'NOT_FOUND', alternatives: [] });
-      continue;
-    }
-    const sellable = isSellable(medicine, now);
+    const medicine = inventoryById.get(productId) || {
+      _id: productId,
+      name: item.requestedName || item.name || 'Requested medicine',
+      composition: item.composition || '',
+      genericName: item.genericName || '',
+      strength: item.strength || '',
+      dosageForm: item.dosageForm || item.form || '',
+      requiresPrescription: Boolean(item.requiresPrescription || item.isPrescriptionRequired),
+      price: 0
+    };
+    const isListed = inventoryById.has(productId);
+    const sellable = isListed && isSellable(medicine, now);
     const available = sellable ? availableStock(medicine) : 0;
     const fulfilNowQuantity = Math.min(requestedQuantity, available);
     const waitingQuantity = requestedQuantity - fulfilNowQuantity;
@@ -83,8 +89,12 @@ export function buildIntelligentFulfillmentPlan({ requestedItems, inventory, cat
       availableQuantity: available,
       fulfilNowQuantity,
       waitingQuantity,
-      availability: waitingQuantity === 0 ? 'AVAILABLE' : fulfilNowQuantity > 0 ? 'PARTIAL' : sellable ? 'OUT_OF_STOCK' : 'UNSELLABLE',
+      availability: waitingQuantity === 0 ? 'AVAILABLE' : fulfilNowQuantity > 0 ? 'PARTIAL' : isListed ? 'OUT_OF_STOCK' : 'NOT_LISTED',
       unitPrice: Number(medicine.price || 0),
+      composition: medicine.composition || medicine.genericName || '',
+      strength: medicine.strength || '',
+      dosageForm: medicine.dosageForm || medicine.form || '',
+      isListed,
       alternatives
     });
   }
