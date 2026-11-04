@@ -84,6 +84,9 @@ router.get('/products/search', requireServiceScope('inventory.read'), asyncHandl
     ...getInventoryScope(req, req.query),
     query: req.query.q || '',
     category: req.query.category || '',
+    hideRx: req.query.hideRx || false,
+    includeOutOfStock: req.query.includeOutOfStock || false,
+    sort: req.query.sort || 'default',
     page: req.query.page || 1,
     limit: req.query.limit || 50
   });
@@ -91,7 +94,7 @@ router.get('/products/search', requireServiceScope('inventory.read'), asyncHandl
 }));
 
 router.get('/products/:productId', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
-  const result = await lookupInventory({ productIds: [req.params.productId], ...getInventoryScope(req) });
+  const result = await lookupInventory({ productIds: [req.params.productId], ...getInventoryScope(req, req.query) });
   if (!result.length) return res.status(404).json({ message: 'Product was not found.' });
   return res.json(result[0]);
 }));
