@@ -6,7 +6,6 @@ import { config, validateConfig } from './config.js';
 import routes from './routes.js';
 import stagedImportRoutes from './staged-import-routes.js';
 import { StagedImportBatch, StagedImportRow } from './staged-import-models.js';
-import { recoverImportJobs } from './imports.js';
 import { Audit, ImportBatch, ImportBatchSnapshot, ImportFailure, ImportJob, Inventory, Product, Reservation } from './models.js';
 
 validateConfig();
@@ -89,7 +88,8 @@ await Promise.all([
   ImportFailure.init(),
   Audit.init()
 ]);
-await recoverImportJobs();
+// The legacy immediate-write import worker is intentionally not started.
+// All new uploads use the staged batch workflow and require explicit publish.
 
 const server = app.listen(config.port, '0.0.0.0', () => {
   console.info(`Inventory Service listening on port ${config.port}`);
