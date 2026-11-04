@@ -244,7 +244,12 @@ router.get('/discovery', async (req, res) => {
             return res.status(400).json({ message: 'priceTier must be LOW, MID, or HIGH.' });
         }
 
-        const medicines = await productDiscovery.getPrioritizedMedicines(
+        const tenantId = String(req.query.tenantId || req.context?.tenantId || '').trim();
+        const branchId = String(req.query.branchId || req.context?.branchId || '').trim();
+        if (!tenantId || !branchId) {
+            return res.status(400).json({ code: 'PHARMACY_BRANCH_REQUIRED', message: 'Select a pharmacy branch for product discovery.' });
+        }
+        const rankedMedicines = await productDiscovery.getPrioritizedMedicines(
             {
                 categories,
                 subCategories,
@@ -254,8 +259,45 @@ router.get('/discovery', async (req, res) => {
             { activeCartSkus, priceTier },
             { page: req.query.page, limit: req.query.limit }
         );
-
-        return res.json({ count: medicines.length, data: medicines });
+        const skuIds = [...new Set(rankedMedicines.map(item => String(item.skuId || item.sku || '').trim()).filter(Boolean))];
+        const liveInventory = skuIds.length ? await inventoryClient.lookup({
+            skus: skuIds, tenantId, branchId, userId: req.user?.sub || 'public-discovery'
+        }) : { items: [] };
+        const inventoryBySku = new Map((liveInventory.items || []).map(item => [String(item.sku || '').toUpperCase(), item]));
+        const data = rankedMedicines.flatMap(item => {
+            const live = inventoryBySku.get(String(item.skuId || item.sku || '').toUpperCase());
+            if (!live || Number(live.availableQuantity || 0) <= 0) return [];
+            const listPrice = Number(live.price || 0);
+            const discountPercentage = Math.min(100, Math.max(0, Number(live.discountPercentage || 0)));
+            const sellingPrice = Math.round(listPrice * (1 - discountPercentage / 100) * 100) / 100;
+            return [{
+                ...item,
+                _id: String(live.productId),
+                productId: String(live.productId),
+                skuId: live.sku,
+                name: live.name,
+                manufacturer: live.manufacturer,
+                composition: live.genericName,
+                strength: live.strength,
+                dosageForm: live.form,
+                imageUrl: live.imageUrl || item.imageUrl || '',
+                isRxRequired: Boolean(live.requiresPrescription),
+                stockQuantity: live.stockQuantity,
+                reservedQuantity: live.reservedQuantity,
+                availableQuantity: live.availableQuantity,
+                basePrice: listPrice,
+                price: sellingPrice,
+                sellingPrice,
+                discountPercentage,
+                pricing: {
+                    ...(item.pricing || {}),
+                    listPrice,
+                    currentPrice: sellingPrice,
+                    discountPercentage
+                }
+            }];
+        });
+        return res.json({ count: data.length, data });
     } catch (error) {
         console.error('Prioritized medicine discovery failed:', error);
         return res.status(error.statusCode || 500).json({
