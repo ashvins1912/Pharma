@@ -43,7 +43,7 @@ test('only proposes alternatives with matching composition, strength and compati
     requestedItems: [{ medicineId: 'medicine-1', quantity: 2 }],
     inventory: [medicine({ stockQuantity: 0 })],
     catalog: [
-      medicine({ _id: 'alternative-good', name: 'Generic equivalent', stockQuantity: 8, reservedQuantity: 0, price: 80, discountPercentage: 10 }),
+      medicine({ _id: 'alternative-good', name: 'Generic equivalent', stockQuantity: 8, reservedQuantity: 0, price: 80, basePrice: 100, discountPercentage: 10 }),
       medicine({ _id: 'alternative-wrong-strength', strength: '250 mg' }),
       medicine({ _id: 'alternative-wrong-composition', composition: 'different salt' }),
       medicine({ _id: 'alternative-expired', expiryDate: new Date('2026-01-01T00:00:00.000Z') })
@@ -51,7 +51,8 @@ test('only proposes alternatives with matching composition, strength and compati
     now
   });
   assert.deepEqual(plan.lines[0].alternatives.map(item => item.productId), ['alternative-good']);
-  assert.equal(plan.lines[0].alternatives[0].discountedUnitPrice, 72);
+  assert.equal(plan.lines[0].alternatives[0].discountedUnitPrice, 80);
+  assert.equal(plan.lines[0].alternatives[0].discountPercentage, 20);
   assert.equal(plan.lines[0].alternatives[0].substitutionRequiresCustomerConsent, true);
 });
 
@@ -62,7 +63,7 @@ test('does not treat expired or inactive stock as sellable', () => {
     now
   });
   assert.equal(plan.lines[0].availableQuantity, 0);
-  assert.equal(plan.lines[0].availability, 'UNSELLABLE');
+  assert.equal(plan.lines[0].availability, 'OUT_OF_STOCK');
 });
 
 test('validates customer wait windows from one to five days', () => {
