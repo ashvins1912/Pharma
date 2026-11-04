@@ -78,7 +78,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
     } finally { setBusy(false); }
   };
   const bulkAction = async action => {
-    if (!selected.length || busy || !canPublish) return;
+    if (!selected.length || busy || (action === 'publish' ? !canPublish : !canUnpublish)) return;
     const eligibleIds = rows
       .filter(row => selected.includes(row.rowId) && (action === 'publish'
         ? ['READY', 'UNPUBLISHED'].includes(row.status)
