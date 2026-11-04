@@ -774,6 +774,11 @@ router.post('/fulfillment/waitlist/:id/cancel', authenticateUser, async (req, re
         }, { new: true }).lean();
         if (!updated) return res.status(404).json({ message: 'Active stock waitlist entry not found.' });
         if (updated.parentOrderId) await Order.updateOne({ _id: updated.parentOrderId, userId: String(req.user.sub), tenantId: updated.tenantId }, { $set: { fulfillmentState: 'PARTIAL' } });
+        if (updated.parentOrderId) {
+            await Order.updateOne({ _id: updated.parentOrderId, userId: String(req.user.sub), tenantId: updated.tenantId }, {
+                $set: { fulfillmentState: 'CANCELLED_REMAINDER' }
+            });
+        }
         if (updated.sourceType === 'MEDICINE_REQUEST' && updated.sourceId) {
             await MedicineRequest.updateOne({ _id: updated.sourceId, customerId: String(req.user.sub), fulfillmentCaseId: String(updated._id) }, {
                 $set: { status: updated.parentOrderId ? 'CONVERTED_TO_ORDER' : 'CANCELLED' },
