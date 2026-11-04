@@ -99,6 +99,8 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
             <span>🔬</span> Pharmacist Reviewing
           </span>
         );
+      case 'READY_FOR_CONFIRMATION':
+        return <span className="bg-emerald-100 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">✓ Stock ready · Confirm order</span>;
       case 'WAITING_FOR_STOCK':
         return <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full">Waiting for stock</span>;
       case 'READY_FOR_CONFIRMATION':
