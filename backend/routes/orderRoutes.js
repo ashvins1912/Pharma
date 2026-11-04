@@ -363,12 +363,18 @@ router.post('/fulfillment/preview', authenticateUser, async (req, res) => {
         if (ids.some(id => !mongoose.isValidObjectId(id))) return res.status(400).json({ message: 'One or more cart products are invalid.' });
         const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
         if (!tenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
-        const inventory = await Medicine.find({ _id: { $in: ids }, tenantId }).select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean();
+        const branchId = String(req.body?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || '').trim();
+        if (branchId) {
+            const branch = await TenantBranch.findOne({ _id: branchId, tenantId, status: 'ACTIVE' }).select('_id').lean();
+            if (!branch) return res.status(404).json({ message: 'Selected pharmacy branch is unavailable.' });
+        }
+        const branchScope = branchId ? { branchId } : {};
+        const inventory = await Medicine.find({ _id: { $in: ids }, tenantId, ...branchScope }).select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean();
         const compositionKeys = [...new Set(inventory.map(item => String(item.composition || item.genericName || '').trim()).filter(Boolean))];
         const strengthKeys = [...new Set(inventory.map(item => String(item.strength || '').trim()).filter(Boolean))];
         const catalog = compositionKeys.length && strengthKeys.length
             ? await Medicine.find({
-                tenantId, isActive: { $ne: false },
+                tenantId, ...branchScope, isActive: { $ne: false },
                 _id: { $nin: ids },
                 composition: { $in: compositionKeys },
                 strength: { $in: strengthKeys },
@@ -376,7 +382,7 @@ router.post('/fulfillment/preview', authenticateUser, async (req, res) => {
             }).limit(100).select('_id name sku code price stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean()
             : [];
         const plan = buildIntelligentFulfillmentPlan({ requestedItems: items, inventory, catalog });
-        return res.json({ ...plan, tenantId, branchId: req.body?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || null });
+        return res.json({ ...plan, tenantId, branchId: branchId || null });
     } catch (error) {
         return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to calculate fulfilment options.' });
     }
