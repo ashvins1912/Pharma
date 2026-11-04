@@ -58,6 +58,8 @@ services:
         sync: false
       - key: SERVICE_AUTH_SECRET
         sync: false
+      - key: INVENTORY_SERVICE_URL
+        sync: false
       - key: SERVICE_JWT_ISSUER
         value: ashvin-pharmacy
       - key: SERVICE_JWT_AUDIENCE
