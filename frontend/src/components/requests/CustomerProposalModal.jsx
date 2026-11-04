@@ -220,7 +220,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
           )}
         </div>
 
-        {(proposal?.alternativeOffers || []).length > 0 && canDecide && (request.requestedItems?.length || 0) <= 1 && (
+        {(proposal?.alternativeOffers || []).length > 0 && canDecide && (request.requestedItems?.length || 0) <= 1 && !Number(availabilityPlan?.summary?.quantityWaiting || 0) && (
           <section className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-2">
             <h4 className="text-xs font-black text-emerald-950">Choose your medicine offer</h4>
             {proposal.productId && (
@@ -325,7 +325,7 @@ export default function CustomerProposalModal({ request, isOpen, onClose, onOrde
                 {line.fulfilNowQuantity > 0 && <p className="text-[11px] text-slate-600">Available now: {line.fulfilNowQuantity} × ₹{Number(line.unitPrice || 0).toFixed(2)}</p>}
                 {line.waitingQuantity > 0 && <>
                   <label className="flex items-center gap-2 text-xs text-slate-700"><input type="radio" name={`request-alt-${line.productId}`} checked={!fulfillmentChoices[line.productId]?.alternativeProductId} onChange={() => setFulfillmentChoices(current => ({ ...current, [line.productId]: {} }))}/>Wait for the original medicine ({line.waitingQuantity})</label>
-                  {line.alternatives?.map(alternative => <label key={alternative.productId} className="flex items-start gap-2 rounded-lg border border-emerald-100 p-2 text-xs"><input type="radio" name={`request-alt-${line.productId}`} checked={fulfillmentChoices[line.productId]?.alternativeProductId === alternative.productId} onChange={() => setFulfillmentChoices(current => ({ ...current, [line.productId]: { alternativeProductId: alternative.productId } }))}/><span><strong>{alternative.name}</strong><br/><span className="text-slate-500">{alternative.brand} · {alternative.availableQuantity} available</span><br/><span className="font-bold text-emerald-700">₹{alternative.discountedUnitPrice.toFixed(2)} each</span>{alternative.discountPercentage > 0 ? <span className="ml-1 text-emerald-700">· {alternative.discountPercentage}% offer</span> : null}{alternative.requiresPharmacistApproval ? <span className="block text-amber-700">Pharmacist review required; automatic substitution is not permitted.</span> : null}</span></label>)}
+                  {line.alternatives?.map(alternative => <label key={alternative.productId} className="flex items-start gap-2 rounded-lg border border-emerald-100 p-2 text-xs"><input type="radio" name={`request-alt-${line.productId}`} checked={fulfillmentChoices[line.productId]?.alternativeProductId === alternative.productId} disabled={Boolean(alternative.requiresPharmacistApproval)} onChange={() => setFulfillmentChoices(current => ({ ...current, [line.productId]: { alternativeProductId: alternative.productId } }))}/><span><strong>{alternative.name}</strong><br/><span className="text-slate-500">{alternative.brand} · {alternative.availableQuantity} available</span><br/><span className="font-bold text-emerald-700">₹{alternative.discountedUnitPrice.toFixed(2)} each</span>{alternative.discountPercentage > 0 ? <span className="ml-1 text-emerald-700">· {alternative.discountPercentage}% offer</span> : null}{alternative.requiresPharmacistApproval ? <span className="block text-amber-700">Pharmacist review required; automatic substitution is not permitted.</span> : null}</span></label>)}
                 </>}
               </div>
             ))}
