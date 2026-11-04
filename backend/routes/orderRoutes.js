@@ -7,7 +7,6 @@ import Order from '../models/Order.js';
 import Tenant from '../models/Tenant.js';
 import TenantBranch from '../models/TenantBranch.js';
 import Rider from '../models/Rider.js';
-import Medicine from '../models/Medicine.js';
 import { inventoryClient } from '../services/inventory-client/InventoryClient.js';
 import FulfillmentCase from '../models/FulfillmentCase.js';
 import MedicineRequest from '../models/MedicineRequest.js';
@@ -369,7 +368,6 @@ router.post('/fulfillment/preview', authenticateUser, async (req, res) => {
         const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
         if (!tenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
         const branchId = await resolveTenantBranchId(tenantId, req.body?.branchId, req.user);
-        const branchScope = { branchId: branchId || null };
         const inventoryResponse = await inventoryClient.lookup({
             productIds: ids, tenantId, branchId, userId: req.user.sub
         });
