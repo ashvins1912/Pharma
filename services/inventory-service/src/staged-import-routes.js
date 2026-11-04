@@ -170,6 +170,9 @@ async function publishRows(batch, rows, req) {
   const published = [];
   try {
     await session.withTransaction(async () => {
+      const baselineBatch = await StagedImportBatch.findById(batch._id).session(session).lean();
+      let inventoryBaseline = [...(baselineBatch?.previewInventorySnapshot || [])];
+      let productBaseline = [...(baselineBatch?.previewProductSnapshot || [])];
       for (const row of rows) {
         const fresh = await StagedImportRow.findOne({ _id: row._id, batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId }).session(session);
         if (fresh?.status === 'PUBLISHED' && fresh.publication) { published.push(fresh.rowId); continue; }
@@ -181,6 +184,10 @@ async function publishRows(batch, rows, req) {
           throw Object.assign(new Error(`Row ${fresh.rowNumber} has invalid normalized data.`), { statusCode: 422 });
         }
         let product = await Product.findOne({ tenantId: batch.tenantId, sku: v.sku }).session(session);
+        const expectedProduct = productBaseline.find(item => item.sku === v.sku) || null;
+        if (!samePreview(product ? { version: product.version, updatedAt: product.updatedAt } : null, expectedProduct, ['version', 'updatedAt'])) {
+          throw Object.assign(new Error(`Row ${fresh.rowNumber}: product catalogue changed after staging. Review the row again before publishing.`), { statusCode: 409 });
+        }
         const productBefore = product ? snapshot(asPlain(product), productFields) : null;
         if (!product) product = new Product({ tenantId: batch.tenantId, sku: v.sku });
         Object.assign(product, {
@@ -195,6 +202,11 @@ async function publishRows(batch, rows, req) {
           tenantId: batch.tenantId, branchId: batch.branchId,
           productId: product._id, batchNumber: v.batchNumber || ''
         }).session(session);
+        const inventoryKey = JSON.stringify([v.sku, v.batchNumber || '']);
+        const expectedInventory = inventoryBaseline.find(item => JSON.stringify([item.sku, item.batchNumber || '']) === inventoryKey) || null;
+        if (!samePreview(inventory ? { stockQuantity: inventory.stockQuantity, reservedQuantity: inventory.reservedQuantity, price: inventory.price, updatedAt: inventory.updatedAt } : null, expectedInventory, ['stockQuantity', 'reservedQuantity', 'price', 'updatedAt'])) {
+          throw Object.assign(new Error(`Row ${fresh.rowNumber}: inventory changed after staging. Review the row again before publishing.`), { statusCode: 409 });
+        }
         const inventoryBefore = inventory ? snapshot(asPlain(inventory), liveInventoryFields) : null;
         if (inventory && Number(inventory.reservedQuantity || 0) > v.stockQuantity) {
           throw Object.assign(new Error(`Row ${fresh.rowNumber}: stock cannot be lower than reserved quantity.`), { statusCode: 409 });
@@ -209,6 +221,11 @@ async function publishRows(batch, rows, req) {
         });
         await inventory.save({ session });
         const inventoryAfter = snapshot(asPlain(inventory), liveInventoryFields);
+        inventoryBaseline = inventoryBaseline.filter(item => JSON.stringify([item.sku, item.batchNumber || '']) !== inventoryKey);
+        inventoryBaseline.push({ sku: v.sku, batchNumber: v.batchNumber || '', stockQuantity: inventory.stockQuantity, reservedQuantity: inventory.reservedQuantity, price: inventory.price, updatedAt: inventory.updatedAt || null });
+        productBaseline = productBaseline.filter(item => item.sku !== v.sku);
+        productBaseline.push({ sku: v.sku, version: product.version, updatedAt: product.updatedAt || null });
+        await StagedImportBatch.updateOne({ _id: batch._id }, { $set: { previewInventorySnapshot: inventoryBaseline, previewProductSnapshot: productBaseline } }, { session });
         const sequenceDoc = await StagedImportBatch.findOneAndUpdate({ _id: batch._id }, { $inc: { nextPublicationSequence: 1 } }, { new: true, session });
         const publication = {
           sequence: sequenceDoc.nextPublicationSequence,
