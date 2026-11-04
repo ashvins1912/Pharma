@@ -10,6 +10,7 @@ const stagedImportBatchSchema = new mongoose.Schema({
   previewInventorySnapshot: { type: [mongoose.Schema.Types.Mixed], default: [] },
   previewProductSnapshot: { type: [mongoose.Schema.Types.Mixed], default: [] },
   idempotencyKey: { type: String, required: true },
+  stockOperation: { type: String, enum: ['ADD', 'SET'], default: 'SET' },
   status: { type: String, enum: ['STAGING', 'READY', 'PARTIALLY_PUBLISHED', 'PUBLISHED', 'REVERTING', 'REVERTED', 'FAILED'], default: 'STAGING', index: true },
   totalRows: { type: Number, default: 0 },
   validRows: { type: Number, default: 0 },
