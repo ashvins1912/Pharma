@@ -2,6 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import { authenticateUser, requirePermission } from '../middleware/auth.js';
 import Tenant from '../models/Tenant.js';
+import TenantBranch from '../models/TenantBranch.js';
 import { inventoryClient } from '../services/inventory-client/InventoryClient.js';
 import SurplusSavingsCampaign from '../models/SurplusSavingsCampaign.js';
 import SurplusSavingsRedemption from '../models/SurplusSavingsRedemption.js';
@@ -38,6 +39,8 @@ router.get('/', async (req, res) => {
         const now = new Date();
         const branchId = String(req.query.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || '').trim();
         if (!branchId) return res.status(400).json({ code: 'BRANCH_SELECTION_REQUIRED', message: 'Select a pharmacy branch to view available surplus savings.' });
+        const activeBranch = await TenantBranch.findOne({ _id: branchId, tenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!activeBranch) return res.status(404).json({ code: 'BRANCH_UNAVAILABLE', message: 'Selected pharmacy branch is unavailable.' });
         const campaigns = await SurplusSavingsCampaign.find(tenantScopedFilter(tenantId, {
             status: 'ACTIVE', startsAt: { $lte: now }, endsAt: { $gt: now },
             $or: [{ usageLimit: null }, { $expr: { $lt: ['$usageCount', '$usageLimit'] } }]
@@ -127,6 +130,8 @@ router.post('/admin', requireCampaignAdmin, requirePermission('promotions.manage
         }
         const branchId = String(req.body.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || '').trim();
         if (!branchId) return res.status(400).json({ code: 'BRANCH_SELECTION_REQUIRED', message: 'Select a pharmacy branch before creating a product campaign.' });
+        const activeBranch = await TenantBranch.findOne({ _id: branchId, tenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!activeBranch) return res.status(404).json({ code: 'BRANCH_UNAVAILABLE', message: 'Selected pharmacy branch is unavailable.' });
         const inventoryResponse = await inventoryClient.lookup({ productIds: medicineIds, tenantId, branchId, userId: req.user.sub });
         if ((inventoryResponse.items || []).length !== medicineIds.length) return res.status(400).json({ code: 'CROSS_TENANT_MEDICINE', message: 'Campaign products must belong to the selected pharmacy branch inventory.' });
         const campaign = await SurplusSavingsCampaign.create({
