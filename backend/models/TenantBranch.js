@@ -8,6 +8,10 @@ const tenantBranchSchema = new mongoose.Schema({
     phone: { type: String, trim: true },
     email: { type: String, trim: true, lowercase: true },
     address: { type: mongoose.Schema.Types.Mixed, default: {} },
+    geolocation: {
+        latitude: { type: Number, min: -90, max: 90, default: null },
+        longitude: { type: Number, min: -180, max: 180, default: null }
+    },
     serviceRadiusKm: { type: Number, min: 0, default: 10 },
     deliveryMode: { type: String, default: 'OWN_RIDER' },
     minimumOrderValue: { type: Number, min: 0, default: 149 },
