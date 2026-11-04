@@ -204,7 +204,7 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     if (!importJob?.jobId) return;
     try {
       const response = await apiClient.get(
-        `/api/v1/inventory/imports/${importJob.jobId}/failures/download`,
+        `/api/v1/inventory/imports/batches/${importJob.batchId}/invalid-records/download`,
         { responseType: 'blob', headers: getImportScopeHeaders() }
       );
       const url = URL.createObjectURL(response.data);
