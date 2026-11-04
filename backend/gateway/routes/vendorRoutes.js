@@ -85,6 +85,7 @@ router.get('/profile', authenticateUser, async (req, res) => {
                         latitude: tenant.geolocation?.latitude ?? null,
                         longitude: tenant.geolocation?.longitude ?? null
                     },
+                    usesTenantAsBranch: tenant.usesTenantAsBranch === true,
                     address: {
                         street: address.street || address.line1 || '',
                         city: address.city || '',
