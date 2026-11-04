@@ -88,6 +88,10 @@ await Promise.all([
   ImportFailure.init(),
   Audit.init()
 ]);
+// Mark abandoned staging requests as failed after a restart; rows remain available for inspection.
+await StagedImportBatch.updateMany({ status: 'STAGING', updatedAt: { $lt: new Date(Date.now() - 10 * 60 * 1000) } }, {
+  $set: { status: 'FAILED' }
+});
 // The legacy immediate-write import worker is intentionally not started.
 // All new uploads use the staged batch workflow and require explicit publish.
 
