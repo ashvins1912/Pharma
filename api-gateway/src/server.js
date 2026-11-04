@@ -73,6 +73,8 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
       'X-Request-ID',
       'X-Correlation-ID',
       'X-Pharma-Client',
+      'X-Tenant-Id',
+      'X-Branch-Id',
       'X-XSRF-TOKEN',
       'X-CSRF-TOKEN'
     ],
@@ -184,6 +186,7 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
       try {
         const trustedToken = createTrustedBackendRequestToken({
           user: req.user,
+          targetTenantId: req.get('x-tenant-id'),
           method: req.method,
           path: req.originalUrl || req.url || '',
           permission,
