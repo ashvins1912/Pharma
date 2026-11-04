@@ -15,6 +15,7 @@ const CAPABILITIES = [
   ['POST', /^\/api\/orders\/checkout(?:\/|$)/, 'orders.create'],
   ['POST', /^\/api\/orders\/checkout\/quote(?:\/|$)/, 'orders.create'],
   ['POST', /^\/api\/orders\/fulfillment\/(?:preview|waitlist(?:\/[^/]+\/(?:confirm|cancel|link-order))?)$/, 'orders.create'],
+  ['POST', /^\/api\/orders\/fulfillment\/from-medicine-request\/[^/]+$/, 'medicine_requests.decide'],
   ['POST', /^\/api\/orders\/admin(?:\/|$)/, 'orders.manage'],
   ['PUT', /^\/api\/orders\/[^/]+(?:\/|$)/, 'orders.manage'],
   ['PATCH', /^\/api\/orders\/[^/]+(?:\/|$)/, 'orders.manage'],
