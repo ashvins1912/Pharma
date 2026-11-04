@@ -433,6 +433,10 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
         })) return res.status(400).json({ message: 'Each waitlist item needs a catalogue product or requested medicine name and a positive whole-number quantity.' });
         const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
         if (!tenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
+        if (selectedBranchId) {
+            const branch = await TenantBranch.findOne({ _id: selectedBranchId, tenantId, status: 'ACTIVE' }).select('_id').lean();
+            if (!branch) return res.status(404).json({ message: 'Selected pharmacy branch is unavailable.' });
+        }
         const existing = await FulfillmentCase.findOne({ customerId: String(req.user.sub), tenantId, idempotencyKey }).lean();
         if (existing) {
             if (existing.requestFingerprint !== requestFingerprint) return res.status(409).json({ message: 'This idempotency key was already used for a different waitlist request.' });
