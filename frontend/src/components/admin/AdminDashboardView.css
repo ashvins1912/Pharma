@@ -1,0 +1,121 @@
+/* Responsive operations dashboard layout. Scoped to AdminDashboardView. */
+.dashboard-shell {
+  width: 100%;
+  max-width: 1800px;
+  margin-inline: auto;
+  padding-inline: clamp(0px, 0.8vw, 12px);
+}
+
+.dashboard-hero {
+  min-width: 0;
+}
+
+.dashboard-hero > div:first-child {
+  min-width: 0;
+}
+
+.dashboard-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+}
+
+.dashboard-metrics > div {
+  min-width: 0;
+}
+
+.dashboard-workspace {
+  min-width: 0;
+}
+
+.dashboard-workspace-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  align-items: stretch;
+  gap: 0.55rem;
+}
+
+.dashboard-nav-item {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.25;
+  padding: 0.65rem 0.8rem !important;
+  border-radius: 0.85rem !important;
+}
+
+.dashboard-nav-item > span:first-child {
+  flex: 0 0 1.35rem;
+  width: 1.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+}
+
+.dashboard-nav-item > span:nth-child(2) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-nav-item > span:last-child:not(:nth-child(2)) {
+  flex: 0 0 auto;
+}
+
+.dashboard-workspace-nav button:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 2px;
+}
+
+@media (min-width: 1440px) {
+  .dashboard-workspace-nav {
+    grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .dashboard-shell {
+    padding-inline: 0;
+    gap: 1rem;
+  }
+
+  .dashboard-hero {
+    border-radius: 1.25rem;
+  }
+
+  .dashboard-workspace-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .dashboard-nav-item {
+    min-height: 52px;
+    padding: 0.65rem 0.7rem !important;
+    font-size: 0.7rem;
+  }
+
+  .dashboard-workspace {
+    border-radius: 1.25rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .dashboard-workspace-nav {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-nav-item {
+    min-height: 46px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-nav-item {
+    transition: none !important;
+  }
+}
+
+html.dark .dashboard-nav-item:not(.bg-blue-600):not(.bg-indigo-600):not(.bg-purple-600) {
+  color: #e2e8f0;
+}
