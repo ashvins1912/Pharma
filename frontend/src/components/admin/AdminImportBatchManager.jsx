@@ -143,7 +143,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
         </div>
         <button type="button" onClick={revertBatch} disabled={busy || !canRevertBatch} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Revert published batch</button>
       </div>
-      {!publishFeatureEnabled && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">Publishing, unpublishing and reverting are disabled by the Inventory Service. Enable INVENTORY_IMPORTS_ENABLED only in the isolated test environment to exercise live test-stock changes.</p>}
+      {!publishFeatureEnabled && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">New publishing is disabled by the Inventory Service. Unpublishing and rollback remain available as safety controls. Enable INVENTORY_IMPORTS_ENABLED only in the isolated test environment to publish test stock.</p>}
       {activeBatchStatus === 'REVERTING' && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">Batch rollback is incomplete. Retry “Revert published batch” to continue safely from the remaining published rows.</p>}
       {activeBatchStatus === 'REVERTED' && <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-600">This batch has been reverted and is read-only. Upload a new batch for further changes.</p>}
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-2">
