@@ -86,7 +86,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
         const matches = await Medicine.find({
           tenantId: entry.tenantId, ...(entry.branchId ? { branchId: entry.branchId } : {}),
           isActive: { $ne: false }, name: String(line.requestedName).trim()
-        }).select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive').limit(2).lean();
+        }).select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive price discountPercentage').limit(2).lean();
         // Exact name is the only permitted fallback when clinical descriptors are missing.
         if (matches.length === 1) product = matches[0];
       }
