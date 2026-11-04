@@ -81,6 +81,14 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
         // Never guess between multiple catalog matches. Keep the request pending for pharmacist review.
         if (matches.length === 1) product = matches[0];
       }
+      if (!product && !line.composition && !line.strength && line.requestedName) {
+        const matches = await Medicine.find({
+          tenantId: entry.tenantId, ...(entry.branchId ? { branchId: entry.branchId } : {}),
+          isActive: { $ne: false }, name: String(line.requestedName).trim()
+        }).select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive').limit(2).lean();
+        // Exact name is the only permitted fallback when clinical descriptors are missing.
+        if (matches.length === 1) product = matches[0];
+      }
       const sellable = product && product.isActive !== false
         && (!product.expiryDate || new Date(product.expiryDate) > now);
       const quantity = sellable ? Math.min(Number(line.waitingQuantity || 0), available(product)) : 0;
