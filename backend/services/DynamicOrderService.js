@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { inventoryClient } from './inventory-client/InventoryClient.js';
 import Order from '../models/Order.js';
 import CustomerPointsLedger from '../models/CustomerPointsLedger.js';
@@ -26,11 +27,14 @@ export class DynamicOrderService {
         if (typeof customerId !== 'string' || !customerId.trim()) {
             throw new TypeError('Authenticated customer ID is required.');
         }
-        return this.orderModel.aggregate([
+        if (!tenantId || !branchId) throw new Error('Select a pharmacy branch to view restock suggestions.');
+        const items = await this.orderModel.aggregate([
             {
                 $match: {
                     $or: [{ customerId }, { userId: customerId }],
-                    orderStatus: 'Delivered'
+                    orderStatus: 'Delivered',
+                    tenantId: String(tenantId),
+                    branchId: String(branchId)
                 }
             },
             { $unwind: '$medicineItems' },
@@ -58,7 +62,6 @@ export class DynamicOrderService {
                 }
             }
         ]).exec();
-        if (!tenantId || !branchId) throw new Error('Select a pharmacy branch to view restock suggestions.');
         const productIds = items.map(item => String(item._id)).filter(id => mongoose.isValidObjectId(id));
         if (!productIds.length) return [];
         const catalog = await this.inventoryClient.lookup({ productIds, tenantId, branchId, userId: customerId });
