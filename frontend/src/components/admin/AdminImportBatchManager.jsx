@@ -18,6 +18,7 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(null);
   const [draft, setDraft] = useState({});
+  const [bulkPatch, setBulkPatch] = useState({ category: '', manufacturer: '', form: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const headersKey = JSON.stringify(headers || {});
@@ -96,6 +97,23 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
       setError(e.response?.data?.message || 'Bulk operation failed. Refresh and review the selected rows.');
     } finally { setBusy(false); }
   };
+  const applyBulkEdit = async () => {
+    const eligibleIds = rows.filter(row => selected.includes(row.rowId) && row.status !== 'PUBLISHED').map(row => row.rowId);
+    const patch = Object.fromEntries(Object.entries(bulkPatch).filter(([, value]) => String(value).trim() !== ''));
+    if (!eligibleIds.length || !Object.keys(patch).length || busy) return;
+    if (!window.confirm(`Apply these shared fields to ${eligibleIds.length} selected staged row(s)?`)) return;
+    setBusy(true);
+    try {
+      const response = await apiClient.post(`${base}/rows/edit-selected`, { rowIds: eligibleIds, patch }, { headers: stableHeaders, timeout: 60000 });
+      setError('');
+      setSelected([]);
+      setBulkPatch({ category: '', manufacturer: '', form: '' });
+      await load();
+      setError(`Updated ${response.data.updated} staged row(s).`);
+    } catch (e) {
+      setError(e.response?.data?.message || 'Bulk row edit failed.');
+    } finally { setBusy(false); }
+  };
   const rowAction = async (row, action) => {
     if (busy || (action === 'publish' ? !canPublish : !canUnpublish)) return;
     const message = action === 'publish' ? `Publish row ${row.rowNumber}?` : `Unpublish and revert row ${row.rowNumber}?`;
@@ -158,6 +176,13 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
         <span className="text-[11px] text-slate-500">{selected.length} selected</span>
         <button type="button" onClick={() => bulkAction('publish')} disabled={!selected.length || busy || !canPublish} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">Publish selected</button>
         <button type="button" onClick={() => bulkAction('unpublish')} disabled={!selected.length || busy || !canUnpublish || !rows.some(r => selected.includes(r.rowId) && r.status === 'PUBLISHED')} className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-bold text-amber-800 disabled:opacity-40">Unpublish / revert selected</button>
+      </div>
+      <div className="flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-2">
+        <label className="grid gap-1 text-[10px] font-semibold text-slate-600">Bulk category<input value={bulkPatch.category} onChange={e => setBulkPatch(v => ({ ...v, category: e.target.value }))} placeholder="Leave blank to keep" className="w-36 rounded border border-slate-200 bg-white px-2 py-1.5 text-xs" /></label>
+        <label className="grid gap-1 text-[10px] font-semibold text-slate-600">Bulk manufacturer<input value={bulkPatch.manufacturer} onChange={e => setBulkPatch(v => ({ ...v, manufacturer: e.target.value }))} placeholder="Leave blank to keep" className="w-36 rounded border border-slate-200 bg-white px-2 py-1.5 text-xs" /></label>
+        <label className="grid gap-1 text-[10px] font-semibold text-slate-600">Bulk form<input value={bulkPatch.form} onChange={e => setBulkPatch(v => ({ ...v, form: e.target.value }))} placeholder="Leave blank to keep" className="w-28 rounded border border-slate-200 bg-white px-2 py-1.5 text-xs" /></label>
+        <button type="button" onClick={applyBulkEdit} disabled={!selected.some(id => rows.some(row => row.rowId === id && row.status !== 'PUBLISHED')) || busy || !Object.values(bulkPatch).some(value => String(value).trim())} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-40">Apply to selected rows</button>
+        <span className="text-[10px] text-slate-500">Only unpublished staged rows are edited.</span>
       </div>
       {error && <p role="alert" className="rounded-lg bg-rose-50 p-2 text-xs text-rose-700">{error}</p>}
       <div className="overflow-x-auto rounded-xl border border-slate-200">
