@@ -98,7 +98,7 @@ router.patch('/profile', authenticateUser, async (req, res) => {
     const address = body.address && typeof body.address === 'object' ? body.address : null;
     const contactEmail = typeof body.contactEmail === 'string' ? body.contactEmail.trim().toLowerCase() : undefined;
     const contactPhone = typeof body.contactPhone === 'string' ? body.contactPhone.trim() : undefined;
-    if (contactEmail !== undefined && contactEmail && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(contactEmail)) {
+    if (contactEmail !== undefined && contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
       return res.status(400).json({ success: false, code: 'INVALID_CONTACT_EMAIL', message: 'Enter a valid pharmacy contact email.' });
     }
     if (shopName !== undefined && !shopName) {
