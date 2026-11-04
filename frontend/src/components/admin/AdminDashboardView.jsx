@@ -242,7 +242,7 @@ export default function AdminDashboardView() {
           <AdminMedicineRequestsTab initialData={initialMedicineRequests} initialLoading={medicinePreloadLoading} onPendingCountRefresh={loadPendingMedicineRequestCount} />
         </div>
         {canViewSurplusSavings && (
-          <SurplusSavingsManager canManage={hasPermission('promotions.manage')} />
+          <div className="admin-screen admin-screen--surplus-savings"><SurplusSavingsManager canManage={hasPermission('promotions.manage')} /></div>
         )}
       </div>
     );
@@ -652,26 +652,26 @@ export default function AdminDashboardView() {
       {/* Tab Content Display */}
       <main className="dashboard-content" id="admin-workspace-content" tabIndex="-1">
       {adminTab === 'tenants' && canViewTenants && (
-        <PlatformTenantsView />
+        <div className="admin-screen admin-screen--tenants"><PlatformTenantsView /></div>
       )}
       {adminTab === 'access' && canManagePlatformAccess && (
-        <PlatformAccessControl />
+        <div className="admin-screen admin-screen--access"><PlatformAccessControl /></div>
       )}
       {adminTab === 'telemetry' && isSuperAdmin && (
-        <LiveTelemetryTab />
+        <div className="admin-screen admin-screen--telemetry"><LiveTelemetryTab /></div>
       )}
       {adminTab === 'matrix' && isSuperAdmin && (
-        <RoleFeatureMatrixTab />
+        <div className="admin-screen admin-screen--matrix"><RoleFeatureMatrixTab /></div>
       )}
       {adminTab === 'tenantProfile' && !isSuperAdmin && (
-        <TenantProfileDashboard />
+        <div className="admin-screen admin-screen--tenant-profile"><TenantProfileDashboard /></div>
       )}
-      {adminTab === 'csquare' && canViewCSquare && <AdminCSquareTab />}
-      {adminTab === 'promotions' && canViewPromotions && <CustomerPromotionsView canManage={hasPermission('promotions.manage')} />}
+      {adminTab === 'csquare' && canViewCSquare && <div className="admin-screen admin-screen--csquare"><AdminCSquareTab /></div>}
+      {adminTab === 'promotions' && canViewPromotions && <div className="admin-screen admin-screen--promotions"><CustomerPromotionsView canManage={hasPermission('promotions.manage')} /></div>}
       {adminTab === 'surplusSavings' && canViewSurplusSavings && <SurplusSavingsManager canManage={hasPermission('promotions.manage')} />}
 
       {adminTab === 'fulfillment' && canViewFulfillment && (
-        <div className="space-y-3">
+        <div className="admin-screen admin-screen--fulfillment space-y-3">
           {ordersError && (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
               <span>{ordersError}</span>
@@ -731,35 +731,35 @@ export default function AdminDashboardView() {
       )}
 
       {adminTab === 'requests' && canViewAdminRequests && (
-        <AdminMedicineRequestsTab initialData={initialMedicineRequests} onPendingCountRefresh={loadPendingMedicineRequestCount} />
+        <div className="admin-screen admin-screen--requests"><AdminMedicineRequestsTab initialData={initialMedicineRequests} onPendingCountRefresh={loadPendingMedicineRequestCount} /></div>
       )}
 
       {adminTab === 'riders' && canManageRiders && (
-        <RiderFleetView />
+        <div className="admin-screen admin-screen--riders"><RiderFleetView /></div>
       )}
 
       {adminTab === 'offerZone' && canViewPromotions && (
-        <AdminOfferZoneManager />
+        <div className="admin-screen admin-screen--offer-zone"><AdminOfferZoneManager /></div>
       )}
 
       {adminTab === 'payments' && canViewPayments && (
-        <AdminPaymentReminders canManage={canManagePayments} />
+        <div className="admin-screen admin-screen--payments"><AdminPaymentReminders canManage={canManagePayments} /></div>
       )}
 
       {adminTab === 'inventory' && canViewInventory && (
-        <AdminInventoryTable
+        <div className="admin-screen admin-screen--inventory"><AdminInventoryTable
           onOpenBulkImport={() => setAdminBulkImportModalOpen(true)}
           canManage={canAccessOperations || isSuperAdmin || hasPermission('inventory.write') || hasPermission('*')}
           canImport={canImportInventory}
-        />
+        /></div>
       )}
 
       {adminTab === 'routes' && canManageRoutes && (
-        <AdminRouteOptimizer onRefresh={loadAllOrders} />
+        <div className="admin-screen admin-screen--routes"><AdminRouteOptimizer onRefresh={loadAllOrders} /></div>
       )}
 
       {adminTab === 'audits' && canViewAudits && (
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
+        <div className="admin-screen admin-screen--audits bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
           <div className="flex justify-between items-center">
             <div>
               <h3 className="text-base font-black text-slate-900">📜 {t('inventoryMergeAuditTrail')}</h3>
