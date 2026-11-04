@@ -2075,24 +2075,49 @@ export const dataStore = {
 
     async getFulfillmentSnapshot(page = 1, limit = 10, tenantId = null) {
         const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+        const deliveredStatuses = [
+            'Delivered', 'delivered', 'DELIVERED',
+            'Completed', 'completed', 'COMPLETED',
+            'Delivered_Order', 'delivered_order', 'DELIVERED_ORDER'
+        ];
+        const deliveredStatusSet = new Set(deliveredStatuses.map(status => status.toLowerCase()));
+        const statusMissing = {
+            $or: [
+                { orderStatus: { $exists: false } },
+                { orderStatus: null },
+                { orderStatus: '' }
+            ]
+        };
+        const deliveredStatusFilter = {
+            $or: [
+                { orderStatus: { $in: deliveredStatuses } },
+                { $and: [statusMissing, { status: { $in: deliveredStatuses } }] }
+            ]
+        };
+        const notDeliveredStatusFilter = {
+            $or: [
+                { $and: [{ orderStatus: { $exists: true, $nin: [...deliveredStatuses, null, ''] } }] },
+                { $and: [statusMissing, { status: { $nin: deliveredStatuses } }] }
+            ]
+        };
         const pipelineFilter = {
             ...(tenantId ? { tenantId: String(tenantId) } : {}),
             $or: [
-                { orderStatus: { $nin: ['Delivered', 'delivered'] } },
-                {
-                    orderStatus: { $in: ['Delivered', 'delivered'] },
-                    createdAt: { $gte: twoDaysAgo }
-                }
+                notDeliveredStatusFilter,
+                { $and: [deliveredStatusFilter, { createdAt: { $gte: twoDaysAgo } }] }
             ]
         };
         const tenantFilter = tenantId ? { tenantId: String(tenantId) } : {};
+        const deliveredCountFilter = tenantId
+            ? { $and: [deliveredStatusFilter, tenantFilter] }
+            : deliveredStatusFilter;
         const parsedLimit = Math.min(50, Math.max(1, Number(limit) || 10));
         const parsedPage = Math.max(1, Number(page) || 1);
         if (getIsConnected()) {
             const [activeTotal, total, deliveredCount, items, recentOrders] = await Promise.all([
                 Order.countDocuments(pipelineFilter),
                 Order.countDocuments(tenantFilter),
-                Order.countDocuments({ ...tenantFilter, orderStatus: 'Delivered' }),
+                Order.countDocuments(deliveredCountFilter),
                 Order.find(pipelineFilter).sort({ createdAt: -1, _id: -1 }).skip((parsedPage - 1) * parsedLimit).limit(parsedLimit).lean(),
                 Order.find(tenantFilter).sort({ createdAt: -1, _id: -1 }).limit(6).lean()
             ]);
@@ -2103,13 +2128,16 @@ export const dataStore = {
                 pagination: { page: currentPage, limit: parsedLimit, total: activeTotal, totalPages, hasNextPage: currentPage < totalPages, hasPreviousPage: currentPage > 1 }
             };
         }
-        const twoDaysAgoTime = Date.now() - 48 * 60 * 60 * 1000;
+        const twoDaysAgoTime = twoDaysAgo.getTime();
         const allOrders = [...inMemoryOrders]
             .filter(order => !tenantId || String(order.tenantId) === String(tenantId))
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         const pipelineOrders = allOrders.filter(order => {
-            const status = String(order.orderStatus || '').trim().toLowerCase();
-            if (status !== 'delivered') return true;
+            const rawStatus = order.orderStatus == null || String(order.orderStatus).trim() === ''
+                ? order.status
+                : order.orderStatus;
+            const isDelivered = deliveredStatusSet.has(String(rawStatus || '').trim().toLowerCase());
+            if (!isDelivered) return true;
             const orderDate = new Date(order.createdAt || Date.now()).getTime();
             return orderDate >= twoDaysAgoTime;
         });
@@ -2120,7 +2148,12 @@ export const dataStore = {
             items: pipelineOrders.slice((currentPage - 1) * parsedLimit, currentPage * parsedLimit),
             total: allOrders.length,
             activeTotal,
-            deliveredCount: allOrders.filter(order => String(order.orderStatus || '').trim().toLowerCase() === 'delivered').length,
+            deliveredCount: allOrders.filter(order => {
+                const rawStatus = order.orderStatus == null || String(order.orderStatus).trim() === ''
+                    ? order.status
+                    : order.orderStatus;
+                return deliveredStatusSet.has(String(rawStatus || '').trim().toLowerCase());
+            }).length,
             recentOrders: allOrders.slice(0, 6),
             pagination: { page: currentPage, limit: parsedLimit, total: activeTotal, totalPages, hasNextPage: currentPage < totalPages, hasPreviousPage: currentPage > 1 }
         };
