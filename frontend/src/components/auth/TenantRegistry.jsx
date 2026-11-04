@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import apiClient from '../../api/apiClient';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 
 const blankBranch = {
   name: '', code: '', phone: '', email: '',
@@ -15,6 +16,9 @@ const labelClass = 'mb-1 block text-xs font-bold text-slate-600';
 
 export default function TenantRegistry() {
   const { t } = useLanguage();
+  const { user } = useAuth();
+  const role = String(user?.app_metadata?.role || user?.role || '').toUpperCase();
+  const canManageBranches = ['TENANT_OWNER', 'TENANT_ADMIN', 'OWNER', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -123,7 +127,7 @@ export default function TenantRegistry() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={fetchBranches} disabled={loading} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-50">Refresh</button>
-          <button type="button" onClick={openCreate} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700">+ Add branch</button>
+          {canManageBranches && <button type="button" onClick={openCreate} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700">+ Add branch</button>}
         </div>
       </div>
 
@@ -168,7 +172,7 @@ export default function TenantRegistry() {
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-2xl">⌖</div>
           <h4 className="font-bold text-slate-900">{statusFilter === 'ALL' ? 'No branches added yet' : `No ${statusFilter.toLowerCase()} branches`}</h4>
           <p className="mt-1 text-sm text-slate-500">Add your first pharmacy branch to configure its address and delivery settings.</p>
-          {statusFilter === 'ALL' && <button type="button" onClick={openCreate} className="mt-4 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white">Add your first branch</button>}
+          {statusFilter === 'ALL' && canManageBranches && <button type="button" onClick={openCreate} className="mt-4 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white">Add your first branch</button>}
         </div>}
       </div>
 
