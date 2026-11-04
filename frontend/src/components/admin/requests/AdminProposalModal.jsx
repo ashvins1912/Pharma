@@ -23,6 +23,9 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
   const [finalPrice, setFinalPrice] = useState('');
   const [pharmacyNote, setPharmacyNote] = useState('');
   const [alternativeProduct, setAlternativeProduct] = useState('');
+  const [catalogOptions, setCatalogOptions] = useState([]);
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedAlternativeIds, setSelectedAlternativeIds] = useState([]);
   const [scannedMedicine, setScannedMedicine] = useState(null);
   const [scannedMedicines, setScannedMedicines] = useState([]);
   const [prescriptionVerification, setPrescriptionVerification] = useState(null);
@@ -107,6 +110,21 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
 
   useEffect(() => {
     let active = true;
+    if (!isOpen || !request?._id) return undefined;
+    apiClient.get(`/api/admin/medicine-requests/${request._id}/fulfillment-options`)
+      .then(response => {
+        if (!active) return;
+        const options = (response.data?.items || []).flatMap(item => item.options || []);
+        setCatalogOptions(options);
+        setSelectedProductId(request.pharmacyProposal?.productId || '');
+        setSelectedAlternativeIds((request.pharmacyProposal?.alternativeOffers || []).map(offer => offer.productId));
+      })
+      .catch(() => { if (active) setCatalogOptions([]); });
+    return () => { active = false; };
+  }, [isOpen, request?._id]);
+
+  useEffect(() => {
+    let active = true;
     if (isOpen && request) {
       setReviewReady(request.status !== 'REQUESTED');
       if (request.status === 'REQUESTED') {
@@ -137,6 +155,8 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
         setFinalPrice(proposal.finalPrice !== null && proposal.finalPrice !== undefined ? String(proposal.finalPrice) : '');
         setPharmacyNote(proposal.pharmacyNote || '');
         setAlternativeProduct(proposal.alternativeProduct || '');
+        setSelectedProductId(proposal.productId || '');
+        setSelectedAlternativeIds((proposal.alternativeOffers || []).map(offer => offer.productId));
         setPrescriptionStatus(proposal.prescriptionStatus || (request.prescriptionUrl ? 'Verified' : 'Not Required'));
 
         const slot = proposal.deliverySlot || {};
@@ -157,6 +177,8 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
         setFinalPrice('');
         setPharmacyNote('');
         setAlternativeProduct('');
+        setSelectedProductId('');
+        setSelectedAlternativeIds([]);
         setPrescriptionStatus(request.prescriptionUrl ? 'Verified' : 'Not Required');
 
         const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
@@ -267,6 +289,21 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
     }
   };
 
+  const handleCatalogProductSelect = productId => {
+    setSelectedProductId(productId);
+    const product = catalogOptions.find(option => option.productId === productId);
+    if (!product) return;
+    const price = Number(product.discountedUnitPrice ?? product.unitPrice ?? 0);
+    setMedicineName(product.medicineName || medicineName);
+    setManufacturer(product.manufacturer || '');
+    setStrength(product.strength || '');
+    setDosageForm(product.dosageForm || dosageForm);
+    setUnitPrice(price);
+    setApproximatePrice(Math.round(price * quantity * 100) / 100);
+    setFinalPrice(String(Math.round(price * quantity * 100) / 100));
+    setPriceType('FINAL');
+  };
+
   const handleSubmitProposal = async (e) => {
     e.preventDefault();
     if (!medicineName.trim()) {
@@ -292,6 +329,8 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
     const expiresAt = new Date(Date.now() + parseInt(validityHours) * 3600000).toISOString();
 
     const payload = {
+      productId: selectedProductId || null,
+      alternativeOffers: catalogOptions.filter(option => selectedAlternativeIds.includes(option.productId)),
       medicineName: medicineName.trim(),
       manufacturer: manufacturer.trim(),
       strength: strength.trim(),
@@ -744,6 +783,29 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
               />
             </div>
           </div>
+
+          {catalogOptions.length > 0 && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-3">
+              <div>
+                <p className="text-xs font-black text-emerald-950">Verified catalogue choices</p>
+                <p className="text-[10px] text-emerald-800">Only products with matching composition, strength and compatible form are listed. Live availability is checked again when the customer confirms.</p>
+              </div>
+              <label className="block text-[11px] font-bold text-slate-700">Main product linked to this proposal</label>
+              <select value={selectedProductId} disabled={isApproved} onChange={event => handleCatalogProductSelect(event.target.value)} className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs">
+                <option value="">Supplier-arranged / manually quoted product</option>
+                {catalogOptions.map(option => <option key={option.productId} value={option.productId}>{option.medicineName} · {option.manufacturer} · ₹{option.discountedUnitPrice} · {option.availableQuantity} available</option>)}
+              </select>
+              <div className="space-y-2">
+                <p className="text-[11px] font-bold text-slate-700">Offer additional customer choices</p>
+                {catalogOptions.filter(option => option.productId !== selectedProductId).map(option => (
+                  <label key={option.productId} className="flex items-start gap-2 rounded-xl border border-emerald-100 bg-white p-2 text-xs">
+                    <input type="checkbox" disabled={isApproved} checked={selectedAlternativeIds.includes(option.productId)} onChange={event => setSelectedAlternativeIds(current => event.target.checked ? [...new Set([...current, option.productId])] : current.filter(id => id !== option.productId))}/>
+                    <span className="flex-1"><strong>{option.medicineName}</strong><br/><span className="text-slate-500">{option.manufacturer} · {option.strength} · {option.dosageForm}</span><br/><span className="font-bold text-emerald-700">₹{option.discountedUnitPrice} each</span>{option.discountPercentage > 0 ? <span className="ml-1 text-emerald-700">({option.discountPercentage}% off)</span> : null}<span className="block text-[10px] text-slate-500">{option.availableQuantity} available</span></span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Validity Period */}
           <div className="flex items-center gap-2 text-xs text-slate-600">
