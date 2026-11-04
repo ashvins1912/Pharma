@@ -174,6 +174,7 @@ export function createServiceRouters(gatewayConfig = config) {
   inventoryRouter.get('/imports/batches/:batchId', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.get('/imports/batches/:batchId/rows', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.patch('/imports/batches/:batchId/rows/:rowId', inventoryImportAuth, inventory('inventory.import'));
+  inventoryRouter.post('/imports/batches/:batchId/rows/edit-selected', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.post('/imports/batches/:batchId/publish', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.post('/imports/batches/:batchId/rows/:rowId/publish', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.post('/imports/batches/:batchId/unpublish', inventoryImportAuth, inventory('inventory.import'));
@@ -182,7 +183,6 @@ export function createServiceRouters(gatewayConfig = config) {
   inventoryRouter.get('/imports/:jobId/failures/download', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.get('/imports/:jobId/failures', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.post('/imports/:jobId/retry', inventoryImportAuth, inventory('inventory.import'));
-  inventoryRouter.post('/imports/batches/:batchId/rollback', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.get('/imports/:jobId', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.get('/:productId', inventory('inventory.read'));
   inventoryRouter.all('*', (req, res) => res.status(404).json({
