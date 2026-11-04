@@ -20,9 +20,8 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const headersKey = JSON.stringify(headers || {});
-  const stableHeaders = useMemo(() => headers || {}, [headersKey]);
+  const stableHeaders = useMemo(() => JSON.parse(headersKey), [headersKey]);
   const base = activeBatchId ? `/api/v1/inventory/imports/batches/${encodeURIComponent(activeBatchId)}` : '';
-  useEffect(() => { if (batchId) setActiveBatchId(batchId); }, [batchId]);
   const canPublish = publishingEnabled || serverPublishingEnabled;
   const loadBatches = useCallback(async () => {
     try {
