@@ -21,7 +21,7 @@ const parsePositiveInteger = (value, fallback, fieldName) => {
 };
 
 const buildCategoryMatch = (categoryFilters = {}, userContext = {}) => {
-    const filter = { isActive: true, availableQuantity: { $gt: 0 } };
+    const filter = { isActive: true };
     const categories = normalizeList(categoryFilters.categories ?? categoryFilters.category);
     const subCategories = normalizeList(categoryFilters.subCategories ?? categoryFilters.subCategory);
     const activeCartSkus = normalizeList(userContext.activeCartSkus).map(sku => sku.toUpperCase());
