@@ -599,12 +599,9 @@ async function processJob(job) {
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
   if (!firstSheet) throw new Error('Workbook does not contain a worksheet.');
   const rows = readImportRows(firstSheet);
-  const currentPreview = await previewImportFile({ filePath: job.filePath, tenantId: job.tenantId, branchId: job.branchId });
-  if (currentPreview.previewFingerprint !== job.previewFingerprint) {
-    const error = new Error('The workbook no longer matches the approved preview. No inventory changes were applied.');
-    error.code = 'PREVIEW_FINGERPRINT_MISMATCH';
-    throw error;
-  }
+  // The upload route already verified the workbook against the approved preview.
+  // Per-batch inventory/product snapshots below detect concurrent changes without
+  // parsing the entire workbook and querying every SKU a second time here.
   await ImportJob.updateOne({ _id: job._id }, { $set: { totalRecords: rows.length } });
 
   let failedRecords = 0;
@@ -729,16 +726,19 @@ export async function createImportJob({
   tenantId,
   branchId,
   stockMode = 'REPLACE',
-  previewFingerprint
+  previewFingerprint,
+  approvedPreview
 }) {
   if (!config.importsEnabled) { const error = new Error('Inventory import writes are disabled. Enable INVENTORY_IMPORTS_ENABLED only in an isolated test environment after review.'); error.statusCode = 503; throw error; }
   if (!tenantId || !branchId) { const error = new Error('Verified tenant and branch context are required.'); error.statusCode = 403; throw error; }
   if (stockMode !== 'REPLACE') { const error = new Error('Only REPLACE stock mode is currently supported; additive imports are disabled.'); error.statusCode = 400; throw error; }
   if (!previewFingerprint) { const error = new Error('A server-generated preview fingerprint and explicit confirmation are required.'); error.statusCode = 400; throw error; }
-  const freshPreview = await previewImportFile({ filePath: file.path, tenantId, branchId });
-  if (freshPreview.previewFingerprint !== previewFingerprint) {
+  // The route passes the server-generated preview produced from this exact upload.
+  // Reusing it avoids a second XLSX parse and duplicate full-catalogue lookups.
+  if (!approvedPreview || approvedPreview.previewFingerprint !== previewFingerprint
+    || approvedPreview.tenantId !== tenantId || approvedPreview.branchId !== branchId) {
     await fs.rm(file.path, { force: true }).catch(() => {});
-    const error = new Error('The approved preview is stale. Re-preview the workbook before importing.');
+    const error = new Error('The approved server preview is missing or does not match this tenant and branch. Preview the workbook again.');
     error.statusCode = 409;
     error.code = 'PREVIEW_FINGERPRINT_MISMATCH';
     throw error;
@@ -789,8 +789,8 @@ export async function createImportJob({
         branchId,
         batchId,
         previewFingerprint,
-        previewInventorySnapshot: freshPreview.inventorySnapshot,
-        previewProductSnapshot: freshPreview.productSnapshot,
+        previewInventorySnapshot: approvedPreview.inventorySnapshot,
+        previewProductSnapshot: approvedPreview.productSnapshot,
         stockMode,
         fileName: safeFileName,
         filePath: destination,
