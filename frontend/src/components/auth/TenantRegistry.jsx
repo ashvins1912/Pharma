@@ -45,6 +45,14 @@ export default function TenantRegistry() {
 
   useEffect(() => { fetchBranches(); }, [fetchBranches]);
 
+  // Lock the page behind the dialog; the dialog's content area is the only scroll container.
+  useEffect(() => {
+    if (!modalOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [modalOpen]);
+
   const openCreate = () => {
     setEditingId(null);
     setForm({ ...blankBranch, address: { ...blankBranch.address }, operatingHours: { ...blankBranch.operatingHours } });
@@ -178,7 +186,7 @@ export default function TenantRegistry() {
       </div>
 
       {modalOpen && createPortal(<div className="fixed inset-0 z-[10000] flex items-center justify-center overflow-hidden bg-slate-950/60 p-2 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="branch-dialog-title">
-        <form onSubmit={saveBranch} className="flex w-full max-w-3xl min-h-0 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-3xl" style={{ maxHeight: 'calc(100dvh - 2rem)' }}>
+        <form onSubmit={saveBranch} className="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl min-h-0 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-3xl" style={{ maxHeight: 'calc(100dvh - 2rem)' }}>
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-7 sm:py-5">
             <div className="min-w-0"><h3 id="branch-dialog-title" className="text-xl font-black text-slate-900">{editingId ? 'Edit branch' : 'Add pharmacy branch'}</h3><p className="mt-1 text-sm text-slate-500">Branch details are scoped to the authenticated tenant.</p></div>
             <button type="button" onClick={() => setModalOpen(false)} className="shrink-0 rounded-lg px-3 py-1 text-xl text-slate-400 hover:bg-slate-100" aria-label="Close">×</button>
