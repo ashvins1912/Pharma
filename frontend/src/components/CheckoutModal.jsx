@@ -11,7 +11,7 @@ import { useLanguage } from '../context/LanguageContext';
 export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const { t } = useLanguage();
   const { user } = useAuth();
-  const { tenantId, activeTenant } = useTenant();
+  const { tenantId, branchId, activeTenant } = useTenant();
   const { cart, subtotal, discountAmount, deliveryFee, finalTotal, appliedCoupon, selectedAddressId, addresses, clearCart, addToCart } = useApp();
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
@@ -147,6 +147,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       try {
       const checkoutData = {
         tenantId: String(tenantId),
+        branchId: String(branchId || ''),
         items: JSON.stringify(cart.map(item => ({
           medicineId: item._id || item.id,
           quantity: item.quantity
