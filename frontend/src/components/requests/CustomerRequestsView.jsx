@@ -6,6 +6,7 @@ import { replaceMedicineRequestPrescription } from '../../api/medicineRequestSer
 import { useActionLoading, LOADING_ACTIONS } from '../../context/LoadingContext';
 import Pagination from '../common/Pagination';
 import { useLanguage } from '../../context/LanguageContext';
+import CustomerStockWaitlist from './CustomerStockWaitlist';
 
 const DEFAULT_PAGINATION = { page: 1, pageSize: 10, limit: 10, total: 0, totalPages: 0, hasNextPage: false };
 
@@ -67,6 +68,8 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
     switch (status) {
       case 'REQUESTED':
         return (
+    <>
+      <CustomerStockWaitlist />
           <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">
             <span>⏳</span> Submitted & Pending
           </span>
@@ -437,5 +440,6 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
       )}
 
     </div>
+      </>
   );
 }
