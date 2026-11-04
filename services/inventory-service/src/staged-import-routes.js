@@ -460,6 +460,7 @@ router.patch('/imports/batches/:batchId/rows/:rowId', requireServiceScope('inven
   if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) return res.status(400).json({ message: 'Provide row fields to update.' });
   const allowed = ['sku','name','genericName','strength','form','manufacturer','category','description','price','stockQuantity','batchNumber','expiryDate','requiresPrescription','imageUrl','baseCostPrice','marginTier'];
   const patch = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowed.includes(key)));
+  const previousNormalized = { ...(row.normalized || {}) };
   const next = { ...row.normalized, ...patch };
   next.sku = String(next.sku || '').trim().toUpperCase();
   next.name = String(next.name || '').trim();
@@ -486,6 +487,23 @@ router.patch('/imports/batches/:batchId/rows/:rowId', requireServiceScope('inven
   row.status = errors.length ? 'INVALID' : 'READY';
   row.version += 1;
   await row.save();
+  if (previousNormalized.sku !== next.sku || (previousNormalized.batchNumber || '') !== (next.batchNumber || '')) {
+    const [currentProduct, currentInventory, batchBaseline] = await Promise.all([
+      Product.findOne({ tenantId, sku: next.sku }).select('sku version updatedAt').lean(),
+      Inventory.findOne({ tenantId, branchId, sku: next.sku, batchNumber: next.batchNumber || '' }).select('sku batchNumber stockQuantity reservedQuantity price updatedAt').lean(),
+      StagedImportBatch.findOne({ batchId: row.batchId, tenantId, branchId })
+    ]);
+    if (batchBaseline) {
+      const inventoryKey = JSON.stringify([next.sku, next.batchNumber || '']);
+      const inventoryBaseline = (batchBaseline.previewInventorySnapshot || []).filter(item => JSON.stringify([item.sku, item.batchNumber || '']) !== inventoryKey);
+      if (currentInventory) inventoryBaseline.push({ sku: currentInventory.sku, batchNumber: currentInventory.batchNumber || '', stockQuantity: currentInventory.stockQuantity, reservedQuantity: currentInventory.reservedQuantity, price: currentInventory.price, updatedAt: currentInventory.updatedAt || null });
+      const productBaseline = (batchBaseline.previewProductSnapshot || []).filter(item => item.sku !== next.sku);
+      if (currentProduct) productBaseline.push({ sku: currentProduct.sku, version: currentProduct.version, updatedAt: currentProduct.updatedAt || null });
+      batchBaseline.previewInventorySnapshot = inventoryBaseline;
+      batchBaseline.previewProductSnapshot = productBaseline;
+      await batchBaseline.save();
+    }
+  }
   await refreshBatchCounts(row.batchId, tenantId, branchId);
   await Audit.create({ tenantId, branchId, actor: actor(req), operation: 'inventory.import.row.edited', details: { batchId: row.batchId, rowId: row.rowId, fields: Object.keys(patch), validationErrors: errors } });
   return res.json({ item: row });
