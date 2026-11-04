@@ -456,52 +456,108 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
 
 router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, res) => {
     if (!getIsConnected()) return res.status(503).json({ message: 'Stock waitlist confirmation is temporarily unavailable.' });
-    try {
-        const waitlist = await FulfillmentCase.findOne({
-            _id: req.params.id, customerId: String(req.user.sub),
-            status: { $in: ['READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'] },
-            waitUntil: { $gt: new Date() }
-        }).lean();
-        if (!waitlist) return res.status(404).json({ message: 'No active stock-ready waitlist entry was found.' });
-        if (!waitlist.addressId || !waitlist.deliveryAddress || !hasValidCoordinates(waitlist.coordinates)) {
-            return res.status(409).json({ message: 'Please update a verified delivery address before confirming this stock-ready request.' });
-        }
-        const readyLines = (waitlist.lines || []).filter(line => Number(line.allocatedQuantity || 0) > 0);
-        if (!readyLines.length) return res.status(409).json({ message: 'No requested quantity is currently available.' });
-        const order = await dataStore.reserveOrder({
-            userId: String(req.user.sub), tenantId: waitlist.tenantId, branchId: waitlist.branchId,
-            addressId: waitlist.addressId, deliveryAddress: waitlist.deliveryAddress,
-            addressDetails: waitlist.addressDetails || {}, coordinates: waitlist.coordinates,
-            paymentMethod: waitlist.paymentMethod || 'Cash on Delivery (COD)',
-            source: waitlist.sourceType === 'MEDICINE_REQUEST' ? 'MEDICINE_REQUEST' : 'WEB',
-            fulfillmentCaseId: String(waitlist._id),
-            prescriptionUrl: waitlist.prescriptionUrl || null, prescriptionId: waitlist.prescriptionId || null,
-            patientPuid: waitlist.patientPuid || null,
-            items: readyLines.map(line => ({ medicineId: line.productId, quantity: Number(line.allocatedQuantity) }))
-        }, 'Customer stock waitlist confirmation');
-        const remainingLines = (waitlist.lines || []).map(line => {
-            const allocated = Math.min(Number(line.allocatedQuantity || 0), Number(line.waitingQuantity || 0));
-            return { ...line, requestedQuantity: Math.max(0, Number(line.waitingQuantity || 0) - allocated), allocatedQuantity: 0, waitingQuantity: Math.max(0, Number(line.waitingQuantity || 0) - allocated), notifiedAvailableQuantity: 0 };
+    let claimed = null;
+    const confirmationId = randomUUID();
+    const finalize = async order => {
+        const confirmationLines = claimed.confirmationLines || [];
+        const remainingLines = (claimed.lines || []).map(line => {
+            const confirmed = confirmationLines.find(item => String(item.productId) === String(line.productId));
+            const allocated = Math.min(Number(confirmed?.allocatedQuantity || 0), Number(line.waitingQuantity || 0));
+            return {
+                ...line,
+                requestedQuantity: Math.max(0, Number(line.waitingQuantity || 0) - allocated),
+                allocatedQuantity: 0,
+                waitingQuantity: Math.max(0, Number(line.waitingQuantity || 0) - allocated),
+                notifiedAvailableQuantity: 0
+            };
         }).filter(line => line.requestedQuantity > 0);
-        await FulfillmentCase.updateOne({ _id: waitlist._id, customerId: String(req.user.sub), status: waitlist.status }, {
+        const updated = await FulfillmentCase.updateOne({
+            _id: claimed._id, customerId: String(req.user.sub),
+            status: 'CONFIRMING', confirmationId
+        }, {
             $set: {
                 lines: remainingLines,
                 status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'FULFILLED',
                 parentOrderId: String(order._id),
+                confirmationId: null, confirmingAt: null,
+                confirmationPreviousStatus: null, confirmationLines: [],
                 lastAvailabilityCheckAt: new Date()
             },
-            $push: { auditTrail: { action: 'AVAILABLE_STOCK_CONFIRMED', actorId: String(req.user.sub), at: new Date(), orderId: String(order._id), fulfilledLineCount: readyLines.length } }
+            $push: { auditTrail: { action: 'AVAILABLE_STOCK_CONFIRMED', actorId: String(req.user.sub), at: new Date(), orderId: String(order._id), fulfilledLineCount: confirmationLines.length } }
         });
-        if (waitlist.parentOrderId) {
-            await Order.updateOne({ _id: waitlist.parentOrderId, userId: String(req.user.sub), tenantId: waitlist.tenantId }, { $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' } });
+        if (!updated.modifiedCount) {
+            throw Object.assign(new Error('Order was created, but the waitlist update is still being reconciled. Refresh your waitlist shortly.'), { statusCode: 202 });
         }
-        if (waitlist.sourceType === 'MEDICINE_REQUEST' && waitlist.sourceId) {
-            await MedicineRequest.updateOne({ _id: waitlist.sourceId, customerId: String(req.user.sub), fulfillmentCaseId: String(waitlist._id) }, {
+        if (claimed.parentOrderId) {
+            await Order.updateOne({ _id: claimed.parentOrderId, userId: String(req.user.sub), tenantId: claimed.tenantId }, {
+                $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' }
+            });
+        }
+        if (claimed.sourceType === 'MEDICINE_REQUEST' && claimed.sourceId) {
+            await MedicineRequest.updateOne({ _id: claimed.sourceId, customerId: String(req.user.sub), fulfillmentCaseId: String(claimed._id) }, {
                 $set: { status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'CONVERTED_TO_ORDER', convertedOrderId: String(order._id) },
                 $push: { auditTrail: { action: 'WAITLIST_STOCK_ORDER_CREATED', actorId: String(req.user.sub), role: 'Customer', timestamp: new Date(), notes: `Created order ${String(order._id)} from available waitlist stock.` } }
             });
         }
-        return res.status(201).json({ order, waitlistCaseId: String(waitlist._id), remainingItems: remainingLines, message: 'Available stock has been reserved and a new order has been created.' });
+        return { order, remainingLines };
+    };
+    try {
+        const initial = await FulfillmentCase.findOne({
+            _id: req.params.id, customerId: String(req.user.sub),
+            status: { $in: ['READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'] },
+            waitUntil: { $gt: new Date() }
+        }).lean();
+        if (!initial) return res.status(404).json({ message: 'No active stock-ready waitlist entry was found.' });
+        if (!initial.addressId || !initial.deliveryAddress || !hasValidCoordinates(initial.coordinates)) {
+            return res.status(409).json({ message: 'Please update a verified delivery address before confirming this stock-ready request.' });
+        }
+        const confirmationLines = (initial.lines || []).filter(line => Number(line.allocatedQuantity || 0) > 0);
+        if (!confirmationLines.length) return res.status(409).json({ message: 'No requested quantity is currently available.' });
+        claimed = await FulfillmentCase.findOneAndUpdate({
+            _id: initial._id, customerId: String(req.user.sub),
+            status: initial.status, waitUntil: { $gt: new Date() }
+        }, {
+            $set: {
+                status: 'CONFIRMING',
+                confirmationId,
+                confirmingAt: new Date(),
+                confirmationPreviousStatus: initial.status,
+                confirmationLines
+            },
+            $push: { auditTrail: { action: 'STOCK_CONFIRMATION_STARTED', actorId: String(req.user.sub), at: new Date(), confirmationId } }
+        }, { new: true }).lean();
+        if (!claimed) return res.status(409).json({ message: 'Another confirmation is already in progress. Refresh your waitlist.' });
+        try {
+            const order = await dataStore.reserveOrder({
+                userId: String(req.user.sub), tenantId: claimed.tenantId, branchId: claimed.branchId,
+                addressId: claimed.addressId, deliveryAddress: claimed.deliveryAddress,
+                addressDetails: claimed.addressDetails || {}, coordinates: claimed.coordinates,
+                paymentMethod: claimed.paymentMethod || 'Cash on Delivery (COD)',
+                source: claimed.sourceType === 'MEDICINE_REQUEST' ? 'MEDICINE_REQUEST' : 'WEB',
+                fulfillmentCaseId: String(claimed._id),
+                fulfillmentConfirmationId: confirmationId,
+                prescriptionUrl: claimed.prescriptionUrl || null, prescriptionId: claimed.prescriptionId || null,
+                patientPuid: claimed.patientPuid || null,
+                items: confirmationLines.map(line => ({ medicineId: line.productId, quantity: Number(line.allocatedQuantity) }))
+            }, 'Customer stock waitlist confirmation');
+            const completed = await finalize(order);
+            return res.status(201).json({ order: completed.order, waitlistCaseId: String(claimed._id), remainingItems: completed.remainingLines, message: 'Available stock has been reserved and a new order has been created.' });
+        } catch (confirmationError) {
+            const existingOrder = await Order.findOne({ fulfillmentConfirmationId: confirmationId }).lean();
+            if (existingOrder) {
+                const completed = await finalize(existingOrder);
+                return res.status(201).json({ order: completed.order, waitlistCaseId: String(claimed._id), remainingItems: completed.remainingLines, message: 'Your stock reservation was completed and reconciled.' });
+            }
+            await FulfillmentCase.updateOne({ _id: claimed._id, customerId: String(req.user.sub), status: 'CONFIRMING', confirmationId }, {
+                $set: {
+                    status: claimed.confirmationPreviousStatus || 'WAITING_FOR_STOCK',
+                    confirmationId: null, confirmingAt: null,
+                    confirmationPreviousStatus: null, confirmationLines: []
+                },
+                $push: { auditTrail: { action: 'STOCK_CONFIRMATION_FAILED', actorId: String(req.user.sub), at: new Date(), notes: confirmationError.message } }
+            });
+            throw confirmationError;
+        }
     } catch (error) {
         return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to confirm available stock.' });
     }
