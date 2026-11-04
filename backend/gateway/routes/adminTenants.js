@@ -111,14 +111,31 @@ router.get('/smtp/history', async (req, res, next) => {
 router.get('/', async (req, res, next) => {
     try {
         const filter = {};
-        if (req.query.status) {
-            filter.status = req.query.status.toUpperCase();
+        if (req.query.status) filter.status = String(req.query.status).toUpperCase();
+        if (req.query.q !== undefined || req.query.search !== undefined) {
+            filter.search = String(req.query.q ?? req.query.search ?? '').trim();
+            if (filter.search.length < 2) {
+                return res.status(400).json({
+                    success: false,
+                    error: { code: 'TENANT_SEARCH_TOO_SHORT', message: 'Enter at least 2 characters to search tenants.' }
+                });
+            }
         }
+        if (req.query.limit !== undefined) {
+            const parsedLimit = Number.parseInt(req.query.limit, 10);
+            if (!Number.isInteger(parsedLimit) || parsedLimit < 1) {
+                return res.status(400).json({ success: false, error: { code: 'INVALID_LIMIT', message: 'Tenant lookup limit must be a positive integer.' } });
+            }
+            filter.limit = Math.min(parsedLimit, 50);
+        }
+        if (req.query.sort) filter.sort = String(req.query.sort);
         const tenants = await tenantService.getTenants(filter);
         res.json({
             success: true,
             data: tenants,
-            count: tenants.length
+            count: tenants.length,
+            query: filter.search || null,
+            limit: filter.limit || null
         });
     } catch (err) {
         next(err);
