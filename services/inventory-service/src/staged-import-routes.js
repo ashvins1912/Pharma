@@ -272,6 +272,9 @@ async function unpublishRows(batch, rows, req) {
   const changed = [];
   try {
     await session.withTransaction(async () => {
+      const baselineBatch = await StagedImportBatch.findById(batch._id).session(session).lean();
+      let inventoryBaseline = [...(baselineBatch?.previewInventorySnapshot || [])];
+      let productBaseline = [...(baselineBatch?.previewProductSnapshot || [])];
       for (const row of [...rows].sort((a,b) => Number(b.publication?.sequence || 0) - Number(a.publication?.sequence || 0))) {
         const fresh = await StagedImportRow.findOne({ _id: row._id, batchId: batch.batchId, tenantId: batch.tenantId, branchId: batch.branchId }).session(session);
         const p = fresh?.publication;
@@ -284,10 +287,15 @@ async function unpublishRows(batch, rows, req) {
         if (Number(inventory.reservedQuantity || 0) > Number(p.inventoryBefore?.stockQuantity || 0)) {
           throw Object.assign(new Error(`Row ${fresh.rowNumber} cannot be reverted because current reservations exceed the previous stock.`), { statusCode: 409 });
         }
-        if (p.inventoryCreated) await Inventory.deleteOne({ _id: inventory._id }).session(session);
-        else {
+        const inventoryKey = JSON.stringify([fresh.normalized.sku, fresh.normalized.batchNumber || '']);
+        if (p.inventoryCreated) {
+          await Inventory.deleteOne({ _id: inventory._id }).session(session);
+          inventoryBaseline = inventoryBaseline.filter(item => JSON.stringify([item.sku, item.batchNumber || '']) !== inventoryKey);
+        } else {
           Object.assign(inventory, p.inventoryBefore);
           await inventory.save({ session });
+          inventoryBaseline = inventoryBaseline.filter(item => JSON.stringify([item.sku, item.batchNumber || '']) !== inventoryKey);
+          inventoryBaseline.push({ sku: inventory.sku, batchNumber: inventory.batchNumber || '', stockQuantity: inventory.stockQuantity, reservedQuantity: inventory.reservedQuantity, price: inventory.price, updatedAt: inventory.updatedAt || null });
         }
         const product = await Product.findOne({ _id: p.productId, tenantId: batch.tenantId }).session(session);
         if (!product || !same(snapshot(asPlain(product), productFields), p.productAfter)) {
@@ -297,10 +305,14 @@ async function unpublishRows(batch, rows, req) {
           const refs = await Inventory.exists({ tenantId: batch.tenantId, productId: product._id }).session(session);
           if (refs) throw Object.assign(new Error('Product is now used by other inventory rows and cannot be removed safely.'), { statusCode: 409 });
           await Product.deleteOne({ _id: product._id }).session(session);
+          productBaseline = productBaseline.filter(item => item.sku !== fresh.normalized.sku);
         } else {
           Object.assign(product, p.productBefore);
           await product.save({ session });
+          productBaseline = productBaseline.filter(item => item.sku !== product.sku);
+          productBaseline.push({ sku: product.sku, version: product.version, updatedAt: product.updatedAt || null });
         }
+        await StagedImportBatch.updateOne({ _id: batch._id }, { $set: { previewInventorySnapshot: inventoryBaseline, previewProductSnapshot: productBaseline } }, { session });
         fresh.history.push({ action: 'UNPUBLISH', actor: actor(req), at: new Date(), version: fresh.version });
         fresh.status = 'UNPUBLISHED';
         fresh.version += 1;
