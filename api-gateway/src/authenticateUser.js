@@ -21,7 +21,7 @@ function normalizeUser(payload) {
   const roles = Array.isArray(payload.roles) && payload.roles.length
     ? payload.roles
     : [role];
-  const permissions = ['SUPER_ADMIN','PLATFORM_SUPER_ADMIN','admin'].includes(rawRole)
+  const permissions = ['SUPER_ADMIN','PLATFORM_SUPER_ADMIN','admin','ADMIN'].includes(rawRole)
     ? ['*']
     : (Array.isArray(payload.permissions) ? payload.permissions : (Array.isArray(payload.app_metadata?.permissions) ? payload.app_metadata.permissions : []));
   return {
@@ -167,7 +167,7 @@ export function requireAdmin(req, res, next) {
   }
 
   const role = req.user?.app_metadata?.role || req.user?.role;
-  const allowed = ['admin', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_OWNER'];
+  const allowed = ['admin', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_OWNER'];
   if (!allowed.includes(role)) {
     return res.status(403).json({ success: false, error: { code: 'ADMIN_REQUIRED', message: 'Administrator access is required.' }, requestId: req.requestId });
   }
