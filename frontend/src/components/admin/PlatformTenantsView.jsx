@@ -600,24 +600,24 @@ export default function PlatformTenantsView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
-                {filteredTenants.map((t) => {
-                  const isSuspended = t.status === 'SUSPENDED';
-                  const isActive = t.status === 'ACTIVE';
-                  const isPending = t.status === 'PENDING';
-                  const isMutating = statusActionPending === t.id;
+                {filteredTenants.map((tenantRow) => {
+                  const isSuspended = tenantRow.status === 'SUSPENDED';
+                  const isActive = tenantRow.status === 'ACTIVE';
+                  const isPending = tenantRow.status === 'PENDING';
+                  const isMutating = statusActionPending === tenantRow.id;
 
                   return (
-                    <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={tenantRow.id} className="hover:bg-slate-50/80 transition-colors">
                       {/* Name & Legal */}
                       <td className="py-3.5 px-4">
-                        <div className="font-extrabold text-slate-900 text-sm">{t.name}</div>
-                        <div className="text-[11px] text-slate-500">{t.legalName || t.name}</div>
+                        <div className="font-extrabold text-slate-900 text-sm">{tenantRow.name}</div>
+                        <div className="text-[11px] text-slate-500">{tenantRow.legalName || tenantRow.name}</div>
                       </td>
 
                       {/* Identifiers */}
                       <td className="py-3.5 px-4 font-mono text-[11px]">
-                        <div className="text-blue-600 font-semibold">{t.id}</div>
-                        <div className="text-slate-400 text-[10px]">slug: {t.slug || '—'}</div>
+                        <div className="text-blue-600 font-semibold">{tenantRow.id}</div>
+                        <div className="text-slate-400 text-[10px]">slug: {tenantRow.slug || '—'}</div>
                       </td>
 
                       {/* Status (Unboxed subtle typography with indicator dot, no pill candy) */}
@@ -641,23 +641,23 @@ export default function PlatformTenantsView() {
                                 : 'text-amber-700'
                             }
                           >
-                            {t.status || 'ACTIVE'}
+                            {tenantRow.status || 'ACTIVE'}
                           </span>
                         </div>
                       </td>
 
                       {/* Contact */}
                       <td className="py-3.5 px-4 text-[11px] text-slate-600">
-                        <div>{t.contactEmail || t.email || '—'}</div>
-                        <div className="text-slate-400">{t.contactPhone || t.phone || '—'}</div>
+                        <div>{tenantRow.contactEmail || tenantRow.email || '—'}</div>
+                        <div className="text-slate-400">{tenantRow.contactPhone || tenantRow.phone || '—'}</div>
                       </td>
 
                       {/* Locale & Currency */}
                       <td className="py-3.5 px-4 text-[11px] text-slate-600">
                         <div className="flex items-center gap-1">
-                          <span>{t.currency || 'INR'}</span>
+                          <span>{tenantRow.currency || 'INR'}</span>
                           <span aria-hidden="true">·</span>
-                          <span className="text-slate-400">{t.timezone || 'Asia/Kolkata'}</span>
+                          <span className="text-slate-400">{tenantRow.timezone || 'Asia/Kolkata'}</span>
                         </div>
                       </td>
 
@@ -667,9 +667,9 @@ export default function PlatformTenantsView() {
                           {/* Invite Admin Button */}
                           <button
                             type="button"
-                            onClick={() => openInviteModal(t)}
+                            onClick={() => openInviteModal(tenantRow)}
                             className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer"
-                            title={t("inviteTenantAdministrator")}
+                            title={tenantRow("inviteTenantAdministrator")}
                           >
                             👤 Invite Admin
                           </button>
@@ -677,9 +677,9 @@ export default function PlatformTenantsView() {
                           {/* Details / View */}
                           <button
                             type="button"
-                            onClick={() => openDetailsModal(t)}
+                            onClick={() => openDetailsModal(tenantRow)}
                             className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer"
-                            title={t("inspectTenantDetails")}
+                            title={tenantRow("inspectTenantDetails")}
                           >
                             👁️ Details
                           </button>
@@ -689,9 +689,9 @@ export default function PlatformTenantsView() {
                             <button
                               type="button"
                               disabled={isMutating}
-                              onClick={() => handleToggleStatus(t, 'suspend')}
+                              onClick={() => handleToggleStatus(tenantRow, 'suspend')}
                               className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer disabled:opacity-50"
-                              title={t("suspendTenantOperations")}
+                              title={tenantRow("suspendTenantOperations")}
                             >
                               {isMutating ? '...' : '🚫 Suspend'}
                             </button>
@@ -701,9 +701,9 @@ export default function PlatformTenantsView() {
                             <button
                               type="button"
                               disabled={isMutating}
-                              onClick={() => handleToggleStatus(t, 'activate')}
+                              onClick={() => handleToggleStatus(tenantRow, 'activate')}
                               className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer disabled:opacity-50"
-                              title={t("reactivateTenant")}
+                              title={tenantRow("reactivateTenant")}
                             >
                               {isMutating ? '...' : '✅ Activate'}
                             </button>
