@@ -25,7 +25,11 @@ export default function CustomerStockWaitlist() {
     void load();
     const refresh = () => { void load(); };
     window.addEventListener('stock-waitlist-updated', refresh);
-    return () => window.removeEventListener('stock-waitlist-updated', refresh);
+    const poll = window.setInterval(() => { void load(); }, 60 * 1000);
+    return () => {
+      window.removeEventListener('stock-waitlist-updated', refresh);
+      window.clearInterval(poll);
+    };
   }, [load]);
 
   const confirm = async entry => {
