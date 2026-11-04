@@ -9,9 +9,10 @@ const available = medicine => Math.max(0,
   Number(medicine?.stockQuantity ?? medicine?.stock ?? medicine?.quantity ?? 0)
   - Number(medicine?.reservedQuantity || 0));
 
-export async function refreshStockWaitlistCases({ limit = 250, now = new Date() } = {}) {
+export async function refreshStockWaitlistCases({ limit = 250, now = new Date(), customerId = null } = {}) {
   if (!getIsConnected()) return { scanned: 0, ready: 0, expired: 0 };
   const cases = await FulfillmentCase.find({
+    ...(customerId ? { customerId: String(customerId) } : {}),
     status: { $in: ['WAITING_FOR_STOCK', 'PARTIALLY_FULFILLED', 'READY_FOR_CONFIRMATION', 'CONFIRMING'] }
   }).sort({ updatedAt: 1 }).limit(Math.max(1, Math.min(1000, Number(limit) || 250))).lean();
   let ready = 0;
@@ -62,7 +63,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date() 
     }
     const ids = [...new Set((entry.lines || []).map(line => String(line.productId || '')).filter(Boolean))];
     const products = ids.length ? await Medicine.find({
-      _id: { $in: ids }, tenantId: entry.tenantId
+      _id: { $in: ids }, tenantId: entry.tenantId, ...(entry.branchId ? { branchId: entry.branchId } : {})
     }).select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive').lean() : [];
     const byId = new Map(products.map(product => [String(product._id), product]));
     let anyAvailable = false;
@@ -72,7 +73,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date() 
       let product = line.productId ? byId.get(String(line.productId)) : null;
       if (!product && line.composition && line.strength) {
         const matches = await Medicine.find({
-          tenantId: entry.tenantId, isActive: { $ne: false },
+          tenantId: entry.tenantId, ...(entry.branchId ? { branchId: entry.branchId } : {}), isActive: { $ne: false },
           composition: line.composition, strength: line.strength,
           ...(line.dosageForm ? { dosageForm: line.dosageForm } : {}),
           ...(line.manufacturer ? { manufacturer: line.manufacturer } : {})
@@ -87,7 +88,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date() 
       if (quantity > 0) anyAvailable = true;
       if (quantity < Number(line.waitingQuantity || 0)) allAvailable = false;
       if (quantity > previousNotified) newlyAvailable = true;
-      return { ...line, ...(product?._id ? { productId: String(product._id), name: product.name || line.name } : {}), allocatedQuantity: quantity, notifiedAvailableQuantity: Math.max(previousNotified, quantity) };
+      return { ...line, ...(product?._id ? { productId: String(product._id), name: product.name || line.name } : {}), allocatedQuantity: quantity, notifiedAvailableQuantity: quantity };
     }));
     const nextStatus = allAvailable ? 'READY_FOR_CONFIRMATION' : anyAvailable ? 'PARTIALLY_FULFILLED' : 'WAITING_FOR_STOCK';
     const result = await FulfillmentCase.updateOne({
