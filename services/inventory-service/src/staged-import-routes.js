@@ -306,6 +306,13 @@ async function unpublishRows(batch, rows, req) {
   return changed;
 }
 
+router.post('/imports/:jobId([0-9a-fA-F]{24})/retry', requireServiceScope('inventory.import'), (_req, res) => {
+  return res.status(410).json({
+    code: 'LEGACY_IMPORT_RETRY_DISABLED',
+    message: 'Legacy immediate-write import jobs are disabled. Use the staged batch workflow to review and publish test inventory.'
+  });
+});
+
 router.post('/imports', requireServiceScope('inventory.import'), upload.single('excelFile'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'An Excel workbook is required.' });
   if (!/\.(xlsx|xls)$/i.test(req.file.originalname)) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(400).json({ message: 'Upload an .xlsx or .xls workbook.' }); }
