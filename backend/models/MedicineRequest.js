@@ -205,6 +205,7 @@ const medicineRequestSchema = new mongoose.Schema({
 
     convertedOrderId: { type: mongoose.Schema.Types.Mixed, default: null, index: true },
     fulfillmentCaseId: { type: String, default: null, index: true },
+    fulfillmentProcessingAt: { type: Date, default: null, index: true },
     waitDays: { type: Number, min: 1, max: 5, default: null },
     waitUntil: { type: Date, default: null, index: true },
 
