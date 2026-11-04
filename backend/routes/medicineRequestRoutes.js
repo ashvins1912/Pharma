@@ -8,6 +8,7 @@ import { getPrescription, savePrescription } from '../config/prescriptionStorage
 import { getIsConnected } from '../config/db.js';
 import MedicineRequest from '../models/MedicineRequest.js';
 import Medicine from '../models/Medicine.js';
+import Order from '../models/Order.js';
 import UserAddress from '../models/UserAddress.js';
 import Tenant from '../models/Tenant.js';
 import FulfillmentCase from '../models/FulfillmentCase.js';
@@ -1025,6 +1026,16 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
                 customerId, tenantId, branchId,
                 sourceType: 'MEDICINE_REQUEST',
                 sourceId: String(request._id),
+                addressId: request.addressId || null,
+                deliveryAddress: request.deliveryAddress || '',
+                addressDetails: request.addressDetails || {},
+                coordinates: request.coordinates || null,
+                customerMobile: request.customerPhone || '',
+                orderedForName: request.customerName || 'Customer',
+                prescriptionRequired: Boolean(request.prescriptionId || request.prescriptionUrl),
+                prescriptionUrl: request.prescriptionUrl || null,
+                prescriptionId: request.prescriptionId || null,
+                patientPuid: request.patientPuid || null,
                 status: 'WAITING_FOR_STOCK',
                 lines: waitingItems.map(item => ({
                     productId: item.productId,
@@ -1076,6 +1087,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
         }
         if (waitlistCase && createdOrder?._id) {
             await FulfillmentCase.updateOne({ _id: waitlistCase._id }, { $set: { parentOrderId: String(createdOrder._id) } });
+            await Order.updateOne({ _id: createdOrder._id, userId: customerId, tenantId }, { $set: { fulfillmentCaseId: String(waitlistCase._id), fulfillmentState: 'PARTIAL' } });
         }
         const finalStatus = createdOrder ? 'CONVERTED_TO_ORDER' : 'WAITING_FOR_STOCK';
         const updatedRequest = await MedicineRequest.findOneAndUpdate(
