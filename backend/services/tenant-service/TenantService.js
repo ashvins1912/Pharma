@@ -176,31 +176,22 @@ export class TenantService {
 
     async getTenants(filter = {}) {
         if (getIsConnected()) {
-            try {
-                const query = {};
-                if (filter.status) query.status = filter.status;
-                const dbTenants = await Tenant.find(query).lean();
-                if (dbTenants.length > 0) {
-                    return dbTenants.map(t => ({ id: t._id, ...t }));
-                }
-            } catch (err) {
-                logger.warn('Failed to query Tenants from MongoDB, falling back to memory', { error: err.message });
-            }
+            // A connected database is authoritative, including when it contains
+            // zero tenants. Never mix local/demo memory records into platform data.
+            const query = {};
+            if (filter.status) query.status = filter.status;
+            const dbTenants = await Tenant.find(query).lean();
+            return dbTenants.map(t => ({ id: String(t._id), ...t }));
         }
         let list = Array.from(this.tenants.values());
         if (filter.status) list = list.filter(t => t.status === filter.status);
         return list;
     }
-
     async getTenantById(tenantId) {
         if (!tenantId) return null;
         if (getIsConnected()) {
-            try {
-                const dbTenant = await Tenant.findById(String(tenantId)).lean();
-                if (dbTenant) return { id: dbTenant._id, ...dbTenant };
-            } catch (err) {
-                logger.warn('Failed to fetch Tenant by ID from MongoDB, falling back to memory', { error: err.message });
-            }
+            const dbTenant = await Tenant.findById(String(tenantId)).lean();
+            return dbTenant ? { id: String(dbTenant._id), ...dbTenant } : null;
         }
         return this.tenants.get(String(tenantId)) || null;
     }
