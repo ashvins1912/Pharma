@@ -449,7 +449,7 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
             if (existing.requestFingerprint !== requestFingerprint) return res.status(409).json({ message: 'This idempotency key was already used for a different waitlist request.' });
             return res.status(200).json({ case: existing, alreadyCreated: true });
         }
-        const inventory = ids.length ? await Medicine.find({ _id: { $in: ids }, tenantId, ...(selectedBranchId ? { branchId: selectedBranchId } : {}) }).select('_id name').lean() : [];
+        const inventory = ids.length ? await Medicine.find({ _id: { $in: ids }, tenantId, branchId: selectedBranchId || null }).select('_id name').lean() : [];
         if (inventory.length !== ids.length) return res.status(404).json({ message: 'One or more selected medicines are not listed by this pharmacy.' });
         const lines = items.map(item => {
             const productId = String(item.productId || item.medicineId || '');
