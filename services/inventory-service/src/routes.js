@@ -174,6 +174,34 @@ router.post('/imports', requireServiceScope('inventory.import'), requireImportsE
       await fs.rm(req.file.path, { force: true }).catch(() => {});
       return res.status(400).json({ message: 'Review the server preview and explicitly confirm it before importing.' });
     }
+
+    // Resolve a repeated request before parsing the workbook again. The client
+    // deliberately reuses its idempotency key after a timeout because the
+    // original request may already have queued and started the background job.
+    const existingJob = await ImportJob.findOne({
+      tenantId,
+      idempotencyKey: idempotencyKey.trim()
+    }).lean();
+    if (existingJob) {
+      const safeFileName = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+      await fs.rm(req.file.path, { force: true }).catch(() => {});
+      if (existingJob.fileName !== safeFileName
+        || existingJob.branchId !== branchId
+        || existingJob.previewFingerprint !== req.body.previewFingerprint) {
+        return res.status(409).json({ message: 'Idempotency key has already been used for a different import.' });
+      }
+      return res.status(202).json({
+        jobId: String(existingJob._id),
+        batchId: existingJob.batchId,
+        idempotencyKey: existingJob.idempotencyKey,
+        status: existingJob.status,
+        totalRecords: existingJob.totalRecords || 0,
+        processedRecords: existingJob.processedRecords || 0,
+        successfulRecords: existingJob.successfulRecords || 0,
+        failedRecords: existingJob.failedRecords || 0
+      });
+    }
+
     const approvedPreview = await previewImportFile({ filePath: req.file.path, tenantId, branchId });
     if (approvedPreview.previewFingerprint !== req.body.previewFingerprint) {
       await fs.rm(req.file.path, { force: true }).catch(() => {});
