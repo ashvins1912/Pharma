@@ -171,8 +171,8 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       fulfillmentPlanForCheckout = availability.data;
       const currentPlanSignature = JSON.stringify((availability.data.lines || []).map(line => ({
         productId: line.productId, requested: line.requestedQuantity,
-        available: line.fulfilNowQuantity, waiting: line.waitingQuantity,
-        alternatives: (line.alternatives || []).map(option => option.productId)
+        available: line.fulfilNowQuantity, waiting: line.waitingQuantity, unitPrice: line.unitPrice,
+        alternatives: (line.alternatives || []).map(option => ({ id: option.productId, price: option.discountedUnitPrice, listPrice: option.listPrice, requiresPharmacistApproval: option.requiresPharmacistApproval }))
       })));
       if (availability.data.customerDecisionRequired && (!fulfillmentConfirmed || currentPlanSignature !== fulfillmentPlanSignature)) {
         setFulfillmentPlan(availability.data);
@@ -256,7 +256,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     if (pendingStockItems.length && checkoutItems.length) {
       try {
         const waitlistResponse = await apiClient.post('/api/orders/fulfillment/waitlist', {
-          tenantId: String(tenantId), items: pendingStockItems, waitDays,
+          tenantId: String(tenantId), branchId: fulfillmentPlanForCheckout?.branchId || activeTenant?.branchId || null, items: pendingStockItems, waitDays,
           sourceType: 'CHECKOUT',
           addressId: selectedAddress._id || selectedAddress.id || '',
           deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
@@ -344,6 +344,45 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     return result;
   };
 
+
+  const handleConfirmFulfillmentChoices = async () => {
+    if (!fulfillmentPlan) return;
+    const selectedItems = [];
+    for (const line of fulfillmentPlan.lines || []) {
+      if (line.fulfilNowQuantity > 0) selectedItems.push({ medicineId: line.productId, quantity: line.fulfilNowQuantity });
+      if (line.waitingQuantity > 0) {
+        const alternativeId = alternativeChoices[line.productId];
+        const alternative = line.alternatives?.find(item => item.productId === alternativeId);
+        if (alternativeId && alternativeId !== 'REMOVE' && alternative
+          && !alternative.requiresPharmacistApproval
+          && alternative.availableQuantity >= line.waitingQuantity) {
+          selectedItems.push({ medicineId: alternative.productId, quantity: line.waitingQuantity });
+        }
+      }
+    }
+    if (selectedItems.length) {
+      setQuoteLoading(true);
+      try {
+        const response = await apiClient.post('/api/orders/checkout/quote', {
+          tenantId: String(tenantId),
+          items: selectedItems,
+          pointsToRedeem: usePoints ? Number(pointsRequested) || 0 : 0,
+          couponCode: appliedCoupon?.code || ''
+        });
+        setRewardQuote(response.data);
+        setQuoteError('');
+      } catch (error) {
+        setErrorMsg(error.response?.data?.message || error.message || 'Could not calculate the updated order total. Please try again.');
+        setQuoteLoading(false);
+        return;
+      } finally {
+        setQuoteLoading(false);
+      }
+    } else {
+      setRewardQuote(null);
+    }
+    setFulfillmentConfirmed(true);
+  };
 
   const addRestockItem = item => {
     if (!item.price || !item.stock) {
@@ -586,7 +625,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                 </select>
               </div>
               <p className="text-[10px] text-amber-900">Alternatives are offered only when composition and strength match. Prescription-related substitutions may require pharmacist approval. No stock is reserved until checkout is confirmed.</p>
-              <button type="button" onClick={() => { setFulfillmentConfirmed(true); }} className="w-full rounded-xl bg-amber-700 px-3 py-2.5 text-xs font-black text-white">Confirm these fulfilment choices</button>
+              <button type="button" onClick={handleConfirmFulfillmentChoices} disabled={quoteLoading || fulfillmentLoading} className="w-full rounded-xl bg-amber-700 disabled:opacity-50 px-3 py-2.5 text-xs font-black text-white">{quoteLoading ? 'Updating order total…' : 'Confirm these fulfilment choices'}</button>
             </section>
           )}
 
