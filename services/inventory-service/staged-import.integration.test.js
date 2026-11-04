@@ -188,6 +188,11 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(stalePublishResponse.status, 409);
     assert.equal((await models.Inventory.findById(staleInventory._id).lean()).stockQuantity, 11);
 
+    const invalidExistingProduct = await models.Product.create({ tenantId, sku: 'TEST-STAGED-INVALID', name: 'Before invalid row correction', version: 1 });
+    const invalidExistingInventory = await models.Inventory.create({
+      tenantId, branchId, productId: invalidExistingProduct._id, sku: 'TEST-STAGED-INVALID',
+      stockQuantity: 2, reservedQuantity: 0, price: 4, batchNumber: 'INVALID-LOT'
+    });
     const invalidWorkbook = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(invalidWorkbook, xlsx.utils.json_to_sheet([
       { SKU: 'TEST-STAGED-INVALID', Price: 5, Stock: 3, 'Batch Number': 'INVALID-LOT' }
@@ -230,12 +235,15 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     });
     assert.equal(publishCorrected.status, 200);
     assert.equal(await models.Inventory.countDocuments({ tenantId, branchId, sku: 'TEST-STAGED-INVALID' }), 1);
+    assert.equal((await models.Inventory.findById(invalidExistingInventory._id).lean()).stockQuantity, 3);
     const unpublishCorrected = await fetch(origin + `/api/v1/inventory/imports/batches/${invalidBatch.batchId}/unpublish`, {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ rowIds: correctedPayload.items.map(row => row.rowId) })
     });
     assert.equal(unpublishCorrected.status, 200);
-    assert.equal(await models.Inventory.countDocuments({ tenantId, branchId, sku: 'TEST-STAGED-INVALID' }), 0);
+    assert.equal(await models.Inventory.countDocuments({ tenantId, branchId, sku: 'TEST-STAGED-INVALID' }), 1);
+    assert.equal((await models.Inventory.findById(invalidExistingInventory._id).lean()).stockQuantity, 2);
+    assert.equal((await models.Product.findById(invalidExistingProduct._id).lean()).name, 'Before invalid row correction');
 
     const duplicateUpload = await upload('/api/v1/inventory/imports', preview.previewFingerprint, 'staged-test-idempotency-1');
     assert.equal(duplicateUpload.status, 202);
