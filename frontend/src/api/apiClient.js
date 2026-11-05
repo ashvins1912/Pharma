@@ -159,8 +159,8 @@ apiClient.interceptors.request.use(async (config) => {
         ? { permission: config.permission }
         : resolveApiCapability(config.method, capabilityUrl);
 
-    // Allow all users on application (permissive permission policy)
-    capability = null;
+    // Keep the frontend preflight aligned with the server-side gateway policy.
+    // This is defense in depth only; backend authorization remains authoritative.
     if (capability?.permission && applicationSessionAuthenticated && !hasCapability(capability.permission) && !config.__skipAuthorizationRevalidation) {
         // Revalidate once before denying. This prevents stale UI RBAC state from
         // incorrectly blocking a permission that is currently granted.
