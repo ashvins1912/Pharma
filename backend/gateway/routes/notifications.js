@@ -16,7 +16,7 @@ router.get('/', authenticateUser, async (req, res, next) => {
     const isSuperAdmin = isPlatformSuperAdmin(userRole);
     const list = await notificationService.getUserNotifications(req.user?.sub || req.context.userId, {
         tenantId: isSuperAdmin ? null : (req.context?.tenantId || req.user?.app_metadata?.tenantId || null),
-        branchId: req.context?.branchId || null,
+        branchId: req.context?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || null,
         isSuperAdmin
     });
     res.json({ success: true, data: list });
@@ -48,7 +48,7 @@ router.get('/delivery-history', authenticateUser, async (req, res, next) => {
     const tenantId = isSuper ? null : (req.context?.tenantId || req.user?.app_metadata?.tenantId);
     // Branch-scoped users cannot widen the delivery-history query via a URL parameter.
     // Platform Super Admin may explicitly filter a branch; tenant-wide users see their tenant.
-    const branchId = isSuper ? (req.query.branchId || null) : (req.context?.branchId || null);
+    const branchId = isSuper ? (req.query.branchId || null) : (req.context?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || null);
 
     const events = await notificationService.getDeliveryEvents(tenantId, branchId, isSuper);
     res.json({ success: true, data: events });
@@ -71,7 +71,7 @@ router.get('/delivery-stream', authenticateUser, (req, res) => {
     const userRole = req.user?.app_metadata?.role || req.user?.role || 'customer';
     const isSuper = isPlatformSuperAdmin(userRole);
     const tenantId = isSuper ? null : (req.context?.tenantId || req.user?.app_metadata?.tenantId);
-    const branchId = req.context?.branchId || null;
+    const branchId = req.context?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || null;
     const clientId = `sse-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
     // 2. Initial Handshake Message
@@ -87,7 +87,7 @@ router.get('/delivery-stream', authenticateUser, (req, res) => {
     notificationService.addSseClient(clientId, res, {
         tenantId,
         branchId,
-        userId: req.context?.userId,
+        userId: req.user?.sub || req.context?.userId,
         isSuperAdmin: isSuper
     });
 
