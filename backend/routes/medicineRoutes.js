@@ -217,8 +217,13 @@ router.get('/', async (req, res) => {
         let branchId = String(req.query.branchId || req.context?.branchId || '').trim();
         if (!branchId) {
             const activeBranches = await tenantService.getBranches(tenantId, { status: 'ACTIVE' });
+            // Match checkout/fulfillment branch resolution exactly: default branch
+            // first, otherwise the earliest-created active branch. This prevents the
+            // catalogue showing stock from one branch while checkout previews another.
             const selectedBranch = activeBranches.find(branch => branch.isDefault)
-                || activeBranches[0];
+                || [...activeBranches].sort((a, b) =>
+                    new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+                )[0];
             branchId = String(selectedBranch?.id || selectedBranch?._id || '').trim();
         }
         if (!branchId) {
