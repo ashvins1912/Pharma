@@ -240,7 +240,7 @@ orderSchema.pre('findOneAndUpdate', function syncUpdatedOrderStatus() {
 
 orderSchema.index({ orderStatus: 1, createdAt: -1, _id: -1 });
 orderSchema.index({ userId: 1, tenantId: 1, idempotencyKey: 1 }, { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } });
-orderSchema.index({ fulfillmentConfirmationId: 1 }, { unique: true, sparse: true });
+orderSchema.index({ fulfillmentConfirmationId: 1 }, { unique: true, partialFilterExpression: { fulfillmentConfirmationId: { $type: 'string' } }, name: 'fulfillmentConfirmationId_unique_string' });
 
 orderSchema.index({ orderStatus: 1, createdAt: -1 });
 orderSchema.index(
