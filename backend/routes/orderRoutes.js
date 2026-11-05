@@ -818,7 +818,7 @@ router.post('/fulfillment/waitlist/:id/cancel', authenticateUser, async (req, re
         const cancelledIndexes = new Set(matchingIndexes.map(item => item.index));
         const cancelledLines = matchingIndexes.map(item => item.line);
         const nextLines = (entry.lines || []).map((line, index) => cancelledIndexes.has(index)
-            ? { ...line, requestedQuantity: 0, allocatedQuantity: 0, waitingQuantity: 0, notifiedAvailableQuantity: 0, customerDecision: 'CANCELLED' }
+            ? { ...line, allocatedQuantity: 0, waitingQuantity: 0, notifiedAvailableQuantity: 0, customerDecision: 'CANCELLED' }
             : line);
         const remainingLines = nextLines.filter(line => Number(line.waitingQuantity || 0) > 0
             && line.customerDecision !== 'CANCELLED');
