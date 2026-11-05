@@ -115,7 +115,7 @@ export class NotificationService {
 
     _bindDomainEvents() {
         domainEvents.on('MEDICINE_REQUEST_CREATED', (evt) => {
-            this.send({
+            this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId, branchId: evt.branchId,
                 recipientUserId: this._recipientUserId(evt),
                 title: 'New Medicine Request',
@@ -127,7 +127,7 @@ export class NotificationService {
 
         domainEvents.on('TENANT_CREATED', async (evt) => {
             const tenant = evt.payload;
-            this.send({
+            this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId,
                 title: `Pharmacy Tenant Onboarded: ${tenant?.name || evt.tenantId}`,
                 body: `Tenant ${tenant?.name || evt.tenantId} has been successfully registered on the platform.`,
@@ -135,7 +135,7 @@ export class NotificationService {
             });
         });
         domainEvents.on('ORDER_CREATED', (evt) => {
-            this.send({
+            this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
                 recipientUserId: this._recipientUserId(evt),
@@ -152,7 +152,7 @@ export class NotificationService {
         domainEvents.on('FULFILLMENT_STOCK_AVAILABLE', (evt) => {
             const lines = Array.isArray(evt.payload?.lines) ? evt.payload.lines : [];
             const summary = lines.map(line => `${line.name || 'Medicine'}: ${line.availableToConfirm}/${line.requestedQuantity}`).join(', ');
-            this.send({
+            this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId, branchId: evt.branchId,
                 recipientUserId: evt.payload?.recipientUserId || null,
                 title: 'Your medicine is available',
@@ -164,7 +164,7 @@ export class NotificationService {
         });
 
         domainEvents.on('FULFILLMENT_REMAINDER_CANCELLED', (evt) => {
-            this.send({
+            this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId, branchId: evt.branchId,
                 recipientUserId: evt.payload?.recipientUserId || null,
                 title: 'Remaining medicine quantities cancelled',
@@ -176,7 +176,7 @@ export class NotificationService {
         });
 
         domainEvents.on('FULFILLMENT_WAITLIST_EXPIRED', (evt) => {
-            this.send({
+            this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId, branchId: evt.branchId,
                 recipientUserId: evt.payload?.recipientUserId || null,
                 title: 'Medicine waitlist expired',
@@ -189,7 +189,7 @@ export class NotificationService {
 
         domainEvents.on('ORDER_STATUS_CHANGED', (evt) => {
             const status = evt.payload?.newStatus || 'updated';
-            this.send({
+            this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
                 recipientUserId: this._recipientUserId(evt),
@@ -201,7 +201,7 @@ export class NotificationService {
                 channels: ['IN_APP', 'WHATSAPP']
             });
             if (['delivered', 'order delivered'].includes(String(status).trim().toLowerCase())) {
-                this.send({
+                this.send({ sourceEventId: evt.eventId,
                     tenantId: evt.tenantId,
                     branchId: evt.branchId,
                     recipientUserId: this._recipientUserId(evt),
@@ -213,7 +213,7 @@ export class NotificationService {
                     channels: ['IN_APP']
                 });
             } else if (['dispatched', 'out_for_delivery'].includes(String(status).trim().toLowerCase())) {
-                this.send({
+                this.send({ sourceEventId: evt.eventId,
                     tenantId: evt.tenantId,
                     branchId: evt.branchId,
                     recipientUserId: this._recipientUserId(evt),
@@ -228,7 +228,7 @@ export class NotificationService {
         });
 
         domainEvents.on('ORDER_ACCEPTED', (evt) => {
-            this.send({
+            this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
                 recipientUserId: this._recipientUserId(evt),
@@ -243,7 +243,7 @@ export class NotificationService {
         });
 
         domainEvents.on('RIDER_ASSIGNED', (evt) => {
-            this.send({
+            this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
                 recipientUserId: this._recipientUserId(evt),
@@ -271,7 +271,7 @@ export class NotificationService {
         });
 
         domainEvents.on('DELIVERY_STATUS_CHANGED', (evt) => {
-            this.send({
+            this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
                 recipientUserId: this._recipientUserId(evt),
@@ -299,7 +299,7 @@ export class NotificationService {
         });
 
         domainEvents.on('ORDER_DELIVERED', (evt) => {
-            this.send({
+            this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
                 recipientUserId: this._recipientUserId(evt),
@@ -327,7 +327,7 @@ export class NotificationService {
         });
 
         domainEvents.on('PROPOSAL_CREATED', (evt) => {
-            this.send({
+            this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
                 recipientUserId: this._recipientUserId(evt),
@@ -341,7 +341,7 @@ export class NotificationService {
             }
         });
         domainEvents.on('PROPOSAL_APPROVED', (evt) => {
-            this.send({
+            this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId, branchId: evt.branchId,
                 recipientUserId: this._recipientUserId(evt),
                 title: 'Medicine Request Approved',
@@ -352,7 +352,7 @@ export class NotificationService {
             if (evt.payload?.request) sendWhatsAppMedicineRequestAlert(evt.payload.request, 'MedicineRequestApproved').catch(err => logger.warn('[WhatsApp] Medicine request approval alert failed:', err?.message));
         });
         domainEvents.on('PROPOSAL_REJECTED', (evt) => {
-            this.send({
+            this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId, branchId: evt.branchId,
                 recipientUserId: this._recipientUserId(evt),
                 title: 'Medicine Proposal Rejected',
@@ -363,7 +363,7 @@ export class NotificationService {
             if (evt.payload?.request) sendWhatsAppMedicineRequestAlert(evt.payload.request, 'MedicineRequestRejected').catch(err => logger.warn('[WhatsApp] Medicine request rejection alert failed:', err?.message));
         });
         domainEvents.on('REQUEST_CANCELLED', (evt) => {
-            this.send({
+            this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId, branchId: evt.branchId,
                 recipientUserId: this._recipientUserId(evt),
                 title: 'Medicine Request Cancelled',
@@ -391,11 +391,12 @@ export class NotificationService {
         promotionId = null,
         pharmacyName = null,
         actionUrl = null,
-        dedupeKey = null
+        dedupeKey = null,
+        sourceEventId = null
     }) {
         const notification = {
             id: `notif-${randomUUID()}`,
-            dedupeKey: dedupeKey || null,
+            dedupeKey: dedupeKey || (sourceEventId ? `${sourceEventId}:${eventType}` : null),
             tenantId: tenantId ? String(tenantId) : null,
             branchId: branchId ? String(branchId) : null,
             recipientUserId: recipientUserId ? String(recipientUserId) : null,
