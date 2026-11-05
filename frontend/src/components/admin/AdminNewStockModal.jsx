@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../context/LanguageContext';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useTenant } from '../../context/TenantContext';
+import { useAuth } from '../../context/AuthContext';
 
 const CATEGORIES = [
   'Prescription Medicines',
@@ -28,7 +29,14 @@ const PRESET_IMAGE_ASSETS = [
 export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) {
   const { t } = useLanguage();
   const { addToast } = useToast();
-  const { tenantId, branchId } = useTenant();
+  const { tenantId: contextTenantId, branchId: contextBranchId, setTenantId, setBranchId } = useTenant();
+  const { user, isFullyAuthenticated } = useAuth();
+  const tenantId = String(user?.tenantId || user?.app_metadata?.tenantId || contextTenantId || '').trim();
+  const [availableBranches, setAvailableBranches] = useState([]);
+  const [selectedBranchId, setSelectedBranchId] = useState(String(contextBranchId || ''));
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [branchLoadError, setBranchLoadError] = useState('');
+  const defaultBranch = useMemo(() => availableBranches.find(branch => branch.isDefault === true) || null, [availableBranches]);
   const modalRef = useFocusTrap(isOpen, onClose);
 
   const [saving, setSaving] = useState(false);
@@ -53,6 +61,32 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
     isPrescriptionRequired: true,
     imageUrl: PRESET_IMAGE_ASSETS[0].url
   });
+
+  useEffect(() => {
+    if (!isOpen || !isFullyAuthenticated || !tenantId) return undefined;
+    let cancelled = false;
+    const loadBranches = async () => {
+      setBranchesLoading(true);
+      setBranchLoadError('');
+      try {
+        const response = await apiClient.get('/api/v1/tenants/' + encodeURIComponent(tenantId) + '/branches');
+        const body = response.data?.data ?? response.data;
+        const branches = (Array.isArray(body) ? body : []).filter(branch => String(branch.status || 'ACTIVE').toUpperCase() === 'ACTIVE').map(branch => ({ ...branch, id: String(branch.id || branch._id || ''), name: String(branch.name || branch.branchName || 'Unnamed branch') })).filter(branch => branch.id);
+        if (cancelled) return;
+        setAvailableBranches(branches);
+        const current = branches.find(branch => branch.id === String(contextBranchId || ''));
+        const preferred = current || branches.find(branch => branch.isDefault === true) || (branches.length === 1 ? branches[0] : null);
+        const nextBranchId = preferred?.id || '';
+        setSelectedBranchId(nextBranchId);
+        setBranchId(nextBranchId || null);
+        setTenantId(tenantId);
+      } catch (error) {
+        if (!cancelled) { setAvailableBranches([]); setSelectedBranchId(''); setBranchLoadError(error?.response?.data?.message || 'Unable to load active pharmacy branches.'); }
+      } finally { if (!cancelled) setBranchesLoading(false); }
+    };
+    loadBranches();
+    return () => { cancelled = true; };
+  }, [isOpen, isFullyAuthenticated, tenantId, contextBranchId, setBranchId, setTenantId]);
 
   if (!isOpen) return null;
 
@@ -90,7 +124,8 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
 
   const handleSubmit = async (e, shouldContinue = false) => {
     e.preventDefault();
-    if (!tenantId || !branchId) {
+    const branchId = selectedBranchId || contextBranchId;
+    if (!tenantId || !branchId || !availableBranches.some(branch => branch.id === String(branchId))) {
       addToast('Select an active pharmacy and branch before adding stock.', 'warning');
       return;
     }
@@ -176,6 +211,24 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
 
         <main className="content-area p-5 sm:p-6 space-y-5 bg-white dark:bg-gray-900 text-slate-800 dark:text-slate-100 overflow-y-auto flex-1">
           <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-5">
+            <section className="rounded-2xl border border-blue-100 dark:border-slate-700 bg-blue-50/70 dark:bg-slate-800/60 p-4 space-y-3">
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-wider text-blue-700 dark:text-blue-300">Stock destination</h4>
+                <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-300">{user?.tenantName || user?.tenant?.name || 'Your pharmacy'} · Stock will be added to the selected active branch.</p>
+              </div>
+              {branchesLoading ? <p className="text-xs text-slate-500">Loading active branches…</p> : availableBranches.length === 0 ? (
+                <p className="text-xs text-amber-700 dark:text-amber-300">{branchLoadError || 'No active branch is available. Ask your tenant administrator to activate a branch.'}</p>
+              ) : (
+                <>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200" htmlFor="new-stock-branch">Pharmacy branch *</label>
+                  <select id="new-stock-branch" value={selectedBranchId} onChange={event => { const nextId = event.target.value; setSelectedBranchId(nextId); setBranchId(nextId || null); }} required disabled={saving || branchesLoading} className="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3.5 py-2.5 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500">
+                    {!selectedBranchId && <option value="">Select an active branch</option>}
+                    {availableBranches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}{branch.isDefault ? ' (Default)' : ''}</option>)}
+                  </select>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">{defaultBranch ? 'Default branch selected automatically. You can change it if needed.' : 'No default branch is configured; choose where this stock should be stored.'}</p>
+                </>
+              )}
+            </section>
             {/* Section 1: Basic Information & Future-Proof Categories */}
             <div className="space-y-4">
               <h4 className="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">{`1. ${t('productMedicineName')}`}</h4>
