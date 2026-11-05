@@ -444,3 +444,85 @@ html.dark .quickmeds-brand-name {
 }
 
 
+
+
+/* Responsive foundation: constrain intrinsic content without hiding layout defects. */
+html {
+  font-size: 16px;
+  scroll-padding-top: 1rem;
+}
+
+body {
+  width: 100%;
+  min-width: 320px;
+  font-size: clamp(0.875rem, 0.15vw + 0.84rem, 1rem);
+  line-height: 1.5;
+}
+
+#root,
+#root > main,
+#root > main > *,
+main > *,
+section,
+article,
+form,
+fieldset {
+  min-width: 0;
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  max-width: 100%;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+:where(p, label, li, td, th, dd, dt, small, button, a, span) {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+:where(input, select, textarea, button) {
+  max-width: 100%;
+}
+
+:where(input, select, textarea) {
+  font-size: 16px;
+}
+
+:where(table) {
+  max-width: 100%;
+}
+
+:where(.flex, .inline-flex, .grid) > * {
+  min-width: 0;
+}
+
+@media (max-width: 639px) {
+  body {
+    font-size: 0.875rem;
+  }
+
+  :where(h1) {
+    font-size: clamp(1.25rem, 5vw, 1.5rem);
+  }
+
+  :where(h2) {
+    font-size: clamp(1.125rem, 4vw, 1.25rem);
+  }
+
+  :where(h3) {
+    font-size: clamp(1rem, 3.5vw, 1.125rem);
+  }
+
+  :where(button, [role="button"]) {
+    min-height: 44px;
+  }
+}
+
+@media (min-width: 1536px) {
+  #root > main > .container,
+  #root > main > [class*="max-w-"] {
+    margin-inline: auto;
+  }
+}
