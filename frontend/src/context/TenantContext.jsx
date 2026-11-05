@@ -29,7 +29,11 @@ export const TenantProvider = ({ children }) => {
   const [branchId, setBranchIdState] = useState(() => {
     if (typeof window === 'undefined') return null;
     const saved = localStorage.getItem('pharma_branch_id');
-    return saved && saved !== 'branch-1' && saved !== 'null' && saved !== 'undefined' ? saved : null;
+    if (!saved || saved === 'branch-1' || saved === 'null' || saved === 'undefined') {
+      localStorage.removeItem('pharma_branch_id');
+      return null;
+    }
+    return saved;
   });
 
   const setTenantId = (value) => {
