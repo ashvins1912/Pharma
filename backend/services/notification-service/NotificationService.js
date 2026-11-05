@@ -75,12 +75,16 @@ export class NotificationService {
         };
         let eventToBroadcast = persistedEvent;
         if (getIsConnected()) {
-            const saved = await NotificationDeliveryEvent.findOneAndUpdate(
-                { eventId: persistedEvent.eventId },
-                { $setOnInsert: persistedEvent },
-                { upsert: true, new: true, setDefaultsOnInsert: true }
-            ).lean();
-            eventToBroadcast = saved || persistedEvent;
+            const existing = await NotificationDeliveryEvent.findOne({ eventId: persistedEvent.eventId }).lean();
+            if (existing) return existing;
+            try {
+                eventToBroadcast = (await NotificationDeliveryEvent.create(persistedEvent)).toObject();
+            } catch (error) {
+                if (error.code === 11000) {
+                    return NotificationDeliveryEvent.findOne({ eventId: persistedEvent.eventId }).lean();
+                }
+                throw error;
+            }
         } else if (process.env.NODE_ENV !== 'production') {
             this.deliveryEvents.unshift(persistedEvent);
             if (this.deliveryEvents.length > 500) this.deliveryEvents.pop();
