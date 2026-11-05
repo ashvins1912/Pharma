@@ -79,6 +79,14 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
     return () => { cancelled = true; };
   }, [isOpen, scopeTenantId, user?.branchId, user?.app_metadata?.branchId]);
 
+  // Keep the admin inventory table and storefront on the same verified
+  // tenant/branch that the import-history view is querying.
+  useEffect(() => {
+    if (!isOpen || !scopeTenantId || !targetBranchId) return;
+    if (String(activeTenantId || '') !== String(scopeTenantId)) setTenantId(scopeTenantId);
+    if (String(activeBranchId || '') !== String(targetBranchId)) setBranchId(targetBranchId);
+  }, [isOpen, scopeTenantId, targetBranchId, activeTenantId, activeBranchId]);
+
   const [file, setFile] = useState(null);
   const [stockMode, setStockMode] = useState('SET');
   const [analyzing, setAnalyzing] = useState(false);
