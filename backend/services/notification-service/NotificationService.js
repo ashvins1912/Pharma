@@ -163,6 +163,18 @@ export class NotificationService {
             });
         });
 
+        domainEvents.on('FULFILLMENT_REMAINDER_CANCELLED', (evt) => {
+            this.send({
+                tenantId: evt.tenantId, branchId: evt.branchId,
+                recipientUserId: evt.payload?.recipientUserId || null,
+                title: 'Remaining medicine quantities cancelled',
+                body: `${evt.payload?.cancelledLineCount || 0} remaining medicine line(s) were cancelled. ${evt.payload?.remainingLineCount || 0} line(s) remain active in your stock watch.`,
+                eventType: 'FULFILLMENT_REMAINDER_CANCELLED',
+                fulfillmentCaseId: evt.entityId,
+                channels: ['IN_APP']
+            });
+        });
+
         domainEvents.on('FULFILLMENT_WAITLIST_EXPIRED', (evt) => {
             this.send({
                 tenantId: evt.tenantId, branchId: evt.branchId,
@@ -240,7 +252,7 @@ export class NotificationService {
                 eventType: 'RIDER_ASSIGNED', orderId: evt.entityId, riderId: evt.payload?.riderId,
                 channels: ['IN_APP', 'WHATSAPP']
             });
-            this._broadcastDeliveryEvent({
+            void this._broadcastDeliveryEvent({
                 eventId: evt.eventId,
                 type: 'DELIVERY_STATUS_CHANGED',
                 eventType: 'RIDER_ASSIGNED',
@@ -252,7 +264,7 @@ export class NotificationService {
                 riderName: evt.payload?.riderName,
                 jobId: evt.payload?.jobId,
                 timestamp: new Date().toISOString()
-            });
+            }).catch(err => logger.warn('[NotificationService] Delivery event persistence failed:', err?.message));
             if (evt.payload?.order) {
                 sendCustomWhatsAppAlert(evt.payload.order, 'Assigned', evt.payload?.riderMobile).catch(err => logger.warn('[WhatsApp] RiderAssigned alert failed:', err?.message));
             }
