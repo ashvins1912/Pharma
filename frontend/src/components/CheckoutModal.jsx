@@ -95,7 +95,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       if (requestId === splitQuoteRequestId.current) setQuoteLoading(false);
     });
     return () => { splitQuoteRequestId.current += 1; };
-  }, [isOpen, fulfillmentPlan, fulfillmentConfirmed, alternativeChoices, tenantId, usePoints, pointsRequested, appliedCoupon?.code]);
+  }, [isOpen, fulfillmentPlan, fulfillmentConfirmed, alternativeChoices, tenantId, branchId, activeTenant?.branchId, usePoints, pointsRequested, appliedCoupon?.code]);
 
   const quoteRequestId = useRef(0);
   const cartForQuote = JSON.stringify(cart.map(item => ({
@@ -127,7 +127,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       try {
         const response = await apiClient.post('/api/orders/checkout/quote', {
           tenantId: tenantId || '',
-          branchId: activeTenant?.branchId || '',
+          branchId: branchId || activeTenant?.branchId || '',
           items: JSON.parse(cartForQuote),
           pointsToRedeem: usePoints ? Number(pointsRequested) || 0 : 0,
           couponCode: appliedCoupon?.code || ''
@@ -146,24 +146,37 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       }
     }, 250);
     return () => window.clearTimeout(timeout);
-  }, [isOpen, cartForQuote, cart.length, usePoints, pointsRequested, appliedCoupon?.code, tenantId, fulfillmentPlan, fulfillmentConfirmed]);
+  }, [isOpen, cartForQuote, cart.length, usePoints, pointsRequested, appliedCoupon?.code, tenantId, branchId, activeTenant?.branchId, fulfillmentPlan, fulfillmentConfirmed]);
 
   useEffect(() => {
-    if (!isOpen) return undefined;
+    if (!isOpen || !tenantId) {
+      setRestockItems([]);
+      setRestockError('');
+      setRestockLoading(false);
+      return undefined;
+    }
     let active = true;
     setRestockLoading(true);
-    apiClient.get('/api/orders/dynamic-restock')
+    setRestockError('');
+    apiClient.get('/api/orders/dynamic-restock', {
+      params: {
+        tenantId: String(tenantId),
+        ...(branchId || activeTenant?.branchId
+          ? { branchId: String(branchId || activeTenant.branchId) }
+          : {})
+      }
+    })
       .then(response => {
-        if (active) setRestockItems(response.data.items || []);
+        if (active) setRestockItems(Array.isArray(response.data?.items) ? response.data.items : []);
       })
       .catch((error) => {
-        if (active) setRestockError(error.message || t('addressUnavailable'));
+        if (active) setRestockError(error.response?.data?.message || 'Personalized restock suggestions are temporarily unavailable.');
       })
       .finally(() => {
         if (active) setRestockLoading(false);
       });
     return () => { active = false; };
-  }, [isOpen]);
+  }, [isOpen, tenantId, branchId, activeTenant?.branchId]);
 
   useEffect(() => {
     if (!prescriptionFile || !prescriptionFile.type.startsWith('image/')) {
@@ -470,10 +483,17 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     setRestockLoading(true);
     setRestockError('');
     try {
-      const response = await apiClient.get('/api/orders/dynamic-restock');
-      setRestockItems(response.data.items || []);
+      const response = await apiClient.get('/api/orders/dynamic-restock', {
+        params: {
+          tenantId: String(tenantId),
+          ...(branchId || activeTenant?.branchId
+            ? { branchId: String(branchId || activeTenant.branchId) }
+            : {})
+        }
+      });
+      setRestockItems(Array.isArray(response.data?.items) ? response.data.items : []);
     } catch (error) {
-      setRestockError(error.message || t('addressUnavailable'));
+      setRestockError(error.response?.data?.message || 'Personalized restock suggestions are temporarily unavailable.');
     } finally {
       setRestockLoading(false);
     }
@@ -507,7 +527,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 overscroll-contain">
           <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
             <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">{t('fulfillmentPharmacy')}</p>
-            <p className="mt-1 text-sm font-extrabold text-emerald-950">{activeTenant?.shopName || t('selectedPharmacy')}</p>
+            <p className="mt-1 text-sm font-extrabold text-emerald-950">{activeTenant?.shopName || activeTenant?.name || activeTenant?.pharmacyName || (tenantId ? 'Selected pharmacy' : 'Select a pharmacy')}</p>
             <p className="mt-1 text-[11px] text-emerald-800">{t('orderRoutedOnly')}</p>
           </section>
           {errorMsg && (
@@ -623,7 +643,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
           {restockError && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900" role="alert">
-              <p>{t('addressUnavailable')}</p>
+              <p>{restockError}</p>
               <button type="button" onClick={retryRestockItems} disabled={restockLoading} className="mt-2 font-bold underline disabled:opacity-50">{restockLoading ? 'Retrying...' : 'Try again'}</button>
             </div>
           )}
