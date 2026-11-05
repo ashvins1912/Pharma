@@ -15,12 +15,13 @@ process.env.SERVICE_AUTH_SECRET = process.env.SERVICE_AUTH_SECRET || 'test-only-
 process.env.INVENTORY_MONGO_URI = testMongoUri || 'mongodb://127.0.0.1:27017/pharma-staged-import-test';
 process.env.INVENTORY_IMPORT_STORAGE = path.join(os.tmpdir(), 'pharma-staged-import-tests');
 
-const [{ config }, models, stagedModels, stagedRoutes, legacyRoutes] = await Promise.all([
+const [{ config }, models, stagedModels, stagedRoutes, legacyRoutes, inventoryApi] = await Promise.all([
   import('./src/config.js'),
   import('./src/models.js'),
   import('./src/staged-import-models.js'),
   import('./src/staged-import-routes.js'),
-  import('./src/routes.js')
+  import('./src/routes.js'),
+  import('./src/inventory.js')
 ]);
 
 test('staged import review, edit, publish, unpublish and batch revert are isolated and reversible', {
@@ -118,6 +119,19 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(publishedInventory.sourceImportRowId, first.rowId);
     assert.equal(publishedProduct.lastImportBatchId, staged.batchId);
     assert.equal(publishedProduct.lastImportRowId, first.rowId);
+
+    // The same published row must immediately appear in the authoritative
+    // branch catalogue, while remaining invisible in a different branch.
+    const publishedCatalogue = await inventoryApi.searchInventoryProducts({
+      tenantId, branchId, includeOutOfStock: true, limit: 20
+    });
+    assert.equal(publishedCatalogue.total, 1);
+    assert.equal(publishedCatalogue.items[0].sku, 'TEST-STAGED-001');
+    assert.equal(publishedCatalogue.items[0].stockQuantity, 8);
+    const otherBranchCatalogue = await inventoryApi.searchInventoryProducts({
+      tenantId, branchId: 'different-branch', includeOutOfStock: true, limit: 20
+    });
+    assert.equal(otherBranchCatalogue.total, 0);
     const repeatedPublish = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/rows/${encodeURIComponent(first.rowId)}/publish`, {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: '{}'
     });
@@ -147,6 +161,11 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(publishBoth.status, 200);
     assert.equal(await models.Inventory.countDocuments({ tenantId, branchId }), 2);
     assert.equal(await models.Product.countDocuments({ tenantId }), 1);
+    const bothPublishedCatalogue = await inventoryApi.searchInventoryProducts({
+      tenantId, branchId, includeOutOfStock: true, limit: 20
+    });
+    assert.equal(bothPublishedCatalogue.total, 1);
+    assert.equal(bothPublishedCatalogue.items[0].stockQuantity, 15);
 
     config.importsEnabled = false;
     const rollback = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/rollback`, {
