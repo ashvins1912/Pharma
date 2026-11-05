@@ -10,7 +10,8 @@ import customersRouter from './routes/customers.js';
 import catalogRouter from './routes/catalog.js';
 import pricingRouter from './routes/pricing.js';
 import deliveryRouter from './routes/delivery.js';
-import medicineRequestsRouter from './routes/medicineRequests.js';
+// Both legacy and versioned medicine-request URLs share one MongoDB-backed domain router.
+import medicineRequestsRouter from '../routes/medicineRequestRoutes.js';
 import integrationsRouter from './routes/integrations.js';
 import notificationsRouter from './routes/notifications.js';
 import authRouter from './routes/auth.js';
