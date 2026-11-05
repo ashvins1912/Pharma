@@ -1595,48 +1595,17 @@ export const dataStore = {
                         throw inventoryError('Only orders that have not been dispatched can be cancelled.', 409);
                     }
 
-                    const legacyStockRestored = !order.medicineItems?.length;
-                    if (order.inventoryReservationId) {
-                        await inventoryClient.release(order.inventoryReservationId, {
-                            tenantId: order.tenantId, branchId: order.branchId, userId: order.userId || 'backend',
-                            idempotencyKey: `legacy-order-release-cancel:${String(order._id)}`
-                        });
-                        order.inventoryReservationStatus = 'RELEASED';
-                    } else if (order.medicineItems?.length) {
-                        for (const item of order.medicineItems) {
-                            const quantity = Number(item.quantity);
-                            const result = await Medicine.updateOne({
-                                _id: item.medicineId,
-                                $expr: { $gte: [{ $ifNull: ['$reservedQuantity', 0] }, quantity] }
-                            }, { $inc: { reservedQuantity: -quantity } }, { session });
-                            if (result.modifiedCount !== 1) {
-                                throw inventoryError('Could not safely release reserved medicine stock.', 409);
-                            }
-                        }
-                    } else {
-                        if (!order.items?.length) throw inventoryError('Order has no inventory records to release.', 409);
-                        for (const item of order.items) {
-                            const medicineId = item.medicineId || item._id;
-                            const quantity = Number(item.quantity);
-                            if (!mongoose.isValidObjectId(medicineId) || !Number.isInteger(quantity) || quantity < 1) {
-                                throw inventoryError('Could not safely restore stock for this legacy order.', 409);
-                            }
-                            const result = await Medicine.collection.updateOne({ _id: new mongoose.Types.ObjectId(medicineId) }, [{
-                                $set: {
-                                    stockQuantity: {
-                                        $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
-                                    },
-                                    stock: {
-                                        $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
-                                    },
-                                    quantity: {
-                                        $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
-                                    }
-                                }
-                            }], { session });
-                            if (result.modifiedCount !== 1) throw inventoryError('Could not safely restore legacy order stock.', 409);
-                        }
+                    if (!order.inventoryReservationId) {
+                        throw inventoryError(
+                            'This legacy order has no Inventory Service reservation reference. Manual reconciliation is required; cancellation will not mutate legacy stock.',
+                            409
+                        );
                     }
+                    await inventoryClient.release(order.inventoryReservationId, {
+                        tenantId: order.tenantId, branchId: order.branchId, userId: order.userId || 'backend',
+                        idempotencyKey: `legacy-order-release-cancel:${String(order._id)}`
+                    });
+                    order.inventoryReservationStatus = 'RELEASED';
 
                     order.orderStatus = 'Cancelled';
                     order.statusHistory.push({
@@ -1644,9 +1613,7 @@ export const dataStore = {
                         newStatus: 'Cancelled',
                         changedBy: actor,
                         timestamp: new Date(),
-                        notes: legacyStockRestored
-                            ? 'Order cancelled; stock restored to inventory.'
-                            : 'Order cancelled; reserved inventory released.'
+                        notes: 'Order cancelled; Inventory Service reservation released.'
                     });
                     await order.save({ session });
                     cancelledOrder = order.toObject({ virtuals: true });
@@ -1665,36 +1632,10 @@ export const dataStore = {
         if (!['Pending_Review', 'Approved', 'Processing Order', 'Ready to Dispatch'].includes(order.orderStatus)) {
             throw inventoryError('Only orders that have not been dispatched can be cancelled.', 409);
         }
-        const legacyStockRestored = !order.medicineItems?.length;
-        if (order.medicineItems?.length) {
-            for (const item of order.medicineItems) {
-                const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
-                if (!medicine || getReservedStock(medicine) < item.quantity) {
-                    throw inventoryError('Could not safely release reserved medicine stock.', 409);
-                }
-            }
-            for (const item of order.medicineItems) {
-                const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
-                medicine.reservedQuantity -= item.quantity;
-            }
-        } else {
-            if (!order.items?.length) throw inventoryError('Order has no inventory records to release.', 409);
-            for (const item of order.items) {
-                const medicineId = item.medicineId || item._id;
-                const quantity = Number(item.quantity);
-                const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(medicineId));
-                if (!medicine || !Number.isInteger(quantity) || quantity < 1) {
-                    throw inventoryError('Could not safely restore stock for this legacy order.', 409);
-                }
-            }
-            for (const item of order.items) {
-                const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId || item._id));
-                const restoredStock = getPhysicalStock(medicine) + Number(item.quantity);
-                medicine.stockQuantity = restoredStock;
-                medicine.stock = restoredStock;
-                medicine.quantity = restoredStock;
-            }
-        }
+        throw inventoryError(
+            'Legacy in-memory orders cannot change pharmacy stock. Reconcile the order through Inventory Service.',
+            409
+        );
         const previousStatus = order.orderStatus;
         order.orderStatus = 'Cancelled';
         order.statusHistory.push({
@@ -1702,9 +1643,7 @@ export const dataStore = {
             newStatus: 'Cancelled',
             changedBy: actor,
             timestamp: new Date(),
-            notes: legacyStockRestored
-                ? 'Order cancelled; stock restored to inventory.'
-                : 'Order cancelled; reserved inventory released.'
+            notes: 'Order cancelled; Inventory Service reservation released.'
         });
         return order;
     },
