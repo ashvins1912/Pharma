@@ -502,12 +502,12 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                 <div className="h-2 overflow-hidden rounded-full bg-blue-100">
                   <div
                     className="h-full rounded-full bg-blue-600 transition-all"
-                    style={{ width: `${Math.min(100, importJob.progress ?? 0)}%` }}
+                    style={{ width: `${Math.min(100, importJob.progress ?? (['READY', 'PARTIALLY_PUBLISHED', 'PUBLISHED', 'COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(importJob.status) ? 100 : 0))}%` }}
                   />
                 </div>
                 <p className="text-xs text-slate-700">
-                  {importJob.processedRecords || 0} / {importJob.totalRecords || previewData.rowsDetected || 0} records processed
-                  {' '}({Math.round(importJob.progress || 0)}%)
+                  {importJob.processedRecords || 0} / {importJob.totalRecords || previewData.rowsDetected || 0} {importJob.status === 'READY' ? 'records staged' : 'records processed'}
+                  {' '}({Math.round(importJob.progress ?? (['READY', 'PARTIALLY_PUBLISHED', 'PUBLISHED', 'COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(importJob.status) ? 100 : 0))}%)
                 </p>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <p className="rounded-xl bg-white p-2.5 text-emerald-800">
