@@ -40,6 +40,13 @@ export const TenantProvider = ({ children }) => {
     const id = value == null ? null
       : typeof value === 'object' ? (value._id || value.id || null)
       : String(value);
+    const currentTenantId = tenantId || activeTenant?._id || activeTenant?.id || null;
+    if (String(currentTenantId || '') !== String(id || '')) {
+      // A branch belongs to exactly one tenant. Never carry a previous
+      // dispensary's branch into the newly selected pharmacy.
+      setBranchIdState('');
+      if (typeof window !== 'undefined') localStorage.removeItem('pharma_branch_id');
+    }
     setTenantIdState(id);
     if (typeof window !== 'undefined') {
       if (id) localStorage.setItem('pharma_tenant_id', String(id));
