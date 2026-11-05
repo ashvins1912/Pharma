@@ -336,7 +336,7 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
     const existing = await StagedImportBatch.findOne({ tenantId, branchId, idempotencyKey: key });
     if (existing) {
       if (existing.fileSha256 !== fileSha256) throw Object.assign(new Error('Idempotency key was already used for another workbook.'), { statusCode: 409 });
-      return res.status(202).json({ jobId: existing.batchId, batchId: existing.batchId, status: existing.status, totalRecords: existing.totalRows, processedRecords: existing.totalRows, successfulRecords: existing.validRows, failedRecords: existing.invalidRows });
+      return res.status(202).json({ jobId: existing.batchId, batchId: existing.batchId, status: existing.status, totalRecords: existing.totalRows, processedRecords: existing.totalRows, successfulRecords: existing.validRows, failedRecords: existing.invalidRows, progress: existing.status === 'READY' ? 100 : 0, failedFileAvailable: existing.invalidRows > 0 });
     }
     const approved = await previewImportFile({ filePath: req.file.path, tenantId, branchId });
     if (approved.previewFingerprint !== req.body.previewFingerprint) {
@@ -396,7 +396,7 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
       throw error;
     }
     await Audit.create({ tenantId, branchId, actor: actor(req), operation: 'inventory.import.staged', details: { batchId, totalRows: documents.length, validRows, invalidRows, fileSha256 } });
-    return res.status(202).json({ jobId: batchId, batchId, status: 'READY', totalRecords: documents.length, processedRecords: documents.length, successfulRecords: validRows, failedRecords: invalidRows });
+    return res.status(202).json({ jobId: batchId, batchId, status: 'READY', totalRecords: documents.length, processedRecords: documents.length, successfulRecords: validRows, failedRecords: invalidRows, progress: 100, failedFileAvailable: invalidRows > 0 });
   } finally { await fs.rm(req.file.path, { force: true }).catch(() => {}); }
 }));
 
