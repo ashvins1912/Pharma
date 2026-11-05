@@ -567,7 +567,10 @@ export function AppProvider({ children }) {
 
   const loadDeliveryEvents = useCallback(async () => {
     const sequence = ++deliveryEventsLoadSequence.current;
-    if (!isFullyAuthenticated) {
+    // Delivery history is an operations feed, not a customer notification API.
+    // Customers receive their own order updates through /notifications and the
+    // customer-scoped order endpoints; do not send them to the staff-only route.
+    if (!isFullyAuthenticated || (!isPharmacyOrAdmin && !isSuperAdmin)) {
       setDeliveryEvents([]);
       return [];
     }
@@ -588,7 +591,7 @@ export function AppProvider({ children }) {
       console.warn('[Fulfillment] Delivery history fetch failed:', error?.message || error);
       return [];
     }
-  }, [isFullyAuthenticated]);
+  }, [isFullyAuthenticated, isPharmacyOrAdmin, isSuperAdmin]);
 
   useEffect(() => {
     if (!authLoading && isFullyAuthenticated) {
