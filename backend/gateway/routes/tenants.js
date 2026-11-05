@@ -28,7 +28,22 @@ router.get('/', async (req, res, next) => {
     }
 });
 
-// List all active branches across tenants with Cache put/get & dynamic proximity/search support
+// Public storefront branch discovery is mounted at /api/v1/branches/all.
+// Keep this route before /:tenantId so "all" is never interpreted as a tenant ID.
+router.get('/all', async (req, res, next) => {
+    try {
+        let branches = await cacheService.get(CACHE_KEY_ALL_BRANCHES);
+        if (!branches) {
+            branches = await tenantService.getAllActiveBranches();
+            await cacheService.set(CACHE_KEY_ALL_BRANCHES, branches, TTL_SECONDS);
+        }
+        res.json({ success: true, data: branches });
+    } catch (err) {
+        next(err);
+    }
+});
+
+// Legacy path retained for existing callers.
 router.get('/branches/all', async (req, res, next) => {
     try {
         let branches = await cacheService.get(CACHE_KEY_ALL_BRANCHES);
