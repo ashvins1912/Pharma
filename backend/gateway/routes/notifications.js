@@ -29,7 +29,7 @@ router.patch('/:id/read', authenticateUser, async (req, res, next) => {
     const isSuperAdmin = isPlatformSuperAdmin(userRole);
     const updated = await notificationService.markAsRead(req.params.id, req.user?.sub || req.context.userId, {
         tenantId: isSuperAdmin ? null : (req.context?.tenantId || req.user?.app_metadata?.tenantId || null),
-        branchId: req.context?.branchId || null,
+        branchId: req.context?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || null,
         isSuperAdmin
     });
     if (!updated) return res.status(404).json({ success: false, error: { code: 'NOTIFICATION_NOT_FOUND' } });
