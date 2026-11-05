@@ -307,7 +307,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       }
       try {
         await apiClient.post('/api/orders/fulfillment/waitlist', {
-          tenantId: String(tenantId), branchId: fulfillmentPlanForCheckout?.branchId || activeTenant?.branchId || null, items: pendingStockItems, waitDays,
+          tenantId: String(tenantId), branchId: fulfillmentPlanForCheckout?.branchId || branchId || activeTenant?.branchId || null, items: pendingStockItems, waitDays,
           sourceType: 'CHECKOUT', addressId: selectedAddress._id || selectedAddress.id || '',
           deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
           coordinates: selectedAddress.coordinates, addressDetails: selectedAddress, customerMobile: selectedAddress.mobile || user?.user_metadata?.mobile || '', orderedForName: (people.find((p) => p.puid === patientPuid)?.displayName) || user?.name || user?.email || 'Customer', prescriptionRequired, paymentMethod: 'Cash on Delivery (COD)', patientPuid
@@ -329,7 +329,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     if (pendingStockItems.length && checkoutItems.length) {
       try {
         const waitlistResponse = await apiClient.post('/api/orders/fulfillment/waitlist', {
-          tenantId: String(tenantId), branchId: fulfillmentPlanForCheckout?.branchId || activeTenant?.branchId || null, items: pendingStockItems, waitDays,
+          tenantId: String(tenantId), branchId: fulfillmentPlanForCheckout?.branchId || branchId || activeTenant?.branchId || null, items: pendingStockItems,
           sourceType: 'CHECKOUT',
           addressId: selectedAddress._id || selectedAddress.id || '',
           deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
@@ -350,7 +350,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       try {
       const checkoutData = {
         tenantId: String(tenantId),
-        branchId: activeTenant?.branchId || null,
+        branchId: branchId || activeTenant?.branchId || fulfillmentPlanForCheckout?.branchId || null,
         fulfillmentCaseId: createdWaitlistCaseId || '',
         fulfillmentState: createdWaitlistCaseId ? 'PARTIAL' : 'FULL',
         items: JSON.stringify(checkoutItems),
@@ -447,6 +447,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       try {
         const response = await apiClient.post('/api/orders/checkout/quote', {
           tenantId: String(tenantId),
+          branchId: String(branchId || activeTenant?.branchId || ''),
           items: selectedItems,
           pointsToRedeem: usePoints ? Number(pointsRequested) || 0 : 0,
           couponCode: appliedCoupon?.code || ''
