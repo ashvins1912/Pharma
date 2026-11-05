@@ -805,20 +805,37 @@ export function AppProvider({ children }) {
 
   // Fetch Admin Inventory Alerts
   const loadInventoryAlerts = useCallback(async () => {
-    if (authLoading || !isFullyAuthenticated || !hasPermission('inventory.read')) return;
+    // Inventory alerts are an operations-only endpoint. Do not request them
+    // during anonymous/customer storefront hydration, even if a stale cached
+    // permission snapshot temporarily contains inventory.read.
+    if (
+      authLoading ||
+      !isFullyAuthenticated ||
+      !user?.id ||
+      !isPharmacyOrAdmin ||
+      !hasPermission('inventory.read')
+    ) return;
     try {
       const res = await apiClient.get('/api/medicines/alerts');
       setInventoryAlerts(res.data || {});
     } catch {
-      // ignore
+      // Alerts are optional dashboard data; a denied request must not affect sign-in.
     }
-  }, [authLoading, isFullyAuthenticated, hasPermission]);
+  }, [authLoading, isFullyAuthenticated, user?.id, isPharmacyOrAdmin, hasPermission]);
 
   useEffect(() => {
-    if (!authLoading && isFullyAuthenticated && hasPermission('inventory.read')) {
+    if (
+      !authLoading &&
+      isFullyAuthenticated &&
+      user?.id &&
+      isPharmacyOrAdmin &&
+      hasPermission('inventory.read')
+    ) {
       loadInventoryAlerts();
+    } else {
+      setInventoryAlerts({});
     }
-  }, [authLoading, isFullyAuthenticated, hasPermission, loadInventoryAlerts]);
+  }, [authLoading, isFullyAuthenticated, user?.id, isPharmacyOrAdmin, hasPermission, loadInventoryAlerts]);
 
   // Cart operations
   const addToCart = (med) => {
