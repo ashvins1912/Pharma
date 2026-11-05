@@ -164,17 +164,21 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
       setError('');
       // Manual customer selection wins over URL defaults and discovery order.
       // The first nearby pharmacy is selected only when no pharmacy was selected yet.
+      const getTenantId = (tenant) => String(tenant?._id || tenant?.id || '');
       const selected = tenantId
-        ? list.find(tenant => String(tenant._id) === String(tenantId))
+        ? list.find(tenant => getTenantId(tenant) === String(tenantId))
         : null;
       const preferred = selected
         || (!tenantId && preferredTenantId
-          ? list.find(tenant => String(tenant._id) === String(preferredTenantId))
+          ? list.find(tenant => getTenantId(tenant) === String(preferredTenantId))
           : null)
         || (!tenantId ? (list[0] || null) : null);
-      if (preferred && String(preferred._id) !== String(tenantId || '')) {
-        setActiveTenant(preferred);
-      } else if (preferred && !tenantId) {
+
+      // Hydrate the persisted selection from the current discovery response.
+      // TenantContext stores the ID and tenant display object separately; if
+      // the ID survived but the object cache was missing/stale, previously the
+      // modal showed a selected pharmacy without restoring activeTenant.
+      if (preferred && getTenantId(preferred)) {
         setActiveTenant(preferred);
       }
     } catch (err) {
