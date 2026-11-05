@@ -808,13 +808,20 @@ export const dataStore = {
         } while (page <= pages && page <= 50);
 
         const now = new Date();
+        const utcDay = date => Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+        const daysUntilExpiry = value => {
+            const expiryDate = value ? new Date(value) : null;
+            if (!expiryDate || !Number.isFinite(expiryDate.getTime())) return null;
+            // Compare calendar days, not elapsed 24-hour periods. A batch expiring
+            // today must remain in the "expiring today" warning for the full day.
+            return Math.round((utcDay(expiryDate) - utcDay(now)) / 86400000);
+        };
         const expired = [];
         const expiringSoon = [];
         const lowStock = [];
         for (const med of allMeds) {
             for (const batch of med.expiredBatchAvailability || []) {
-                const expiryDate = batch.expiryDate ? new Date(batch.expiryDate) : null;
-                const daysLeft = expiryDate ? Math.ceil((expiryDate.getTime() - now.getTime()) / 86400000) : null;
+                const daysLeft = daysUntilExpiry(batch.expiryDate);
                 // Alert only when physical expired stock still exists; zeroed batches
                 // should not keep generating a safety incident after disposal.
                 if (Number(batch.stockQuantity || 0) > 0) {
@@ -823,9 +830,8 @@ export const dataStore = {
             }
             for (const batch of med.batchAvailability || []) {
                 if (!batch.expiryDate) continue;
-                const expiryDate = new Date(batch.expiryDate);
-                const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / 86400000);
-                if (daysLeft > 0 && daysLeft <= expiringThresholdDays && Number(batch.stockQuantity || 0) > 0) {
+                const daysLeft = daysUntilExpiry(batch.expiryDate);
+                if (daysLeft !== null && daysLeft >= 0 && daysLeft <= expiringThresholdDays && Number(batch.stockQuantity || 0) > 0) {
                     expiringSoon.push({ ...med, batchNumber: batch.batchNumber, expiryDate: batch.expiryDate, stock: Number(batch.stockQuantity || 0), availableQuantity: Number(batch.availableQuantity || 0), daysLeft });
                 }
             }
