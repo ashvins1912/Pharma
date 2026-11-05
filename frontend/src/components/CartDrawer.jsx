@@ -34,7 +34,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
       />
 
       <div className="fixed inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10 pointer-events-none">
-        <div className="w-screen max-w-md bg-white border-l border-slate-200 shadow-2xl flex flex-col justify-between pointer-events-auto overscroll-contain">
+        <div className="pharma-cart-drawer w-screen max-w-md bg-white border-l border-slate-200 shadow-2xl flex flex-col justify-between pointer-events-auto overscroll-contain">
           
           {/* Header */}
           <div className="shrink-0 px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white">

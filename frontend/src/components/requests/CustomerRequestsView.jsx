@@ -153,7 +153,7 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
   return (
     <>
       <CustomerStockWaitlist />
-      <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
+      <div className="pharma-customer-requests bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
       
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">

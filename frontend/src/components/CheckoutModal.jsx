@@ -502,7 +502,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/40 backdrop-blur-[2px] animate-fade-in">
-      <div role="dialog" aria-modal="true" aria-labelledby="checkout-modal-title" className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col relative overflow-hidden">
+      <div role="dialog" aria-modal="true" aria-labelledby="checkout-modal-title" className="pharma-checkout-modal bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col relative overflow-hidden">
         
         {/* Sticky Header */}
         <div className="shrink-0 p-4 sm:p-6 pb-3.5 border-b border-slate-100 bg-white flex justify-between items-center">

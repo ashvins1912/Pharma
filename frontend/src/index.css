@@ -444,3 +444,382 @@ html.dark .quickmeds-brand-name {
 }
 
 
+
+
+/* Responsive foundation: constrain intrinsic content without hiding layout defects. */
+html {
+  font-size: 16px;
+  scroll-padding-top: 1rem;
+}
+
+body {
+  width: 100%;
+  min-width: 320px;
+  font-size: clamp(0.875rem, 0.15vw + 0.84rem, 1rem);
+  line-height: 1.5;
+}
+
+#root,
+#root > main,
+#root > main > *,
+main > *,
+section,
+article,
+form,
+fieldset {
+  min-width: 0;
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  max-width: 100%;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+:where(p, label, li, td, th, dd, dt, small, button, a, span) {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+:where(input, select, textarea, button) {
+  max-width: 100%;
+}
+
+:where(input, select, textarea) {
+  font-size: 16px;
+}
+
+:where(table) {
+  max-width: 100%;
+}
+
+:where(.flex, .inline-flex, .grid) > * {
+  min-width: 0;
+}
+
+@media (max-width: 639px) {
+  body {
+    font-size: 0.875rem;
+  }
+
+  :where(h1) {
+    font-size: clamp(1.25rem, 5vw, 1.5rem);
+  }
+
+  :where(h2) {
+    font-size: clamp(1.125rem, 4vw, 1.25rem);
+  }
+
+  :where(h3) {
+    font-size: clamp(1rem, 3.5vw, 1.125rem);
+  }
+
+  :where(button, [role="button"]) {
+    min-height: 44px;
+  }
+}
+
+@media (min-width: 1536px) {
+  #root > main > .container,
+  #root > main > [class*="max-w-"] {
+    margin-inline: auto;
+  }
+}
+
+
+/* --------------------------------------------------------------------------
+   Application-wide responsive pass: storefront, customer workflows, overlays
+   and shared interactive controls. All selectors are presentation-only.
+   -------------------------------------------------------------------------- */
+.quickmeds-header-inner {
+  gap: clamp(0.35rem, 1vw, 1rem);
+}
+
+.quickmeds-brand-anchor {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.quickmeds-brand-badge-container {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.quickmeds-actions-group {
+  min-width: 0;
+  gap: clamp(0.25rem, 0.8vw, 0.5rem);
+}
+
+.quickmeds-header-inner > nav {
+  min-width: 0;
+}
+
+.pharma-product-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pharma-cart-drawer {
+  width: min(100vw, 28rem);
+  max-width: 100vw;
+  min-width: 0;
+  height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pharma-cart-drawer > :where(header, div) {
+  min-width: 0;
+}
+
+.pharma-checkout-modal {
+  width: min(100%, 42rem);
+  max-width: 42rem;
+  max-height: min(92dvh, 52rem);
+  min-height: 0;
+}
+
+.pharma-checkout-modal > :where(.overflow-y-auto) {
+  min-height: 0;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+:where([role="dialog"]) {
+  min-width: 0;
+  max-height: calc(100dvh - 1rem);
+}
+
+:where([role="dialog"] input, [role="dialog"] select, [role="dialog"] textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:where(.overflow-x-auto) {
+  max-width: 100%;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+:where(form) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:where(form input:not([type="checkbox"]):not([type="radio"]),
+form select, form textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:where(.flex.items-center.justify-between, .flex.justify-between.items-center) {
+  min-width: 0;
+}
+
+@media (max-width: 639px) {
+  .quickmeds-header-inner {
+    min-height: 3.75rem;
+    gap: 0.3rem;
+  }
+
+  .quickmeds-brand-anchor {
+    gap: 0.4rem;
+  }
+
+  .quickmeds-brand-name {
+    font-size: clamp(0.875rem, 3.8vw, 1.05rem);
+    letter-spacing: -0.03em;
+  }
+
+  .quickmeds-role-chip {
+    font-size: 0.5rem;
+    padding: 0.15rem 0.35rem;
+  }
+
+  .quickmeds-actions-group {
+    flex-shrink: 0;
+  }
+
+  .pharma-cart-drawer {
+    width: 100vw;
+    max-width: 100vw;
+    border-left: 0;
+  }
+
+  .pharma-cart-drawer > :where(.shrink-0) {
+    padding-inline: 1rem;
+  }
+
+  .pharma-cart-drawer > :where(.flex-1) {
+    padding-inline: 1rem;
+  }
+
+  .pharma-cart-drawer > :where(.shrink-0:last-child) {
+    padding: 1rem;
+  }
+
+  .pharma-checkout-modal {
+    border-radius: 1.25rem;
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .pharma-checkout-modal > :where(.overflow-y-auto) {
+    padding: 1rem;
+  }
+
+  :where(.fixed.inset-0[role="dialog"], .fixed.inset-0[aria-modal="true"]) {
+    padding: 0.5rem;
+  }
+
+  :where([role="dialog"] > .pharma-modal-surface) {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100dvh - 0.5rem);
+  }
+}
+
+@media (max-width: 380px) {
+  .pharma-product-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quickmeds-brand-name {
+    font-size: 0.875rem;
+  }
+
+  .quickmeds-role-chip {
+    display: none;
+  }
+
+  .quickmeds-actions-group {
+    gap: 0.2rem;
+  }
+
+  .pharma-cart-drawer > :where(.shrink-0) {
+    padding-inline: 0.75rem;
+  }
+
+  .pharma-cart-drawer > :where(.flex-1) {
+    padding-inline: 0.75rem;
+  }
+
+  .pharma-checkout-modal {
+    border-radius: 1rem;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .pharma-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .pharma-product-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .pharma-product-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1536px) {
+  .pharma-product-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+
+/* Customer-facing request and address workspaces. */
+.pharma-customer-requests,
+.pharma-address-manager {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pharma-customer-requests :where(.flex.items-center.justify-between),
+.pharma-address-manager :where(.flex.items-center.justify-between) {
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.pharma-customer-requests :where(.grid),
+.pharma-address-manager :where(.grid) {
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+
+.pharma-customer-requests :where(button, select),
+.pharma-address-manager :where(button, select, input, textarea) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.pharma-medicine-request-modal {
+  min-width: 0;
+  max-width: min(100%, 36rem);
+  max-height: calc(100dvh - 1rem);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pharma-medicine-request-modal :where(input[type="file"]) {
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.8125rem;
+}
+
+.pharma-medicine-request-modal :where(form > div, .grid) {
+  min-width: 0;
+}
+
+@media (max-width: 639px) {
+  .pharma-customer-requests,
+  .pharma-address-manager {
+    padding: 1rem;
+    border-radius: 1.25rem;
+  }
+
+  .pharma-customer-requests :where(header, .flex.items-center.justify-between),
+  .pharma-address-manager :where(header, .flex.items-center.justify-between) {
+    align-items: stretch;
+  }
+
+  .pharma-customer-requests :where(button),
+  .pharma-address-manager :where(button) {
+    min-height: 44px;
+  }
+
+  .pharma-medicine-request-modal {
+    width: 100%;
+    max-width: 100%;
+    padding: 1rem;
+    border-radius: 1.25rem;
+  }
+
+  .pharma-medicine-request-modal :where(.flex.justify-end) {
+    flex-wrap: wrap;
+  }
+
+  .pharma-medicine-request-modal :where(.flex.justify-end > button) {
+    flex: 1 1 8rem;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 380px) {
+  .pharma-customer-requests,
+  .pharma-address-manager {
+    padding: 0.75rem;
+  }
+
+  .pharma-medicine-request-modal {
+    padding: 0.75rem;
+    border-radius: 1rem;
+  }
+}
