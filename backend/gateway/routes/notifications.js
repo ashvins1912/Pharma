@@ -10,34 +10,39 @@ import { isPlatformSuperAdmin } from '../../shared/contracts/index.js';
 
 const router = express.Router();
 
-router.get('/', authenticateUser, (req, res) => {
+router.get('/', authenticateUser, async (req, res, next) => {
+  try {
     const userRole = req.user?.app_metadata?.role || req.user?.role || 'customer';
     const isSuperAdmin = isPlatformSuperAdmin(userRole);
-    const list = notificationService.getUserNotifications(req.context.userId, {
+    const list = await notificationService.getUserNotifications(req.user?.sub || req.context.userId, {
         tenantId: isSuperAdmin ? null : (req.context?.tenantId || req.user?.app_metadata?.tenantId || null),
         branchId: req.context?.branchId || null,
         isSuperAdmin
     });
     res.json({ success: true, data: list });
+  } catch (error) { next(error); }
 });
 
-router.patch('/:id/read', authenticateUser, (req, res) => {
+router.patch('/:id/read', authenticateUser, async (req, res, next) => {
+  try {
     const userRole = req.user?.app_metadata?.role || req.user?.role || 'customer';
     const isSuperAdmin = isPlatformSuperAdmin(userRole);
-    const updated = notificationService.markAsRead(req.params.id, req.context.userId, {
+    const updated = await notificationService.markAsRead(req.params.id, req.user?.sub || req.context.userId, {
         tenantId: isSuperAdmin ? null : (req.context?.tenantId || req.user?.app_metadata?.tenantId || null),
         branchId: req.context?.branchId || null,
         isSuperAdmin
     });
     if (!updated) return res.status(404).json({ success: false, error: { code: 'NOTIFICATION_NOT_FOUND' } });
     return res.json({ success: true, data: updated });
+  } catch (error) { next(error); }
 });
 
 /**
  * GET /delivery-history
  * Returns recent delivery state transitions across branches for the caller's tenant
  */
-router.get('/delivery-history', authenticateUser, (req, res) => {
+router.get('/delivery-history', authenticateUser, async (req, res, next) => {
+  try {
     const userRole = req.user?.app_metadata?.role || req.user?.role || 'customer';
     const isSuper = isPlatformSuperAdmin(userRole);
     const tenantId = isSuper ? null : (req.context?.tenantId || req.user?.app_metadata?.tenantId);
@@ -45,8 +50,9 @@ router.get('/delivery-history', authenticateUser, (req, res) => {
     // Platform Super Admin may explicitly filter a branch; tenant-wide users see their tenant.
     const branchId = isSuper ? (req.query.branchId || null) : (req.context?.branchId || null);
 
-    const events = notificationService.getDeliveryEvents(tenantId, branchId, isSuper);
+    const events = await notificationService.getDeliveryEvents(tenantId, branchId, isSuper);
     res.json({ success: true, data: events });
+  } catch (error) { next(error); }
 });
 
 /**
