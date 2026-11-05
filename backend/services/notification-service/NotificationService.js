@@ -280,7 +280,7 @@ export class NotificationService {
                 eventType: 'DELIVERY_STATUS_CHANGED', orderId: evt.entityId, status: evt.payload?.status,
                 channels: ['IN_APP', 'WHATSAPP']
             });
-            this._broadcastDeliveryEvent({
+            void this._broadcastDeliveryEvent({
                 eventId: evt.eventId,
                 type: 'DELIVERY_STATUS_CHANGED',
                 eventType: 'DELIVERY_STATUS_CHANGED',
@@ -292,7 +292,7 @@ export class NotificationService {
                 riderMobile: evt.payload?.riderMobile,
                 jobId: evt.payload?.jobId,
                 timestamp: new Date().toISOString()
-            });
+            }).catch(err => logger.warn('[NotificationService] Delivery event persistence failed:', err?.message));
             if (evt.payload?.order) {
                 sendCustomWhatsAppAlert(evt.payload.order, evt.payload?.status, evt.payload?.riderMobile).catch(err => logger.warn('[WhatsApp] DeliveryStatus alert failed:', err?.message));
             }
@@ -308,7 +308,7 @@ export class NotificationService {
                 eventType: 'ORDER_DELIVERED', orderId: evt.entityId, status: 'DELIVERED',
                 channels: ['IN_APP', 'WHATSAPP']
             });
-            this._broadcastDeliveryEvent({
+            void this._broadcastDeliveryEvent({
                 eventId: evt.eventId,
                 type: 'DELIVERY_STATUS_CHANGED',
                 eventType: 'ORDER_DELIVERED',
@@ -320,7 +320,7 @@ export class NotificationService {
                 riderMobile: evt.payload?.riderMobile,
                 jobId: evt.payload?.jobId,
                 timestamp: new Date().toISOString()
-            });
+            }).catch(err => logger.warn('[NotificationService] Delivery event persistence failed:', err?.message));
             if (evt.payload?.order) {
                 sendCustomWhatsAppAlert(evt.payload.order, 'Delivered', evt.payload?.riderMobile).catch(err => logger.warn('[WhatsApp] OrderDelivered alert failed:', err?.message));
             }
