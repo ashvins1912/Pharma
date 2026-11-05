@@ -27,8 +27,13 @@ export const TenantProvider = ({ children }) => {
   });
   const [activeTenant, setActiveTenantState] = useState(readSavedTenant);
   const [branchId, setBranchIdState] = useState(() => {
-    if (typeof window === 'undefined') return 'branch-1';
-    return localStorage.getItem('pharma_branch_id') || 'branch-1';
+    if (typeof window === 'undefined') return null;
+    const saved = localStorage.getItem('pharma_branch_id');
+    if (!saved || saved === 'branch-1' || saved === 'null' || saved === 'undefined') {
+      localStorage.removeItem('pharma_branch_id');
+      return null;
+    }
+    return saved;
   });
 
   const setTenantId = (value) => {

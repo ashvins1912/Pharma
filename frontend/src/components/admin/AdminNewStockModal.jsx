@@ -3,6 +3,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useTenant } from '../../context/TenantContext';
 
 const CATEGORIES = [
   'Prescription Medicines',
@@ -27,6 +28,7 @@ const PRESET_IMAGE_ASSETS = [
 export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) {
   const { t } = useLanguage();
   const { addToast } = useToast();
+  const { tenantId, branchId } = useTenant();
   const modalRef = useFocusTrap(isOpen, onClose);
 
   const [saving, setSaving] = useState(false);
@@ -88,6 +90,10 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
 
   const handleSubmit = async (e, shouldContinue = false) => {
     e.preventDefault();
+    if (!tenantId || !branchId) {
+      addToast('Select an active pharmacy and branch before adding stock.', 'warning');
+      return;
+    }
     if (!form.name || !form.price) {
       addToast(t('pleaseTryAgain'), 'warning');
       return;
@@ -99,10 +105,14 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
         ...form,
         price: Number(form.price),
         sellingPrice: form.sellingPrice ? Number(form.sellingPrice) : Number(form.price),
-        stockQuantity: Number(form.stockQuantity)
+        stockQuantity: Number(form.stockQuantity),
+        tenantId: String(tenantId),
+        branchId: String(branchId)
       };
 
-      await apiClient.post('/api/medicines', payload);
+      await apiClient.post('/api/medicines', payload, {
+        headers: { 'X-Tenant-Id': String(tenantId), 'X-Branch-Id': String(branchId) }
+      });
       addToast(`Successfully added "${form.name}" to inventory catalog!`, 'success');
 
       if (onStockCreated) onStockCreated();
@@ -129,7 +139,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
         onClose();
       }
     } catch (err) {
-      addToast(err?.response?.data?.error || err.message || t('saveMedicineFailed'), 'error');
+      addToast(err?.response?.data?.message || err?.response?.data?.error || err.message || t('saveMedicineFailed'), 'error');
     } finally {
       setSaving(false);
     }
