@@ -135,7 +135,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
                     <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                       🎟️ {t('promoCode')}
                     </span>
-                    <span className="text-[10px] text-slate-400">{t('tryCouponCodes')}</span>
+
                   </div>
 
                   {appliedCoupon ? (
