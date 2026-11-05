@@ -172,6 +172,7 @@ const orderSchema = new mongoose.Schema({
     medicineRequestId: { type: String, default: null },
     fulfillmentCaseId: { type: String, default: null, index: true },
     parentOrderId: { type: String, default: null, index: true },
+    childOrderIds: { type: [String], default: [] },
     idempotencyKey: { type: String, default: null },
     requestFingerprint: { type: String, default: null },
     fulfillmentConfirmationId: { type: String, default: undefined },
