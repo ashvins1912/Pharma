@@ -86,7 +86,6 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
           const quantity = Math.min(Number(confirmed?.allocatedQuantity || 0), Number(line.waitingQuantity || 0));
           return { ...line, requestedQuantity: Math.max(0, Number(line.waitingQuantity || 0) - quantity), allocatedQuantity: 0, waitingQuantity: Math.max(0, Number(line.waitingQuantity || 0) - quantity), notifiedAvailableQuantity: 0 };
         }).filter(line => line.requestedQuantity > 0);
-        const rootOrderId = entry.parentOrderId || String(recoveredOrder._id);
         const rootOrderId = String(entry.parentOrderId || recoveredOrder._id);
         const isChildOrder = rootOrderId !== String(recoveredOrder._id);
         const parentUpdate = await Order.updateOne(
