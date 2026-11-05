@@ -817,8 +817,11 @@ router.post('/fulfillment/waitlist/:id/cancel', authenticateUser, async (req, re
         const remainingLines = nextLines.filter(line => Number(line.waitingQuantity || 0) > 0
             && line.customerDecision !== 'CANCELLED');
         const hasAvailableRemainder = remainingLines.some(line => Number(line.allocatedQuantity || 0) > 0);
+        const allRemainingAvailable = remainingLines.length > 0 && remainingLines.every(line =>
+            Number(line.allocatedQuantity || 0) >= Number(line.waitingQuantity || 0)
+        );
         const nextStatus = remainingLines.length
-            ? (hasAvailableRemainder ? 'PARTIALLY_FULFILLED' : 'WAITING_FOR_STOCK')
+            ? (allRemainingAvailable ? 'READY_FOR_CONFIRMATION' : hasAvailableRemainder ? 'PARTIALLY_FULFILLED' : 'WAITING_FOR_STOCK')
             : 'CANCELLED';
         const updatedResult = await FulfillmentCase.updateOne({
             _id: entry._id,
