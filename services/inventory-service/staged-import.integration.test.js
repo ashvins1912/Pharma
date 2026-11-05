@@ -261,7 +261,10 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     const isolated = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}`, { headers: { Authorization: `Bearer ${crossTenantToken}` } });
     assert.equal(isolated.status, 404);
   } finally {
-    await new Promise(resolve => server.close(resolve));
+    const closingServer = new Promise(resolve => server.close(resolve));
+    server.closeAllConnections?.();
+    server.closeIdleConnections?.();
+    await closingServer;
     await mongoose.disconnect();
     await fs.rm(config.importStorage, { recursive: true, force: true });
   }
