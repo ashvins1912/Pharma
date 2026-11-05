@@ -41,8 +41,9 @@ router.get('/profile', authenticateUser, async (req, res) => {
             return sendError(res, { code: 'TENANT_CONTEXT_REQUIRED', message: 'Select an authorized pharmacy tenant first.', statusCode: 403, req });
         }
 
+        let membership = null;
         if (!platformAdmin) {
-            const membership = await TenantMembership.findOne({
+            membership = await TenantMembership.findOne({
                 userId: String(req.user?.sub || req.user?.id || req.user?.userId || ''),
                 tenantId,
                 status: 'ACTIVE'
@@ -51,6 +52,8 @@ router.get('/profile', authenticateUser, async (req, res) => {
                 return sendError(res, { code: 'TENANT_MEMBERSHIP_REQUIRED', message: 'An active membership for this pharmacy is required.', statusCode: 403, req });
             }
         }
+        const canViewPersonnel = platformAdmin
+            || ['TENANT_OWNER', 'TENANT_ADMIN'].includes(String(membership?.role || '').toUpperCase());
 
         const tenant = await Tenant.findOne({ _id: tenantId, status: { $ne: 'DISABLED' } }).lean();
         if (!tenant) {
@@ -59,9 +62,11 @@ router.get('/profile', authenticateUser, async (req, res) => {
 
         const [vendor, personnel] = await Promise.all([
             Vendor.findOne({ tenantId }).sort({ onboardingCompletedAt: -1, updatedAt: -1 }).lean(),
-            UserProfile.find({ tenantId, status: 'ACTIVE' })
-                .select('userId name firstName lastName email role roles')
-                .sort({ createdAt: 1 }).lean()
+            canViewPersonnel
+                ? UserProfile.find({ tenantId, status: 'ACTIVE' })
+                    .select('userId name firstName lastName email role roles')
+                    .sort({ createdAt: 1 }).lean()
+                : Promise.resolve([])
         ]);
 
         const address = tenant.address || vendor?.address || {};
