@@ -192,6 +192,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                   {order.fulfillmentState === 'CANCELLED_REMAINDER' && <p className="text-[10px] font-bold text-slate-600">Remaining items cancelled at your request</p>}
                   {order.fulfillmentState === 'EXPIRED_REMAINDER' && <p className="text-[10px] font-bold text-amber-700">Remaining items expired from the stock wait window</p>}
                   {order.parentOrderId && <p className="text-[10px] font-semibold text-indigo-700">Part of order #{String(order.parentOrderId).slice(-6).toUpperCase()}</p>}
+                  {Array.isArray(order.childOrderIds) && order.childOrderIds.length > 0 && <p className="text-[10px] font-semibold text-indigo-700">Split fulfilments: {order.childOrderIds.length} linked order(s)</p>}
 
                   <p className="text-[11px] text-slate-600 line-clamp-2">
                     {(order.items || []).map(i => `${i.name} (x${i.quantity})`).join(', ')}
