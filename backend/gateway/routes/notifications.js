@@ -9,16 +9,28 @@ import { authenticateUser } from '../../middleware/auth.js';
 import { isPlatformSuperAdmin } from '../../shared/contracts/index.js';
 
 const router = express.Router();
+const TENANT_STAFF_ROLES = new Set([
+    'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACY', 'PHARMACIST',
+    'PHARMACY_STAFF', 'ORDER_MANAGER', 'INVENTORY_MANAGER',
+    'DISPATCHER', 'BRANCH_ADMIN'
+]);
+const isTenantStaff = user => {
+    const roles = [user?.role, ...(Array.isArray(user?.roles) ? user.roles : [])]
+        .filter(Boolean).map(value => String(value).toUpperCase());
+    const appRole = String(user?.app_metadata?.role || '').toUpperCase();
+    return TENANT_STAFF_ROLES.has(appRole) || roles.some(role => TENANT_STAFF_ROLES.has(role));
+};
+const getTrustedTenantScope = (user, isSuperAdmin) => ({
+    tenantId: isSuperAdmin ? null : (isTenantStaff(user) ? (user?.tenantId || user?.app_metadata?.tenantId || null) : null),
+    branchId: isSuperAdmin ? null : (isTenantStaff(user) ? (user?.branchId || user?.app_metadata?.branchId || null) : null)
+});
 
 router.get('/', authenticateUser, async (req, res, next) => {
   try {
     const userRole = req.user?.app_metadata?.role || req.user?.role || 'customer';
     const isSuperAdmin = isPlatformSuperAdmin(userRole);
-    const list = await notificationService.getUserNotifications(req.user?.sub || req.context.userId, {
-        tenantId: isSuperAdmin ? null : (req.context?.tenantId || req.user?.app_metadata?.tenantId || null),
-        branchId: req.context?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || null,
-        isSuperAdmin
-    });
+    const scope = getTrustedTenantScope(req.user, isSuperAdmin);
+    const list = await notificationService.getUserNotifications(req.user?.sub || req.context.userId, { ...scope, isSuperAdmin });
     res.json({ success: true, data: list });
   } catch (error) { next(error); }
 });
@@ -27,11 +39,8 @@ router.patch('/:id/read', authenticateUser, async (req, res, next) => {
   try {
     const userRole = req.user?.app_metadata?.role || req.user?.role || 'customer';
     const isSuperAdmin = isPlatformSuperAdmin(userRole);
-    const updated = await notificationService.markAsRead(req.params.id, req.user?.sub || req.context.userId, {
-        tenantId: isSuperAdmin ? null : (req.context?.tenantId || req.user?.app_metadata?.tenantId || null),
-        branchId: req.context?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || null,
-        isSuperAdmin
-    });
+    const scope = getTrustedTenantScope(req.user, isSuperAdmin);
+    const updated = await notificationService.markAsRead(req.params.id, req.user?.sub || req.context.userId, { ...scope, isSuperAdmin });
     if (!updated) return res.status(404).json({ success: false, error: { code: 'NOTIFICATION_NOT_FOUND' } });
     return res.json({ success: true, data: updated });
   } catch (error) { next(error); }
@@ -45,10 +54,11 @@ router.get('/delivery-history', authenticateUser, async (req, res, next) => {
   try {
     const userRole = req.user?.app_metadata?.role || req.user?.role || 'customer';
     const isSuper = isPlatformSuperAdmin(userRole);
-    const tenantId = isSuper ? null : (req.context?.tenantId || req.user?.app_metadata?.tenantId);
-    // Branch-scoped users cannot widen the delivery-history query via a URL parameter.
-    // Platform Super Admin may explicitly filter a branch; tenant-wide users see their tenant.
-    const branchId = isSuper ? (req.query.branchId || null) : (req.context?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || null);
+    if (!isSuper && !isTenantStaff(req.user)) return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Pharmacy staff access is required for delivery history.' } });
+    const scope = getTrustedTenantScope(req.user, isSuper);
+    const tenantId = scope.tenantId;
+    // Only platform administrators may override the branch filter from the query string.
+    const branchId = isSuper ? (req.query.branchId || null) : scope.branchId;
 
     const events = await notificationService.getDeliveryEvents(tenantId, branchId, isSuper);
     res.json({ success: true, data: events });
@@ -70,8 +80,10 @@ router.get('/delivery-stream', authenticateUser, (req, res) => {
 
     const userRole = req.user?.app_metadata?.role || req.user?.role || 'customer';
     const isSuper = isPlatformSuperAdmin(userRole);
-    const tenantId = isSuper ? null : (req.context?.tenantId || req.user?.app_metadata?.tenantId);
-    const branchId = req.context?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || null;
+    if (!isSuper && !isTenantStaff(req.user)) return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Pharmacy staff access is required for delivery streaming.' } });
+    const scope = getTrustedTenantScope(req.user, isSuper);
+    const tenantId = scope.tenantId;
+    const branchId = scope.branchId;
     const clientId = `sse-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
     // 2. Initial Handshake Message
