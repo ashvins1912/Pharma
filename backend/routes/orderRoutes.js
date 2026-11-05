@@ -824,6 +824,7 @@ router.post('/fulfillment/waitlist/:id/cancel', authenticateUser, async (req, re
             _id: entry._id,
             customerId: String(req.user.sub),
             status: entry.status,
+            updatedAt: entry.updatedAt,
             __v: Number(entry.__v || 0)
         }, {
             $set: { lines: nextLines, status: nextStatus },
