@@ -664,7 +664,22 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
                 notifiedAvailableQuantity: 0
             };
         }).filter(line => line.requestedQuantity > 0);
-        const rootOrderId = claimed.parentOrderId || String(order._id);
+        const rootOrderId = String(claimed.parentOrderId || order._id);
+        const isChildOrder = rootOrderId !== String(order._id);
+
+        // Persist the order hierarchy before finalizing the waitlist. If this
+        // update fails, the CONFIRMING claim remains recoverable by the monitor.
+        const parentUpdate = await Order.updateOne(
+            { _id: rootOrderId, userId: String(req.user.sub), tenantId: claimed.tenantId },
+            {
+                $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' },
+                ...(isChildOrder ? { $addToSet: { childOrderIds: String(order._id) } } : {})
+            }
+        );
+        if (!parentUpdate.matchedCount) {
+            throw Object.assign(new Error('The fulfilment order link could not be saved. The reservation will be reconciled automatically.'), { statusCode: 202 });
+        }
+
         const caseUpdate = {
             $set: {
                 lines: remainingLines,
@@ -674,9 +689,9 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
                 confirmationPreviousStatus: null, confirmationLines: [],
                 lastAvailabilityCheckAt: new Date()
             },
-            $push: { auditTrail: { action: 'AVAILABLE_STOCK_CONFIRMED', actorId: String(req.user.sub), at: new Date(), orderId: String(order._id), fulfilledLineCount: confirmationLines.length } }
+            $push: { auditTrail: { action: 'AVAILABLE_STOCK_CONFIRMED', actorId: String(req.user.sub), at: new Date(), orderId: String(order._id), fulfilledLineCount: confirmationLines.length, rootOrderId } }
         };
-        if (claimed.parentOrderId) caseUpdate.$addToSet = { childOrderIds: String(order._id) };
+        if (isChildOrder) caseUpdate.$addToSet = { childOrderIds: String(order._id) };
         const updated = await FulfillmentCase.updateOne({
             _id: claimed._id, customerId: String(req.user.sub),
             status: 'CONFIRMING', confirmationId
@@ -684,16 +699,17 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
         if (!updated.modifiedCount) {
             throw Object.assign(new Error('Order was created, but the waitlist update is still being reconciled. Refresh your waitlist shortly.'), { statusCode: 202 });
         }
-        await Order.updateOne({ _id: rootOrderId, userId: String(req.user.sub), tenantId: claimed.tenantId }, {
-            $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' }
-        });
+
         if (claimed.sourceType === 'MEDICINE_REQUEST' && claimed.sourceId) {
             await MedicineRequest.updateOne({ _id: claimed.sourceId, customerId: String(req.user.sub), fulfillmentCaseId: String(claimed._id) }, {
-                $set: { status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'CONVERTED_TO_ORDER', convertedOrderId: String(order._id) },
-                $push: { auditTrail: { action: 'WAITLIST_STOCK_ORDER_CREATED', actorId: String(req.user.sub), role: 'Customer', timestamp: new Date(), notes: `Created order ${String(order._id)} from available waitlist stock.` } }
+                $set: {
+                    status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'CONVERTED_TO_ORDER',
+                    convertedOrderId: rootOrderId
+                },
+                $push: { auditTrail: { action: 'WAITLIST_STOCK_ORDER_CREATED', actorId: String(req.user.sub), role: 'Customer', timestamp: new Date(), notes: `Created fulfilment order ${String(order._id)} under root order ${rootOrderId}.` } }
             });
         }
-        return { order, remainingLines };
+        return { order, remainingLines, rootOrderId };
     };
     try {
         const initial = await FulfillmentCase.findOne({
@@ -733,6 +749,7 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
                 orderedForName: claimed.orderedForName || 'Customer',
                 fulfillmentCaseId: String(claimed._id),
                 parentOrderId: claimed.parentOrderId || null,
+                fulfillmentState: 'FULL',
                 fulfillmentConfirmationId: confirmationId,
                 prescriptionUrl: claimed.prescriptionUrl || null, prescriptionId: claimed.prescriptionId || null,
                 patientPuid: claimed.patientPuid || null,
