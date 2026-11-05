@@ -247,14 +247,12 @@ app.get('/api/admin/audit-logs', authenticateUser, isAdmin, async (req, res) => 
     res.json(dataStore.getAuditLogs());
 });
 
-// Seed data
-app.post('/api/test/seed-medicines', authenticateUser, isAdmin, async (req, res) => {
-    try {
-        await dataStore.seedMedicines();
-        res.status(201).json({ message: "✅ Mock pharmacy catalog with images, stock counts, and expiry dates safely seeded!" });
-    } catch (err) {
-        res.status(500).json({ message: "Seeding script execution crashed.", error: err.message });
-    }
+// Legacy global catalogue seeding is disabled: product and stock creation must be tenant/branch scoped in Inventory Service.
+app.post('/api/test/seed-medicines', authenticateUser, isAdmin, async (_req, res) => {
+    return res.status(410).json({
+        code: 'LEGACY_INVENTORY_SEED_DISABLED',
+        message: 'Global catalogue seeding is disabled. Use the tenant- and branch-scoped Inventory Service import workflow.'
+    });
 });
 
 // Resilient Express error middleware for API routes
