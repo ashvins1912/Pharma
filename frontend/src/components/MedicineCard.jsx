@@ -22,7 +22,7 @@ export default function MedicineCard({ med, onAddToCart }) {
                     />
                     {stock <= 5 && stock > 0 && (
                         <span className="absolute top-2 right-2 bg-amber-500 text-white font-bold text-[9px] px-1.5 py-0.5 rounded shadow">
-                            Only {stock} left
+                            Few left
                         </span>
                     )}
                 </div>
