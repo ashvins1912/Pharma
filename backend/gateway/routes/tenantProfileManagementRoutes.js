@@ -31,6 +31,9 @@ async function resolveTenant(req, res) {
       res.status(403).json({ success: false, code: 'TENANT_MEMBERSHIP_REQUIRED', message: 'Active membership for this pharmacy is required.' });
       return null;
     }
+    // The active membership is the authoritative source for tenant-level
+    // profile privileges; never infer edit rights from a browser-supplied role.
+    req.tenantMembership = membership;
   }
   const tenant = await Tenant.findOne({ _id: tenantId, status: { $ne: 'DISABLED' } });
   if (!tenant) {
@@ -84,6 +87,16 @@ router.patch('/profile', authenticateUser, async (req, res) => {
     const tenant = await resolveTenant(req, res);
     if (!tenant) return;
     const platformAdmin = isPlatformAdmin(req);
+    if (!platformAdmin) {
+      const membershipRole = String(req.tenantMembership?.role || '').toUpperCase();
+      if (!['TENANT_OWNER', 'TENANT_ADMIN'].includes(membershipRole)) {
+        return res.status(403).json({
+          success: false,
+          code: 'TENANT_PROFILE_ADMIN_REQUIRED',
+          message: 'Only the pharmacy owner or tenant administrator can update pharmacy profile details.'
+        });
+      }
+    }
     if (!platformAdmin && tenant.settings?.pharmacyProfileEditingEnabled !== true) {
       return res.status(403).json({
         success: false,
