@@ -150,7 +150,10 @@ function MainApp() {
   // Restore the selected dispensary's display details when only its ID survived
   // a previous session (for example, after local storage was partially cleared).
   useEffect(() => {
-    if (tenantId && !activeTenant) setTenantSelectorOpen(true);
+    const displayedTenantId = activeTenant?._id || activeTenant?.id || null;
+    if (tenantId && String(displayedTenantId || '') !== String(tenantId)) {
+      setTenantSelectorOpen(true);
+    }
   }, [tenantId, activeTenant]);
 
   // Navigation is permission-first. Staff workspace capabilities are separate
