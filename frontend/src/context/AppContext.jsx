@@ -100,14 +100,11 @@ export function AppProvider({ children }) {
 
   // Admin Alerts State
   const [inventoryAlerts, setInventoryAlerts] = useState({
-    expiredCount: 0,
-    expiringSoonCount: 0,
-    lowStockCount: 0,
-    totalAlerts: 0,
-    expired: [],
-    expiringSoon: [],
-    lowStock: []
+    expiredCount: 0, expiringSoonCount: 0, lowStockCount: 0, totalAlerts: 0,
+    expired: [], expiringSoon: [], lowStock: []
   });
+  const [inventoryAlertsStatus, setInventoryAlertsStatus] = useState({ loading: false, error: '' });
+  const inventoryAlertsRequestRef = useRef(0);
 
   // WhatsApp Gateway State
   const [whatsappStatus, setWhatsappStatus] = useState({
@@ -803,39 +800,80 @@ export function AppProvider({ children }) {
     setActiveProposalRequest(request);
   };
 
-  // Fetch Admin Inventory Alerts
+  // Load tenant+branch scoped safety alerts from the authoritative Inventory Service.
   const loadInventoryAlerts = useCallback(async () => {
-    // Inventory alerts are an operations-only endpoint. Do not request them
-    // during anonymous/customer storefront hydration, even if a stale cached
-    // permission snapshot temporarily contains inventory.read.
     if (
-      authLoading ||
-      !isFullyAuthenticated ||
-      !user?.id ||
-      !isPharmacyOrAdmin ||
-      !hasPermission('inventory.read')
-    ) return;
-    try {
-      const res = await apiClient.get('/api/medicines/alerts');
-      setInventoryAlerts(res.data || {});
-    } catch {
-      // Alerts are optional dashboard data; a denied request must not affect sign-in.
+      authLoading || !isFullyAuthenticated || !user?.id || !isPharmacyOrAdmin ||
+      !hasPermission('inventory.read') || !tenantId || !branchId
+    ) {
+      setInventoryAlerts({
+        expiredCount: 0, expiringSoonCount: 0, lowStockCount: 0, totalAlerts: 0,
+        expired: [], expiringSoon: [], lowStock: []
+      });
+      setInventoryAlertsStatus({ loading: false, error: '' });
+      return null;
     }
-  }, [authLoading, isFullyAuthenticated, user?.id, isPharmacyOrAdmin, hasPermission]);
+
+    const requestId = ++inventoryAlertsRequestRef.current;
+    setInventoryAlertsStatus({ loading: true, error: '' });
+    try {
+      const res = await apiClient.get('/api/medicines/alerts', {
+        params: { tenantId, branchId }
+      });
+      if (requestId !== inventoryAlertsRequestRef.current) return null;
+      const payload = res.data?.data || res.data || {};
+      const next = {
+        expired: Array.isArray(payload.expired) ? payload.expired : [],
+        expiringSoon: Array.isArray(payload.expiringSoon) ? payload.expiringSoon : [],
+        lowStock: Array.isArray(payload.lowStock) ? payload.lowStock : []
+      };
+      setInventoryAlerts({
+        ...next,
+        expiredCount: Number(payload.expiredCount ?? next.expired.length) || 0,
+        expiringSoonCount: Number(payload.expiringSoonCount ?? next.expiringSoon.length) || 0,
+        lowStockCount: Number(payload.lowStockCount ?? next.lowStock.length) || 0,
+        totalAlerts: Number(payload.totalAlerts ?? (
+          next.expired.length + next.expiringSoon.length + next.lowStock.length
+        )) || 0
+      });
+      setInventoryAlertsStatus({ loading: false, error: '' });
+      return payload;
+    } catch (error) {
+      if (requestId !== inventoryAlertsRequestRef.current) return null;
+      console.error('Inventory safety alert refresh failed:', error);
+      setInventoryAlertsStatus({
+        loading: false,
+        error: error.response?.data?.message || error.message || 'Could not refresh inventory safety alerts.'
+      });
+      return null;
+    }
+  }, [authLoading, isFullyAuthenticated, user?.id, isPharmacyOrAdmin, hasPermission, tenantId, branchId]);
 
   useEffect(() => {
     if (
-      !authLoading &&
-      isFullyAuthenticated &&
-      user?.id &&
-      isPharmacyOrAdmin &&
-      hasPermission('inventory.read')
+      authLoading || !isFullyAuthenticated || !user?.id || !isPharmacyOrAdmin ||
+      !hasPermission('inventory.read') || !tenantId || !branchId
     ) {
-      loadInventoryAlerts();
-    } else {
-      setInventoryAlerts({});
+      inventoryAlertsRequestRef.current += 1;
+      setInventoryAlerts({
+        expiredCount: 0, expiringSoonCount: 0, lowStockCount: 0, totalAlerts: 0,
+        expired: [], expiringSoon: [], lowStock: []
+      });
+      setInventoryAlertsStatus({ loading: false, error: '' });
+      return undefined;
     }
-  }, [authLoading, isFullyAuthenticated, user?.id, isPharmacyOrAdmin, hasPermission, loadInventoryAlerts]);
+
+    void loadInventoryAlerts();
+    // Refresh after stock/import operations and periodically while the dashboard is open.
+    const handleInventoryUpdated = () => { void loadInventoryAlerts(); };
+    window.addEventListener('pharma:inventory-updated', handleInventoryUpdated);
+    const refreshTimer = window.setInterval(() => { void loadInventoryAlerts(); }, 60_000);
+    return () => {
+      inventoryAlertsRequestRef.current += 1;
+      window.removeEventListener('pharma:inventory-updated', handleInventoryUpdated);
+      window.clearInterval(refreshTimer);
+    };
+  }, [authLoading, isFullyAuthenticated, user?.id, isPharmacyOrAdmin, hasPermission, tenantId, branchId, loadInventoryAlerts]);
 
   // Cart operations
   const addToCart = (med) => {
@@ -1172,6 +1210,7 @@ export function AppProvider({ children }) {
 
         // Admin alerts
         inventoryAlerts,
+        inventoryAlertsStatus,
         loadInventoryAlerts,
 
         // WhatsApp Gateway
