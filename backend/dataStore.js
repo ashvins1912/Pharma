@@ -639,7 +639,7 @@ const orderInventoryWasDeducted = (order) => Boolean(
     )
 );
 
-const deductMongoOrderInventory = async (order, session) => {
+const deductMongoOrderInventory = async (order) => {
     if (orderInventoryWasDeducted(order)) return;
     if (order.inventoryReservationId) {
         await inventoryClient.deduct(order.inventoryReservationId, {
@@ -650,93 +650,26 @@ const deductMongoOrderInventory = async (order, session) => {
         order.inventoryDeductedAt = new Date();
         return;
     }
-    const items = getOrderInventoryItems(order);
-    if (!items.length) {
-        if (order.source === 'MEDICINE_REQUEST') {
-            order.inventoryDeductedAt = new Date();
-            return;
-        }
-        throw inventoryError('Order has no inventory records to deduct.', 409);
+    if (order.source === 'MEDICINE_REQUEST' && !getOrderInventoryItems(order).length) {
+        order.inventoryDeductedAt = new Date();
+        return;
     }
-    for (const item of items) {
-        const medicineId = item.medicineId;
-        const quantity = Number(item.quantity);
-        if (!mongoose.isValidObjectId(medicineId) || !Number.isInteger(quantity) || quantity < 1) {
-            if (order.source === 'MEDICINE_REQUEST') {
-                continue; // Procured externally, no catalog deduction needed
-            }
-            throw inventoryError('Could not safely deduct stock for this order.', 409);
-        }
-        const medExists = await Medicine.findById(medicineId).session(session);
-        if (!medExists && order.source === 'MEDICINE_REQUEST') {
-            continue;
-        }
-        const result = await Medicine.collection.updateOne({
-            _id: new mongoose.Types.ObjectId(medicineId),
-            $expr: {
-                $and: [
-                    { $gte: [{ $ifNull: ['$reservedQuantity', 0] }, quantity] },
-                    { $gte: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity] }
-                ]
-            }
-        }, [{
-            $set: {
-                stockQuantity: {
-                    $subtract: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
-                },
-                stock: {
-                    $subtract: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
-                },
-                quantity: {
-                    $subtract: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
-                },
-                reservedQuantity: {
-                    $subtract: [{ $ifNull: ['$reservedQuantity', 0] }, quantity]
-                }
-            }
-        }], { session });
-        if (result.modifiedCount !== 1) {
-            if (order.source === 'MEDICINE_REQUEST') continue;
-            throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
-        }
-    }
-    order.inventoryDeductedAt = new Date();
+    throw inventoryError(
+        'This legacy order has no Inventory Service reservation reference. Manual reconciliation is required; dispatch will not mutate legacy stock.',
+        409
+    );
 };
 
 const deductInMemoryOrderInventory = (order) => {
     if (orderInventoryWasDeducted(order)) return;
-    const items = getOrderInventoryItems(order);
-    if (!items.length) {
-        if (order.source === 'MEDICINE_REQUEST') {
-            order.inventoryDeductedAt = new Date();
-            return;
-        }
-        throw inventoryError('Order has no inventory records to deduct.', 409);
+    if (order.source === 'MEDICINE_REQUEST' && !getOrderInventoryItems(order).length) {
+        order.inventoryDeductedAt = new Date();
+        return;
     }
-    const medicineItems = [];
-    for (const item of items) {
-        const medicineId = item.medicineId;
-        const quantity = Number(item.quantity);
-        const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(medicineId));
-        if (!medicine) {
-            if (order.source === 'MEDICINE_REQUEST') continue;
-            throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
-        }
-        if (!Number.isInteger(quantity) || quantity < 1
-            || getReservedStock(medicine) < quantity || getPhysicalStock(medicine) < quantity) {
-            if (order.source === 'MEDICINE_REQUEST') continue;
-            throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
-        }
-        medicineItems.push({ medicine, quantity });
-    }
-    for (const { medicine, quantity } of medicineItems) {
-        const remainingStock = getPhysicalStock(medicine) - quantity;
-        medicine.stockQuantity = remainingStock;
-        medicine.stock = remainingStock;
-        medicine.quantity = remainingStock;
-        medicine.reservedQuantity = getReservedStock(medicine) - quantity;
-    }
-    order.inventoryDeductedAt = new Date();
+    throw inventoryError(
+        'In-memory legacy orders cannot deduct pharmacy stock. Reconcile and dispatch through Inventory Service.',
+        409
+    );
 };
 
 export const dataStore = {
