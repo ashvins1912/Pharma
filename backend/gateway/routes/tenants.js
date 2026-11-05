@@ -10,7 +10,7 @@ import { PlatformRoles, TenantRoles } from '../../shared/contracts/index.js';
 import { cacheService } from '../../services/cache/CacheService.js';
 
 const router = express.Router();
-const CACHE_KEY_ALL_BRANCHES = 'cache:tenants:branches:all';
+const CACHE_KEY_ALL_BRANCHES = 'cache:tenants:branches:all:v2';
 const CACHE_KEY_TENANTS_ACTIVE = 'cache:tenants:active';
 const TTL_SECONDS = 900; // 15 minutes TTL
 
