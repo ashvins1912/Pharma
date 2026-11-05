@@ -810,7 +810,14 @@ export function AppProvider({ children }) {
         expiredCount: 0, expiringSoonCount: 0, lowStockCount: 0, totalAlerts: 0,
         expired: [], expiringSoon: [], lowStock: []
       });
-      setInventoryAlertsStatus({ loading: false, error: '' });
+      const canSeeAlerts = !authLoading && isFullyAuthenticated && Boolean(user?.id)
+        && isPharmacyOrAdmin && hasPermission('inventory.read');
+      setInventoryAlertsStatus({
+        loading: false,
+        error: canSeeAlerts && (!tenantId || !branchId)
+          ? 'Select an active pharmacy and branch to check inventory safety alerts.'
+          : ''
+      });
       return null;
     }
 
@@ -859,7 +866,14 @@ export function AppProvider({ children }) {
         expiredCount: 0, expiringSoonCount: 0, lowStockCount: 0, totalAlerts: 0,
         expired: [], expiringSoon: [], lowStock: []
       });
-      setInventoryAlertsStatus({ loading: false, error: '' });
+      const canSeeAlerts = !authLoading && isFullyAuthenticated && Boolean(user?.id)
+        && isPharmacyOrAdmin && hasPermission('inventory.read');
+      setInventoryAlertsStatus({
+        loading: false,
+        error: canSeeAlerts && (!tenantId || !branchId)
+          ? 'Select an active pharmacy and branch to check inventory safety alerts.'
+          : ''
+      });
       return undefined;
     }
 
