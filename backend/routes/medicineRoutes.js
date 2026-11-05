@@ -202,19 +202,38 @@ router.delete('/:medicineId', authenticateUser, async (req, res) => {
 router.get('/', async (req, res) => {
     try {
         const { search, hideRx, category, sort, page, limit, paginate } = req.query;
-        const tenantId = String(req.query.tenantId || '').trim();
+        const tenantId = String(req.query.tenantId || req.context?.tenantId || '').trim();
         if (!tenantId) {
             return res.status(400).json({
                 code: 'PHARMACY_SELECTION_REQUIRED',
                 message: 'Select a pharmacy to view its medicine catalogue.'
             });
         }
+
+        // A storefront can select a pharmacy before choosing a branch. Resolve
+        // that tenant's default active branch (or first active branch) rather
+        // than sending a tenant-only query to Inventory Service, which requires
+        // an explicit tenant+branch stock scope.
+        let branchId = String(req.query.branchId || req.context?.branchId || '').trim();
+        if (!branchId) {
+            const activeBranches = await tenantService.getBranches(tenantId, { status: 'ACTIVE' });
+            const selectedBranch = activeBranches.find(branch => branch.isDefault)
+                || activeBranches[0];
+            branchId = String(selectedBranch?.id || selectedBranch?._id || '').trim();
+        }
+        if (!branchId) {
+            return res.status(409).json({
+                code: 'ACTIVE_BRANCH_REQUIRED',
+                message: 'This pharmacy has no active branch available for its medicine catalogue.'
+            });
+        }
+
         // Inventory Service is authoritative for product metadata, batch stock,
         // reservations, expiry and price. Do not cache this response: an import
         // publish must be reflected on the next catalogue read.
         const result = await inventoryClient.searchProducts({
             tenantId,
-            branchId: req.query.branchId || req.context?.branchId || null,
+            branchId,
             query: search || '',
             category: category === 'All' ? '' : category || '',
             hideRx: hideRx === 'true' || hideRx === true,
