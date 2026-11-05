@@ -733,3 +733,94 @@ form select, form textarea) {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
+
+
+/* Customer-facing request and address workspaces. */
+.pharma-customer-requests,
+.pharma-address-manager {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pharma-customer-requests :where(.flex.items-center.justify-between),
+.pharma-address-manager :where(.flex.items-center.justify-between) {
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.pharma-customer-requests :where(.grid),
+.pharma-address-manager :where(.grid) {
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+
+.pharma-customer-requests :where(button, select),
+.pharma-address-manager :where(button, select, input, textarea) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.pharma-medicine-request-modal {
+  min-width: 0;
+  max-width: min(100%, 36rem);
+  max-height: calc(100dvh - 1rem);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pharma-medicine-request-modal :where(input[type="file"]) {
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.8125rem;
+}
+
+.pharma-medicine-request-modal :where(form > div, .grid) {
+  min-width: 0;
+}
+
+@media (max-width: 639px) {
+  .pharma-customer-requests,
+  .pharma-address-manager {
+    padding: 1rem;
+    border-radius: 1.25rem;
+  }
+
+  .pharma-customer-requests :where(header, .flex.items-center.justify-between),
+  .pharma-address-manager :where(header, .flex.items-center.justify-between) {
+    align-items: stretch;
+  }
+
+  .pharma-customer-requests :where(button),
+  .pharma-address-manager :where(button) {
+    min-height: 44px;
+  }
+
+  .pharma-medicine-request-modal {
+    width: 100%;
+    max-width: 100%;
+    padding: 1rem;
+    border-radius: 1.25rem;
+  }
+
+  .pharma-medicine-request-modal :where(.flex.justify-end) {
+    flex-wrap: wrap;
+  }
+
+  .pharma-medicine-request-modal :where(.flex.justify-end > button) {
+    flex: 1 1 8rem;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 380px) {
+  .pharma-customer-requests,
+  .pharma-address-manager {
+    padding: 0.75rem;
+  }
+
+  .pharma-medicine-request-modal {
+    padding: 0.75rem;
+    border-radius: 1rem;
+  }
+}
