@@ -12,6 +12,7 @@ const notificationDeliveryEventSchema = new mongoose.Schema({
   riderName: { type: String, default: null },
   riderMobile: { type: String, default: null },
   payload: { type: mongoose.Schema.Types.Mixed, default: {} },
+  timestamp: { type: Date, default: Date.now },
   occurredAt: { type: Date, default: Date.now, index: true }
 }, { timestamps: true });
 
