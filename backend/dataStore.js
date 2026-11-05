@@ -908,32 +908,14 @@ export const dataStore = {
     },
 
     async seedMedicines() {
-        inMemoryMedicines = generateEager1000Catalog();
-        if (getIsConnected() && await Medicine.countDocuments() === 0) {
-            const mongoCatalog = inMemoryMedicines.map(({ _id, ...medicine }) => ({
-                ...medicine,
-                code: medicine.sku,
-                stockQuantity: getPhysicalStock(medicine),
-                reservedQuantity: 0,
-                isPrescriptionRequired: Boolean(medicine.requiresPrescription)
-            }));
-            await Medicine.insertMany(mongoCatalog, { ordered: false });
-        }
-        this.logAudit('Admin', 'SEED_MEDICINES', 'INVENTORY', 'ALL', { count: inMemoryMedicines.length });
-        return inMemoryMedicines;
+        throw inventoryError(
+            'Direct catalogue seeding is disabled. Seed or import products through the tenant- and branch-scoped Inventory Service workflow.',
+            410
+        );
     },
 
     async ensureCatalogSeeded() {
-        if (!getIsConnected() || await Medicine.countDocuments() > 0) return;
-        const mongoCatalog = defaultMedicines.map(({ _id, ...medicine }) => ({
-            ...medicine,
-            code: medicine.sku,
-            stockQuantity: getPhysicalStock(medicine),
-            reservedQuantity: 0,
-            isPrescriptionRequired: Boolean(medicine.requiresPrescription)
-        }));
-        await Medicine.insertMany(mongoCatalog, { ordered: false });
-        console.log(`Initialized MongoDB medicine catalog with ${mongoCatalog.length} medicines.`);
+        return false;
     },
 
     async importExcelInventory() {
