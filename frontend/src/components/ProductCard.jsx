@@ -11,7 +11,7 @@ export default function ProductCard({ med }) {
 
   const stock = med.availableQuantity ?? med.stock ?? med.quantity ?? 0;
   const isOut = stock <= 0 || med.isExpired;
-  const isLow = stock > 0 && stock < 5;
+  const isLow = stock > 0 && stock <= 5;
 
   // Find item in cart
   const cartItem = cart.find(item => item._id === med._id);
@@ -86,7 +86,7 @@ export default function ProductCard({ med }) {
 
           {isLow && !med.isExpired && (
             <span className="absolute bottom-1.5 right-1.5 bg-amber-500 text-white text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded shadow-xs">
-              {t('onlyLeftBadge') ? t('onlyLeftBadge').replace('{count}', stock) : `Only ${stock} Left`}
+              Few left
             </span>
           )}
         </div>
