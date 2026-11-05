@@ -1044,7 +1044,8 @@ export function buildFailureWorkbook(failures) {
 }
 
 
-export async function previewImportFile({ filePath, tenantId, branchId }) {
+export async function previewImportFile({ filePath, tenantId, branchId, stockMode = 'SET' }) {
+  const stockOperation = stockMode === 'ADD' ? 'ADD' : 'SET';
   if (!tenantId || !branchId) {
     const error = new Error('Verified tenant and branch context are required for preview.');
     error.statusCode = 403;
@@ -1064,6 +1065,16 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     throw error;
   }
   const normalized = rows.map((row, index) => ({ rowNumber: Number(row['Source Row Number']) || index + 2, originalRecord: row, parsed: normalizeImportRow(row) }));
+  // Use the same tenant-scoped deterministic SKU as staged publishing so the preview snapshot
+  // can detect existing stock on later uploads when the source workbook omits a SKU.
+  for (const item of normalized) {
+    const value = item.parsed.value;
+    if (!value || value.sku) continue;
+    const identity = [tenantId, value.name, value.genericName, value.strength, value.form, value.manufacturer]
+      .map(part => String(part || '').trim().toLowerCase()).join('|');
+    const prefix = String(value.name || '').normalize('NFKD').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase().padEnd(2, 'X');
+    value.sku = prefix + createHash('sha256').update(identity).digest('hex').slice(0, 10).toUpperCase();
+  }
   const seen = new Set();
   const valid = [];
   const errors = [];
@@ -1099,24 +1110,29 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     const current = byBatch.get(JSON.stringify([item.value.sku, item.value.batchNumber || '']));
     const existingStock = Number(current?.stockQuantity || 0);
     const reservedStock = Number(current?.reservedQuantity || 0);
+    const resultingStock = stockOperation === 'ADD' ? existingStock + item.value.stockQuantity : item.value.stockQuantity;
     return {
       ...item.originalRecord,
+      SKU: item.value.sku,
       'Source Row Number': item.rowNumber,
       'Existing Stock': existingStock,
       'Reserved Stock': reservedStock,
-      'New Stock': item.value.stockQuantity,
-      'Available After Import': Math.max(0, item.value.stockQuantity - reservedStock)
+      'Incoming Quantity': item.value.stockQuantity,
+      'Resulting Stock': resultingStock,
+      'Available After Import': Math.max(0, resultingStock - reservedStock)
     };
   });
   for (const item of valid) {
     const current = byBatch.get(JSON.stringify([item.value.sku, item.value.batchNumber || '']));
-    if (Number(current?.reservedQuantity || 0) > item.value.stockQuantity) {
+    const resultingStock = stockOperation === 'ADD' ? Number(current?.stockQuantity || 0) + item.value.stockQuantity : item.value.stockQuantity;
+    if (Number(current?.reservedQuantity || 0) > resultingStock) {
       errors.push({ rowNumber: item.rowNumber, sku: item.value.sku, name: item.value.name, errors: ['New stock is below the quantity already reserved for this batch.'] });
     }
   }
   const errorRows = new Set(errors.map(error => error.rowNumber));
   const previewFingerprint = createHash('sha256').update(JSON.stringify({
     tenantId, branchId,
+    stockOperation,
     rows: normalized.map(item => ({ rowNumber: item.rowNumber, parsed: item.parsed.error ? { error: item.parsed.error, field: item.parsed.field } : item.parsed.value })),
     existingInventory: inventorySnapshot,
     existingProducts: productSnapshot
@@ -1137,7 +1153,7 @@ export async function previewImportFile({ filePath, tenantId, branchId }) {
     errors: errors.slice(0, 100),
     previewRows,
     catalogSkus: skus,
-    stockMode: 'REPLACE'
+    stockMode: stockOperation
   };
 }
 
