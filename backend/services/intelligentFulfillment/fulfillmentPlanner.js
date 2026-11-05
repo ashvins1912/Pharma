@@ -27,9 +27,12 @@ const scoreAlternative = (requested, candidate) => {
   const price = Number(candidate.price || 0);
   if (!Number.isFinite(price) || price < 0) return null;
   const listPrice = Math.max(price, Number(candidate.basePrice ?? price));
-  const discountPercentage = listPrice > price
+  const configuredDiscount = Math.min(100, Math.max(0, Number(candidate.discountPercentage || 0)));
+  const derivedDiscount = listPrice > price
     ? Math.round((1 - price / listPrice) * 10000) / 100
     : 0;
+  const discountPercentage = configuredDiscount > 0 ? configuredDiscount : derivedDiscount;
+  const discountedUnitPrice = roundMoney(price * (1 - discountPercentage / 100));
   return {
     productId: String(candidate._id),
     name: candidate.name,
@@ -41,7 +44,7 @@ const scoreAlternative = (requested, candidate) => {
     availableQuantity: availableStock(candidate),
     listPrice,
     discountPercentage,
-    discountedUnitPrice: roundMoney(price),
+    discountedUnitPrice,
     requiresPharmacistApproval: Boolean(requested.requiresPrescription || requested.isPrescriptionRequired || candidate.requiresPrescription || candidate.isPrescriptionRequired),
     substitutionRequiresCustomerConsent: true
   };

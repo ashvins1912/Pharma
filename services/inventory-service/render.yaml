@@ -31,7 +31,7 @@ services:
       - key: INVENTORY_MAX_RETRIES
         value: 3
       - key: INVENTORY_IMPORTS_ENABLED
-        value: "false"
+        value: "true"
       - key: INVENTORY_IMPORT_MAX_FILE_BYTES
         value: 104857600
       - key: INVENTORY_IMPORT_STORAGE

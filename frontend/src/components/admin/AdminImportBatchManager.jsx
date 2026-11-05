@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import apiClient from '../../api/apiClient';
 
-const editableFields = ['sku', 'name', 'price', 'stockQuantity', 'batchNumber', 'expiryDate', 'category', 'manufacturer', 'baseCostPrice', 'marginTier', 'genericName', 'strength', 'form', 'description', 'imageUrl', 'requiresPrescription'];
+const editableFields = ['sku', 'name', 'price', 'stockQuantity', 'batchNumber', 'expiryDate', 'category', 'manufacturer', 'baseCostPrice', 'marginTier', 'discountPercentage', 'genericName', 'strength', 'form', 'description', 'imageUrl', 'requiresPrescription'];
 
 export default function AdminImportBatchManager({ batchId, headers, onInventoryChanged, publishingEnabled = false }) {
   const [rows, setRows] = useState([]);

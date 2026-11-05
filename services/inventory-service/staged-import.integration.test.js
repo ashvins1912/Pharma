@@ -125,7 +125,7 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(await models.Inventory.countDocuments({ tenantId, branchId }), 1);
 
     config.importsEnabled = false;
-    const unpublishOne = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/unpublish`,
+    const unpublishOne = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/unpublish`, {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ rowIds: [first.rowId] })
     });
@@ -140,7 +140,7 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     assert.equal(await models.Inventory.countDocuments({ tenantId, branchId }), 0);
 
     config.importsEnabled = true;
-    const publishBoth = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/publish`,
+    const publishBoth = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/publish` , {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ rowIds: rowsPayload.items.map(row => row.rowId) })
     });
@@ -261,7 +261,10 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     const isolated = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}`, { headers: { Authorization: `Bearer ${crossTenantToken}` } });
     assert.equal(isolated.status, 404);
   } finally {
-    await new Promise(resolve => server.close(resolve));
+    const closingServer = new Promise(resolve => server.close(resolve));
+    server.closeAllConnections?.();
+    server.closeIdleConnections?.();
+    await closingServer;
     await mongoose.disconnect();
     await fs.rm(config.importStorage, { recursive: true, force: true });
   }

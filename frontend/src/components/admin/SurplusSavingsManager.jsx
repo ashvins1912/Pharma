@@ -13,7 +13,7 @@ const toLocalDateTime = value => {
 
 export default function SurplusSavingsManager({ canManage = false }) {
   const { medicines } = useApp();
-  const { tenantId } = useTenant();
+  const { tenantId, branchId } = useTenant();
   const { addToast } = useToast();
   const { t } = useLanguage();
   const [campaigns, setCampaigns] = useState([]);
@@ -36,7 +36,7 @@ export default function SurplusSavingsManager({ canManage = false }) {
     setLoading(true);
     setError('');
     try {
-      const { data } = await apiClient.get('/api/surplus-savings/admin', { params: { tenantId } });
+      const { data } = await apiClient.get('/api/surplus-savings/admin', { params: { tenantId, branchId } });
       setCampaigns(Array.isArray(data?.campaigns) ? data.campaigns : []);
     } catch (err) {
       setError(err?.response?.data?.message || err.message || t('couldNotLoadCampaigns'));
@@ -66,6 +66,7 @@ export default function SurplusSavingsManager({ canManage = false }) {
       await apiClient.post('/api/surplus-savings/admin', {
         ...form,
         tenantId,
+        branchId,
         discountValue: Number(form.discountValue),
         maxDiscountAmount: form.maxDiscountAmount === '' ? null : Number(form.maxDiscountAmount),
         minOrderAmount: Number(form.minOrderAmount || 0),

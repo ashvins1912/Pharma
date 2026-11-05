@@ -1,4 +1,5 @@
-import Medicine from '../models/Medicine.js';
+import mongoose from 'mongoose';
+import { inventoryClient } from './inventory-client/InventoryClient.js';
 import Order from '../models/Order.js';
 import CustomerPointsLedger from '../models/CustomerPointsLedger.js';
 import ProfitMarginRewardEngine from '../strategies/ProfitMarginRewardEngine.js';
@@ -10,27 +11,30 @@ import { calculateSurplusUnitDiscount, roundCurrency } from './surplusSavingsPri
 export class DynamicOrderService {
     constructor({
         orderModel = Order,
-        medicineModel = Medicine,
+        inventory = inventoryClient,
         pointsLedgerModel = CustomerPointsLedger,
         rewardEngine = new ProfitMarginRewardEngine(),
         couponValidator = async () => ({ valid: true, discountPercentage: 0 })
     } = {}) {
         this.orderModel = orderModel;
-        this.medicineModel = medicineModel;
+        this.inventoryClient = inventory;
         this.pointsLedgerModel = pointsLedgerModel;
         this.rewardEngine = rewardEngine;
         this.couponValidator = couponValidator;
     }
 
-    async generateDynamicRestockBasket(customerId) {
+    async generateDynamicRestockBasket(customerId, { tenantId, branchId } = {}) {
         if (typeof customerId !== 'string' || !customerId.trim()) {
             throw new TypeError('Authenticated customer ID is required.');
         }
-        return this.orderModel.aggregate([
+        if (!tenantId || !branchId) throw new Error('Select a pharmacy branch to view restock suggestions.');
+        const items = await this.orderModel.aggregate([
             {
                 $match: {
                     $or: [{ customerId }, { userId: customerId }],
-                    orderStatus: 'Delivered'
+                    orderStatus: 'Delivered',
+                    tenantId: String(tenantId),
+                    branchId: String(branchId)
                 }
             },
             { $unwind: '$medicineItems' },
@@ -48,36 +52,45 @@ export class DynamicOrderService {
             { $sort: { orderCount: -1, lastOrderedAt: -1, _id: 1 } },
             { $limit: 8 },
             {
-                $lookup: {
-                    from: this.medicineModel.collection.name,
-                    localField: '_id',
-                    foreignField: '_id',
-                    as: 'medicine'
-                }
-            },
-            { $unwind: { path: '$medicine', preserveNullAndEmptyArrays: true } },
-            {
                 $project: {
                     _id: 1,
-                    skuId: { $ifNull: ['$medicine.sku', '$skuId'] },
-                    name: { $ifNull: ['$medicine.name', '$name'] },
-                    imageUrl: '$medicine.imageUrl',
-                    price: '$medicine.price',
-                    stock: { $ifNull: ['$medicine.stockQuantity', { $ifNull: ['$medicine.stock', '$medicine.quantity'] }] },
-                    isPrescriptionRequired: '$medicine.isPrescriptionRequired',
+                    skuId: 1,
+                    name: 1,
                     orderCount: 1,
                     totalQuantity: 1,
                     lastOrderedAt: 1
                 }
             }
         ]).exec();
+        const productIds = items.map(item => String(item._id)).filter(id => mongoose.isValidObjectId(id));
+        if (!productIds.length) return [];
+        const catalog = await this.inventoryClient.lookup({ productIds, tenantId, branchId, userId: customerId });
+        const products = new Map((catalog.items || []).map(product => [String(product.productId), product]));
+        return items.map(item => {
+            const product = products.get(String(item._id));
+            if (!product || Number(product.availableQuantity || 0) <= 0) return null;
+            return {
+                _id: String(product.productId),
+                skuId: product.sku || item.skuId,
+                name: product.name || item.name,
+                imageUrl: product.imageUrl || '',
+                price: product.price,
+                stock: product.availableQuantity,
+                availableQuantity: product.availableQuantity,
+                isPrescriptionRequired: product.requiresPrescription,
+                orderCount: item.orderCount,
+                totalQuantity: item.totalQuantity,
+                lastOrderedAt: item.lastOrderedAt
+            };
+        }).filter(Boolean);
+
     }
 
-    async evaluateCheckout(cartItems, customerId, requestedPoints = 0, { session, couponCode, tenantId } = {}) {
+    async evaluateCheckout(cartItems, customerId, requestedPoints = 0, { session, couponCode, tenantId, branchId } = {}) {
         if (typeof customerId !== 'string' || !customerId.trim()) {
             throw new TypeError('Authenticated customer ID is required.');
         }
-        if (!tenantId) throw new TypeError('Selected pharmacy tenant is required for checkout pricing.');
+        if (!tenantId || !branchId) throw new TypeError('Selected pharmacy tenant and branch are required for checkout pricing.');
         const activeTenant = await Tenant.findOne({ _id: String(tenantId), status: 'ACTIVE' }).select('_id settings.allowOfferWithCoupon settings.allowOfferWithRewards').lean();
         if (!activeTenant) throw new Error('The selected pharmacy is not active.');
         if (!Array.isArray(cartItems) || cartItems.length === 0) {
@@ -94,31 +107,33 @@ export class DynamicOrderService {
         }
 
         const medicineIds = [...normalized.keys()];
-        const query = this.medicineModel.find({
-            _id: { $in: medicineIds },
-            isActive: { $ne: false },
-            tenantId: String(tenantId)
-        }).select('name sku price baseCostPrice marginTier discountPercentage');
-        if (session) query.session(session);
-        const medicines = await query.lean().exec();
+        const catalog = await this.inventoryClient.lookup({
+            productIds: medicineIds, tenantId: String(tenantId), branchId: String(branchId), userId: customerId
+        });
+        const medicines = catalog.items || [];
         if (medicines.length !== medicineIds.length) {
-            throw new Error('One or more medicines are no longer available.');
+            throw new Error('One or more medicines are no longer available in the selected pharmacy branch.');
         }
 
         const pricedItems = medicineIds.map(id => {
-            const medicine = medicines.find(item => String(item._id) === id);
+            const medicine = medicines.find(item => String(item.productId) === id);
             return {
-                medicineId: medicine._id,
+                medicineId: medicine.productId,
                 skuId: medicine.sku,
                 name: medicine.name,
                 quantity: normalized.get(id),
-                currentPrice: Number(medicine.price),
-                baseCostPrice: Number(medicine.baseCostPrice ?? medicine.price),
+                currentPrice: Math.round(Number(medicine.price) * (1 - Math.min(100, Math.max(0, Number(medicine.discountPercentage || 0))) / 100) * 100) / 100,
+                basePrice: Number(medicine.price),
+                discountPercentage: Number(medicine.discountPercentage || 0),
+                baseCostPrice: Number(medicine.baseCostPrice > 0 ? medicine.baseCostPrice : medicine.price),
                 marginTier: ['LOW', 'MID', 'HIGH'].includes(medicine.marginTier) ? medicine.marginTier : 'LOW',
-                isDiscounted: Number(medicine.discountPercentage || 0) > 0
+                isDiscounted: Number(medicine.discountPercentage || 0) > 0,
+                availableQuantity: Number(medicine.availableQuantity || 0)
             };
         });
 
+        const insufficient = pricedItems.find(item => item.availableQuantity < item.quantity);
+        if (insufficient) throw new Error(`Insufficient available stock for ${insufficient.name}.`);
         const subtotal = pricedItems.reduce((total, item) => total + item.currentPrice * item.quantity, 0);
         let surplusSavingsDiscount = 0;
         const surplusSavings = [];

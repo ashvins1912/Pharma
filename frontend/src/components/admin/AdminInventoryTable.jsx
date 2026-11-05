@@ -2,11 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import apiClient from '../../api/apiClient';
+import { invalidatePublicCatalogCache } from '../../api/publicCatalogCache';
 import Pagination from '../common/Pagination';
 import { useLanguage } from '../../context/LanguageContext';
+import { useTenant } from '../../context/TenantContext';
 export default function AdminInventoryTable({ onOpenBulkImport, canManage = false, canImport = false }) {
   const { t } = useLanguage();
   const { fetchMedicines, setAdminNewStockModalOpen } = useApp();
+  const { tenantId, branchId } = useTenant();
+  const refreshStorefrontInventory = () => {
+    invalidatePublicCatalogCache();
+    fetchMedicines();
+  };
   const { addToast } = useToast();
   
   const [adminMeds, setAdminMeds] = useState([]);
@@ -25,7 +32,9 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
         params: {
           search,
           page,
-          limit: 20
+          limit: 20,
+          tenantId,
+          branchId
         }
       });
       if (res.data && res.data.medicines) {
@@ -47,7 +56,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
 
   useEffect(() => {
     loadAdminInventory(1, searchTerm);
-  }, [searchTerm]);
+  }, [searchTerm, tenantId, branchId]);
 
   const openMedicineForm = (medicine = null) => {
     if (!canManage) return;
@@ -57,8 +66,10 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       batchNumber: medicine.batchNumber || '',
       hsnSac: medicine.hsnSac || '',
       imageUrl: medicine.imageUrl || '',
-      stockQuantity: medicine.stockQuantity ?? medicine.stock ?? medicine.quantity ?? 0,
-      expiryDate: medicine.expiryDate ? new Date(medicine.expiryDate).toISOString().slice(0, 10) : ''
+      stockQuantity: medicine.batchAvailability?.[0]?.stockQuantity ?? medicine.stockQuantity ?? medicine.stock ?? medicine.quantity ?? 0,
+      price: medicine.batchAvailability?.[0]?.price ?? medicine.price ?? '',
+      batchNumber: medicine.batchAvailability?.[0]?.batchNumber ?? medicine.batchNumber ?? '',
+      expiryDate: (medicine.batchAvailability?.[0]?.expiryDate || medicine.expiryDate) ? new Date(medicine.batchAvailability?.[0]?.expiryDate || medicine.expiryDate).toISOString().slice(0, 10) : ''
     } : {
       name: '',
       brand: '',
@@ -82,14 +93,14 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
     try {
       setSavingMedicine(true);
       if (medicineDraft._id) {
-        await apiClient.put(`/api/medicines/${encodeURIComponent(medicineDraft._id)}`, medicineDraft);
+        await apiClient.put(`/api/medicines/${encodeURIComponent(medicineDraft._id)}`, { ...medicineDraft, tenantId, branchId });
       } else {
-        await apiClient.post('/api/medicines', medicineDraft);
+        await apiClient.post('/api/medicines', { ...medicineDraft, tenantId, branchId });
       }
       addToast(medicineDraft._id ? t('medicineUpdated') : t('medicineCreated'), 'success');
       setMedicineDraft(null);
       await loadAdminInventory(adminPage, searchTerm);
-      fetchMedicines();
+      refreshStorefrontInventory();
     } catch (err) {
       addToast(err.message || t('saveMedicineFailed'), 'error');
     } finally {
@@ -101,7 +112,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
     if (!canManage) return;
     if (!window.confirm(`Archive ${medicine.name} from the customer store?`)) return;
     try {
-      await apiClient.delete(`/api/medicines/${encodeURIComponent(medicine._id)}`);
+      await apiClient.delete(`/api/medicines/${encodeURIComponent(medicine._id)}`, { params: { tenantId, branchId } });
       addToast(t('medicineArchived'), 'success');
       await loadAdminInventory(adminPage, searchTerm);
       fetchMedicines();

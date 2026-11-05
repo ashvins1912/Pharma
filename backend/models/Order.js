@@ -114,6 +114,8 @@ const orderSchema = new mongoose.Schema({
         attempts: { type: Number, default: 0, select: false },
         verifiedAt: { type: Date, default: null, select: false }
     },
+    inventoryReservationId: { type: String, default: null, index: true },
+    inventoryReservationStatus: { type: String, enum: ['RESERVED', 'RELEASED', 'DEDUCTED'], default: null },
     inventoryDeductedAt: { type: Date, default: null },
     deliveryMinutes: { type: Number, default: null },
     systemRating: { type: Number, min: 1, max: 5, default: null },

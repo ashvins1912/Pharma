@@ -12,9 +12,12 @@ const router = express.Router();
 const asyncHandler = handler => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 
 router.get('/products', asyncHandler(async (req, res) => {
+    const tenantId = req.query.tenantId || req.context?.tenantId || null;
+    const branchId = req.query.branchId || req.context?.branchId || null;
+    if (!tenantId || !branchId) return res.status(400).json({ success: false, code: 'PHARMACY_BRANCH_REQUIRED', message: 'Select a pharmacy branch to view its catalogue.' });
     const result = await inventoryClient.searchProducts({
-        tenantId: req.query.tenantId || req.context?.tenantId || null,
-        branchId: req.query.branchId || req.context?.branchId || null,
+        tenantId,
+        branchId,
         query: req.query.q || '',
         category: req.query.category || '',
         page: req.query.page || 1,
@@ -25,8 +28,9 @@ router.get('/products', asyncHandler(async (req, res) => {
 }));
 
 router.get('/unified', asyncHandler(async (req, res) => {
-    const tenantId = req.query.tenantId || req.context?.tenantId || 'tenant-ashvin-main';
-    const branchId = req.query.branchId || req.context?.branchId || 'branch-indore-central';
+    const tenantId = req.query.tenantId || req.context?.tenantId || null;
+    const branchId = req.query.branchId || req.context?.branchId || null;
+    if (!tenantId || !branchId) return res.status(400).json({ success: false, code: 'PHARMACY_BRANCH_REQUIRED', message: 'Select a pharmacy branch to view its catalogue.' });
     const result = await inventoryClient.searchProducts({
         tenantId,
         branchId,
@@ -50,6 +54,7 @@ router.get('/unified', asyncHandler(async (req, res) => {
 router.get('/products/:sku', asyncHandler(async (req, res) => {
     const tenantId = req.query.tenantId || req.context?.tenantId || null;
     const branchId = req.query.branchId || req.context?.branchId || null;
+    if (!tenantId || !branchId) return res.status(400).json({ success: false, code: 'PHARMACY_BRANCH_REQUIRED', message: 'Select a pharmacy branch to view this product.' });
     const result = await inventoryClient.lookup({
         skus: [req.params.sku],
         tenantId,
@@ -62,9 +67,10 @@ router.get('/products/:sku', asyncHandler(async (req, res) => {
 }));
 
 router.get('/listings', asyncHandler(async (req, res) => {
-    const branchId = req.query.branchId || req.context?.branchId || 'branch-indore-central';
+    const branchId = req.query.branchId || req.context?.branchId || null;
+    if (!branchId) return res.status(400).json({ success: false, code: 'PHARMACY_BRANCH_REQUIRED', message: 'Select a pharmacy branch to view listings.' });
     const branch = await tenantService.getBranchById(branchId);
-    if (!branch) return res.status(404).json({ success: false, message: 'Branch not found' });
+    if (!branch || branch.status !== 'ACTIVE') return res.status(404).json({ success: false, message: 'Branch not found' });
 
     const result = await inventoryClient.searchProducts({
         tenantId: branch.tenantId,

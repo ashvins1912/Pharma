@@ -46,6 +46,8 @@ function normalizeRow(raw, usedSkus, tenantIdentityForSku = '') {
   const baseCostRaw = pick(raw, 'Base Cost Price', 'baseCostPrice', 'Cost Price', 'Base Price');
   const baseCostPrice = baseCostRaw === undefined || baseCostRaw === '' ? null : Number(baseCostRaw);
   const marginTier = String(pick(raw, 'Margin Tier', 'marginTier') || 'LOW').trim().toUpperCase();
+  const discountRaw = pick(raw, 'Discount Percentage', 'discountPercentage', 'Discount %', 'discount');
+  const discountPercentage = discountRaw === undefined || discountRaw === '' ? 0 : Number(discountRaw);
   const errors = [];
   if (!name) errors.push('Medicine name is required.');
   if (priceRaw === undefined || priceRaw === '' || !Number.isFinite(price) || price < 0) errors.push('Price must be a valid non-negative number.');
@@ -76,7 +78,7 @@ function normalizeRow(raw, usedSkus, tenantIdentityForSku = '') {
     description: String(pick(raw, 'Description', 'description') || '').trim(),
     imageUrl: String(pick(raw, 'Image URL', 'imageUrl') || '').trim(),
     requiresPrescription: ['true', 'yes', '1'].includes(String(pick(raw, 'Requires Prescription', 'requiresPrescription') || '').toLowerCase()),
-    price, stockQuantity, baseCostPrice, marginTier,
+    price, stockQuantity, baseCostPrice, marginTier, discountPercentage,
     batchNumber: String(pick(raw, 'Batch Number', 'batchNumber', 'Batch No', 'Batch') || '').trim(),
     expiryDate
   };
@@ -110,7 +112,7 @@ const samePreview = (current, expected, fields) => {
   return fields.every(field => comparable(current[field]) === comparable(expected[field]));
 };
 const liveInventoryFields = ['tenantId','branchId','productId','sku','stockQuantity','reservedQuantity','price','batchNumber','expiryDate','warehouse','sourceImportBatchId','sourceImportRowId'];
-const productFields = ['tenantId','sku','name','genericName','strength','form','manufacturer','category','description','imageUrl','requiresPrescription','baseCostPrice','marginTier','version','lastImportBatchId','lastImportRowId','active'];
+const productFields = ['tenantId','sku','name','genericName','strength','form','manufacturer','category','description','imageUrl','requiresPrescription','baseCostPrice','marginTier','discountPercentage','version','lastImportBatchId','lastImportRowId','active'];
 function snapshot(doc, fields) {
   if (!doc) return null;
   const out = {};
@@ -155,7 +157,7 @@ async function publishRows(batch, rows, req) {
         Object.assign(product, {
           name: v.name, genericName: v.genericName, strength: v.strength, form: v.form,
           manufacturer: v.manufacturer, category: v.category, description: v.description,
-          imageUrl: v.imageUrl, requiresPrescription: v.requiresPrescription, baseCostPrice: v.baseCostPrice ?? undefined, marginTier: v.marginTier || 'LOW',
+          imageUrl: v.imageUrl, requiresPrescription: v.requiresPrescription, baseCostPrice: v.baseCostPrice ?? undefined, marginTier: v.marginTier || 'LOW', discountPercentage: v.discountPercentage || 0,
           lastImportBatchId: batch.batchId, lastImportRowId: fresh.rowId, active: true,
           version: Number(product.version || 0) + 1
         });
@@ -465,7 +467,7 @@ router.patch('/imports/batches/:batchId/rows/:rowId', requireServiceScope('inven
   if (req.body?.expectedVersion !== undefined && Number(req.body.expectedVersion) !== row.version) return res.status(409).json({ message: 'This row was edited by another user. Reload it before saving your changes.' });
   if (row.status === 'PUBLISHED') return res.status(409).json({ message: 'Unpublish this row before editing it.' });
   if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) return res.status(400).json({ message: 'Provide row fields to update.' });
-  const allowed = ['sku','name','genericName','strength','form','manufacturer','category','description','price','stockQuantity','batchNumber','expiryDate','requiresPrescription','imageUrl','baseCostPrice','marginTier'];
+  const allowed = ['sku','name','genericName','strength','form','manufacturer','category','description','price','stockQuantity','batchNumber','expiryDate','requiresPrescription','imageUrl','baseCostPrice','marginTier','discountPercentage'];
   const patch = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowed.includes(key)));
   const previousNormalized = { ...(row.normalized || {}) };
   const next = { ...row.normalized, ...patch };
@@ -476,6 +478,7 @@ router.patch('/imports/batches/:batchId/rows/:rowId', requireServiceScope('inven
   if (next.baseCostPrice === '') next.baseCostPrice = null;
   else if (next.baseCostPrice !== null && next.baseCostPrice !== undefined) next.baseCostPrice = Number(next.baseCostPrice);
   next.marginTier = String(next.marginTier || 'LOW').toUpperCase();
+  next.discountPercentage = next.discountPercentage === '' ? 0 : Number(next.discountPercentage || 0);
   next.batchNumber = String(next.batchNumber || '').trim();
   next.plannedStockQuantity = batch.stockOperation === 'ADD' ? Number(next.currentStockQuantity || 0) + next.stockQuantity : next.stockQuantity;
   const errors = [];
@@ -485,6 +488,7 @@ router.patch('/imports/batches/:batchId/rows/:rowId', requireServiceScope('inven
   if (!Number.isSafeInteger(next.stockQuantity) || next.stockQuantity < 0) errors.push('Stock must be a non-negative integer.');
   if (next.baseCostPrice !== null && next.baseCostPrice !== undefined && (!Number.isFinite(next.baseCostPrice) || next.baseCostPrice < 0)) errors.push('Base cost price must be a non-negative number.');
   if (!['LOW','MID','HIGH'].includes(next.marginTier)) errors.push('Margin tier must be LOW, MID or HIGH.');
+  if (!Number.isFinite(next.discountPercentage) || next.discountPercentage < 0 || next.discountPercentage > 100) errors.push('Discount percentage must be between 0 and 100.');
   if (next.expiryDate && !Number.isFinite(new Date(next.expiryDate).getTime())) errors.push('Expiry date is invalid.');
   if (next.expiryDate && new Date(next.expiryDate) < new Date(new Date().toISOString().slice(0,10))) errors.push('Expired medicine batches cannot be published.');
   const duplicate = await StagedImportRow.findOne({ batchId: row.batchId, tenantId, branchId, rowId: { $ne: row.rowId }, 'normalized.sku': next.sku, 'normalized.batchNumber': next.batchNumber });

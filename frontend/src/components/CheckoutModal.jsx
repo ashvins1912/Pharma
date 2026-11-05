@@ -11,7 +11,7 @@ import { useLanguage } from '../context/LanguageContext';
 export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const { t } = useLanguage();
   const { user } = useAuth();
-  const { tenantId, activeTenant } = useTenant();
+  const { tenantId, branchId, activeTenant } = useTenant();
   const { cart, subtotal, discountAmount, deliveryFee, finalTotal, appliedCoupon, selectedAddressId, addresses, clearCart, addToCart } = useApp();
   const { addToast } = useToast();
   const { runAction, isActionLoading } = useActionLoading();
@@ -80,6 +80,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     setQuoteError('');
     apiClient.post('/api/orders/checkout/quote', {
       tenantId: tenantId || '',
+      branchId: String(branchId || activeTenant?.branchId || ''),
       items,
       pointsToRedeem: usePoints ? Number(pointsRequested) || 0 : 0,
       couponCode: appliedCoupon?.code || ''
@@ -126,6 +127,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       try {
         const response = await apiClient.post('/api/orders/checkout/quote', {
           tenantId: tenantId || '',
+          branchId: activeTenant?.branchId || '',
           items: JSON.parse(cartForQuote),
           pointsToRedeem: usePoints ? Number(pointsRequested) || 0 : 0,
           couponCode: appliedCoupon?.code || ''
@@ -211,7 +213,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       setFulfillmentLoading(true);
       const availability = await apiClient.post('/api/orders/fulfillment/preview', {
         tenantId: String(tenantId),
-        branchId: activeTenant?.branchId || null,
+        branchId: String(branchId || activeTenant?.branchId || ''),
         items: checkoutItems
       });
       fulfillmentPlanForCheckout = availability.data;

@@ -6,12 +6,12 @@ const callerScopes = {
   'backend-platform': new Set(['orders.read', 'orders.create', 'orders.manage'])
 };
 
-export function createInventoryToken(scopes, userId) {
+export function createInventoryToken(scopes, userId, tenantId = null, branchId = null) {
   const allowedScopes = new Set(['inventory.read', 'inventory.reserve', 'inventory.release', 'inventory.deduct']);
   if (!Array.isArray(scopes) || scopes.length === 0 || scopes.some(scope => !allowedScopes.has(scope))) {
     throw new Error('Order Service requested an unsupported Inventory scope.');
   }
-  return jwt.sign({ scope: scopes.join(' '), userId }, config.serviceAuthSecret, {
+  return jwt.sign({ scope: scopes.join(' '), userId, tenantId: tenantId || null, branchId: branchId || null }, config.serviceAuthSecret, {
     algorithm: 'HS256',
     subject: 'order-service',
     issuer: config.serviceJwtIssuer,
@@ -69,7 +69,10 @@ export function requireOrderScope(scope) {
       userRole: typeof payload.userRole === 'string' ? payload.userRole : 'customer',
       email: typeof payload.email === 'string' ? payload.email : '',
       customerName: typeof payload.customerName === 'string' ? payload.customerName : '',
-      customerMobile: typeof payload.customerMobile === 'string' ? payload.customerMobile : ''
+      customerMobile: typeof payload.customerMobile === 'string' ? payload.customerMobile : '',
+      tenantId: typeof payload.tenantId === 'string' ? payload.tenantId : null,
+      branchId: typeof payload.branchId === 'string' ? payload.branchId : null,
+      isPlatformUser: payload.isPlatformUser === true
     };
     if (!req.service.userId) return res.status(401).json({ message: 'A trusted user identity is required.' });
     return next();

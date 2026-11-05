@@ -1,5 +1,6 @@
+import mongoose from 'mongoose';
 import FulfillmentCase from '../../models/FulfillmentCase.js';
-import Medicine from '../../models/Medicine.js';
+import { inventoryClient } from '../inventory-client/InventoryClient.js';
 import MedicineRequest from '../../models/MedicineRequest.js';
 import Order from '../../models/Order.js';
 import { getIsConnected } from '../../config/db.js';
@@ -61,6 +62,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
   }
 
   for (const entry of cases) {
+    if (!entry.tenantId || !entry.branchId) continue;
     if (!entry.parentOrderId) {
       const linkedOrder = await Order.findOne({
         fulfillmentCaseId: String(entry._id),
@@ -122,25 +124,33 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
       }
       continue;
     }
-    const ids = [...new Set((entry.lines || []).map(line => String(line.productId || '')).filter(Boolean))];
-    const products = ids.length ? await Medicine.find({
-      _id: { $in: ids }, tenantId: entry.tenantId, branchId: entry.branchId || null
-    }) .select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive price basePrice discountPercentage').lean() : [];
-    const byId = new Map(products.map(product => [String(product._id), product]));
+    const ids = [...new Set((entry.lines || []).map(line => String(line.productId || '')).filter(id => mongoose.isValidObjectId(id)))];
+    const lookup = ids.length ? await inventoryClient.lookup({
+      productIds: ids, tenantId: entry.tenantId, branchId: entry.branchId, userId: 'inventory-waitlist-monitor'
+    }) : { items: [] };
+    const byId = new Map((lookup.items || []).map(product => [String(product.productId), product]));
     let anyAvailable = false;
     let allAvailable = true;
     let newlyAvailable = false;
+    const alternativeCatalogs = new Map();
     const lines = await Promise.all((entry.lines || []).map(async line => {
       let product = line.productId ? byId.get(String(line.productId)) : null;
       if (!product && line.composition && line.strength) {
-        const matches = await Medicine.find({
-          tenantId: entry.tenantId, branchId: entry.branchId || null, isActive: { $ne: false },
-          composition: line.composition, strength: line.strength,
-          ...(line.dosageForm ? { dosageForm: line.dosageForm } : {})
-        }).select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive price discountPercentage').limit(10).lean();
-        // Manufacturer is a preference, not a clinical identity requirement. Prefer
-        // a unique exact-manufacturer match; otherwise accept only one unambiguous
-        // composition/strength/form match and never guess between multiple products.
+        const key = `${String(line.composition).trim().toLowerCase()}|${String(line.strength).trim().toLowerCase()}|${String(line.dosageForm || '').trim().toLowerCase()}`;
+        if (!alternativeCatalogs.has(key)) {
+          const result = await inventoryClient.searchProducts({
+            tenantId: entry.tenantId, branchId: entry.branchId,
+            query: String(line.composition).trim(), includeOutOfStock: true, limit: 100,
+            userId: 'inventory-waitlist-monitor'
+          });
+          const matches = (result.items || []).filter(item =>
+            String(item.genericName || item.composition || '').trim().toLowerCase() === String(line.composition).trim().toLowerCase()
+            && String(item.strength || '').trim().toLowerCase() === String(line.strength).trim().toLowerCase()
+            && (!line.dosageForm || String(item.dosageForm || item.form || '').trim().toLowerCase() === String(line.dosageForm).trim().toLowerCase())
+          );
+          alternativeCatalogs.set(key, matches);
+        }
+        const matches = alternativeCatalogs.get(key) || [];
         const manufacturerMatches = line.manufacturer
           ? matches.filter(item => String(item.manufacturer || '').trim().toLowerCase() === String(line.manufacturer).trim().toLowerCase())
           : [];
@@ -148,26 +158,34 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
         else if (matches.length === 1) product = matches[0];
       }
       if (!product && !line.composition && !line.strength && line.requestedName) {
-        const matches = await Medicine.find({
-          tenantId: entry.tenantId, ...(entry.branchId ? { branchId: entry.branchId } : {}),
-          isActive: { $ne: false }, name: String(line.requestedName).trim()
-        }).select('_id name composition strength dosageForm manufacturer stockQuantity stock quantity reservedQuantity expiryDate isActive price discountPercentage').limit(2).lean();
-        // Exact name is the only permitted fallback when clinical descriptors are missing.
+        const result = await inventoryClient.searchProducts({
+          tenantId: entry.tenantId, branchId: entry.branchId,
+          query: String(line.requestedName).trim(), includeOutOfStock: true, limit: 20,
+          userId: 'inventory-waitlist-monitor'
+        });
+        const matches = (result.items || []).filter(item =>
+          String(item.name || '').trim().toLowerCase() === String(line.requestedName).trim().toLowerCase()
+        );
         if (matches.length === 1) product = matches[0];
       }
-      const sellable = product && product.isActive !== false
-        && (!product.expiryDate || new Date(product.expiryDate) > now);
-      const quantity = sellable ? Math.min(Number(line.waitingQuantity || 0), available(product)) : 0;
+      const sellable = product && Number(product.availableQuantity || 0) >= 0;
+      const quantity = sellable ? Math.min(Number(line.waitingQuantity || 0), Number(product.availableQuantity || 0)) : 0;
       const previousNotified = Number(line.notifiedAvailableQuantity || 0);
       if (quantity > 0) anyAvailable = true;
       if (quantity < Number(line.waitingQuantity || 0)) allAvailable = false;
       if (quantity > previousNotified) newlyAvailable = true;
-      const unitPrice = Number(product?.price ?? line.unitPrice ?? 0);
-      const listPrice = Math.max(unitPrice, Number(product?.basePrice ?? unitPrice));
-      const discountPercentage = listPrice > unitPrice
-        ? Math.round((1 - unitPrice / listPrice) * 10000) / 100
-        : 0;
-      return { ...line, ...(product?._id ? { productId: String(product._id), name: product.name || line.name } : {}), allocatedQuantity: quantity, notifiedAvailableQuantity: quantity, unitPrice: roundPrice(unitPrice), listPrice: roundPrice(listPrice), discountPercentage };
+      const listPrice = Number(product?.price ?? line.listPrice ?? line.unitPrice ?? 0);
+      const discountPercentage = Math.min(100, Math.max(0, Number(product?.discountPercentage || 0)));
+      const unitPrice = listPrice * (1 - discountPercentage / 100);
+      return {
+        ...line,
+        ...(product?.productId ? { productId: String(product.productId), name: product.name || line.name } : {}),
+        allocatedQuantity: quantity,
+        notifiedAvailableQuantity: quantity,
+        unitPrice: roundPrice(unitPrice),
+        listPrice: roundPrice(listPrice),
+        discountPercentage
+      };
     }));
     const nextStatus = allAvailable ? 'READY_FOR_CONFIRMATION' : anyAvailable ? 'PARTIALLY_FULFILLED' : 'WAITING_FOR_STOCK';
     const result = await FulfillmentCase.updateOne({

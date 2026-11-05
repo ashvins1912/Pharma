@@ -3,6 +3,7 @@ import { getIsConnected } from './config/db.js';
 import mongoose from 'mongoose';
 import { createHash } from 'node:crypto';
 import Medicine from './models/Medicine.js';
+import { inventoryClient } from './services/inventory-client/InventoryClient.js';
 import Order from './models/Order.js';
 import Coupon from './models/Coupon.js';
 import UserProfile from './models/UserProfile.js';
@@ -638,95 +639,37 @@ const orderInventoryWasDeducted = (order) => Boolean(
     )
 );
 
-const deductMongoOrderInventory = async (order, session) => {
+const deductMongoOrderInventory = async (order) => {
     if (orderInventoryWasDeducted(order)) return;
-    const items = getOrderInventoryItems(order);
-    if (!items.length) {
-        if (order.source === 'MEDICINE_REQUEST') {
-            order.inventoryDeductedAt = new Date();
-            return;
-        }
-        throw inventoryError('Order has no inventory records to deduct.', 409);
+    if (order.inventoryReservationId) {
+        await inventoryClient.deduct(order.inventoryReservationId, {
+            tenantId: order.tenantId, branchId: order.branchId, userId: order.userId || 'backend',
+            idempotencyKey: `legacy-order-deduct:${String(order._id)}`
+        });
+        order.inventoryReservationStatus = 'DEDUCTED';
+        order.inventoryDeductedAt = new Date();
+        return;
     }
-    for (const item of items) {
-        const medicineId = item.medicineId;
-        const quantity = Number(item.quantity);
-        if (!mongoose.isValidObjectId(medicineId) || !Number.isInteger(quantity) || quantity < 1) {
-            if (order.source === 'MEDICINE_REQUEST') {
-                continue; // Procured externally, no catalog deduction needed
-            }
-            throw inventoryError('Could not safely deduct stock for this order.', 409);
-        }
-        const medExists = await Medicine.findById(medicineId).session(session);
-        if (!medExists && order.source === 'MEDICINE_REQUEST') {
-            continue;
-        }
-        const result = await Medicine.collection.updateOne({
-            _id: new mongoose.Types.ObjectId(medicineId),
-            $expr: {
-                $and: [
-                    { $gte: [{ $ifNull: ['$reservedQuantity', 0] }, quantity] },
-                    { $gte: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity] }
-                ]
-            }
-        }, [{
-            $set: {
-                stockQuantity: {
-                    $subtract: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
-                },
-                stock: {
-                    $subtract: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
-                },
-                quantity: {
-                    $subtract: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
-                },
-                reservedQuantity: {
-                    $subtract: [{ $ifNull: ['$reservedQuantity', 0] }, quantity]
-                }
-            }
-        }], { session });
-        if (result.modifiedCount !== 1) {
-            if (order.source === 'MEDICINE_REQUEST') continue;
-            throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
-        }
+    if (order.source === 'MEDICINE_REQUEST' && !getOrderInventoryItems(order).length) {
+        order.inventoryDeductedAt = new Date();
+        return;
     }
-    order.inventoryDeductedAt = new Date();
+    throw inventoryError(
+        'This legacy order has no Inventory Service reservation reference. Manual reconciliation is required; dispatch will not mutate legacy stock.',
+        409
+    );
 };
 
 const deductInMemoryOrderInventory = (order) => {
     if (orderInventoryWasDeducted(order)) return;
-    const items = getOrderInventoryItems(order);
-    if (!items.length) {
-        if (order.source === 'MEDICINE_REQUEST') {
-            order.inventoryDeductedAt = new Date();
-            return;
-        }
-        throw inventoryError('Order has no inventory records to deduct.', 409);
+    if (order.source === 'MEDICINE_REQUEST' && !getOrderInventoryItems(order).length) {
+        order.inventoryDeductedAt = new Date();
+        return;
     }
-    const medicineItems = [];
-    for (const item of items) {
-        const medicineId = item.medicineId;
-        const quantity = Number(item.quantity);
-        const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(medicineId));
-        if (!medicine) {
-            if (order.source === 'MEDICINE_REQUEST') continue;
-            throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
-        }
-        if (!Number.isInteger(quantity) || quantity < 1
-            || getReservedStock(medicine) < quantity || getPhysicalStock(medicine) < quantity) {
-            if (order.source === 'MEDICINE_REQUEST') continue;
-            throw inventoryError('Reserved stock is no longer available for dispatch.', 409);
-        }
-        medicineItems.push({ medicine, quantity });
-    }
-    for (const { medicine, quantity } of medicineItems) {
-        const remainingStock = getPhysicalStock(medicine) - quantity;
-        medicine.stockQuantity = remainingStock;
-        medicine.stock = remainingStock;
-        medicine.quantity = remainingStock;
-        medicine.reservedQuantity = getReservedStock(medicine) - quantity;
-    }
-    order.inventoryDeductedAt = new Date();
+    throw inventoryError(
+        'In-memory legacy orders cannot deduct pharmacy stock. Reconcile and dispatch through Inventory Service.',
+        409
+    );
 };
 
 export const dataStore = {
@@ -749,210 +692,143 @@ export const dataStore = {
         return inMemoryAuditLogs.slice(0, 50);
     },
 
-    async getInventoryAudits(page = 1, limit = 10) {
+    async getInventoryAudits(page = 1, limit = 10, { tenantId, branchId } = {}) {
+        const scopeTenantId = String(tenantId || '').trim();
+        const scopeBranchId = String(branchId || '').trim();
+        if (!scopeTenantId || !scopeBranchId) throw inventoryError('Tenant and branch are required for inventory audit history.', 400);
         const parsedLimit = Math.min(50, Math.max(1, Number(limit) || 10));
         const parsedPage = Math.max(1, Number(page) || 1);
+        const inventoryAudits = [];
+        let cursor = 1;
+        let pages = 1;
+        do {
+            const result = await inventoryClient.getAudits({
+                tenantId: scopeTenantId, branchId: scopeBranchId,
+                page: cursor, limit: 100, userId: 'inventory-audit-history'
+            });
+            inventoryAudits.push(...(result.items || []));
+            pages = Number(result.pages || 1);
+            cursor += 1;
+        } while (cursor <= pages && cursor <= 50);
+        const mappedAudits = inventoryAudits.map(entry => {
+            const details = entry.details || {};
+            const result = details.result || {};
+            return {
+                eventType: String(entry.operation || 'INVENTORY').toUpperCase(),
+                importId: details.importBatchId || details.batchId || null,
+                orderId: details.orderId || null,
+                timestamp: entry.createdAt || entry.updatedAt || new Date(),
+                sku: entry.sku || result.sku || '—',
+                name: details.name || result.name || 'Inventory item',
+                quantity: Number(details.quantity ?? result.stockQuantity ?? 0),
+                previousStock: details.before?.stockQuantity ?? null,
+                newStock: details.after?.stockQuantity ?? result.stockQuantity ?? null,
+                previousPrice: details.before?.price ?? null,
+                newPrice: details.after?.price ?? result.price ?? null,
+                adminId: entry.actor || 'Inventory Service',
+                branchId: entry.branchId,
+                tenantId: entry.tenantId,
+                details
+            };
+        });
         const deliveredOrders = getIsConnected()
-            ? await Order.find({ orderStatus: 'Delivered' })
+            ? await Order.find({ orderStatus: 'Delivered', tenantId: scopeTenantId, branchId: scopeBranchId })
                 .select('_id deliveredAt createdAt customerName statusHistory medicineItems items')
-                .sort({ deliveredAt: -1, createdAt: -1 })
-                .lean()
-            : inMemoryOrders.filter(order => order.orderStatus === 'Delivered' && (!filter.createdAt || (new Date(order.createdAt) >= filter.createdAt.$gte && new Date(order.createdAt) < filter.createdAt.$lt)))
-                .sort((a, b) => new Date(b.deliveredAt || b.createdAt) - new Date(a.deliveredAt || a.createdAt));
+                .sort({ deliveredAt: -1, createdAt: -1 }).lean()
+            : [];
         const deliveryAudits = deliveredOrders.flatMap(order => {
             const actor = order.statusHistory?.findLast?.(entry => entry.newStatus === 'Delivered')?.changedBy || 'Delivery';
             return getOrderInventoryItems(order).map(item => ({
-                eventType: 'DELIVERY',
-                importId: `ORDER-${String(order._id).slice(-8).toUpperCase()}`,
-                orderId: String(order._id),
-                timestamp: order.deliveredAt || order.createdAt,
-                sku: item.sku || item.code || '—',
-                name: item.name || item.productName || 'Medicine',
-                quantity: Number(item.quantity) || 0,
-                previousStock: null,
-                newStock: null,
+                eventType: 'DELIVERY', importId: `ORDER-${String(order._id).slice(-8).toUpperCase()}`,
+                orderId: String(order._id), timestamp: order.deliveredAt || order.createdAt,
+                sku: item.sku || item.code || '—', name: item.name || item.productName || 'Medicine',
+                quantity: Number(item.quantity) || 0, previousStock: null, newStock: null,
                 previousPrice: Number(item.price ?? item.unitPrice) || 0,
-                newPrice: Number(item.price ?? item.unitPrice) || 0,
-                adminId: actor
+                newPrice: Number(item.price ?? item.unitPrice) || 0, adminId: actor
             }));
         });
-        const allAudits = [...inMemoryInventoryAudits, ...deliveryAudits].sort(
-            (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-        );
+        const allAudits = [...mappedAudits, ...deliveryAudits, ...inMemoryInventoryAudits.filter(audit => String(audit.tenantId || '') === scopeTenantId && String(audit.branchId || '') === scopeBranchId)]
+            .sort((left, right) => new Date(right.timestamp) - new Date(left.timestamp));
         const total = allAudits.length;
         const totalPages = Math.ceil(total / parsedLimit) || 1;
         const currentPage = Math.min(parsedPage, totalPages);
         return {
             items: allAudits.slice((currentPage - 1) * parsedLimit, currentPage * parsedLimit),
-            page: currentPage,
-            limit: parsedLimit,
-            total,
-            totalPages,
-            hasNextPage: currentPage < totalPages,
-            hasPreviousPage: currentPage > 1
+            page: currentPage, limit: parsedLimit, total, totalPages,
+            hasNextPage: currentPage < totalPages, hasPreviousPage: currentPage > 1
         };
     },
 
     // Medicines: Supports server-side pagination & "out-of-stock only on search" logic
-    async getMedicines(search = '', hideRx = false, category = 'All', sort = 'default', page = 1, limit = 16, includeOutOfStock = false, tenantId = null) {
-        const isSearching = Boolean(search && search.toString().trim() !== '');
-        const parsedPage = Math.max(1, Number(page) || 1);
-        const parsedLimit = Math.max(1, Number(limit) || 16);
-
-        if (getIsConnected()) {
-            const filter = {};
-            filter.isActive = { $ne: false };
-            // Public storefront reads must be scoped to the pharmacy selected by
-            // the customer. A missing tenant remains unscoped only for explicit
-            // platform-admin inventory calls.
-            if (tenantId) filter.tenantId = String(tenantId);
-            if (isSearching) {
-                const escapedSearch = search.toString().trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                filter.$or = [
-                    { name: { $regex: escapedSearch, $options: 'i' } },
-                    { brand: { $regex: escapedSearch, $options: 'i' } },
-                    { composition: { $regex: escapedSearch, $options: 'i' } },
-                    { sku: { $regex: escapedSearch, $options: 'i' } }
-                ];
-            } else if (!includeOutOfStock) {
-                filter.expiryDate = { $gt: new Date() };
-                filter.$expr = {
-                    $gt: [
-                        {
-                            $subtract: [
-                                { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
-                                { $ifNull: ['$reservedQuantity', 0] }
-                            ]
-                        },
-                        0
-                    ]
-                };
-            }
-            if (hideRx === 'true' || hideRx === true) {
-                filter.$nor = [{ isPrescriptionRequired: true }, { requiresPrescription: true }];
-            }
-            if (category && category !== 'All') filter.category = category;
-
-            const sortOptions = {
-                'price-asc': { price: 1 },
-                'price-desc': { price: -1 },
-                'name-asc': { name: 1 },
-                'stock-asc': { stockQuantity: 1 },
-                default: { name: 1 }
-            };
-            const [total, medicines] = await Promise.all([
-                Medicine.countDocuments(filter),
-                Medicine.find(filter)
-                    .sort(sortOptions[sort] || sortOptions.default)
-                    .skip((parsedPage - 1) * parsedLimit)
-                    .limit(parsedLimit)
-            ]);
-            return {
-                medicines: medicines.map(formatMedicine),
-                total,
-                page: parsedPage,
-                limit: parsedLimit,
-                totalPages: Math.ceil(total / parsedLimit) || 1,
-                isSearching,
-                outOfStockHidden: !isSearching && !includeOutOfStock
-            };
+    async getMedicines(search = '', hideRx = false, category = 'All', sort = 'default', page = 1, limit = 16, includeOutOfStock = false, tenantId = null, branchId = null) {
+        const scopeTenantId = String(tenantId || '').trim();
+        const scopeBranchId = String(branchId || '').trim();
+        if (!scopeTenantId || !scopeBranchId) {
+            throw inventoryError('Tenant and branch are required for catalogue reads.', 400);
         }
-
-        let filtered = inMemoryMedicines;
-        if (tenantId) filtered = filtered.filter(m => String(m.tenantId || '') === String(tenantId));
-
-        // RULE: If search query is provided, out-of-stock items can display (with SOLD OUT badge).
-        // If not searching, out-of-stock items are hidden from general browsing!
-        if (!isSearching && !includeOutOfStock) {
-            filtered = filtered.filter(m => {
-                if (m.isActive === false) return false;
-                const stock = getPhysicalStock(m) - getReservedStock(m);
-                return stock > 0 && !m.isExpired;
-            });
-        } else {
-            filtered = filtered.filter(m => m.isActive !== false);
-        }
-
-        if (isSearching) {
-            const s = search.toString().toLowerCase().trim();
-            filtered = filtered.filter(m =>
-                m.name.toLowerCase().includes(s) ||
-                m.brand.toLowerCase().includes(s) ||
-                (m.composition && m.composition.toLowerCase().includes(s)) ||
-                (m.sku && m.sku.toLowerCase().includes(s))
-            );
-        }
-
-        if (hideRx === 'true' || hideRx === true) {
-            filtered = filtered.filter(m => !m.requiresPrescription);
-        }
-
-        if (category && category !== 'All') {
-            filtered = filtered.filter(m => m.category === category);
-        }
-
-        // Sorting
-        if (sort === 'price-asc') {
-            filtered = [...filtered].sort((a, b) => a.price - b.price);
-        } else if (sort === 'price-desc') {
-            filtered = [...filtered].sort((a, b) => b.price - a.price);
-        } else if (sort === 'name-asc') {
-            filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
-        } else if (sort === 'stock-asc') {
-            filtered = [...filtered].sort((a, b) =>
-                (getPhysicalStock(a) - getReservedStock(a)) - (getPhysicalStock(b) - getReservedStock(b)));
-        }
-
-        // Pagination Calculations
-        const total = filtered.length;
-        const totalPages = Math.ceil(total / parsedLimit) || 1;
-        const startIndex = (parsedPage - 1) * parsedLimit;
-        const paginatedMedicines = filtered.slice(startIndex, startIndex + parsedLimit).map(formatMedicine);
-
+        const result = await inventoryClient.searchProducts({
+            tenantId: scopeTenantId,
+            branchId: scopeBranchId,
+            query: search || '',
+            hideRx: hideRx === true || String(hideRx).toLowerCase() === 'true',
+            category: category && category !== 'All' ? category : '',
+            sort: sort || 'default',
+            page: Math.max(1, Number(page) || 1),
+            limit: Math.max(1, Math.min(100, Number(limit) || 16)),
+            includeOutOfStock: includeOutOfStock === true || String(includeOutOfStock).toLowerCase() === 'true',
+            userId: 'backend-catalogue'
+        });
         return {
-            medicines: paginatedMedicines,
-            total,
-            page: parsedPage,
-            limit: parsedLimit,
-            totalPages,
-            isSearching,
-            outOfStockHidden: !isSearching && !includeOutOfStock
+            medicines: result.items || [],
+            total: Number(result.total || 0),
+            page: Number(result.page || page || 1),
+            limit: Number(result.limit || limit || 16),
+            totalPages: Number(result.pages || 1),
+            isSearching: Boolean(search && String(search).trim()),
+            outOfStockHidden: Boolean(result.outOfStockHidden)
         };
     },
 
     async getInventoryAlerts(lowStockThreshold = 3, expiringThresholdDays = 30, { tenantId, branchId } = {}) {
-        let query = {};
-        if (tenantId) query.tenantId = tenantId;
-        if (branchId) query.branchId = branchId;
+        const scopeTenantId = String(tenantId || '').trim();
+        const scopeBranchId = String(branchId || '').trim();
+        if (!scopeTenantId || !scopeBranchId) throw inventoryError('Tenant and branch are required for inventory alerts.', 400);
+        const allMeds = [];
+        let page = 1;
+        let pages = 1;
+        do {
+            const result = await inventoryClient.searchProducts({
+                tenantId: scopeTenantId, branchId: scopeBranchId,
+                includeOutOfStock: true, includeExpiredBatches: true,
+                page, limit: 100, userId: 'inventory-alerts'
+            });
+            allMeds.push(...(result.items || []));
+            pages = Number(result.pages || 1);
+            page += 1;
+        } while (page <= pages && page <= 50);
 
-        // Inspect tenant-scoped medicines including out of stock for admin alerts
-        const inventory = getIsConnected() ? await Medicine.find(query) : inMemoryMedicines.filter(m => {
-            if (tenantId && String(m.tenantId || '') !== String(tenantId)) return false;
-            if (branchId && String(m.branchId || '') !== String(branchId)) return false;
-            return true;
-        });
-        const allMeds = inventory.map(formatMedicine);
         const now = new Date();
-
         const expired = [];
         const expiringSoon = [];
         const lowStock = [];
-
         for (const med of allMeds) {
-            const exp = new Date(med.expiryDate);
-            const daysLeft = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 3600 * 24));
-
-            if (daysLeft <= 0) {
-                expired.push({ ...med, daysLeft });
-            } else if (daysLeft <= expiringThresholdDays) {
-                expiringSoon.push({ ...med, daysLeft });
+            for (const batch of med.expiredBatchAvailability || []) {
+                const expiryDate = batch.expiryDate ? new Date(batch.expiryDate) : null;
+                const daysLeft = expiryDate ? Math.ceil((expiryDate.getTime() - now.getTime()) / 86400000) : null;
+                expired.push({ ...med, batchNumber: batch.batchNumber, expiryDate: batch.expiryDate, stock: Number(batch.availableQuantity || 0), availableQuantity: Number(batch.availableQuantity || 0), daysLeft });
             }
-
-            if (med.stock <= lowStockThreshold) {
-                lowStock.push(med);
+            for (const batch of med.batchAvailability || []) {
+                if (!batch.expiryDate) continue;
+                const expiryDate = new Date(batch.expiryDate);
+                const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / 86400000);
+                if (daysLeft > 0 && daysLeft <= expiringThresholdDays) {
+                    expiringSoon.push({ ...med, batchNumber: batch.batchNumber, expiryDate: batch.expiryDate, stock: Number(batch.availableQuantity || 0), availableQuantity: Number(batch.availableQuantity || 0), daysLeft });
+                }
+            }
+            if (Number(med.availableQuantity || 0) <= lowStockThreshold) {
+                lowStock.push({ ...med, stock: Number(med.availableQuantity || 0) });
             }
         }
-
         return {
             expiredCount: expired.length,
             expiringSoonCount: expiringSoon.length,
@@ -965,232 +841,23 @@ export const dataStore = {
     },
 
     async seedMedicines() {
-        inMemoryMedicines = generateEager1000Catalog();
-        if (getIsConnected() && await Medicine.countDocuments() === 0) {
-            const mongoCatalog = inMemoryMedicines.map(({ _id, ...medicine }) => ({
-                ...medicine,
-                code: medicine.sku,
-                stockQuantity: getPhysicalStock(medicine),
-                reservedQuantity: 0,
-                isPrescriptionRequired: Boolean(medicine.requiresPrescription)
-            }));
-            await Medicine.insertMany(mongoCatalog, { ordered: false });
-        }
-        this.logAudit('Admin', 'SEED_MEDICINES', 'INVENTORY', 'ALL', { count: inMemoryMedicines.length });
-        return inMemoryMedicines;
+        throw inventoryError(
+            'Direct catalogue seeding is disabled. Seed or import products through the tenant- and branch-scoped Inventory Service workflow.',
+            410
+        );
     },
 
     async ensureCatalogSeeded() {
-        if (!getIsConnected() || await Medicine.countDocuments() > 0) return;
-        const mongoCatalog = defaultMedicines.map(({ _id, ...medicine }) => ({
-            ...medicine,
-            code: medicine.sku,
-            stockQuantity: getPhysicalStock(medicine),
-            reservedQuantity: 0,
-            isPrescriptionRequired: Boolean(medicine.requiresPrescription)
-        }));
-        await Medicine.insertMany(mongoCatalog, { ordered: false });
-        console.log(`Initialized MongoDB medicine catalog with ${mongoCatalog.length} medicines.`);
+        return false;
     },
 
-    async importExcelInventory(rows, adminId = 'Admin') {
-        const importId = `imp-${Date.now()}`;
-        const auditEntries = [];
-        let importedCount = 0;
-        let updatedCount = 0;
-
-        for (const row of rows) {
-            const sku = (row.SKU || row.sku || `SKU-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`).toString().trim();
-            const name = (row['Medicine Name'] || row.name || row.Name || '').toString().trim();
-            if (!name) continue;
-
-            const category = (row.Category || row.category || 'General Medicine').toString().trim();
-            const subCategory = (row['Sub-category'] || row.SubCategory || row.subCategory || 'Unclassified').toString().trim();
-            const description = (row.Description || row.description || '').toString().trim();
-            const brand = (row.Brand || row.brand || row.Manufacturer || 'Generic').toString().trim();
-            const manufacturer = (row.Manufacturer || row.manufacturer || brand).toString().trim();
-            const price = Number(row.Price || row.price) || 50;
-            const rawBaseCostPrice = row['Base Cost Price'] ?? row.baseCostPrice;
-            const baseCostPrice = rawBaseCostPrice === undefined || rawBaseCostPrice === ''
-                ? price
-                : Number(rawBaseCostPrice);
-            if (!Number.isFinite(baseCostPrice) || baseCostPrice < 0) {
-                throw inventoryError(`Invalid base cost price for ${name}.`);
-            }
-            const requestedMarginTier = String(row['Margin Tier'] || row.marginTier || 'LOW').trim().toUpperCase();
-            if (!['LOW', 'MID', 'HIGH'].includes(requestedMarginTier)) {
-                throw inventoryError(`Invalid margin tier for ${name}.`);
-            }
-            const stock = Number(row.Stock || row.stock || row.Quantity || row.quantity) || 10;
-            const batchNumber = (row['Batch Number'] || row.batchNumber || 'BATCH-NEW').toString().trim();
-            const requiresPrescription = String(row['Requires Prescription'] || row.requiresPrescription || '').toLowerCase() === 'true';
-            
-            let imageUrl = (row['Cloudinary Image URL'] || row.imageUrl || '').toString().trim();
-            if (!imageUrl || !imageUrl.startsWith('http')) {
-                imageUrl = "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80";
-            }
-
-            let expiryDate = new Date();
-            if (row['Expiry Date'] || row.expiryDate) {
-                const parsed = new Date(row['Expiry Date'] || row.expiryDate);
-                if (!isNaN(parsed.getTime())) expiryDate = parsed;
-                else expiryDate = new Date(Date.now() + 365 * 86400000);
-            } else {
-                expiryDate = new Date(Date.now() + 365 * 86400000);
-            }
-
-            const existingIdx = inMemoryMedicines.findIndex(m =>
-                (m.sku && m.sku.toLowerCase() === sku.toLowerCase()) ||
-                m.name.toLowerCase() === name.toLowerCase()
-            );
-
-            if (existingIdx >= 0) {
-                const prev = inMemoryMedicines[existingIdx];
-                const auditRecord = {
-                    importId,
-                    adminId,
-                    timestamp: new Date().toISOString(),
-                    sku,
-                    name,
-                    previousStock: prev.stock || prev.quantity || 0,
-                    newStock: (prev.stock || prev.quantity || 0) + stock,
-                    previousPrice: prev.price,
-                    newPrice: price,
-                    previousExpiry: prev.expiryDate,
-                    newExpiry: expiryDate
-                };
-
-                prev.stock = (prev.stock || prev.quantity || 0) + stock;
-                prev.quantity = prev.stock;
-                prev.stockQuantity = prev.stock;
-                prev.price = price;
-                prev.baseCostPrice = baseCostPrice;
-                prev.marginTier = requestedMarginTier;
-                prev.expiryDate = expiryDate;
-                prev.batchNumber = batchNumber;
-                prev.category = category;
-                prev.subCategory = subCategory;
-                prev.description = description || prev.description;
-                if (imageUrl) prev.imageUrl = imageUrl;
-
-                auditEntries.push(auditRecord);
-                inMemoryInventoryAudits.unshift(auditRecord);
-                updatedCount++;
-            } else {
-                const newMed = {
-                    _id: `med-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-                    sku,
-                    name,
-                    brand,
-                    category,
-                    subCategory,
-                    description,
-                    composition: "Active Formulation",
-                    price,
-                    baseCostPrice,
-                    marginTier: requestedMarginTier,
-                    quantity: stock,
-                    stock,
-                    stockQuantity: stock,
-                    reservedQuantity: 0,
-                    batchNumber,
-                    expiryDate,
-                    requiresPrescription,
-                    imageUrl,
-                    manufacturer
-                };
-                inMemoryMedicines.push(newMed);
-                const auditRecord = {
-                    importId,
-                    adminId,
-                    timestamp: new Date().toISOString(),
-                    sku,
-                    name,
-                    previousStock: 0,
-                    newStock: stock,
-                    previousPrice: 0,
-                    newPrice: price,
-                    previousExpiry: null,
-                    newExpiry: expiryDate
-                };
-                auditEntries.push(auditRecord);
-                inMemoryInventoryAudits.unshift(auditRecord);
-                importedCount++;
-            }
-
-            if (getIsConnected()) {
-                const existingMedicine = await Medicine.findOne({
-                    $or: [{ sku }, { name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } }]
-                });
-                if (existingMedicine) {
-                    await Medicine.collection.updateOne({ _id: existingMedicine._id }, [{
-                        $set: {
-                            stockQuantity: {
-                                $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, stock]
-                            },
-                            stock: {
-                                $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, stock]
-                            },
-                            quantity: {
-                                $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, stock]
-                            },
-                            price,
-                            baseCostPrice,
-                            marginTier: requestedMarginTier,
-                            expiryDate,
-                            batchNumber,
-                            category,
-                            subCategory,
-                            description: description || existingMedicine.description,
-                            imageUrl,
-                            isPrescriptionRequired: requiresPrescription,
-                            requiresPrescription
-                        }
-                    }]);
-                } else {
-                    await Medicine.create({
-                        sku,
-                        code: sku,
-                        name,
-                        brand,
-                        category,
-                        subCategory,
-                        description,
-                        composition: 'Active Formulation',
-                        price,
-                        baseCostPrice,
-                        marginTier: requestedMarginTier,
-                        stockQuantity: stock,
-                        reservedQuantity: 0,
-                        stock,
-                        quantity: stock,
-                        batchNumber,
-                        expiryDate,
-                        isPrescriptionRequired: requiresPrescription,
-                        requiresPrescription,
-                        imageUrl,
-                        manufacturer
-                    });
-                }
-            }
-        }
-
-        this.logAudit(adminId, 'BULK_IMPORT_EXCEL', 'INVENTORY', importId, {
-            totalRows: rows.length,
-            importedCount,
-            updatedCount
-        });
-
-        return {
-            importId,
-            totalRows: rows.length,
-            importedCount,
-            updatedCount,
-            auditEntries
-        };
+    async importExcelInventory() {
+        throw inventoryError(
+            'Legacy Excel stock mutation is disabled. Use the staged Inventory Service import, review and publish workflow.',
+            410
+        );
     },
 
-    // Orders
     async createOrder(orderData, actor = 'Customer') {
         return this.reserveOrder(orderData, actor);
     },
@@ -1198,6 +865,7 @@ export const dataStore = {
     async reserveOrder(orderData, actor = 'Customer') {
         const selectedTenantId = String(orderData.tenantId || '').trim();
         const selectedBranchId = String(orderData.branchId || '').trim();
+        if (!selectedBranchId) throw inventoryError('Select an active pharmacy branch before placing an order.', 400);
         if (!selectedTenantId) throw inventoryError('Select an active pharmacy before creating an order.', 400);
         if (!orderData.userId) throw inventoryError('An authenticated customer is required to create an order.', 401);
         if (!orderData.deliveryAddress?.trim() || !hasValidCoordinates(orderData.coordinates)) {
@@ -1280,6 +948,75 @@ export const dataStore = {
             }
         }
 
+        if (!getIsConnected()) throw inventoryError('Order persistence is unavailable. No order was created.', 503);
+        if (!inventoryClient.isConfigured()) throw inventoryError('Inventory Service is unavailable. No order was created.', 503);
+        const productIds = [...quantities.keys()];
+        if (productIds.some(id => !mongoose.isValidObjectId(id))) {
+            throw inventoryError('Every order item must reference a valid medicine in the selected pharmacy catalogue.', 400);
+        }
+        const catalog = await inventoryClient.lookup({
+            productIds, tenantId: selectedTenantId, branchId: selectedBranchId, userId: orderData.userId
+        });
+        const productsById = new Map((catalog.items || []).map(item => [String(item.productId), item]));
+        if (productsById.size !== productIds.length) {
+            throw inventoryError('One or more medicines are not available in the selected pharmacy branch.', 404);
+        }
+        const medicineItemsForOrder = [];
+        const itemSnapshotsForOrder = [];
+        let totalAmountForOrder = 0;
+        let prescriptionRequiredForOrder = false;
+        for (const [medicineId, requested] of quantities) {
+            const quantity = requested.quantity;
+            const product = productsById.get(medicineId);
+            if (!product) throw inventoryError('The selected pharmacy does not have this medicine in its branch catalogue.', 404);
+            if (Number(product.availableQuantity || 0) < quantity) {
+                throw inventoryError(`Insufficient available stock for ${product.name}.`, 409);
+            }
+            const requiresPrescription = Boolean(product.requiresPrescription);
+            prescriptionRequiredForOrder ||= requiresPrescription;
+            if (requiresPrescription && !orderData.prescriptionUrl) {
+                throw inventoryError(`A prescription is required for ${product.name}.`);
+            }
+            const catalogPrice = Number(product.price);
+            if (!Number.isFinite(catalogPrice) || catalogPrice < 0) throw inventoryError(`Invalid catalogue price for ${product.name}.`, 409);
+            const configuredDiscount = Math.min(100, Math.max(0, Number(product.discountPercentage || 0)));
+            const expectedUnitPrice = Math.round(catalogPrice * (1 - configuredDiscount / 100) * 100) / 100;
+            if (requested.unitPrice != null && Math.abs(requested.unitPrice - expectedUnitPrice) > 0.01) {
+                throw inventoryError('The selected catalogue price has changed. Refresh the fulfilment options before confirming.', 409);
+            }
+            const basePrice = catalogPrice;
+            const salePrice = requested.unitPrice != null ? Number(requested.unitPrice) : expectedUnitPrice;
+            const discountPercentage = basePrice > 0 ? Math.round((1 - salePrice / basePrice) * 10000) / 100 : 0;
+            const rawCost = Number(product.baseCostPrice);
+            const baseCostPrice = Number.isFinite(rawCost) && rawCost > 0 ? rawCost : catalogPrice;
+            const marginTier = ['LOW', 'MID', 'HIGH'].includes(product.marginTier) ? product.marginTier : 'LOW';
+            const productObjectId = new mongoose.Types.ObjectId(medicineId);
+            totalAmountForOrder += salePrice * quantity;
+            medicineItemsForOrder.push({
+                medicineId: productObjectId, quantity, price: salePrice, basePrice,
+                baseCostPrice, discountPercentage, marginTier,
+                name: product.name, sku: product.sku || ''
+            });
+            itemSnapshotsForOrder.push({
+                _id: medicineId, medicineId: productObjectId, name: product.name,
+                sku: product.sku || '', price: salePrice, basePrice,
+                baseCostPrice, discountPercentage, marginTier, quantity,
+                stock: Math.max(0, Number(product.availableQuantity || 0) - quantity)
+            });
+        }
+        const orderId = new mongoose.Types.ObjectId();
+        const inventoryReservation = await inventoryClient.reserve({
+            orderId: orderId.toString(),
+            items: medicineItemsForOrder.map(item => ({ productId: String(item.medicineId), quantity: item.quantity })),
+            tenantId: selectedTenantId,
+            branchId: selectedBranchId,
+            userId: orderData.userId,
+            idempotencyKey: `legacy-order-reservation:${orderId.toString()}`
+        });
+        if (inventoryReservation.status !== 'RESERVED' || !inventoryReservation.reservationId) {
+            throw inventoryError('Inventory could not reserve the requested medicines. Refresh stock and retry.', 409);
+        }
+
         const now = new Date();
         const statusEntry = {
             previousStatus: null,
@@ -1290,100 +1027,17 @@ export const dataStore = {
         };
 
         if (getIsConnected()) {
-            const session = await mongoose.startSession();
+            let session;
             let createdOrder;
             try {
+                session = await mongoose.startSession();
                 await session.withTransaction(async () => {
                     const activeTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id settings.allowOfferWithCoupon settings.allowOfferWithRewards').session(session).lean();
                     if (!activeTenant) throw inventoryError('The selected pharmacy is not active.', 404);
-                    const medicineItems = [];
-                    const itemSnapshots = [];
-                    let totalAmount = 0;
-                    let prescriptionRequired = false;
-
-                    for (const [medicineId, requested] of quantities) {
-                        const quantity = requested.quantity;
-                        if (!mongoose.isValidObjectId(medicineId)) {
-                            throw inventoryError(`Invalid medicine ID: ${medicineId}`);
-                        }
-                        const medicineFilter = { _id: medicineId, tenantId: selectedTenantId };
-                        if (orderData.branchScopeExplicit) medicineFilter.branchId = selectedBranchId || null;
-                        else if (selectedBranchId) medicineFilter.branchId = selectedBranchId;
-                        const medicine = await Medicine.findOne(medicineFilter).session(session);
-                        if (!medicine) throw inventoryError('The selected pharmacy does not have this medicine in its catalogue.', 404);
-                        if (medicine.expiryDate && new Date(medicine.expiryDate) <= now) {
-                            throw inventoryError(`${medicine.name} is expired and cannot be ordered.`);
-                        }
-                        const medicineRequiresPrescription = Boolean(medicine.isPrescriptionRequired ?? medicine.requiresPrescription);
-                        prescriptionRequired ||= medicineRequiresPrescription;
-                        if (medicineRequiresPrescription && !orderData.prescriptionUrl) {
-                            throw inventoryError(`A prescription is required for ${medicine.name}.`);
-                        }
-
-                        const reservationFilter = {
-                            _id: medicine._id,
-                            expiryDate: { $gt: now },
-                            tenantId: selectedTenantId,
-                            ...(orderData.branchScopeExplicit ? { branchId: selectedBranchId || null } : selectedBranchId ? { branchId: selectedBranchId } : {}),
-                            $expr: {
-                                $gte: [
-                                    {
-                                        $subtract: [
-                                            { $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] },
-                                            { $ifNull: ['$reservedQuantity', 0] }
-                                        ]
-                                    },
-                                    quantity
-                                ]
-                            }
-                        };
-                        const reserved = await Medicine.findOneAndUpdate(reservationFilter, {
-                            $inc: { reservedQuantity: quantity }
-                        }, { new: true, session });
-
-                        if (!reserved) {
-                            throw inventoryError(`Insufficient available stock for ${medicine.name}.`, 409);
-                        }
-
-                        const catalogPrice = Number(medicine.price);
-                        const basePrice = Math.max(catalogPrice, Number(medicine.basePrice ?? catalogPrice));
-                        const discountPercentage = basePrice > catalogPrice
-                            ? roundCurrency((1 - catalogPrice / basePrice) * 100)
-                            : 0;
-                        if (requested.unitPrice != null && Math.abs(requested.unitPrice - catalogPrice) > 0.01) {
-                            throw inventoryError('The selected catalogue price has changed. Refresh the fulfilment options before confirming.', 409);
-                        }
-                        const price = requested.unitPrice == null ? catalogPrice : catalogPrice;
-                        totalAmount += price * quantity;
-                        medicineItems.push({
-                            medicineId: medicine._id,
-                            quantity,
-                            price,
-                            basePrice,
-                            baseCostPrice: Number(medicine.baseCostPrice ?? price),
-                            discountPercentage,
-                            marginTier: ['LOW', 'MID', 'HIGH'].includes(medicine.marginTier)
-                                ? medicine.marginTier
-                                : 'LOW',
-                            name: medicine.name,
-                            sku: medicine.sku || medicine.code || ''
-                        });
-                        itemSnapshots.push({
-                            _id: medicine._id.toString(),
-                            medicineId: medicine._id,
-                            name: medicine.name,
-                            sku: medicine.sku || medicine.code || '',
-                            price,
-                            basePrice,
-                            baseCostPrice: Number(medicine.baseCostPrice ?? price),
-                            discountPercentage,
-                            marginTier: ['LOW', 'MID', 'HIGH'].includes(medicine.marginTier)
-                                ? medicine.marginTier
-                                : 'LOW',
-                            quantity,
-                            stock: Math.max(0, getPhysicalStock(medicine) - getReservedStock(medicine) - quantity)
-                        });
-                    }
+                    const medicineItems = medicineItemsForOrder.map(item => ({ ...item }));
+                    const itemSnapshots = itemSnapshotsForOrder.map(item => ({ ...item }));
+                    let totalAmount = totalAmountForOrder;
+                    let prescriptionRequired = prescriptionRequiredForOrder;
 
                     let surplusDiscountApplied = 0;
                     const appliedSurplusCampaigns = [];
@@ -1470,7 +1124,6 @@ export const dataStore = {
                         isDiscounted: couponRate > 0 || Number(item.discountPercentage || 0) > 0 || Number(item.surplusSavingsDiscount || 0) > 0
                     }));
                     const earnedPoints = profitMarginRewardEngine.calculateEarnedPoints(rewardItems);
-                    const orderId = new mongoose.Types.ObjectId();
                     let allowedPoints = 0;
                     let pointsDiscount = 0;
                     let redemptionWarning = null;
@@ -1538,6 +1191,8 @@ export const dataStore = {
                         customerId: orderData.userId,
                         tenantId: selectedTenantId,
                         branchId: orderData.branchId || null,
+                        inventoryReservationId: inventoryReservation.reservationId,
+                        inventoryReservationStatus: 'RESERVED',
                         addressId: orderData.addressId || null,
                         customerName: orderData.customerName,
                         orderedByName: orderData.customerName || 'Valued Customer',
@@ -1590,8 +1245,21 @@ export const dataStore = {
                     createdOrder = order.toObject({ virtuals: true });
                     createdOrder.rewardNotice = redemptionWarning;
                 });
+            } catch (error) {
+                try {
+                    await inventoryClient.release(inventoryReservation.reservationId, {
+                        tenantId: selectedTenantId, branchId: selectedBranchId, userId: orderData.userId,
+                        idempotencyKey: `legacy-order-release-after-create-failure:${orderId.toString()}`
+                    });
+                } catch (releaseError) {
+                    console.error('Order creation failed and Inventory reservation release also failed:', {
+                        orderId: orderId.toString(), reservationId: inventoryReservation.reservationId,
+                        error: releaseError.message
+                    });
+                }
+                throw error;
             } finally {
-                await session.endSession();
+                if (session) await session.endSession();
             }
 
             this.logAudit(actor, 'ORDER_CREATED', 'ORDER', createdOrder._id.toString(), {
@@ -1769,17 +1437,17 @@ export const dataStore = {
                         throw inventoryError('This order requires an attached prescription before approval.', 409);
                     }
 
-                    if (status === 'Rejected') {
-                        for (const item of order.medicineItems) {
-                            const quantity = Number(item.quantity);
-                            const result = await Medicine.updateOne({
-                                _id: item.medicineId,
-                                $expr: { $gte: [{ $ifNull: ['$reservedQuantity', 0] }, quantity] }
-                            }, { $inc: { reservedQuantity: -quantity } }, { session });
-                            if (result.modifiedCount !== 1) {
-                                throw inventoryError('Could not safely release reserved medicine stock.', 409);
-                            }
-                        }
+                    if (status === 'Rejected' && order.inventoryReservationId) {
+                        await inventoryClient.release(order.inventoryReservationId, {
+                            tenantId: order.tenantId, branchId: order.branchId, userId: order.userId || 'backend',
+                            idempotencyKey: `legacy-order-release-rejected:${String(order._id)}`
+                        });
+                        order.inventoryReservationStatus = 'RELEASED';
+                    } else if (status === 'Rejected') {
+                        throw inventoryError(
+                            'This legacy order has no Inventory Service reservation reference. Manual reconciliation is required; legacy stock will not be changed.',
+                            409
+                        );
                     }
 
                     order.orderStatus = status;
@@ -1808,16 +1476,10 @@ export const dataStore = {
             throw inventoryError('This order requires an attached prescription before approval.', 409);
         }
         if (status === 'Rejected') {
-            for (const item of order.medicineItems || []) {
-                const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
-                if (!medicine || getReservedStock(medicine) < item.quantity) {
-                    throw inventoryError('Could not safely release reserved medicine stock.', 409);
-                }
-            }
-            for (const item of order.medicineItems || []) {
-                const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
-                medicine.reservedQuantity -= item.quantity;
-            }
+            throw inventoryError(
+                'Legacy in-memory orders cannot change pharmacy stock. Reconcile the order through Inventory Service.',
+                409
+            );
         }
         order.orderStatus = status;
         order.statusHistory.push({
@@ -1866,42 +1528,17 @@ export const dataStore = {
                         throw inventoryError('Only orders that have not been dispatched can be cancelled.', 409);
                     }
 
-                    const legacyStockRestored = !order.medicineItems?.length;
-                    if (order.medicineItems?.length) {
-                        for (const item of order.medicineItems) {
-                            const quantity = Number(item.quantity);
-                            const result = await Medicine.updateOne({
-                                _id: item.medicineId,
-                                $expr: { $gte: [{ $ifNull: ['$reservedQuantity', 0] }, quantity] }
-                            }, { $inc: { reservedQuantity: -quantity } }, { session });
-                            if (result.modifiedCount !== 1) {
-                                throw inventoryError('Could not safely release reserved medicine stock.', 409);
-                            }
-                        }
-                    } else {
-                        if (!order.items?.length) throw inventoryError('Order has no inventory records to release.', 409);
-                        for (const item of order.items) {
-                            const medicineId = item.medicineId || item._id;
-                            const quantity = Number(item.quantity);
-                            if (!mongoose.isValidObjectId(medicineId) || !Number.isInteger(quantity) || quantity < 1) {
-                                throw inventoryError('Could not safely restore stock for this legacy order.', 409);
-                            }
-                            const result = await Medicine.collection.updateOne({ _id: new mongoose.Types.ObjectId(medicineId) }, [{
-                                $set: {
-                                    stockQuantity: {
-                                        $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
-                                    },
-                                    stock: {
-                                        $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
-                                    },
-                                    quantity: {
-                                        $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, quantity]
-                                    }
-                                }
-                            }], { session });
-                            if (result.modifiedCount !== 1) throw inventoryError('Could not safely restore legacy order stock.', 409);
-                        }
+                    if (!order.inventoryReservationId) {
+                        throw inventoryError(
+                            'This legacy order has no Inventory Service reservation reference. Manual reconciliation is required; cancellation will not mutate legacy stock.',
+                            409
+                        );
                     }
+                    await inventoryClient.release(order.inventoryReservationId, {
+                        tenantId: order.tenantId, branchId: order.branchId, userId: order.userId || 'backend',
+                        idempotencyKey: `legacy-order-release-cancel:${String(order._id)}`
+                    });
+                    order.inventoryReservationStatus = 'RELEASED';
 
                     order.orderStatus = 'Cancelled';
                     order.statusHistory.push({
@@ -1909,9 +1546,7 @@ export const dataStore = {
                         newStatus: 'Cancelled',
                         changedBy: actor,
                         timestamp: new Date(),
-                        notes: legacyStockRestored
-                            ? 'Order cancelled; stock restored to inventory.'
-                            : 'Order cancelled; reserved inventory released.'
+                        notes: 'Order cancelled; Inventory Service reservation released.'
                     });
                     await order.save({ session });
                     cancelledOrder = order.toObject({ virtuals: true });
@@ -1930,48 +1565,10 @@ export const dataStore = {
         if (!['Pending_Review', 'Approved', 'Processing Order', 'Ready to Dispatch'].includes(order.orderStatus)) {
             throw inventoryError('Only orders that have not been dispatched can be cancelled.', 409);
         }
-        const legacyStockRestored = !order.medicineItems?.length;
-        if (order.medicineItems?.length) {
-            for (const item of order.medicineItems) {
-                const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
-                if (!medicine || getReservedStock(medicine) < item.quantity) {
-                    throw inventoryError('Could not safely release reserved medicine stock.', 409);
-                }
-            }
-            for (const item of order.medicineItems) {
-                const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
-                medicine.reservedQuantity -= item.quantity;
-            }
-        } else {
-            if (!order.items?.length) throw inventoryError('Order has no inventory records to release.', 409);
-            for (const item of order.items) {
-                const medicineId = item.medicineId || item._id;
-                const quantity = Number(item.quantity);
-                const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(medicineId));
-                if (!medicine || !Number.isInteger(quantity) || quantity < 1) {
-                    throw inventoryError('Could not safely restore stock for this legacy order.', 409);
-                }
-            }
-            for (const item of order.items) {
-                const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId || item._id));
-                const restoredStock = getPhysicalStock(medicine) + Number(item.quantity);
-                medicine.stockQuantity = restoredStock;
-                medicine.stock = restoredStock;
-                medicine.quantity = restoredStock;
-            }
-        }
-        const previousStatus = order.orderStatus;
-        order.orderStatus = 'Cancelled';
-        order.statusHistory.push({
-            previousStatus,
-            newStatus: 'Cancelled',
-            changedBy: actor,
-            timestamp: new Date(),
-            notes: legacyStockRestored
-                ? 'Order cancelled; stock restored to inventory.'
-                : 'Order cancelled; reserved inventory released.'
-        });
-        return order;
+        throw inventoryError(
+            'Legacy in-memory orders cannot change pharmacy stock. Reconcile the order through Inventory Service.',
+            409
+        );
     },
 
     async dispatchOrder(orderId, actor = 'Admin', riderInfo = null) {
@@ -2605,183 +2202,16 @@ export const dataStore = {
         return order;
     },
 
-    async createMedicine(medicineData) {
-        const stockQuantity = Number(medicineData.stockQuantity ?? medicineData.quantity ?? medicineData.stock ?? 0);
-        const baseCostPrice = Number(medicineData.baseCostPrice ?? medicineData.price);
-        const discountPercentage = Number(medicineData.discountPercentage ?? 0);
-        const marginTier = medicineData.marginTier || 'LOW';
-        if (!medicineData.name?.trim() || !medicineData.brand?.trim()
-            || !Number.isFinite(Number(medicineData.price)) || Number(medicineData.price) < 0
-            || !Number.isFinite(baseCostPrice) || baseCostPrice < 0
-            || !Number.isFinite(discountPercentage) || discountPercentage < 0 || discountPercentage > 100
-            || !['LOW', 'MID', 'HIGH'].includes(marginTier)
-            || !Number.isFinite(stockQuantity) || !Number.isInteger(stockQuantity) || stockQuantity < 0
-            || !medicineData.expiryDate || Number.isNaN(new Date(medicineData.expiryDate).getTime())) {
-            throw inventoryError('Name, brand, valid price/cost/discount, stock, margin tier, and expiry date are required.');
-        }
-        const normalizedSku = String(medicineData.sku || medicineData.code || '').trim().toUpperCase();
-        const values = {
-            name: medicineData.name.trim(),
-            brand: medicineData.brand.trim(),
-            sku: normalizedSku || undefined,
-            code: normalizedSku || undefined,
-            description: medicineData.description || '',
-            composition: medicineData.composition || '',
-            category: medicineData.category || 'General Medicine',
-            subCategory: medicineData.subCategory || 'Unclassified',
-            price: Number(medicineData.price),
-            baseCostPrice,
-            basePrice: medicineData.basePrice === undefined ? undefined : Number(medicineData.basePrice),
-            discountPercentage,
-            marginTier,
-            stockQuantity,
-            stock: stockQuantity,
-            quantity: stockQuantity,
-            reservedQuantity: 0,
-            expiryDate: new Date(medicineData.expiryDate),
-            isPrescriptionRequired: Boolean(medicineData.isPrescriptionRequired ?? medicineData.requiresPrescription),
-            requiresPrescription: Boolean(medicineData.isPrescriptionRequired ?? medicineData.requiresPrescription),
-            imageUrl: medicineData.imageUrl,
-            manufacturer: medicineData.manufacturer,
-            isActive: true
-        };
-
-        if (getIsConnected()) {
-            try {
-                return (await Medicine.create(values)).toObject({ virtuals: true });
-            } catch (error) {
-                if (error.code === 11000) throw inventoryError('A medicine with this SKU already exists.', 409);
-                throw error;
-            }
-        }
-        if (normalizedSku && inMemoryMedicines.some(medicine => medicine.sku?.toUpperCase() === normalizedSku)) {
-            throw inventoryError('A medicine with this SKU already exists.', 409);
-        }
-        const medicine = { _id: new mongoose.Types.ObjectId().toString(), ...values };
-        inMemoryMedicines.unshift(medicine);
-        return formatMedicine(medicine);
+    async createMedicine() {
+        throw inventoryError('Legacy dataStore product creation is disabled. Use the tenant- and branch-scoped Inventory Service product API.', 410);
     },
 
-    async updateMedicine(medicineId, updates) {
-        const allowedFields = [
-            'name', 'brand', 'sku', 'code', 'description', 'composition', 'category', 'subCategory',
-            'price', 'basePrice', 'baseCostPrice', 'discountPercentage', 'marginTier',
-            'expiryDate', 'isPrescriptionRequired', 'requiresPrescription',
-            'imageUrl', 'manufacturer', 'batchNumber'
-        ];
-        const values = {};
-        for (const field of allowedFields) {
-            if (updates[field] !== undefined) values[field] = updates[field];
-        }
-        const requestedStock = updates.stockQuantity ?? updates.stock ?? updates.quantity;
-        if (requestedStock !== undefined) {
-            const stock = Number(requestedStock);
-            if (!Number.isInteger(stock) || stock < 0) {
-                throw inventoryError('Stock quantity must be a non-negative whole number.');
-            }
-            values.stockQuantity = stock;
-            values.stock = stock;
-            values.quantity = stock;
-        }
-        if (values.name !== undefined && !String(values.name).trim()) {
-            throw inventoryError('Medicine name cannot be empty.');
-        }
-        if (values.price !== undefined && (!Number.isFinite(Number(values.price)) || Number(values.price) < 0)) {
-            throw inventoryError('Medicine price must be a non-negative number.');
-        }
-        if (values.price !== undefined) values.price = Number(values.price);
-        if (values.basePrice !== undefined) {
-            if (!Number.isFinite(Number(values.basePrice)) || Number(values.basePrice) < 0) {
-                throw inventoryError('Base price must be a non-negative number.');
-            }
-            values.basePrice = Number(values.basePrice);
-        }
-        if (values.baseCostPrice !== undefined) {
-            if (!Number.isFinite(Number(values.baseCostPrice)) || Number(values.baseCostPrice) < 0) {
-                throw inventoryError('Base cost price must be a non-negative number.');
-            }
-            values.baseCostPrice = Number(values.baseCostPrice);
-        }
-        if (values.discountPercentage !== undefined) {
-            if (!Number.isFinite(Number(values.discountPercentage))
-                || Number(values.discountPercentage) < 0 || Number(values.discountPercentage) > 100) {
-                throw inventoryError('Discount percentage must be between 0 and 100.');
-            }
-            values.discountPercentage = Number(values.discountPercentage);
-        }
-        if (values.marginTier !== undefined && !['LOW', 'MID', 'HIGH'].includes(values.marginTier)) {
-            throw inventoryError('Margin tier must be LOW, MID, or HIGH.');
-        }
-        if (values.expiryDate !== undefined) {
-            const expiryDate = new Date(values.expiryDate);
-            if (Number.isNaN(expiryDate.getTime())) throw inventoryError('A valid expiry date is required.');
-            values.expiryDate = expiryDate;
-        }
-        if (values.sku !== undefined || values.code !== undefined) {
-            const sku = String(values.sku ?? values.code ?? '').trim().toUpperCase();
-            values.sku = sku || undefined;
-            values.code = sku || undefined;
-        }
-        if (values.isPrescriptionRequired !== undefined || values.requiresPrescription !== undefined) {
-            const required = Boolean(values.isPrescriptionRequired ?? values.requiresPrescription);
-            values.isPrescriptionRequired = required;
-            values.requiresPrescription = required;
-        }
-        if (Object.keys(values).length === 0) throw inventoryError('No valid medicine fields were provided.');
-
-        if (getIsConnected()) {
-            if (!mongoose.isValidObjectId(medicineId)) throw inventoryError('Invalid medicine ID.');
-            try {
-                const medicine = await Medicine.findOneAndUpdate({
-                    _id: medicineId,
-                    isActive: { $ne: false },
-                    ...(values.stockQuantity !== undefined
-                        ? { $expr: { $lte: [{ $ifNull: ['$reservedQuantity', 0] }, values.stockQuantity] } }
-                        : {})
-                }, { $set: values }, { new: true, runValidators: true });
-                if (!medicine) {
-                    const exists = await Medicine.exists({ _id: medicineId, isActive: { $ne: false } });
-                    if (!exists) throw inventoryError('Medicine not found.', 404);
-                    throw inventoryError('Physical stock cannot be lower than currently reserved stock.', 409);
-                }
-                return medicine.toObject({ virtuals: true });
-            } catch (error) {
-                if (error.code === 11000) throw inventoryError('A medicine with this SKU already exists.', 409);
-                throw error;
-            }
-        }
-        const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(medicineId) && entry.isActive !== false);
-        if (!medicine) throw inventoryError('Medicine not found.', 404);
-        if (values.stockQuantity !== undefined && values.stockQuantity < getReservedStock(medicine)) {
-            throw inventoryError('Physical stock cannot be lower than currently reserved stock.', 409);
-        }
-        if (values.sku && inMemoryMedicines.some(entry =>
-            String(entry._id) !== String(medicineId) && entry.sku?.toUpperCase() === values.sku
-        )) {
-            throw inventoryError('A medicine with this SKU already exists.', 409);
-        }
-        Object.assign(medicine, values);
-        return formatMedicine(medicine);
+    async updateMedicine() {
+        throw inventoryError('Legacy dataStore product updates are disabled. Use the tenant- and branch-scoped Inventory Service product API.', 410);
     },
 
-    async deleteMedicine(medicineId) {
-        if (getIsConnected()) {
-            if (!mongoose.isValidObjectId(medicineId)) throw inventoryError('Invalid medicine ID.');
-            const medicine = await Medicine.findOneAndUpdate({
-                _id: medicineId,
-                isActive: { $ne: false },
-                $expr: { $eq: [{ $ifNull: ['$reservedQuantity', 0] }, 0] }
-            }, { $set: { isActive: false } }, { new: true });
-            if (medicine) return { _id: medicine._id, deleted: true };
-            const exists = await Medicine.exists({ _id: medicineId, isActive: { $ne: false } });
-            if (!exists) throw inventoryError('Medicine not found.', 404);
-            throw inventoryError('Medicine with reserved inventory cannot be deleted.', 409);
-        }
-        const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(medicineId) && entry.isActive !== false);
-        if (!medicine) throw inventoryError('Medicine not found.', 404);
-        if (getReservedStock(medicine) > 0) throw inventoryError('Medicine with reserved inventory cannot be deleted.', 409);
-        medicine.isActive = false;
-        return { _id: medicine._id, deleted: true };
+    async deleteMedicine() {
+        throw inventoryError('Legacy dataStore product archival is disabled. Use the tenant- and branch-scoped Inventory Service product API.', 410);
     },
 
     calculateDistanceInKm(lat1, lon1, lat2, lon2) {
@@ -3611,34 +3041,32 @@ export const dataStore = {
         const alternativeIds = [...new Set((Array.isArray(proposalData.alternativeOffers) ? proposalData.alternativeOffers : [])
             .map(offer => String(offer?.productId || '').trim()).filter(id => mongoose.isValidObjectId(id)))].slice(0, 5);
         let alternativeOffers = [];
-        if (alternativeIds.length && getIsConnected() && request.tenantId) {
-            const alternativeQuery = {
-                _id: { $in: alternativeIds },
+        if (alternativeIds.length && getIsConnected() && request.tenantId && request.branchId) {
+            const inventoryResponse = await inventoryClient.lookup({
+                productIds: alternativeIds,
                 tenantId: String(request.tenantId),
-                isActive: { $ne: false },
-                expiryDate: { $gt: new Date() }
-            };
-            if (request.branchId) alternativeQuery.branchId = String(request.branchId);
-            const candidates = await Medicine.find(alternativeQuery)
-                .select('_id name brand manufacturer composition strength dosageForm form price discountPercentage stockQuantity stock quantity reservedQuantity requiresPrescription isPrescriptionRequired')
-                .lean();
+                branchId: String(request.branchId),
+                userId: actor?.userId || actor?.sub || 'pharmacy-admin'
+            });
+            const candidates = inventoryResponse.items || [];
             const norm = value => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
             alternativeOffers = candidates.flatMap(candidate => {
-                const sameComposition = requestedIdentity.composition && norm(candidate.composition) === norm(requestedIdentity.composition);
+                const composition = candidate.composition || candidate.genericName;
+                const sameComposition = requestedIdentity.composition && norm(composition) === norm(requestedIdentity.composition);
                 const sameStrength = requestedIdentity.strength && norm(candidate.strength) === norm(requestedIdentity.strength);
                 const sameForm = requestedIdentity.dosageForm && norm(candidate.dosageForm || candidate.form) === norm(requestedIdentity.dosageForm);
-                if (!sameComposition || !sameStrength || !sameForm || String(candidate._id) === String(proposalData.productId || '')) return [];
-                const availableQuantity = Math.max(0, Number(candidate.stockQuantity ?? candidate.stock ?? candidate.quantity ?? 0) - Number(candidate.reservedQuantity || 0));
+                if (!sameComposition || !sameStrength || !sameForm || String(candidate.productId) === String(proposalData.productId || '')) return [];
+                const availableQuantity = Math.max(0, Number(candidate.availableQuantity || 0));
                 if (availableQuantity < quantity) return [];
                 const unitPrice = Number(candidate.price || 0);
                 if (!Number.isFinite(unitPrice) || unitPrice < 0) return [];
                 const discountPercentage = Math.min(100, Math.max(0, Number(candidate.discountPercentage || 0)));
                 const discountedUnitPrice = Math.round(unitPrice * (1 - discountPercentage / 100) * 100) / 100;
                 return [{
-                    productId: String(candidate._id),
+                    productId: String(candidate.productId),
                     medicineName: candidate.name,
                     manufacturer: candidate.manufacturer || candidate.brand || '',
-                    composition: candidate.composition || '',
+                    composition,
                     strength: candidate.strength || '',
                     dosageForm: candidate.dosageForm || candidate.form || '',
                     quantity,
@@ -3646,8 +3074,8 @@ export const dataStore = {
                     discountPercentage,
                     discountedUnitPrice,
                     availableQuantity,
-                    requiresPrescription: Boolean(candidate.requiresPrescription ?? candidate.isPrescriptionRequired),
-                    requiresPharmacistApproval: Boolean(request.prescriptionId || request.prescriptionUrl || candidate.requiresPrescription || candidate.isPrescriptionRequired),
+                    requiresPrescription: Boolean(candidate.requiresPrescription),
+                    requiresPharmacistApproval: Boolean(request.prescriptionId || request.prescriptionUrl || candidate.requiresPrescription),
                     customerConsentRequired: true
                 }];
             }).sort((a, b) => a.discountedUnitPrice - b.discountedUnitPrice);
@@ -4097,12 +3525,21 @@ export const dataStore = {
             ? `${chosenName} ${chosenStrength}`
             : chosenName;
         let selectedMedicine = null;
-        if (selectedProductId && getIsConnected()) {
-            selectedMedicine = await Medicine.findOne({ _id: selectedProductId, tenantId: String(request.tenantId) })
-                .select('_id name sku code price discountPercentage stockQuantity stock quantity reservedQuantity expiryDate isActive requiresPrescription isPrescriptionRequired')
-                .lean();
-            if (!selectedMedicine || selectedMedicine.isActive === false || (selectedMedicine.expiryDate && new Date(selectedMedicine.expiryDate) <= new Date())) {
-                throw inventoryError('The selected catalogue product is no longer available from this pharmacy.', 409);
+        let inventoryReservation = null;
+        let reservedMedicineItems = [];
+        if (selectedProductId) {
+            if (!getIsConnected()) throw inventoryError('Order persistence is unavailable. This catalogue product cannot be reserved.', 503);
+            const tenantId = String(request.tenantId || '').trim();
+            const branchId = String(request.branchId || user?.branchId || '').trim();
+            if (!tenantId || !branchId || !mongoose.isValidObjectId(selectedProductId)) {
+                throw inventoryError('The selected catalogue product requires a valid pharmacy tenant and branch.', 400);
+            }
+            const catalog = await inventoryClient.lookup({
+                productIds: [String(selectedProductId)], tenantId, branchId, userId: customerId
+            });
+            selectedMedicine = catalog.items?.[0] || null;
+            if (!selectedMedicine || Number(selectedMedicine.availableQuantity || 0) < chosenQuantity) {
+                throw inventoryError('The selected catalogue product is no longer available in the required quantity from this branch.', 409);
             }
             if (selectedAlternative) {
                 const currentDiscount = Math.min(100, Math.max(0, Number(selectedMedicine.discountPercentage || 0)));
@@ -4112,8 +3549,33 @@ export const dataStore = {
                     throw inventoryError('The alternative offer price changed. Ask the pharmacy to refresh the proposal before approving.', 409);
                 }
             }
-            if (Boolean(selectedMedicine.requiresPrescription ?? selectedMedicine.isPrescriptionRequired) && !request.prescriptionUrl && !request.prescriptionId) {
+            if (Boolean(selectedMedicine.requiresPrescription) && !request.prescriptionUrl && !request.prescriptionId) {
                 throw inventoryError('A valid prescription is required for the selected product.', 409);
+            }
+            const basePrice = Number(selectedMedicine.price || unitPrice);
+            if (!Number.isFinite(unitPrice) || unitPrice < 0 || unitPrice > basePrice + 0.01) {
+                throw inventoryError('The proposed price must be valid and cannot exceed the current Inventory Service catalogue price.', 409);
+            }
+            const baseCostPrice = Number(selectedMedicine.baseCostPrice) > 0 ? Number(selectedMedicine.baseCostPrice) : basePrice;
+            reservedMedicineItems = [{
+                medicineId: new mongoose.Types.ObjectId(String(selectedMedicine.productId)),
+                quantity: chosenQuantity,
+                price: unitPrice,
+                basePrice,
+                baseCostPrice,
+                discountPercentage: basePrice > unitPrice ? roundCurrency((1 - unitPrice / basePrice) * 100) : 0,
+                marginTier: ['LOW', 'MID', 'HIGH'].includes(selectedMedicine.marginTier) ? selectedMedicine.marginTier : 'LOW',
+                name: selectedMedicine.name || chosenName,
+                sku: selectedMedicine.sku || ''
+            }];
+            inventoryReservation = await inventoryClient.reserve({
+                orderId: String(orderId),
+                items: [{ productId: String(selectedMedicine.productId), quantity: chosenQuantity }],
+                tenantId, branchId, userId: customerId,
+                idempotencyKey: `medicine-request-order:${String(orderId)}`
+            });
+            if (inventoryReservation.status !== 'RESERVED' || !inventoryReservation.reservationId) {
+                throw inventoryError('Inventory could not reserve the selected proposal product. Refresh the proposal and retry.', 409);
             }
         }
 
@@ -4122,7 +3584,8 @@ export const dataStore = {
                 name: itemName,
                 productName: chosenName,
                 productId: selectedProductId,
-                sku: selectedMedicine?.sku || selectedMedicine?.code || (selectedProductId ? 'CATALOGUE' : 'MR-ARRANGED'),
+                medicineId: selectedProductId || null,
+                sku: selectedMedicine?.sku || (selectedProductId ? 'CATALOGUE' : 'MR-ARRANGED'),
                 quantity: chosenQuantity,
                 unitPrice: unitPrice,
                 price: unitPrice,
@@ -4138,7 +3601,11 @@ export const dataStore = {
             customerName: request.customerName,
             customerMobile: request.customerPhone || '',
             items: orderItems,
-            medicineItems: selectedProductId ? [{ medicineId: selectedProductId, quantity: chosenQuantity, price: unitPrice, name: chosenName, sku: selectedMedicine?.sku || selectedMedicine?.code || '' }] : [],
+            medicineItems: reservedMedicineItems,
+            tenantId: request.tenantId || null,
+            branchId: request.branchId || user?.branchId || null,
+            inventoryReservationId: inventoryReservation?.reservationId || null,
+            inventoryReservationStatus: inventoryReservation ? 'RESERVED' : null,
             prescriptionUrl: request.prescriptionUrl || null,
             prescriptionId: request.prescriptionId || null,
             patientPuid: request.patientPuid || null,
@@ -4170,26 +3637,11 @@ export const dataStore = {
         let createdOrder = null;
 
         if (getIsConnected()) {
-            const session = await mongoose.startSession();
+            let session;
             let updatedRequest;
             try {
+                session = await mongoose.startSession();
                 await session.withTransaction(async () => {
-                    if (selectedProductId) {
-                        const quantity = chosenQuantity;
-                        const reserved = await Medicine.findOneAndUpdate({
-                            _id: selectedProductId,
-                            tenantId: String(request.tenantId),
-                            isActive: { $ne: false },
-                            expiryDate: { $gt: now },
-                            $expr: {
-                                $gte: [
-                                    { $subtract: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, { $ifNull: ['$reservedQuantity', 0] }] },
-                                    quantity
-                                ]
-                            }
-                        }, { $inc: { reservedQuantity: quantity } }, { new: true, session });
-                        if (!reserved) throw inventoryError('The selected product stock changed or is insufficient. Please review the proposal again.', 409);
-                    }
                     const [created] = await Order.create([orderData], { session });
                     createdOrder = created.toObject();
                     updatedRequest = await MedicineRequest.findOneAndUpdate(
@@ -4227,8 +3679,21 @@ export const dataStore = {
                     ).lean();
                     if (!updatedRequest) throw inventoryError('This medicine request was already processed. Refresh your requests and orders.', 409);
                 });
+            } catch (error) {
+                if (inventoryReservation?.reservationId) {
+                    try {
+                        await inventoryClient.release(inventoryReservation.reservationId, {
+                            tenantId: request.tenantId, branchId: request.branchId || user?.branchId,
+                            userId: customerId,
+                            idempotencyKey: `medicine-request-release-after-failure:${String(request._id)}`
+                        });
+                    } catch (releaseError) {
+                        console.error('Medicine request conversion failed and inventory release also failed:', releaseError.message);
+                    }
+                }
+                throw error;
             } finally {
-                await session.endSession();
+                if (session) await session.endSession();
             }
 
             this.logAudit(customerId, 'CONVERT_REQUEST_TO_ORDER', 'ORDER', createdOrder._id.toString(), {

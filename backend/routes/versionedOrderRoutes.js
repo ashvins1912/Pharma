@@ -1,9 +1,10 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
-import Medicine from '../models/Medicine.js';
+import { inventoryClient } from '../services/inventory-client/InventoryClient.js';
 import Order from '../models/Order.js';
 import Tenant from '../models/Tenant.js';
+import TenantBranch from '../models/TenantBranch.js';
 import { authenticateUser } from '../middleware/auth.js';
 import { getIsConnected } from '../config/db.js';
 import { publishOrderEvent } from '../services/OrderEventService.js';
@@ -100,27 +101,27 @@ router.post('/', authenticateUser, async (req, res) => {
         const selectedTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id').lean();
         if (!selectedTenant) return res.status(404).json({ code: 'PHARMACY_UNAVAILABLE', message: 'Selected pharmacy is unavailable.' });
 
+        const selectedBranchId = String(body.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || '').trim();
+        if (!selectedBranchId) return res.status(400).json({ code: 'BRANCH_SELECTION_REQUIRED', message: 'Select a pharmacy branch before creating an order.' });
+        const selectedBranch = await TenantBranch.findOne({ _id: selectedBranchId, tenantId: selectedTenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!selectedBranch) return res.status(404).json({ code: 'BRANCH_UNAVAILABLE', message: 'Selected pharmacy branch is unavailable.' });
         const productReferences = body.items.map(item => String(item.productId || item.sku).trim());
         const objectIds = productReferences.filter(mongoose.isValidObjectId);
-        const products = await Medicine.find({
-            tenantId: selectedTenantId,
-            $or: [
-                { sku: { $in: productReferences.map(id => id.toUpperCase()) } },
-                { code: { $in: productReferences.map(id => id.toUpperCase()) } },
-                ...(objectIds.length ? [{ _id: { $in: objectIds } }] : [])
-            ]
-        }).lean();
-        const productsById = new Map(products.map(product => [String(product._id), product]));
+        const skus = productReferences.filter(id => !mongoose.isValidObjectId(id));
+        const inventoryLookup = await inventoryClient.lookup({
+            productIds: objectIds, skus, tenantId: selectedTenantId, branchId: selectedBranchId, userId: req.user.sub
+        });
+        const products = inventoryLookup.items || [];
+        const productsById = new Map(products.map(product => [String(product.productId), product]));
         const productsBySku = new Map(products.flatMap(product => [
-            [String(product.sku || '').toUpperCase(), product],
-            [String(product.code || '').toUpperCase(), product]
+            [String(product.sku || '').toUpperCase(), product]
         ]).filter(([sku]) => sku));
         const resolvedItems = [];
         for (let index = 0; index < body.items.length; index += 1) {
             const productReference = productReferences[index];
             const product = productsById.get(productReference) || productsBySku.get(productReference.toUpperCase());
             if (!product) return res.status(409).json({ message: `Product ${productReference} is unavailable.` });
-            resolvedItems.push({ medicineId: String(product._id), quantity: Number(body.items[index].quantity) });
+            resolvedItems.push({ medicineId: String(product.productId), productId: String(product.productId), quantity: Number(body.items[index].quantity) });
         }
 
         const lookup = {
@@ -154,6 +155,8 @@ router.post('/', authenticateUser, async (req, res) => {
         const order = await dataStore.reserveOrder({
             userId: req.user.sub,
             tenantId: selectedTenantId,
+            branchId: selectedBranchId,
+            branchScopeExplicit: true,
             customerName: body.addressDetails?.fullName || req.user.user_metadata?.name || req.user.email || 'Customer',
             customerMobile: String(body.mobile || body.addressDetails?.mobile || body.addressDetails?.phone || req.user.user_metadata?.mobile || '').trim(),
             items: resolvedItems,

@@ -2,7 +2,8 @@ import express from 'express';
 import mongoose from 'mongoose';
 import { authenticateUser, requirePermission } from '../middleware/auth.js';
 import Tenant from '../models/Tenant.js';
-import Medicine from '../models/Medicine.js';
+import TenantBranch from '../models/TenantBranch.js';
+import { inventoryClient } from '../services/inventory-client/InventoryClient.js';
 import SurplusSavingsCampaign from '../models/SurplusSavingsCampaign.js';
 import SurplusSavingsRedemption from '../models/SurplusSavingsRedemption.js';
 import { tenantScopedFilter } from '../authorization/tenantScope.js';
@@ -36,6 +37,10 @@ router.get('/', async (req, res) => {
         const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
         if (!tenant) return res.status(404).json({ code: 'PHARMACY_UNAVAILABLE', message: 'This pharmacy is not available.' });
         const now = new Date();
+        const branchId = String(req.query.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || '').trim();
+        if (!branchId) return res.status(400).json({ code: 'BRANCH_SELECTION_REQUIRED', message: 'Select a pharmacy branch to view available surplus savings.' });
+        const activeBranch = await TenantBranch.findOne({ _id: branchId, tenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!activeBranch) return res.status(404).json({ code: 'BRANCH_UNAVAILABLE', message: 'Selected pharmacy branch is unavailable.' });
         const campaigns = await SurplusSavingsCampaign.find(tenantScopedFilter(tenantId, {
             status: 'ACTIVE', startsAt: { $lte: now }, endsAt: { $gt: now },
             $or: [{ usageLimit: null }, { $expr: { $lt: ['$usageCount', '$usageLimit'] } }]
@@ -45,24 +50,28 @@ router.get('/', async (req, res) => {
         const visibleCampaigns = campaigns.filter(campaign => !redeemedCampaignIds.has(String(campaign._id)));
         const ids = [...new Set(visibleCampaigns.flatMap(c => c.medicineIds.map(String)))];
         if (!ids.length) return res.json({ success: true, tenantId, items: [] });
-        const medicines = await Medicine.find(tenantScopedFilter(tenantId, { _id: { $in: ids }, isActive: { $ne: false } }))
-            .select('_id name brand price imageUrl description stockQuantity stock quantity requiresPrescription isPrescriptionRequired')
-            .lean();
+        const inventoryResponse = await inventoryClient.lookup({ productIds: ids, tenantId, branchId, userId: req.user.sub });
+        const medicines = inventoryResponse.items || [];
         const items = [];
         for (const medicine of medicines) {
-            const eligible = visibleCampaigns.filter(c => c.medicineIds.some(id => String(id) === String(medicine._id)))
-                .map(c => ({ campaign: c, discount: computeDiscount(medicine.price, c) }))
+            const listPrice = Number(medicine.price || 0);
+            const productDiscount = Math.min(100, Math.max(0, Number(medicine.discountPercentage || 0)));
+            const currentPrice = listPrice * (1 - productDiscount / 100);
+            const eligible = visibleCampaigns.filter(c => c.medicineIds.some(id => String(id) === String(medicine.productId)))
+                .map(c => ({ campaign: c, discount: computeDiscount(currentPrice, c) }))
                 .filter(x => x.discount > 0)
-                .sort((a, b) => b.discount - a.discount);
+                .sort((a, b) => b.discount - a.discount)
+                .slice(0, 1);
             if (!eligible.length) continue;
             const best = eligible[0];
-            const price = Number(medicine.price);
+            const price = Number(currentPrice);
+            const totalSavings = listPrice - (price - best.discount);
             items.push({
-                _id: String(medicine._id), medicineId: String(medicine._id), tenantId,
-                name: medicine.name, brand: medicine.brand, imageUrl: medicine.imageUrl || null,
-                description: medicine.description || '', originalPrice: price,
+                _id: String(medicine.productId), medicineId: String(medicine.productId), tenantId, branchId,
+                name: medicine.name, brand: medicine.brand || medicine.manufacturer, imageUrl: medicine.imageUrl || null,
+                description: medicine.description || '', originalPrice: listPrice,
                 price: money(price - best.discount), discountedPrice: money(price - best.discount),
-                savingsAmount: best.discount, discountPercent: price > 0 ? money(best.discount / price * 100) : 0,
+                savingsAmount: money(totalSavings), discountPercent: listPrice > 0 ? money(totalSavings / listPrice * 100) : 0,
                 campaignId: String(best.campaign._id), campaignName: best.campaign.name,
                 campaignDescription: best.campaign.description, minOrderAmount: Number(best.campaign.minOrderAmount || 0), endsAt: best.campaign.endsAt,
                 stock: medicine.stockQuantity ?? medicine.stock ?? medicine.quantity ?? 0,
@@ -119,8 +128,12 @@ router.post('/admin', requireCampaignAdmin, requirePermission('promotions.manage
             || (maxDiscountAmount != null && (!Number.isFinite(maxDiscountAmount) || maxDiscountAmount <= 0))) {
             return res.status(400).json({ message: 'Usage limits and maximum discount must be positive whole-number/amount values.' });
         }
-        const medicines = await Medicine.find(tenantScopedFilter(tenantId, { _id: { $in: medicineIds }, isActive: { $ne: false } })).select('_id').lean();
-        if (medicines.length !== medicineIds.length) return res.status(400).json({ code: 'CROSS_TENANT_MEDICINE', message: 'Campaign products must all belong to the selected pharmacy.' });
+        const branchId = String(req.body.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || '').trim();
+        if (!branchId) return res.status(400).json({ code: 'BRANCH_SELECTION_REQUIRED', message: 'Select a pharmacy branch before creating a product campaign.' });
+        const activeBranch = await TenantBranch.findOne({ _id: branchId, tenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!activeBranch) return res.status(404).json({ code: 'BRANCH_UNAVAILABLE', message: 'Selected pharmacy branch is unavailable.' });
+        const inventoryResponse = await inventoryClient.lookup({ productIds: medicineIds, tenantId, branchId, userId: req.user.sub });
+        if ((inventoryResponse.items || []).length !== medicineIds.length) return res.status(400).json({ code: 'CROSS_TENANT_MEDICINE', message: 'Campaign products must belong to the selected pharmacy branch inventory.' });
         const campaign = await SurplusSavingsCampaign.create({
             tenantId, name, description: String(req.body.description || '').trim().slice(0, 500),
             status: req.body.status === 'ACTIVE' ? 'ACTIVE' : 'DRAFT',

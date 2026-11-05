@@ -7,7 +7,7 @@ import Order from '../models/Order.js';
 import Tenant from '../models/Tenant.js';
 import TenantBranch from '../models/TenantBranch.js';
 import Rider from '../models/Rider.js';
-import Medicine from '../models/Medicine.js';
+import { inventoryClient } from '../services/inventory-client/InventoryClient.js';
 import FulfillmentCase from '../models/FulfillmentCase.js';
 import MedicineRequest from '../models/MedicineRequest.js';
 import { buildIntelligentFulfillmentPlan, validateWaitWindow } from '../services/intelligentFulfillment/fulfillmentPlanner.js';
@@ -238,19 +238,10 @@ router.post('/', authenticateUser, async (req, res) => {
         if (medicineIds.length === 0 || medicineIds.some(id => !mongoose.isValidObjectId(id))) {
             return res.status(400).json({ message: 'Every order item must reference a valid medicine in the selected pharmacy catalogue.' });
         }
-        const medicines = await Medicine.find({
-            _id: { $in: medicineIds },
-            tenantId: selectedTenantId,
-            isActive: { $ne: false }
-        }).select('_id name price sku').lean();
-        if (medicines.length !== medicineIds.length) {
-            return res.status(404).json({ code: 'MEDICINE_NOT_IN_SELECTED_PHARMACY', message: 'One or more medicines are not available from the selected pharmacy.' });
-        }
-        const medicineById = new Map(medicines.map(medicine => [String(medicine._id), medicine]));
+        const selectedBranchId = await resolveTenantBranchId(selectedTenantId, req.body?.branchId, req.user);
         const scopedItems = items.map(item => {
             const medicineId = String(item.medicineId || item.productId || item._id || item.id);
-            const medicine = medicineById.get(medicineId);
-            return { ...item, medicineId, productId: medicineId, name: medicine.name, price: Number(medicine.price), unitPrice: Number(medicine.price), sku: medicine.sku || item.sku || '' };
+            return { ...item, medicineId, productId: medicineId };
         });
         let deliveryAddress = typeof req.body.deliveryAddress === 'string' ? req.body.deliveryAddress.trim() : '';
         let coordinates = req.body.coordinates;
@@ -290,6 +281,8 @@ router.post('/', authenticateUser, async (req, res) => {
             userId: req.user.sub,
             customerId: req.user.sub,
             tenantId: selectedTenantId,
+            branchId: selectedBranchId,
+            branchScopeExplicit: true,
             addressId: addressSnapshot?._id || req.body.addressId || null,
             customerName: addressSnapshot?.fullName || req.user.user_metadata?.name || req.user.email || 'Customer',
             customerMobile,
@@ -375,19 +368,22 @@ router.post('/fulfillment/preview', authenticateUser, async (req, res) => {
         const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
         if (!tenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
         const branchId = await resolveTenantBranchId(tenantId, req.body?.branchId, req.user);
-        const branchScope = { branchId: branchId || null };
-        const inventory = await Medicine.find({ _id: { $in: ids }, tenantId, ...branchScope }).select('_id name sku code price basePrice stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean();
+        const inventoryResponse = await inventoryClient.lookup({
+            productIds: ids, tenantId, branchId, userId: req.user.sub
+        });
+        const inventory = inventoryResponse.items || [];
         const compositionKeys = [...new Set([...inventory.map(item => item.composition || item.genericName), ...items.map(item => item.composition || item.genericName)].map(value => String(value || '').trim()).filter(value => value && !['active compound', 'unknown', 'n/a', 'na'].includes(value.toLowerCase())))];
         const strengthKeys = [...new Set([...inventory.map(item => item.strength), ...items.map(item => item.strength)].map(value => String(value || '').trim()).filter(Boolean))];
-        const catalog = compositionKeys.length && strengthKeys.length
-            ? await Medicine.find({
-                tenantId, ...branchScope, isActive: { $ne: false },
-                _id: { $nin: ids },
-                composition: { $in: compositionKeys },
-                strength: { $in: strengthKeys },
-                expiryDate: { $gt: new Date() }
-            }).limit(100).select('_id name sku code price basePrice stockQuantity stock quantity reservedQuantity expiryDate isActive composition genericName strength dosageForm form requiresPrescription isPrescriptionRequired discountPercentage manufacturer brand').lean()
+        const catalogResults = compositionKeys.length
+            ? await Promise.all(compositionKeys.map(composition => inventoryClient.searchProducts({
+                tenantId, branchId, query: composition, includeOutOfStock: true, limit: 100, userId: req.user.sub
+            })))
             : [];
+        const catalog = [...new Map(catalogResults.flatMap(result => result.items || [])
+            .filter(product => compositionKeys.some(composition => String(product.genericName || product.composition || '').trim().toLowerCase() === composition.toLowerCase()))
+            .filter(product => strengthKeys.some(strength => String(product.strength || '').trim().toLowerCase() === strength.toLowerCase()))
+            .filter(product => !ids.includes(String(product.productId)))
+            .map(product => [String(product.productId), product])).values()];
         const plan = buildIntelligentFulfillmentPlan({ requestedItems: items, inventory, catalog });
         return res.json({ ...plan, tenantId, branchId: branchId || null });
     } catch (error) {
@@ -449,7 +445,10 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
             if (existing.requestFingerprint !== requestFingerprint) return res.status(409).json({ message: 'This idempotency key was already used for a different waitlist request.' });
             return res.status(200).json({ case: existing, alreadyCreated: true });
         }
-        const inventory = ids.length ? await Medicine.find({ _id: { $in: ids }, tenantId, branchId: selectedBranchId || null }).select('_id name').lean() : [];
+        const inventoryResponse = ids.length ? await inventoryClient.lookup({
+            productIds: ids, tenantId, branchId: selectedBranchId, userId: req.user.sub
+        }) : { items: [] };
+        const inventory = inventoryResponse.items || [];
         let waitlistCoordinates = req.body?.coordinates || null;
         if (typeof waitlistCoordinates === 'string') {
             try { waitlistCoordinates = JSON.parse(waitlistCoordinates); } catch { waitlistCoordinates = null; }
@@ -458,11 +457,11 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
         if (!req.body?.addressId || !waitlistAddress || !hasValidCoordinates(waitlistCoordinates)) {
             return res.status(400).json({ message: 'A saved delivery address with a verified map pin is required before waiting for stock.' });
         }
-        if (inventory.length !== ids.length) return res.status(404).json({ message: 'One or more selected medicines are not listed by this pharmacy.' });
+        if (inventory.length !== ids.length) return res.status(404).json({ message: 'One or more selected medicines are not listed in this pharmacy branch inventory.' });
         const lines = items.map(item => {
             const productId = String(item.productId || item.medicineId || '');
             const requestedQuantity = Number(item.requestedQuantity ?? item.waitingQuantity);
-            const product = productId ? inventory.find(row => String(row._id) === productId) : null;
+            const product = productId ? inventory.find(row => String(row.productId) === productId) : null;
             return {
                 productId: productId || null,
                 name: product?.name || String(item.requestedName || item.name || '').trim(),
@@ -979,7 +978,9 @@ router.get('/dynamic-restock', authenticateUser, async (req, res) => {
         return res.status(503).json({ message: 'Personalized restock is temporarily unavailable.' });
     }
     try {
-        const items = await dynamicOrderService.generateDynamicRestockBasket(req.user.sub);
+        const tenantId = String(req.query.tenantId || req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
+        const branchId = await resolveTenantBranchId(tenantId, req.query.branchId, req.user);
+        const items = await dynamicOrderService.generateDynamicRestockBasket(req.user.sub, { tenantId, branchId });
         return res.json({ items });
     } catch (error) {
         console.error('Dynamic restock generation failed:', error);
@@ -1008,7 +1009,7 @@ router.post('/checkout/quote', authenticateUser, async (req, res) => {
             items,
             req.user.sub,
             pointsToRedeem,
-            { couponCode: req.body.couponCode || undefined, tenantId: selectedTenantId }
+            { couponCode: req.body.couponCode || undefined, tenantId: selectedTenantId, branchId: await resolveTenantBranchId(selectedTenantId, req.body.branchId, req.user) }
         );
         return res.json(quote);
     } catch (error) {

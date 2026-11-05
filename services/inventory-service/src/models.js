@@ -11,7 +11,9 @@ const productSchema = new mongoose.Schema({
   category: { type: 'string', default: 'General Medicine' },
   description: { type: 'string', default: '' },
   imageUrl: { type: 'string', default: '' },
-  baseCostPrice: { type: 'number', min: 0 },
+  hsnSac: { type: 'string', default: '' },
+  baseCostPrice: { type: 'number', min: 0, default: 0 },
+  discountPercentage: { type: 'number', min: 0, max: 100, default: 0 },
   marginTier: { type: 'string', enum: ['LOW', 'MID', 'HIGH'], default: 'LOW' },
   requiresPrescription: { type: 'boolean', default: false },
   version: { type: 'number', default: 1 },
@@ -57,7 +59,12 @@ const reservationSchema = new mongoose.Schema({
   items: [{
     productId: { type: mongoose.Schema.Types.ObjectId, required: true },
     sku: { type: 'string', required: true },
-    quantity: { type: 'number', required: true, min: 1 }
+    quantity: { type: 'number', required: true, min: 1 },
+    allocations: [{
+      inventoryId: { type: mongoose.Schema.Types.ObjectId, required: true },
+      batchNumber: { type: 'string', default: '' },
+      quantity: { type: 'number', required: true, min: 1 }
+    }]
   }]
 }, { timestamps: true });
 

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api/apiClient';
 import AdminLogistics from './AdminLogistics';
+import AdminBulkImportModal from './admin/AdminBulkImportModal';
 
 export default function AdminDashboard() {
     const [orders, setOrders] = useState([]);
-    const [file, setFile] = useState(null);
+    const [bulkImportOpen, setBulkImportOpen] = useState(false);
     const [code, setCode] = useState('');
     const [pct, setPct] = useState('');
     const [status, setStatus] = useState('');
@@ -23,22 +24,6 @@ export default function AdminDashboard() {
             // error
         } finally {
             setLoading(false);
-        }
-    };
-
-    const uploadExcel = async (e) => {
-        e.preventDefault();
-        if (!file) return;
-        const form = new FormData();
-        form.append('excelFile', file);
-        try {
-            await apiClient.post('/api/medicines/upload-excel', form, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-            setStatus('✅ Catalog sync complete!');
-            setFile(null);
-        } catch (err) {
-            setStatus('❌ Excel upload failed: ' + (err.message || 'Error'));
         }
     };
 
@@ -69,18 +54,13 @@ export default function AdminDashboard() {
             <AdminLogistics refresh={loadOrders} />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white border border-slate-200 p-4 rounded-2xl shadow-sm">
-                <form onSubmit={uploadExcel} className="space-y-2 border-b md:border-b-0 md:border-r border-slate-200 pb-4 md:pb-0 md:pr-4">
-                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">📊 Sync Stock Excel</h4>
-                    <input
-                        type="file"
-                        accept=".xlsx, .xls"
-                        onChange={e => setFile(e.target.files?.[0] || null)}
-                        className="text-xs file:bg-blue-50 file:text-blue-600 file:border-0 file:rounded-xl file:px-3 file:py-1 cursor-pointer w-full"
-                    />
-                    <button type="submit" disabled={!file} className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold text-xs py-2 rounded-xl cursor-pointer transition">
-                        Upload Sheet
+                <div className="space-y-2 border-b md:border-b-0 md:border-r border-slate-200 pb-4 md:pb-0 md:pr-4">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">📊 Refill Inventory</h4>
+                    <p className="text-xs text-slate-500">Upload stock through the reviewed, tenant-and-branch-scoped inventory batch workflow.</p>
+                    <button type="button" onClick={() => setBulkImportOpen(true)} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2 rounded-xl cursor-pointer transition">
+                        Review Stock Import
                     </button>
-                </form>
+                </div>
 
                 <form onSubmit={makeCoupon} className="space-y-2 border-b md:border-b-0 md:border-r border-slate-200 pb-4 md:pb-0 md:pr-4">
                     <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">🎟️ Create Coupon</h4>
@@ -206,6 +186,7 @@ export default function AdminDashboard() {
                     </div>
                 )}
             </div>
+            <AdminBulkImportModal isOpen={bulkImportOpen} onClose={() => setBulkImportOpen(false)} />
         </div>
     );
 }
