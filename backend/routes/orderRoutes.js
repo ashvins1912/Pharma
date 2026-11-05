@@ -1085,12 +1085,21 @@ router.get('/dynamic-restock', authenticateUser, async (req, res) => {
     }
     try {
         const tenantId = String(req.query.tenantId || req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
+        if (!tenantId) {
+            return res.status(400).json({ code: 'PHARMACY_SELECTION_REQUIRED', message: 'Select a pharmacy to view personalized restock suggestions.' });
+        }
         const branchId = await resolveTenantBranchId(tenantId, req.query.branchId, req.user);
+        if (!branchId) {
+            return res.status(409).json({ code: 'ACTIVE_BRANCH_REQUIRED', message: 'This pharmacy has no active branch available for restock suggestions.' });
+        }
         const items = await dynamicOrderService.generateDynamicRestockBasket(req.user.sub, { tenantId, branchId });
         return res.json({ items });
     } catch (error) {
         console.error('Dynamic restock generation failed:', error);
-        return res.status(500).json({ message: 'Failed to generate your restock basket.' });
+        return res.status(getErrorStatus(error)).json({
+            code: error.code || 'DYNAMIC_RESTOCK_FAILED',
+            message: error.message || 'Unable to generate your restock suggestions.'
+        });
     }
 });
 
