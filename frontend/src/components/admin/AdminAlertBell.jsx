@@ -21,6 +21,7 @@ export default function AdminAlertBell({
 
   const total = (canViewInventoryAlerts ? Number(alerts.totalAlerts || 0) : 0)
     + (canReadWhatsApp && !whatsappStatus?.isConnected ? 1 : 0);
+  const displayTotal = canViewInventoryAlerts && alertError ? '—' : total;
 
   return (
     <div className="relative flex-shrink-0">
@@ -50,7 +51,7 @@ export default function AdminAlertBell({
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div>
                 <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                  {t('dispensaryAlerts')} ({total})
+                  {t('dispensaryAlerts')} ({displayTotal})
                 </h4>
                 <p className="text-[10px] text-slate-400">{t('safetyThresholdMonitor')}</p>
                 <p className={`text-[10px] mt-1 ${alertError ? 'text-rose-600' : 'text-slate-400'}`} role="status" aria-live="polite">
