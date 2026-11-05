@@ -936,204 +936,13 @@ export const dataStore = {
         console.log(`Initialized MongoDB medicine catalog with ${mongoCatalog.length} medicines.`);
     },
 
-    async importExcelInventory(rows, adminId = 'Admin') {
-        const importId = `imp-${Date.now()}`;
-        const auditEntries = [];
-        let importedCount = 0;
-        let updatedCount = 0;
-
-        for (const row of rows) {
-            const sku = (row.SKU || row.sku || `SKU-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`).toString().trim();
-            const name = (row['Medicine Name'] || row.name || row.Name || '').toString().trim();
-            if (!name) continue;
-
-            const category = (row.Category || row.category || 'General Medicine').toString().trim();
-            const subCategory = (row['Sub-category'] || row.SubCategory || row.subCategory || 'Unclassified').toString().trim();
-            const description = (row.Description || row.description || '').toString().trim();
-            const brand = (row.Brand || row.brand || row.Manufacturer || 'Generic').toString().trim();
-            const manufacturer = (row.Manufacturer || row.manufacturer || brand).toString().trim();
-            const price = Number(row.Price || row.price) || 50;
-            const rawBaseCostPrice = row['Base Cost Price'] ?? row.baseCostPrice;
-            const baseCostPrice = rawBaseCostPrice === undefined || rawBaseCostPrice === ''
-                ? price
-                : Number(rawBaseCostPrice);
-            if (!Number.isFinite(baseCostPrice) || baseCostPrice < 0) {
-                throw inventoryError(`Invalid base cost price for ${name}.`);
-            }
-            const requestedMarginTier = String(row['Margin Tier'] || row.marginTier || 'LOW').trim().toUpperCase();
-            if (!['LOW', 'MID', 'HIGH'].includes(requestedMarginTier)) {
-                throw inventoryError(`Invalid margin tier for ${name}.`);
-            }
-            const stock = Number(row.Stock || row.stock || row.Quantity || row.quantity) || 10;
-            const batchNumber = (row['Batch Number'] || row.batchNumber || 'BATCH-NEW').toString().trim();
-            const requiresPrescription = String(row['Requires Prescription'] || row.requiresPrescription || '').toLowerCase() === 'true';
-            
-            let imageUrl = (row['Cloudinary Image URL'] || row.imageUrl || '').toString().trim();
-            if (!imageUrl || !imageUrl.startsWith('http')) {
-                imageUrl = "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80";
-            }
-
-            let expiryDate = new Date();
-            if (row['Expiry Date'] || row.expiryDate) {
-                const parsed = new Date(row['Expiry Date'] || row.expiryDate);
-                if (!isNaN(parsed.getTime())) expiryDate = parsed;
-                else expiryDate = new Date(Date.now() + 365 * 86400000);
-            } else {
-                expiryDate = new Date(Date.now() + 365 * 86400000);
-            }
-
-            const existingIdx = inMemoryMedicines.findIndex(m =>
-                (m.sku && m.sku.toLowerCase() === sku.toLowerCase()) ||
-                m.name.toLowerCase() === name.toLowerCase()
-            );
-
-            if (existingIdx >= 0) {
-                const prev = inMemoryMedicines[existingIdx];
-                const auditRecord = {
-                    importId,
-                    adminId,
-                    timestamp: new Date().toISOString(),
-                    sku,
-                    name,
-                    previousStock: prev.stock || prev.quantity || 0,
-                    newStock: (prev.stock || prev.quantity || 0) + stock,
-                    previousPrice: prev.price,
-                    newPrice: price,
-                    previousExpiry: prev.expiryDate,
-                    newExpiry: expiryDate
-                };
-
-                prev.stock = (prev.stock || prev.quantity || 0) + stock;
-                prev.quantity = prev.stock;
-                prev.stockQuantity = prev.stock;
-                prev.price = price;
-                prev.baseCostPrice = baseCostPrice;
-                prev.marginTier = requestedMarginTier;
-                prev.expiryDate = expiryDate;
-                prev.batchNumber = batchNumber;
-                prev.category = category;
-                prev.subCategory = subCategory;
-                prev.description = description || prev.description;
-                if (imageUrl) prev.imageUrl = imageUrl;
-
-                auditEntries.push(auditRecord);
-                inMemoryInventoryAudits.unshift(auditRecord);
-                updatedCount++;
-            } else {
-                const newMed = {
-                    _id: `med-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-                    sku,
-                    name,
-                    brand,
-                    category,
-                    subCategory,
-                    description,
-                    composition: "Active Formulation",
-                    price,
-                    baseCostPrice,
-                    marginTier: requestedMarginTier,
-                    quantity: stock,
-                    stock,
-                    stockQuantity: stock,
-                    reservedQuantity: 0,
-                    batchNumber,
-                    expiryDate,
-                    requiresPrescription,
-                    imageUrl,
-                    manufacturer
-                };
-                inMemoryMedicines.push(newMed);
-                const auditRecord = {
-                    importId,
-                    adminId,
-                    timestamp: new Date().toISOString(),
-                    sku,
-                    name,
-                    previousStock: 0,
-                    newStock: stock,
-                    previousPrice: 0,
-                    newPrice: price,
-                    previousExpiry: null,
-                    newExpiry: expiryDate
-                };
-                auditEntries.push(auditRecord);
-                inMemoryInventoryAudits.unshift(auditRecord);
-                importedCount++;
-            }
-
-            if (getIsConnected()) {
-                const existingMedicine = await Medicine.findOne({
-                    $or: [{ sku }, { name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } }]
-                });
-                if (existingMedicine) {
-                    await Medicine.collection.updateOne({ _id: existingMedicine._id }, [{
-                        $set: {
-                            stockQuantity: {
-                                $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, stock]
-                            },
-                            stock: {
-                                $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, stock]
-                            },
-                            quantity: {
-                                $add: [{ $ifNull: ['$stockQuantity', { $ifNull: ['$stock', '$quantity'] }] }, stock]
-                            },
-                            price,
-                            baseCostPrice,
-                            marginTier: requestedMarginTier,
-                            expiryDate,
-                            batchNumber,
-                            category,
-                            subCategory,
-                            description: description || existingMedicine.description,
-                            imageUrl,
-                            isPrescriptionRequired: requiresPrescription,
-                            requiresPrescription
-                        }
-                    }]);
-                } else {
-                    await Medicine.create({
-                        sku,
-                        code: sku,
-                        name,
-                        brand,
-                        category,
-                        subCategory,
-                        description,
-                        composition: 'Active Formulation',
-                        price,
-                        baseCostPrice,
-                        marginTier: requestedMarginTier,
-                        stockQuantity: stock,
-                        reservedQuantity: 0,
-                        stock,
-                        quantity: stock,
-                        batchNumber,
-                        expiryDate,
-                        isPrescriptionRequired: requiresPrescription,
-                        requiresPrescription,
-                        imageUrl,
-                        manufacturer
-                    });
-                }
-            }
-        }
-
-        this.logAudit(adminId, 'BULK_IMPORT_EXCEL', 'INVENTORY', importId, {
-            totalRows: rows.length,
-            importedCount,
-            updatedCount
-        });
-
-        return {
-            importId,
-            totalRows: rows.length,
-            importedCount,
-            updatedCount,
-            auditEntries
-        };
+    async importExcelInventory() {
+        throw inventoryError(
+            'Legacy Excel stock mutation is disabled. Use the staged Inventory Service import, review and publish workflow.',
+            410
+        );
     },
 
-    // Orders
     async createOrder(orderData, actor = 'Customer') {
         return this.reserveOrder(orderData, actor);
     },
@@ -1720,16 +1529,10 @@ export const dataStore = {
                         });
                         order.inventoryReservationStatus = 'RELEASED';
                     } else if (status === 'Rejected') {
-                        for (const item of order.medicineItems) {
-                            const quantity = Number(item.quantity);
-                            const result = await Medicine.updateOne({
-                                _id: item.medicineId,
-                                $expr: { $gte: [{ $ifNull: ['$reservedQuantity', 0] }, quantity] }
-                            }, { $inc: { reservedQuantity: -quantity } }, { session });
-                            if (result.modifiedCount !== 1) {
-                                throw inventoryError('Could not safely release reserved medicine stock.', 409);
-                            }
-                        }
+                        throw inventoryError(
+                            'This legacy order has no Inventory Service reservation reference. Manual reconciliation is required; legacy stock will not be changed.',
+                            409
+                        );
                     }
 
                     order.orderStatus = status;
@@ -1758,16 +1561,10 @@ export const dataStore = {
             throw inventoryError('This order requires an attached prescription before approval.', 409);
         }
         if (status === 'Rejected') {
-            for (const item of order.medicineItems || []) {
-                const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
-                if (!medicine || getReservedStock(medicine) < item.quantity) {
-                    throw inventoryError('Could not safely release reserved medicine stock.', 409);
-                }
-            }
-            for (const item of order.medicineItems || []) {
-                const medicine = inMemoryMedicines.find(entry => String(entry._id) === String(item.medicineId));
-                medicine.reservedQuantity -= item.quantity;
-            }
+            throw inventoryError(
+                'Legacy in-memory orders cannot change pharmacy stock. Reconcile the order through Inventory Service.',
+                409
+            );
         }
         order.orderStatus = status;
         order.statusHistory.push({
