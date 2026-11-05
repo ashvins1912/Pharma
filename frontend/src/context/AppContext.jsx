@@ -66,6 +66,8 @@ export function AppProvider({ children }) {
   const [addressesError, setAddressesError] = useState('');
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [loadingAddresses, setLoadingAddresses] = useState(false);
+  const addressesRef = useRef(addresses);
+  addressesRef.current = addresses;
   const addressLoadSequence = useRef(0);
 
   // Orders & Tracking State
@@ -325,7 +327,7 @@ export function AppProvider({ children }) {
     const requestSequence = ++addressLoadSequence.current;
     if (!isFullyAuthenticated) return null;
     if (!force && addressCacheKey) {
-      const cached = addresses;
+      const cached = addressesRef.current;
       if (Array.isArray(cached) && cached.length > 0) {
         setAddresses(cached);
         setAddressesError('');
@@ -357,7 +359,7 @@ export function AppProvider({ children }) {
     } catch (err) {
       if (requestSequence !== addressLoadSequence.current) return;
       console.warn("Address directory notice:", err?.message || err);
-      if (!Array.isArray(addresses) || addresses.length === 0) {
+      if (!Array.isArray(addressesRef.current) || addressesRef.current.length === 0) {
         setAddressesError('Unable to load your saved addresses right now. Please try again.');
       } else {
         setAddressesError('');
@@ -366,7 +368,7 @@ export function AppProvider({ children }) {
     } finally {
       if (requestSequence === addressLoadSequence.current) setLoadingAddresses(false);
     }
-  }, [addressCacheKey, isFullyAuthenticated, addresses]);
+  }, [addressCacheKey, isFullyAuthenticated]);
 
   // Fetch Orders
   const loadUserOrders = useCallback(async ({ silent = false } = {}) => {
