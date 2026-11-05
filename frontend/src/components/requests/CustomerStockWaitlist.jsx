@@ -47,13 +47,30 @@ export default function CustomerStockWaitlist() {
     }
   };
 
+  const cancelLine = async (entry, lineIndex) => {
+    if (busyId) return;
+    setBusyId(String(entry._id));
+    try {
+      const response = await apiClient.post(`/api/orders/fulfillment/waitlist/${entry._id}/cancel`, {
+        lineIndexes: [lineIndex]
+      });
+      addToast(response.data?.message || 'Selected remaining quantity cancelled.', 'info');
+      await Promise.all([load(), loadUserOrders()]);
+    } catch (error) {
+      addToast(error.response?.data?.message || 'Could not cancel this medicine quantity.', 'error');
+      await load();
+    } finally {
+      setBusyId('');
+    }
+  };
+
   const cancel = async entry => {
     if (busyId) return;
     setBusyId(String(entry._id));
     try {
       await apiClient.post(`/api/orders/fulfillment/waitlist/${entry._id}/cancel`);
       addToast('Stock waitlist cancelled.', 'info');
-      await load();
+      await Promise.all([load(), loadUserOrders()]);
     } catch (error) {
       addToast(error.response?.data?.message || 'Could not cancel this waitlist.', 'error');
     } finally {
@@ -84,12 +101,32 @@ export default function CustomerStockWaitlist() {
                 {statusLabel}
               </span>
             </div>
-            {(entry.lines || []).map((line, index) => (
-              <div key={`${line.productId}-${index}`} className="flex justify-between gap-3 text-xs">
-                <span className="text-slate-700">{line.name || 'Medicine'}</span>
-                <span className="text-right font-bold text-slate-900">{line.allocatedQuantity || 0} available / {line.waitingQuantity || line.requestedQuantity} waiting<br/><span className="text-[10px] font-medium text-emerald-700">{Number(line.listPrice || 0) > Number(line.unitPrice || 0) ? <><s className="mr-1 text-slate-400">₹{Number(line.listPrice).toFixed(2)}</s>₹{Number(line.unitPrice).toFixed(2)} each · {Number(line.discountPercentage || 0)}% off</> : <>₹{Number(line.unitPrice || 0).toFixed(2)} each</>}</span></span>
-              </div>
-            ))}
+            {(entry.lines || []).map((line, index) => {
+              const waitingQuantity = Number(line.waitingQuantity ?? line.requestedQuantity ?? 0);
+              const cancelled = line.customerDecision === 'CANCELLED';
+              return (
+                <div key={`${line.productId || line.requestedName || 'medicine'}-${index}`} className="flex items-start justify-between gap-3 text-xs border-t border-slate-100 pt-2">
+                  <div className="min-w-0">
+                    <span className="text-slate-700">{line.name || line.requestedName || 'Medicine'}</span>
+                    {cancelled ? (
+                      <p className="mt-1 text-[10px] font-bold text-slate-500">Remaining quantity cancelled</p>
+                    ) : (
+                      <p className="mt-1 text-[10px] font-medium text-emerald-700">
+                        {Number(line.listPrice || 0) > Number(line.unitPrice || 0)
+                          ? <><s className="mr-1 text-slate-400">₹{Number(line.listPrice).toFixed(2)}</s>₹{Number(line.unitPrice).toFixed(2)} each · {Number(line.discountPercentage || 0)}% off</>
+                          : <>₹{Number(line.unitPrice || 0).toFixed(2)} each</>}
+                      </p>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="font-bold text-slate-900">{Number(line.allocatedQuantity || 0)} available / {waitingQuantity} waiting</p>
+                    {!cancelled && waitingQuantity > 0 && !terminal && (
+                      <button type="button" disabled={busyId === String(entry._id)} onClick={() => cancelLine(entry, index)} className="mt-1 text-[10px] font-bold text-rose-700 underline disabled:opacity-50">Cancel remaining</button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
             {entry.parentOrderId && <p className="text-[10px] text-indigo-700">Linked to order #{String(entry.parentOrderId).slice(-6).toUpperCase()}</p>}
             <p className="text-[10px] text-slate-500">Wait window ends: {until || 'Not specified'}</p>
             <div className="flex gap-2">
