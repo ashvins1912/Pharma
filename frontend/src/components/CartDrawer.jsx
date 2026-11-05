@@ -110,7 +110,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
                           </span>
                           <button
                             onClick={() => updateQuantity(item._id, 1)}
-                            disabled={item.quantity >= item.stock}
+                            disabled={item.quantity >= (item.maxCartQuantity || item.stock)}
                             className="w-6 h-6 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 rounded font-black text-xs cursor-pointer"
                           >
                             +
