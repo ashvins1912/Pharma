@@ -54,8 +54,29 @@ test('only proposes alternatives with matching composition, strength and compati
   assert.equal(plan.lines[0].alternatives[0].discountedUnitPrice, 80);
   assert.equal(plan.lines[0].alternatives[0].listPrice, 100);
   assert.equal(plan.lines[0].alternatives[0].discountPercentage, 20);
-  assert.equal(plan.lines[0].alternatives[0].discountPercentage, 28);
   assert.equal(plan.lines[0].alternatives[0].substitutionRequiresCustomerConsent, true);
+});
+
+test('applies a configured discount once when the candidate price is not already reduced', () => {
+  const plan = buildIntelligentFulfillmentPlan({
+    requestedItems: [{ medicineId: 'medicine-1', quantity: 1 }],
+    inventory: [medicine({ stockQuantity: 0 })],
+    catalog: [
+      medicine({
+        _id: 'configured-discount',
+        stockQuantity: 5,
+        reservedQuantity: 0,
+        price: 100,
+        basePrice: 100,
+        discountPercentage: 10
+      })
+    ],
+    now
+  });
+  const alternative = plan.lines[0].alternatives[0];
+  assert.equal(alternative.listPrice, 100);
+  assert.equal(alternative.discountPercentage, 10);
+  assert.equal(alternative.discountedUnitPrice, 90);
 });
 
 test('does not treat expired or inactive stock as sellable', () => {

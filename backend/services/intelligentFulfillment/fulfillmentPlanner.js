@@ -31,8 +31,15 @@ const scoreAlternative = (requested, candidate) => {
   const derivedDiscount = listPrice > price
     ? Math.round((1 - price / listPrice) * 10000) / 100
     : 0;
-  const discountPercentage = configuredDiscount > 0 ? configuredDiscount : derivedDiscount;
-  const discountedUnitPrice = roundMoney(price * (1 - discountPercentage / 100));
+  // Inventory Service's price is the current selling price when it is below
+  // basePrice. In that case the effective discount is already reflected in
+  // price and must not be applied a second time. Only apply a configured
+  // discount when no reduced selling price is present.
+  const hasDiscountedSellingPrice = listPrice > price;
+  const discountPercentage = hasDiscountedSellingPrice ? derivedDiscount : configuredDiscount;
+  const discountedUnitPrice = hasDiscountedSellingPrice
+    ? roundMoney(price)
+    : roundMoney(price * (1 - discountPercentage / 100));
   return {
     productId: String(candidate._id),
     name: candidate.name,
