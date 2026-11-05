@@ -5,7 +5,7 @@ import express from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import { config } from './config.js';
-import { ImportJob } from './models.js';
+import { ImportJob, Audit } from './models.js';
 import {
   buildFailureWorkbook,
   createImportJob,
@@ -47,7 +47,6 @@ const upload = multer({
 
 router.post('/products', requireServiceScope('inventory.write'), asyncHandler(async (req, res) => {
   const result = await createProduct({
-    ...(req.body || {}),
     product: req.body?.product || req.body || {},
     ...getInventoryScope(req, req.body || {}),
     actor: req.service.userId || req.service.name,
@@ -80,6 +79,23 @@ router.delete('/products/:productId', requireServiceScope('inventory.write'), as
   return res.json(result);
 }));
 
+router.get('/audits', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
+  const { tenantId, branchId } = getInventoryScope(req, req.query || {});
+  if (!tenantId || !branchId) {
+    const error = new Error('Verified tenantId and branchId are required for inventory audit history.');
+    error.statusCode = 403;
+    throw error;
+  }
+  const page = Math.max(1, Math.floor(Number(req.query.page) || 1));
+  const limit = Math.min(100, Math.max(1, Math.floor(Number(req.query.limit) || 50)));
+  const filter = { tenantId: String(tenantId), branchId: String(branchId) };
+  const [total, items] = await Promise.all([
+    Audit.countDocuments(filter),
+    Audit.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean()
+  ]);
+  return res.json({ items, total, page, limit, pages: Math.ceil(total / limit) || 1 });
+}));
+
 router.get('/products/search', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
   const result = await searchInventoryProducts({
     ...getInventoryScope(req, req.query),
@@ -87,6 +103,7 @@ router.get('/products/search', requireServiceScope('inventory.read'), asyncHandl
     category: req.query.category || '',
     hideRx: req.query.hideRx || false,
     includeOutOfStock: req.query.includeOutOfStock || false,
+    includeExpiredBatches: req.query.includeExpiredBatches || false,
     sort: req.query.sort || 'default',
     page: req.query.page || 1,
     limit: req.query.limit || 50
@@ -95,13 +112,13 @@ router.get('/products/search', requireServiceScope('inventory.read'), asyncHandl
 }));
 
 router.get('/products/:productId', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
-  const result = await lookupInventory({ productIds: [req.params.productId], ...getInventoryScope(req) });
+  const result = await lookupInventory({ productIds: [req.params.productId], ...getInventoryScope(req, req.query) });
   if (!result.length) return res.status(404).json({ message: 'Product was not found.' });
   return res.json(result[0]);
 }));
 
 router.get('/:productId', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
-  const result = await lookupInventory({ productIds: [req.params.productId], ...getInventoryScope(req) });
+  const result = await lookupInventory({ productIds: [req.params.productId], ...getInventoryScope(req, req.query) });
   if (!result.length) return res.status(404).json({ message: 'Inventory item was not found.' });
   return res.json(result[0]);
 }));
@@ -154,7 +171,7 @@ router.post('/reservations', requireServiceScope('inventory.reserve'), asyncHand
 
 router.post('/reservations/:reservationId/release', requireServiceScope('inventory.release'), asyncHandler(async (req, res) => {
   const result = await transitionReservation(req.params.reservationId, 'RELEASED', {
-    ...getInventoryScope(req),
+    ...getInventoryScope(req, req.body || {}),
     actor: req.service.name,
     requestId: req.requestId,
     correlationId: req.correlationId
@@ -164,7 +181,7 @@ router.post('/reservations/:reservationId/release', requireServiceScope('invento
 
 router.post('/reservations/:reservationId/deduct', requireServiceScope('inventory.deduct'), asyncHandler(async (req, res) => {
   const result = await transitionReservation(req.params.reservationId, 'DEDUCTED', {
-    ...getInventoryScope(req),
+    ...getInventoryScope(req, req.body || {}),
     actor: req.service.name,
     requestId: req.requestId,
     correlationId: req.correlationId
@@ -190,7 +207,7 @@ router.post('/imports/preview', requireServiceScope('inventory.import'), upload.
   const { tenantId, branchId } = getInventoryScope(req);
   if (!tenantId || !branchId) { await fs.rm(req.file.path, { force: true }).catch(() => {}); return res.status(403).json({ message: 'Verified tenant and branch selection is required.' }); }
   try {
-    const preview = await previewImportFile({ filePath: req.file.path, tenantId, branchId });
+    const preview = await previewImportFile({ filePath: req.file.path, tenantId, branchId, stockMode: req.body?.stockMode });
     const publicPreview = { ...preview };
     delete publicPreview.catalogSkus;
     delete publicPreview.sourceRows;
