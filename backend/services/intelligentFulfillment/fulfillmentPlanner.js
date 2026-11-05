@@ -61,7 +61,12 @@ export function buildIntelligentFulfillmentPlan({ requestedItems, inventory, cat
   if (!Array.isArray(requestedItems) || !requestedItems.length) {
     throw Object.assign(new Error('At least one order item is required.'), { statusCode: 400 });
   }
-  const inventoryById = new Map((inventory || []).map(item => [String(item._id), item]));
+  // Inventory Service bulk lookup returns productId; older planner fixtures
+  // and catalogue search results may expose _id. Normalize both identifiers.
+  const inventoryById = new Map((inventory || []).map(item => [
+    String(item.productId || item._id || item.medicineId || ''),
+    item
+  ]).filter(([id]) => id));
   const seen = new Map();
   const descriptorsById = new Map();
   for (const [itemIndex, item] of requestedItems.entries()) {
