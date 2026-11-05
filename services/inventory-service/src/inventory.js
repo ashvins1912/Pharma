@@ -1,8 +1,3 @@
-import { randomUUID } from 'node:crypto';
-import mongoose from 'mongoose';
-import { Audit, Inventory, Product, Reservation } from './models.js';
-import { config } from './config.js';
-
 const asPositiveQuantity = value => Number.isSafeInteger(value) && value > 0;
 const normalizeItems = items => {
   if (!Array.isArray(items) || items.length === 0 || items.length > 100) {
@@ -62,8 +57,8 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
   const today = new Date(new Date().toISOString().slice(0, 10));
   const byProductId = new Map();
   for (const row of inventories) {
-    if (row.expiryDate && new Date(row.expiryDate) < today) continue;
     const key = String(row.productId);
+    if (row.expiryDate && new Date(row.expiryDate) < today) continue;
     if (!byProductId.has(key)) byProductId.set(key, []);
     byProductId.get(key).push(row);
   }
@@ -115,7 +110,7 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
 
 export async function searchInventoryProducts({
   tenantId = null, branchId = null, query = '', category = '', hideRx = false,
-  includeOutOfStock = false, sort = 'default', page = 1, limit = 50
+  includeOutOfStock = false, includeExpiredBatches = false, sort = 'default', page = 1, limit = 50
 } = {}) {
   const scopeTenantId = typeof tenantId === 'string' ? tenantId.trim() : '';
   const scopeBranchId = typeof branchId === 'string' ? branchId.trim() : '';
@@ -136,7 +131,7 @@ export async function searchInventoryProducts({
   if (isSearching) {
     const escapedQuery = normalizedQuery.replace(/[.*+?^()|[\]{}\\]/g, '\\$&');
     const pattern = new RegExp(escapedQuery, 'i');
-    filter.$or = [{ sku: pattern }, { name: pattern }, { genericName: pattern }, { manufacturer: pattern }, { category: pattern }];
+    filter.$or = [{ sku: pattern }, { name: pattern }, { genericName: pattern }, { manufacturer: pattern }, { category: pattern }, { strength: pattern }, { form: pattern }];
   }
   const products = await Product.find(filter).lean();
   const productIds = products.map(product => product._id);
@@ -145,15 +140,23 @@ export async function searchInventoryProducts({
   inventoryFilter.branchId = scopeBranchId;
   const inventories = productIds.length ? await Inventory.find(inventoryFilter).lean() : [];
   const byProductId = new Map();
+  const expiredByProductId = new Map();
   const today = new Date(new Date().toISOString().slice(0, 10));
   for (const row of inventories) {
-    if (row.expiryDate && new Date(row.expiryDate) < today) continue;
     const key = String(row.productId);
+    if (row.expiryDate && new Date(row.expiryDate) < today) {
+      if (includeExpiredBatches === true || String(includeExpiredBatches).toLowerCase() === 'true') {
+        if (!expiredByProductId.has(key)) expiredByProductId.set(key, []);
+        expiredByProductId.get(key).push(row);
+      }
+      continue;
+    }
     if (!byProductId.has(key)) byProductId.set(key, []);
     byProductId.get(key).push(row);
   }
   const allItems = products.map(product => {
     const batches = byProductId.get(String(product._id)) || [];
+    const expiredBatches = expiredByProductId.get(String(product._id)) || [];
     batches.sort((a, b) => {
       const ae = a.expiryDate ? new Date(a.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
       const be = b.expiryDate ? new Date(b.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
@@ -173,11 +176,20 @@ export async function searchInventoryProducts({
       manufacturer: product.manufacturer, brand: product.manufacturer, strength: product.strength, dosage: product.strength, dosageForm: product.form, form: product.form,
       category: product.category, requiresPrescription: product.requiresPrescription, isPrescriptionRequired: product.requiresPrescription,
       baseCostPrice: product.baseCostPrice || 0, discountPercentage: product.discountPercentage || 0, marginTier: product.marginTier || 'LOW',
-      mrp: price, sellingPrice: price, price, stockQuantity, reservedQuantity, availableQuantity,
+      mrp: price, basePrice: price,
+      sellingPrice: Math.round(Number(price || 0) * (1 - Math.min(100, Math.max(0, Number(product.discountPercentage || 0))) / 100) * 100) / 100,
+      price, stockQuantity, reservedQuantity, availableQuantity,
       stock: stockQuantity, quantity: availableQuantity,
       stockStatus: availableQuantity > 10 ? 'IN_STOCK' : availableQuantity > 0 ? 'LOW_STOCK' : 'OUT_OF_STOCK',
       batchNumber: listingBatch?.batchNumber || '', expiryDate: listingBatch?.expiryDate || null,
       batchCount: batches.length,
+      expiredStockQuantity: expiredBatches.reduce((sum, row) => sum + Number(row.stockQuantity || 0), 0),
+      expiredBatchAvailability: expiredBatches.map(row => ({
+        batchNumber: row.batchNumber || '', expiryDate: row.expiryDate || null,
+        stockQuantity: row.stockQuantity, reservedQuantity: row.reservedQuantity,
+        availableQuantity: Math.max(0, Number(row.stockQuantity || 0) - Number(row.reservedQuantity || 0)),
+        price: row.price
+      })),
       batchAvailability: batches.map(row => ({
         batchNumber: row.batchNumber || '', expiryDate: row.expiryDate || null,
         stockQuantity: row.stockQuantity, reservedQuantity: row.reservedQuantity,
@@ -192,8 +204,8 @@ export async function searchInventoryProducts({
     ? allItems.filter(item => item.availableQuantity > 0)
     : allItems;
   const comparators = {
-    'price-asc': (a, b) => (a.price ?? Number.MAX_SAFE_INTEGER) - (b.price ?? Number.MAX_SAFE_INTEGER),
-    'price-desc': (a, b) => (b.price ?? -1) - (a.price ?? -1),
+    'price-asc': (a, b) => (a.sellingPrice ?? a.price ?? Number.MAX_SAFE_INTEGER) - (b.sellingPrice ?? b.price ?? Number.MAX_SAFE_INTEGER),
+    'price-desc': (a, b) => (b.sellingPrice ?? b.price ?? -1) - (a.sellingPrice ?? a.price ?? -1),
     'name-asc': (a, b) => String(a.name).localeCompare(String(b.name)),
     'stock-asc': (a, b) => a.availableQuantity - b.availableQuantity
   };
@@ -298,6 +310,12 @@ export async function updateProduct({ productId, product: input = {}, tenantId, 
         throw error;
       }
       const fields = normalizeProductFields(input);
+      if (!Number.isFinite(fields.baseCostPrice) || fields.baseCostPrice < 0
+        || !Number.isFinite(fields.discountPercentage) || fields.discountPercentage < 0 || fields.discountPercentage > 100) {
+        const error = new Error('Base cost must be non-negative and discount percentage must be between 0 and 100.');
+        error.statusCode = 400;
+        throw error;
+      }
       const editableFields = ['name', 'genericName', 'strength', 'form', 'manufacturer', 'category', 'description', 'imageUrl', 'hsnSac', 'baseCostPrice', 'discountPercentage', 'marginTier', 'requiresPrescription'];
       for (const field of editableFields) {
         if (Object.prototype.hasOwnProperty.call(input, field)
