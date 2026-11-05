@@ -749,6 +749,7 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
                 orderedForName: claimed.orderedForName || 'Customer',
                 fulfillmentCaseId: String(claimed._id),
                 parentOrderId: claimed.parentOrderId || null,
+                idempotencyKey: `fulfillment-confirmation:${confirmationId}`,
                 fulfillmentState: 'FULL',
                 fulfillmentConfirmationId: confirmationId,
                 prescriptionUrl: claimed.prescriptionUrl || null, prescriptionId: claimed.prescriptionId || null,
