@@ -427,6 +427,7 @@ export class NotificationService {
 
     async _persistAndPublish(notification) {
         let saved = notification;
+        let shouldPublish = true;
         if (getIsConnected()) {
             if (notification.dedupeKey) {
                 saved = await Notification.findOneAndUpdate(
@@ -434,6 +435,7 @@ export class NotificationService {
                     { $setOnInsert: notification },
                     { upsert: true, new: true, setDefaultsOnInsert: true }
                 ).lean();
+                shouldPublish = saved?.id === notification.id;
             } else {
                 saved = (await Notification.create(notification)).toObject();
             }
@@ -444,10 +446,12 @@ export class NotificationService {
             throw new Error('MongoDB is unavailable; refusing to publish a non-persistent notification.');
         }
 
-        logger.info(`Notification persisted: "${saved.title}" via [${(saved.channels || []).join(', ')}]`, {
-            notificationId: saved.id, tenantId: saved.tenantId, branchId: saved.branchId
-        });
-        this._publishNotification(saved);
+        if (shouldPublish) {
+            logger.info(`Notification persisted: "${saved.title}" via [${(saved.channels || []).join(', ')}]`, {
+                notificationId: saved.id, tenantId: saved.tenantId, branchId: saved.branchId
+            });
+            this._publishNotification(saved);
+        }
         return saved;
     }
 
