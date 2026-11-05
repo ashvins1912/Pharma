@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import apiClient from '../../api/apiClient';
@@ -18,6 +18,8 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
   
   const [adminMeds, setAdminMeds] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const inventoryRequestRef = useRef(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [adminPage, setAdminPage] = useState(1);
   const [adminTotalPages, setAdminTotalPages] = useState(1);
@@ -26,31 +28,44 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
   const [savingMedicine, setSavingMedicine] = useState(false);
 
   const loadAdminInventory = async (page = 1, search = '') => {
+    const requestVersion = ++inventoryRequestRef.current;
+    if (!tenantId || !branchId) {
+      setAdminMeds([]);
+      setAdminTotal(0);
+      setAdminTotalPages(1);
+      setLoadError('Select an active pharmacy and branch to view inventory.');
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      setLoadError('');
       const res = await apiClient.get('/api/medicines/admin/inventory', {
-        params: {
-          search,
-          page,
-          limit: 20,
-          tenantId,
-          branchId
-        }
+        params: { search, page, limit: 20, tenantId, branchId }
       });
-      if (res.data && res.data.medicines) {
-        setAdminMeds(res.data.medicines);
-        setAdminTotal(res.data.total || 0);
-        setAdminTotalPages(res.data.totalPages || 1);
-        setAdminPage(page);
-      } else if (Array.isArray(res.data)) {
-        setAdminMeds(res.data);
-        setAdminTotal(res.data.length);
-        setAdminTotalPages(1);
-      }
+      if (requestVersion !== inventoryRequestRef.current) return;
+
+      const payload = res.data?.data || res.data || {};
+      const medicines = Array.isArray(payload.medicines)
+        ? payload.medicines
+        : Array.isArray(payload.items)
+          ? payload.items
+          : Array.isArray(payload.data?.medicines)
+            ? payload.data.medicines
+            : null;
+      if (!medicines) throw new Error('Inventory API returned an unexpected response format.');
+
+      setAdminMeds(medicines);
+      setAdminTotal(Number(payload.total ?? payload.pagination?.total ?? medicines.length) || 0);
+      setAdminTotalPages(Number(payload.totalPages ?? payload.pages ?? payload.pagination?.totalPages ?? 1) || 1);
+      setAdminPage(Number(payload.page) || page);
     } catch (err) {
-      console.error("Admin inventory load error:", err);
+      if (requestVersion !== inventoryRequestRef.current) return;
+      console.error('Admin inventory load error:', err);
+      setLoadError(err.response?.data?.message || err.message || 'Could not load inventory. Please retry.');
     } finally {
-      setLoading(false);
+      if (requestVersion === inventoryRequestRef.current) setLoading(false);
     }
   };
 
@@ -195,6 +210,13 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
         {loading && adminMeds.length === 0 ? (
           <div className="col-span-full py-12 text-center text-xs text-slate-400">{t('loadingInventory')}</div>
+        ) : loadError ? (
+          <div className="col-span-full py-10 text-center space-y-3">
+            <p className="text-sm font-semibold text-rose-700">{loadError}</p>
+            <button type="button" onClick={() => loadAdminInventory(1, searchTerm)} className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700">
+              Retry inventory
+            </button>
+          </div>
         ) : adminMeds.length === 0 ? (
           <div className="col-span-full py-12 text-center text-xs text-slate-400">{t('noProductsSearch')}</div>
         ) : (
