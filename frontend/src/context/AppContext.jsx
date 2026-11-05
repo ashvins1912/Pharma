@@ -357,12 +357,16 @@ export function AppProvider({ children }) {
     } catch (err) {
       if (requestSequence !== addressLoadSequence.current) return;
       console.warn("Address directory notice:", err?.message || err);
-      setAddressesError('Unable to load your saved addresses right now. Please try again.');
+      if (!Array.isArray(addresses) || addresses.length === 0) {
+        setAddressesError('Unable to load your saved addresses right now. Please try again.');
+      } else {
+        setAddressesError('');
+      }
       return null;
     } finally {
       if (requestSequence === addressLoadSequence.current) setLoadingAddresses(false);
     }
-  }, [addressCacheKey, isFullyAuthenticated]);
+  }, [addressCacheKey, isFullyAuthenticated, addresses]);
 
   // Fetch Orders
   const loadUserOrders = useCallback(async ({ silent = false } = {}) => {
@@ -894,7 +898,11 @@ export function AppProvider({ children }) {
 
   // Cart operations
   const addToCart = (med) => {
-    const stock = med.stock !== undefined ? med.stock : (med.quantity || 0);
+    const stock = Number(med.availableQuantity ?? med.quantity ?? med.stock ?? 0);
+    // For low-stock medicines let the customer request up to five extra units.
+    // Checkout's live fulfillment preview splits available vs waiting quantities;
+    // the inventory reservation remains the final authority.
+    const maxCartQuantity = stock > 0 && stock <= 5 ? stock + 5 : stock;
     if (stock <= 0) {
       addToast(`Sorry, ${med.name} is currently out of stock.`, 'warning');
       return;
@@ -907,8 +915,8 @@ export function AppProvider({ children }) {
 
     const existing = cart.find(item => item._id === med._id && String(item._cartTenantId || item.tenantId || tenantId || '') === String(tenantId || ''));
     if (existing) {
-      if (existing.quantity >= stock) {
-        addToast(`Maximum available stock reached for ${med.name} (${stock} units).`, 'warning');
+      if (existing.quantity >= (existing.maxCartQuantity || maxCartQuantity)) {
+        addToast(`Maximum request quantity reached for ${med.name} (${existing.maxCartQuantity || maxCartQuantity} units). Available now: ${stock}.`, 'warning');
         return;
       }
       const quantity = existing.quantity + 1;
@@ -919,7 +927,7 @@ export function AppProvider({ children }) {
       return;
     }
 
-    setCart([...cart, { ...med, quantity: 1, stock, _cartTenantId: tenantId || med.tenantId || null }]);
+    setCart([...cart, { ...med, quantity: 1, stock, maxCartQuantity, _cartTenantId: tenantId || med.tenantId || null }]);
     addToast(`Added ${med.name} to cart`, 'success');
   };
 
@@ -933,8 +941,9 @@ export function AppProvider({ children }) {
       addToast(`Removed ${item.name} from cart`, 'info');
       return;
     }
-    if (nextQty > item.stock) {
-      addToast(`Only ${item.stock} units available in pharmacy stock.`, 'warning');
+    const maxCartQuantity = Number(item.maxCartQuantity || item.stock || 0);
+    if (nextQty > maxCartQuantity) {
+      addToast(`Maximum request quantity is ${maxCartQuantity}. Available now: ${item.stock}.`, 'warning');
       return;
     }
     setCart(cart.map(cartItem => cartItem._id === id ? { ...cartItem, quantity: nextQty } : cartItem));
