@@ -81,7 +81,7 @@ const authorizeCustomerAction = (req, res, next) => {
 };
 
 const authorizeRequestList = (req, res, next) => {
-    if (req.baseUrl.startsWith('/api/admin/')) {
+    if (req.baseUrl.startsWith('/api/admin/') || isStaff(req.user)) {
         return requirePermission('medicine_requests.read')(req, res, next);
     }
     return requireCustomer(req, res, next);
