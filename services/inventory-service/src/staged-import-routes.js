@@ -25,7 +25,7 @@ const scope = req => ({ tenantId: req.service?.tenantId || null, branchId: req.s
 const actor = req => req.service?.userId || req.service?.name || 'unknown';
 const requirePublishEnabled = (_req, res, next) => config.importsEnabled
   ? next()
-  : res.status(503).json({ code: 'INVENTORY_IMPORT_PUBLISH_DISABLED', message: 'Batch staging and review are available, but publishing is disabled by deployment configuration. Enable it only after confirming transaction-capable MongoDB and an approved rollout.' });
+  : res.status(503).json({ code: 'INVENTORY_IMPORT_PUBLISH_DISABLED', message: 'Batch staging and review are available, but publishing is disabled. Enable INVENTORY_IMPORTS_ENABLED only in the isolated test environment to publish test rows.' });
 const cleanName = value => path.basename(String(value || 'upload.xlsx')).replace(/[^a-zA-Z0-9._-]/g, '_');
 const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, character => `\\${character}`);
 const normHeader = value => String(value ?? '').trim().toLowerCase().replace(/[.\s_/-]+/g, '');
@@ -36,7 +36,7 @@ const pick = (row, ...keys) => {
   }
   return undefined;
 };
-function normalizeRow(raw, usedSkus) {
+function normalizeRow(raw, usedSkus, tenantIdentityForSku = '') {
   const name = String(pick(raw, 'Medicine Name', 'medicineName', 'name', 'Name', 'Product Name', 'Item Name') ?? '').trim();
   let sku = String(pick(raw, 'SKU', 'sku', 'Product SKU', 'Barcode', 'Code', 'Item Code') ?? '').trim().toUpperCase();
   const priceRaw = pick(raw, 'Price', 'price', 'MRP/Pk', 'MRP Per Pack', 'MRP', 'Selling Price');
@@ -46,6 +46,8 @@ function normalizeRow(raw, usedSkus) {
   const baseCostRaw = pick(raw, 'Base Cost Price', 'baseCostPrice', 'Cost Price', 'Base Price');
   const baseCostPrice = baseCostRaw === undefined || baseCostRaw === '' ? null : Number(baseCostRaw);
   const marginTier = String(pick(raw, 'Margin Tier', 'marginTier') || 'LOW').trim().toUpperCase();
+  const discountRaw = pick(raw, 'Discount Percentage', 'discountPercentage', 'Discount %', 'discount');
+  const discountPercentage = discountRaw === undefined || discountRaw === '' ? 0 : Number(discountRaw);
   const errors = [];
   if (!name) errors.push('Medicine name is required.');
   if (priceRaw === undefined || priceRaw === '' || !Number.isFinite(price) || price < 0) errors.push('Price must be a valid non-negative number.');
@@ -59,9 +61,11 @@ function normalizeRow(raw, usedSkus) {
   } else if (expiryRaw) expiryDate = new Date(expiryRaw);
   if (expiryRaw && (!expiryDate || !Number.isFinite(expiryDate.getTime()))) { errors.push('Expiry date is invalid.'); expiryDate = null; }
   if (expiryDate && expiryDate.getTime() < new Date(new Date().toISOString().slice(0, 10)).getTime()) errors.push('Expired medicine batches cannot be published.');
+  // Stable SKU generation prevents duplicate medicine records across refill uploads.
   if (!sku && name) {
-    do { sku = `${name.normalize('NFKD').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase().padEnd(2, 'X')}${randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`; }
-    while (usedSkus.has(sku));
+    const identity = [tenantIdentityForSku, name, String(pick(raw, 'Generic Name', 'genericName') || '').trim(), String(pick(raw, 'Strength', 'strength') || '').trim(), String(pick(raw, 'Form', 'form', 'Packing') || '').trim(), String(pick(raw, 'Manufacturer', 'manufacturer', 'Brand') || 'Pharmaceutical Standard').trim()].map(value => String(value).trim().toLowerCase()).join('|');
+    const prefix = name.normalize('NFKD').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase().padEnd(2, 'X');
+    sku = prefix + createHash('sha256').update(identity).digest('hex').slice(0, 10).toUpperCase();
   }
   if (sku) usedSkus.add(sku);
   const normalized = {
@@ -74,7 +78,7 @@ function normalizeRow(raw, usedSkus) {
     description: String(pick(raw, 'Description', 'description') || '').trim(),
     imageUrl: String(pick(raw, 'Image URL', 'imageUrl') || '').trim(),
     requiresPrescription: ['true', 'yes', '1'].includes(String(pick(raw, 'Requires Prescription', 'requiresPrescription') || '').toLowerCase()),
-    price, stockQuantity, baseCostPrice, marginTier,
+    price, stockQuantity, baseCostPrice, marginTier, discountPercentage,
     batchNumber: String(pick(raw, 'Batch Number', 'batchNumber', 'Batch No', 'Batch') || '').trim(),
     expiryDate
   };
@@ -108,7 +112,7 @@ const samePreview = (current, expected, fields) => {
   return fields.every(field => comparable(current[field]) === comparable(expected[field]));
 };
 const liveInventoryFields = ['tenantId','branchId','productId','sku','stockQuantity','reservedQuantity','price','batchNumber','expiryDate','warehouse','sourceImportBatchId','sourceImportRowId'];
-const productFields = ['tenantId','sku','name','genericName','strength','form','manufacturer','category','description','imageUrl','requiresPrescription','baseCostPrice','marginTier','version','lastImportBatchId','lastImportRowId','active'];
+const productFields = ['tenantId','sku','name','genericName','strength','form','manufacturer','category','description','imageUrl','requiresPrescription','baseCostPrice','marginTier','discountPercentage','version','lastImportBatchId','lastImportRowId','active'];
 function snapshot(doc, fields) {
   if (!doc) return null;
   const out = {};
@@ -153,7 +157,7 @@ async function publishRows(batch, rows, req) {
         Object.assign(product, {
           name: v.name, genericName: v.genericName, strength: v.strength, form: v.form,
           manufacturer: v.manufacturer, category: v.category, description: v.description,
-          imageUrl: v.imageUrl, requiresPrescription: v.requiresPrescription, baseCostPrice: v.baseCostPrice ?? undefined, marginTier: v.marginTier || 'LOW',
+          imageUrl: v.imageUrl, requiresPrescription: v.requiresPrescription, baseCostPrice: v.baseCostPrice ?? undefined, marginTier: v.marginTier || 'LOW', discountPercentage: v.discountPercentage || 0,
           lastImportBatchId: batch.batchId, lastImportRowId: fresh.rowId, active: true,
           version: Number(product.version || 0) + 1
         });
@@ -169,15 +173,21 @@ async function publishRows(batch, rows, req) {
           throw Object.assign(new Error(`Row ${fresh.rowNumber}: inventory changed after staging. Review the row again before publishing.`), { statusCode: 409 });
         }
         const inventoryBefore = inventory ? snapshot(asPlain(inventory), liveInventoryFields) : null;
-        if (inventory && Number(inventory.reservedQuantity || 0) > v.stockQuantity) {
-          throw Object.assign(new Error(`Row ${fresh.rowNumber}: stock cannot be lower than reserved quantity.`), { statusCode: 409 });
+        const currentStockQuantity = Number(inventory?.stockQuantity || 0);
+        const incomingStockQuantity = Number(v.stockQuantity);
+        const nextStockQuantity = batch.stockOperation === 'ADD' ? currentStockQuantity + incomingStockQuantity : incomingStockQuantity;
+        if (!Number.isSafeInteger(nextStockQuantity) || nextStockQuantity < 0) {
+          throw Object.assign(new Error('Row ' + fresh.rowNumber + ': resulting stock quantity is outside the supported range.'), { statusCode: 422 });
+        }
+        if (inventory && Number(inventory.reservedQuantity || 0) > nextStockQuantity) {
+          throw Object.assign(new Error('Row ' + fresh.rowNumber + ': stock cannot be lower than the quantity already reserved.'), { statusCode: 409 });
         }
         if (!inventory) inventory = new Inventory({
           tenantId: batch.tenantId, branchId: batch.branchId, productId: product._id,
           sku: v.sku, batchNumber: v.batchNumber || '', reservedQuantity: 0, warehouse: 'default'
         });
         Object.assign(inventory, {
-          sku: v.sku, price: v.price, stockQuantity: v.stockQuantity,
+          sku: v.sku, price: v.price, stockQuantity: nextStockQuantity,
           batchNumber: v.batchNumber || '', expiryDate: v.expiryDate || null,
           sourceImportBatchId: batch.batchId, sourceImportRowId: fresh.rowId
         });
@@ -194,6 +204,7 @@ async function publishRows(batch, rows, req) {
           productId: String(product._id), inventoryId: String(inventory._id),
           productCreated: !productBefore, inventoryCreated: !inventoryBefore,
           productBefore, productAfter, inventoryBefore, inventoryAfter,
+          stockOperation: batch.stockOperation || 'SET', incomingStockQuantity, previousStockQuantity: currentStockQuantity, resultingStockQuantity: nextStockQuantity,
           publishedAt: new Date(), publishedBy: actor(req)
         };
         fresh.history.push({ action: 'PUBLISH', actor: actor(req), at: new Date(), version: fresh.version, publication });
@@ -338,7 +349,7 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
       if (existing.fileSha256 !== fileSha256) throw Object.assign(new Error('Idempotency key was already used for another workbook.'), { statusCode: 409 });
       return res.status(202).json({ jobId: existing.batchId, batchId: existing.batchId, status: existing.status, totalRecords: existing.totalRows, processedRecords: existing.totalRows, successfulRecords: existing.validRows, failedRecords: existing.invalidRows, progress: existing.status === 'READY' ? 100 : 0, failedFileAvailable: existing.invalidRows > 0 });
     }
-    const approved = await previewImportFile({ filePath: req.file.path, tenantId, branchId });
+    const approved = await previewImportFile({ filePath: req.file.path, tenantId, branchId, stockMode: req.body?.stockMode });
     if (approved.previewFingerprint !== req.body.previewFingerprint) {
       throw Object.assign(new Error('The workbook differs from the reviewed preview. Preview it again before staging.'), { statusCode: 409 });
     }
@@ -348,13 +359,17 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
     const batchId = randomUUID();
     const usedSkus = new Set();
     const seenKeys = new Set();
+    const stockOperation = req.body?.stockMode === 'ADD' ? 'ADD' : 'SET';
     const documents = records.map((originalRecord, index) => {
-      const { normalized, errors } = normalizeRow(originalRecord, usedSkus);
+      const { normalized, errors } = normalizeRow(originalRecord, usedSkus, tenantId);
       const existingBatch = (approved.inventorySnapshot || []).find(item =>
         item.sku === normalized.sku && (item.batchNumber || '') === (normalized.batchNumber || '')
       );
-      if (existingBatch && Number(existingBatch.reservedQuantity || 0) > normalized.stockQuantity) {
-        errors.push('New stock is below the quantity already reserved for this batch.');
+      const currentStockQuantity = Number(existingBatch?.stockQuantity || 0);
+      normalized.currentStockQuantity = currentStockQuantity;
+      normalized.plannedStockQuantity = stockOperation === 'ADD' ? currentStockQuantity + Number(normalized.stockQuantity || 0) : Number(normalized.stockQuantity || 0);
+      if (existingBatch && Number(existingBatch.reservedQuantity || 0) > normalized.plannedStockQuantity) {
+        errors.push('Resulting stock would be below the quantity already reserved for this batch.');
       }
       const keyValue = JSON.stringify([normalized.sku, normalized.batchNumber || '']);
       if (seenKeys.has(keyValue)) errors.push('Duplicate SKU + medicine batch number in this upload.');
@@ -372,14 +387,14 @@ router.post('/imports', requireServiceScope('inventory.import'), upload.single('
     try {
       batch = await StagedImportBatch.create({
         batchId, tenantId, branchId, uploadedBy: actor(req), fileName: cleanName(req.file.originalname),
-        fileSha256, idempotencyKey: key, previewInventorySnapshot: approved.inventorySnapshot,
+        fileSha256, idempotencyKey: key, stockOperation, previewInventorySnapshot: approved.inventorySnapshot,
         previewProductSnapshot: approved.productSnapshot, status: 'STAGING', totalRows: documents.length, validRows, invalidRows
       });
     } catch (error) {
       if (error.code === 11000) {
         const duplicate = await StagedImportBatch.findOne({ tenantId, branchId, idempotencyKey: key });
         if (duplicate && duplicate.fileSha256 === fileSha256) {
-          return res.status(202).json({ jobId: duplicate.batchId, batchId: duplicate.batchId, status: duplicate.status, totalRecords: duplicate.totalRows, processedRecords: duplicate.totalRows, successfulRecords: duplicate.validRows, failedRecords: duplicate.invalidRows });
+          return res.status(202).json({ jobId: duplicate.batchId, batchId: duplicate.batchId, status: duplicate.status, totalRecords: duplicate.totalRows, processedRecords: duplicate.totalRows, successfulRecords: duplicate.validRows, failedRecords: duplicate.invalidRows, progress: duplicate.status === 'READY' ? 100 : 0, failedFileAvailable: duplicate.invalidRows > 0 });
         }
         throw Object.assign(new Error('Idempotency key has already been used for a different workbook.'), { statusCode: 409 });
       }
@@ -452,7 +467,7 @@ router.patch('/imports/batches/:batchId/rows/:rowId', requireServiceScope('inven
   if (req.body?.expectedVersion !== undefined && Number(req.body.expectedVersion) !== row.version) return res.status(409).json({ message: 'This row was edited by another user. Reload it before saving your changes.' });
   if (row.status === 'PUBLISHED') return res.status(409).json({ message: 'Unpublish this row before editing it.' });
   if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) return res.status(400).json({ message: 'Provide row fields to update.' });
-  const allowed = ['sku','name','genericName','strength','form','manufacturer','category','description','price','stockQuantity','batchNumber','expiryDate','requiresPrescription','imageUrl','baseCostPrice','marginTier'];
+  const allowed = ['sku','name','genericName','strength','form','manufacturer','category','description','price','stockQuantity','batchNumber','expiryDate','requiresPrescription','imageUrl','baseCostPrice','marginTier','discountPercentage'];
   const patch = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowed.includes(key)));
   const previousNormalized = { ...(row.normalized || {}) };
   const next = { ...row.normalized, ...patch };
@@ -463,7 +478,9 @@ router.patch('/imports/batches/:batchId/rows/:rowId', requireServiceScope('inven
   if (next.baseCostPrice === '') next.baseCostPrice = null;
   else if (next.baseCostPrice !== null && next.baseCostPrice !== undefined) next.baseCostPrice = Number(next.baseCostPrice);
   next.marginTier = String(next.marginTier || 'LOW').toUpperCase();
+  next.discountPercentage = next.discountPercentage === '' ? 0 : Number(next.discountPercentage || 0);
   next.batchNumber = String(next.batchNumber || '').trim();
+  next.plannedStockQuantity = batch.stockOperation === 'ADD' ? Number(next.currentStockQuantity || 0) + next.stockQuantity : next.stockQuantity;
   const errors = [];
   if (!next.sku) errors.push('SKU is required.');
   if (!next.name) errors.push('Medicine name is required.');
@@ -471,6 +488,7 @@ router.patch('/imports/batches/:batchId/rows/:rowId', requireServiceScope('inven
   if (!Number.isSafeInteger(next.stockQuantity) || next.stockQuantity < 0) errors.push('Stock must be a non-negative integer.');
   if (next.baseCostPrice !== null && next.baseCostPrice !== undefined && (!Number.isFinite(next.baseCostPrice) || next.baseCostPrice < 0)) errors.push('Base cost price must be a non-negative number.');
   if (!['LOW','MID','HIGH'].includes(next.marginTier)) errors.push('Margin tier must be LOW, MID or HIGH.');
+  if (!Number.isFinite(next.discountPercentage) || next.discountPercentage < 0 || next.discountPercentage > 100) errors.push('Discount percentage must be between 0 and 100.');
   if (next.expiryDate && !Number.isFinite(new Date(next.expiryDate).getTime())) errors.push('Expiry date is invalid.');
   if (next.expiryDate && new Date(next.expiryDate) < new Date(new Date().toISOString().slice(0,10))) errors.push('Expired medicine batches cannot be published.');
   const duplicate = await StagedImportRow.findOne({ batchId: row.batchId, tenantId, branchId, rowId: { $ne: row.rowId }, 'normalized.sku': next.sku, 'normalized.batchNumber': next.batchNumber });
@@ -612,9 +630,9 @@ router.get('/imports/batches/:batchId', requireServiceScope('inventory.import'),
   ]);
   return res.json({
     batch: {
-      batchId: batch.batchId, fileName: batch.fileName, status: batch.status,
+      batchId: batch.batchId, fileName: batch.fileName, status: batch.status, stockOperation: batch.stockOperation || 'SET',
       totalRows: batch.totalRows, validRows: batch.validRows, invalidRows: batch.invalidRows,
-      publishedRows: batch.publishedRows, unpublishedRows: batch.unpublishedRows,
+      publishedRows: batch.publishedRows, unpublishedRows: batch.unpublishedRows, stockOperation: batch.stockOperation || 'SET',
       uploadedBy: batch.uploadedBy, createdAt: batch.createdAt, completedAt: batch.completedAt
     },
     counts: Object.fromEntries(counts.map(x => [x._id, x.count]))
