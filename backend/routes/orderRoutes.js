@@ -44,7 +44,7 @@ const resolveTenantBranchId = async (tenantId, requestedBranchId, user = {}) => 
         return String(branch._id);
     }
     const defaultBranch = await TenantBranch.findOne({ tenantId: String(tenantId), status: 'ACTIVE' })
-        .sort({ isDefault: -1, createdAt: 1 }).select('_id').lean();
+        .sort({ isDefault: -1, createdAt: 1, _id: 1 }).select('_id').lean();
     return defaultBranch ? String(defaultBranch._id) : null;
 };
 const isPlatformOrderAdmin = req => ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(getActorRole(req));
