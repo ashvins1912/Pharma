@@ -815,17 +815,23 @@ export const dataStore = {
             for (const batch of med.expiredBatchAvailability || []) {
                 const expiryDate = batch.expiryDate ? new Date(batch.expiryDate) : null;
                 const daysLeft = expiryDate ? Math.ceil((expiryDate.getTime() - now.getTime()) / 86400000) : null;
-                expired.push({ ...med, batchNumber: batch.batchNumber, expiryDate: batch.expiryDate, stock: Number(batch.availableQuantity || 0), availableQuantity: Number(batch.availableQuantity || 0), daysLeft });
+                // Alert only when physical expired stock still exists; zeroed batches
+                // should not keep generating a safety incident after disposal.
+                if (Number(batch.stockQuantity || 0) > 0) {
+                    expired.push({ ...med, batchNumber: batch.batchNumber, expiryDate: batch.expiryDate, stock: Number(batch.stockQuantity || 0), availableQuantity: Number(batch.availableQuantity || 0), daysLeft });
+                }
             }
             for (const batch of med.batchAvailability || []) {
                 if (!batch.expiryDate) continue;
                 const expiryDate = new Date(batch.expiryDate);
                 const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / 86400000);
-                if (daysLeft > 0 && daysLeft <= expiringThresholdDays) {
-                    expiringSoon.push({ ...med, batchNumber: batch.batchNumber, expiryDate: batch.expiryDate, stock: Number(batch.availableQuantity || 0), availableQuantity: Number(batch.availableQuantity || 0), daysLeft });
+                if (daysLeft > 0 && daysLeft <= expiringThresholdDays && Number(batch.stockQuantity || 0) > 0) {
+                    expiringSoon.push({ ...med, batchNumber: batch.batchNumber, expiryDate: batch.expiryDate, stock: Number(batch.stockQuantity || 0), availableQuantity: Number(batch.availableQuantity || 0), daysLeft });
                 }
             }
-            if (Number(med.availableQuantity || 0) <= lowStockThreshold) {
+            // Product master records with no stock row in this branch are not
+            // restock alerts. A branch with a real batch at zero is still low stock.
+            if (Number(med.batchCount || 0) > 0 && Number(med.availableQuantity || 0) <= lowStockThreshold) {
                 lowStock.push({ ...med, stock: Number(med.availableQuantity || 0) });
             }
         }
