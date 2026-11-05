@@ -23,6 +23,24 @@ test('splits requested quantity into available and waiting quantities without re
   assert.equal(plan.safety.stockIsNotReservedByPreview, true);
 });
 
+test('matches Inventory Service lookup rows keyed by productId', () => {
+  const lookupRow = {
+    productId: 'medicine-1', name: 'Example 500 mg', composition: 'example salt',
+    strength: '500 mg', form: 'tablet', price: 100,
+    stockQuantity: 1, reservedQuantity: 0, availableQuantity: 1,
+    expiryDate: new Date('2027-12-31T00:00:00.000Z')
+  };
+  const plan = buildIntelligentFulfillmentPlan({
+    requestedItems: [{ medicineId: 'medicine-1', quantity: 1 }],
+    inventory: [lookupRow],
+    now
+  });
+  assert.equal(plan.lines[0].isListed, true);
+  assert.equal(plan.lines[0].availableQuantity, 1);
+  assert.equal(plan.lines[0].fulfilNowQuantity, 1);
+  assert.equal(plan.lines[0].waitingQuantity, 0);
+});
+
 test('aggregates duplicate cart lines before calculating availability', () => {
   const plan = buildIntelligentFulfillmentPlan({
     requestedItems: [
