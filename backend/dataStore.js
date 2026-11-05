@@ -1238,7 +1238,7 @@ export const dataStore = {
                         fulfillmentState: orderData.fulfillmentState || (orderData.fulfillmentCaseId ? 'PARTIAL' : 'FULL'),
                         idempotencyKey: idempotencyKey || null,
                         requestFingerprint: requestFingerprint || null,
-                        fulfillmentConfirmationId: orderData.fulfillmentConfirmationId || null,
+                        fulfillmentConfirmationId: orderData.fulfillmentConfirmationId || undefined,
                         orderStatus: 'Pending_Review',
                         statusHistory: [statusEntry]
                     }], { session });

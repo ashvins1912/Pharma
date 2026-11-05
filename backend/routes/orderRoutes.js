@@ -664,7 +664,22 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
                 notifiedAvailableQuantity: 0
             };
         }).filter(line => line.requestedQuantity > 0);
-        const rootOrderId = claimed.parentOrderId || String(order._id);
+        const rootOrderId = String(claimed.parentOrderId || order._id);
+        const isChildOrder = rootOrderId !== String(order._id);
+
+        // Persist the order hierarchy before finalizing the waitlist. If this
+        // update fails, the CONFIRMING claim remains recoverable by the monitor.
+        const parentUpdate = await Order.updateOne(
+            { _id: rootOrderId, userId: String(req.user.sub), tenantId: claimed.tenantId },
+            {
+                $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' },
+                ...(isChildOrder ? { $addToSet: { childOrderIds: String(order._id) } } : {})
+            }
+        );
+        if (!parentUpdate.matchedCount) {
+            throw Object.assign(new Error('The fulfilment order link could not be saved. The reservation will be reconciled automatically.'), { statusCode: 202 });
+        }
+
         const caseUpdate = {
             $set: {
                 lines: remainingLines,
@@ -674,9 +689,9 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
                 confirmationPreviousStatus: null, confirmationLines: [],
                 lastAvailabilityCheckAt: new Date()
             },
-            $push: { auditTrail: { action: 'AVAILABLE_STOCK_CONFIRMED', actorId: String(req.user.sub), at: new Date(), orderId: String(order._id), fulfilledLineCount: confirmationLines.length } }
+            $push: { auditTrail: { action: 'AVAILABLE_STOCK_CONFIRMED', actorId: String(req.user.sub), at: new Date(), orderId: String(order._id), fulfilledLineCount: confirmationLines.length, rootOrderId } }
         };
-        if (claimed.parentOrderId) caseUpdate.$addToSet = { childOrderIds: String(order._id) };
+        if (isChildOrder) caseUpdate.$addToSet = { childOrderIds: String(order._id) };
         const updated = await FulfillmentCase.updateOne({
             _id: claimed._id, customerId: String(req.user.sub),
             status: 'CONFIRMING', confirmationId
@@ -684,16 +699,17 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
         if (!updated.modifiedCount) {
             throw Object.assign(new Error('Order was created, but the waitlist update is still being reconciled. Refresh your waitlist shortly.'), { statusCode: 202 });
         }
-        await Order.updateOne({ _id: rootOrderId, userId: String(req.user.sub), tenantId: claimed.tenantId }, {
-            $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' }
-        });
+
         if (claimed.sourceType === 'MEDICINE_REQUEST' && claimed.sourceId) {
             await MedicineRequest.updateOne({ _id: claimed.sourceId, customerId: String(req.user.sub), fulfillmentCaseId: String(claimed._id) }, {
-                $set: { status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'CONVERTED_TO_ORDER', convertedOrderId: String(order._id) },
-                $push: { auditTrail: { action: 'WAITLIST_STOCK_ORDER_CREATED', actorId: String(req.user.sub), role: 'Customer', timestamp: new Date(), notes: `Created order ${String(order._id)} from available waitlist stock.` } }
+                $set: {
+                    status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'CONVERTED_TO_ORDER',
+                    convertedOrderId: rootOrderId
+                },
+                $push: { auditTrail: { action: 'WAITLIST_STOCK_ORDER_CREATED', actorId: String(req.user.sub), role: 'Customer', timestamp: new Date(), notes: `Created fulfilment order ${String(order._id)} under root order ${rootOrderId}.` } }
             });
         }
-        return { order, remainingLines };
+        return { order, remainingLines, rootOrderId };
     };
     try {
         const initial = await FulfillmentCase.findOne({
@@ -733,6 +749,8 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
                 orderedForName: claimed.orderedForName || 'Customer',
                 fulfillmentCaseId: String(claimed._id),
                 parentOrderId: claimed.parentOrderId || null,
+                idempotencyKey: `fulfillment-confirmation:${confirmationId}`,
+                fulfillmentState: 'FULL',
                 fulfillmentConfirmationId: confirmationId,
                 prescriptionUrl: claimed.prescriptionUrl || null, prescriptionId: claimed.prescriptionId || null,
                 patientPuid: claimed.patientPuid || null,
@@ -764,29 +782,117 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
 router.post('/fulfillment/waitlist/:id/cancel', authenticateUser, async (req, res) => {
     if (!getIsConnected()) return res.status(503).json({ message: 'Stock waitlist is temporarily unavailable.' });
     try {
-        const updated = await FulfillmentCase.findOneAndUpdate({
-            _id: req.params.id, customerId: String(req.user.sub),
+        const entry = await FulfillmentCase.findOne({
+            _id: req.params.id,
+            customerId: String(req.user.sub),
             status: { $in: ['WAITING_FOR_STOCK', 'AWAITING_CUSTOMER_DECISION', 'READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'] }
-        }, {
-            $set: { status: 'CANCELLED' },
-            $push: { auditTrail: { action: 'WAITLIST_CANCELLED', actorId: String(req.user.sub), at: new Date() } }
-        }, { new: true }).lean();
-        if (!updated) return res.status(404).json({ message: 'Active stock waitlist entry not found.' });
-        if (updated.parentOrderId) await Order.updateOne({ _id: updated.parentOrderId, userId: String(req.user.sub), tenantId: updated.tenantId }, { $set: { fulfillmentState: 'PARTIAL' } });
-        if (updated.parentOrderId) {
-            await Order.updateOne({ _id: updated.parentOrderId, userId: String(req.user.sub), tenantId: updated.tenantId }, {
-                $set: { fulfillmentState: 'CANCELLED_REMAINDER' }
-            });
+        }).lean();
+        if (!entry) return res.status(404).json({ message: 'Active stock waitlist entry not found.' });
+
+        const productIds = Array.isArray(req.body?.productIds)
+            ? [...new Set(req.body.productIds.map(value => String(value).trim()).filter(Boolean))]
+            : [];
+        const lineIndexes = Array.isArray(req.body?.lineIndexes)
+            ? [...new Set(req.body.lineIndexes.map(Number))]
+            : [];
+        if (lineIndexes.some(index => !Number.isInteger(index) || index < 0 || index >= (entry.lines || []).length)) {
+            return res.status(400).json({ message: 'One or more selected waitlist items are invalid. Refresh and try again.' });
         }
-        if (updated.sourceType === 'MEDICINE_REQUEST' && updated.sourceId) {
-            await MedicineRequest.updateOne({ _id: updated.sourceId, customerId: String(req.user.sub), fulfillmentCaseId: String(updated._id) }, {
-                $set: { status: updated.parentOrderId ? 'CONVERTED_TO_ORDER' : 'CANCELLED' },
-                $push: { auditTrail: { action: 'WAITLIST_CANCELLED', actorId: String(req.user.sub), role: 'Customer', timestamp: new Date(), notes: 'Customer cancelled the stock waitlist.' } }
-            });
+        const activeProductIds = new Set((entry.lines || [])
+            .filter(line => Number(line.waitingQuantity || 0) > 0 && line.customerDecision !== 'CANCELLED')
+            .map(line => String(line.productId || '')).filter(Boolean));
+        if (productIds.some(id => !activeProductIds.has(id))) {
+            return res.status(404).json({ message: 'One or more selected medicines are no longer waiting for stock.' });
         }
-        return res.json({ case: updated, message: 'Stock waitlist entry cancelled.' });
-    } catch {
-        return res.status(503).json({ message: 'Unable to cancel stock waitlist entry.' });
+        const selective = productIds.length > 0 || lineIndexes.length > 0;
+        const selectedIndexes = new Set(lineIndexes);
+        const matchingIndexes = (entry.lines || []).map((line, index) => ({
+            line, index,
+            selected: selective
+                ? selectedIndexes.has(index) || (line.productId && productIds.includes(String(line.productId)))
+                : true
+        })).filter(item => item.selected && Number(item.line.waitingQuantity || 0) > 0
+            && item.line.customerDecision !== 'CANCELLED');
+        if (selective && !matchingIndexes.length) {
+            return res.status(404).json({ message: 'No active remaining quantity was found for the selected items.' });
+        }
+        const cancelledIndexes = new Set(matchingIndexes.map(item => item.index));
+        const cancelledLines = matchingIndexes.map(item => item.line);
+        const nextLines = (entry.lines || []).map((line, index) => cancelledIndexes.has(index)
+            ? { ...line, allocatedQuantity: 0, waitingQuantity: 0, notifiedAvailableQuantity: 0, customerDecision: 'CANCELLED' }
+            : line);
+        const remainingLines = nextLines.filter(line => Number(line.waitingQuantity || 0) > 0
+            && line.customerDecision !== 'CANCELLED');
+        const hasAvailableRemainder = remainingLines.some(line => Number(line.allocatedQuantity || 0) > 0);
+        const allRemainingAvailable = remainingLines.length > 0 && remainingLines.every(line =>
+            Number(line.allocatedQuantity || 0) >= Number(line.waitingQuantity || 0)
+        );
+        const nextStatus = remainingLines.length
+            ? (allRemainingAvailable ? 'READY_FOR_CONFIRMATION' : hasAvailableRemainder ? 'PARTIALLY_FULFILLED' : 'WAITING_FOR_STOCK')
+            : 'CANCELLED';
+        let updated;
+        const session = await mongoose.startSession();
+        try {
+            await session.withTransaction(async () => {
+                const updatedResult = await FulfillmentCase.updateOne({
+                    _id: entry._id,
+                    customerId: String(req.user.sub),
+                    status: entry.status,
+                    ...(entry.updatedAt ? { updatedAt: entry.updatedAt } : {})
+                }, {
+                    $set: { lines: nextLines, status: nextStatus },
+                    $push: { auditTrail: { action: selective ? 'REMAINING_ITEMS_CANCELLED' : 'WAITLIST_CANCELLED', actorId: String(req.user.sub), at: new Date(), details: { cancelledProductIds: cancelledLines.map(line => line.productId).filter(Boolean), cancelledLineCount: cancelledLines.length, remainingLineCount: remainingLines.length } } }
+                }, { session });
+                if (!updatedResult.modifiedCount) {
+                    throw Object.assign(new Error('The stock waitlist changed while you were updating it. Refresh and try again.'), { statusCode: 409 });
+                }
+                updated = await FulfillmentCase.findById(entry._id).session(session).lean();
+
+                if (entry.parentOrderId) {
+                    const parentUpdate = await Order.updateOne({
+                        _id: entry.parentOrderId, userId: String(req.user.sub), tenantId: entry.tenantId
+                    }, {
+                        $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'CANCELLED_REMAINDER' }
+                    }, { session });
+                    if (!parentUpdate.matchedCount) {
+                        throw Object.assign(new Error('The linked order could not be updated. Refresh and retry the cancellation.'), { statusCode: 409 });
+                    }
+                }
+                if (entry.sourceType === 'MEDICINE_REQUEST' && entry.sourceId) {
+                    const requestUpdate = await MedicineRequest.updateOne({
+                        _id: entry.sourceId, customerId: String(req.user.sub), fulfillmentCaseId: String(entry._id)
+                    }, {
+                        $set: {
+                            status: remainingLines.length ? 'WAITING_FOR_STOCK' : (entry.parentOrderId ? 'CONVERTED_TO_ORDER' : 'CANCELLED'),
+                            ...(entry.parentOrderId ? { convertedOrderId: String(entry.parentOrderId) } : {})
+                        },
+                        $push: { auditTrail: { action: selective ? 'REMAINING_ITEMS_CANCELLED' : 'WAITLIST_CANCELLED', actorId: String(req.user.sub), role: 'Customer', timestamp: new Date(), notes: `Cancelled ${cancelledLines.length} remaining medicine line(s).` } }
+                    }, { session });
+                    if (!requestUpdate.matchedCount) {
+                        throw Object.assign(new Error('The linked medicine request could not be updated. Refresh and retry the cancellation.'), { statusCode: 409 });
+                    }
+                }
+            });
+        } finally {
+            await session.endSession();
+        }
+        domainEvents.emitDomainEvent('FULFILLMENT_REMAINDER_CANCELLED', String(entry._id), {
+            recipientUserId: String(req.user.sub),
+            caseNumber: entry.caseNumber,
+            cancelledLineCount: cancelledLines.length,
+            remainingLineCount: remainingLines.length,
+            status: nextStatus
+        }, req.user, entry.tenantId, entry.branchId);
+        return res.json({
+            case: updated,
+            cancelledLineCount: cancelledLines.length,
+            remainingLineCount: remainingLines.length,
+            message: remainingLines.length
+                ? 'Selected remaining medicine quantities were cancelled. Other waitlisted items are still active.'
+                : (entry.parentOrderId ? 'Remaining medicine quantities were cancelled. Your already-created order remains in order history.' : 'Stock waitlist cancelled.')
+        });
+    } catch (error) {
+        return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to cancel remaining stock quantities.' });
     }
 });
 

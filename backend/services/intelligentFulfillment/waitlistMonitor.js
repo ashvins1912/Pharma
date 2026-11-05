@@ -86,15 +86,26 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
           const quantity = Math.min(Number(confirmed?.allocatedQuantity || 0), Number(line.waitingQuantity || 0));
           return { ...line, requestedQuantity: Math.max(0, Number(line.waitingQuantity || 0) - quantity), allocatedQuantity: 0, waitingQuantity: Math.max(0, Number(line.waitingQuantity || 0) - quantity), notifiedAvailableQuantity: 0 };
         }).filter(line => line.requestedQuantity > 0);
-        const rootOrderId = entry.parentOrderId || String(recoveredOrder._id);
+        const rootOrderId = String(entry.parentOrderId || recoveredOrder._id);
+        const isChildOrder = rootOrderId !== String(recoveredOrder._id);
+        const parentUpdate = await Order.updateOne(
+          { _id: rootOrderId, tenantId: entry.tenantId },
+          {
+            $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' },
+            ...(isChildOrder ? { $addToSet: { childOrderIds: String(recoveredOrder._id) } } : {})
+          }
+        );
+        if (!parentUpdate.matchedCount) {
+          // Keep the claim for a later recovery pass; never discard the committed order link.
+          continue;
+        }
         const recoveryUpdate = {
           $set: { lines: remainingLines, status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'FULFILLED', parentOrderId: rootOrderId, confirmationId: null, confirmingAt: null, confirmationPreviousStatus: null, confirmationLines: [] },
-          $push: { auditTrail: { action: 'CONFIRMATION_RECOVERED', at: now, actorId: 'system', details: { orderId: String(recoveredOrder._id) } } }
+          $push: { auditTrail: { action: 'CONFIRMATION_RECOVERED', at: now, actorId: 'system', details: { orderId: String(recoveredOrder._id), rootOrderId } } }
         };
-        if (entry.parentOrderId) recoveryUpdate.$addToSet = { childOrderIds: String(recoveredOrder._id) };
+        if (isChildOrder) recoveryUpdate.$addToSet = { childOrderIds: String(recoveredOrder._id) };
         await FulfillmentCase.updateOne({ _id: entry._id, status: 'CONFIRMING', confirmationId: entry.confirmationId }, recoveryUpdate);
-        await Order.updateOne({ _id: rootOrderId, tenantId: entry.tenantId }, { $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' } });
-        if (entry.sourceType === 'MEDICINE_REQUEST' && entry.sourceId) await MedicineRequest.updateOne({ _id: entry.sourceId, fulfillmentCaseId: String(entry._id) }, { $set: { status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'CONVERTED_TO_ORDER', convertedOrderId: String(recoveredOrder._id) } });
+        if (entry.sourceType === 'MEDICINE_REQUEST' && entry.sourceId) await MedicineRequest.updateOne({ _id: entry.sourceId, fulfillmentCaseId: String(entry._id) }, { $set: { status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'CONVERTED_TO_ORDER', convertedOrderId: rootOrderId } });
       } else {
         await FulfillmentCase.updateOne({ _id: entry._id, status: 'CONFIRMING', confirmationId: entry.confirmationId }, {
           $set: { status: entry.confirmationPreviousStatus || 'WAITING_FOR_STOCK', confirmationId: null, confirmingAt: null, confirmationPreviousStatus: null, confirmationLines: [], lastAvailabilityCheckAt: null },

@@ -50,6 +50,37 @@ export const connectDB = async ({ silent = false } = {}) => {
             mongoose.set('bufferCommands', false);
             await mongoose.connect(env.MONGO_URI, { serverSelectionTimeoutMS: 3000 });
             const hello = await mongoose.connection.db.admin().command({ hello: 1 });
+            // Keep split-order confirmation IDs unique only when present. The legacy
+            // sparse unique index also indexed explicit null values and could block
+            // otherwise unrelated orders that had no confirmation ID.
+            try {
+                const ordersCollection = mongoose.connection.db.collection('orders');
+                const orderIndexes = await ordersCollection.indexes();
+                const legacyConfirmationIndex = orderIndexes.find(index =>
+                    index.key?.fulfillmentConfirmationId === 1 && index.unique && index.sparse
+                );
+                if (legacyConfirmationIndex) {
+                    await ordersCollection.dropIndex(legacyConfirmationIndex.name);
+                }
+                const validConfirmationIndex = orderIndexes.find(index =>
+                    index.key?.fulfillmentConfirmationId === 1
+                    && index.unique
+                    && index.partialFilterExpression?.fulfillmentConfirmationId?.$type === 'string'
+                );
+                if (!validConfirmationIndex) {
+                    await ordersCollection.createIndex(
+                        { fulfillmentConfirmationId: 1 },
+                        {
+                            unique: true,
+                            partialFilterExpression: { fulfillmentConfirmationId: { $type: 'string' } },
+                            name: 'fulfillmentConfirmationId_unique_string'
+                        }
+                    );
+                }
+            } catch (indexError) {
+                console.warn('⚠️ Could not reconcile the split-order confirmation index:', indexError.message);
+            }
+
             supportsTransactions = Boolean(hello.setName || hello.msg === 'isdbgrid');
             await Promise.all([
                 Rider.init(),
