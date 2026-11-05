@@ -797,6 +797,12 @@ router.post('/fulfillment/waitlist/:id/cancel', authenticateUser, async (req, re
         if (lineIndexes.some(index => !Number.isInteger(index) || index < 0 || index >= (entry.lines || []).length)) {
             return res.status(400).json({ message: 'One or more selected waitlist items are invalid. Refresh and try again.' });
         }
+        const activeProductIds = new Set((entry.lines || [])
+            .filter(line => Number(line.waitingQuantity || 0) > 0 && line.customerDecision !== 'CANCELLED')
+            .map(line => String(line.productId || '')).filter(Boolean));
+        if (productIds.some(id => !activeProductIds.has(id))) {
+            return res.status(404).json({ message: 'One or more selected medicines are no longer waiting for stock.' });
+        }
         const selective = productIds.length > 0 || lineIndexes.length > 0;
         const selectedIndexes = new Set(lineIndexes);
         const matchingIndexes = (entry.lines || []).map((line, index) => ({
@@ -827,11 +833,9 @@ router.post('/fulfillment/waitlist/:id/cancel', authenticateUser, async (req, re
             _id: entry._id,
             customerId: String(req.user.sub),
             status: entry.status,
-            updatedAt: entry.updatedAt,
-            __v: Number(entry.__v || 0)
+            ...(entry.updatedAt ? { updatedAt: entry.updatedAt } : {})
         }, {
             $set: { lines: nextLines, status: nextStatus },
-            $inc: { __v: 1 },
             $push: { auditTrail: { action: selective ? 'REMAINING_ITEMS_CANCELLED' : 'WAITLIST_CANCELLED', actorId: String(req.user.sub), at: new Date(), details: { cancelledProductIds: cancelledLines.map(line => line.productId).filter(Boolean), cancelledLineCount: cancelledLines.length, remainingLineCount: remainingLines.length } } }
         });
         if (!updatedResult.modifiedCount) {
