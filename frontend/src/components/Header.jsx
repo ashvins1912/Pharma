@@ -24,45 +24,37 @@ export default function Header({
   const { cart, whatsappStatus, setWhatsappModalOpen, medicineRequests } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const { branchId, setBranchId } = useTenant();
+  const { tenantId, branchId, setBranchId } = useTenant();
   const { language, setLanguage, t, languages } = useLanguage();
   const [branchOptions, setBranchOptions] = useState([]);
 
   React.useEffect(() => {
+    let cancelled = false;
     apiClient.get('/api/v1/branches/all').then(res => {
       const items = res.data?.data || res.data?.branches || [];
-      if (Array.isArray(items) && items.length > 0) {
-        const valid = items
-          .filter(Boolean)
-          .map(b => ({
-            id: String(b._id || b.id || ''),
-            name: String(b.name || b.branchName || 'Branch')
-          }))
-          .filter(b => b.id);
-        setBranchOptions(valid);
-      } else {
-        setBranchOptions([]);
-      }
+      const valid = (Array.isArray(items) ? items : [])
+        .filter(Boolean)
+        .filter(item => !tenantId || !item.tenantId || String(item.tenantId) === String(tenantId))
+        .map(item => ({
+          id: String(item._id || item.id || ''),
+          name: String(item.name || item.branchName || 'Branch')
+        }))
+        .filter(item => item.id);
+      if (!cancelled) setBranchOptions(valid);
     }).catch(() => {
-      apiClient.get('/api/tenants/nearby').then(res => {
-        const tenants = res.data?.tenants || [];
-        if (tenants.length > 0) {
-          const dynamicBranches = tenants
-            .filter(Boolean)
-            .map((t, idx) => ({
-              id: String(t._id || t.id || `branch-${idx+1}`),
-              name: String(t.name ? `${t.name} (Primary Branch)` : 'Primary Branch')
-            }))
-            .filter(b => b.id);
-          setBranchOptions(dynamicBranches);
-        } else {
-          setBranchOptions([]);
-        }
-      }).catch(() => {
-        setBranchOptions([]);
-      });
+      // A pharmacy/tenant is not a branch. Never synthesize a branch ID from
+      // nearby tenant results; inventory APIs require a real active branch.
+      if (!cancelled) setBranchOptions([]);
     });
-  }, []);
+    return () => { cancelled = true; };
+  }, [tenantId]);
+
+  React.useEffect(() => {
+    if (!tenantId || branchOptions.length === 0) return;
+    if (!branchOptions.some(option => option.id === String(branchId || ''))) {
+      setBranchId(branchOptions[0].id);
+    }
+  }, [tenantId, branchOptions, branchId, setBranchId]);
 
   const cartItemCount = cart.reduce((total, item) => total + item.quantity, 0);
   const proposalsWaitingCount = (medicineRequests || []).filter(r => r.status === 'PROPOSAL_SENT').length;
