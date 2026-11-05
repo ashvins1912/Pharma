@@ -131,7 +131,10 @@ test('staged import review, edit, publish, unpublish and batch revert are isolat
     const otherBranchCatalogue = await inventoryApi.searchInventoryProducts({
       tenantId, branchId: 'different-branch', includeOutOfStock: true, limit: 20
     });
-    assert.equal(otherBranchCatalogue.total, 0);
+    assert.equal(otherBranchCatalogue.total, 1);
+    assert.equal(otherBranchCatalogue.items[0].sku, 'TEST-STAGED-001');
+    assert.equal(otherBranchCatalogue.items[0].stockQuantity, 0);
+    assert.equal(otherBranchCatalogue.items[0].availableQuantity, 0);
     const repeatedPublish = await fetch(origin + `/api/v1/inventory/imports/batches/${staged.batchId}/rows/${encodeURIComponent(first.rowId)}/publish`, {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: '{}'
     });
