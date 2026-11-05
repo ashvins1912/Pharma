@@ -8,6 +8,10 @@ import { logger } from '../../shared/observability/logger.js';
 import { emailService } from './EmailService.js';
 import { sendCustomWhatsAppAlert, sendWhatsAppMedicineRequestAlert } from '../../config/whatsapp.js';
 import { cacheService } from '../cache/CacheService.js';
+import { randomUUID } from 'node:crypto';
+import { getIsConnected } from '../../config/db.js';
+import Notification from '../../models/Notification.js';
+import NotificationDeliveryEvent from '../../models/NotificationDeliveryEvent.js';
 
 export class NotificationService {
     constructor() {
@@ -49,41 +53,63 @@ export class NotificationService {
         this.sseClients.delete(clientId);
     }
 
-    getDeliveryEvents(tenantId = null, branchId = null, isSuperAdmin = false) {
-        return this.deliveryEvents.filter(e => {
-            if (!isSuperAdmin && e.tenantId && String(e.tenantId) !== String(tenantId || '')) return false;
-            if (branchId && e.branchId && String(e.branchId) !== String(branchId)) return false;
+    async getDeliveryEvents(tenantId = null, branchId = null, isSuperAdmin = false) {
+        if (getIsConnected()) {
+            const filter = {};
+            if (!isSuperAdmin) filter.tenantId = String(tenantId || '');
+            if (branchId) filter.branchId = String(branchId);
+            return NotificationDeliveryEvent.find(filter).sort({ occurredAt: -1 }).limit(500).lean();
+        }
+        return this.deliveryEvents.filter(event => {
+            if (!isSuperAdmin && event.tenantId && String(event.tenantId) !== String(tenantId || '')) return false;
+            if (branchId && event.branchId && String(event.branchId) !== String(branchId)) return false;
             return true;
         });
     }
 
-    _broadcastDeliveryEvent(eventData) {
-        this.deliveryEvents.unshift(eventData);
-        if (this.deliveryEvents.length > 500) this.deliveryEvents.pop();
+    async _broadcastDeliveryEvent(eventData) {
+        const persistedEvent = {
+            ...eventData,
+            eventId: eventData.eventId || randomUUID(),
+            occurredAt: eventData.timestamp ? new Date(eventData.timestamp) : new Date()
+        };
+        let eventToBroadcast = persistedEvent;
+        if (getIsConnected()) {
+            const saved = await NotificationDeliveryEvent.findOneAndUpdate(
+                { eventId: persistedEvent.eventId },
+                { $setOnInsert: persistedEvent },
+                { upsert: true, new: true, setDefaultsOnInsert: true }
+            ).lean();
+            eventToBroadcast = saved || persistedEvent;
+        } else if (process.env.NODE_ENV !== 'production') {
+            this.deliveryEvents.unshift(persistedEvent);
+            if (this.deliveryEvents.length > 500) this.deliveryEvents.pop();
+        } else {
+            logger.error('[NotificationService] Delivery event was not broadcast because durable storage is unavailable.', {
+                eventId: persistedEvent.eventId, tenantId: persistedEvent.tenantId
+            });
+            return null;
+        }
 
         for (const [clientId, client] of this.sseClients.entries()) {
             try {
-                if (!client.context.isSuperAdmin && eventData.tenantId
-                    && String(client.context.tenantId || '') !== String(eventData.tenantId)) {
-                    continue;
-                }
-                if (!client.context.isSuperAdmin && client.context.branchId && eventData.branchId
-                    && String(client.context.branchId) !== String(eventData.branchId)) {
-                    continue;
-                }
-                client.res.write(`data: ${JSON.stringify(eventData)}\n\n`);
+                if (!client.context.isSuperAdmin && eventToBroadcast.tenantId
+                    && String(client.context.tenantId || '') !== String(eventToBroadcast.tenantId)) continue;
+                if (!client.context.isSuperAdmin && client.context.branchId && eventToBroadcast.branchId
+                    && String(client.context.branchId) !== String(eventToBroadcast.branchId)) continue;
+                client.res.write(`data: ${JSON.stringify(eventToBroadcast)}\\n\\n`);
             } catch (err) {
                 logger.warn(`Failed to push SSE event to client ${clientId}:`, err?.message);
                 this.sseClients.delete(clientId);
             }
         }
+        return eventToBroadcast;
     }
-
     _recipientUserId(evt) {
         const payload = evt?.payload || {};
         const order = payload.order || {};
-        return payload.customerUserId || payload.customerId || payload.recipientUserId || payload.userId
-            || order.userId || order.customerId
+        return payload.customerUserId || payload.recipientUserId || payload.userId
+            || order.userId || order.customerUserId || payload.customerId || order.customerId
             || (evt?.eventType === 'ORDER_CREATED' ? evt?.actor?.userId : null) || null;
     }
 
@@ -215,6 +241,7 @@ export class NotificationService {
                 channels: ['IN_APP', 'WHATSAPP']
             });
             this._broadcastDeliveryEvent({
+                eventId: evt.eventId,
                 type: 'DELIVERY_STATUS_CHANGED',
                 eventType: 'RIDER_ASSIGNED',
                 status: 'ASSIGNED',
@@ -242,6 +269,7 @@ export class NotificationService {
                 channels: ['IN_APP', 'WHATSAPP']
             });
             this._broadcastDeliveryEvent({
+                eventId: evt.eventId,
                 type: 'DELIVERY_STATUS_CHANGED',
                 eventType: 'DELIVERY_STATUS_CHANGED',
                 status: evt.payload?.status,
@@ -269,6 +297,7 @@ export class NotificationService {
                 channels: ['IN_APP', 'WHATSAPP']
             });
             this._broadcastDeliveryEvent({
+                eventId: evt.eventId,
                 type: 'DELIVERY_STATUS_CHANGED',
                 eventType: 'ORDER_DELIVERED',
                 status: 'DELIVERED',
@@ -345,67 +374,128 @@ export class NotificationService {
         orderId = null,
         riderId = null,
         medicineRequestId = null,
+        fulfillmentCaseId = null,
         status = null,
         promotionId = null,
         pharmacyName = null,
-        actionUrl = null
+        actionUrl = null,
+        dedupeKey = null
     }) {
         const notification = {
-            id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            tenantId,
-            branchId,
-            recipientUserId,
-            title,
-            body,
+            id: `notif-${randomUUID()}`,
+            dedupeKey: dedupeKey || null,
+            tenantId: tenantId ? String(tenantId) : null,
+            branchId: branchId ? String(branchId) : null,
+            recipientUserId: recipientUserId ? String(recipientUserId) : null,
+            title: String(title || 'Pharmacy update'),
+            body: String(body || ''),
             channels,
             eventType,
             orderId: orderId ? String(orderId) : null,
             riderId: riderId ? String(riderId) : null,
             medicineRequestId: medicineRequestId ? String(medicineRequestId) : null,
+            fulfillmentCaseId: fulfillmentCaseId ? String(fulfillmentCaseId) : null,
             promotionId: promotionId ? String(promotionId) : null,
             pharmacyName: pharmacyName ? String(pharmacyName) : null,
             actionUrl: typeof actionUrl === 'string' && actionUrl.startsWith('/') ? actionUrl : null,
             status,
             read: false,
-            createdAt: new Date().toISOString()
+            createdAt: new Date()
         };
 
-        this.notifications.unshift(notification);
-        if (this.notifications.length > 200) this.notifications.pop();
-
-        logger.info(`Notification dispatched: "${title}" via [${channels.join(', ')}]`, { tenantId, branchId });
-
-        // Publish only to a verified user or tenant audience. Never send private
-        // notification bodies as unscoped/global WebSocket events.
-        if (recipientUserId || tenantId) {
-            const eventPayload = { ...notification, userId: recipientUserId, tenantId, source: 'notification-service' };
-            const target = { userId: recipientUserId, tenantId, riderId };
-            void cacheService.publishEvent('notification', eventPayload, target);
-            if (channels.includes('WHATSAPP')) {
-                void cacheService.publishEvent('whatsapp_notification', { ...eventPayload, deliveryState: 'REQUESTED' }, target);
-            }
-            if (orderId && ['ORDER_CREATED', 'ORDER_ACCEPTED', 'ORDER_STATUS_CHANGED', 'RIDER_ASSIGNED', 'DELIVERY_STATUS_CHANGED', 'ORDER_DELIVERED', 'ORDER_DELIVERED_RATING_PROMPT', 'ORDER_OUT_FOR_DELIVERY_OTP_SENT', 'PROPOSAL_APPROVED'].includes(eventType)) {
-                void cacheService.publishEvent('order_status_changed', eventPayload, target);
-            }
-            if (medicineRequestId || eventType.startsWith('MEDICINE_REQUEST') || eventType.startsWith('PROPOSAL_') || eventType.startsWith('REQUEST_') || eventType.startsWith('FULFILLMENT_')) {
-                void cacheService.publishEvent('medicine_request_updated', eventPayload, target);
-            }
-        }
+        void this._persistAndPublish(notification).catch(error => {
+            logger.error('[NotificationService] Durable notification dispatch failed.', {
+                notificationId: notification.id, eventType, tenantId, branchId,
+                recipientUserId, error: error?.message
+            });
+        });
         return notification;
     }
 
-    getUserNotifications(userId, { tenantId = null, branchId = null, isSuperAdmin = false } = {}) {
+    async _persistAndPublish(notification) {
+        let saved = notification;
+        if (getIsConnected()) {
+            if (notification.dedupeKey) {
+                saved = await Notification.findOneAndUpdate(
+                    { dedupeKey: notification.dedupeKey },
+                    { $setOnInsert: notification },
+                    { upsert: true, new: true, setDefaultsOnInsert: true }
+                ).lean();
+            } else {
+                saved = (await Notification.create(notification)).toObject();
+            }
+        } else if (process.env.NODE_ENV !== 'production') {
+            this.notifications.unshift(notification);
+            if (this.notifications.length > 200) this.notifications.pop();
+        } else {
+            throw new Error('MongoDB is unavailable; refusing to publish a non-persistent notification.');
+        }
+
+        logger.info(`Notification persisted: "${saved.title}" via [${(saved.channels || []).join(', ')}]`, {
+            notificationId: saved.id, tenantId: saved.tenantId, branchId: saved.branchId
+        });
+        this._publishNotification(saved);
+        return saved;
+    }
+
+    _publishNotification(notification) {
+        const { recipientUserId, tenantId, riderId, channels, orderId, eventType, medicineRequestId } = notification;
+        if (!(recipientUserId || tenantId)) return;
+        const eventPayload = { ...notification, userId: recipientUserId, tenantId, source: 'notification-service' };
+        const target = { userId: recipientUserId, tenantId, riderId };
+        void cacheService.publishEvent('notification', eventPayload, target);
+        if (channels?.includes('WHATSAPP')) {
+            void cacheService.publishEvent('whatsapp_notification', { ...eventPayload, deliveryState: 'REQUESTED' }, target);
+        }
+        if (orderId && ['ORDER_CREATED', 'ORDER_ACCEPTED', 'ORDER_STATUS_CHANGED', 'RIDER_ASSIGNED', 'DELIVERY_STATUS_CHANGED', 'ORDER_DELIVERED', 'ORDER_DELIVERED_RATING_PROMPT', 'ORDER_OUT_FOR_DELIVERY_OTP_SENT', 'PROPOSAL_APPROVED'].includes(eventType)) {
+            void cacheService.publishEvent('order_status_changed', eventPayload, target);
+        }
+        if (medicineRequestId || eventType.startsWith('MEDICINE_REQUEST') || eventType.startsWith('PROPOSAL_') || eventType.startsWith('REQUEST_') || eventType.startsWith('FULFILLMENT_')) {
+            void cacheService.publishEvent('medicine_request_updated', eventPayload, target);
+        }
+    }
+
+    async getUserNotifications(userId, { tenantId = null, branchId = null, isSuperAdmin = false } = {}) {
+        if (getIsConnected()) {
+            const filter = isSuperAdmin ? {} : {
+                $or: [
+                    { recipientUserId: String(userId) },
+                    {
+                        recipientUserId: null,
+                        tenantId: String(tenantId || ''),
+                        ...(branchId ? { $or: [{ branchId: null }, { branchId: String(branchId) }] } : {})
+                    }
+                ]
+            };
+            return Notification.find(filter).sort({ createdAt: -1 }).limit(200).lean();
+        }
         return this.notifications.filter(notification => {
             if (!isSuperAdmin && notification.recipientUserId && notification.recipientUserId !== userId) return false;
             if (!isSuperAdmin && !notification.recipientUserId && notification.tenantId && notification.tenantId !== tenantId) return false;
             if (!isSuperAdmin && !notification.recipientUserId && notification.branchId && notification.branchId !== branchId) return false;
-            // Untargeted platform notifications must not leak to ordinary tenant users.
             if (!isSuperAdmin && !notification.recipientUserId && !notification.tenantId) return false;
             return true;
         });
     }
 
-    markAsRead(notificationId, userId, { tenantId = null, branchId = null, isSuperAdmin = false } = {}) {
+    async markAsRead(notificationId, userId, { tenantId = null, branchId = null, isSuperAdmin = false } = {}) {
+        if (getIsConnected()) {
+            const access = isSuperAdmin ? {} : {
+                $or: [
+                    { recipientUserId: String(userId) },
+                    {
+                        recipientUserId: null,
+                        tenantId: String(tenantId || ''),
+                        ...(branchId ? { $or: [{ branchId: null }, { branchId: String(branchId) }] } : {})
+                    }
+                ]
+            };
+            return Notification.findOneAndUpdate(
+                { id: String(notificationId), ...access },
+                { $set: { read: true, readAt: new Date() } },
+                { new: true }
+            ).lean();
+        }
         const notif = this.notifications.find(notification => {
             if (notification.id !== notificationId) return false;
             if (!isSuperAdmin && notification.recipientUserId && notification.recipientUserId !== userId) return false;
