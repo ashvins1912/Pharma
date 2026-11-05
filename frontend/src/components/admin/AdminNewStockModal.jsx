@@ -86,7 +86,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
     };
     loadBranches();
     return () => { cancelled = true; };
-  }, [isOpen, isFullyAuthenticated, tenantId, contextBranchId, setBranchId, setTenantId]);
+  }, [isOpen, isFullyAuthenticated, tenantId, contextBranchId]);
 
   if (!isOpen) return null;
 
