@@ -3,6 +3,19 @@ import apiClient from '../../api/apiClient';
 
 const editableFields = ['sku', 'name', 'price', 'stockQuantity', 'batchNumber', 'expiryDate', 'category', 'manufacturer', 'baseCostPrice', 'marginTier', 'genericName', 'strength', 'form', 'description', 'imageUrl', 'requiresPrescription'];
 
+function getBulkActionError(error) {
+  const data = error?.response?.data;
+  const serverMessage = data?.message || data?.error?.message ||
+    (typeof data?.error === 'string' ? data.error : null) ||
+    data?.details?.message;
+  const code = data?.code || data?.error?.code;
+  const httpStatus = error?.response?.status;
+  if (serverMessage) return [serverMessage, code && `Code: ${code}`, httpStatus && `HTTP ${httpStatus}`].filter(Boolean).join(' · ');
+  if (httpStatus) return `Bulk operation failed (HTTP ${httpStatus})${code ? ` · Code: ${code}` : ''}. The batch rows have been refreshed; review their current status and try again.`;
+  if (error?.request) return 'The Inventory Service did not respond. Check the API Gateway and Inventory Service health, then refresh the batch.';
+  return error?.message || 'Bulk operation failed. Refresh the batch and review the selected rows.';
+}
+
 export default function AdminImportBatchManager({ batchId, headers, onInventoryChanged, publishingEnabled = false }) {
   const [rows, setRows] = useState([]);
   const [activeBatchId, setActiveBatchId] = useState(batchId || '');
@@ -94,7 +107,10 @@ export default function AdminImportBatchManager({ batchId, headers, onInventoryC
       await load();
       onInventoryChanged?.();
     } catch (e) {
-      setError(e.response?.data?.message || 'Bulk operation failed. Refresh and review the selected rows.');
+      const message = getBulkActionError(e);
+      // Reload server state after a rejected action so stale row selections are not retained.
+      await load();
+      setError(message);
     } finally { setBusy(false); }
   };
   const applyBulkEdit = async () => {
