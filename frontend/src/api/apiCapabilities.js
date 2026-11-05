@@ -486,6 +486,21 @@ export const API_CAPABILITIES = [
   },
   {
     method: 'GET',
+    pattern: /^\/api\/v1\/vendor\/profile(?:\/edit-policy)?$/,
+    permission: 'profile.read'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/v1\/vendor\/profile$/,
+    permission: 'profile.write'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/v1\/vendor\/profile\/edit-policy$/,
+    permission: 'tenants.manage'
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/v1\/profile(?:\/|$)/,
     permission: 'profile.read'
   },
