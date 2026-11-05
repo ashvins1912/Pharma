@@ -1,3 +1,8 @@
+import { randomUUID } from 'node:crypto';
+import mongoose from 'mongoose';
+import { config } from './config.js';
+import { Audit, Inventory, Product, Reservation } from './models.js';
+
 const asPositiveQuantity = value => Number.isSafeInteger(value) && value > 0;
 const normalizeItems = items => {
   if (!Array.isArray(items) || items.length === 0 || items.length > 100) {
