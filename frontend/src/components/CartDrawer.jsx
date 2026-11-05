@@ -92,6 +92,11 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
                       <div className="flex-1 min-w-0">
                         <h4 className="font-bold text-xs text-slate-900 truncate">{item.name}</h4>
                         <p className="text-[10px] text-slate-400">{t('unit')}: ₹{item.price}</p>
+                        {Number(item.maxCartQuantity || item.stock || 0) > Number(item.stock || 0) && (
+                          <p className="mt-0.5 text-[9px] font-semibold text-amber-700">
+                            Available now: {item.stock} · extra quantity needs stock confirmation
+                          </p>
+                        )}
                         <span className="font-extrabold text-xs text-emerald-600">
                           ₹{item.price * item.quantity}
                         </span>
