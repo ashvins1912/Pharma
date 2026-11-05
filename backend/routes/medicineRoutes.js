@@ -223,6 +223,7 @@ router.get('/', async (req, res) => {
             const selectedBranch = activeBranches.find(branch => branch.isDefault)
                 || [...activeBranches].sort((a, b) =>
                     new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+                    || String(a._id || a.id).localeCompare(String(b._id || b.id))
                 )[0];
             branchId = String(selectedBranch?.id || selectedBranch?._id || '').trim();
         }
