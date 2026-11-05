@@ -97,10 +97,15 @@ export class NotificationService {
 
         for (const [clientId, client] of this.sseClients.entries()) {
             try {
-                if (!client.context.isSuperAdmin && eventToBroadcast.tenantId
-                    && String(client.context.tenantId || '') !== String(eventToBroadcast.tenantId)) continue;
-                if (!client.context.isSuperAdmin && client.context.branchId && eventToBroadcast.branchId
-                    && String(client.context.branchId) !== String(eventToBroadcast.branchId)) continue;
+                if (!client.context.isSuperAdmin && (
+                    !eventToBroadcast.tenantId
+                    || !client.context.tenantId
+                    || String(client.context.tenantId) !== String(eventToBroadcast.tenantId)
+                )) continue;
+                if (!client.context.isSuperAdmin && client.context.branchId && (
+                    !eventToBroadcast.branchId
+                    || String(client.context.branchId) !== String(eventToBroadcast.branchId)
+                )) continue;
                 client.res.write(`data: ${JSON.stringify(eventToBroadcast)}\n\n`);
             } catch (err) {
                 logger.warn(`Failed to push SSE event to client ${clientId}:`, err?.message);
