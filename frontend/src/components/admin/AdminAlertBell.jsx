@@ -9,13 +9,15 @@ export default function AdminAlertBell({
   canManageWhatsApp = false
 }) {
   const { t } = useLanguage();
-  const { inventoryAlerts = {}, whatsappStatus = {}, setWhatsappModalOpen } = useApp();
+  const { inventoryAlerts = {}, inventoryAlertsStatus = {}, loadInventoryAlerts, whatsappStatus = {}, setWhatsappModalOpen } = useApp();
   const [isOpen, setIsOpen] = useState(false);
 
   const alerts = inventoryAlerts || {};
   const expired = Array.isArray(alerts.expired) ? alerts.expired : [];
   const expiringSoon = Array.isArray(alerts.expiringSoon) ? alerts.expiringSoon : [];
   const lowStock = Array.isArray(alerts.lowStock) ? alerts.lowStock : [];
+  const alertLoading = Boolean(inventoryAlertsStatus.loading);
+  const alertError = String(inventoryAlertsStatus.error || '');
 
   const total = (canViewInventoryAlerts ? Number(alerts.totalAlerts || 0) : 0)
     + (canReadWhatsApp && !whatsappStatus?.isConnected ? 1 : 0);
@@ -51,7 +53,20 @@ export default function AdminAlertBell({
                   {t('dispensaryAlerts')} ({total})
                 </h4>
                 <p className="text-[10px] text-slate-400">{t('safetyThresholdMonitor')}</p>
+                <p className={`text-[10px] mt-1 ${alertError ? 'text-rose-600' : 'text-slate-400'}`} role="status" aria-live="polite">
+                  {alertLoading ? 'Checking live inventory…' : alertError ? 'Inventory alerts could not be verified' : 'Live safety checks · refreshes every minute'}
+                </p>
               </div>
+              {canViewInventoryAlerts && (
+                <button
+                  type="button"
+                  onClick={() => { if (loadInventoryAlerts) void loadInventoryAlerts(); }}
+                  disabled={alertLoading}
+                  className="text-[10px] font-bold rounded-lg border border-slate-200 px-2.5 py-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  {alertLoading ? 'Checking…' : 'Refresh'}
+                </button>
+              )}
               <button
                 onClick={() => setIsOpen(false)}
                 className="text-slate-400 hover:text-slate-700 text-xs font-bold p-1 rounded-full hover:bg-slate-100"
@@ -116,7 +131,7 @@ export default function AdminAlertBell({
                   </span>
                 </div>
                 {expired.length === 0 ? (
-                  <p className="text-[11px] text-slate-500">{t('noExpiredPharmaceuticals')}</p>
+                  <p className="text-[11px] text-slate-500">{alertLoading ? 'Checking expiry batches…' : alertError ? 'Unable to verify expiry status. Refresh to retry.' : t('noExpiredPharmaceuticals')}</p>
                 ) : (
                   <div className="space-y-1">
                     {expired.map(m => (
@@ -140,7 +155,7 @@ export default function AdminAlertBell({
                   </span>
                 </div>
                 {expiringSoon.length === 0 ? (
-                  <p className="text-[11px] text-slate-500">{t('noMedicinesNearExpiry')}</p>
+                  <p className="text-[11px] text-slate-500">{alertLoading ? 'Checking upcoming expiry dates…' : alertError ? 'Unable to verify expiry status. Refresh to retry.' : t('noMedicinesNearExpiry')}</p>
                 ) : (
                   <div className="space-y-1">
                     {expiringSoon.map(m => (
@@ -164,7 +179,7 @@ export default function AdminAlertBell({
                   </span>
                 </div>
                 {lowStock.length === 0 ? (
-                  <p className="text-[11px] text-slate-500">{t('adequateInventory')}</p>
+                  <p className="text-[11px] text-slate-500">{alertLoading ? 'Checking branch stock levels…' : alertError ? 'Unable to verify stock levels. Refresh to retry.' : t('adequateInventory')}</p>
                 ) : (
                   <div className="space-y-1">
                     {lowStock.map(m => (
