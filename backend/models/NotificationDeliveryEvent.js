@@ -7,6 +7,7 @@ const notificationDeliveryEventSchema = new mongoose.Schema({
   orderId: { type: String, default: null, index: true },
   riderId: { type: String, default: null, index: true },
   jobId: { type: String, default: null },
+  type: { type: String, default: 'DELIVERY_STATUS_CHANGED' },
   eventType: { type: String, default: 'DELIVERY_STATUS_CHANGED', index: true },
   status: { type: String, default: null, index: true },
   riderName: { type: String, default: null },
