@@ -46,6 +46,16 @@ test('storefront medicine catalog is public and does not require inventory RBAC'
   assert.equal(resolveGatewayCapability('POST', '/api/medicines'), 'inventory.write');
 });
 
+test('storefront branch discovery is public while branch mutations remain protected', () => {
+  const url = '/api/v1/branches/all';
+  assert.equal(isGatewayPublicPath('GET', url), true);
+  assert.equal(resolveGatewayCapability('GET', url), null);
+
+  // Only the read-only active branch directory is public.
+  assert.equal(isGatewayPublicPath('POST', '/api/v1/branches/all'), false);
+  assert.equal(resolveGatewayCapability('POST', '/api/v1/branches/all'), 'tenants.manage');
+});
+
 test('staged inventory batch APIs require the explicit inventory.import capability', () => {
   const batch = '/api/v1/inventory/imports/batches/550e8400-e29b-41d4-a716-446655440000';
   const protectedRoutes = [
