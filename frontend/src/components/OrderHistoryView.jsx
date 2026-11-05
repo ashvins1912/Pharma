@@ -144,6 +144,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                         {order.fulfillmentState === 'CANCELLED_REMAINDER' && <p className="mt-1 text-[10px] font-bold text-slate-600">Remaining items cancelled at your request</p>}
                         {order.fulfillmentState === 'EXPIRED_REMAINDER' && <p className="mt-1 text-[10px] font-bold text-amber-700">Remaining items expired from the stock wait window</p>}
                         {order.parentOrderId && <p className="mt-1 text-[10px] font-semibold text-indigo-700">Part of order #{String(order.parentOrderId).slice(-6).toUpperCase()}</p>}
+                        {Array.isArray(order.childOrderIds) && order.childOrderIds.length > 0 && <p className="mt-1 text-[10px] font-semibold text-indigo-700">Split fulfilments: {order.childOrderIds.length} linked order(s)</p>}
                       </td>
                       <td className="py-3.5 px-3 text-right">
                         {editableStatuses.includes(getNormalizedStatus(order)) && (
