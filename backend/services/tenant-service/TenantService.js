@@ -396,7 +396,21 @@ export class TenantService {
     }
 
     async getAllActiveBranches() {
-        return Array.from(this.branches.values()).filter(b => b.status === 'ACTIVE');
+        // Production branch discovery must read the persisted directory, not
+        // the in-memory demo seed map. Otherwise real tenants created in MongoDB
+        // appear to have no branches on the public sign-in/storefront screen.
+        if (getIsConnected()) {
+            const persisted = await TenantBranch.find({ status: 'ACTIVE' })
+                .sort({ tenantId: 1, name: 1, _id: 1 })
+                .lean();
+            return persisted.map(branch => ({
+                ...branch,
+                id: String(branch._id)
+            }));
+        }
+
+        return Array.from(this.branches.values())
+            .filter(branch => branch.status === 'ACTIVE');
     }
 
     async getBranchById(branchId) {
