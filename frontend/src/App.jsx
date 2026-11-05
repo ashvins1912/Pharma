@@ -147,6 +147,12 @@ function MainApp() {
     }
   }, [tenantId]);
 
+  // Restore the selected dispensary's display details when only its ID survived
+  // a previous session (for example, after local storage was partially cleared).
+  useEffect(() => {
+    if (tenantId && !activeTenant) setTenantSelectorOpen(true);
+  }, [tenantId, activeTenant]);
+
   // Navigation is permission-first. Staff workspace capabilities are separate
   // from customer self-service permissions, even when they share a domain.
   const handleTabSwitch = (tab) => {
@@ -406,12 +412,10 @@ function MainApp() {
                           <span className="inline-block bg-white/20 backdrop-blur-md text-white text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                             {t('expressDelivery')}
                           </span>
-                          {activeTenant && (
-                            <span className="inline-flex items-center gap-1 bg-emerald-500/30 border border-emerald-400/40 backdrop-blur-md text-emerald-50 text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full">
-                              <span>🏥</span>
-                              <span>{activeTenant.shopName || activeTenant.name || t('selectedPharmacy')}</span>
-                            </span>
-                          )}
+                          <span className="inline-flex items-center gap-1 bg-emerald-500/30 border border-emerald-400/40 backdrop-blur-md text-emerald-50 text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full">
+                            <span>🏥</span>
+                            <span>{activeTenant ? (activeTenant.shopName || activeTenant.name || t('selectedPharmacy')) : 'Select a dispensary to check availability'}</span>
+                          </span>
                         </div>
                         <span className="inline-flex items-center gap-1 bg-black/20 backdrop-blur-md text-white text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full">
                           <span>🇮🇳</span>
@@ -433,7 +437,7 @@ function MainApp() {
                     onClick={() => setTenantSelectorOpen(true)}
                     className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-xl backdrop-blur-md transition flex items-center gap-2 cursor-pointer shadow-sm"
                   >
-                    <span>📍 {activeTenant ? t('changePharmacy') : t('selectNearbyPharmacy')}</span>
+                    <span>📍 {activeTenant ? 'Change Pharmacy / Dispensary' : 'Select Pharmacy / Dispensary'}</span>
                   </button>
                   {activeTenant?.address && (
                     <span className="text-[11px] text-blue-200">
@@ -703,7 +707,7 @@ function MainApp() {
       {/* Tenant Selector Modal */}
       <TenantSelectorModal
         isOpen={tenantSelectorOpen}
-        preferredTenantId={new URLSearchParams(window.location.search).get('tenantId') || ''}
+        preferredTenantId={new URLSearchParams(window.location.search).get('tenantId') || tenantId || ''}
         onClose={() => {
           setTenantSelectorOpen(false);
           if (checkoutAfterTenantSelection) {
