@@ -5,6 +5,7 @@ import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { useTenant } from '../../context/TenantContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { invalidatePublicCatalogCache } from '../../api/publicCatalogCache';
 
@@ -15,8 +16,12 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   const refreshInventoryCatalogue = useCallback(() => {
     invalidatePublicCatalogCache();
     fetchMedicines();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('pharma:inventory-updated'));
+    }
   }, [fetchMedicines]);
   const { isSuperAdmin, user } = useAuth();
+  const { tenantId: activeTenantId, branchId: activeBranchId, setTenantId, setBranchId } = useTenant();
   const authenticatedTenantId = String(user?.tenantId || user?.app_metadata?.tenantId || '').trim();
   const [targetTenantId, setTargetTenantId] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('pharma_import_target_tenant_id') || '') : '');
   const scopeTenantId = isSuperAdmin ? targetTenantId.trim() : authenticatedTenantId;
@@ -154,6 +159,12 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
       addToast(t('noRecordsToImport'), 'warning');
       return;
     }
+
+    // Keep the inventory workspace aligned with the verified tenant/branch
+    // selected for this import. Otherwise the admin catalogue can keep querying
+    // a stale branch (for example the old "branch-1" fallback) after publish.
+    if (String(activeTenantId || '') !== String(scopeTenantId)) setTenantId(scopeTenantId);
+    if (String(activeBranchId || '') !== String(targetBranchId)) setBranchId(targetBranchId);
 
     setCommitting(true);
     try {
