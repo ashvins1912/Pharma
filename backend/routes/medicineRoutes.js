@@ -74,40 +74,79 @@ const getVerifiedInventoryScope = async (req, requiredPermission = 'inventory.re
     ]);
     const permissions = [
         ...(Array.isArray(req.user?.permissions) ? req.user.permissions : []),
+        ...(Array.isArray(req.user?.app_metadata?.permissions) ? req.user.app_metadata.permissions : []),
         ...(Array.isArray(req.context?.permissions) ? req.context.permissions : [])
     ];
     const hasPermission = permissions.includes('*') || permissions.includes(requiredPermission);
     const roleAllowed = requiredPermission === 'inventory.write' ? writeRoles.has(role) : readRoles.has(role);
-    if (!platformRoles.has(role) && !roleAllowed && !hasPermission) {
+    const isPlatformAdmin = platformRoles.has(role);
+    if (!isPlatformAdmin && !roleAllowed && !hasPermission) {
         const error = new Error(`You do not have permission to ${requiredPermission === 'inventory.write' ? 'manage' : 'view'} pharmacy inventory.`);
         error.statusCode = 403;
         throw error;
     }
-    const isPlatformAdmin = platformRoles.has(role);
-    const tenantId = String(
+
+    // Browser-selected scope is a request, not authorization evidence. Resolve it
+    // against the signed identity and the authoritative active TenantMembership.
+    const requestedTenantId = String(
         req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId
-        || (isPlatformAdmin ? req.get('x-tenant-id') || req.body?.tenantId || req.query?.tenantId : '')
-        || ''
+        || req.get('x-tenant-id') || req.body?.tenantId || req.query?.tenantId || ''
     ).trim();
-    const branchId = String(
+    const requestedBranchId = String(
         req.user?.branchId || req.user?.app_metadata?.branchId || req.context?.branchId
         || req.get('x-branch-id') || req.body?.branchId || req.query?.branchId || ''
     ).trim();
-    if (!tenantId || !branchId) {
+
+    if (!requestedTenantId || !requestedBranchId) {
         const error = new Error('Select an authorized pharmacy tenant and branch before accessing inventory.');
         error.statusCode = 403;
+        error.code = 'PHARMACY_SCOPE_REQUIRED';
         throw error;
     }
+
+    if (!isPlatformAdmin) {
+        const userId = String(req.user?.sub || req.user?.id || '').trim();
+        if (!userId) {
+            const error = new Error('An authenticated pharmacy membership is required for inventory access.');
+            error.statusCode = 403;
+            error.code = 'TENANT_MEMBERSHIP_REQUIRED';
+            throw error;
+        }
+        const memberships = await tenantService.getMembershipsForUser(userId);
+        const membership = memberships.find(item =>
+            String(item.tenantId) === requestedTenantId && item.status === 'ACTIVE'
+        );
+        if (!membership) {
+            const error = new Error('Your account does not have active access to the selected pharmacy.');
+            error.statusCode = 403;
+            error.code = 'TENANT_ACCESS_DENIED';
+            throw error;
+        }
+
+        // A branch-bound staff member cannot switch branches. Tenant-wide
+        // memberships (branchId=null) may select any active branch in the tenant.
+        const tokenBranchId = String(req.user?.branchId || req.user?.app_metadata?.branchId || '').trim();
+        const membershipBranchId = String(membership.branchId || '').trim();
+        const allowedBranchId = tokenBranchId || membershipBranchId;
+        if (allowedBranchId && allowedBranchId !== requestedBranchId) {
+            const error = new Error('You are not authorized to access the selected pharmacy branch.');
+            error.statusCode = 403;
+            error.code = 'BRANCH_ACCESS_DENIED';
+            throw error;
+        }
+    }
+
     const [tenant, branch] = await Promise.all([
-        tenantService.getTenantById(tenantId),
-        tenantService.getBranchById(branchId)
+        tenantService.getTenantById(requestedTenantId),
+        tenantService.getBranchById(requestedBranchId)
     ]);
-    if (!tenant || tenant.status !== 'ACTIVE' || !branch || branch.status !== 'ACTIVE' || String(branch.tenantId) !== tenantId) {
-        const error = new Error('An active tenant and its active branch are required for inventory access.');
+    if (!tenant || tenant.status !== 'ACTIVE' || !branch || branch.status !== 'ACTIVE' || String(branch.tenantId) !== requestedTenantId) {
+        const error = new Error('The selected pharmacy or branch is inactive or does not belong to this pharmacy. Select a valid branch and try again.');
         error.statusCode = 403;
+        error.code = 'INVALID_PHARMACY_BRANCH';
         throw error;
     }
-    return { tenantId, branchId };
+    return { tenantId: requestedTenantId, branchId: requestedBranchId };
 };
 
 router.post('/', authenticateUser, async (req, res) => {
