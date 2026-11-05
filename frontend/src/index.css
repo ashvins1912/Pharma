@@ -588,7 +588,6 @@ fieldset {
 
 :where([role="dialog"]) {
   min-width: 0;
-  max-width: calc(100vw - 1rem);
   max-height: calc(100dvh - 1rem);
 }
 
