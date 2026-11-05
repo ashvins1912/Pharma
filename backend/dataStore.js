@@ -1569,16 +1569,6 @@ export const dataStore = {
             'Legacy in-memory orders cannot change pharmacy stock. Reconcile the order through Inventory Service.',
             409
         );
-        const previousStatus = order.orderStatus;
-        order.orderStatus = 'Cancelled';
-        order.statusHistory.push({
-            previousStatus,
-            newStatus: 'Cancelled',
-            changedBy: actor,
-            timestamp: new Date(),
-            notes: 'Order cancelled; Inventory Service reservation released.'
-        });
-        return order;
     },
 
     async dispatchOrder(orderId, actor = 'Admin', riderInfo = null) {
