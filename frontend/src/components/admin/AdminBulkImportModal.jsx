@@ -555,9 +555,6 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                     </button>
                   </div>
                 )}
-                {importJob.batchId && !['FAILED','REVERTED'].includes(importJob.status) && (
-                  <AdminImportBatchManager batchId={importJob.batchId} headers={getImportScopeHeaders()} publishingEnabled={previewData.importsEnabled === true} onInventoryChanged={refreshInventoryCatalogue} />
-                )}
                 {importJob.status === 'REVERTED' && (
                   <p className="text-xs font-bold text-emerald-800">{t('batchRevertedMessage')}</p>
                 )}
@@ -585,6 +582,17 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
                   </button>
                 )}
               </section>
+            )}
+
+            {/* Persisted import history remains available after closing the modal or refreshing the page. */}
+            {scopeTenantId && targetBranchId && (
+              <AdminImportBatchManager
+                key={importJob?.batchId || 'persisted-import-history'}
+                batchId={importJob?.batchId || ''}
+                headers={getImportScopeHeaders()}
+                publishingEnabled={previewData?.importsEnabled === true}
+                onInventoryChanged={refreshInventoryCatalogue}
+              />
             )}
 
             {/* Error Review Banner if any detected client-side */}
