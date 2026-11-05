@@ -58,6 +58,14 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
     loadAdminInventory(1, searchTerm);
   }, [searchTerm, tenantId, branchId]);
 
+  // A published import changes Inventory Service records, not this component's
+  // local React state. Listen for the shared refresh signal from the import UI.
+  useEffect(() => {
+    const handleInventoryUpdated = () => { void loadAdminInventory(1, searchTerm); };
+    window.addEventListener('pharma:inventory-updated', handleInventoryUpdated);
+    return () => window.removeEventListener('pharma:inventory-updated', handleInventoryUpdated);
+  }, [searchTerm, tenantId, branchId]);
+
   const openMedicineForm = (medicine = null) => {
     if (!canManage) return;
     setMedicineDraft(medicine ? {
