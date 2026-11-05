@@ -162,11 +162,19 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
 
       setTenants(list);
       setError('');
-      const preferred = preferredTenantId
-        ? (list.find(tenant => String(tenant._id) === String(preferredTenantId)) || list[0])
-        : (list[0] || null);
-      if (preferred) {
-        setTenantId(preferred._id);
+      // Manual customer selection wins over URL defaults and discovery order.
+      // The first nearby pharmacy is selected only when no pharmacy was selected yet.
+      const selected = tenantId
+        ? list.find(tenant => String(tenant._id) === String(tenantId))
+        : null;
+      const preferred = selected
+        || (!tenantId && preferredTenantId
+          ? list.find(tenant => String(tenant._id) === String(preferredTenantId))
+          : null)
+        || (!tenantId ? (list[0] || null) : null);
+      if (preferred && String(preferred._id) !== String(tenantId || '')) {
+        setActiveTenant(preferred);
+      } else if (preferred && !tenantId) {
         setActiveTenant(preferred);
       }
     } catch (err) {
@@ -251,7 +259,6 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
                 <div
                   key={tenant._id}
                   onClick={() => {
-                    setTenantId(tenant._id);
                     setActiveTenant(tenant);
                   }}
                   className={`p-4 rounded-2xl border-2 transition cursor-pointer flex items-center gap-4 ${
