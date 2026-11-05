@@ -452,7 +452,7 @@ export default function AddressManager({
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
+    <div className="pharma-address-manager bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-base font-extrabold text-slate-900">
