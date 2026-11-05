@@ -6,7 +6,13 @@ const readSavedTenant = () => {
   if (typeof window === 'undefined') return null;
   try {
     const value = localStorage.getItem('pharma_active_tenant');
-    return value ? JSON.parse(value) : null;
+    const tenant = value ? JSON.parse(value) : null;
+    const savedTenantId = localStorage.getItem('pharma_tenant_id');
+    const displayedTenantId = tenant?._id || tenant?.id || null;
+    // Never display a stale pharmacy object beside a different selected tenant ID.
+    return tenant && savedTenantId && String(displayedTenantId) === String(savedTenantId)
+      ? tenant
+      : null;
   } catch {
     return null;
   }
