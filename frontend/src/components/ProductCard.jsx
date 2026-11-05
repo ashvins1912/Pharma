@@ -9,7 +9,8 @@ export default function ProductCard({ med }) {
   const { user } = useAuth();
   const [imageError, setImageError] = useState(false);
 
-  const stock = med.availableQuantity ?? med.stock ?? med.quantity ?? 0;
+  const stock = Number(med.availableQuantity ?? med.quantity ?? med.stock ?? 0);
+  const maxCartQuantity = stock > 0 && stock <= 5 ? stock + 5 : stock;
   const isOut = stock <= 0 || med.isExpired;
   const isLow = stock > 0 && stock <= 5;
 
@@ -160,7 +161,7 @@ export default function ProductCard({ med }) {
               </span>
               <button
                 onClick={() => updateQuantity(med._id, 1)}
-                disabled={cartQty >= stock}
+                disabled={cartQty >= (cartItem?.maxCartQuantity || maxCartQuantity)}
                 className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-blue-700 hover:bg-blue-200 disabled:opacity-30 rounded-md font-black text-xs cursor-pointer transition"
                 aria-label={t("increaseQuantity")}
               >
