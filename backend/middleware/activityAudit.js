@@ -5,6 +5,10 @@ const recentActivity = [];
 const MAX_MEMORY_ACTIVITY = 500;
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const SENSITIVE_FIELDS = /password|token|secret|authorization|cookie|prescription|medical|otp|mobile|phone|email|address/i;
+const NON_MUTATING_POST_PATHS = [
+  /^\/api\/(?:v1\/)?delivery\/check-serviceability\/?$/i,
+  /^\/api\/(?:v1\/)?integrations\/test-connection\/?$/i
+];
 
 function describeResource(pathname) {
   const parts = pathname.split('/').filter(Boolean);
@@ -73,8 +77,11 @@ export function recordActivity(record) {
 }
 
 export function auditMutation(req, res, next) {
-  if (!MUTATING_METHODS.has(String(req.method).toUpperCase())) return next();
+  const method = String(req.method).toUpperCase();
+  if (!MUTATING_METHODS.has(method)) return next();
   const requestPath = String(req.originalUrl || req.path || '').split('?')[0];
+  // Exclude successful POST probes that do not mutate domain state.
+  if (method === 'POST' && NON_MUTATING_POST_PATHS.some(pattern => pattern.test(requestPath))) return next();
   // Do not persist authentication payloads or high-entropy public onboarding tokens in audit paths.
   if (/^\/api\/v1\/auth\//i.test(requestPath) || /^\/api\/(?:v1\/)?vendor\/onboarding\//i.test(requestPath)) return next();
   res.once('finish', () => {
@@ -99,11 +106,46 @@ export async function queryActivity({ tenantId, branchId, page = 1, limit = 20 }
   if (tenantId) filter.tenantId = String(tenantId);
   if (branchId) filter.$or = [{ branchId: String(branchId) }, { branchId: null }];
   if (getIsConnected()) {
-    const [items, total] = await Promise.all([
-      ActivityAudit.find(filter).sort({ createdAt: -1, _id: -1 }).skip((safePage - 1) * safeLimit).limit(safeLimit).lean(),
-      ActivityAudit.countDocuments(filter)
-    ]);
-    return { items, pagination: { page: safePage, limit: safeLimit, total, totalPages: Math.ceil(total / safeLimit), hasNextPage: safePage * safeLimit < total, hasPreviousPage: safePage > 1 } };
+    const buffered = recentActivity.filter(item =>
+      (!tenantId || item.tenantId === String(tenantId))
+      && (!branchId || !item.branchId || item.branchId === String(branchId))
+    ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // A write may have failed while MongoDB was unavailable and been buffered in memory.
+    // If the write actually reached MongoDB before the connection error, de-duplicate it by requestId.
+    const requestIds = buffered.map(item => item.requestId).filter(Boolean);
+    const persisted = requestIds.length
+      ? await ActivityAudit.find({ ...filter, requestId: { $in: requestIds } }).select('requestId').lean()
+      : [];
+    const persistedIds = new Set(persisted.map(item => item.requestId));
+    const pending = buffered.filter(item => !item.requestId || !persistedIds.has(item.requestId));
+
+    const start = (safePage - 1) * safeLimit;
+    const bufferedPage = pending.slice(start, start + safeLimit);
+    const remaining = safeLimit - bufferedPage.length;
+    let databaseItems = [];
+    if (remaining > 0) {
+      const databaseSkip = Math.max(0, start - pending.length);
+      databaseItems = await ActivityAudit.find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(databaseSkip)
+        .limit(remaining)
+        .lean();
+    }
+    const databaseTotal = await ActivityAudit.countDocuments(filter);
+    const total = databaseTotal + pending.length;
+    const items = [...bufferedPage, ...databaseItems];
+    return {
+      items,
+      pagination: {
+        page: safePage,
+        limit: safeLimit,
+        total,
+        totalPages: Math.ceil(total / safeLimit),
+        hasNextPage: start + items.length < total,
+        hasPreviousPage: safePage > 1
+      }
+    };
   }
   const filtered = recentActivity.filter(item => (!tenantId || item.tenantId === String(tenantId)) && (!branchId || !item.branchId || item.branchId === String(branchId)));
   const total = filtered.length;
