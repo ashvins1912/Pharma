@@ -107,20 +107,135 @@ router.post('/', async (req, res) => {
     const permissions = Array.isArray(req.body?.permissions)
       ? [...new Set(req.body.permissions.map(clean).filter(Boolean))]
       : [];
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return res.status(400).json({ success: false, code: 'INVALID_STAFF_EMAIL', message: 'Enter a valid registered pharmacy user email.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ success: false, code: 'INVALID_STAFF_EMAIL', message: 'Enter a valid registered pharmacy user email.' });
     if (!ALLOWED_ROLES.has(role)) return res.status(400).json({ success: false, code: 'INVALID_STAFF_ROLE', message: 'Choose a supported pharmacy staff role.' });
     if (role === 'TENANT_ADMIN' && !scope.platform && scope.role !== 'TENANT_OWNER') return res.status(403).json({ success: false, code: 'OWNER_REQUIRED', message: 'Only the pharmacy owner or platform administrator can grant tenant administrator access.' });
     if (role === 'TENANT_ADMIN' && branchId) return res.status(400).json({ success: false, code: 'TENANT_ADMIN_MUST_BE_TENANT_WIDE', message: 'Tenant administrators must be assigned at tenant scope, not to a branch.' });
     if (role !== 'TENANT_ADMIN' && !branchId) return res.status(400).json({ success: false, code: 'BRANCH_REQUIRED', message: 'Choose an active branch for this staff role.' });
     if (!await validateBranch(scope.tenantId, branchId, res)) return;
-    const profile = await UserProfile.findOne({ tenantId: scope.tenantId, email, status: 'ACTIVE' })
+    const profile = await UserProfile.findOne({ tenantId: scope.tenantId, email: { $regex: `^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\UserProfile.findOne({ tenantId: scope.tenantId, email, status: 'ACTIVE' })')}import express from 'express';
+import { authenticateUser } from '../../middleware/auth.js';
+import { resolveUserContext } from '../../middleware/context.js';
+import TenantMembership from '../../models/TenantMembership.js';
+import TenantBranch from '../../models/TenantBranch.js';
+import UserProfile from '../../models/UserProfile.js';
+import { tenantService } from '../../services/tenant-service/TenantService.js';
+import { domainEvents } from '../../shared/events/DomainEvents.js';
+
+const router = express.Router({ mergeParams: true });
+const ALLOWED_ROLES = new Set(['PHARMACY_STAFF', 'PHARMACIST', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'RIDER', 'TENANT_RIDER', 'TENANT_ADMIN']);
+const clean = value => String(value ?? '').trim();
+
+async function authorizeTenantManager(req, res) {
+  resolveUserContext(req);
+  const tenantId = clean(req.params.tenantId);
+  const context = req.context || {};
+  const platform = context.isPlatformUser === true;
+  let role = clean(context.role || req.user?.app_metadata?.role || req.user?.role).toUpperCase();
+  let membership = null;
+  if (!platform) {
+    if (String(context.tenantId || '') !== tenantId || context.tenantMismatch) {
+      res.status(403).json({ success: false, code: 'TENANT_SCOPE_FORBIDDEN', message: 'You cannot manage users outside your selected pharmacy.' });
+      return null;
+    }
+    membership = await TenantMembership.findOne({
+      userId: String(req.user?.sub || ''),
+      tenantId,
+      status: 'ACTIVE'
+    }).lean();
+    if (!membership) {
+      res.status(403).json({ success: false, code: 'TENANT_MEMBERSHIP_REQUIRED', message: 'An active membership for this pharmacy is required.' });
+      return null;
+    }
+    role = clean(membership.role).toUpperCase();
+    if (!['TENANT_OWNER', 'TENANT_ADMIN'].includes(role) || membership.branchId) {
+      res.status(403).json({ success: false, code: 'TENANT_ADMIN_REQUIRED', message: 'Only a tenant-wide owner or administrator can manage branch staff.' });
+      return null;
+    }
+  } else if (!['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'ADMIN'].includes(role)) {
+    res.status(403).json({ success: false, code: 'PLATFORM_ADMIN_REQUIRED', message: 'Platform administrator access is required.' });
+    return null;
+  }
+  const tenant = await tenantService.getTenantById(tenantId);
+  if (!tenant) {
+    res.status(404).json({ success: false, code: 'TENANT_NOT_FOUND', message: 'Pharmacy tenant not found.' });
+    return null;
+  }
+  return { tenantId, actor: req.user, platform, role };
+}
+
+async function validateBranch(tenantId, branchId, res) {
+  if (!branchId) return true;
+  const branch = await TenantBranch.findOne({ _id: branchId, tenantId, status: 'ACTIVE' }).lean();
+  if (!branch) {
+    res.status(400).json({ success: false, code: 'INVALID_BRANCH', message: 'Choose an active branch belonging to this pharmacy.' });
+    return false;
+  }
+  return true;
+}
+
+router.use(authenticateUser);
+
+router.get('/', async (req, res) => {
+  try {
+    const scope = await authorizeTenantManager(req, res);
+    if (!scope) return;
+    const memberships = await TenantMembership.find({ tenantId: scope.tenantId })
+      .select('-invitationToken')
+      .sort({ createdAt: -1, _id: -1 }).lean();
+    const userIds = [...new Set(memberships.map(item => String(item.userId || '')).filter(Boolean))];
+    const profiles = userIds.length ? await UserProfile.find({
+      tenantId: scope.tenantId,
+      $or: [
+        { userId: { $in: userIds } },
+        { supabaseId: { $in: userIds } },
+        { supabase_user_id: { $in: userIds } }
+      ]
+    }).select('userId supabaseId supabase_user_id name firstName lastName email').lean() : [];
+    const profileById = new Map();
+    for (const profile of profiles) {
+      for (const id of [profile.userId, profile.supabaseId, profile.supabase_user_id].filter(Boolean)) {
+        profileById.set(String(id), profile);
+      }
+    }
+    const data = memberships.map(item => {
+      const profile = profileById.get(String(item.userId)) || {};
+      return {
+        ...item,
+        name: profile.name || [profile.firstName, profile.lastName].filter(Boolean).join(' '),
+        email: profile.email || ''
+      };
+    });
+    return res.json({ success: true, data });
+  } catch (error) {
+    return res.status(503).json({ success: false, code: 'STAFF_LIST_UNAVAILABLE', message: 'Pharmacy staff could not be loaded.' });
+  }
+});
+
+router.post('/', async (req, res) => {
+  try {
+    const scope = await authorizeTenantManager(req, res);
+    if (!scope) return;
+    const email = clean(req.body?.email).toLowerCase();
+    const branchId = clean(req.body?.branchId) || null;
+    const role = clean(req.body?.role).toUpperCase();
+    const permissions = Array.isArray(req.body?.permissions)
+      ? [...new Set(req.body.permissions.map(clean).filter(Boolean))]
+      : [];
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ success: false, code: 'INVALID_STAFF_EMAIL', message: 'Enter a valid registered pharmacy user email.' });
+    if (!ALLOWED_ROLES.has(role)) return res.status(400).json({ success: false, code: 'INVALID_STAFF_ROLE', message: 'Choose a supported pharmacy staff role.' });
+    if (role === 'TENANT_ADMIN' && !scope.platform && scope.role !== 'TENANT_OWNER') return res.status(403).json({ success: false, code: 'OWNER_REQUIRED', message: 'Only the pharmacy owner or platform administrator can grant tenant administrator access.' });
+    if (role === 'TENANT_ADMIN' && branchId) return res.status(400).json({ success: false, code: 'TENANT_ADMIN_MUST_BE_TENANT_WIDE', message: 'Tenant administrators must be assigned at tenant scope, not to a branch.' });
+    if (role !== 'TENANT_ADMIN' && !branchId) return res.status(400).json({ success: false, code: 'BRANCH_REQUIRED', message: 'Choose an active branch for this staff role.' });
+    if (!await validateBranch(scope.tenantId, branchId, res)) return;
+    const profile = await , $options: 'i' }, status: 'ACTIVE' })
       .select('userId supabaseId supabase_user_id name email')
       .lean();
     const userId = String(profile?.userId || profile?.supabaseId || profile?.supabase_user_id || '');
     if (!userId) return res.status(404).json({ success: false, code: 'REGISTERED_USER_NOT_FOUND', message: 'This email must belong to an active registered user of this pharmacy.' });
     const existing = await TenantMembership.findOne({ userId, tenantId: scope.tenantId }).lean();
     const existingRole = clean(existing?.role).toUpperCase();
-    if (existingRole === 'TENANT_OWNER' && !scope.platform) return res.status(403).json({ success: false, code: 'OWNER_MEMBERSHIP_PROTECTED', message: 'A tenant owner membership cannot be replaced by branch staff assignment.' });
+    if (existingRole === 'TENANT_OWNER') return res.status(403).json({ success: false, code: 'OWNER_MEMBERSHIP_PROTECTED', message: 'A tenant owner membership cannot be replaced by branch staff assignment.' });
     if (existingRole === 'TENANT_ADMIN' && !scope.platform && scope.role !== 'TENANT_OWNER') return res.status(403).json({ success: false, code: 'TENANT_ADMIN_MEMBERSHIP_PROTECTED', message: 'Only the tenant owner or platform administrator can change a tenant administrator membership.' });
     const membership = await TenantMembership.findOneAndUpdate(
       { userId, tenantId: scope.tenantId },
@@ -144,7 +259,7 @@ router.patch('/:membershipId', async (req, res) => {
     const currentRole = clean(current.role).toUpperCase();
     if (currentRole === 'TENANT_OWNER' && !scope.platform) return res.status(403).json({ success: false, code: 'OWNER_MEMBERSHIP_PROTECTED', message: 'Only a platform administrator can change a tenant owner membership.' });
     if (currentRole === 'TENANT_ADMIN' && !scope.platform && scope.role !== 'TENANT_OWNER') return res.status(403).json({ success: false, code: 'ADMIN_MEMBERSHIP_PROTECTED', message: 'Only the pharmacy owner or platform administrator can change another administrator membership.' });
-    if (String(current.userId) === String(scope.actor?.sub || '') && !scope.platform) return res.status(403).json({ success: false, code: 'SELF_MEMBERSHIP_CHANGE_FORBIDDEN', message: 'You cannot change your own pharmacy membership.' });
+    if (String(current.userId) === String(scope.actor?.sub || scope.actor?.id || '') && !scope.platform) return res.status(403).json({ success: false, code: 'SELF_MEMBERSHIP_CHANGE_FORBIDDEN', message: 'You cannot change your own pharmacy membership.' });
     const updates = {};
     if (req.body?.role !== undefined) {
       const role = clean(req.body.role).toUpperCase();
