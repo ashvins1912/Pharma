@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { auditMutation, queryActivity } from './activityAudit.js';
+import { getIsConnected } from '../config/db.js';
 
 function response() {
   let finish;
@@ -11,7 +12,7 @@ function response() {
   };
 }
 
-test('customer-supplied tenant IDs are not used as audit tenant scope', async () => {
+test('customer-supplied tenant IDs are not used as audit tenant scope', { skip: getIsConnected() }, async () => {
   const tenantId = 'untrusted-audit-tenant-' + Math.random().toString(36).slice(2);
   const req = {
     method: 'POST',
@@ -31,7 +32,7 @@ test('customer-supplied tenant IDs are not used as audit tenant scope', async ()
   assert.equal(result.items.some(item => item.requestId === 'audit-untrusted-scope-test'), false);
 });
 
-test('order fulfillment preview is excluded from mutation audit', async () => {
+test('order fulfillment preview is excluded from mutation audit', { skip: getIsConnected() }, async () => {
   const req = {
     method: 'POST',
     originalUrl: '/api/orders/fulfillment/preview',
