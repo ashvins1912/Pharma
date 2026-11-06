@@ -7,7 +7,7 @@ function routeKind(method, path) {
   if (path.startsWith('/api/surplus-savings/admin') || path.startsWith('/api/tenant/members')) return null;
   if (path.startsWith('/api/orders/')) return 'ORDER';
   if (path.startsWith('/api/admin/riders') || path.startsWith('/api/riders/')) return 'RIDER';
-  if (path === '/api/v1/vendor/profile' && method !== 'GET') return 'TENANT_PROFILE';
+  if (path.startsWith('/api/v1/vendor/profile') && method !== 'GET') return 'TENANT_PROFILE';
   if (path.startsWith('/api/v1/admin/tenants')) return 'TENANT';
   if (path.startsWith('/api/tenant/branches')) return 'TENANT_BRANCH';
   return null;
@@ -20,7 +20,7 @@ function bodyEntity(body) {
 
 function eventName(kind, method, req, entity) {
   if (kind === 'ORDER') {
-    const status = clean(req.body?.newStatus || req.body?.status || req.body?.decision || entity?.status || entity?.orderStatus).toLowerCase();
+    const status = clean(req.body?.newStatus || req.body?.status || req.body?.decision || req.params?.step || entity?.status || entity?.orderStatus).toLowerCase();
     if (status.includes('reject')) return 'ORDER_REJECTED';
     if (status.includes('accept')) return 'ORDER_ACCEPTED';
     return method === 'POST' ? 'ORDER_CREATED' : 'ORDER_UPDATED';
