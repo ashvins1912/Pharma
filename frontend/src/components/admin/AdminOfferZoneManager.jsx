@@ -2,24 +2,77 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useTenant } from '../../context/TenantContext';
+import apiClient from '../../api/apiClient';
 
 export default function AdminOfferZoneManager() {
   const { t } = useLanguage();
-  const { medicines, orders } = useApp();
+  const {
+    medicines, orders, searchQuery, setSearchQuery, selectedCategory,
+    setSelectedCategory, page, setPage, totalPages, totalMedicines, limit
+  } = useApp();
+  const { tenantId } = useTenant();
   const { addToast } = useToast();
+  const [campaigns, setCampaigns] = useState([]);
+  const [campaignLoadError, setCampaignLoadError] = useState('');
+  const [editingCampaign, setEditingCampaign] = useState(null);
+  const [campaignDraft, setCampaignDraft] = useState({ name: '', description: '', status: 'DRAFT', endsAt: '' });
+  const [campaignSaving, setCampaignSaving] = useState(false);
 
-  const [search, setSearch] = useState('');
-  const [filterCategory, setFilterCategory] = useState('All');
+  const search = searchQuery;
+  const filterCategory = selectedCategory;
   const [offerZoneOverrides, setOfferZoneOverrides] = useState({});
   const [discountOverrides, setDiscountOverrides] = useState({});
   const [reasonOverrides, setReasonOverrides] = useState({});
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 20;
-
   useEffect(() => {
-    setCurrentPage(1);
-  }, [search, filterCategory]);
+    if (!tenantId) { setCampaigns([]); return undefined; }
+    let active = true;
+    apiClient.get('/api/surplus-savings/admin', { params: { tenantId } })
+      .then(response => {
+        if (active) {
+          const rows = response.data?.campaigns || response.data?.data?.campaigns || [];
+          setCampaigns(Array.isArray(rows) ? rows : []);
+          setCampaignLoadError('');
+        }
+      })
+      .catch(error => {
+        if (active) setCampaignLoadError(error?.response?.data?.message || 'Campaigns could not be loaded.');
+      });
+    return () => { active = false; };
+  }, [tenantId]);
+
+  useEffect(() => { setPage(1); }, [search, filterCategory, setPage]);
+
+  const beginCampaignEdit = campaign => {
+    setEditingCampaign(String(campaign._id || campaign.id));
+    setCampaignDraft({
+      name: campaign.name || '',
+      description: campaign.description || '',
+      status: campaign.status || 'DRAFT',
+      endsAt: campaign.endsAt ? new Date(campaign.endsAt).toISOString().slice(0, 10) : ''
+    });
+  };
+
+  const saveCampaign = async event => {
+    event.preventDefault();
+    if (!editingCampaign || !tenantId) return;
+    setCampaignSaving(true);
+    try {
+      const response = await apiClient.patch(
+        `/api/surplus-savings/admin/${encodeURIComponent(editingCampaign)}`,
+        { tenantId, ...campaignDraft, endsAt: campaignDraft.endsAt ? new Date(campaignDraft.endsAt).toISOString() : undefined }
+      );
+      const updated = response.data?.campaign;
+      if (updated) setCampaigns(current => current.map(item => String(item._id || item.id) === editingCampaign ? updated : item));
+      setEditingCampaign(null);
+      addToast('Campaign updated successfully.', 'success');
+    } catch (error) {
+      addToast(error?.response?.data?.message || 'Campaign could not be updated.', 'error');
+    } finally {
+      setCampaignSaving(false);
+    }
+  };
 
   // Seasonal & Platform Recommendation Logic
   const recommendationInsights = useMemo(() => {
@@ -92,11 +145,8 @@ export default function AdminOfferZoneManager() {
     });
   }, [catalogItems, search, filterCategory]);
 
-  const totalPages = Math.ceil(filteredMedicines.length / pageSize) || 1;
-  const paginatedMedicines = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredMedicines.slice(start, start + pageSize);
-  }, [filteredMedicines, currentPage]);
+  const paginatedMedicines = filteredMedicines;
+  const visibleTotalPages = Math.max(1, Number(totalPages) || 1);
 
   const toggleOfferZone = (id) => {
     setOfferZoneOverrides(prev => ({
@@ -157,7 +207,7 @@ export default function AdminOfferZoneManager() {
             type="text"
             placeholder={t("searchCatalogMedicines")}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-600 transition"
           />
         </div>
@@ -167,7 +217,7 @@ export default function AdminOfferZoneManager() {
             <button
               key={cat}
               type="button"
-              onClick={() => setFilterCategory(cat)}
+              onClick={() => setSelectedCategory(cat)}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                 filterCategory === cat
                   ? 'bg-indigo-600 text-white shadow-sm'
@@ -179,6 +229,52 @@ export default function AdminOfferZoneManager() {
           ))}
         </div>
       </div>
+
+      {/* Persisted campaign management: edits call the tenant-scoped campaign API. */}
+      <section className="rounded-3xl border border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-800 p-5 shadow-sm space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-black text-slate-900 dark:text-white">Saved campaigns</h3>
+            <p className="text-xs text-slate-500">Edit campaign details and status; changes are saved to the selected pharmacy.</p>
+          </div>
+          <span className="text-xs font-bold text-slate-500">{campaigns.length} campaigns</span>
+        </div>
+        {campaignLoadError && <p role="alert" className="text-xs text-rose-600">{campaignLoadError}</p>}
+        {!campaignLoadError && campaigns.length === 0 && <p className="text-xs text-slate-500">No saved campaigns found for this pharmacy.</p>}
+        <div className="space-y-2">
+          {campaigns.map(campaign => (
+            <div key={campaign._id || campaign.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 dark:border-slate-800 p-3">
+              <div className="min-w-0">
+                <p className="text-xs font-extrabold text-slate-900 dark:text-white">{campaign.name}</p>
+                <p className="text-[11px] text-slate-500">{campaign.status} · Ends {campaign.endsAt ? new Date(campaign.endsAt).toLocaleDateString() : 'not set'}</p>
+              </div>
+              <button type="button" onClick={() => beginCampaignEdit(campaign)} className="rounded-lg bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100">Edit campaign</button>
+            </div>
+          ))}
+        </div>
+        {editingCampaign && (
+          <form onSubmit={saveCampaign} className="grid gap-3 rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 sm:grid-cols-2">
+            <label className="text-xs font-bold text-slate-700">Campaign name
+              <input required maxLength={120} value={campaignDraft.name} onChange={event => setCampaignDraft(current => ({ ...current, name: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs" />
+            </label>
+            <label className="text-xs font-bold text-slate-700">End date
+              <input required type="date" value={campaignDraft.endsAt} onChange={event => setCampaignDraft(current => ({ ...current, endsAt: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs" />
+            </label>
+            <label className="text-xs font-bold text-slate-700 sm:col-span-2">Description
+              <textarea maxLength={500} value={campaignDraft.description} onChange={event => setCampaignDraft(current => ({ ...current, description: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs" rows={2} />
+            </label>
+            <label className="text-xs font-bold text-slate-700">Status
+              <select value={campaignDraft.status} onChange={event => setCampaignDraft(current => ({ ...current, status: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs">
+                <option value="DRAFT">Draft</option><option value="ACTIVE">Active</option><option value="PAUSED">Paused</option>
+              </select>
+            </label>
+            <div className="flex items-end gap-2">
+              <button type="submit" disabled={campaignSaving} className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{campaignSaving ? 'Saving…' : 'Save campaign'}</button>
+              <button type="button" disabled={campaignSaving} onClick={() => setEditingCampaign(null)} className="rounded-xl bg-white px-4 py-2 text-xs font-bold text-slate-600">Cancel</button>
+            </div>
+          </form>
+        )}
+      </section>
 
       {/* Product Offer Configuration Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm overflow-hidden space-y-4">
@@ -280,21 +376,21 @@ export default function AdminOfferZoneManager() {
         </div>
 
         {/* Pagination Navigation */}
-        {totalPages > 1 && (
+        {visibleTotalPages > 1 && (
           <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
             <button
-              onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-              disabled={currentPage === 1}
+              onClick={() => setPage(p => Math.max(p - 1, 1))}
+              disabled={page === 1}
               className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-extrabold text-xs rounded-xl disabled:opacity-40 transition cursor-pointer"
             >
               ← Previous Page
             </button>
             <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
-              Page {currentPage} of {totalPages} (20 records per page)
+              Page {page} of {visibleTotalPages} ({limit} records per page)
             </span>
             <button
-              onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-              disabled={currentPage === totalPages}
+              onClick={() => setPage(p => Math.min(p + 1, visibleTotalPages))}
+              disabled={page === visibleTotalPages}
               className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-extrabold text-xs rounded-xl disabled:opacity-40 transition cursor-pointer"
             >
               Next Page →
