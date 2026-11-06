@@ -15,13 +15,24 @@ async function authorizeTenantManager(req, res) {
   const tenantId = clean(req.params.tenantId);
   const context = req.context || {};
   const platform = context.isPlatformUser === true;
-  const role = clean(context.tenantMembership?.role || context.role || req.user?.app_metadata?.role || req.user?.role).toUpperCase();
+  let role = clean(context.role || req.user?.app_metadata?.role || req.user?.role).toUpperCase();
+  let membership = null;
   if (!platform) {
     if (String(context.tenantId || '') !== tenantId || context.tenantMismatch) {
       res.status(403).json({ success: false, code: 'TENANT_SCOPE_FORBIDDEN', message: 'You cannot manage users outside your selected pharmacy.' });
       return null;
     }
-    if (!['TENANT_OWNER', 'TENANT_ADMIN'].includes(role) || context.tenantMembership?.branchId) {
+    membership = await TenantMembership.findOne({
+      userId: String(req.user?.sub || ''),
+      tenantId,
+      status: 'ACTIVE'
+    }).lean();
+    if (!membership) {
+      res.status(403).json({ success: false, code: 'TENANT_MEMBERSHIP_REQUIRED', message: 'An active membership for this pharmacy is required.' });
+      return null;
+    }
+    role = clean(membership.role).toUpperCase();
+    if (!['TENANT_OWNER', 'TENANT_ADMIN'].includes(role) || membership.branchId) {
       res.status(403).json({ success: false, code: 'TENANT_ADMIN_REQUIRED', message: 'Only a tenant-wide owner or administrator can manage branch staff.' });
       return null;
     }
