@@ -75,16 +75,19 @@ const getVerifiedInventoryScope = async (req, requiredPermission = 'inventory.re
 
     // Browser-selected scope is a request, never authorization evidence.
     // Signed tenant/branch context is resolved against active membership first.
-    // Platform operators intentionally switch between pharmacies in the UI.
-    // Their resolved auth context may contain a stale/default tenant from a prior
-    // request, so honor the explicitly selected scope for platform users only.
-    // For tenant members, signed membership context remains authoritative.
-    const isPlatform = authorizationService.isPlatformContext(authz);
+    const platformContext = authorizationService.isPlatformContext(authz);
+    // Platform operators can switch between tenants/branches in the UI. For
+    // platform context, honor the explicitly selected request scope first;
+    // for tenant members, signed membership context remains authoritative.
     const requestedTenantId = String(
-        (isPlatform ? (req.get('x-tenant-id') || req.body?.tenantId || req.query?.tenantId) : authz.tenantId) || ''
+        (platformContext
+            ? req.get('x-tenant-id') || req.body?.tenantId || req.query?.tenantId || authz.tenantId
+            : authz.tenantId || req.get('x-tenant-id') || req.body?.tenantId || req.query?.tenantId) || ''
     ).trim();
     const requestedBranchId = String(
-        (isPlatform ? (req.get('x-branch-id') || req.body?.branchId || req.query?.branchId) : authz.branchId) || ''
+        (platformContext
+            ? req.get('x-branch-id') || req.body?.branchId || req.query?.branchId || authz.branchId
+            : authz.branchId || req.get('x-branch-id') || req.body?.branchId || req.query?.branchId) || ''
     ).trim();
 
     if (!requestedTenantId || !requestedBranchId) {
