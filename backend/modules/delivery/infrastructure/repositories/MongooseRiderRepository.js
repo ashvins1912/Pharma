@@ -2,6 +2,15 @@ import { IRiderRepository } from '../../ports/IRiderRepository.js';
 import { Rider } from '../../domain/entities/Rider.js';
 import RiderModel from '../../../../models/Rider.js';
 
+const RIDER_DOMAIN_PROJECTION = [
+    '_id', 'tenantId', 'branchId', 'name', 'mobile', 'photoUrl', 'status',
+    'vehicleType', 'currentLocation', 'activeOrderIds', 'totalDeliveries',
+    'rating', 'enabled', 'disabledAction', 'disabledReason', 'disabledAt',
+    'createdAt', 'updatedAt'
+].join(' ');
+
+const MAX_RIDER_LIST_LIMIT = 500;
+
 export class MongooseRiderRepository extends IRiderRepository {
     _toDomain(doc) {
         if (!doc) return null;
@@ -30,19 +39,19 @@ export class MongooseRiderRepository extends IRiderRepository {
 
     async findById(id, tenantId) {
         if (!tenantId) return null;
-        const doc = await RiderModel.findOne({ _id: id, tenantId: String(tenantId) });
+        const doc = await RiderModel.findOne({ _id: id, tenantId: String(tenantId) }).select(RIDER_DOMAIN_PROJECTION).lean();
         return this._toDomain(doc);
     }
 
     async findByMobile(mobile, tenantId) {
         if (!tenantId) return null;
         const cleanMobile = String(mobile).trim();
-        let doc = await RiderModel.findOne({ mobile: cleanMobile, tenantId: String(tenantId) });
+        let doc = await RiderModel.findOne({ mobile: cleanMobile, tenantId: String(tenantId) }).select(RIDER_DOMAIN_PROJECTION).lean();
         if (!doc) {
             const digits = cleanMobile.replace(/\D/g, '');
             if (digits) {
                 const formattedMobile = new RegExp(`^\\D*${digits.split('').join('\\D*')}\\D*$`);
-                doc = await RiderModel.findOne({ mobile: formattedMobile, tenantId: String(tenantId) });
+                doc = await RiderModel.findOne({ mobile: formattedMobile, tenantId: String(tenantId) }).select(RIDER_DOMAIN_PROJECTION).lean();
             }
         }
         return this._toDomain(doc);
@@ -62,12 +71,30 @@ export class MongooseRiderRepository extends IRiderRepository {
             query.status = compatibleStatuses ? { $in: compatibleStatuses } : filter.status;
         }
         if (filter.search) {
+            const escapedSearch = String(filter.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\        if (filter.search) {
             query.$or = [
                 { name: { $regex: filter.search, $options: 'i' } },
                 { mobile: { $regex: filter.search, $options: 'i' } }
             ];
         }
         const docs = await RiderModel.find(query).sort({ status: 1, name: 1 });
+        return docs.map(d => this._toDomain(d));');
+            if (escapedSearch) {
+                query.$or = [
+                    { name: { $regex: escapedSearch, $options: 'i' } },
+                    { mobile: { $regex: escapedSearch, $options: 'i' } }
+                ];
+            }
+        }
+        const requestedLimit = Number.parseInt(filter.limit, 10);
+        const limit = Number.isInteger(requestedLimit) && requestedLimit > 0
+            ? Math.min(MAX_RIDER_LIST_LIMIT, requestedLimit)
+            : 200;
+        const docs = await RiderModel.find(query)
+            .select(RIDER_DOMAIN_PROJECTION)
+            .sort({ status: 1, name: 1, _id: 1 })
+            .limit(limit)
+            .lean();
         return docs.map(d => this._toDomain(d));
     }
 
@@ -88,7 +115,7 @@ export class MongooseRiderRepository extends IRiderRepository {
                 coordinates: updates.currentLocation.coordinates
             };
         }
-        const doc = await RiderModel.findOneAndUpdate({ _id: id, tenantId: String(tenantId) }, { $set: updates }, { new: true });
+        const doc = await RiderModel.findOneAndUpdate({ _id: id, tenantId: String(tenantId) }, { $set: updates }, { new: true }).select(RIDER_DOMAIN_PROJECTION).lean();
         return this._toDomain(doc);
     }
 
@@ -124,7 +151,7 @@ export class MongooseRiderRepository extends IRiderRepository {
                         $maxDistance: maxDistance
                     }
                 }
-            }).limit(limit);
+            }).select(RIDER_DOMAIN_PROJECTION).limit(limit).lean();
             return buildResults(docs);
         } catch (error) {
             // A missing/stale 2dsphere index must not make auto-assignment fail.
@@ -134,7 +161,7 @@ export class MongooseRiderRepository extends IRiderRepository {
                 tenantId: String(tenantId),
                 enabled: { $ne: false },
                 status: { $in: [Rider.STATUSES.AVAILABLE, 'available'] }
-            }).limit(100).lean();
+            }).select(RIDER_DOMAIN_PROJECTION).limit(100).lean();
             return buildResults(docs);
         }
     }
