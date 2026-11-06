@@ -181,7 +181,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
   };
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="admin-screen admin-screen--requests w-full min-w-0 space-y-5 animate-fade-in">
       
       {/* Metrics Banner */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-slate-800">
