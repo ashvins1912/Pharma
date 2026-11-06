@@ -32,6 +32,7 @@ import internalGatewayRoutes from './routes/internalGatewayRoutes.js';
 import apiRoutes from './routes/apiRoutes.js';
 import AuditEvent from './models/AuditEvent.js';
 import { domainEvents } from './shared/events/DomainEvents.js';
+import auditMutationEvents from './middleware/auditMutationEvents.js';
 
 
 
@@ -87,6 +88,7 @@ app.use(corsErrorHandler);
 app.use(express.json({ verify: (req, _res, buffer) => { req.rawBody = Buffer.from(buffer); } }));
 app.use(cookieParser());
 app.use(csrfProtection);
+app.use(auditMutationEvents);
 
 // Render/private-network readiness endpoint. The API Gateway uses this endpoint
 // to decide whether the private backend can receive proxied traffic. Keep it
