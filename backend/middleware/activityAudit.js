@@ -38,19 +38,19 @@ function makeAuditRecord(req, statusCode) {
   const context = req.context || {};
   const actorRole = String(context.role || actor.app_metadata?.role || actor.role || '').toUpperCase();
   const platformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(actorRole);
+  // Non-platform tenant scope must come from an authenticated membership or
+  // trusted identity metadata, never from customer-supplied tenant/body context.
   const tenantId = context.authorizedTenantId
-    || context.tenantId
-    || context.tenant?.id
+    || context.tenantMembership?.tenantId
     || actor.tenantId
     || actor.app_metadata?.tenantId
-    || (platformAdmin ? (req.get?.('x-tenant-id') || req.body?.tenantId || req.query?.tenantId) : null)
+    || (platformAdmin ? (context.tenantId || req.get?.('x-tenant-id')) : null)
     || null;
-  const branchId = context.branchId
-    || context.branch?.id
+  const branchId = context.tenantMembership?.branchId
+    || (context.authorizedTenantId ? context.branchId : null)
     || actor.branchId
     || actor.app_metadata?.branchId
-    || req.body?.branchId
-    || (platformAdmin ? req.get?.('x-branch-id') : null)
+    || (platformAdmin ? (context.branchId || req.get?.('x-branch-id')) : null)
     || null;
   const changedFields = Object.keys(req.body || {}).filter(key => !SENSITIVE_FIELDS.test(key)).slice(0, 30);
   const idParam = Object.entries(req.params || {}).find(([key]) => /id$/i.test(key));
@@ -62,7 +62,7 @@ function makeAuditRecord(req, statusCode) {
     actorRole: String(actor.app_metadata?.role || actor.role || context.role || 'user'),
     action,
     entityType,
-    entityId: idParam ? String(idParam[1]) : (normalized.find(part => /^[a-f0-9]{16,}$/i.test(part)) || req.body?.tenantId || req.query?.tenantId || req.body?.branchId || null),
+    entityId: idParam ? String(idParam[1]) : (normalized.find(part => /^[a-f0-9]{16,}$/i.test(part)) || null),
     method,
     path: pathname.slice(0, 240),
     statusCode,
