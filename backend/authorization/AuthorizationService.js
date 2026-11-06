@@ -33,8 +33,6 @@ export class AuthorizationService {
     let requestedTenantId = user?.tenantId || user?.app_metadata?.tenantId || null;
     let branchId = user?.branchId || null;
     let membership = null;
-
-    // TenantMembership is the authoritative source for tenant-scoped users.
     const memberships = await tenantService.getMembershipsForUser(userId);
     if (requestedTenantId) {
       membership = memberships.find(item =>
@@ -68,10 +66,7 @@ export class AuthorizationService {
     const rolePermissions = await getRolePermissions(role);
     const permissions = new Set(rolePermissions);
     const revokedPermissions = new Set();
-
-    // Membership permissions are explicit tenant-level grants/overrides.
     for (const permission of membership?.permissions || []) permissions.add(permission);
-    // Platform/customer explicit permission overrides may be supplied by the user record.
     if (!membership) for (const permission of user?.permissions || []) permissions.add(permission);
 
     let userProfile = null;
@@ -99,16 +94,26 @@ export class AuthorizationService {
     };
   }
 
+  isPlatformContext(context) {
+    const role = String(context?.role || context?.app_metadata?.role || '').toUpperCase();
+    return context?.scope === 'PLATFORM' || ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'ADMIN'].includes(role);
+  }
+
+  canAccessTenantResource(context, tenantId, branchId = null) {
+    if (!context || !tenantId) return false;
+    if (this.isPlatformContext(context)) return true;
+    if (!context.tenantId || String(context.tenantId) !== String(tenantId)) return false;
+    if (context.branchId && branchId && String(context.branchId) !== String(branchId)) return false;
+    if (context.branchId && !branchId) return false;
+    return true;
+  }
+
   isAllowed(context, permission) {
-    // Explicit revocations are deny rules and must override broad grants,
-    // including the platform administrator wildcard.
     const revoked = context?.revokedPermissions || context?.app_metadata?.revokedPermissions || [];
     if (permission && (
       revoked.includes(permission)
       || revoked.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)))
     )) return false;
-
-    // Preserve legacy platform-admin aliases only after checking explicit denies.
     const role = context?.role || context?.app_metadata?.role;
     if (role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN' || role === 'admin') return true;
     return hasPermission(context?.permissions || [], permission, revoked);
