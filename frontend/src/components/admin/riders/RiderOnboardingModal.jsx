@@ -59,7 +59,7 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
 
     return createPortal(
         <div className="fixed inset-0 z-[10000] flex items-start sm:items-center justify-center overflow-y-auto overscroll-contain bg-slate-950/60 p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] modal-overlay animate-fade-in">
-            <div role="dialog" aria-modal="true" aria-labelledby="rider-onboarding-title" className="pharma-modal-surface relative my-auto max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] max-w-lg w-full p-4 sm:p-7 overflow-x-hidden overflow-y-auto overscroll-contain">
+            <div role="dialog" aria-modal="true" aria-labelledby="rider-onboarding-title" className="pharma-modal-surface relative my-auto max-w-lg w-full p-4 sm:p-7 max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] overflow-x-hidden overflow-y-auto overscroll-contain">
                 {/* Header */}
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100 pr-10">
                     <div className="flex items-center gap-3">
