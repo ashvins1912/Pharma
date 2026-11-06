@@ -22,7 +22,7 @@ function eventName(kind, method, req, entity) {
   if (kind === 'ORDER') {
     const status = clean(req.body?.newStatus || req.body?.status || req.body?.decision || req.params?.step || entity?.status || entity?.orderStatus).toLowerCase();
     if (status.includes('reject')) return 'ORDER_REJECTED';
-    if (status.includes('accept')) return 'ORDER_ACCEPTED';
+    if (status.includes('accept') || status.includes('approv')) return 'ORDER_ACCEPTED';
     return method === 'POST' ? 'ORDER_CREATED' : 'ORDER_UPDATED';
   }
   if (kind === 'RIDER') return method === 'POST' ? 'RIDER_CREATED' : 'RIDER_UPDATED';
