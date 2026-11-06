@@ -112,7 +112,7 @@ export default function TenantStaffManager({ tenantId }) {
         </label>
         <label className="space-y-1 text-xs font-bold text-slate-600">Role
           <select value={form.role} onChange={event => setForm(current => ({ ...current, role: event.target.value, branchId: event.target.value === 'TENANT_ADMIN' ? '' : current.branchId }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
-            {ROLES.map(role => <option key={role} value={role} disabled={member.role === 'TENANT_ADMIN' && role !== 'TENANT_ADMIN'}>{role.replace(/_/g, ' ')}</option>)}
+            {ROLES.map(role => <option key={role} value={role}>{role.replace(/_/g, ' ')}</option>)}
           </select>
         </label>
         <div className="md:col-span-4 flex flex-wrap items-center justify-between gap-2">
@@ -123,7 +123,7 @@ export default function TenantStaffManager({ tenantId }) {
       <div className="space-y-2">
         <div className="flex items-center justify-between"><h4 className="text-sm font-black text-slate-800">Current memberships ({memberships.length})</h4><button type="button" onClick={() => void load()} disabled={loading} className="text-xs font-bold text-blue-700">{loading ? 'Loading…' : 'Refresh'}</button></div>
         {memberships.length === 0 && !loading ? <p className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-xs text-slate-500">No staff memberships found.</p> : memberships.map(member => (
-          <div key={idOf(member)} className="grid gap-2 rounded-xl border border-slate-100 p-3 md:grid-cols-[minmax(0,1fr)_180px_180px_auto] md:items-center">
+          <div key={idOf(member)} className="grid gap-2 rounded-xl border border-slate-100 p-3 md:grid-cols-[minmax(0,1fr)_180px_180px_auto_auto] md:items-center">
             <div className="min-w-0"><p className="break-all text-xs font-bold text-slate-800">{member.name || member.email || member.userId}</p><p className="break-all text-[10px] text-slate-400">{member.userId} · {member.status}</p></div>
             {member.role === 'TENANT_OWNER'
               ? <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">TENANT OWNER · protected</span>
@@ -138,7 +138,8 @@ export default function TenantStaffManager({ tenantId }) {
               <option value="" disabled={member.role !== 'TENANT_ADMIN'}>{member.role === 'TENANT_ADMIN' ? 'Choose branch to scope' : member.role === 'TENANT_OWNER' ? 'Tenant-wide owner' : 'Branch required'}</option>
               {branches.map(branch => <option key={idOf(branch)} value={idOf(branch)}>{branch.name || branch.code}</option>)}
             </select>
-            <button type="button" onClick={() => void revokeStaff(member)} disabled={String(member.role).toUpperCase() === 'TENANT_OWNER' || member.status !== 'ACTIVE'} className="rounded-lg border border-rose-200 disabled:cursor-not-allowed disabled:opacity-40 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Revoke</button>
+            <button type="button" onClick={() => void updateStaff(member, { status: member.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED' })} disabled={member.role === 'TENANT_OWNER' || !['ACTIVE', 'SUSPENDED'].includes(member.status)} className="rounded-lg border border-amber-200 disabled:cursor-not-allowed disabled:opacity-40 px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50">{member.status === 'SUSPENDED' ? 'Reactivate' : 'Suspend'}</button>
+            <button type="button" onClick={() => void revokeStaff(member)} disabled={String(member.role).toUpperCase() === 'TENANT_OWNER' || !['ACTIVE', 'SUSPENDED'].includes(member.status)} className="rounded-lg border border-rose-200 disabled:cursor-not-allowed disabled:opacity-40 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Revoke</button>
           </div>
         ))}
       </div>
