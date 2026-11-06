@@ -65,6 +65,7 @@ router.get('/', async (req, res) => {
     const scope = await authorizeTenantManager(req, res);
     if (!scope) return;
     const memberships = await TenantMembership.find({ tenantId: scope.tenantId })
+      .select('-invitationToken')
       .sort({ createdAt: -1, _id: -1 }).lean();
     return res.json({ success: true, data: memberships });
   } catch (error) {
@@ -105,6 +106,7 @@ router.patch('/:membershipId', async (req, res) => {
     if (!scope) return;
     const current = await TenantMembership.findOne({ _id: req.params.membershipId, tenantId: scope.tenantId }).lean();
     if (!current) return res.status(404).json({ success: false, code: 'MEMBERSHIP_NOT_FOUND', message: 'Staff membership not found.' });
+    if (['TENANT_OWNER', 'TENANT_ADMIN'].includes(String(current.role).toUpperCase()) && !scope.platform && scope.role !== 'TENANT_OWNER') return res.status(403).json({ success: false, code: 'ADMIN_MEMBERSHIP_PROTECTED', message: 'Only the pharmacy owner or platform administrator can change another administrator membership.' });
     const updates = {};
     if (req.body?.role !== undefined) {
       const role = clean(req.body.role).toUpperCase();
@@ -139,6 +141,9 @@ router.delete('/:membershipId', async (req, res) => {
   try {
     const scope = await authorizeTenantManager(req, res);
     if (!scope) return;
+    const current = await TenantMembership.findOne({ _id: req.params.membershipId, tenantId: scope.tenantId }).lean();
+    if (!current) return res.status(404).json({ success: false, code: 'MEMBERSHIP_NOT_FOUND', message: 'Staff membership not found.' });
+    if (['TENANT_OWNER', 'TENANT_ADMIN'].includes(String(current.role).toUpperCase()) && !scope.platform && scope.role !== 'TENANT_OWNER') return res.status(403).json({ success: false, code: 'ADMIN_MEMBERSHIP_PROTECTED', message: 'Only the pharmacy owner or platform administrator can revoke another administrator membership.' });
     const updated = await TenantMembership.findOneAndUpdate(
       { _id: req.params.membershipId, tenantId: scope.tenantId },
       { $set: { status: 'REVOKED', invitationToken: null } },
