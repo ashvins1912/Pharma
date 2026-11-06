@@ -36,7 +36,7 @@ class DomainEventEmitter extends EventEmitter {
         // Keep the fast in-process event stream while persisting a safe audit
         // projection for tenant activity screens and post-restart history.
         if (event.tenantId && AuditEvent.db.readyState === 1) {
-            const allowedMetadata = ['status', 'role', 'branchId', 'orderNumber', 'campaignId', 'jobId', 'caseNumber', 'itemCount', 'cancelledLineCount'];
+            const allowedMetadata = ['status', 'role', 'branchId', 'orderNumber', 'campaignId', 'jobId', 'caseNumber', 'itemCount', 'cancelledLineCount', 'changedFieldCount'];
             const metadata = {};
             for (const key of allowedMetadata) {
                 const value = event.payload?.[key];
