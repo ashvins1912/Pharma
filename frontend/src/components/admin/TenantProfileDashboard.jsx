@@ -194,6 +194,7 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
       setDraft(next);
       setEditing(false);
       setNotice(response.data?.message || 'Pharmacy details saved.');
+      window.dispatchEvent(new Event('pharma:activity-updated'));
       setBranchRegistryVersion(version => version + 1);
     } catch (err) {
       setError(err?.response?.data?.message || 'Pharmacy details could not be saved.');
@@ -234,6 +235,7 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
       if (member) setPersonnel(current => [...current.filter(item => String(item.email).toLowerCase() !== String(member.email).toLowerCase()), member]);
       setMemberDraft({ email: '', role: 'PHARMACY_STAFF', branchId: '' });
       setMemberNotice(response.data?.message || 'User role and branch access updated.');
+      window.dispatchEvent(new Event('pharma:activity-updated'));
     } catch (err) {
       setMemberError(err?.response?.data?.message || err?.response?.data?.error?.message || 'Could not assign this user.');
     } finally {
