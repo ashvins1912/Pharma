@@ -3,6 +3,7 @@
  */
 import { EventEmitter } from 'node:events';
 import crypto from 'node:crypto';
+import AuditEvent from '../../models/AuditEvent.js';
 
 class DomainEventEmitter extends EventEmitter {
     constructor() {
@@ -30,6 +31,30 @@ class DomainEventEmitter extends EventEmitter {
         this.eventHistory.unshift(event);
         if (this.eventHistory.length > this.maxHistory) {
             this.eventHistory.pop();
+        }
+
+        // Keep the fast in-process event stream while persisting a safe audit
+        // projection for tenant activity screens and post-restart history.
+        if (event.tenantId && AuditEvent.db.readyState === 1) {
+            const allowedMetadata = ['status', 'role', 'branchId', 'orderNumber', 'campaignId', 'jobId', 'caseNumber', 'itemCount', 'cancelledLineCount', 'changedFieldCount'];
+            const metadata = {};
+            for (const key of allowedMetadata) {
+                const value = event.payload?.[key];
+                if (['string', 'number', 'boolean'].includes(typeof value)) metadata[key] = value;
+            }
+            const summary = eventType.toLowerCase().replaceAll('_', ' ');
+            void AuditEvent.create({
+                eventId: event.eventId,
+                eventType,
+                entityId: event.entityId,
+                tenantId: event.tenantId,
+                branchId: event.branchId,
+                actor: event.actor,
+                summary,
+                metadata
+            }).catch(error => {
+                console.warn('[AuditEvent] Could not persist domain event:', error.message);
+            });
         }
 
         this.emit(eventType, event);
