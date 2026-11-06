@@ -1,4 +1,5 @@
 import { getIsConnected } from '../../config/db.js';
+import { ServiceContainerBuilder } from '@pharma/service-kernel';
 import { MongooseRiderRepository } from './infrastructure/repositories/MongooseRiderRepository.js';
 import { InMemoryRiderRepository } from './infrastructure/repositories/InMemoryRiderRepository.js';
 import { MongooseOrderRepository } from './infrastructure/repositories/MongooseOrderRepository.js';
@@ -46,67 +47,55 @@ class DeliveryContainer {
     init() {
         if (this._initialized) return;
 
-        // 1. Data Layer Adapter Selection (Repository Pattern)
+        // Composition root: factories select adapters once per container lifecycle.
+        // Use cases depend on ports, not on the selected persistence implementation.
         const isMongoLive = getIsConnected();
-        if (isMongoLive) {
-            console.log('📦 [DeliveryContainer] Binding Mongoose Repositories');
-            this.riderRepository = new MongooseRiderRepository();
-            this.orderRepository = new MongooseOrderRepository();
-        } else {
-            console.log('📦 [DeliveryContainer] Binding In-Memory Resilient Repositories');
-            this.riderRepository = new InMemoryRiderRepository();
-            this.orderRepository = new InMemoryOrderRepository();
-        }
+        const builder = new ServiceContainerBuilder()
+            .singleton('riderRepository', () => isMongoLive
+                ? new MongooseRiderRepository()
+                : new InMemoryRiderRepository())
+            .singleton('orderRepository', () => isMongoLive
+                ? new MongooseOrderRepository()
+                : new InMemoryOrderRepository())
+            .singleton('storageService', () => {
+                const supabaseDriver = new SupabaseStorageDriver();
+                return supabaseDriver.isAvailable() ? supabaseDriver : new LocalStorageDriver();
+            })
+            .singleton('assignmentEngine', ({ riderRepository, orderRepository }) => {
+                const strategies = [
+                    new OrderClubbingStrategy({ timeWindowMinutes: 15, maxProximityMeters: 2000 }),
+                    new ClosestRiderStrategy({ maxSearchRadiusMeters: 20000 })
+                ];
+                return new OrderAssignmentEngine({ riderRepository, orderRepository, strategies });
+            }, ['riderRepository', 'orderRepository'])
+            .singleton('registerRiderUseCase', ({ riderRepository, storageService }) =>
+                new RegisterRiderUseCase({ riderRepository, storageService }),
+            ['riderRepository', 'storageService'])
+            .singleton('getRidersUseCase', ({ riderRepository }) =>
+                new GetRidersUseCase({ riderRepository }), ['riderRepository'])
+            .singleton('updateRiderStatusUseCase', ({ riderRepository }) =>
+                new UpdateRiderStatusUseCase({ riderRepository }), ['riderRepository'])
+            .singleton('updateRiderLocationUseCase', ({ riderRepository }) =>
+                new UpdateRiderLocationUseCase({ riderRepository }), ['riderRepository'])
+            .singleton('setRiderEnabledUseCase', ({ riderRepository }) =>
+                new SetRiderEnabledUseCase({ riderRepository }), ['riderRepository'])
+            .singleton('manualAssignOrderUseCase', ({ riderRepository, orderRepository }) =>
+                new ManualAssignOrderUseCase({ riderRepository, orderRepository }),
+            ['riderRepository', 'orderRepository']);
 
-        // 2. Storage Adapter Selection (Strategy Pattern)
-        const supabaseDriver = new SupabaseStorageDriver();
-        if (supabaseDriver.isAvailable()) {
-            console.log('☁️ [DeliveryContainer] Binding Supabase Storage Driver');
-            this.storageService = supabaseDriver;
-        } else {
-            console.log('💾 [DeliveryContainer] Binding Local/Memory Storage Driver (Supabase credentials unset)');
-            this.storageService = new LocalStorageDriver();
-        }
-
-        // 3. Automated Assignment Engine Pipeline Configuration (Expandable Strategy Array)
-        const defaultStrategies = [
-            new OrderClubbingStrategy({ timeWindowMinutes: 15, maxProximityMeters: 2000 }),
-            new ClosestRiderStrategy({ maxSearchRadiusMeters: 20000 })
-        ];
-
-        this.assignmentEngine = new OrderAssignmentEngine({
-            riderRepository: this.riderRepository,
-            orderRepository: this.orderRepository,
-            strategies: defaultStrategies
-        });
-
-        // 4. Wire Use Cases with Injected Dependencies
-        this.registerRiderUseCase = new RegisterRiderUseCase({
-            riderRepository: this.riderRepository,
-            storageService: this.storageService
-        });
-
-        this.getRidersUseCase = new GetRidersUseCase({
-            riderRepository: this.riderRepository
-        });
-
-        this.updateRiderStatusUseCase = new UpdateRiderStatusUseCase({
-            riderRepository: this.riderRepository
-        });
-
-        this.updateRiderLocationUseCase = new UpdateRiderLocationUseCase({
-            riderRepository: this.riderRepository
-        });
-
-        this.setRiderEnabledUseCase = new SetRiderEnabledUseCase({
-            riderRepository: this.riderRepository
-        });
-
-        this.manualAssignOrderUseCase = new ManualAssignOrderUseCase({
-            riderRepository: this.riderRepository,
-            orderRepository: this.orderRepository
-        });
-
+        this.container = builder.build();
+        Object.assign(this, this.container.resolveAll([
+            'riderRepository',
+            'orderRepository',
+            'storageService',
+            'assignmentEngine',
+            'registerRiderUseCase',
+            'getRidersUseCase',
+            'updateRiderStatusUseCase',
+            'updateRiderLocationUseCase',
+            'setRiderEnabledUseCase',
+            'manualAssignOrderUseCase'
+        ]));
         this._initialized = true;
     }
 
