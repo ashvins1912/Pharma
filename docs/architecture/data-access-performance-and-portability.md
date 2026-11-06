@@ -69,6 +69,12 @@ The bounded bulk lookup path now selects only its required product and inventory
 
 These are workload-aligned candidates. Validate them against production query plans and collection cardinality before adding more indexes; every extra index increases write and storage cost.
 
+### Delivery Mongo repositories
+
+The delivery-specific Mongo adapters now use explicit domain projections and `lean()` for read-only order and rider queries. Order list reads can constrain branch/status/assignment and accept a bounded limit; proximity candidate reads are capped at 1,000 and transfer only fields used by the delivery domain. Rider list reads are tenant/branch scoped, use escaped search input, deterministic sorting and a bounded limit; nearby-rider reads project only the rider domain fields.
+
+These changes reduce document hydration and payload size. The proximity query still computes exact distances in application code because the order model does not currently have a verified 2dsphere index. Do not add a geo index until legacy location data has been audited for valid GeoJSON coordinates and the index can be safely built.
+
 ### Legacy backend delivery repository
 
 The legacy backend's shared `dataStore.getAllOrders()` previously returned the full order collection for every caller. It now accepts optional, backward-compatible query options for tenant, branch, customer/user, status, assignment, rider, date range, projection, skip and bounded limit. Existing no-argument callers retain their full-list behavior so unrelated workflows are not silently changed.
