@@ -1153,3 +1153,135 @@ html.dark .admin-screen :where(.overflow-x-auto) {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+
+/* Shared responsive polish for inventory, fulfilment, riders and routing. */
+.admin-screen--inventory,
+.admin-screen--riders,
+.admin-screen--routes,
+.admin-screen--fulfillment-board {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.admin-screen--inventory > :first-child,
+.admin-screen--routes > :first-child {
+  min-width: 0;
+  width: 100%;
+}
+
+.admin-screen--inventory :where(.flex.items-center.justify-between),
+.admin-screen--routes :where(.flex.items-center.justify-between),
+.admin-screen--riders :where(.flex.items-center.justify-between) {
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.admin-screen--inventory :where(.overflow-x-auto),
+.admin-screen--routes :where(.overflow-x-auto),
+.admin-screen--riders :where(.overflow-x-auto) {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-screen--inventory :where(table),
+.admin-screen--routes :where(table),
+.admin-screen--riders :where(table) {
+  width: 100%;
+  min-width: 680px;
+}
+
+.admin-screen--inventory :where(.grid),
+.admin-screen--routes :where(.grid),
+.admin-screen--riders :where(.grid) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+}
+
+.admin-screen--fulfillment-board > :where(.flex.overflow-x-auto) {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.75rem;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-screen--fulfillment-board > :where(.flex.overflow-x-auto) > * {
+  flex: 0 0 min(21rem, 86vw);
+  min-width: min(17rem, 82vw);
+  max-width: 22rem;
+  scroll-snap-align: start;
+}
+
+.admin-screen--fulfillment-board > :where(.grid) {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.admin-screen--fulfillment-board :where(article, section) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-screen--fulfillment-board :where(button) {
+  min-width: 0;
+  white-space: normal;
+}
+
+@media (min-width: 768px) {
+  .admin-screen--fulfillment-board > :where(.grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .admin-screen--fulfillment-board > :where(.grid) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .admin-screen--inventory,
+  .admin-screen--routes,
+  .admin-screen--riders {
+    padding: 1rem;
+    border-radius: 1.25rem;
+  }
+
+  .admin-screen--inventory :where(header),
+  .admin-screen--routes :where(header),
+  .admin-screen--riders :where(header) {
+    align-items: stretch;
+  }
+
+  .admin-screen--inventory :where(form),
+  .admin-screen--routes :where(form) {
+    width: 100%;
+  }
+
+  .admin-screen--inventory :where(input, select),
+  .admin-screen--routes :where(input, select) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .admin-screen--fulfillment-board > :where(.flex.overflow-x-auto) > * {
+    flex-basis: min(19rem, 88vw);
+    min-width: min(16rem, 84vw);
+  }
+}
+
+@media (max-width: 380px) {
+  .admin-screen--inventory,
+  .admin-screen--routes,
+  .admin-screen--riders {
+    padding: 0.75rem;
+  }
+}
