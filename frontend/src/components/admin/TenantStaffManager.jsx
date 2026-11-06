@@ -112,7 +112,7 @@ export default function TenantStaffManager({ tenantId }) {
         </label>
         <label className="space-y-1 text-xs font-bold text-slate-600">Role
           <select value={form.role} onChange={event => setForm(current => ({ ...current, role: event.target.value, branchId: event.target.value === 'TENANT_ADMIN' ? '' : current.branchId }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
-            {ROLES.map(role => <option key={role} value={role}>{role.replace(/_/g, ' ')}</option>)}
+            {ROLES.map(role => <option key={role} value={role} disabled={member.role === 'TENANT_ADMIN' && role !== 'TENANT_ADMIN'}>{role.replace(/_/g, ' ')}</option>)}
           </select>
         </label>
         <div className="md:col-span-4 flex flex-wrap items-center justify-between gap-2">
@@ -133,7 +133,7 @@ export default function TenantStaffManager({ tenantId }) {
               const role = member.role === 'TENANT_ADMIN' && branchId ? 'PHARMACY_STAFF' : member.role;
               updateStaff(member, { role, branchId, permissions: ROLE_PERMISSIONS[role] || [] });
             }} className="rounded-lg border border-slate-300 px-2 py-2 text-xs disabled:opacity-50">
-              <option value="">{member.role === 'TENANT_ADMIN' ? 'Choose branch to scope' : 'All branches'}</option>
+              <option value="" disabled={member.role !== 'TENANT_ADMIN'}>{member.role === 'TENANT_ADMIN' ? 'Choose branch to scope' : 'Branch required'}</option>
               {branches.map(branch => <option key={idOf(branch)} value={idOf(branch)}>{branch.name || branch.code}</option>)}
             </select>
             <button type="button" onClick={() => void revokeStaff(member)} disabled={String(member.role).toUpperCase() === 'TENANT_OWNER' || member.status !== 'ACTIVE'} className="rounded-lg border border-rose-200 disabled:cursor-not-allowed disabled:opacity-40 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Revoke</button>
