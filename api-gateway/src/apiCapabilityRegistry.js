@@ -1,3 +1,5 @@
+import { isPermissionGranted } from '@pharma/service-kernel';
+
 const CAPABILITIES = [
   ['GET', /^\/api\/orders\/[^/]+\/scan-prescription$/, 'prescription.read'],
   ['GET', /^\/api\/orders\/notifications\/logs$/, 'whatsapp.read'],
@@ -193,22 +195,14 @@ export function isGatewayPublicPath(method, url) {
 }
 
 export function isGatewayPermissionAllowed(user, permission) {
-  if (!permission) return false;
-  const permissions = Array.isArray(user?.permissions) ? user.permissions : (user?.app_metadata?.permissions || []);
-  const revoked = Array.isArray(user?.revokedPermissions)
-    ? user.revokedPermissions
-    : (Array.isArray(user?.app_metadata?.revokedPermissions) ? user.app_metadata.revokedPermissions : []);
-  // Deny rules must win even when a platform-admin role or wildcard grant exists.
-  if (revoked.includes(permission)) return false;
-  if (revoked.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)))) return false;
-
-  const role = user?.app_metadata?.role || user?.role;
-  if (['admin', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return true;
-  // Tenant admins/owners may read only their own pharmacy profile and branch directory.
-  // The backend independently enforces active membership and tenant scope.
-  const tenantRole = ['TENANT_ADMIN', 'TENANT_OWNER', 'OWNER'].includes(String(role || '').toUpperCase());
-  if (tenantRole && ['tenant.profile.read', 'tenant.branches.read', 'tenant.branches.manage'].includes(permission)) return true;
-  return permissions.includes('*')
-    || permissions.includes(permission)
-    || permissions.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)));
+  const role = String(user?.app_metadata?.role || user?.role || '').toUpperCase();
+  return isPermissionGranted({
+    subject: user,
+    permission,
+    roleOverrides: {
+      TENANT_ADMIN: ['tenant.profile.read', 'tenant.branches.read', 'tenant.branches.manage'],
+      TENANT_OWNER: ['tenant.profile.read', 'tenant.branches.read', 'tenant.branches.manage'],
+      OWNER: ['tenant.profile.read', 'tenant.branches.read', 'tenant.branches.manage']
+    }
+  });
 }
