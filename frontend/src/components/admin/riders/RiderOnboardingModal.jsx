@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { useRiderOnboarding } from '../../../hooks/useRiderOnboarding';
 import { useToast } from '../../../context/ToastContext';
 
