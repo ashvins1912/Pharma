@@ -20,7 +20,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 
 export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId = '' }) {
   const { t } = useLanguage();
-  const { tenantId, setTenantId, setActiveTenant } = useTenant();
+  const { tenantId, setActiveTenant } = useTenant();
   const { addresses, loadAddresses } = useApp();
   const { isFullyAuthenticated } = useAuth();
   const [tenants, setTenants] = useState([]);
