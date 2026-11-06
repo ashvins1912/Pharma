@@ -21,6 +21,7 @@ const tenantBranchSchema = new mongoose.Schema({
     operatingHours: { type: mongoose.Schema.Types.Mixed, default: { open: '08:00', close: '22:00' } },
     status: { type: String, enum: ['PENDING', 'ACTIVE', 'INACTIVE', 'SUSPENDED'], default: 'PENDING', index: true },
     activatedAt: { type: Date, default: null },
+    makeDefaultOnActivation: { type: Boolean, default: false },
     isDefault: { type: Boolean, default: false, index: true },
     archivedAt: { type: Date, default: null },
     archivedBy: { type: String, default: null }
