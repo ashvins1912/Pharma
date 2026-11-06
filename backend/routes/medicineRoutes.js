@@ -75,11 +75,16 @@ const getVerifiedInventoryScope = async (req, requiredPermission = 'inventory.re
 
     // Browser-selected scope is a request, never authorization evidence.
     // Signed tenant/branch context is resolved against active membership first.
+    // Platform operators intentionally switch between pharmacies in the UI.
+    // Their resolved auth context may contain a stale/default tenant from a prior
+    // request, so honor the explicitly selected scope for platform users only.
+    // For tenant members, signed membership context remains authoritative.
+    const isPlatform = authorizationService.isPlatformContext(authz);
     const requestedTenantId = String(
-        authz.tenantId || req.get('x-tenant-id') || req.body?.tenantId || req.query?.tenantId || ''
+        (isPlatform ? (req.get('x-tenant-id') || req.body?.tenantId || req.query?.tenantId) : authz.tenantId) || ''
     ).trim();
     const requestedBranchId = String(
-        authz.branchId || req.get('x-branch-id') || req.body?.branchId || req.query?.branchId || ''
+        (isPlatform ? (req.get('x-branch-id') || req.body?.branchId || req.query?.branchId) : authz.branchId) || ''
     ).trim();
 
     if (!requestedTenantId || !requestedBranchId) {
