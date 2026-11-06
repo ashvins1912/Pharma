@@ -17,7 +17,7 @@ const PERMISSIONS = [
 ];
 const ROLE_PERMISSIONS = {
   SUPER_ADMIN:['*','platform.*'], PLATFORM_SUPER_ADMIN:['*','platform.*'], admin:['*','platform.*'],
-  TENANT_OWNER:['profile.read','profile.write','delivery.read','delivery.manage','whatsapp.read','whatsapp.manage','csquare.read','csquare.manage','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','medicine_requests.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','promotions.read','promotions.manage','tenants.read','tenants.manage','tenant.profile.read','tenant.branches.read','tenant.branches.manage','users.read','users.manage'],
+  TENANT_OWNER:['profile.read','profile.write','delivery.read','delivery.manage','whatsapp.read','whatsapp.manage','csquare.read','csquare.manage','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','medicine_requests.manage','inventory.read','inventory.write','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','promotions.read','promotions.manage','tenants.read','tenants.manage','tenant.profile.read','tenant.branches.read','tenant.branches.manage','users.read','users.manage'],
   TENANT_ADMIN:['profile.read','profile.write','delivery.read','delivery.manage','whatsapp.read','whatsapp.manage','csquare.read','csquare.manage','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','medicine_requests.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review','billing.read','billing.write','referrals.read','referrals.manage','promotions.read','promotions.manage','tenant.profile.read','tenant.branches.read','tenant.branches.manage','users.read'],
   PHARMACIST:['profile.read','profile.write','csquare.read','csquare.sync','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','promotions.read','promotions.manage','inventory.read','inventory.write','inventory.import','orders.read','orders.create','orders.manage','prescription.read','prescription.write','prescription.review'],
   PHARMACY_STAFF:['profile.read','profile.write','csquare.read','promotions.read','promotions.manage','medicine_requests.read','medicine_requests.pending_count','medicine_requests.proposal','inventory.read','orders.read','orders.create','prescription.read','prescription.write'],
@@ -45,6 +45,11 @@ export async function ensureAuthorizationCatalog() {
     await Role.findOneAndUpdate({ code }, { $setOnInsert: { code, name: code, scope: ROLE_SCOPE[code] || 'CUSTOMER' } }, { upsert: true });
     for (const permissionCode of permissions) await RolePermission.findOneAndUpdate({ roleCode: code, permissionCode }, { $setOnInsert: { roleCode: code, permissionCode, status: 'ACTIVE' } }, { upsert: true });
   }
+  // Inventory imports stay unavailable to tenant roles until controlled tenant/branch validation is complete.
+  await RolePermission.updateMany(
+    { roleCode: { $in: ['TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'INVENTORY_MANAGER'] }, permissionCode: 'inventory.import' },
+    { $set: { status: 'DISABLED' } }
+  );
 }
 
 export async function getRolePermissions(roleCode) {
