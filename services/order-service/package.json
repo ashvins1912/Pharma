@@ -13,7 +13,6 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^9.10.4",
-    "@pharma/service-kernel": "1.0.0"
+    "mongoose": "^9.10.4"
   }
 }
