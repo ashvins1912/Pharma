@@ -105,19 +105,19 @@ export default function TenantStaffManager({ tenantId }) {
           <input required type="email" value={form.email} onChange={event => setForm(current => ({ ...current, email: event.target.value }))} placeholder="staff@pharmacy.com" className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm" />
         </label>
         <label className="space-y-1 text-xs font-bold text-slate-600">Branch
-          <select value={form.branchId} onChange={event => setForm(current => ({ ...current, branchId: event.target.value }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+          <select value={form.branchId} onChange={event => setForm(current => ({ ...current, branchId: event.target.value }))} required={form.role !== 'TENANT_ADMIN'} disabled={form.role === 'TENANT_ADMIN'} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
             <option value="">All branches (tenant-wide)</option>
             {branches.map(branch => <option key={idOf(branch)} value={idOf(branch)}>{branch.name || branch.code}</option>)}
           </select>
         </label>
         <label className="space-y-1 text-xs font-bold text-slate-600">Role
-          <select value={form.role} onChange={event => setForm(current => ({ ...current, role: event.target.value }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+          <select value={form.role} onChange={event => setForm(current => ({ ...current, role: event.target.value, branchId: event.target.value === 'TENANT_ADMIN' ? '' : current.branchId }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
             {ROLES.map(role => <option key={role} value={role}>{role.replace(/_/g, ' ')}</option>)}
           </select>
         </label>
         <div className="md:col-span-4 flex flex-wrap items-center justify-between gap-2">
           <p className="text-[11px] text-slate-500">The email must belong to an active registered user of this pharmacy. Existing owner/admin memberships are protected.</p>
-          <button disabled={saving || !form.email.trim()} className="rounded-xl bg-blue-700 px-4 py-2.5 text-xs font-extrabold text-white disabled:opacity-50">{saving ? 'Saving…' : 'Add / assign user'}</button>
+          <button disabled={saving || !form.email.trim() || (form.role !== 'TENANT_ADMIN' && !form.branchId)} className="rounded-xl bg-blue-700 px-4 py-2.5 text-xs font-extrabold text-white disabled:opacity-50">{saving ? 'Saving…' : 'Add / assign user'}</button>
         </div>
       </form>
       <div className="space-y-2">
@@ -125,14 +125,14 @@ export default function TenantStaffManager({ tenantId }) {
         {memberships.length === 0 && !loading ? <p className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-xs text-slate-500">No staff memberships found.</p> : memberships.map(member => (
           <div key={idOf(member)} className="grid gap-2 rounded-xl border border-slate-100 p-3 md:grid-cols-[minmax(0,1fr)_180px_180px_auto] md:items-center">
             <div className="min-w-0"><p className="break-all text-xs font-bold text-slate-800">{member.name || member.email || member.userId}</p><p className="break-all text-[10px] text-slate-400">{member.userId} · {member.status}</p></div>
-            <select aria-label="Staff role" value={member.role} onChange={event => updateStaff(member, { role: event.target.value, permissions: ROLE_PERMISSIONS[event.target.value] || [] })} className="rounded-lg border border-slate-300 px-2 py-2 text-xs">
+            <select aria-label="Staff role" value={member.role} onChange={event => updateStaff(member, { role: event.target.value, branchId: event.target.value === 'TENANT_ADMIN' ? null : (member.branchId || null), permissions: ROLE_PERMISSIONS[event.target.value] || [] })} className="rounded-lg border border-slate-300 px-2 py-2 text-xs">
               {ROLES.map(role => <option key={role} value={role}>{role.replace(/_/g, ' ')}</option>)}
             </select>
             <select aria-label="Staff branch" value={member.branchId || ''} onChange={event => updateStaff(member, { branchId: event.target.value || null })} className="rounded-lg border border-slate-300 px-2 py-2 text-xs">
               <option value="">All branches</option>
               {branches.map(branch => <option key={idOf(branch)} value={idOf(branch)}>{branch.name || branch.code}</option>)}
             </select>
-            <button type="button" onClick={() => void revokeStaff(member)} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Revoke</button>
+            <button type="button" onClick={() => void revokeStaff(member)} disabled={String(member.role).toUpperCase() === 'TENANT_OWNER'} className="rounded-lg border border-rose-200 disabled:cursor-not-allowed disabled:opacity-40 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Revoke</button>
           </div>
         ))}
       </div>
