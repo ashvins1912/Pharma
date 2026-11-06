@@ -76,7 +76,7 @@ export async function queryActivity({ tenantId, branchId, page = 1, limit = 20 }
   const safeLimit = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
   const filter = {};
   if (tenantId) filter.tenantId = String(tenantId);
-  if (branchId) filter.branchId = String(branchId);
+  if (branchId) filter.$or = [{ branchId: String(branchId) }, { branchId: null }];
   if (getIsConnected()) {
     const [items, total] = await Promise.all([
       ActivityAudit.find(filter).sort({ createdAt: -1, _id: -1 }).skip((safePage - 1) * safeLimit).limit(safeLimit).lean(),
@@ -84,7 +84,7 @@ export async function queryActivity({ tenantId, branchId, page = 1, limit = 20 }
     ]);
     return { items, pagination: { page: safePage, limit: safeLimit, total, totalPages: Math.ceil(total / safeLimit), hasNextPage: safePage * safeLimit < total, hasPreviousPage: safePage > 1 } };
   }
-  const filtered = recentActivity.filter(item => (!tenantId || item.tenantId === String(tenantId)) && (!branchId || item.branchId === String(branchId)));
+  const filtered = recentActivity.filter(item => (!tenantId || item.tenantId === String(tenantId)) && (!branchId || !item.branchId || item.branchId === String(branchId)));
   const total = filtered.length;
   return { items: filtered.slice((safePage - 1) * safeLimit, safePage * safeLimit), pagination: { page: safePage, limit: safeLimit, total, totalPages: Math.ceil(total / safeLimit), hasNextPage: safePage * safeLimit < total, hasPreviousPage: safePage > 1 } };
 }
