@@ -30,20 +30,31 @@ export default function Header({
 
   React.useEffect(() => {
     let cancelled = false;
-    apiClient.get('/api/v1/branches/all').then(res => {
-      const items = res.data?.data || res.data?.branches || [];
-      const valid = (Array.isArray(items) ? items : [])
+    if (!tenantId) {
+      setBranchOptions([]);
+      return () => { cancelled = true; };
+    }
+
+    // Load only the selected pharmacy's active branches. The global branch list
+    // can contain branches from other tenants and can race a tenant switch.
+    apiClient.get('/api/v1/branches/all', { params: { tenantId } }).then(res => {
+      const payload = res.data?.data || res.data?.branches || [];
+      const items = Array.isArray(payload) ? payload : [];
+      const valid = items
         .filter(Boolean)
-        .filter(item => !tenantId || !item.tenantId || String(item.tenantId) === String(tenantId))
         .map(item => ({
           id: String(item._id || item.id || ''),
-          name: String(item.name || item.branchName || 'Branch')
+          name: String(item.name || item.branchName || 'Branch'),
+          tenantId: String(item.tenantId || tenantId),
+          isDefault: Boolean(item.isDefault),
+          createdAt: item.createdAt || null
         }))
-        .filter(item => item.id);
+        .filter(item => item.id && item.tenantId === String(tenantId));
+      valid.sort((a, b) => Number(b.isDefault) - Number(a.isDefault)
+        || new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+        || a.id.localeCompare(b.id));
       if (!cancelled) setBranchOptions(valid);
     }).catch(() => {
-      // A pharmacy/tenant is not a branch. Never synthesize a branch ID from
-      // nearby tenant results; inventory APIs require a real active branch.
       if (!cancelled) setBranchOptions([]);
     });
     return () => { cancelled = true; };
@@ -51,9 +62,8 @@ export default function Header({
 
   React.useEffect(() => {
     if (!tenantId || branchOptions.length === 0) return;
-    if (!branchOptions.some(option => option.id === String(branchId || ''))) {
-      setBranchId(branchOptions[0].id);
-    }
+    const selectedBranchIsValid = branchOptions.some(option => option.id === String(branchId || ''));
+    if (!selectedBranchIsValid) setBranchId(branchOptions[0].id);
   }, [tenantId, branchOptions, branchId, setBranchId]);
 
   const cartItemCount = cart.reduce((total, item) => total + item.quantity, 0);
