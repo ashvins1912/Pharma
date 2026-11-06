@@ -22,6 +22,7 @@ import Tenant from '../../models/Tenant.js';
 import TenantBranch from '../../models/TenantBranch.js';
 import { domainEvents } from '../../shared/events/DomainEvents.js';
 import Vendor from '../../models/Vendor.js';
+import AuditEvent from '../../models/AuditEvent.js';
 
 const router = express.Router();
 
@@ -209,6 +210,49 @@ router.post('/profile/personnel', authenticateUser, async (req, res) => {
             code: 'TENANT_MEMBER_ASSIGNMENT_FAILED',
             message: err.message || 'Could not assign this user to the selected branch.',
             statusCode: err.code === 11000 ? 409 : 500,
+            req
+        });
+    }
+});
+
+/**
+ * GET /vendor/profile/activity
+ * Returns durable, tenant-scoped audit events; branch members only see their branch.
+ */
+router.get('/profile/activity', authenticateUser, async (req, res) => {
+    try {
+        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+        const platformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const tenantId = String(platformAdmin
+            ? req.get('x-tenant-id') || req.query.tenantId || ''
+            : req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
+        if (!tenantId) return sendError(res, { code: 'TENANT_CONTEXT_REQUIRED', message: 'Select a pharmacy tenant first.', statusCode: 400, req });
+
+        let membership = null;
+        if (!platformAdmin) {
+            membership = await TenantMembership.findOne({
+                userId: String(req.user?.sub || req.user?.id || ''),
+                tenantId,
+                status: 'ACTIVE'
+            }).select('role branchId').lean();
+            if (!membership) return sendError(res, { code: 'TENANT_MEMBERSHIP_REQUIRED', message: 'An active pharmacy membership is required.', statusCode: 403, req });
+        }
+
+        const filter = { tenantId };
+        if (!platformAdmin && membership?.branchId) filter.branchId = membership.branchId;
+        const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 50));
+        const events = await AuditEvent.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
+        return sendSuccess(res, {
+            data: { events },
+            message: 'Tenant activity retrieved.',
+            statusCode: 200,
+            req
+        });
+    } catch (err) {
+        return sendError(res, {
+            code: 'TENANT_ACTIVITY_UNAVAILABLE',
+            message: 'Tenant activity is temporarily unavailable.',
+            statusCode: 503,
             req
         });
     }
