@@ -31,6 +31,7 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
   const [availableTenants, setAvailableTenants] = useState([]);
   const [internalTenantId, setInternalTenantId] = useState('');
   const selectedTenantId = platformTenantId || internalTenantId;
+  const effectiveTenantId = selectedTenantId || user?.tenantId || user?.app_metadata?.tenantId || '';
   const [tenantsLoading, setTenantsLoading] = useState(false);
   const [profile, setProfile] = useState(emptyProfile);
   const [draft, setDraft] = useState(emptyProfile);
@@ -40,6 +41,9 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
   const [memberSaving, setMemberSaving] = useState(false);
   const [memberError, setMemberError] = useState('');
   const [memberNotice, setMemberNotice] = useState('');
+  const [activityEvents, setActivityEvents] = useState([]);
+  const [activityError, setActivityError] = useState('');
+  const [activityLoading, setActivityLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profileMissing, setProfileMissing] = useState(false);
@@ -111,9 +115,9 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
 
 
   useEffect(() => {
-    if (!selectedTenantId) { setBranches([]); return undefined; }
+    if (!effectiveTenantId) { setBranches([]); return undefined; }
     let cancelled = false;
-    apiClient.get('/api/v1/branches/all', { params: { tenantId: selectedTenantId } })
+    apiClient.get('/api/v1/branches/all', { params: { tenantId: effectiveTenantId } })
       .then(response => {
         if (cancelled) return;
         const payload = response.data?.branches || response.data?.data?.branches || response.data?.data || [];
@@ -121,7 +125,28 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
       })
       .catch(() => { if (!cancelled) setBranches([]); });
     return () => { cancelled = true; };
-  }, [selectedTenantId]);
+  }, [effectiveTenantId]);
+
+
+  useEffect(() => {
+    if (!effectiveTenantId) { setActivityEvents([]); return undefined; }
+    let cancelled = false;
+    setActivityLoading(true);
+    apiClient.get('/api/v1/vendor/profile/activity', {
+      params: isSuperAdmin ? { tenantId: effectiveTenantId, limit: 50 } : { limit: 50 }
+    }).then(response => {
+      if (cancelled) return;
+      const events = response.data?.data?.events || response.data?.events || [];
+      setActivityEvents(Array.isArray(events) ? events : []);
+      setActivityError('');
+    }).catch(error => {
+      if (!cancelled) {
+        setActivityEvents([]);
+        setActivityError(error?.response?.data?.message || 'Activity history could not be loaded.');
+      }
+    }).finally(() => { if (!cancelled) setActivityLoading(false); });
+    return () => { cancelled = true; };
+  }, [effectiveTenantId, isSuperAdmin]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
 
@@ -364,7 +389,7 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
             {memberError && <p role="alert" className="text-xs text-rose-700 sm:col-span-2">{memberError}</p>}
             {memberNotice && <p role="status" className="text-xs text-emerald-700 sm:col-span-2">{memberNotice}</p>}
             <div className="sm:col-span-2">
-              <button type="submit" disabled={memberSaving || !selectedTenantId || (memberDraft.role !== 'TENANT_ADMIN' && !memberDraft.branchId)} className="rounded-xl bg-blue-700 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50">{memberSaving ? 'Saving access…' : 'Add user / update role'}</button>
+              <button type="submit" disabled={memberSaving || !effectiveTenantId || (memberDraft.role !== 'TENANT_ADMIN' && !memberDraft.branchId)} className="rounded-xl bg-blue-700 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50">{memberSaving ? 'Saving access…' : 'Add user / update role'}</button>
               <p className="mt-2 text-[11px] text-slate-500">The email must belong to an active registered user of this pharmacy. Branch-specific roles require an active branch.</p>
             </div>
           </form>
@@ -380,6 +405,33 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
             </div>
           </div>
         )) : <p className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-500">No personnel records are available yet.</p>}
+      </section>
+
+      <section className="space-y-3 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div><h3 className="text-sm font-black uppercase tracking-wide text-slate-900">Tenant activity</h3><p className="mt-1 text-xs text-slate-500">Persisted changes and operational events for this pharmacy</p></div>
+          <button type="button" onClick={() => {
+            apiClient.get('/api/v1/vendor/profile/activity', { params: isSuperAdmin ? { tenantId: effectiveTenantId, limit: 50 } : { limit: 50 } })
+              .then(response => setActivityEvents(response.data?.data?.events || response.data?.events || []))
+              .catch(error => setActivityError(error?.response?.data?.message || 'Activity history could not be refreshed.'));
+          }} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">Refresh activity</button>
+        </div>
+        {activityLoading ? <p className="text-xs text-slate-500">Loading activity…</p>
+          : activityError ? <p role="alert" className="text-xs text-rose-700">{activityError}</p>
+          : activityEvents.length ? (
+            <div className="space-y-2">
+              {activityEvents.map(event => (
+                <div key={event.eventId} className="flex flex-wrap items-start justify-between gap-2 rounded-xl bg-slate-50 p-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold capitalize text-slate-800">{String(event.summary || event.eventType || 'activity').replaceAll('_', ' ')}</p>
+                    <p className="mt-1 break-all text-[10px] text-slate-500">Record: {event.entityId} · By: {event.actor?.userId || 'system'} ({event.actor?.role || 'system'})</p>
+                    {event.metadata?.status && <p className="mt-1 text-[10px] text-slate-600">Status: {event.metadata.status}</p>}
+                  </div>
+                  <time className="whitespace-nowrap text-[10px] text-slate-400">{event.createdAt ? new Date(event.createdAt).toLocaleString() : ''}</time>
+                </div>
+              ))}
+            </div>
+          ) : <p className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-xs text-slate-500">No recorded activity yet. New supported changes will appear here.</p>}
       </section>
 
       <section className="space-y-3">
