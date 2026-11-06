@@ -340,4 +340,3 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
     </div>
   );
 }
-}
