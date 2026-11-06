@@ -40,7 +40,7 @@ function makeAuditRecord(req, statusCode) {
     tenantId: tenantId ? String(tenantId) : null,
     branchId: branchId ? String(branchId) : null,
     actorId: String(actor.sub || actor.id || actor.userId || 'unknown'),
-    actorName: String(actor.user_metadata?.name || actor.user_metadata?.full_name || actor.name || actor.email || 'User'),
+    actorName: String(actor.user_metadata?.name || actor.user_metadata?.full_name || actor.name || 'User'),
     actorRole: String(actor.app_metadata?.role || actor.role || context.role || 'user'),
     action,
     entityType,
@@ -60,6 +60,9 @@ export function recordActivity(record) {
 
 export function auditMutation(req, res, next) {
   if (!MUTATING_METHODS.has(String(req.method).toUpperCase())) return next();
+  const requestPath = String(req.originalUrl || req.path || '').split('?')[0];
+  // Do not persist authentication payloads or high-entropy public onboarding tokens in audit paths.
+  if (/^\/api\/v1\/auth\//i.test(requestPath) || /^\/api\/(?:v1\/)?vendor\/onboarding\//i.test(requestPath)) return next();
   res.once('finish', () => {
     if (res.statusCode < 200 || res.statusCode >= 300) return;
     const record = makeAuditRecord(req, res.statusCode);
