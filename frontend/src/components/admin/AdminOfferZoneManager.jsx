@@ -67,6 +67,7 @@ export default function AdminOfferZoneManager() {
       if (updated) setCampaigns(current => current.map(item => String(item._id || item.id) === editingCampaign ? updated : item));
       setEditingCampaign(null);
       addToast('Campaign updated successfully.', 'success');
+      window.dispatchEvent(new Event('pharma:activity-updated'));
     } catch (error) {
       addToast(error?.response?.data?.message || 'Campaign could not be updated.', 'error');
     } finally {
