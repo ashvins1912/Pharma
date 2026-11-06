@@ -51,11 +51,19 @@ router.post('/', async (req, res) => {
       userId = clean(profile?.supabase_user_id || profile?.supabaseId || profile?.userId);
     }
     if (!userId) return res.status(404).json({ code: 'USER_NOT_FOUND', message: 'No registered user matches this email. The user must register before assignment.' });
+    const profile = await UserProfile.findOne({ $or: [
+      { supabase_user_id: userId }, { supabaseId: userId }, { userId }
+    ] }).select('supabase_user_id supabaseId userId').lean();
+    if (!profile) return res.status(404).json({ code: 'USER_NOT_FOUND', message: 'The selected account is not a registered Pharma user.' });
     const branchId = clean(req.body?.branchId);
     const role = clean(req.body?.role).toUpperCase();
     if (!allowedRoles.has(role)) return res.status(400).json({ code: 'INVALID_BRANCH_ROLE', message: 'Choose a branch-level role. Tenant owner/admin roles cannot be assigned here.' });
     const branch = await TenantBranch.findOne({ _id: branchId, tenantId: selected.tenantId, status: 'ACTIVE' }).select('_id').lean();
     if (!branch) return res.status(404).json({ code: 'BRANCH_NOT_FOUND', message: 'Choose an active branch belonging to this pharmacy.' });
+    const existing = await TenantMembership.findOne({ userId, tenantId: selected.tenantId }).lean();
+    if (existing && ['OWNER', 'TENANT_OWNER', 'TENANT_ADMIN'].includes(clean(existing.role).toUpperCase()) && !existing.branchId) {
+      return res.status(409).json({ code: 'TENANT_ADMIN_PROTECTED', message: 'A tenant owner or tenant-wide administrator cannot be replaced by a branch assignment.' });
+    }
     const member = await TenantMembership.findOneAndUpdate({ userId, tenantId: selected.tenantId }, {
       $set: { branchId, role, status: 'ACTIVE', invitedBy: clean(req.user?.sub) }
     }, { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }).lean();
@@ -69,6 +77,9 @@ router.patch('/:membershipId', async (req, res) => {
     const selected = await scope(req, res); if (!selected) return;
     const current = await TenantMembership.findOne({ _id: req.params.membershipId, tenantId: selected.tenantId }).lean();
     if (!current) return res.status(404).json({ code: 'MEMBER_NOT_FOUND', message: 'Branch user assignment not found.' });
+    if (['OWNER', 'TENANT_OWNER', 'TENANT_ADMIN'].includes(clean(current.role).toUpperCase()) && !current.branchId) {
+      return res.status(409).json({ code: 'TENANT_ADMIN_PROTECTED', message: 'Tenant-wide owner/admin membership cannot be changed through branch staff management.' });
+    }
     const updates = {};
     if (req.body?.role !== undefined) {
       const role = clean(req.body.role).toUpperCase();
@@ -82,6 +93,7 @@ router.patch('/:membershipId', async (req, res) => {
       updates.branchId = branchId;
     }
     if (req.body?.status !== undefined && ['ACTIVE', 'SUSPENDED', 'REVOKED'].includes(clean(req.body.status).toUpperCase())) updates.status = clean(req.body.status).toUpperCase();
+    if (Object.keys(updates).length === 0) return res.status(400).json({ code: 'NO_MEMBER_CHANGES', message: 'Provide a role, branch or status change.' });
     const member = await TenantMembership.findOneAndUpdate({ _id: current._id, tenantId: selected.tenantId }, { $set: updates }, { new: true, runValidators: true }).lean();
     domainEvents.emitDomainEvent('TENANT_BRANCH_MEMBER_UPDATED', String(member._id), { userId: member.userId, changes: Object.keys(updates), role: member.role, branchId: member.branchId, status: member.status }, req.user, selected.tenantId, member.branchId);
     return res.json({ success: true, member: { ...member, id: String(member._id) } });
