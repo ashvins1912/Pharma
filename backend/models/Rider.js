@@ -86,6 +86,7 @@ const riderSchema = new mongoose.Schema({
 riderSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });
 riderSchema.index({ tenantId: 1, mobile: 1 }, { unique: true });
 riderSchema.index({ tenantId: 1, enabled: 1, status: 1 });
+riderSchema.index({ tenantId: 1, branchId: 1, enabled: 1, status: 1, name: 1, _id: 1 });
 riderSchema.pre('validate', function syncPhoneAliases() {
     if (this.phone && !this.mobile) this.mobile = this.phone;
     if (this.mobile && !this.phone) this.phone = this.mobile;

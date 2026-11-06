@@ -24,6 +24,17 @@ export function isFulfillmentReady(order) {
   return Boolean(paymentOk && inventoryOk && prescriptionOk && customerOk);
 }
 
+// Explicit read projection mirrors the public order DTO. Avoid transferring internal
+// reconciliation, idempotency, payment-action and worker fields for list/detail reads.
+const ORDER_RESPONSE_PROJECTION = [
+  'orderNumber', 'source', 'externalReference', 'orderedByName', 'customerName',
+  'orderedForName', 'orderStatus', 'fulfillmentGate', 'prescriptionId', 'patientPuid',
+  'prescriptionVerification', 'tenantId', 'branchId', 'reservationExpiresAt', 'version',
+  'items', 'subtotal', 'discountApplied', 'totalAmount', 'finalTotal', 'paymentMethod',
+  'deliveryAddress', 'addressDetails', 'coordinates', 'rider', 'statusHistory',
+  'createdAt', 'updatedAt'
+].join(' ');
+
 const serializeOrder = order => ({
   orderId: order.orderNumber,
   source: order.source,
@@ -463,7 +474,7 @@ export async function listOrders({ userId, admin, query }) {
   const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
   const limit = Math.min(100, Math.max(1, Number.parseInt(query.limit, 10) || 25));
   const [orders, total] = await Promise.all([
-    Order.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+    Order.find(filter).select(ORDER_RESPONSE_PROJECTION).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
     Order.countDocuments(filter)
   ]);
   return { orders: orders.map(serializeOrder), page, limit, total };
@@ -472,7 +483,7 @@ export async function listOrders({ userId, admin, query }) {
 export async function getOrder(orderNumber, userId, admin) {
   const filter = { orderNumber };
   if (!admin) filter.userId = userId;
-  const order = await Order.findOne(filter).lean();
+  const order = await Order.findOne(filter).select(ORDER_RESPONSE_PROJECTION).lean();
   return order ? serializeOrder(order) : null;
 }
 

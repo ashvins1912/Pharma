@@ -130,9 +130,10 @@ const orderSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 orderSchema.index({ 'fulfillmentGate.prescription': 1, orderStatus: 1 });
-orderSchema.index({ tenantId: 1, branchId: 1, createdAt: -1 });
+orderSchema.index({ tenantId: 1, branchId: 1, createdAt: -1, _id: -1 });
 
 orderSchema.index({ orderNumber: 1 }, { unique: true });
+orderSchema.index({ source: 1, createdAt: -1, _id: -1 });
 orderSchema.index({ source: 1, externalReference: 1 }, {
   unique: true,
   partialFilterExpression: { externalReference: { $type: 'string' } }
@@ -141,8 +142,8 @@ orderSchema.index({ source: 1, idempotencyKey: 1 }, {
   unique: true,
   partialFilterExpression: { idempotencyKey: { $type: 'string' } }
 });
-orderSchema.index({ userId: 1, createdAt: -1 });
-orderSchema.index({ orderStatus: 1, createdAt: -1 });
+orderSchema.index({ userId: 1, createdAt: -1, _id: -1 });
+orderSchema.index({ orderStatus: 1, createdAt: -1, _id: -1 });
 
 const eventSchema = new mongoose.Schema({
   eventId: { type: String, required: true, unique: true },

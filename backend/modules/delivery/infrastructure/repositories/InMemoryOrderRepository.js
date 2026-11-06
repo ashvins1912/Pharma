@@ -47,7 +47,7 @@ export class InMemoryOrderRepository extends IOrderRepository {
     async findById(id, tenantId) {
         if (!tenantId) return null;
         if (typeof this.dataStore.getOrderById === 'function') {
-            const raw = await this.dataStore.getOrderById(id);
+            const raw = await this.dataStore.getOrderById(id, { tenantId });
             if (!raw || String(raw.tenantId || '') !== String(tenantId)) return null;
             return this._toDomain(raw);
         }
@@ -59,48 +59,51 @@ export class InMemoryOrderRepository extends IOrderRepository {
     }
 
     async findAll(filter = {}) {
-        const rawList = typeof this.dataStore.getAllOrders === 'function'
-            ? await this.dataStore.getAllOrders(filter.orderStatus)
-            : [];
         if (!filter.tenantId) return [];
-        let orders = rawList.filter(o => String(o.tenantId || '') === String(filter.tenantId)).map(o => this._toDomain(o));
-
-        if (filter.assignmentType) {
-            orders = orders.filter(o => o.assignmentType === filter.assignmentType);
-        }
-        if (filter.assignedRiderId) {
-            orders = orders.filter(o => o.assignedRiderId === filter.assignedRiderId);
-        }
+        const rawList = typeof this.dataStore.getAllOrders === 'function'
+            ? await this.dataStore.getAllOrders({
+                tenantId: filter.tenantId,
+                branchId: filter.branchId,
+                orderStatus: filter.orderStatus,
+                assignmentType: filter.assignmentType,
+                assignedRiderId: filter.assignedRiderId,
+                limit: filter.limit,
+                select: '_id tenantId branchId customerName customerMobile addressDetails deliveryAddress paymentMethod location coordinates orderStatus assignmentType rider assignedRiderId expectedOutForDeliveryAt outForDeliveryAt deliveredAt finalTotal items assignmentDetails createdAt updatedAt',
+                from: filter.from,
+                to: filter.to
+            })
+            : [];
+        // Keep a defensive in-process scope check for injected/test adapters;
+        // the production datastore also applies these predicates in MongoDB.
+        let orders = rawList
+            .filter(order => String(order.tenantId || '') === String(filter.tenantId))
+            .filter(order => !filter.branchId || String(order.branchId || '') === String(filter.branchId))
+            .filter(order => !filter.orderStatus || order.orderStatus === filter.orderStatus)
+            .filter(order => !filter.assignmentType || order.assignmentType === filter.assignmentType)
+            .filter(order => !filter.assignedRiderId || String(order.rider?.riderId || order.assignedRiderId || '') === String(filter.assignedRiderId))
+            .map(o => this._toDomain(o));
         return orders;
     }
 
     async update(id, updateData, tenantId) {
         if (!tenantId) return null;
-        // Deep-merge into dataStore order
+        if (typeof this.dataStore.updateOrderForTenant === 'function') {
+            const updated = await this.dataStore.updateOrderForTenant(id, tenantId, updateData);
+            return this._toDomain(updated);
+        }
+        // Compatibility fallback for older injected stores; production dataStore
+        // supports scoped updates and never scans the full order collection here.
         const rawList = typeof this.dataStore.getAllOrders === 'function'
-            ? await this.dataStore.getAllOrders()
+            ? await this.dataStore.getAllOrders({ tenantId, limit: 500 })
             : [];
-        const raw = rawList.find(o => String(o._id || o.id) === String(id) && String(o.tenantId || '') === String(tenantId));
+        const raw = rawList.find(o => String(o._id || o.id) === String(id));
         if (!raw) return null;
-
         const safeUpdates = { ...updateData };
         delete safeUpdates.tenantId;
         Object.assign(raw, safeUpdates);
         raw.updatedAt = new Date();
-
-        if (updateData.rider) {
-            raw.rider = { ...raw.rider, ...updateData.rider };
-            raw.deliveryPersonMobile = raw.rider.riderMobile;
-        }
-
-        if (updateData.orderStatus) {
-            raw.orderStatus = updateData.orderStatus;
-        }
-
-        if (updateData.assignmentDetails) {
-            raw.assignmentDetails = updateData.assignmentDetails;
-        }
-
+        if (updateData.rider) raw.rider = { ...raw.rider, ...updateData.rider };
+        if (updateData.assignmentDetails) raw.assignmentDetails = { ...raw.assignmentDetails, ...updateData.assignmentDetails };
         return this._toDomain(raw);
     }
 
