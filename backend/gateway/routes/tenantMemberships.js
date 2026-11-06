@@ -11,6 +11,7 @@ const ALLOWED_ROLES = new Set(['PHARMACY_STAFF', 'PHARMACIST', 'ORDER_MANAGER', 
 const clean = value => String(value ?? '').trim();
 
 async function authorizeTenantManager(req, res) {
+  resolveUserContext(req);
   const tenantId = clean(req.params.tenantId);
   const context = req.context || {};
   const platform = context.isPlatformUser === true;
