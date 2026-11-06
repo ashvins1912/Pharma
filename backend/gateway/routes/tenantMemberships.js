@@ -1,5 +1,4 @@
 import express from 'express';
-import crypto from 'node:crypto';
 import { authenticateUser } from '../../middleware/auth.js';
 import TenantMembership from '../../models/TenantMembership.js';
 import TenantBranch from '../../models/TenantBranch.js';
@@ -33,7 +32,7 @@ async function authorizeTenantManager(req, res) {
     res.status(404).json({ success: false, code: 'TENANT_NOT_FOUND', message: 'Pharmacy tenant not found.' });
     return null;
   }
-  return { tenantId, actor: req.user, platform };
+  return { tenantId, actor: req.user, platform, role };
 }
 
 async function validateBranch(tenantId, branchId, res) {
@@ -72,6 +71,7 @@ router.post('/', async (req, res) => {
       : [];
     if (!userId) return res.status(400).json({ success: false, code: 'USER_ID_REQUIRED', message: 'Enter the existing authenticated user ID to add staff.' });
     if (!ALLOWED_ROLES.has(role)) return res.status(400).json({ success: false, code: 'INVALID_STAFF_ROLE', message: 'Choose a supported pharmacy staff role.' });
+    if (role === 'TENANT_ADMIN' && !scope.platform && scope.role !== 'TENANT_OWNER') return res.status(403).json({ success: false, code: 'OWNER_REQUIRED', message: 'Only the pharmacy owner or platform administrator can grant tenant administrator access.' });
     if (!await validateBranch(scope.tenantId, branchId, res)) return;
     const membership = await TenantMembership.findOneAndUpdate(
       { userId, tenantId: scope.tenantId },
@@ -96,6 +96,7 @@ router.patch('/:membershipId', async (req, res) => {
     if (req.body?.role !== undefined) {
       const role = clean(req.body.role).toUpperCase();
       if (!ALLOWED_ROLES.has(role)) return res.status(400).json({ success: false, code: 'INVALID_STAFF_ROLE', message: 'Choose a supported pharmacy staff role.' });
+      if (role === 'TENANT_ADMIN' && !scope.platform && scope.role !== 'TENANT_OWNER') return res.status(403).json({ success: false, code: 'OWNER_REQUIRED', message: 'Only the pharmacy owner or platform administrator can grant tenant administrator access.' });
       updates.role = role;
     }
     if (req.body?.permissions !== undefined) {
