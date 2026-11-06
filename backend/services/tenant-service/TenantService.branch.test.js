@@ -70,3 +70,16 @@ test('generic branch updates cannot change tenant ownership or activation state'
     assert.equal(updated.status, 'PENDING');
     assert.equal(updated.name, 'Updated Sarjapur Branch');
 });
+
+
+test('tenant creation normalizes optional geolocation without referencing undefined values', { skip: getIsConnected() }, async () => {
+    const service = new TenantService();
+    const created = await service.createTenant({ name: 'Geolocation Regression Pharmacy' });
+    assert.deepEqual(created.geolocation, { latitude: null, longitude: null });
+
+    const located = await service.createTenant({
+        name: 'Located Regression Pharmacy',
+        geolocation: { latitude: 12.91, longitude: 77.64 }
+    });
+    assert.deepEqual(located.geolocation, { latitude: 12.91, longitude: 77.64 });
+});
