@@ -2020,11 +2020,11 @@ export const dataStore = {
             if (!order) return null;
             Object.assign(order, safeUpdates);
             if (updateData.rider) {
-                order.rider = { ...order.rider?.toObject?.() || order.rider || {}, ...updateData.rider };
+                order.rider = { ...(order.rider?.toObject?.() || order.rider || {}), ...updateData.rider };
                 order.deliveryPersonMobile = updateData.rider.riderMobile || order.deliveryPersonMobile || '';
             }
             if (updateData.assignmentDetails) {
-                order.assignmentDetails = { ...order.assignmentDetails || {}, ...updateData.assignmentDetails };
+                order.assignmentDetails = { ...(order.assignmentDetails || {}), ...updateData.assignmentDetails };
             }
             order.updatedAt = new Date();
             await order.save();
