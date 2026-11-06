@@ -761,7 +761,9 @@ export default function AdminDashboardView() {
       )}
 
       {adminTab === 'audits' && canViewAudits && (
-        <div className="admin-screen admin-screen--audits space-y-5">\n          <TenantActivityFeed />\n          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
+        <div className="admin-screen admin-screen--audits space-y-5">
+          <TenantActivityFeed />
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
           <div className="flex justify-between items-center">
             <div>
               <h3 className="text-base font-black text-slate-900">📜 {t('inventoryMergeAuditTrail')}</h3>
@@ -842,6 +844,7 @@ export default function AdminDashboardView() {
             loading={loadingOrders}
             label="audit records"
           />
+          </div>
         </div>
       )}
 
