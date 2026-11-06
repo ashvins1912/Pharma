@@ -3,6 +3,16 @@ import { Order } from '../../domain/entities/Order.js';
 import OrderModel from '../../../../models/Order.js';
 import mongoose from 'mongoose';
 
+const DELIVERY_ORDER_PROJECTION = [
+    '_id', 'tenantId', 'branchId', 'customerName', 'customerMobile', 'addressDetails',
+    'deliveryAddress', 'paymentMethod', 'location', 'coordinates', 'orderStatus',
+    'assignmentType', 'rider', 'assignedRiderId', 'expectedOutForDeliveryAt',
+    'outForDeliveryAt', 'deliveredAt', 'finalTotal', 'items', 'assignmentDetails',
+    'createdAt', 'updatedAt'
+].join(' ');
+
+const MAX_DELIVERY_CANDIDATES = 1000;
+
 export class MongooseOrderRepository extends IOrderRepository {
     _toDomain(doc) {
         if (!doc) return null;
@@ -43,7 +53,7 @@ export class MongooseOrderRepository extends IOrderRepository {
 
     async findById(id, tenantId) {
         if (!tenantId || id == null || String(id) === 'undefined' || String(id) === 'null' || !mongoose.isValidObjectId(id)) return null;
-        const doc = await OrderModel.findOne({ _id: String(id), tenantId: String(tenantId) });
+        const doc = await OrderModel.findOne({ _id: String(id), tenantId: String(tenantId) }).select(DELIVERY_ORDER_PROJECTION).lean();
         return this._toDomain(doc);
     }
 
@@ -51,11 +61,20 @@ export class MongooseOrderRepository extends IOrderRepository {
         const query = {};
         if (!filter.tenantId) return [];
         query.tenantId = String(filter.tenantId);
+        if (filter.branchId) query.branchId = String(filter.branchId);
         if (filter.orderStatus) query.orderStatus = filter.orderStatus;
+        if (filter.orderStatuses?.length) query.orderStatus = { $in: filter.orderStatuses };
         if (filter.assignmentType) query.assignmentType = filter.assignmentType;
         if (filter.assignedRiderId) query['rider.riderId'] = filter.assignedRiderId;
 
-        const docs = await OrderModel.find(query).sort({ createdAt: -1 });
+        let cursor = OrderModel.find(query)
+            .select(DELIVERY_ORDER_PROJECTION)
+            .sort({ createdAt: -1, _id: -1 })
+            .lean();
+        if (Number.isFinite(Number(filter.limit)) && Number(filter.limit) > 0) {
+            cursor = cursor.limit(Math.min(MAX_DELIVERY_CANDIDATES, Math.floor(Number(filter.limit))));
+        }
+        const docs = await cursor;
         return docs.map(d => this._toDomain(d));
     }
 
@@ -84,7 +103,11 @@ export class MongooseOrderRepository extends IOrderRepository {
             };
         }
 
-        const doc = await OrderModel.findOneAndUpdate({ _id: id, tenantId: String(tenantId) }, { $set: updates }, { new: true });
+        const doc = await OrderModel.findOneAndUpdate(
+            { _id: id, tenantId: String(tenantId) },
+            { $set: updates },
+            { new: true }
+        ).select(DELIVERY_ORDER_PROJECTION).lean();
         return this._toDomain(doc);
     }
 
@@ -94,7 +117,11 @@ export class MongooseOrderRepository extends IOrderRepository {
             tenantId: String(tenantId),
             orderStatus: { $in: statuses },
             'rider.riderId': { $exists: true, $ne: null }
-        });
+        })
+            .select(DELIVERY_ORDER_PROJECTION)
+            .sort({ createdAt: -1, _id: -1 })
+            .limit(MAX_DELIVERY_CANDIDATES)
+            .lean();
 
         const targetLng = Number(coordinates[0]);
         const targetLat = Number(coordinates[1]);
