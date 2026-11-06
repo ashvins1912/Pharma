@@ -101,7 +101,7 @@ export default function AdminRouteOptimizer({ onRefresh }) {
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
+    <div className="admin-screen admin-screen--routes bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
       <div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
