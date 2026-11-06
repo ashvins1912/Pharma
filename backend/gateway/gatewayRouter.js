@@ -22,13 +22,11 @@ import paymentActionRoutes from '../routes/paymentActionRoutes.js';
 import adminPaymentReminderRoutes from '../routes/adminPaymentReminderRoutes.js';
 import deliveryEventRoutes from '../routes/deliveryEventRoutes.js';
 import activityRouter from './routes/activity.js';
-import { auditMutation } from '../middleware/activityAudit.js';
 
 const gateway = express.Router();
 
 // 1. Gateway Pre-processing Middleware: RequestContext Injection
 gateway.use(contextMiddleware);
-gateway.use(auditMutation);
 
 // 2. Health Check
 gateway.get('/health', (req, res) => {
