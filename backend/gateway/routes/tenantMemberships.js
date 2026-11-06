@@ -9,6 +9,16 @@ import { domainEvents } from '../../shared/events/DomainEvents.js';
 
 const router = express.Router({ mergeParams: true });
 const ALLOWED_ROLES = new Set(['PHARMACY_STAFF', 'PHARMACIST', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'RIDER', 'TENANT_RIDER', 'TENANT_ADMIN']);
+const ROLE_PERMISSION_PRESETS = {
+  PHARMACY_STAFF: ['orders.read', 'inventory.read'],
+  PHARMACIST: ['orders.read', 'orders.manage', 'inventory.read', 'medicine_requests.read', 'medicine_requests.manage'],
+  ORDER_MANAGER: ['orders.read', 'orders.manage', 'medicine_requests.read', 'medicine_requests.manage'],
+  INVENTORY_MANAGER: ['inventory.read', 'inventory.write'],
+  DISPATCHER: ['orders.read', 'orders.manage', 'delivery.read', 'delivery.manage'],
+  RIDER: ['delivery.read'],
+  TENANT_RIDER: ['delivery.read'],
+  TENANT_ADMIN: []
+};
 const clean = value => String(value ?? '').trim();
 
 async function authorizeTenantManager(req, res) {
@@ -106,9 +116,14 @@ router.post('/', async (req, res) => {
     const email = clean(req.body?.email).toLowerCase();
     const branchId = clean(req.body?.branchId) || null;
     const role = clean(req.body?.role).toUpperCase();
-    const permissions = Array.isArray(req.body?.permissions)
+    const requestedPermissions = Array.isArray(req.body?.permissions)
       ? [...new Set(req.body.permissions.map(clean).filter(Boolean))]
-      : [];
+      : (ROLE_PERMISSION_PRESETS[role] || []);
+    const allowedPermissions = new Set(ROLE_PERMISSION_PRESETS[role] || []);
+    if (requestedPermissions.some(permission => !allowedPermissions.has(permission))) {
+      return res.status(400).json({ success: false, code: 'INVALID_ROLE_PERMISSIONS', message: 'The requested permissions are not part of this role preset.' });
+    }
+    const permissions = requestedPermissions;
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ success: false, code: 'INVALID_STAFF_EMAIL', message: 'Enter a valid registered pharmacy user email.' });
@@ -184,9 +199,10 @@ router.patch('/:membershipId', async (req, res) => {
       }
       updates.role = role;
     }
+    let requestedPermissions = null;
     if (req.body?.permissions !== undefined) {
       if (!Array.isArray(req.body.permissions)) return res.status(400).json({ success: false, code: 'INVALID_PERMISSIONS', message: 'Permissions must be an array.' });
-      updates.permissions = [...new Set(req.body.permissions.map(clean).filter(Boolean))];
+      requestedPermissions = [...new Set(req.body.permissions.map(clean).filter(Boolean))];
     }
     if (req.body?.branchId !== undefined) {
       updates.branchId = clean(req.body.branchId) || null;
@@ -195,6 +211,12 @@ router.patch('/:membershipId', async (req, res) => {
 
     const effectiveRole = updates.role || currentRole;
     const effectiveBranchId = updates.branchId !== undefined ? updates.branchId : (current.branchId || null);
+    const allowedPermissions = new Set(ROLE_PERMISSION_PRESETS[effectiveRole] || []);
+    if (requestedPermissions && requestedPermissions.some(permission => !allowedPermissions.has(permission))) {
+      return res.status(400).json({ success: false, code: 'INVALID_ROLE_PERMISSIONS', message: 'The requested permissions are not part of this role preset.' });
+    }
+    if (requestedPermissions) updates.permissions = requestedPermissions;
+    else if (updates.role) updates.permissions = ROLE_PERMISSION_PRESETS[effectiveRole] || [];
     if (effectiveRole === 'TENANT_ADMIN' && effectiveBranchId) {
       return res.status(400).json({ success: false, code: 'TENANT_ADMIN_MUST_BE_TENANT_WIDE', message: 'Tenant administrators must be assigned at tenant scope.' });
     }
