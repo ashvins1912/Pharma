@@ -9,7 +9,7 @@ export default function AdminOfferZoneManager() {
   const { t } = useLanguage();
   const {
     medicines, orders, searchQuery, setSearchQuery, selectedCategory,
-    setSelectedCategory, page, setPage, totalPages, totalMedicines, limit
+    setSelectedCategory, page, setPage, totalPages, totalMedicines, limit, setLimit
   } = useApp();
   const { tenantId } = useTenant();
   const { addToast } = useToast();
@@ -42,7 +42,7 @@ export default function AdminOfferZoneManager() {
     return () => { active = false; };
   }, [tenantId]);
 
-  useEffect(() => { setPage(1); }, [search, filterCategory, setPage]);
+  useEffect(() => { setPage(1); }, [search, filterCategory, limit, setPage]);
 
   const beginCampaignEdit = campaign => {
     setEditingCampaign(String(campaign._id || campaign.id));
@@ -90,7 +90,7 @@ export default function AdminOfferZoneManager() {
       });
     });
 
-    const catalogItems = (Array.isArray(medicines) ? medicines : []).map((med, idx) => {
+    const catalogItems = (Array.isArray(medicines) ? medicines : []).map(med => {
       const name = med.name || med.title || 'Medicine';
       const category = (med.category || 'General').toLowerCase();
       const soldCount = salesFrequencyMap[name] || 0;
@@ -108,7 +108,7 @@ export default function AdminOfferZoneManager() {
         seasonReason = 'Seasonal category match: allergy and digestion care.';
       }
 
-      const override = offerZoneOverrides[med.id || med._id] ?? (idx < 6);
+      const override = offerZoneOverrides[med.id || med._id] ?? false;
       const discount = discountOverrides[med.id || med._id] ?? (isSeasonalRecommended ? 25 : 20);
       const reason = reasonOverrides[med.id || med._id] ?? seasonReason;
 
@@ -188,14 +188,14 @@ export default function AdminOfferZoneManager() {
             <div className="text-sm font-black text-white">{seasonName}</div>
           </div>
           <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3">
-            <div className="text-[10px] uppercase font-bold text-indigo-200">{t('activeOfferZoneItems')}</div>
+            <div className="text-[10px] uppercase font-bold text-indigo-200">Preview selections</div>
             <div className="text-sm font-black text-white">
-              {catalogItems.filter(i => i.isInOfferZone).length} Products Listed
+              {catalogItems.filter(i => i.isInOfferZone).length} Selected (preview only)
             </div>
           </div>
           <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3">
-            <div className="text-[10px] uppercase font-bold text-indigo-200">{t('recommendationEngine')}</div>
-            <div className="text-sm font-black text-emerald-300">{t('activeSalesSeasonSynced')}</div>
+            <div className="text-[10px] uppercase font-bold text-indigo-200">Recommendation logic</div>
+            <div className="text-sm font-black text-emerald-300">Rule-based</div>
           </div>
         </div>
       </div>
@@ -283,9 +283,17 @@ export default function AdminOfferZoneManager() {
             <h3 className="text-sm font-black text-slate-900 dark:text-white">{t('productOfferRecommendationControl')}</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">{t('toggleOfferZoneDiscount')} · Preview only; use Saved campaigns to persist customer-facing promotions.</p>
           </div>
-          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-3 py-1.5 rounded-xl w-fit">
-            Showing {paginatedMedicines.length} of {Number(totalMedicines || filteredMedicines.length)} medicines (Page {page} of {visibleTotalPages})
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+              Medicines per page
+              <select value={limit} onChange={event => setLimit(Number(event.target.value))} className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-white" aria-label="Medicines per page">
+                <option value={16}>16</option><option value={32}>32</option><option value={48}>48</option><option value={64}>64</option>
+              </select>
+            </label>
+            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-3 py-1.5 rounded-xl w-fit">
+              Showing {paginatedMedicines.length} of {Number(totalMedicines || filteredMedicines.length)} medicines (Page {page} of {visibleTotalPages})
+            </span>
+          </div>
         </div>
 
         <div className="overflow-x-auto">

@@ -75,7 +75,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
         longitude: branch.geolocation?.longitude ?? branch.address?.coordinates?.lng ?? ''
       },
       operatingHours: { ...blankBranch.operatingHours, ...(branch.operatingHours || {}) },
-      isDefault: Boolean(branch.isDefault)
+      isDefault: branch.status === 'PENDING' ? Boolean(branch.makeDefaultOnActivation) : Boolean(branch.isDefault)
     });
     setError('');
     setModalOpen(true);
@@ -106,7 +106,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
         setNotice('Branch details updated successfully.');
       } else {
         await apiClient.post('/api/tenant/branches', form);
-        setNotice('Branch created successfully.');
+        setNotice('Branch created as Pending. Review the details and activate it before it appears in customer branch selection.');
       }
       setModalOpen(false);
       await fetchBranches();
@@ -166,7 +166,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-500">{branches.length} branch{branches.length === 1 ? '' : 'es'} registered</p>
         <select aria-label="Filter branches by status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-          <option value="ALL">All branches</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive / archived</option><option value="SUSPENDED">Suspended</option>
+          <option value="ALL">All branches</option><option value="PENDING">Pending review</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive / archived</option><option value="SUSPENDED">Suspended</option>
         </select>
       </div>
 
@@ -181,7 +181,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
                   <div className="flex flex-wrap items-center gap-2">
                     <h4 className="font-bold text-slate-900">{branch.name}</h4>
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">{branch.code}</span>
-                    {branch.isDefault && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">DEFAULT</span>}
+                    {branch.isDefault && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">DEFAULT</span>}{branch.status === 'PENDING' && branch.makeDefaultOnActivation && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700">DEFAULT AFTER APPROVAL</span>}
                     {branch.isTenantLocation && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-bold text-violet-700">TENANT LOCATION</span>}
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${branch.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{branch.status}</span>
                   </div>
@@ -193,7 +193,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
                   <button type="button" onClick={() => openEdit(branch)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Edit</button>
                   {branch.status === 'ACTIVE'
                     ? <button type="button" onClick={() => changeStatus(branch, 'INACTIVE')} className="rounded-lg border border-amber-200 px-3 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50">Deactivate</button>
-                    : <button type="button" onClick={() => changeStatus(branch, 'ACTIVE')} className="rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50">Activate</button>}
+                    : <button type="button" onClick={() => changeStatus(branch, 'ACTIVE')} className="rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50">{branch.status === 'PENDING' ? 'Review & activate' : 'Activate'}</button>}
                   <button type="button" onClick={() => archiveBranch(branch)} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Remove</button>
                   </>}
                 </div>
@@ -217,13 +217,13 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-7 sm:py-5">
             <div className="grid gap-4 sm:grid-cols-2">
             <label><span className={labelClass}>Branch name *</span><input required maxLength={100} className={fieldClass} value={form.name} onChange={e => setField('name', e.target.value)} /></label>
-            <label><span className={labelClass}>Branch code *</span><input required maxLength={20} className={fieldClass} value={form.code} onChange={e => setField('code', e.target.value.toUpperCase())} /></label>
-            <label><span className={labelClass}>Phone</span><input className={fieldClass} value={form.phone || ''} onChange={e => setField('phone', e.target.value)} /></label>
-            <label><span className={labelClass}>Email</span><input type="email" className={fieldClass} value={form.email || ''} onChange={e => setField('email', e.target.value)} /></label>
-            <label className="sm:col-span-2"><span className={labelClass}>Street address</span><input className={fieldClass} value={form.address?.street || ''} onChange={e => setAddress('street', e.target.value)} /></label>
-            <label><span className={labelClass}>City</span><input className={fieldClass} value={form.address?.city || ''} onChange={e => setAddress('city', e.target.value)} /></label>
-            <label><span className={labelClass}>State</span><input className={fieldClass} value={form.address?.state || ''} onChange={e => setAddress('state', e.target.value)} /></label>
-            <label><span className={labelClass}>PIN code</span><input className={fieldClass} value={form.address?.pincode || ''} onChange={e => setAddress('pincode', e.target.value)} /></label>
+            <label><span className={labelClass}>Branch code *</span><input required minLength={2} maxLength={20} pattern="[A-Za-z0-9_-]{2,20}" className={fieldClass} value={form.code} onChange={e => setField('code', e.target.value.toUpperCase())} /></label>
+            <label><span className={labelClass}>Phone *</span><input required type="tel" className={fieldClass} value={form.phone || ''} onChange={e => setField('phone', e.target.value)} /></label>
+            <label><span className={labelClass}>Email *</span><input required type="email" className={fieldClass} value={form.email || ''} onChange={e => setField('email', e.target.value)} /></label>
+            <label className="sm:col-span-2"><span className={labelClass}>Street address *</span><input required minLength={5} maxLength={200} className={fieldClass} value={form.address?.street || ''} onChange={e => setAddress('street', e.target.value)} /></label>
+            <label><span className={labelClass}>City *</span><input required minLength={2} className={fieldClass} value={form.address?.city || ''} onChange={e => setAddress('city', e.target.value)} /></label>
+            <label><span className={labelClass}>State *</span><input required minLength={2} className={fieldClass} value={form.address?.state || ''} onChange={e => setAddress('state', e.target.value)} /></label>
+            <label><span className={labelClass}>PIN code *</span><input required minLength={6} maxLength={6} pattern="[0-9]{6}" inputMode="numeric" className={fieldClass} value={form.address?.pincode || ''} onChange={e => setAddress('pincode', e.target.value)} /></label>
             <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div><p className="text-sm font-bold text-slate-800">Branch geolocation</p><p className="text-xs text-slate-500">Coordinates are used to identify this branch on maps and for location-based services.</p></div>

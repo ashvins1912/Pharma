@@ -376,6 +376,77 @@ export const API_CAPABILITIES = [
     pattern: /^\/api\/v1\/admin\/tenants(?:\/|$)/,
     permission: 'tenants.manage'
   },
+  // Tenant-scoped branch approval, staff membership and activity APIs.
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/tenants\/[^/]+\/branches(?:\/|$)/,
+    permission: 'tenant.branches.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/tenants\/[^/]+\/memberships(?:\/|$)/,
+    permission: 'tenant.branches.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/tenants\/[^/]+\/memberships\/?$/,
+    permission: 'tenant.branches.manage'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/v1\/tenants\/[^/]+\/memberships\/[^/]+$/,
+    permission: 'tenant.branches.manage'
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/v1\/tenants\/[^/]+\/memberships\/[^/]+$/,
+    permission: 'tenant.branches.manage'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/activity(?:\/|$)/,
+    permission: 'tenant.branches.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/tenants\/[^/]+\/branches\/?$/,
+    permission: 'tenant.branches.manage'
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/v1\/branches\/[^/]+$/,
+    permission: 'tenant.branches.manage'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/branches\/[^/]+\/activate$/,
+    permission: 'tenant.branches.manage'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/tenant\/branches(?:\/|$)/,
+    permission: 'tenant.branches.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/tenant\/branches\/?$/,
+    permission: 'tenant.branches.manage'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/tenant\/branches\/[^/]+(?:\/status)?$/,
+    permission: 'tenant.branches.manage'
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/tenant\/branches\/[^/]+$/,
+    permission: 'tenant.branches.manage'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/vendor\/profile$/,
+    permission: 'tenant.profile.read'
+  },
   // Public tenant and branch discovery (e.g. /api/v1/tenants, /api/v1/branches, /api/tenants/nearby)
   // are deliberately unrestricted so all patients can discover local pharmacies.
   // Administrative mutations remain strictly protected.

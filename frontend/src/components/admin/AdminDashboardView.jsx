@@ -3,6 +3,7 @@ import apiClient from '../../api/apiClient';
 import AdminFulfillmentKanban from './AdminFulfillmentKanban';
 import AdminInventoryTable from './AdminInventoryTable';
 import AdminRouteOptimizer from './AdminRouteOptimizer';
+import TenantActivityFeed from './TenantActivityFeed';
 
 import RiderFleetView from './riders/RiderFleetView';
 import AdminOrderFinancials from './AdminOrderFinancials';
@@ -760,7 +761,9 @@ export default function AdminDashboardView() {
       )}
 
       {adminTab === 'audits' && canViewAudits && (
-        <div className="admin-screen admin-screen--audits bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
+        <div className="admin-screen admin-screen--audits space-y-5">
+          <TenantActivityFeed />
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
           <div className="flex justify-between items-center">
             <div>
               <h3 className="text-base font-black text-slate-900">📜 {t('inventoryMergeAuditTrail')}</h3>
@@ -841,6 +844,7 @@ export default function AdminDashboardView() {
             loading={loadingOrders}
             label="audit records"
           />
+          </div>
         </div>
       )}
 

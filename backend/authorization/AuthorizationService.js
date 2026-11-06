@@ -61,12 +61,20 @@ export class AuthorizationService {
       throw err;
     }
     const rolePermissions = await getRolePermissions(role);
-    const permissions = new Set(rolePermissions);
+    const membershipRole = String(membership?.role || '').toUpperCase();
+    const hasStaffPermissionCeiling = Boolean(membership
+      && Array.isArray(membership.permissions)
+      && !['TENANT_OWNER', 'TENANT_ADMIN'].includes(membershipRole));
+    // A branch-staff membership is an explicit permission ceiling, not an
+    // additive grant on top of the broader role catalog.
+    const permissions = new Set(hasStaffPermissionCeiling ? membership.permissions : rolePermissions);
     const revokedPermissions = new Set([
       ...(Array.isArray(user?.revokedPermissions) ? user.revokedPermissions : []),
       ...(Array.isArray(user?.app_metadata?.revokedPermissions) ? user.app_metadata.revokedPermissions : [])
     ]);
-    for (const permission of membership?.permissions || []) permissions.add(permission);
+    if (!hasStaffPermissionCeiling) {
+      for (const permission of membership?.permissions || []) permissions.add(permission);
+    }
     if (!membership) for (const permission of user?.permissions || []) permissions.add(permission);
 
     let userProfile = null;
@@ -75,8 +83,12 @@ export class AuthorizationService {
         userProfile = await UserProfile.findOne({ $or: [{ supabase_user_id: userId }, { supabaseId: userId }, { userId }] }).select('permissions accessGrants accessRevokes permissionVersion').lean();
       } catch {}
     }
-    for (const permission of userProfile?.permissions || []) permissions.add(permission);
-    for (const permission of userProfile?.accessGrants || []) permissions.add(permission);
+    for (const permission of userProfile?.permissions || []) {
+      if (!hasStaffPermissionCeiling || permissions.has(permission)) permissions.add(permission);
+    }
+    for (const permission of userProfile?.accessGrants || []) {
+      if (!hasStaffPermissionCeiling || permissions.has(permission)) permissions.add(permission);
+    }
     for (const permission of userProfile?.accessRevokes || []) { permissions.delete(permission); revokedPermissions.add(permission); }
     if (role === 'SUPER_ADMIN') { permissions.clear(); permissions.add('*'); }
 

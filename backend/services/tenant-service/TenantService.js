@@ -253,6 +253,17 @@ export class TenantService {
             throw new Error('A valid alphanumeric slug is required.');
         }
 
+        const latitude = data.geolocation?.latitude === '' || data.geolocation?.latitude == null ? null : Number(data.geolocation.latitude);
+        const longitude = data.geolocation?.longitude === '' || data.geolocation?.longitude == null ? null : Number(data.geolocation.longitude);
+        if ((latitude == null) !== (longitude == null)
+            || (latitude != null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90))
+            || (longitude != null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180))) {
+            const error = new Error('Provide both valid tenant latitude and longitude coordinates.');
+            error.statusCode = 400;
+            error.code = 'TENANT_GEOLOCATION_INVALID';
+            throw error;
+        }
+
         // Verify slug uniqueness
         const existing = await this.getTenantBySlug(slug);
         if (existing && existing.id !== id) {
@@ -270,7 +281,7 @@ export class TenantService {
             contactEmail: data.contactEmail || data.email || '',
             contactPhone: data.contactPhone || data.phone || '',
             usesTenantAsBranch: data.usesTenantAsBranch === true,
-            geolocation: data.geolocation || { latitude: null, longitude: null },
+            geolocation: { latitude, longitude },
             status: data.status || 'ACTIVE',
             timezone: data.timezone || 'Asia/Kolkata',
             currency: data.currency || 'INR',
@@ -444,30 +455,69 @@ export class TenantService {
         const tenant = await this.getTenantById(tenantId);
         if (!tenant) throw new Error('Tenant not found');
 
-        const id = data.id || `branch-${Date.now()}`;
+        const name = String(data.name || '').trim();
+        const code = String(data.code || '').trim().toUpperCase();
+        const phone = String(data.phone || '').trim();
+        const email = String(data.email || '').trim().toLowerCase();
+        const street = String(data.address?.street || '').trim();
+        const city = String(data.address?.city || '').trim();
+        const state = String(data.address?.state || '').trim();
+        const pincode = String(data.address?.pincode || data.address?.zipCode || '').trim();
+        const numericOrDefault = (value, fallback) => value === '' || value == null ? fallback : (Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : fallback);
+        const latitude = data.geolocation?.latitude === '' || data.geolocation?.latitude == null ? null : Number(data.geolocation.latitude);
+        const longitude = data.geolocation?.longitude === '' || data.geolocation?.longitude == null ? null : Number(data.geolocation.longitude);
+        if (name.length < 2 || name.length > 120) {
+            const error = new Error('Branch name must be between 2 and 120 characters.'); error.statusCode = 400; error.code = 'BRANCH_VALIDATION_FAILED'; throw error;
+        }
+        if (!/^[A-Z0-9][A-Z0-9_-]{1,19}$/.test(code)) {
+            const error = new Error('Branch code must be 2-20 characters using letters, numbers, hyphens or underscores.'); error.statusCode = 400; error.code = 'BRANCH_VALIDATION_FAILED'; throw error;
+        }
+        if (!/^\+?[0-9 ()-]{7,20}$/.test(phone) || phone.replace(/\D/g, '').length < 7 || phone.replace(/\D/g, '').length > 15) {
+            const error = new Error('Enter a valid branch contact number.'); error.statusCode = 400; error.code = 'BRANCH_VALIDATION_FAILED'; throw error;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            const error = new Error('Enter a valid branch contact email.'); error.statusCode = 400; error.code = 'BRANCH_VALIDATION_FAILED'; throw error;
+        }
+        if (street.length < 5 || street.length > 200 || city.length < 2 || state.length < 2 || !/^[0-9]{6}$/.test(pincode)) {
+            const error = new Error('Enter a complete branch address with street, city, state and a valid 6-digit PIN code.'); error.statusCode = 400; error.code = 'BRANCH_VALIDATION_FAILED'; throw error;
+        }
+        if ((latitude == null) !== (longitude == null)
+            || (latitude != null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90))
+            || (longitude != null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180))) {
+            const error = new Error('Provide both valid branch latitude and longitude coordinates.'); error.statusCode = 400; error.code = 'BRANCH_VALIDATION_FAILED'; throw error;
+        }
+        const existing = getIsConnected()
+            ? await TenantBranch.findOne({ tenantId: String(tenantId), code }).select('_id').lean()
+            : Array.from(this.branches.values()).find(item => String(item.tenantId) === String(tenantId) && String(item.code).toUpperCase() === code);
+        if (existing) {
+            const error = new Error('This branch code is already used by your pharmacy.'); error.statusCode = 409; error.code = 'BRANCH_CODE_EXISTS'; throw error;
+        }
+        const id = data.id || `branch-${crypto.randomUUID()}`;
         const newBranch = {
             id,
-            tenantId,
-            name: data.name,
-            code: data.code || `BR-${this.branches.size + 1}`,
-            phone: data.phone || tenant.phone,
-            email: data.email || tenant.email,
-            geolocation: data.geolocation || { latitude: null, longitude: null },
+            tenantId: String(tenantId),
+            name,
+            code,
+            phone: phone || tenant.phone,
+            email: email || tenant.email,
+            geolocation: { latitude, longitude },
             address: {
-                street: data.address?.street || '',
-                city: data.address?.city || '',
-                state: data.address?.state || '',
-                pincode: data.address?.pincode || '',
+                street,
+                city,
+                state,
+                pincode,
                 ...(data.address?.coordinates ? { coordinates: data.address.coordinates } : {})
             },
-            serviceRadiusKm: Number(data.serviceRadiusKm) || 10.0,
+            serviceRadiusKm: numericOrDefault(data.serviceRadiusKm, 10.0),
             deliveryMode: data.deliveryMode || 'OWN_RIDER',
-            minimumOrderValue: Number(data.minimumOrderValue) || 149,
-            freeDeliveryAbove: Number(data.freeDeliveryAbove) || 499,
-            deliveryFee: Number(data.deliveryFee) || 30,
+            minimumOrderValue: numericOrDefault(data.minimumOrderValue, 149),
+            freeDeliveryAbove: numericOrDefault(data.freeDeliveryAbove, 499),
+            deliveryFee: numericOrDefault(data.deliveryFee, 30),
             operatingHours: data.operatingHours || { open: '08:00', close: '22:00' },
-            status: 'ACTIVE',
-            isDefault: Boolean(data.isDefault),
+            status: 'PENDING',
+            activatedAt: null,
+            makeDefaultOnActivation: Boolean(data.isDefault),
+            isDefault: false,
             isTenantLocation: Boolean(data.isTenantLocation),
             createdAt: new Date().toISOString()
         };
@@ -480,15 +530,122 @@ export class TenantService {
         return newBranch;
     }
 
+    async activateBranch(branchId, tenantId, actor = null) {
+        const branch = await this.getBranchById(branchId);
+        if (!branch || String(branch.tenantId) !== String(tenantId)) {
+            const error = new Error('Branch not found for this pharmacy.');
+            error.statusCode = 404;
+            error.code = 'BRANCH_NOT_FOUND';
+            throw error;
+        }
+        if (branch.status !== 'PENDING' && branch.status !== 'ACTIVE') {
+            const error = new Error('Only a pending branch can be activated.');
+            error.statusCode = 409;
+            error.code = 'BRANCH_NOT_PENDING';
+            throw error;
+        }
+
+        const now = new Date();
+        const activatedAt = branch.activatedAt || now;
+        let updated = {
+            ...branch,
+            status: 'ACTIVE',
+            activatedAt,
+            updatedAt: now
+        };
+        const branchIdString = String(branchId);
+        const tenantIdString = String(tenantId);
+
+        if (getIsConnected()) {
+            const persisted = await TenantBranch.findOneAndUpdate(
+                { _id: branchIdString, tenantId: tenantIdString, status: { $in: ['PENDING', 'ACTIVE'] } },
+                { $set: { status: 'ACTIVE', activatedAt, updatedAt: now } },
+                { new: true, runValidators: true }
+            ).lean();
+            if (!persisted) {
+                const error = new Error('Branch activation conflict. Refresh and try again.');
+                error.statusCode = 409;
+                error.code = 'BRANCH_ACTIVATION_CONFLICT';
+                throw error;
+            }
+            updated = { ...persisted, id: String(persisted._id) };
+
+            const hasOtherDefault = await TenantBranch.exists({
+                tenantId: tenantIdString,
+                status: 'ACTIVE',
+                isDefault: true,
+                _id: { $ne: branchIdString }
+            });
+            const shouldBecomeDefault = updated.makeDefaultOnActivation === true || !hasOtherDefault;
+            if (shouldBecomeDefault) {
+                await TenantBranch.updateMany(
+                    { tenantId: tenantIdString, _id: { $ne: branchIdString } },
+                    { $set: { isDefault: false } }
+                );
+            }
+            const finalized = await TenantBranch.findOneAndUpdate(
+                { _id: branchIdString, tenantId: tenantIdString, status: 'ACTIVE' },
+                { $set: { isDefault: shouldBecomeDefault, makeDefaultOnActivation: false } },
+                { new: true, runValidators: true }
+            ).lean();
+            if (!finalized) {
+                const error = new Error('Branch activation conflict. Refresh and try again.');
+                error.statusCode = 409;
+                error.code = 'BRANCH_ACTIVATION_CONFLICT';
+                throw error;
+            }
+            updated = { ...finalized, id: String(finalized._id) };
+        } else {
+            const hasOtherDefault = Array.from(this.branches.values()).some(item =>
+                String(item.tenantId) === tenantIdString
+                && String(item.id || item._id) !== branchIdString
+                && item.status === 'ACTIVE'
+                && item.isDefault === true
+            );
+            const shouldBecomeDefault = updated.makeDefaultOnActivation === true || !hasOtherDefault;
+            if (shouldBecomeDefault) {
+                for (const [id, item] of this.branches.entries()) {
+                    if (String(item.tenantId) === tenantIdString) {
+                        this.branches.set(id, { ...item, isDefault: false });
+                    }
+                }
+            }
+            updated = {
+                ...updated,
+                isDefault: shouldBecomeDefault,
+                makeDefaultOnActivation: false
+            };
+        }
+
+        this.branches.set(branchIdString, updated);
+        domainEvents.emitDomainEvent('BRANCH_ACTIVATED', branchIdString, { status: 'ACTIVE', isDefault: updated.isDefault }, actor, tenantIdString, branchIdString);
+        return updated;
+    }
+
     async updateBranch(branchId, updates, actor = null) {
         const branch = await this.getBranchById(branchId);
         if (!branch) throw new Error('Branch not found');
 
+        const safeUpdates = { ...(updates || {}) };
+        delete safeUpdates.id;
+        delete safeUpdates._id;
+        delete safeUpdates.tenantId;
+        delete safeUpdates.status;
+        delete safeUpdates.activatedAt;
+        delete safeUpdates.isDefault;
+        delete safeUpdates.makeDefaultOnActivation;
+        delete safeUpdates.isTenantLocation;
+        delete safeUpdates.archivedAt;
+        delete safeUpdates.archivedBy;
+        delete safeUpdates.createdAt;
+        delete safeUpdates.updatedAt;
         const updated = {
             ...branch,
-            ...updates,
-            address: { ...branch.address, ...(updates.address || {}) },
-            geolocation: updates.geolocation !== undefined ? updates.geolocation : branch.geolocation,
+            ...safeUpdates,
+            tenantId: branch.tenantId,
+            status: branch.status,
+            address: { ...branch.address, ...(safeUpdates.address || {}) },
+            geolocation: safeUpdates.geolocation !== undefined ? safeUpdates.geolocation : branch.geolocation,
             updatedAt: new Date().toISOString()
         };
         if (getIsConnected()) {
