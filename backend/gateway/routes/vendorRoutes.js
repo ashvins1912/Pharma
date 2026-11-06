@@ -67,7 +67,7 @@ router.get('/profile', authenticateUser, async (req, res) => {
             Vendor.findOne({ tenantId }).sort({ onboardingCompletedAt: -1, updatedAt: -1 }).lean(),
             canViewPersonnel
                 ? UserProfile.find({ tenantId, status: 'ACTIVE' })
-                    .select('userId name firstName lastName email role roles')
+                    .select('userId supabaseId supabase_user_id name firstName lastName email role roles')
                     .sort({ createdAt: 1 }).lean()
                 : Promise.resolve([]),
             canViewPersonnel
@@ -113,9 +113,9 @@ router.get('/profile', authenticateUser, async (req, res) => {
                     currency: tenant.currency || ''
                 },
                 personnel: personnel.map(member => {
-                    const membership = membershipByUserId.get(String(member.userId));
+                    const membership = membershipByUserId.get(String(member.userId || member.supabaseId || member.supabase_user_id));
                     return {
-                        id: String(member.userId || member._id),
+                        id: String(member.userId || member.supabaseId || member.supabase_user_id || member._id),
                         name: member.name || [member.firstName, member.lastName].filter(Boolean).join(' '),
                         email: member.email || '',
                         role: membership?.role || member.role || (member.roles || [])[0] || '',
@@ -177,14 +177,15 @@ router.post('/profile/personnel', authenticateUser, async (req, res) => {
         }
 
         const memberProfile = await UserProfile.findOne({ tenantId, email, status: 'ACTIVE' })
-            .select('userId name firstName lastName email')
+            .select('userId supabaseId supabase_user_id name firstName lastName email')
             .lean();
-        if (!memberProfile?.userId) {
+        const memberUserId = memberProfile?.userId || memberProfile?.supabaseId || memberProfile?.supabase_user_id;
+        if (!memberUserId) {
             return sendError(res, { code: 'REGISTERED_TENANT_USER_REQUIRED', message: 'This email must belong to an active registered user of this pharmacy before role assignment.', statusCode: 404, req });
         }
 
         const membership = await TenantMembership.findOneAndUpdate(
-            { userId: String(memberProfile.userId), tenantId },
+            { userId: String(memberUserId), tenantId },
             { $set: { branchId, role: assignedRole, status: 'ACTIVE', invitedBy: String(req.user?.sub || req.user?.id || 'platform') } },
             { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
         ).lean();
@@ -194,7 +195,7 @@ router.post('/profile/personnel', authenticateUser, async (req, res) => {
 
         return sendSuccess(res, {
             data: {
-                id: String(memberProfile.userId),
+                id: String(memberUserId),
                 name: memberProfile.name || [memberProfile.firstName, memberProfile.lastName].filter(Boolean).join(' '),
                 email,
                 role: membership.role,
