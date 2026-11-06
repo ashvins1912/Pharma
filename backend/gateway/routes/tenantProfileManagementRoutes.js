@@ -76,7 +76,6 @@ router.patch('/profile/edit-policy', authenticateUser, requireSuperAdmin, async 
     tenant.profileAudit.push({ action: 'PROFILE_EDIT_PERMISSION_CHANGED', changedFields: ['pharmacyProfileEditingEnabled'], actorId: String(req.user?.sub || req.user?.id || ''), actorRole: getRole(req), at: new Date() });
     if (tenant.profileAudit.length > 100) tenant.profileAudit = tenant.profileAudit.slice(-100);
     await tenant.save();
-    domainEvents.emitDomainEvent('TENANT_PROFILE_UPDATED', String(tenant._id), { action: 'PROFILE_UPDATED', changes: changedFields }, req.user, String(tenant._id));
     return res.json({ success: true, data: { pharmacyCanEdit: req.body.pharmacyCanEdit }, message: 'Pharmacy profile edit permission updated.' });
   } catch (error) {
     console.error('[TenantProfilePolicy] Update failed:', error);
