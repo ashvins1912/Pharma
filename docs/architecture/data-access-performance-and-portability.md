@@ -69,6 +69,19 @@ The bounded bulk lookup path now selects only its required product and inventory
 
 These are workload-aligned candidates. Validate them against production query plans and collection cardinality before adding more indexes; every extra index increases write and storage cost.
 
+### Legacy backend delivery repository
+
+The legacy backend's shared `dataStore.getAllOrders()` previously returned the full order collection for every caller. It now accepts optional, backward-compatible query options for tenant, branch, customer/user, status, assignment, rider, date range, projection, skip and bounded limit. Existing no-argument callers retain their full-list behavior so unrelated workflows are not silently changed.
+
+The delivery order repository now:
+- passes tenant and branch predicates into the datastore rather than loading every order first;
+- requests only fields needed to construct its delivery-domain entity;
+- uses a scoped `getOrderById` call for tenant-owned detail reads;
+- delegates updates to `updateOrderForTenant`, which applies the tenant predicate in the database query before mutation/save;
+- retains defensive tenant checks for injected test adapters and backward compatibility.
+
+This is an incremental seam: the legacy datastore remains MongoDB-aware, but delivery application/repository consumers no longer need to know its query mechanics. The next stage is to move this adapter behind a fully separate Mongo repository and introduce the same contract for any non-Mongo adapter.
+
 ## Remaining migration work
 
 This commit does not claim a complete repository-port migration across the entire platform. The following work must be done service by service, preserving each service's existing contract:
