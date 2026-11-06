@@ -131,21 +131,27 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
   useEffect(() => {
     if (!effectiveTenantId) { setActivityEvents([]); return undefined; }
     let cancelled = false;
+    const refreshActivity = () => {
+      apiClient.get('/api/v1/vendor/profile/activity', {
+        params: isSuperAdmin ? { tenantId: effectiveTenantId, limit: 50 } : { limit: 50 }
+      }).then(response => {
+        if (cancelled) return;
+        const events = response.data?.data?.events || response.data?.events || [];
+        setActivityEvents(Array.isArray(events) ? events : []);
+        setActivityError('');
+      }).catch(error => {
+        if (!cancelled) setActivityError(error?.response?.data?.message || 'Activity history could not be loaded.');
+      }).finally(() => { if (!cancelled) setActivityLoading(false); });
+    };
     setActivityLoading(true);
-    apiClient.get('/api/v1/vendor/profile/activity', {
-      params: isSuperAdmin ? { tenantId: effectiveTenantId, limit: 50 } : { limit: 50 }
-    }).then(response => {
-      if (cancelled) return;
-      const events = response.data?.data?.events || response.data?.events || [];
-      setActivityEvents(Array.isArray(events) ? events : []);
-      setActivityError('');
-    }).catch(error => {
-      if (!cancelled) {
-        setActivityEvents([]);
-        setActivityError(error?.response?.data?.message || 'Activity history could not be loaded.');
-      }
-    }).finally(() => { if (!cancelled) setActivityLoading(false); });
-    return () => { cancelled = true; };
+    refreshActivity();
+    const interval = window.setInterval(refreshActivity, 30_000);
+    window.addEventListener('pharma:activity-updated', refreshActivity);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener('pharma:activity-updated', refreshActivity);
+    };
   }, [effectiveTenantId, isSuperAdmin]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
