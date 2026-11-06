@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import TenantRegistry from '../auth/TenantRegistry';
 import TenantStaffManager from './TenantStaffManager';
+import TenantActivityFeed from './TenantActivityFeed';
 import { useTenant } from '../../context/TenantContext';
 
 const emptyProfile = {
@@ -312,6 +313,7 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
       </section>
 
       {canManageStaff && staffTenantId && <TenantStaffManager tenantId={staffTenantId} />}
+      {staffTenantId && <TenantActivityFeed tenantId={staffTenantId} />}
 
       <section className="space-y-3">
         <div><h3 className="text-lg font-black text-slate-900">Tenant branches</h3><p className="text-sm text-slate-500">Create and activate branches for this pharmacy.</p></div>
