@@ -8,6 +8,7 @@ import { authenticateUser } from '../../middleware/auth.js';
 import { requireRoles } from '../../middleware/context.js';
 import { PlatformRoles, TenantRoles } from '../../shared/contracts/index.js';
 import { cacheService } from '../../services/cache/CacheService.js';
+import TenantBranch from '../../models/TenantBranch.js';
 import tenantMembershipsRouter from './tenantMemberships.js';
 
 const router = express.Router();
