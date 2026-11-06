@@ -177,7 +177,7 @@ export default function AdminOfferZoneManager() {
             Offer Zone Curation &amp; Intelligent Refill Engine
           </h2>
           <p className="text-xs sm:text-sm text-indigo-100 max-w-2xl mt-1 leading-relaxed">
-            Configure which products appear in the customer Offer Zone, set promotional discounts, and monitor platform-wide sales frequencies with seasonal demand intelligence (20 records per page).
+            Review seasonal and sales-based product recommendations. Only saved, active campaigns in the Saved campaigns section are published to customers.
           </p>
         </div>
 
@@ -281,10 +281,10 @@ export default function AdminOfferZoneManager() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h3 className="text-sm font-black text-slate-900 dark:text-white">{t('productOfferRecommendationControl')}</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t('toggleOfferZoneDiscount')}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('toggleOfferZoneDiscount')} · Preview only; use Saved campaigns to persist customer-facing promotions.</p>
           </div>
           <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-3 py-1.5 rounded-xl w-fit">
-            Showing {paginatedMedicines.length} of {filteredMedicines.length} items (Page {currentPage} of {totalPages})
+            Showing {paginatedMedicines.length} of {Number(totalMedicines || filteredMedicines.length)} medicines (Page {page} of {visibleTotalPages})
           </span>
         </div>
 
