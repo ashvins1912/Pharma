@@ -1,4 +1,5 @@
 import { Rider } from '../domain/entities/Rider.js';
+import { domainEvents } from '../../../shared/events/DomainEvents.js';
 
 /**
  * Use Case: RegisterRiderUseCase
@@ -76,7 +77,7 @@ export class RegisterRiderUseCase {
 
         if (existingRider) {
             if (existingRider.tenantId !== String(tenantId)) throw new Error('Rider belongs to another pharmacy tenant.');
-            return this.riderRepository.update(existingRider.id, {
+            const reactivated = await this.riderRepository.update(existingRider.id, {
                 tenantId: String(tenantId),
                 branchId,
                 name: name.trim(),
@@ -92,6 +93,8 @@ export class RegisterRiderUseCase {
                 disabledReason: null,
                 disabledAt: null
             }, tenantId);
+            domainEvents.emitDomainEvent('RIDER_REACTIVATED', String(reactivated.id), { status: reactivated.status, branchId }, command.actor || null, tenantId, branchId);
+            return reactivated;
         }
 
         // Create domain entity
@@ -110,6 +113,8 @@ export class RegisterRiderUseCase {
         });
 
         // Persist through repository port
-        return await this.riderRepository.create(rider);
+        const created = await this.riderRepository.create(rider);
+        domainEvents.emitDomainEvent('RIDER_ONBOARDED', String(created.id), { status: created.status, branchId }, command.actor || null, tenantId, branchId);
+        return created;
     }
 }
