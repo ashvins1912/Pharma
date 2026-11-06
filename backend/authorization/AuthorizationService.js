@@ -3,12 +3,9 @@ import { isPlatformSuperAdmin } from '../shared/contracts/index.js';
 import { getRolePermissions, getRoleScope } from './AuthorizationCatalogService.js';
 import UserProfile from '../models/UserProfile.js';
 import mongoose from 'mongoose';
+import { isPermissionGranted } from '@pharma/service-kernel';
 
-function hasPermission(granted, required, revoked = []) {
-  if (!required) return true;
-  if (revoked.includes(required) || revoked.some(item => item.endsWith('.*') && required.startsWith(item.slice(0, -1)))) return false;
-  return granted.includes('*') || granted.includes(required) || granted.some(item => item.endsWith('.*') && required.startsWith(item.slice(0, -1)));
-}
+
 
 export class AuthorizationService {
   async resolve(user) {
@@ -116,7 +113,7 @@ export class AuthorizationService {
     )) return false;
     const role = context?.role || context?.app_metadata?.role;
     if (role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN' || role === 'admin') return true;
-    return hasPermission(context?.permissions || [], permission, revoked);
+    return isPermissionGranted({ subject: context, permission });
   }
 }
 
