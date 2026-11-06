@@ -27,6 +27,19 @@ test('new branch remains pending until explicit activation', { skip: getIsConnec
     assert.equal((await service.getBranches('tenant-ashvin-main', { status: 'ACTIVE' })).some(item => item.id === created.id), true);
 });
 
+test('requested default branch is applied only after activation', { skip: getIsConnected() }, async () => {
+    const service = new TenantService();
+    const created = await service.createBranch('tenant-ashvin-main', { ...validBranch('BLR-SAR-04'), isDefault: true });
+    assert.equal(created.status, 'PENDING');
+    assert.equal(created.isDefault, false);
+    assert.equal(created.makeDefaultOnActivation, true);
+
+    const activated = await service.activateBranch(created.id, 'tenant-ashvin-main');
+    assert.equal(activated.status, 'ACTIVE');
+    assert.equal(activated.isDefault, true);
+    assert.equal(activated.makeDefaultOnActivation, false);
+});
+
 test('branch activation rejects a different tenant', { skip: getIsConnected() }, async () => {
     const service = new TenantService();
     const created = await service.createBranch('tenant-ashvin-main', validBranch('BLR-SAR-02'));
