@@ -3,6 +3,7 @@ import { authenticateUser } from '../middleware/auth.js';
 import TenantMembership from '../models/TenantMembership.js';
 import TenantBranch from '../models/TenantBranch.js';
 import tenantService from '../services/tenant-service/TenantService.js';
+import { domainEvents } from '../shared/events/DomainEvents.js';
 
 const router = express.Router();
 router.use(authenticateUser);
@@ -131,6 +132,7 @@ router.post('/', async (req, res) => {
         branch.isDefault = true;
       }
     }
+    domainEvents.emitDomainEvent('BRANCH_CREATED', String(branch.id || branch._id), { status: branch.status || 'ACTIVE' }, req.user, scope.tenantId, String(branch.id || branch._id));
     return res.status(201).json({ success: true, branch, message: 'Branch created successfully.' });
   } catch (error) {
     if (error?.code === 11000) return res.status(409).json({ success: false, code: 'BRANCH_CODE_EXISTS', message: 'This branch code is already used by this pharmacy.' });
@@ -156,6 +158,7 @@ router.patch('/:branchId', async (req, res) => {
       await TenantBranch.updateOne({ _id: branch._id, tenantId: scope.tenantId, status: 'ACTIVE' }, { $set: { isDefault: true } });
       updated.isDefault = true;
     }
+    domainEvents.emitDomainEvent('BRANCH_UPDATED', String(branch._id), { status: updated.status || branch.status }, req.user, scope.tenantId, String(branch._id));
     return res.json({ success: true, branch: updated, message: 'Branch updated successfully.' });
   } catch (error) {
     if (error?.code === 11000) return res.status(409).json({ success: false, code: 'BRANCH_CODE_EXISTS', message: 'This branch code is already used by this pharmacy.' });
@@ -178,6 +181,7 @@ router.patch('/:branchId/status', async (req, res) => {
       await TenantBranch.updateOne({ _id: replacement._id, tenantId: scope.tenantId }, { $set: { isDefault: true } });
     }
     const updated = await TenantBranch.findOneAndUpdate({ _id: branch._id, tenantId: scope.tenantId }, { $set: { status, ...(status !== 'ACTIVE' ? { isDefault: false } : {}) } }, { new: true, runValidators: true }).lean();
+    domainEvents.emitDomainEvent('BRANCH_STATUS_CHANGED', String(updated._id), { status }, req.user, scope.tenantId, String(updated._id));
     return res.json({ success: true, branch: { ...updated, id: String(updated._id) }, message: status === 'ACTIVE' ? 'Branch activated.' : 'Branch deactivated.' });
   } catch (error) {
     return res.status(400).json({ success: false, code: 'BRANCH_STATUS_UPDATE_FAILED', message: error.message || 'Branch status could not be updated.' });
@@ -198,6 +202,7 @@ router.delete('/:branchId', async (req, res) => {
       await TenantBranch.updateOne({ _id: replacement._id, tenantId: scope.tenantId }, { $set: { isDefault: true } });
     }
     const updated = await TenantBranch.findOneAndUpdate({ _id: branch._id, tenantId: scope.tenantId }, { $set: { status: 'INACTIVE', isDefault: false, archivedAt: new Date(), archivedBy: clean(req.user?.sub) } }, { new: true }).lean();
+    domainEvents.emitDomainEvent('BRANCH_ARCHIVED', String(updated._id), { status: 'INACTIVE' }, req.user, scope.tenantId, String(updated._id));
     return res.json({ success: true, branch: { ...updated, id: String(updated._id) }, archived: true, message: 'Branch archived. Historical records are preserved.' });
   } catch (error) {
     return res.status(400).json({ success: false, code: 'BRANCH_ARCHIVE_FAILED', message: error.message || 'Branch could not be archived.' });
