@@ -615,7 +615,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="admin-screen admin-screen--fulfillment-board min-w-0 space-y-4">
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-base font-black text-slate-900">📦 Order Fulfillment Pipeline</h3>
