@@ -253,6 +253,17 @@ export class TenantService {
             throw new Error('A valid alphanumeric slug is required.');
         }
 
+        const latitude = data.geolocation?.latitude === '' || data.geolocation?.latitude == null ? null : Number(data.geolocation.latitude);
+        const longitude = data.geolocation?.longitude === '' || data.geolocation?.longitude == null ? null : Number(data.geolocation.longitude);
+        if ((latitude == null) !== (longitude == null)
+            || (latitude != null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90))
+            || (longitude != null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180))) {
+            const error = new Error('Provide both valid tenant latitude and longitude coordinates.');
+            error.statusCode = 400;
+            error.code = 'TENANT_GEOLOCATION_INVALID';
+            throw error;
+        }
+
         // Verify slug uniqueness
         const existing = await this.getTenantBySlug(slug);
         if (existing && existing.id !== id) {
