@@ -128,8 +128,11 @@ export default function AdminOfferZoneManager() {
             Offer Zone Curation &amp; Intelligent Refill Engine
           </h2>
           <p className="text-xs sm:text-sm text-indigo-100 max-w-2xl mt-1 leading-relaxed">
-            Configure which products appear in the customer Offer Zone, set promotional discounts, and review available catalogue pages with seasonal/category guidance and observed order quantities.
+            Curate medicine recommendations, review available sales signals and seasonal heuristics, and manage the campaigns that power customer-facing offers.
           </p>
+          <div className="mt-3 max-w-3xl rounded-2xl border border-white/20 bg-white/10 p-3 text-xs leading-relaxed text-white">
+            <strong>Where this is used:</strong> Saved campaigns marked Active are consumed by the customer Offer Zone and apply to eligible medicines at checkout. Seasonal suggestions are rule-based guidance, not AI predictions. The product toggles and discount/reason fields below are a local preview; publish customer offers by saving an Active campaign in the Saved Campaigns editor.
+          </div>
         </div>
 
         {/* Season & Analytics Badge */}
