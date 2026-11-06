@@ -142,7 +142,7 @@ router.post('/', async (req, res) => {
     }
     if (!await validateBranch(scope.tenantId, branchId, res)) return;
 
-    const profile = await UserProfile.findOne({ tenantId: scope.tenantId, email, status: 'ACTIVE' })
+    const profile = await UserProfile.findOne({ tenantId: scope.tenantId, status: 'ACTIVE', $or: [{ email }, { normalizedEmail: email }] })
       .select('userId supabaseId supabase_user_id name email')
       .lean();
     const userId = String(profile?.userId || profile?.supabaseId || profile?.supabase_user_id || '');
