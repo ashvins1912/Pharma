@@ -34,7 +34,11 @@ export default function TenantActivityFeed() {
     }
   }, [tenantId, branchId]);
 
-  useEffect(() => { void load(1); }, [load]);
+  useEffect(() => {
+    void load(1);
+    const refresh = window.setInterval(() => { void load(pagination.page || 1); }, 15000);
+    return () => window.clearInterval(refresh);
+  }, [load, pagination.page]);
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
