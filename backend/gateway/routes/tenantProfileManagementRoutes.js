@@ -4,6 +4,7 @@ import Vendor from '../../models/Vendor.js';
 import TenantMembership from '../../models/TenantMembership.js';
 import TenantBranch from '../../models/TenantBranch.js';
 import { authenticateUser } from '../../middleware/auth.js';
+import { domainEvents } from '../../shared/events/DomainEvents.js';
 
 const router = express.Router();
 const platformRoles = new Set(['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'ADMIN', 'admin']);
@@ -75,6 +76,7 @@ router.patch('/profile/edit-policy', authenticateUser, requireSuperAdmin, async 
     tenant.profileAudit.push({ action: 'PROFILE_EDIT_PERMISSION_CHANGED', changedFields: ['pharmacyProfileEditingEnabled'], actorId: String(req.user?.sub || req.user?.id || ''), actorRole: getRole(req), at: new Date() });
     if (tenant.profileAudit.length > 100) tenant.profileAudit = tenant.profileAudit.slice(-100);
     await tenant.save();
+    domainEvents.emitDomainEvent('TENANT_PROFILE_EDIT_POLICY_CHANGED', String(tenant._id), { status: req.body.pharmacyCanEdit ? 'ENABLED' : 'DISABLED' }, req.user, String(tenant._id));
     return res.json({ success: true, data: { pharmacyCanEdit: req.body.pharmacyCanEdit }, message: 'Pharmacy profile edit permission updated.' });
   } catch (error) {
     console.error('[TenantProfilePolicy] Update failed:', error);
@@ -194,6 +196,7 @@ router.patch('/profile', authenticateUser, async (req, res) => {
     tenant.profileAudit.push({ action: 'PHARMACY_PROFILE_UPDATED', changedFields, actorId: String(req.user?.sub || req.user?.id || ''), actorRole: getRole(req), at: new Date() });
     if (tenant.profileAudit.length > 100) tenant.profileAudit = tenant.profileAudit.slice(-100);
     await tenant.save();
+    domainEvents.emitDomainEvent('TENANT_PROFILE_UPDATED', String(tenant._id), { changedFieldCount: changedFields.length }, req.user, String(tenant._id));
 
     const vendor = await Vendor.findOne({ tenantId: String(tenant._id) }).sort({ updatedAt: -1 });
     if (vendor) {
