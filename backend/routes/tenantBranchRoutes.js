@@ -74,7 +74,9 @@ function normalizeBranchPayload(body = {}) {
     operatingHours: {
       open: clean(body.operatingHours?.open) || '08:00',
       close: clean(body.operatingHours?.close) || '22:00'
-    }
+    },
+    // A requested default is deferred until the pending branch is approved.
+    isDefault: body.isDefault === true
   };
 }
 
