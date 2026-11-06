@@ -255,7 +255,7 @@ export async function searchInventoryProducts({
       stock: product.stockQuantity, quantity: product.availableQuantity,
       stockStatus: product.availableQuantity > 10 ? 'IN_STOCK' : product.availableQuantity > 0 ? 'LOW_STOCK' : 'OUT_OF_STOCK',
       batchNumber: listingBatch?.batchNumber || '', expiryDate: listingBatch?.expiryDate || null,
-      batchCount: batches.length, expiredStockQuantity: product.expiredStockQuantity || 0,
+      batchCount: batches.length, expiredStockQuantity: showExpired ? (product.expiredStockQuantity || 0) : 0,
       expiredBatchAvailability: expiredBatches.map(batchDto),
       batchAvailability: batches.map(batchDto),
       tenantId: listingBatch?.tenantId || scopeTenantId,
