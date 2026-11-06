@@ -200,120 +200,144 @@ export default function TenantSelectorModal({ isOpen, onClose, preferredTenantId
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-      <div
+    <div className="fixed inset-0 z-[70] flex items-end justify-center overflow-y-auto bg-slate-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+      <section
         ref={modalRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="tenant-modal-title"
         tabIndex={-1}
-        className="pharma-modal-surface bg-white dark:bg-gray-900 rounded-3xl shadow-2xl max-w-lg w-full p-6 md:p-8 border border-gray-100 dark:border-gray-800 space-y-6"
+        className="flex max-h-[94dvh] min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl outline-none dark:border-slate-700 dark:bg-slate-900 sm:max-h-[min(90dvh,48rem)] sm:rounded-3xl"
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">{t('nearbyPharmacyFinder')}</span>
-            <h3 id="tenant-modal-title" className="text-xl font-black text-gray-900 dark:text-white mt-1">{t('selectActivePharmacy')}</h3>
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 dark:border-slate-800 sm:px-6 sm:py-5">
+          <div className="min-w-0">
+            <span className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-400">
+              <span aria-hidden="true">📍</span>{t('nearbyPharmacyFinder')}
+            </span>
+            <h3 id="tenant-modal-title" className="mt-1 text-xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-2xl">
+              {t('selectActivePharmacy')}
+            </h3>
+            <p className="mt-1 max-w-xl text-xs leading-5 text-slate-500 dark:text-slate-400 sm:text-sm">
+              {userLocation?.source === 'saved-address'
+                ? t('showingNearSavedAddress')
+                : userLocation?.lat != null
+                  ? t('showingNearCurrentLocation')
+                  : t('searchOrAddAddress')}
+            </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:text-gray-800 dark:hover:text-white transition"
+            aria-label="Close pharmacy selector"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
           >
-            ✕
+            <span aria-hidden="true">✕</span>
           </button>
-        </div>
+        </header>
 
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {userLocation?.source === 'saved-address'
-            ? t('showingNearSavedAddress')
-            : userLocation?.lat != null
-              ? t('showingNearCurrentLocation')
-              : t('searchOrAddAddress')}
-        </p>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
+          <label className="relative block">
+            <span className="sr-only">{t('searchDispensaryPlaceholder')}</span>
+            <svg className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('searchDispensaryPlaceholder')}
+              className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:bg-slate-800"
+            />
+          </label>
 
-        {/* Search Bar */}
-        <div className="relative">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("searchDispensaryPlaceholder")}
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
-          />
-          <svg className="w-4 h-4 text-gray-400 absolute left-3.5 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </div>
+          {error && (
+            <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm leading-5 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+              {error}
+            </div>
+          )}
 
-        {error && (
-          <div className="p-3 bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 text-xs rounded-xl">
-            {error}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="py-12 text-center">
-            <div className="inline-block w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mb-3" />
-            <p className="text-xs text-gray-400">{t('findingPharmacies')}</p>
-          </div>
-        ) : (
-          <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
-            {filteredTenants.map((tenant) => {
-              const isSelected = String(tenantId) === String(tenant._id);
-              return (
-                <div
-                  key={tenant._id}
-                  onClick={() => {
-                    setActiveTenant(tenant);
-                  }}
-                  className={`p-4 rounded-2xl border-2 transition cursor-pointer flex items-center gap-4 ${
-                    isSelected
-                      ? 'border-emerald-600 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-md'
-                      : 'border-gray-200 dark:border-gray-700 hover:border-emerald-400 bg-gray-50 dark:bg-gray-800/40'
-                  }`}
-                >
-                  <img
-                    src={tenant.shopPhotoUrl || 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80'}
-                    alt={tenant.shopName}
-                    className="w-16 h-16 rounded-xl object-cover border border-gray-200 dark:border-gray-700 flex-shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-gray-900 dark:text-white truncate">{tenant.shopName}</h4>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                      {tenant.address?.street}, {tenant.address?.city}
-                    </p>
-                    <div className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                      <span>📍</span>
-                      <span>{tenant.calculatedDistance == null ? (userLocation?.source === 'saved-address' ? t('matchesSavedAddress') : t('locationDistanceUnavailable')) : `${t('distanceLabel')}: ${tenant.calculatedDistance} ${t('kmAway')}`}</span>
-                    </div>
-                  </div>
-                  {isSelected && (
-                    <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
-                      ✓
-                    </div>
-                  )}
+          {loading ? (
+            <div className="flex min-h-48 flex-col items-center justify-center gap-3 py-10 text-center" role="status" aria-live="polite">
+              <span className="h-9 w-9 animate-spin rounded-full border-4 border-emerald-600 border-r-transparent" />
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{t('findingPharmacies')}</p>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {filteredTenants.map((tenant) => {
+                const id = String(tenant?._id || tenant?.id || '');
+                const isSelected = String(tenantId || '') === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => setActiveTenant(tenant)}
+                    className={`group flex w-full min-w-0 items-center gap-3 rounded-2xl border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 sm:gap-4 sm:p-4 ${
+                      isSelected
+                        ? 'border-emerald-500 bg-emerald-50/80 ring-2 ring-emerald-500/10 dark:border-emerald-500 dark:bg-emerald-950/30'
+                        : 'border-slate-200 bg-white hover:border-emerald-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-emerald-700 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <img
+                      src={tenant.shopPhotoUrl || 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80'}
+                      alt=""
+                      loading="lazy"
+                      className="h-12 w-12 shrink-0 rounded-xl border border-slate-200 bg-slate-100 object-cover sm:h-16 sm:w-16 dark:border-slate-700"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="min-w-0 break-words text-sm font-bold leading-5 text-slate-900 dark:text-white sm:text-base">
+                          {tenant.shopName || tenant.name || 'Pharmacy'}
+                        </span>
+                        {isSelected && (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200">
+                            <span aria-hidden="true">✓</span> Selected
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-1 block break-words text-xs leading-5 text-slate-500 dark:text-slate-400">
+                        {[tenant.address?.street, tenant.address?.city, tenant.address?.state, tenant.address?.zipCode || tenant.address?.pincode].filter(Boolean).join(', ') || 'Address not provided'}
+                      </span>
+                      <span className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                        <span aria-hidden="true">📍</span>
+                        {tenant.calculatedDistance == null
+                          ? (userLocation?.source === 'saved-address' ? t('matchesSavedAddress') : t('locationDistanceUnavailable'))
+                          : `${t('distanceLabel')}: ${tenant.calculatedDistance} ${t('kmAway')}`}
+                      </span>
+                    </span>
+                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-bold ${
+                      isSelected
+                        ? 'border-emerald-600 bg-emerald-600 text-white'
+                        : 'border-slate-300 text-transparent group-hover:border-emerald-400 dark:border-slate-600'
+                    }`} aria-hidden="true">✓</span>
+                  </button>
+                );
+              })}
+              {filteredTenants.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center dark:border-slate-700 dark:bg-slate-800/50">
+                  <span className="text-2xl" aria-hidden="true">🏥</span>
+                  <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    {searchQuery.trim() ? t('noPharmacyMatches') : t('noActivePharmaciesArea')}
+                  </p>
+                  {searchQuery.trim() && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('pleaseTryAgain')}</p>}
                 </div>
-              );
-            })}
-            {filteredTenants.length === 0 && (
-              <div className="py-8 text-center text-sm text-gray-400">
-                {searchQuery.trim()
-                  ? `${t('noPharmacyMatches')} "${searchQuery}". ${t('pleaseTryAgain')}`
-                  : t('noActivePharmaciesArea')}
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
 
-        <div className="pt-2 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+        <footer className="shrink-0 border-t border-slate-100 bg-white/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] dark:border-slate-800 dark:bg-slate-900/95 sm:px-6 sm:py-4">
           <button
+            type="button"
             onClick={onClose}
-            disabled={!tenantId || !tenants.some(tenant => String(tenant._id) === String(tenantId))}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold rounded-2xl shadow transition"
+            disabled={!tenantId || !tenants.some(tenant => String(tenant?._id || tenant?.id || '') === String(tenantId))}
+            className="flex min-h-12 w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none dark:disabled:bg-slate-700 dark:disabled:text-slate-400"
           >
             {t('confirmAndViewCatalogue')}
           </button>
-        </div>
-      </div>
+        </footer>
+      </section>
     </div>
   );
+}
 }
