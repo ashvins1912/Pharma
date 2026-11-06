@@ -23,6 +23,7 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
     } = useRiderOnboarding({
         onSuccess: (data) => {
             if (onRiderAdded) onRiderAdded(data.rider);
+            window.dispatchEvent(new Event('pharma:activity-updated'));
             onClose();
         }
     });
