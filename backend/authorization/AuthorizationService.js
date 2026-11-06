@@ -62,7 +62,10 @@ export class AuthorizationService {
     }
     const rolePermissions = await getRolePermissions(role);
     const permissions = new Set(rolePermissions);
-    const revokedPermissions = new Set();
+    const revokedPermissions = new Set([
+      ...(Array.isArray(user?.revokedPermissions) ? user.revokedPermissions : []),
+      ...(Array.isArray(user?.app_metadata?.revokedPermissions) ? user.app_metadata.revokedPermissions : [])
+    ]);
     for (const permission of membership?.permissions || []) permissions.add(permission);
     if (!membership) for (const permission of user?.permissions || []) permissions.add(permission);
 
