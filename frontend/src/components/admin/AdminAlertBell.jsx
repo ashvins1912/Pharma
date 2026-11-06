@@ -55,7 +55,7 @@ export default function AdminAlertBell({
                 </h4>
                 <p className="text-[10px] text-slate-400">{t('safetyThresholdMonitor')}</p>
                 <p className={`text-[10px] mt-1 ${alertError ? 'text-rose-600' : 'text-slate-400'}`} role="status" aria-live="polite">
-                  {alertLoading ? 'Checking live inventory…' : alertError ? 'Inventory alerts could not be verified' : 'Live safety checks · refreshes every minute'}
+                  {alertLoading ? 'Checking live inventory…' : alertError ? `Inventory alerts unavailable: ${alertError}` : 'Live safety checks · refreshes every minute'}
                 </p>
               </div>
               {canViewInventoryAlerts && (
