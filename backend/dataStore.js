@@ -2015,6 +2015,8 @@ export const dataStore = {
         if (!tenantId) return null;
         const safeUpdates = { ...updateData };
         delete safeUpdates.tenantId;
+        delete safeUpdates.rider;
+        delete safeUpdates.assignmentDetails;
         if (getIsConnected()) {
             const order = await Order.findOne({ _id: orderId, tenantId: String(tenantId) });
             if (!order) return null;
