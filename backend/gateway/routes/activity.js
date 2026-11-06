@@ -2,6 +2,7 @@ import express from 'express';
 import { authenticateUser } from '../../middleware/auth.js';
 import { queryActivity } from '../../middleware/activityAudit.js';
 import TenantMembership from '../../models/TenantMembership.js';
+import { resolveUserContext } from '../../middleware/context.js';
 
 const router = express.Router();
 router.use(authenticateUser);
