@@ -24,11 +24,14 @@ router.get('/', async (req, res) => {
     let branchId = String(req.query.branchId || req.get('x-branch-id') || req.context?.branchId || '').trim();
     if (!platformAdmin) {
       const membership = await TenantMembership.findOne({
-        userId: String(req.user?.sub || ''),
+        userId: String(req.user?.sub || req.user?.id || ''),
         tenantId,
         status: 'ACTIVE'
       }).lean();
       if (!membership) return res.status(403).json({ success: false, code: 'TENANT_MEMBERSHIP_REQUIRED', message: 'An active pharmacy membership is required.' });
+      if (!['TENANT_OWNER', 'TENANT_ADMIN'].includes(String(membership.role || '').toUpperCase())) {
+        return res.status(403).json({ success: false, code: 'TENANT_ADMIN_REQUIRED', message: 'Only pharmacy owners and tenant administrators can view the activity audit.' });
+      }
       if (membership.branchId) {
         if (branchId && branchId !== String(membership.branchId)) return res.status(403).json({ success: false, code: 'BRANCH_SCOPE_FORBIDDEN', message: 'You cannot view another branch activity.' });
         branchId = String(membership.branchId);
