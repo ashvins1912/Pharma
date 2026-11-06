@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { buildCatalogQuery, fetchMedicineCatalog } from '../api/medicineCatalogService';
 
 const pendingRequests = new Map();
+let requestSequence = 0;
 
 function makeKey(params) {
   return JSON.stringify(Object.keys(params).sort().reduce((result, key) => {
@@ -20,6 +21,7 @@ export const useCatalogStore = create((set, get) => ({
   isSearching: false,
   activeKey: null,
   lastLoadedAt: 0,
+  activeRequestId: null,
 
   loadCatalog: async (filters, options = {}) => {
     let params;
@@ -35,14 +37,18 @@ export const useCatalogStore = create((set, get) => ({
       return { medicines: current.medicines, total: current.total, totalPages: current.totalPages, cached: true };
     }
 
-    if (pendingRequests.has(key)) {
+    if (!options.force && pendingRequests.has(key)) {
       set({ activeKey: key, loading: true, error: '' });
       return pendingRequests.get(key);
     }
 
     // Clear cross-pharmacy data immediately. Never flash the previous pharmacy's medicines.
+    // Each request owns a sequence token so even same-key forced refreshes cannot
+    // be overwritten by an older response that happens to finish later.
+    const requestId = ++requestSequence;
     set({
       activeKey: key,
+      activeRequestId: requestId,
       ...(current.activeKey !== key ? { medicines: [], total: 0, totalPages: 1 } : {}),
       loading: true,
       error: ''
@@ -50,7 +56,7 @@ export const useCatalogStore = create((set, get) => ({
 
     const request = fetchMedicineCatalog(params, options)
       .then(result => {
-        if (get().activeKey !== key) return result;
+        if (get().activeKey !== key || get().activeRequestId !== requestId) return result;
         set({
           medicines: result.medicines,
           total: result.total,
@@ -64,7 +70,7 @@ export const useCatalogStore = create((set, get) => ({
         return result;
       })
       .catch(error => {
-        if (get().activeKey === key) {
+        if (get().activeKey === key && get().activeRequestId === requestId) {
           set({
             medicines: [],
             total: 0,
@@ -83,6 +89,6 @@ export const useCatalogStore = create((set, get) => ({
   },
 
   clearCatalog: message => {
-    set({ medicines: [], total: 0, totalPages: 1, loading: false, error: message || '', activeKey: null, lastLoadedAt: 0 });
+    set({ medicines: [], total: 0, totalPages: 1, loading: false, error: message || '', activeKey: null, activeRequestId: null, lastLoadedAt: 0 });
   }
 }));
