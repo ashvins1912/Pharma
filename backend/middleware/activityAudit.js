@@ -38,7 +38,7 @@ function makeAuditRecord(req, statusCode) {
     actorRole: String(actor.app_metadata?.role || actor.role || context.role || 'user'),
     action,
     entityType,
-    entityId: idParam ? String(idParam[1]) : null,
+    entityId: idParam ? String(idParam[1]) : (normalized.find(part => /^[a-f0-9]{16,}$/i.test(part)) || null),
     method,
     path: pathname.slice(0, 240),
     statusCode,
