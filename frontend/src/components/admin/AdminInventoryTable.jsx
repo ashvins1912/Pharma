@@ -162,7 +162,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
+    <div className="admin-screen admin-screen--inventory bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
       {/* Header & Controls */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
