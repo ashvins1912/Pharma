@@ -46,3 +46,50 @@ test('tenant ownership filters are fail-closed and cannot be built without a ten
         orderStatus: 'Ready to Dispatch', tenantId: 'tenant-b'
     });
 });
+
+test('delivery repository delegates tenant and branch predicates to the data adapter', async () => {
+    const calls = [];
+    const row = {
+        _id: 'scoped-order',
+        tenantId: 'tenant-a',
+        branchId: 'branch-a',
+        orderStatus: 'Ready to Dispatch',
+        items: []
+    };
+    const store = {
+        getOrderById: async (id, scope) => {
+            calls.push({ operation: 'get', id, scope });
+            return row;
+        },
+        getAllOrders: async options => {
+            calls.push({ operation: 'list', options });
+            return [row, { ...row, _id: 'other-tenant-order', tenantId: 'tenant-b' }];
+        },
+        updateOrderForTenant: async (id, tenantId, updates) => {
+            calls.push({ operation: 'update', id, tenantId, updates });
+            return { ...row, ...updates, tenantId };
+        }
+    };
+    const repository = new InMemoryOrderRepository(store);
+
+    assert.equal((await repository.findById('scoped-order', 'tenant-a')).id, 'scoped-order');
+    assert.equal(calls[0].scope.tenantId, 'tenant-a');
+
+    const listed = await repository.findAll({
+        tenantId: 'tenant-a',
+        branchId: 'branch-a',
+        orderStatus: 'Ready to Dispatch',
+        assignmentType: 'Auto',
+        assignedRiderId: 'rider-a'
+    });
+    assert.equal(calls[1].options.tenantId, 'tenant-a');
+    assert.equal(calls[1].options.branchId, 'branch-a');
+    assert.equal(calls[1].options.orderStatus, 'Ready to Dispatch');
+    assert.equal(calls[1].options.assignedRiderId, 'rider-a');
+    assert.equal(listed.length, 1);
+
+    const updated = await repository.update('scoped-order', { orderStatus: 'Dispatched' }, 'tenant-a');
+    assert.equal(updated.orderStatus, 'Dispatched');
+    assert.equal(calls[2].operation, 'update');
+    assert.equal(calls[2].tenantId, 'tenant-a');
+});
