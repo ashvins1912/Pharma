@@ -547,6 +547,18 @@ test('pharmacy profile reads are available to tenant admins but policy changes r
   assert.equal(isGatewayPermissionAllowed({ role: 'SUPER_ADMIN' }, 'tenants.manage'), true);
 });
 
+test('tenant staff membership and activity endpoints are registered with tenant-scoped gateway permissions', () => {
+  assert.equal(resolveGatewayCapability('GET', '/api/v1/tenants/tenant-1/memberships'), 'tenant.branches.read');
+  assert.equal(resolveGatewayCapability('POST', '/api/v1/tenants/tenant-1/memberships'), 'tenant.branches.manage');
+  assert.equal(resolveGatewayCapability('PATCH', '/api/v1/tenants/tenant-1/memberships/member-1'), 'tenant.branches.manage');
+  assert.equal(resolveGatewayCapability('DELETE', '/api/v1/tenants/tenant-1/memberships/member-1'), 'tenant.branches.manage');
+  assert.equal(resolveGatewayCapability('GET', '/api/v1/activity?page=1'), 'tenant.branches.read');
+  for (const role of ['TENANT_ADMIN', 'TENANT_OWNER', 'OWNER']) {
+    assert.equal(isGatewayPermissionAllowed({ role }, 'tenant.branches.read'), true);
+    assert.equal(isGatewayPermissionAllowed({ role }, 'tenant.branches.manage'), true);
+  }
+});
+
 test('tenant branch CRUD endpoints are registered and tenant admins are allowed by gateway policy', () => {
   assert.equal(resolveGatewayCapability('GET', '/api/tenant/branches?page=1'), 'tenant.branches.read');
   assert.equal(resolveGatewayCapability('POST', '/api/tenant/branches'), 'tenant.branches.manage');
