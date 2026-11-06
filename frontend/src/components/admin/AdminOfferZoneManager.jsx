@@ -90,7 +90,7 @@ export default function AdminOfferZoneManager() {
       });
     });
 
-    const catalogItems = (Array.isArray(medicines) ? medicines : []).map((med, idx) => {
+    const catalogItems = (Array.isArray(medicines) ? medicines : []).map(med => {
       const name = med.name || med.title || 'Medicine';
       const category = (med.category || 'General').toLowerCase();
       const soldCount = salesFrequencyMap[name] || 0;
@@ -108,7 +108,7 @@ export default function AdminOfferZoneManager() {
         seasonReason = 'Seasonal category match: allergy and digestion care.';
       }
 
-      const override = offerZoneOverrides[med.id || med._id] ?? (idx < 6);
+      const override = offerZoneOverrides[med.id || med._id] ?? false;
       const discount = discountOverrides[med.id || med._id] ?? (isSeasonalRecommended ? 25 : 20);
       const reason = reasonOverrides[med.id || med._id] ?? seasonReason;
 
@@ -188,14 +188,14 @@ export default function AdminOfferZoneManager() {
             <div className="text-sm font-black text-white">{seasonName}</div>
           </div>
           <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3">
-            <div className="text-[10px] uppercase font-bold text-indigo-200">{t('activeOfferZoneItems')}</div>
+            <div className="text-[10px] uppercase font-bold text-indigo-200">Preview selections</div>
             <div className="text-sm font-black text-white">
-              {catalogItems.filter(i => i.isInOfferZone).length} Products Listed
+              {catalogItems.filter(i => i.isInOfferZone).length} Selected (preview only)
             </div>
           </div>
           <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3">
-            <div className="text-[10px] uppercase font-bold text-indigo-200">{t('recommendationEngine')}</div>
-            <div className="text-sm font-black text-emerald-300">{t('activeSalesSeasonSynced')}</div>
+            <div className="text-[10px] uppercase font-bold text-indigo-200">Recommendation logic</div>
+            <div className="text-sm font-black text-emerald-300">Rule-based</div>
           </div>
         </div>
       </div>
