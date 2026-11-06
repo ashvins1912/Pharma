@@ -98,7 +98,7 @@ router.get('/', async (req, res) => {
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 50));
     const status = clean(req.query.status).toUpperCase();
-    const all = await tenantService.getBranches(scope.tenantId, status && ['ACTIVE', 'INACTIVE', 'SUSPENDED'].includes(status) ? { status } : {});
+    const all = await tenantService.getBranches(scope.tenantId, status && ['PENDING', 'ACTIVE', 'INACTIVE', 'SUSPENDED'].includes(status) ? { status } : {});
     const branches = scope.platform || !scope.membership?.branchId
       ? all
       : all.filter(branch => String(branch.id || branch._id) === String(scope.membership.branchId));
@@ -120,17 +120,8 @@ router.post('/', async (req, res) => {
     const duplicate = await TenantBranch.findOne({ tenantId: scope.tenantId, code: data.code }).lean();
     if (duplicate) return res.status(409).json({ success: false, code: 'BRANCH_CODE_EXISTS', message: 'This branch code is already used by this pharmacy.' });
     const branch = await tenantService.createBranch(scope.tenantId, data, { userId: req.user?.sub });
-    if (req.body?.isDefault) {
-      await TenantBranch.updateMany({ tenantId: scope.tenantId }, { $set: { isDefault: false } });
-      await TenantBranch.updateOne({ _id: branch.id, tenantId: scope.tenantId }, { $set: { isDefault: true } });
-      branch.isDefault = true;
-    } else {
-      const hasDefault = await TenantBranch.exists({ tenantId: scope.tenantId, status: 'ACTIVE', isDefault: true });
-      if (!hasDefault) {
-        await TenantBranch.updateOne({ _id: branch.id, tenantId: scope.tenantId }, { $set: { isDefault: true } });
-        branch.isDefault = true;
-      }
-    }
+    // Pending branches are not eligible for the customer-facing default branch.
+    branch.isDefault = false;
     return res.status(201).json({ success: true, branch, message: 'Branch created successfully.' });
   } catch (error) {
     if (error?.code === 11000) return res.status(409).json({ success: false, code: 'BRANCH_CODE_EXISTS', message: 'This branch code is already used by this pharmacy.' });
@@ -171,6 +162,15 @@ router.patch('/:branchId/status', async (req, res) => {
     if (!['ACTIVE', 'INACTIVE', 'SUSPENDED'].includes(status)) return res.status(400).json({ success: false, code: 'INVALID_BRANCH_STATUS', message: 'Choose ACTIVE, INACTIVE or SUSPENDED.' });
     const branch = await TenantBranch.findOne({ _id: clean(req.params.branchId), tenantId: scope.tenantId }).lean();
     if (!branch) return res.status(404).json({ success: false, code: 'BRANCH_NOT_FOUND', message: 'Branch not found for this pharmacy.' });
+    if (branch.status === 'PENDING' && status === 'ACTIVE') {
+      const activated = await tenantService.activateBranch(branch._id, scope.tenantId, { userId: req.user?.sub });
+      const hasDefault = await TenantBranch.exists({ tenantId: scope.tenantId, status: 'ACTIVE', isDefault: true });
+      if (!hasDefault) {
+        await TenantBranch.updateOne({ _id: activated.id || activated._id, tenantId: scope.tenantId }, { $set: { isDefault: true } });
+        activated.isDefault = true;
+      }
+      return res.json({ success: true, branch: activated, message: 'Branch reviewed and activated.' });
+    }
     if (branch.isTenantLocation) return res.status(409).json({ success: false, code: 'TENANT_LOCATION_MANAGED_BY_PROFILE', message: 'Change the tenant branch setting in Tenant Profile instead of deactivating the tenant location.' });
     if (status !== 'ACTIVE' && branch.isDefault) {
       const replacement = await TenantBranch.findOne({ tenantId: scope.tenantId, status: 'ACTIVE', _id: { $ne: branch._id } }).sort({ createdAt: 1 }).lean();
