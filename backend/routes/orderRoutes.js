@@ -1745,6 +1745,11 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
             }
         }
 
+        domainEvents.emitDomainEvent('ORDER_STATUS_CHANGED', String(orderId), {
+            status: newStatus,
+            orderNumber: updatedOrder.orderNumber || String(orderId)
+        }, req.user, String(targetOrder.tenantId), updatedOrder.branchId || updatedOrder.branch?.id || null);
+
         res.json({
             message: `Order transitioned to ${newStatus}.${assignmentMessage}`,
             order: updatedOrder,
