@@ -21,11 +21,15 @@ function makeAuditRecord(req, statusCode) {
   const normalized = pathname.split('/').filter(part => part && !/^v\\d+$/i.test(part) && !['api', 'admin'].includes(part.toLowerCase()));
   const { entityType, actionPart } = describeResource(pathname);
   const method = req.method.toUpperCase();
+  const decision = String(req.body?.reviewDecision || req.body?.orderStatus || req.body?.newStatus || req.body?.status || req.body?.targetStatus || '').toLowerCase();
+  const decisionAction = decision.includes('reject') ? 'REJECT'
+    : (decision.includes('approv') || decision === 'accepted' || decision === 'accept') ? 'ACCEPT'
+      : null;
   const action = actionPart
     ? actionPart.toUpperCase()
-    : method === 'POST' ? 'CREATE'
+    : decisionAction || (method === 'POST' ? 'CREATE'
       : method === 'DELETE' ? 'DELETE'
-        : 'UPDATE';
+        : 'UPDATE');
   const actor = req.user || {};
   const context = req.context || {};
   const tenantId = context.tenantId || context.tenant?.id || req.get?.('x-tenant-id') || req.body?.tenantId || req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
