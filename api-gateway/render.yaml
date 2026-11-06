@@ -2,9 +2,9 @@ services:
   - type: web
     name: ashvin-pharmacy-api-gateway
     runtime: node
-    rootDir: api-gateway
-    buildCommand: npm install
-    startCommand: npm start
+    rootDir: .
+    buildCommand: npm install --workspace api-gateway --workspace packages/service-kernel
+    startCommand: npm --workspace api-gateway start
     numInstances: 1
     healthCheckPath: /ready
     envVars:

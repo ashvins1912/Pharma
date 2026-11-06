@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { verifyPharmaAccessToken, verifyGatewayTrustedRequestToken } from '../security/pharmaToken.js';
 import { authorizationService } from '../authorization/AuthorizationService.js';
+import { authorize } from './authorization.js';
 import { resolveApiCapability } from '../authorization/ApiCapabilityRegistry.js';
 import { env } from '../config/env.js';
 
@@ -285,21 +286,7 @@ export const isPharmacyOrAdmin = (req, res, next) => {
     });
 };
 
-export const requirePermission = (permission) => async (req, res, next) => {
-    try {
-        const role = req.user?.app_metadata?.role || req.user?.role || req.context?.role;
-        if (role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN' || role === 'admin') return next();
-        const allowed = authorizationService.isAllowed(req.user, permission);
-        if (allowed) return next();
-        return res.status(403).json({
-            success: false,
-            code: 'FORBIDDEN',
-            message: 'You do not have permission to perform this action.',
-            permission
-        });
-    } catch (error) {
-        return next(error);
-    }
-};
+// Permission checks use the shared policy middleware; explicit revocations always win.
+export const requirePermission = authorize;
 
 export default { authenticateUser, requireSuperAdmin, isAdmin, isPharmacyOrAdmin, requirePermission };

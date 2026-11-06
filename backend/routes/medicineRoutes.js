@@ -7,6 +7,7 @@ import ProductDiscoveryService from '../services/ProductDiscoveryService.js';
 import SearchMetricIngestionService from '../services/SearchMetricIngestionService.js';
 import { inventoryClient } from '../services/inventory-client/InventoryClient.js';
 import { tenantService } from '../services/tenant-service/TenantService.js';
+import { authorizationService } from '../authorization/AuthorizationService.js';
 
 const router = express.Router();
 const productDiscovery = new ProductDiscoveryService();
@@ -63,38 +64,22 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
 });
 
 const getVerifiedInventoryScope = async (req, requiredPermission = 'inventory.read') => {
-    const role = String(req.user?.app_metadata?.role || req.user?.role || req.context?.role || '').toUpperCase();
-    const platformRoles = new Set(['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN']);
-    const readRoles = new Set([
-        'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF',
-        'PHARMACY', 'INVENTORY_MANAGER'
-    ]);
-    const writeRoles = new Set([
-        'TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'INVENTORY_MANAGER'
-    ]);
-    const permissions = [
-        ...(Array.isArray(req.user?.permissions) ? req.user.permissions : []),
-        ...(Array.isArray(req.user?.app_metadata?.permissions) ? req.user.app_metadata.permissions : []),
-        ...(Array.isArray(req.context?.permissions) ? req.context.permissions : [])
-    ];
-    const hasPermission = permissions.includes('*') || permissions.includes(requiredPermission);
-    const roleAllowed = requiredPermission === 'inventory.write' ? writeRoles.has(role) : readRoles.has(role);
-    const isPlatformAdmin = platformRoles.has(role);
-    if (!isPlatformAdmin && !roleAllowed && !hasPermission) {
+    const authz = req.authz || await authorizationService.resolve(req.user);
+    req.authz = authz;
+    if (!authorizationService.isAllowed(authz, requiredPermission)) {
         const error = new Error(`You do not have permission to ${requiredPermission === 'inventory.write' ? 'manage' : 'view'} pharmacy inventory.`);
         error.statusCode = 403;
+        error.code = 'FORBIDDEN';
         throw error;
     }
 
-    // Browser-selected scope is a request, not authorization evidence. Resolve it
-    // against the signed identity and the authoritative active TenantMembership.
+    // Browser-selected scope is a request, never authorization evidence.
+    // Signed tenant/branch context is resolved against active membership first.
     const requestedTenantId = String(
-        req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId
-        || req.get('x-tenant-id') || req.body?.tenantId || req.query?.tenantId || ''
+        authz.tenantId || req.get('x-tenant-id') || req.body?.tenantId || req.query?.tenantId || ''
     ).trim();
     const requestedBranchId = String(
-        req.user?.branchId || req.user?.app_metadata?.branchId || req.context?.branchId
-        || req.get('x-branch-id') || req.body?.branchId || req.query?.branchId || ''
+        authz.branchId || req.get('x-branch-id') || req.body?.branchId || req.query?.branchId || ''
     ).trim();
 
     if (!requestedTenantId || !requestedBranchId) {
@@ -104,36 +89,12 @@ const getVerifiedInventoryScope = async (req, requiredPermission = 'inventory.re
         throw error;
     }
 
-    if (!isPlatformAdmin) {
-        const userId = String(req.user?.sub || req.user?.id || '').trim();
-        if (!userId) {
-            const error = new Error('An authenticated pharmacy membership is required for inventory access.');
-            error.statusCode = 403;
-            error.code = 'TENANT_MEMBERSHIP_REQUIRED';
-            throw error;
-        }
-        const memberships = await tenantService.getMembershipsForUser(userId);
-        const membership = memberships.find(item =>
-            String(item.tenantId) === requestedTenantId && item.status === 'ACTIVE'
-        );
-        if (!membership) {
-            const error = new Error('Your account does not have active access to the selected pharmacy.');
-            error.statusCode = 403;
-            error.code = 'TENANT_ACCESS_DENIED';
-            throw error;
-        }
-
-        // A branch-bound staff member cannot switch branches. Tenant-wide
-        // memberships (branchId=null) may select any active branch in the tenant.
-        const tokenBranchId = String(req.user?.branchId || req.user?.app_metadata?.branchId || '').trim();
-        const membershipBranchId = String(membership.branchId || '').trim();
-        const allowedBranchId = tokenBranchId || membershipBranchId;
-        if (allowedBranchId && allowedBranchId !== requestedBranchId) {
-            const error = new Error('You are not authorized to access the selected pharmacy branch.');
-            error.statusCode = 403;
-            error.code = 'BRANCH_ACCESS_DENIED';
-            throw error;
-        }
+    if (!authorizationService.isPlatformContext(authz)
+        && !authorizationService.canAccessTenantResource(authz, requestedTenantId, requestedBranchId)) {
+        const error = new Error('Your account does not have active access to the selected pharmacy branch.');
+        error.statusCode = 403;
+        error.code = 'TENANT_ACCESS_DENIED';
+        throw error;
     }
 
     const [tenant, branch] = await Promise.all([

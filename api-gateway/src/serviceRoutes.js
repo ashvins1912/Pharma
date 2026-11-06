@@ -1,3 +1,4 @@
+import { isPermissionGranted } from '@pharma/service-kernel';
 import express from 'express';
 import { authenticateUser, requireAdmin, requireInventoryImportPermission } from './authenticateUser.js';
 import { config } from './config.js';
@@ -5,9 +6,6 @@ import { proxyRequest } from './proxy.js';
 import { createBackendAuthToken, createServiceToken } from './serviceAuth.js';
 
 function hasScopePermission(user, scope) {
-  const role = user?.app_metadata?.role || user?.role || 'customer';
-  const permissions = Array.isArray(user?.permissions) ? user.permissions : (user?.app_metadata?.permissions || []);
-  const revoked = Array.isArray(user?.revokedPermissions) ? user.revokedPermissions : (user?.app_metadata?.revokedPermissions || []);
   const aliases = {
     'inventory.read': ['inventory.view'],
     'inventory.write': ['inventory.update'],
@@ -17,21 +15,16 @@ function hasScopePermission(user, scope) {
     'prescription.write': ['prescriptions.write'],
     'prescription.review': ['prescriptions.review']
   };
-  // Explicit revocations apply to both canonical and legacy permission names,
-  // and must win over wildcard/admin grants.
-  const permissionNames = [scope, ...(aliases[scope] || [])];
-  if (revoked.some(item => permissionNames.some(name =>
-    item === name || (item.endsWith('.*') && name.startsWith(item.slice(0, -1)))
-  ))) return false;
-  if (['admin', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)) return true;
-  if (role === 'customer' && (
-    scope.startsWith('customer.profile.')
+  const customerDefaults = scope.startsWith('customer.profile.')
     || ['orders.create', 'orders.read', 'prescription.read', 'prescription.write'].includes(scope)
-  )) return true;
-  if (permissions.includes('*') || permissions.includes(scope)) return true;
-  if ((aliases[scope] || []).some(permission => permissions.includes(permission))) return true;
-  return permissions.some(grant => grant.endsWith('.*')
-    && permissionNames.some(name => name.startsWith(grant.slice(0, -1))));
+    ? [scope]
+    : [];
+  return isPermissionGranted({
+    subject: user,
+    permission: scope,
+    aliases,
+    customerDefaultPermissions: customerDefaults
+  });
 }
 
 function createServiceHandler({ audience, getScope, target, includeCustomerProfile = false, validateTenantBranch = false }, gatewayConfig) {
