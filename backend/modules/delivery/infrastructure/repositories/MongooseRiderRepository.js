@@ -72,7 +72,7 @@ export class MongooseRiderRepository extends IRiderRepository {
             query.status = compatibleStatuses ? { $in: compatibleStatuses } : filter.status;
         }
         if (filter.search) {
-            const escapedSearch = String(filter.search).trim().replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+            const escapedSearch = String(filter.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             if (escapedSearch) {
                 query.$or = [
                     { name: { $regex: escapedSearch, $options: 'i' } },
