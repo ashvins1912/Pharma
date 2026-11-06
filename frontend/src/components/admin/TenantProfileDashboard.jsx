@@ -373,7 +373,11 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
         {personnel.length ? personnel.map(member => (
           <div key={member._id || member.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 p-3">
             <div><p className="text-sm font-bold text-slate-800">{member.name || 'Name not added'}</p><p className="text-xs text-slate-500">{member.email || 'Email not added'}</p></div>
-            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">{member.role}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">{member.role}</span>
+              <span className="text-[10px] text-slate-500">{member.branchId ? branches.find(branch => String(branch.id || branch._id) === String(member.branchId))?.name || member.branchId : 'All branches'}</span>
+              <span className="text-[10px] text-slate-400">{member.status || 'ACTIVE'}</span>
+            </div>
           </div>
         )) : <p className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-500">No personnel records are available yet.</p>}
       </section>
