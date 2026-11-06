@@ -217,13 +217,13 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-7 sm:py-5">
             <div className="grid gap-4 sm:grid-cols-2">
             <label><span className={labelClass}>Branch name *</span><input required maxLength={100} className={fieldClass} value={form.name} onChange={e => setField('name', e.target.value)} /></label>
-            <label><span className={labelClass}>Branch code *</span><input required maxLength={20} className={fieldClass} value={form.code} onChange={e => setField('code', e.target.value.toUpperCase())} /></label>
-            <label><span className={labelClass}>Phone</span><input className={fieldClass} value={form.phone || ''} onChange={e => setField('phone', e.target.value)} /></label>
-            <label><span className={labelClass}>Email</span><input type="email" className={fieldClass} value={form.email || ''} onChange={e => setField('email', e.target.value)} /></label>
-            <label className="sm:col-span-2"><span className={labelClass}>Street address</span><input className={fieldClass} value={form.address?.street || ''} onChange={e => setAddress('street', e.target.value)} /></label>
-            <label><span className={labelClass}>City</span><input className={fieldClass} value={form.address?.city || ''} onChange={e => setAddress('city', e.target.value)} /></label>
-            <label><span className={labelClass}>State</span><input className={fieldClass} value={form.address?.state || ''} onChange={e => setAddress('state', e.target.value)} /></label>
-            <label><span className={labelClass}>PIN code</span><input className={fieldClass} value={form.address?.pincode || ''} onChange={e => setAddress('pincode', e.target.value)} /></label>
+            <label><span className={labelClass}>Branch code *</span><input required minLength={2} maxLength={20} pattern="[A-Za-z0-9_-]{2,20}" className={fieldClass} value={form.code} onChange={e => setField('code', e.target.value.toUpperCase())} /></label>
+            <label><span className={labelClass}>Phone *</span><input required type="tel" className={fieldClass} value={form.phone || ''} onChange={e => setField('phone', e.target.value)} /></label>
+            <label><span className={labelClass}>Email *</span><input required type="email" className={fieldClass} value={form.email || ''} onChange={e => setField('email', e.target.value)} /></label>
+            <label className="sm:col-span-2"><span className={labelClass}>Street address *</span><input required minLength={5} maxLength={200} className={fieldClass} value={form.address?.street || ''} onChange={e => setAddress('street', e.target.value)} /></label>
+            <label><span className={labelClass}>City *</span><input required minLength={2} className={fieldClass} value={form.address?.city || ''} onChange={e => setAddress('city', e.target.value)} /></label>
+            <label><span className={labelClass}>State *</span><input required minLength={2} className={fieldClass} value={form.address?.state || ''} onChange={e => setAddress('state', e.target.value)} /></label>
+            <label><span className={labelClass}>PIN code *</span><input required minLength={6} maxLength={6} pattern="[0-9]{6}" inputMode="numeric" className={fieldClass} value={form.address?.pincode || ''} onChange={e => setAddress('pincode', e.target.value)} /></label>
             <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div><p className="text-sm font-bold text-slate-800">Branch geolocation</p><p className="text-xs text-slate-500">Coordinates are used to identify this branch on maps and for location-based services.</p></div>
