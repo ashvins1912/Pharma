@@ -2,24 +2,26 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import { useLanguage } from '../../context/LanguageContext';
+import SavedCampaignsEditor from './SavedCampaignsEditor';
 
 export default function AdminOfferZoneManager() {
   const { t } = useLanguage();
-  const { medicines, orders } = useApp();
+  const { medicines, orders, page, setPage, totalPages: catalogTotalPages, totalMedicines, searchQuery, setSearchQuery, selectedCategory, setSelectedCategory } = useApp();
   const { addToast } = useToast();
 
-  const [search, setSearch] = useState('');
-  const [filterCategory, setFilterCategory] = useState('All');
+  const [search, setSearch] = useState(searchQuery || '');
+  const [filterCategory, setFilterCategory] = useState(selectedCategory || 'All');
   const [offerZoneOverrides, setOfferZoneOverrides] = useState({});
   const [discountOverrides, setDiscountOverrides] = useState({});
   const [reasonOverrides, setReasonOverrides] = useState({});
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 20;
+  const currentPage = page;
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [search, filterCategory]);
+    setSearchQuery(search);
+    setSelectedCategory(filterCategory);
+    setPage(1);
+  }, [search, filterCategory, setSearchQuery, setSelectedCategory, setPage]);
 
   // Seasonal & Platform Recommendation Logic
   const recommendationInsights = useMemo(() => {
@@ -40,7 +42,7 @@ export default function AdminOfferZoneManager() {
     const catalogItems = (Array.isArray(medicines) ? medicines : []).map((med, idx) => {
       const name = med.name || med.title || 'Medicine';
       const category = (med.category || 'General').toLowerCase();
-      const soldCount = salesFrequencyMap[name] || (15 + (idx * 7) % 60);
+      const soldCount = salesFrequencyMap[name] || 0;
 
       let isSeasonalRecommended = false;
       let seasonReason = 'Standard essential medicine';
@@ -92,11 +94,10 @@ export default function AdminOfferZoneManager() {
     });
   }, [catalogItems, search, filterCategory]);
 
-  const totalPages = Math.ceil(filteredMedicines.length / pageSize) || 1;
-  const paginatedMedicines = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredMedicines.slice(start, start + pageSize);
-  }, [filteredMedicines, currentPage]);
+  const totalPages = Math.max(1, Number(catalogTotalPages) || 1);
+  // The API returns one server page at a time; never locally slice it and
+  // accidentally hide products that belong to the next backend page.
+  const paginatedMedicines = filteredMedicines;
 
   const toggleOfferZone = (id) => {
     setOfferZoneOverrides(prev => ({
@@ -223,7 +224,7 @@ export default function AdminOfferZoneManager() {
                     </td>
                     <td className="py-3.5 px-4">
                       <span className="font-bold text-slate-700 dark:text-slate-300">
-                        {med.soldCount} units sold
+                        {med.soldCount > 0 ? `${med.soldCount} units in loaded order history` : 'No sales signal available'}
                       </span>
                     </td>
                     <td className="py-3.5 px-4 max-w-xs">
@@ -283,17 +284,17 @@ export default function AdminOfferZoneManager() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
             <button
-              onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+              onClick={() => setPage(p => Math.max(p - 1, 1))}
               disabled={currentPage === 1}
               className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-extrabold text-xs rounded-xl disabled:opacity-40 transition cursor-pointer"
             >
               ← Previous Page
             </button>
             <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
-              Page {currentPage} of {totalPages} (20 records per page)
+              Page {currentPage} of {totalPages} · {totalMedicines.toLocaleString()} medicines in catalogue
             </span>
             <button
-              onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+              onClick={() => setPage(p => Math.min(p + 1, totalPages))}
               disabled={currentPage === totalPages}
               className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-extrabold text-xs rounded-xl disabled:opacity-40 transition cursor-pointer"
             >
