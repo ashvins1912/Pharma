@@ -4,7 +4,7 @@ const PLATFORM_ROLES = new Set(['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'])
 const clean = value => String(value ?? '').trim();
 
 function routeKind(method, path) {
-  if (path.startsWith('/api/surplus-savings/admin') || path.startsWith('/api/tenant/members')) return null;
+  if (path.startsWith('/api/surplus-savings/admin') || path.startsWith('/api/tenant/members') || (method === 'POST' && path.endsWith('/onboard'))) return null;
   if (path.startsWith('/api/orders/')) return 'ORDER';
   if (path.startsWith('/api/admin/riders') || path.startsWith('/api/riders/')) return 'RIDER';
   if (path.startsWith('/api/v1/vendor/profile') && method !== 'GET') return 'TENANT_PROFILE';
