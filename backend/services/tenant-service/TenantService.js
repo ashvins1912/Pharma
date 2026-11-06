@@ -270,7 +270,7 @@ export class TenantService {
             contactEmail: data.contactEmail || data.email || '',
             contactPhone: data.contactPhone || data.phone || '',
             usesTenantAsBranch: data.usesTenantAsBranch === true,
-            geolocation: data.geolocation || { latitude: null, longitude: null },
+            geolocation: { latitude, longitude },
             status: data.status || 'ACTIVE',
             timezone: data.timezone || 'Asia/Kolkata',
             currency: data.currency || 'INR',
@@ -444,14 +444,43 @@ export class TenantService {
         const tenant = await this.getTenantById(tenantId);
         if (!tenant) throw new Error('Tenant not found');
 
-        const id = data.id || `branch-${Date.now()}`;
+        const name = String(data.name || '').trim();
+        const code = String(data.code || '').trim().toUpperCase();
+        const phone = String(data.phone || '').trim();
+        const email = String(data.email || '').trim().toLowerCase();
+        const latitude = data.geolocation?.latitude === '' || data.geolocation?.latitude == null ? null : Number(data.geolocation.latitude);
+        const longitude = data.geolocation?.longitude === '' || data.geolocation?.longitude == null ? null : Number(data.geolocation.longitude);
+        if (name.length < 2 || name.length > 120) {
+            const error = new Error('Branch name must be between 2 and 120 characters.'); error.statusCode = 400; error.code = 'BRANCH_VALIDATION_FAILED'; throw error;
+        }
+        if (!/^[A-Z0-9][A-Z0-9_-]{1,19}$/.test(code)) {
+            const error = new Error('Branch code must be 2-20 characters using letters, numbers, hyphens or underscores.'); error.statusCode = 400; error.code = 'BRANCH_VALIDATION_FAILED'; throw error;
+        }
+        if (phone && (!/^\\+?[0-9 ()-]{7,20}$/.test(phone) || phone.replace(/\\D/g, '').length < 7 || phone.replace(/\\D/g, '').length > 15)) {
+            const error = new Error('Enter a valid branch contact number.'); error.statusCode = 400; error.code = 'BRANCH_VALIDATION_FAILED'; throw error;
+        }
+        if (email && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+            const error = new Error('Enter a valid branch contact email.'); error.statusCode = 400; error.code = 'BRANCH_VALIDATION_FAILED'; throw error;
+        }
+        if ((latitude == null) !== (longitude == null)
+            || (latitude != null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90))
+            || (longitude != null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180))) {
+            const error = new Error('Provide both valid branch latitude and longitude coordinates.'); error.statusCode = 400; error.code = 'BRANCH_VALIDATION_FAILED'; throw error;
+        }
+        const existing = getIsConnected()
+            ? await TenantBranch.findOne({ tenantId: String(tenantId), code }).select('_id').lean()
+            : Array.from(this.branches.values()).find(item => String(item.tenantId) === String(tenantId) && String(item.code).toUpperCase() === code);
+        if (existing) {
+            const error = new Error('This branch code is already used by your pharmacy.'); error.statusCode = 409; error.code = 'BRANCH_CODE_EXISTS'; throw error;
+        }
+        const id = data.id || `branch-${crypto.randomUUID()}`;
         const newBranch = {
             id,
-            tenantId,
-            name: data.name,
-            code: data.code || `BR-${this.branches.size + 1}`,
-            phone: data.phone || tenant.phone,
-            email: data.email || tenant.email,
+            tenantId: String(tenantId),
+            name,
+            code,
+            phone: phone || tenant.phone,
+            email: email || tenant.email,
             geolocation: data.geolocation || { latitude: null, longitude: null },
             address: {
                 street: data.address?.street || '',
@@ -460,11 +489,11 @@ export class TenantService {
                 pincode: data.address?.pincode || '',
                 ...(data.address?.coordinates ? { coordinates: data.address.coordinates } : {})
             },
-            serviceRadiusKm: Number(data.serviceRadiusKm) || 10.0,
+            serviceRadiusKm: Number.isFinite(Number(data.serviceRadiusKm)) && Number(data.serviceRadiusKm) >= 0 ? Number(data.serviceRadiusKm) : 10.0,
             deliveryMode: data.deliveryMode || 'OWN_RIDER',
-            minimumOrderValue: Number(data.minimumOrderValue) || 149,
-            freeDeliveryAbove: Number(data.freeDeliveryAbove) || 499,
-            deliveryFee: Number(data.deliveryFee) || 30,
+            minimumOrderValue: Number.isFinite(Number(data.minimumOrderValue)) && Number(data.minimumOrderValue) >= 0 ? Number(data.minimumOrderValue) : 149,
+            freeDeliveryAbove: Number.isFinite(Number(data.freeDeliveryAbove)) && Number(data.freeDeliveryAbove) >= 0 ? Number(data.freeDeliveryAbove) : 499,
+            deliveryFee: Number.isFinite(Number(data.deliveryFee)) && Number(data.deliveryFee) >= 0 ? Number(data.deliveryFee) : 30,
             operatingHours: data.operatingHours || { open: '08:00', close: '22:00' },
             status: 'PENDING',
             activatedAt: null,
