@@ -35,6 +35,11 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
   const [profile, setProfile] = useState(emptyProfile);
   const [draft, setDraft] = useState(emptyProfile);
   const [personnel, setPersonnel] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [memberDraft, setMemberDraft] = useState({ email: '', role: 'PHARMACY_STAFF', branchId: '' });
+  const [memberSaving, setMemberSaving] = useState(false);
+  const [memberError, setMemberError] = useState('');
+  const [memberNotice, setMemberNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profileMissing, setProfileMissing] = useState(false);
@@ -104,6 +109,20 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
     return () => { cancelled = true; };
   }, [isSuperAdmin, showTenantSelector, platformTenantId]);
 
+
+  useEffect(() => {
+    if (!selectedTenantId) { setBranches([]); return undefined; }
+    let cancelled = false;
+    apiClient.get('/api/v1/branches/all', { params: { tenantId: selectedTenantId } })
+      .then(response => {
+        if (cancelled) return;
+        const payload = response.data?.branches || response.data?.data?.branches || response.data?.data || [];
+        setBranches(Array.isArray(payload) ? payload.filter(item => String(item.status || 'ACTIVE').toUpperCase() === 'ACTIVE') : []);
+      })
+      .catch(() => { if (!cancelled) setBranches([]); });
+    return () => { cancelled = true; };
+  }, [selectedTenantId]);
+
   useEffect(() => { loadProfile(); }, [loadProfile]);
 
   const canEdit = isSuperAdmin || pharmacyCanEdit;
@@ -166,6 +185,31 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
       setPolicySaving(false);
     }
   };
+
+
+  const assignPersonnel = async event => {
+    event.preventDefault();
+    setMemberSaving(true);
+    setMemberError('');
+    setMemberNotice('');
+    try {
+      const response = await apiClient.post('/api/v1/vendor/profile/personnel', {
+        ...(isSuperAdmin ? { tenantId: selectedTenantId } : {}),
+        email: memberDraft.email.trim(),
+        role: memberDraft.role,
+        branchId: memberDraft.role === 'TENANT_ADMIN' ? '' : memberDraft.branchId
+      });
+      const member = response.data?.data?.data || response.data?.data || response.data?.member;
+      if (member) setPersonnel(current => [...current.filter(item => String(item.email).toLowerCase() !== String(member.email).toLowerCase()), member]);
+      setMemberDraft({ email: '', role: 'PHARMACY_STAFF', branchId: '' });
+      setMemberNotice(response.data?.message || 'User role and branch access updated.');
+    } catch (err) {
+      setMemberError(err?.response?.data?.message || err?.response?.data?.error?.message || 'Could not assign this user.');
+    } finally {
+      setMemberSaving(false);
+    }
+  };
+  const canManagePersonnel = isSuperAdmin || ['TENANT_OWNER', 'TENANT_ADMIN'].includes(role);
 
   return (
     <div className="space-y-6">
@@ -298,6 +342,34 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
           <div><h3 className="text-sm font-black uppercase tracking-wide text-slate-900">Tenant personnel</h3><p className="mt-1 text-xs text-slate-500">Authorized users linked to this pharmacy</p></div>
           <span className="text-xs font-bold text-slate-500">{personnel.length} members</span>
         </div>
+
+        {canManagePersonnel && (
+          <form onSubmit={assignPersonnel} className="grid gap-3 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 sm:grid-cols-2">
+            <label className="space-y-1 text-xs font-bold text-slate-700">Registered user email
+              <input type="email" required value={memberDraft.email} onChange={event => setMemberDraft(current => ({ ...current, email: event.target.value }))} placeholder="staff@pharmacy.com" className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm" />
+            </label>
+            <label className="space-y-1 text-xs font-bold text-slate-700">Assign role
+              <select value={memberDraft.role} onChange={event => setMemberDraft(current => ({ ...current, role: event.target.value, branchId: event.target.value === 'TENANT_ADMIN' ? '' : current.branchId }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                <option value="PHARMACY_STAFF">Pharmacy staff</option><option value="PHARMACIST">Pharmacist</option><option value="ORDER_MANAGER">Order manager</option><option value="INVENTORY_MANAGER">Inventory manager</option><option value="DISPATCHER">Dispatcher</option><option value="RIDER">Rider</option><option value="TENANT_RIDER">Tenant rider</option><option value="TENANT_ADMIN">Tenant administrator</option>
+              </select>
+            </label>
+            {memberDraft.role !== 'TENANT_ADMIN' && (
+              <label className="space-y-1 text-xs font-bold text-slate-700 sm:col-span-2">Assign branch
+                <select required value={memberDraft.branchId} onChange={event => setMemberDraft(current => ({ ...current, branchId: event.target.value }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                  <option value="">Select an active branch</option>
+                  {branches.map(branch => <option key={branch.id || branch._id} value={branch.id || branch._id}>{branch.name || branch.code || branch.id}</option>)}
+                </select>
+              </label>
+            )}
+            {memberError && <p role="alert" className="text-xs text-rose-700 sm:col-span-2">{memberError}</p>}
+            {memberNotice && <p role="status" className="text-xs text-emerald-700 sm:col-span-2">{memberNotice}</p>}
+            <div className="sm:col-span-2">
+              <button type="submit" disabled={memberSaving || !selectedTenantId || (memberDraft.role !== 'TENANT_ADMIN' && !memberDraft.branchId)} className="rounded-xl bg-blue-700 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50">{memberSaving ? 'Saving access…' : 'Add user / update role'}</button>
+              <p className="mt-2 text-[11px] text-slate-500">The email must belong to an active registered user of this pharmacy. Branch-specific roles require an active branch.</p>
+            </div>
+          </form>
+        )}
+
         {personnel.length ? personnel.map(member => (
           <div key={member._id || member.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 p-3">
             <div><p className="text-sm font-bold text-slate-800">{member.name || 'Name not added'}</p><p className="text-xs text-slate-500">{member.email || 'Email not added'}</p></div>
