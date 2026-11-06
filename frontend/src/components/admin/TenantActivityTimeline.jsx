@@ -9,10 +9,10 @@ export default function TenantActivityTimeline({ tenantId = '' }) {
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
-    if (!tenantId) { setEvents([]); return; }
     setLoading(true); setError('');
     try {
-      const response = await apiClient.get('/api/tenant/activity', { params: { tenantId, limit: 40 } });
+      const params = tenantId ? { tenantId, limit: 40 } : { limit: 40 };
+      const response = await apiClient.get('/api/tenant/activity', { params });
       setEvents(Array.isArray(response.data?.events) ? response.data.events : []);
     } catch (err) {
       setError(err?.response?.data?.message || err.message || 'Activity history could not be loaded.');
