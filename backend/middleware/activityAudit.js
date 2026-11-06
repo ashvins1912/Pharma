@@ -17,6 +17,7 @@ function describeResource(pathname) {
 
 function makeAuditRecord(req, statusCode) {
   const pathname = String(req.originalUrl || req.path || '').split('?')[0];
+  const normalized = pathname.split('/').filter(part => part && !/^v\\d+$/i.test(part) && !['api', 'admin'].includes(part.toLowerCase()));
   const { entityType, actionPart } = describeResource(pathname);
   const method = req.method.toUpperCase();
   const action = actionPart
