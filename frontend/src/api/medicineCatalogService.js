@@ -1,12 +1,15 @@
 import apiClient from './apiClient';
-import { getCachedPublicCatalog, invalidatePublicCatalogCache } from './publicCatalogCache';
+import { getCachedPublicCatalog } from './publicCatalogCache';
 import { buildCatalogQuery, normalizeCatalogResponse } from './catalogMapper';
 
 export { buildCatalogQuery, normalizeCatalogResponse };
 
 export async function fetchMedicineCatalog(params, { force = false, client = apiClient } = {}) {
-  if (force) invalidatePublicCatalogCache();
-  const response = await getCachedPublicCatalog(client, '/api/medicines', params);
+  // A forced refresh must not join a previous in-flight request for the same
+  // key; inventory mutations may have changed the response while it was pending.
+  const response = force
+    ? await client.get('/api/medicines', { params })
+    : await getCachedPublicCatalog(client, '/api/medicines', params);
   return normalizeCatalogResponse(response);
 }
 
