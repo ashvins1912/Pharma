@@ -61,6 +61,7 @@ gateway.use('/notifications', notificationsRouter);
 gateway.use('/public/payments', paymentActionRoutes);
 gateway.use('/admin/payments', adminPaymentReminderRoutes);
 gateway.use('/delivery/events', deliveryEventRoutes);
+gateway.use('/activity', activityRouter);
 
 // 4. Gateway Standard Error Response Middleware
 gateway.use((err, req, res, next) => {
