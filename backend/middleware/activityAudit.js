@@ -32,8 +32,22 @@ function makeAuditRecord(req, statusCode) {
         : 'UPDATE');
   const actor = req.user || {};
   const context = req.context || {};
-  const tenantId = context.tenantId || context.tenant?.id || req.get?.('x-tenant-id') || req.body?.tenantId || req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
-  const branchId = context.branchId || context.branch?.id || req.get?.('x-branch-id') || req.body?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || null;
+  const actorRole = String(context.role || actor.app_metadata?.role || actor.role || '').toUpperCase();
+  const platformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(actorRole);
+  const tenantId = context.authorizedTenantId
+    || context.tenantId
+    || context.tenant?.id
+    || actor.tenantId
+    || actor.app_metadata?.tenantId
+    || (platformAdmin ? (req.get?.('x-tenant-id') || req.body?.tenantId || req.query?.tenantId) : null)
+    || null;
+  const branchId = context.branchId
+    || context.branch?.id
+    || actor.branchId
+    || actor.app_metadata?.branchId
+    || req.body?.branchId
+    || (platformAdmin ? req.get?.('x-branch-id') : null)
+    || null;
   const changedFields = Object.keys(req.body || {}).filter(key => !SENSITIVE_FIELDS.test(key)).slice(0, 30);
   const idParam = Object.entries(req.params || {}).find(([key]) => /id$/i.test(key));
   return {
