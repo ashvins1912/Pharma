@@ -567,6 +567,11 @@ export class TenantService {
         delete safeUpdates.activatedAt;
         delete safeUpdates.isDefault;
         delete safeUpdates.makeDefaultOnActivation;
+        delete safeUpdates.isTenantLocation;
+        delete safeUpdates.archivedAt;
+        delete safeUpdates.archivedBy;
+        delete safeUpdates.createdAt;
+        delete safeUpdates.updatedAt;
         const updated = {
             ...branch,
             ...safeUpdates,
