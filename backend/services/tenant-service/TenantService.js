@@ -468,6 +468,7 @@ export class TenantService {
             operatingHours: data.operatingHours || { open: '08:00', close: '22:00' },
             status: 'PENDING',
             activatedAt: null,
+            makeDefaultOnActivation: Boolean(data.isDefault),
             isDefault: false,
             isTenantLocation: Boolean(data.isTenantLocation),
             createdAt: new Date().toISOString()
@@ -521,11 +522,18 @@ export class TenantService {
         const branch = await this.getBranchById(branchId);
         if (!branch) throw new Error('Branch not found');
 
+        const safeUpdates = { ...(updates || {}) };
+        delete safeUpdates.id;
+        delete safeUpdates._id;
+        delete safeUpdates.tenantId;
+        delete safeUpdates.status;
         const updated = {
             ...branch,
-            ...updates,
-            address: { ...branch.address, ...(updates.address || {}) },
-            geolocation: updates.geolocation !== undefined ? updates.geolocation : branch.geolocation,
+            ...safeUpdates,
+            tenantId: branch.tenantId,
+            status: branch.status,
+            address: { ...branch.address, ...(safeUpdates.address || {}) },
+            geolocation: safeUpdates.geolocation !== undefined ? safeUpdates.geolocation : branch.geolocation,
             updatedAt: new Date().toISOString()
         };
         if (getIsConnected()) {
