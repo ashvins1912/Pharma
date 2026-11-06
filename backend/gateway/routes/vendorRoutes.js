@@ -19,7 +19,10 @@ import { authService } from '../../services/identity-service/AuthService.js';
 import TenantMembership from '../../models/TenantMembership.js';
 import UserProfile from '../../models/UserProfile.js';
 import Tenant from '../../models/Tenant.js';
+import TenantBranch from '../../models/TenantBranch.js';
+import { domainEvents } from '../../shared/events/DomainEvents.js';
 import Vendor from '../../models/Vendor.js';
+import AuditEvent from '../../models/AuditEvent.js';
 
 const router = express.Router();
 
@@ -60,14 +63,19 @@ router.get('/profile', authenticateUser, async (req, res) => {
             return sendError(res, { code: 'TENANT_PROFILE_NOT_FOUND', message: 'The selected pharmacy profile was not found.', statusCode: 404, req });
         }
 
-        const [vendor, personnel] = await Promise.all([
+        const [vendor, personnel, memberships] = await Promise.all([
             Vendor.findOne({ tenantId }).sort({ onboardingCompletedAt: -1, updatedAt: -1 }).lean(),
             canViewPersonnel
                 ? UserProfile.find({ tenantId, status: 'ACTIVE' })
                     .select('userId name firstName lastName email role roles')
                     .sort({ createdAt: 1 }).lean()
+                : Promise.resolve([]),
+            canViewPersonnel
+                ? TenantMembership.find({ tenantId, status: { $in: ['ACTIVE', 'INVITED'] } })
+                    .select('userId branchId role status').lean()
                 : Promise.resolve([])
         ]);
+        const membershipByUserId = new Map(memberships.map(item => [String(item.userId), item]));
 
         const address = tenant.address || vendor?.address || {};
         const owner = personnel.find(member => ['TENANT_OWNER', 'TENANT_ADMIN', 'OWNER'].includes(String(member.role || '').toUpperCase()))
@@ -104,12 +112,17 @@ router.get('/profile', authenticateUser, async (req, res) => {
                     timezone: tenant.timezone || '',
                     currency: tenant.currency || ''
                 },
-                personnel: personnel.map(member => ({
-                    id: String(member._id),
-                    name: member.name || [member.firstName, member.lastName].filter(Boolean).join(' '),
-                    email: member.email || '',
-                    role: member.role || (member.roles || [])[0] || ''
-                }))
+                personnel: personnel.map(member => {
+                    const membership = membershipByUserId.get(String(member.userId));
+                    return {
+                        id: String(member.userId || member._id),
+                        name: member.name || [member.firstName, member.lastName].filter(Boolean).join(' '),
+                        email: member.email || '',
+                        role: membership?.role || member.role || (member.roles || [])[0] || '',
+                        branchId: membership?.branchId || null,
+                        status: membership?.status || 'ACTIVE'
+                    };
+                })
             },
             message: 'Tenant profile retrieved successfully.',
             statusCode: 200,
@@ -119,6 +132,129 @@ router.get('/profile', authenticateUser, async (req, res) => {
         return sendError(res, {
             code: 'TENANT_PROFILE_UNAVAILABLE',
             message: 'The pharmacy profile is temporarily unavailable.',
+            statusCode: 503,
+            req
+        });
+    }
+});
+
+/**
+ * POST /vendor/profile/personnel
+ * Assign an existing registered tenant user to a branch with a tenant-scoped role.
+ * A tenant administrator cannot grant access to a different tenant.
+ */
+router.post('/profile/personnel', authenticateUser, async (req, res) => {
+    try {
+        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+        const platformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const tenantId = String(platformAdmin
+            ? req.get('x-tenant-id') || req.body?.tenantId || ''
+            : req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
+        if (!tenantId) return sendError(res, { code: 'TENANT_CONTEXT_REQUIRED', message: 'Select a pharmacy tenant first.', statusCode: 400, req });
+
+        let tenantMembership = null;
+        if (!platformAdmin) {
+            tenantMembership = await TenantMembership.findOne({
+                userId: String(req.user?.sub || req.user?.id || ''),
+                tenantId,
+                status: 'ACTIVE'
+            }).lean();
+            if (!tenantMembership || !['TENANT_OWNER', 'TENANT_ADMIN'].includes(String(tenantMembership.role).toUpperCase()) || tenantMembership.branchId) {
+                return sendError(res, { code: 'TENANT_ADMIN_REQUIRED', message: 'Only a tenant-wide owner or administrator can assign branch users.', statusCode: 403, req });
+            }
+        }
+
+        const email = String(req.body?.email || '').trim().toLowerCase();
+        const assignedRole = String(req.body?.role || '').trim().toUpperCase();
+        const branchId = String(req.body?.branchId || '').trim() || null;
+        const allowedRoles = new Set(['TENANT_ADMIN', 'PHARMACY_STAFF', 'PHARMACIST', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'RIDER', 'TENANT_RIDER']);
+        if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || !allowedRoles.has(assignedRole) || (!branchId && assignedRole !== 'TENANT_ADMIN')) {
+            return sendError(res, { code: 'INVALID_PERSONNEL_ASSIGNMENT', message: 'Provide a valid registered email and supported tenant role.', statusCode: 400, req });
+        }
+        if (branchId) {
+            const branch = await TenantBranch.findOne({ _id: branchId, tenantId, status: 'ACTIVE' }).select('_id').lean();
+            if (!branch) return sendError(res, { code: 'BRANCH_NOT_FOUND', message: 'Choose an active branch belonging to this pharmacy.', statusCode: 404, req });
+        }
+
+        const memberProfile = await UserProfile.findOne({ tenantId, email, status: 'ACTIVE' })
+            .select('userId name firstName lastName email')
+            .lean();
+        if (!memberProfile?.userId) {
+            return sendError(res, { code: 'REGISTERED_TENANT_USER_REQUIRED', message: 'This email must belong to an active registered user of this pharmacy before role assignment.', statusCode: 404, req });
+        }
+
+        const membership = await TenantMembership.findOneAndUpdate(
+            { userId: String(memberProfile.userId), tenantId },
+            { $set: { branchId, role: assignedRole, status: 'ACTIVE', invitedBy: String(req.user?.sub || req.user?.id || 'platform') } },
+            { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+        ).lean();
+        domainEvents.emitDomainEvent('TENANT_MEMBER_ASSIGNED', String(memberProfile.userId), {
+            email, role: assignedRole, branchId
+        }, req.user, tenantId, branchId);
+
+        return sendSuccess(res, {
+            data: {
+                id: String(memberProfile.userId),
+                name: memberProfile.name || [memberProfile.firstName, memberProfile.lastName].filter(Boolean).join(' '),
+                email,
+                role: membership.role,
+                branchId: membership.branchId || null,
+                status: membership.status
+            },
+            message: 'User role and branch access updated.',
+            statusCode: 200,
+            req
+        });
+    } catch (err) {
+        return sendError(res, {
+            code: 'TENANT_MEMBER_ASSIGNMENT_FAILED',
+            message: err.message || 'Could not assign this user to the selected branch.',
+            statusCode: err.code === 11000 ? 409 : 500,
+            req
+        });
+    }
+});
+
+/**
+ * GET /vendor/profile/activity
+ * Returns durable, tenant-scoped audit events; branch members only see their branch.
+ */
+router.get('/profile/activity', authenticateUser, async (req, res) => {
+    try {
+        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+        const platformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const tenantId = String(platformAdmin
+            ? req.get('x-tenant-id') || req.query.tenantId || ''
+            : req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
+        if (!tenantId) return sendError(res, { code: 'TENANT_CONTEXT_REQUIRED', message: 'Select a pharmacy tenant first.', statusCode: 400, req });
+
+        let membership = null;
+        if (!platformAdmin) {
+            membership = await TenantMembership.findOne({
+                userId: String(req.user?.sub || req.user?.id || ''),
+                tenantId,
+                status: 'ACTIVE'
+            }).select('role branchId').lean();
+            if (!membership) return sendError(res, { code: 'TENANT_MEMBERSHIP_REQUIRED', message: 'An active pharmacy membership is required.', statusCode: 403, req });
+            if (!['TENANT_OWNER', 'TENANT_ADMIN'].includes(String(membership.role || '').toUpperCase()) && !membership.branchId) {
+                return sendError(res, { code: 'BRANCH_ACTIVITY_SCOPE_REQUIRED', message: 'Branch-scoped membership is required to view branch activity.', statusCode: 403, req });
+            }
+        }
+
+        const filter = { tenantId };
+        if (!platformAdmin && membership?.branchId) filter.branchId = membership.branchId;
+        const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 50));
+        const events = await AuditEvent.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
+        return sendSuccess(res, {
+            data: { events },
+            message: 'Tenant activity retrieved.',
+            statusCode: 200,
+            req
+        });
+    } catch (err) {
+        return sendError(res, {
+            code: 'TENANT_ACTIVITY_UNAVAILABLE',
+            message: 'Tenant activity is temporarily unavailable.',
             statusCode: 503,
             req
         });
