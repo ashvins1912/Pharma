@@ -1120,6 +1120,7 @@ export function AppProvider({ children }) {
         totalPages,
         totalMedicines,
         limit,
+        setLimit,
         isSearching,
 
         // Cart
