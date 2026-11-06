@@ -1705,6 +1705,14 @@ router.post('/admin/transition', authenticateUser, isAdmin, async (req, res) => 
 
         const actor = req.user.user_metadata?.name || req.user.email || 'Pharmacist Admin';
         let updatedOrder = await dataStore.transitionOrderStatus(orderId, newStatus, actor, riderInfo, cashCollectionStatus);
+        domainEvents.emitDomainEvent(
+            newStatus === 'Rejected' ? 'ORDER_REJECTED' : newStatus === 'Approved' ? 'ORDER_ACCEPTED' : 'ORDER_STATUS_CHANGED',
+            String(orderId),
+            { orderId: String(orderId), status: newStatus, action: newStatus === 'Rejected' ? 'REJECTED' : newStatus === 'Approved' ? 'ACCEPTED' : 'STATUS_CHANGED' },
+            req.user,
+            targetOrder.tenantId,
+            updatedOrder.branchId || updatedOrder.branch?._id || null
+        );
         let assignmentMessage = '';
         let notificationEvent = newStatus === 'Ready to Dispatch' ? 'Ready to Dispatch' : null;
         let notificationMobile = updatedOrder.rider?.riderMobile;
