@@ -189,7 +189,7 @@ router.post('/profile/personnel', authenticateUser, async (req, res) => {
             { $set: { branchId, role: assignedRole, status: 'ACTIVE', invitedBy: String(req.user?.sub || req.user?.id || 'platform') } },
             { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
         ).lean();
-        domainEvents.emitDomainEvent('TENANT_MEMBER_ASSIGNED', String(memberProfile.userId), {
+        domainEvents.emitDomainEvent('TENANT_MEMBER_ASSIGNED', String(memberUserId), {
             email, role: assignedRole, branchId
         }, req.user, tenantId, branchId);
 
