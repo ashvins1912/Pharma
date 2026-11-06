@@ -2,9 +2,9 @@ services:
   - type: pserv
     name: ashvin-pharmacy-platform
     runtime: node
-    rootDir: backend
-    buildCommand: npm install --omit=dev
-    startCommand: npm start
+    rootDir: .
+    buildCommand: npm install --workspace backend --workspace packages/service-kernel --omit=dev
+    startCommand: npm --workspace backend start
     healthCheckPath: /ready
     envVars:
       - key: NODE_ENV
