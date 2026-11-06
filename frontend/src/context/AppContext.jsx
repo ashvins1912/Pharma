@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import apiClient, { getRuntimeAccessToken } from '../api/apiClient';
 import { io } from 'socket.io-client';
-import { getCachedPublicCatalog } from '../api/publicCatalogCache.js';
+import { useCatalogStore } from '../stores/catalogStore.js';
 import { normalizeOrdersResponse } from '../api/orderService';
 import { applyCouponCode } from '../api/couponService';
 import { getCustomerMedicineRequestsPage } from '../api/medicineRequestService';
@@ -22,20 +22,22 @@ export function AppProvider({ children }) {
   const { addToast } = useToast();
   const { runAction } = useActionLoading();
 
-  // Catalog State
-  const [medicines, setMedicines] = useState([]);
-  const [medicinesError, setMedicinesError] = useState('');
-  const [loadingMedicines, setLoadingMedicines] = useState(false);
+  // Catalog state is shared through Zustand so pharmacy selection, filters,
+  // async requests and storefront consumers observe one consistent snapshot.
+  const medicines = useCatalogStore(state => state.medicines);
+  const medicinesError = useCatalogStore(state => state.error);
+  const loadingMedicines = useCatalogStore(state => state.loading);
+  const totalMedicines = useCatalogStore(state => state.total);
+  const totalPages = useCatalogStore(state => state.totalPages);
+  const isSearching = useCatalogStore(state => state.isSearching);
+  const loadCatalog = useCatalogStore(state => state.loadCatalog);
+  const clearCatalog = useCatalogStore(state => state.clearCatalog);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [hideRx, setHideRx] = useState(false);
   const [sortOption, setSortOption] = useState('default'); // 'default', 'price-asc', 'price-desc', 'name-asc'
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(16);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalMedicines, setTotalMedicines] = useState(0);
-  const [isSearching, setIsSearching] = useState(false);
-  const catalogRequestSequence = useRef(0);
 
   // Cart & Checkout State
   const [cart, setCart] = useState([]);
@@ -255,71 +257,32 @@ export function AppProvider({ children }) {
     setPage(1);
   }, [searchQuery, hideRx, selectedCategory, sortOption]);
 
-  // Fetch medicines catalog with pagination
-  const fetchMedicines = useCallback(async () => {
-    const requestSequence = ++catalogRequestSequence.current;
+  // Fetch catalog through the dedicated API/service layer. The Zustand store
+  // deduplicates same-scope requests and discards responses for a stale pharmacy.
+  const fetchMedicines = useCallback(async (options = {}) => {
     if (!tenantId) {
-      setMedicines([]);
-      setTotalMedicines(0);
-      setTotalPages(1);
-      setMedicinesError('Select a pharmacy to view its medicine catalogue.');
-      setLoadingMedicines(false);
-      return;
+      clearCatalog('Select a pharmacy to view its medicine catalogue.');
+      return null;
     }
     try {
-      setLoadingMedicines(true);
-      const params = {
+      return await loadCatalog({
+        tenantId,
+        branchId,
         page,
         limit,
-        tenantId: String(tenantId),
-        ...(branchId ? { branchId: String(branchId) } : {})
-      };
-      if (searchQuery) params.search = searchQuery;
-      if (hideRx) params.hideRx = 'true';
-      if (selectedCategory && selectedCategory !== 'All') params.category = selectedCategory;
-      if (sortOption !== 'default') params.sort = sortOption;
-
-      // Do not automatically replay catalog requests. A 502/503 is an
-      // infrastructure signal and a 401/403/404 is an authorization/routing
-      // signal; replaying either obscures the real failure and creates duplicate
-      // browser traffic.
-      // Use the frontend's same-origin /api rewrite for the public catalog too.
-      // This avoids browser CORS/preflight failures when the gateway origin is
-      // configured differently in Render, while keeping the catalog available
-      // before sign-in. The gateway remains the trust boundary and its public
-      // catalog route stays read-only; protected APIs still use apiClient.
-      const catalogUrl = '/api/medicines';
-      const res = await getCachedPublicCatalog(apiClient, catalogUrl, params);
-      // Ignore a slower response for a pharmacy that is no longer selected.
-      if (requestSequence !== catalogRequestSequence.current) return;
-
-      if (res.data && res.data.medicines) {
-        setMedicines(res.data.medicines || []);
-        setMedicinesError('');
-        setTotalMedicines(res.data.total || 0);
-        setTotalPages(res.data.totalPages || 1);
-        setIsSearching(Boolean(res.data.isSearching));
-      } else if (Array.isArray(res.data)) {
-        setMedicines(res.data);
-        setMedicinesError('');
-        setTotalMedicines(res.data.length);
-        setTotalPages(1);
-        setIsSearching(Boolean(searchQuery));
-      }
-    } catch (err) {
-      if (requestSequence !== catalogRequestSequence.current) return;
-      console.error("Failed to load catalog:", err);
-      setMedicines([]);
-      setTotalMedicines(0);
-      setTotalPages(1);
-      setMedicinesError(err.message || 'The medicine catalog is temporarily unavailable. Please try again.');
-    } finally {
-      if (requestSequence === catalogRequestSequence.current) setLoadingMedicines(false);
+        search: searchQuery,
+        hideRx,
+        category: selectedCategory,
+        sort: sortOption
+      }, options);
+    } catch (error) {
+      console.error('Failed to load medicine catalogue:', error);
+      return null;
     }
-  }, [searchQuery, hideRx, selectedCategory, sortOption, page, limit, tenantId, branchId]);
+  }, [tenantId, branchId, page, limit, searchQuery, hideRx, selectedCategory, sortOption, loadCatalog, clearCatalog]);
 
   useEffect(() => {
-    fetchMedicines();
+    void fetchMedicines();
   }, [fetchMedicines]);
 
   // Fetch User Addresses

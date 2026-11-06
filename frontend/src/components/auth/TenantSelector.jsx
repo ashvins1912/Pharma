@@ -17,7 +17,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 
 export default function TenantSelector({ onTenantSelected }) {
   const { t } = useLanguage();
-  const { tenantId, activeTenant, setActiveTenant, setTenantId } = useTenant();
+  const { tenantId, activeTenant, setActiveTenant } = useTenant();
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -83,7 +83,6 @@ export default function TenantSelector({ onTenantSelected }) {
       
       if (!tenantId && list.length > 0) {
         setActiveTenant(list[0]);
-        setTenantId(list[0]._id);
       } else if (tenantId && !activeTenant && list.length > 0) {
         const found = list.find(t => String(t._id) === String(tenantId));
         if (found) setActiveTenant(found);
@@ -96,8 +95,8 @@ export default function TenantSelector({ onTenantSelected }) {
   };
 
   const handleSelectTenant = (tenant) => {
+    // One atomic store update persists tenant identity and display data together.
     setActiveTenant(tenant);
-    setTenantId(tenant._id);
     if (onTenantSelected) onTenantSelected(tenant);
   };
 

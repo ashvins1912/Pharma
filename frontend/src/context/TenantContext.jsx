@@ -1,97 +1,133 @@
-import React, { createContext, useContext, useState } from 'react';
+import React from 'react';
+import { create } from 'zustand';
 
-const TenantContext = createContext(null);
+const STORAGE_KEY = 'pharma_tenant_selection_v2';
 
-const readSavedTenant = () => {
-  if (typeof window === 'undefined') return null;
+function safeRead(key) {
+  try { return window.localStorage.getItem(key); } catch { return null; }
+}
+
+function readInitialSelection() {
+  if (typeof window === 'undefined') return { tenantId: null, activeTenant: null, branchId: null, branchTenantId: null };
   try {
-    const value = localStorage.getItem('pharma_active_tenant');
-    const tenant = value ? JSON.parse(value) : null;
-    const savedTenantId = localStorage.getItem('pharma_tenant_id');
-    const displayedTenantId = tenant?._id || tenant?.id || null;
-    // Never display a stale pharmacy object beside a different selected tenant ID.
-    return tenant && savedTenantId && String(displayedTenantId) === String(savedTenantId)
-      ? tenant
-      : null;
+    const versioned = safeRead(STORAGE_KEY);
+    if (versioned) {
+      const saved = JSON.parse(versioned);
+      const tenantId = saved?.tenantId ? String(saved.tenantId) : null;
+      const tenantObjectId = saved?.activeTenant?._id || saved?.activeTenant?.id;
+      const activeTenant = tenantId && tenantObjectId && String(tenantObjectId) === tenantId
+        ? saved.activeTenant : null;
+      const branchTenantId = saved?.branchTenantId ? String(saved.branchTenantId) : null;
+      const branchId = tenantId && branchTenantId === tenantId && saved?.branchId
+        ? String(saved.branchId) : null;
+      return { tenantId, activeTenant, branchId, branchTenantId: branchId ? branchTenantId : null };
+    }
   } catch {
-    return null;
+    // Fall through to the previous storage keys.
   }
-};
 
-export const TenantProvider = ({ children }) => {
-  // The saved tenant is a customer preference, never authorization evidence.
-  const [tenantId, setTenantIdState] = useState(() => {
-    if (typeof window === 'undefined') return null;
-    const saved = localStorage.getItem('pharma_tenant_id');
-    const legacyDefaults = new Set(['tenant-ashvin-main', 'tenant-default-1', '65a1234567890abcdef12345']);
-    if (!saved || saved === 'null' || saved === 'undefined' || legacyDefaults.has(saved)) {
-      localStorage.removeItem('pharma_tenant_id');
-      localStorage.removeItem('pharma_active_tenant');
-      return null;
-    }
-    return saved;
-  });
-  const [activeTenant, setActiveTenantState] = useState(readSavedTenant);
-  const [branchId, setBranchIdState] = useState(() => {
-    if (typeof window === 'undefined') return null;
-    const saved = localStorage.getItem('pharma_branch_id');
-    if (!saved || saved === 'branch-1' || saved === 'null' || saved === 'undefined') {
-      localStorage.removeItem('pharma_branch_id');
-      return null;
-    }
-    return saved;
-  });
+  const savedTenantId = safeRead('pharma_tenant_id');
+  const legacyDefaults = new Set(['tenant-ashvin-main', 'tenant-default-1', '65a1234567890abcdef12345']);
+  const tenantId = savedTenantId && !['null', 'undefined'].includes(savedTenantId)
+    && !legacyDefaults.has(savedTenantId) ? savedTenantId : null;
+  let activeTenant = null;
+  try {
+    const parsed = JSON.parse(safeRead('pharma_active_tenant') || 'null');
+    if (tenantId && String(parsed?._id || parsed?.id || '') === String(tenantId)) activeTenant = parsed;
+  } catch {}
+  // Older branch IDs were not associated with a tenant. Do not restore one
+  // blindly: it could belong to a different pharmacy after a refresh.
+  return { tenantId, activeTenant, branchId: null, branchTenantId: null };
+}
 
-  const setTenantId = (value) => {
+function persistSelection(state) {
+  if (typeof window === 'undefined') return;
+  const snapshot = {
+    tenantId: state.tenantId || null,
+    activeTenant: state.activeTenant || null,
+    branchId: state.branchId || null,
+    branchTenantId: state.branchTenantId || null,
+    updatedAt: Date.now()
+  };
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    if (snapshot.tenantId) window.localStorage.setItem('pharma_tenant_id', snapshot.tenantId);
+    else window.localStorage.removeItem('pharma_tenant_id');
+    if (snapshot.activeTenant) window.localStorage.setItem('pharma_active_tenant', JSON.stringify(snapshot.activeTenant));
+    else window.localStorage.removeItem('pharma_active_tenant');
+    if (snapshot.branchId) window.localStorage.setItem('pharma_branch_id', snapshot.branchId);
+    else window.localStorage.removeItem('pharma_branch_id');
+  } catch {
+    // Persistence is a convenience; in-memory selection must keep working.
+  }
+}
+
+export const useTenantStore = create((set, get) => ({
+  ...readInitialSelection(),
+
+  setTenantId: value => {
     const id = value == null ? null
       : typeof value === 'object' ? (value._id || value.id || null)
-      : String(value);
-    const currentTenantId = tenantId || activeTenant?._id || activeTenant?.id || null;
-    if (String(currentTenantId || '') !== String(id || '')) {
-      // A branch belongs to exactly one tenant. Never carry a previous
-      // dispensary's branch into the newly selected pharmacy.
-      setBranchIdState('');
-      if (typeof window !== 'undefined') localStorage.removeItem('pharma_branch_id');
-    }
-    setTenantIdState(id);
-    if (typeof window !== 'undefined') {
-      if (id) localStorage.setItem('pharma_tenant_id', String(id));
-      else localStorage.removeItem('pharma_tenant_id');
-    }
-    if (value && typeof value === 'object') {
-      setActiveTenantState(value);
-      if (typeof window !== 'undefined') localStorage.setItem('pharma_active_tenant', JSON.stringify(value));
-    } else if (!id || (activeTenant && String(activeTenant._id || activeTenant.id) !== String(id))) {
-      setActiveTenantState(null);
-      if (typeof window !== 'undefined') localStorage.removeItem('pharma_active_tenant');
-    }
-  };
+      : String(value).trim();
+    const current = get();
+    const changed = String(current.tenantId || '') !== String(id || '');
+    const activeTenant = value && typeof value === 'object'
+      ? value
+      : (!id ? null : (current.activeTenant && String(current.activeTenant._id || current.activeTenant.id) === String(id) ? current.activeTenant : null));
+    const next = {
+      tenantId: id ? String(id) : null,
+      activeTenant,
+      branchId: changed ? null : current.branchId,
+      branchTenantId: changed ? null : current.branchTenantId
+    };
+    set(next);
+    persistSelection(next);
+  },
 
-  const setActiveTenant = (tenant) => {
-    setActiveTenantState(tenant || null);
-    setTenantId(tenant ? (tenant._id || tenant.id) : null);
-  };
+  setActiveTenant: tenant => {
+    const id = tenant?._id || tenant?.id || null;
+    const current = get();
+    const changed = String(current.tenantId || '') !== String(id || '');
+    const next = {
+      tenantId: id ? String(id) : null,
+      activeTenant: tenant || null,
+      branchId: changed ? null : current.branchId,
+      branchTenantId: changed ? null : current.branchTenantId
+    };
+    set(next);
+    persistSelection(next);
+  },
 
-  const setBranchId = (id) => {
-    const nextBranchId = id ? String(id).trim() : '';
-    setBranchIdState(nextBranchId);
-    if (typeof window !== 'undefined') {
-      if (nextBranchId) localStorage.setItem('pharma_branch_id', nextBranchId);
-      else localStorage.removeItem('pharma_branch_id');
-    }
-  };
+  setBranchId: value => {
+    const current = get();
+    const id = value ? String(value).trim() : null;
+    const next = {
+      ...current,
+      branchId: id,
+      branchTenantId: id ? current.tenantId : null
+    };
+    set(next);
+    persistSelection(next);
+  },
 
-  return (
-    <TenantContext.Provider value={{ tenantId, setTenantId, activeTenant, setActiveTenant, branchId, setBranchId }}>
-      {children}
-    </TenantContext.Provider>
-  );
-};
+  clearSelection: () => {
+    const next = { tenantId: null, activeTenant: null, branchId: null, branchTenantId: null };
+    set(next);
+    persistSelection(next);
+  }
+}));
+
+export const TenantProvider = ({ children }) => <>{children}</>;
 
 export const useTenant = () => {
-  const context = useContext(TenantContext);
-  if (!context) throw new Error('useTenant must be used within a TenantProvider');
-  return context;
+  const tenantId = useTenantStore(state => state.tenantId);
+  const activeTenant = useTenantStore(state => state.activeTenant);
+  const branchId = useTenantStore(state => state.branchId);
+  const setTenantId = useTenantStore(state => state.setTenantId);
+  const setActiveTenant = useTenantStore(state => state.setActiveTenant);
+  const setBranchId = useTenantStore(state => state.setBranchId);
+  const clearSelection = useTenantStore(state => state.clearSelection);
+  return { tenantId, activeTenant, branchId, setTenantId, setActiveTenant, setBranchId, clearSelection };
 };
 
-export default TenantContext;
+export default TenantProvider;
