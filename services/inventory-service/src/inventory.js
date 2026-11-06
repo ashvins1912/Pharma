@@ -150,6 +150,13 @@ export async function searchInventoryProducts({
 
   const pipeline = [
     { $match: productMatch },
+    // Keep only catalogue fields needed by the UI contract before joining stock.
+    { $project: {
+      _id: 1, version: 1, sku: 1, name: 1, genericName: 1, description: 1,
+      imageUrl: 1, hsnSac: 1, manufacturer: 1, strength: 1, form: 1,
+      category: 1, requiresPrescription: 1, baseCostPrice: 1,
+      discountPercentage: 1, marginTier: 1
+    } },
     { $lookup: {
       from: Inventory.collection.name,
       let: { productId: '$_id' },
@@ -203,7 +210,6 @@ export async function searchInventoryProducts({
           { $subtract: [1, { $divide: [{ $min: [100, { $max: [0, { $ifNull: ['$discountPercentage', 0] }] }] }, 100] }] }
         ] }, 2
       ] },
-      _sortPrice: { $ifNull: ['$priceBatch.price', sort === 'price-desc' ? -1 : Number.MAX_SAFE_INTEGER] }
     } },
     { $sort: sort === 'price-asc' ? { sellingPrice: 1, name: 1, _id: 1 }
       : sort === 'price-desc' ? { sellingPrice: -1, name: 1, _id: 1 }
