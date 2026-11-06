@@ -7,7 +7,8 @@ export function isPermissionGranted({
   permission,
   aliases = {},
   platformRoles = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'ADMIN', 'admin'],
-  customerDefaultPermissions = []
+  customerDefaultPermissions = [],
+  roleOverrides = {}
 } = {}) {
   if (!permission) return false;
   const role = String(subject?.app_metadata?.role || subject?.role || '').toUpperCase();
@@ -24,6 +25,7 @@ export function isPermissionGranted({
   ))) return false;
 
   if (platformRoles.some(value => String(value).toUpperCase() === role)) return true;
+  if ((roleOverrides[role] || []).includes(permission)) return true;
   if (role === 'CUSTOMER' && customerDefaultPermissions.includes(permission)) return true;
   if (permissions.includes('*') || names.some(name => permissions.includes(name))) return true;
   return permissions.some(grant => typeof grant === 'string' && grant.endsWith('.*')
