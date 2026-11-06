@@ -1,5 +1,6 @@
 import deliveryContainer from '../container.js';
 import { connectDB, getIsConnected } from '../../../config/db.js';
+import { domainEvents } from '../../../shared/events/DomainEvents.js';
 
 const getRiderTenantId = req => {
     const role = String(req.user?.role || req.user?.app_metadata?.role || req.context?.role || '').toUpperCase();
@@ -40,6 +41,7 @@ export const registerRider = async (req, res) => {
             file: req.file
         });
 
+        domainEvents.emitDomainEvent('COURIER_RIDER_ONBOARDED', String(rider._id || rider.id), { riderId: String(rider._id || rider.id), action: 'ONBOARDED' }, req.user, tenantId, req.user?.branchId || req.user?.app_metadata?.branchId || req.context?.branchId || null);
         res.status(201).json({
             message: `Rider ${rider.name} successfully registered or re-enabled and ready for dispatch.`,
             rider: rider.toJSON()
