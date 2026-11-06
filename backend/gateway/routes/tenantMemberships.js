@@ -24,7 +24,7 @@ async function authorizeTenantManager(req, res) {
       return null;
     }
     const membership = await TenantMembership.findOne({
-      userId: String(req.user?.sub || ''),
+      userId: String(req.user?.sub || req.user?.id || ''),
       tenantId,
       status: 'ACTIVE'
     }).lean();
