@@ -28,6 +28,7 @@ const gateway = express.Router();
 
 // 1. Gateway Pre-processing Middleware: RequestContext Injection
 gateway.use(contextMiddleware);
+gateway.use(auditMutation);
 
 // 2. Health Check
 gateway.get('/health', (req, res) => {
