@@ -75,7 +75,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
         longitude: branch.geolocation?.longitude ?? branch.address?.coordinates?.lng ?? ''
       },
       operatingHours: { ...blankBranch.operatingHours, ...(branch.operatingHours || {}) },
-      isDefault: Boolean(branch.isDefault)
+      isDefault: branch.status === 'PENDING' ? Boolean(branch.makeDefaultOnActivation) : Boolean(branch.isDefault)
     });
     setError('');
     setModalOpen(true);
@@ -181,7 +181,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
                   <div className="flex flex-wrap items-center gap-2">
                     <h4 className="font-bold text-slate-900">{branch.name}</h4>
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">{branch.code}</span>
-                    {branch.isDefault && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">DEFAULT</span>}
+                    {branch.isDefault && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">DEFAULT</span>}{branch.status === 'PENDING' && branch.makeDefaultOnActivation && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700">DEFAULT AFTER APPROVAL</span>}
                     {branch.isTenantLocation && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-bold text-violet-700">TENANT LOCATION</span>}
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${branch.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{branch.status}</span>
                   </div>
