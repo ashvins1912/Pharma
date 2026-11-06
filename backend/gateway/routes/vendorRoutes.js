@@ -19,6 +19,8 @@ import { authService } from '../../services/identity-service/AuthService.js';
 import TenantMembership from '../../models/TenantMembership.js';
 import UserProfile from '../../models/UserProfile.js';
 import Tenant from '../../models/Tenant.js';
+import TenantBranch from '../../models/TenantBranch.js';
+import { domainEvents } from '../../shared/events/DomainEvents.js';
 import Vendor from '../../models/Vendor.js';
 
 const router = express.Router();
@@ -120,6 +122,83 @@ router.get('/profile', authenticateUser, async (req, res) => {
             code: 'TENANT_PROFILE_UNAVAILABLE',
             message: 'The pharmacy profile is temporarily unavailable.',
             statusCode: 503,
+            req
+        });
+    }
+});
+
+/**
+ * POST /vendor/profile/personnel
+ * Assign an existing registered tenant user to a branch with a tenant-scoped role.
+ * A tenant administrator cannot grant access to a different tenant.
+ */
+router.post('/profile/personnel', authenticateUser, async (req, res) => {
+    try {
+        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+        const platformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const tenantId = String(platformAdmin
+            ? req.get('x-tenant-id') || req.body?.tenantId || ''
+            : req.user?.tenantId || req.user?.app_metadata?.tenantId || '').trim();
+        if (!tenantId) return sendError(res, { code: 'TENANT_CONTEXT_REQUIRED', message: 'Select a pharmacy tenant first.', statusCode: 400, req });
+
+        let tenantMembership = null;
+        if (!platformAdmin) {
+            tenantMembership = await TenantMembership.findOne({
+                userId: String(req.user?.sub || req.user?.id || ''),
+                tenantId,
+                status: 'ACTIVE'
+            }).lean();
+            if (!tenantMembership || !['TENANT_OWNER', 'TENANT_ADMIN'].includes(String(tenantMembership.role).toUpperCase()) || tenantMembership.branchId) {
+                return sendError(res, { code: 'TENANT_ADMIN_REQUIRED', message: 'Only a tenant-wide owner or administrator can assign branch users.', statusCode: 403, req });
+            }
+        }
+
+        const email = String(req.body?.email || '').trim().toLowerCase();
+        const assignedRole = String(req.body?.role || '').trim().toUpperCase();
+        const branchId = String(req.body?.branchId || '').trim() || null;
+        const allowedRoles = new Set(['TENANT_ADMIN', 'PHARMACY_STAFF', 'PHARMACIST', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'RIDER', 'TENANT_RIDER']);
+        if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || !allowedRoles.has(assignedRole)) {
+            return sendError(res, { code: 'INVALID_PERSONNEL_ASSIGNMENT', message: 'Provide a valid registered email and supported tenant role.', statusCode: 400, req });
+        }
+        if (branchId) {
+            const branch = await TenantBranch.findOne({ _id: branchId, tenantId, status: 'ACTIVE' }).select('_id').lean();
+            if (!branch) return sendError(res, { code: 'BRANCH_NOT_FOUND', message: 'Choose an active branch belonging to this pharmacy.', statusCode: 404, req });
+        }
+
+        const memberProfile = await UserProfile.findOne({ tenantId, email, status: 'ACTIVE' })
+            .select('userId name firstName lastName email')
+            .lean();
+        if (!memberProfile?.userId) {
+            return sendError(res, { code: 'REGISTERED_TENANT_USER_REQUIRED', message: 'This email must belong to an active registered user of this pharmacy before role assignment.', statusCode: 404, req });
+        }
+
+        const membership = await TenantMembership.findOneAndUpdate(
+            { userId: String(memberProfile.userId), tenantId },
+            { $set: { branchId, role: assignedRole, status: 'ACTIVE', invitedBy: String(req.user?.sub || req.user?.id || 'platform') } },
+            { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+        ).lean();
+        domainEvents.emitDomainEvent('TENANT_MEMBER_ASSIGNED', String(memberProfile.userId), {
+            email, role: assignedRole, branchId
+        }, req.user, tenantId, branchId);
+
+        return sendSuccess(res, {
+            data: {
+                id: String(memberProfile.userId),
+                name: memberProfile.name || [memberProfile.firstName, memberProfile.lastName].filter(Boolean).join(' '),
+                email,
+                role: membership.role,
+                branchId: membership.branchId || null,
+                status: membership.status
+            },
+            message: 'User role and branch access updated.',
+            statusCode: 200,
+            req
+        });
+    } catch (err) {
+        return sendError(res, {
+            code: 'TENANT_MEMBER_ASSIGNMENT_FAILED',
+            message: err.message || 'Could not assign this user to the selected branch.',
+            statusCode: err.code === 11000 ? 409 : 500,
             req
         });
     }
