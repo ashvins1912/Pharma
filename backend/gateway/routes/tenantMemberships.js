@@ -1,5 +1,6 @@
 import express from 'express';
 import { authenticateUser } from '../../middleware/auth.js';
+import { resolveUserContext } from '../../middleware/context.js';
 import TenantMembership from '../../models/TenantMembership.js';
 import TenantBranch from '../../models/TenantBranch.js';
 import { tenantService } from '../../services/tenant-service/TenantService.js';
