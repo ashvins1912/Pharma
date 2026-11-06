@@ -576,6 +576,12 @@ export class TenantService {
                 { $set: { isDefault: shouldBecomeDefault, makeDefaultOnActivation: false } },
                 { new: true, runValidators: true }
             ).lean();
+            if (!finalized) {
+                const error = new Error('Branch activation conflict. Refresh and try again.');
+                error.statusCode = 409;
+                error.code = 'BRANCH_ACTIVATION_CONFLICT';
+                throw error;
+            }
             updated = { ...finalized, id: String(finalized._id) };
         } else {
             const hasOtherDefault = Array.from(this.branches.values()).some(item =>
