@@ -30,7 +30,7 @@ async function scope(req, res) {
 router.get('/', async (req, res) => {
   try {
     const selected = await scope(req, res); if (!selected) return;
-    const rows = await TenantMembership.find({ tenantId: selected.tenantId }).sort({ updatedAt: -1 }).lean();
+    const rows = await TenantMembership.find({ tenantId: selected.tenantId, branchId: { $ne: null } }).sort({ updatedAt: -1 }).lean();
     const ids = [...new Set(rows.map(row => String(row.userId)))];
     const profiles = ids.length ? await UserProfile.find({ $or: [
       { supabase_user_id: { $in: ids } }, { supabaseId: { $in: ids } }, { userId: { $in: ids } }
