@@ -456,10 +456,10 @@ export class TenantService {
         if (!/^[A-Z0-9][A-Z0-9_-]{1,19}$/.test(code)) {
             const error = new Error('Branch code must be 2-20 characters using letters, numbers, hyphens or underscores.'); error.statusCode = 400; error.code = 'BRANCH_VALIDATION_FAILED'; throw error;
         }
-        if (phone && (!/^\\+?[0-9 ()-]{7,20}$/.test(phone) || phone.replace(/\\D/g, '').length < 7 || phone.replace(/\\D/g, '').length > 15)) {
+        if (phone && (!/^\+?[0-9 ()-]{7,20}$/.test(phone) || phone.replace(/\D/g, '').length < 7 || phone.replace(/\\D/g, '').length > 15)) {
             const error = new Error('Enter a valid branch contact number.'); error.statusCode = 400; error.code = 'BRANCH_VALIDATION_FAILED'; throw error;
         }
-        if (email && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             const error = new Error('Enter a valid branch contact email.'); error.statusCode = 400; error.code = 'BRANCH_VALIDATION_FAILED'; throw error;
         }
         if ((latitude == null) !== (longitude == null)
@@ -481,7 +481,7 @@ export class TenantService {
             code,
             phone: phone || tenant.phone,
             email: email || tenant.email,
-            geolocation: data.geolocation || { latitude: null, longitude: null },
+            geolocation: { latitude, longitude },
             address: {
                 street: data.address?.street || '',
                 city: data.address?.city || '',
