@@ -5,6 +5,10 @@ const clean = value => String(value ?? '').trim();
 
 function routeKind(method, path) {
   if (path.startsWith('/api/surplus-savings/admin') || path.startsWith('/api/tenant/members') || (method === 'POST' && path.endsWith('/onboard'))) return null;
+  // TenantService already emits durable domain events for tenant create/update
+  // and branch create/settings updates. Avoid logging those same writes twice.
+  if (path.startsWith('/api/v1/admin/tenants')) return null;
+  if (path.startsWith('/api/tenant/branches') && (method === 'POST' || (method === 'PATCH' && !path.endsWith('/status')))) return null;
   if (path.startsWith('/api/orders/')) return 'ORDER';
   if (path.startsWith('/api/admin/riders') || path.startsWith('/api/riders/')) return 'RIDER';
   if (path.startsWith('/api/v1/vendor/profile') && method !== 'GET') return 'TENANT_PROFILE';
@@ -22,13 +26,13 @@ function eventName(kind, method, req, entity) {
   if (kind === 'ORDER') {
     const status = clean(req.body?.newStatus || req.body?.status || req.body?.decision || req.params?.step || entity?.status || entity?.orderStatus).toLowerCase();
     if (status.includes('reject')) return 'ORDER_REJECTED';
-    if (status.includes('accept')) return 'ORDER_ACCEPTED';
+    if (status.includes('accept') || status.includes('approv')) return 'ORDER_ACCEPTED';
     return method === 'POST' ? 'ORDER_CREATED' : 'ORDER_UPDATED';
   }
   if (kind === 'RIDER') return method === 'POST' ? 'RIDER_CREATED' : 'RIDER_UPDATED';
   if (kind === 'TENANT_PROFILE') return 'TENANT_PROFILE_UPDATED';
   if (kind === 'TENANT') return method === 'POST' ? 'TENANT_CREATED' : method === 'DELETE' ? 'TENANT_DELETED' : 'TENANT_UPDATED';
-  if (kind === 'TENANT_BRANCH') return method === 'POST' ? 'TENANT_BRANCH_CREATED' : method === 'DELETE' ? 'TENANT_BRANCH_DELETED' : 'TENANT_BRANCH_UPDATED';
+  if (kind === 'TENANT_BRANCH') return method === 'DELETE' ? 'BRANCH_ARCHIVED' : 'BRANCH_STATUS_UPDATED';
   return 'RECORD_UPDATED';
 }
 
