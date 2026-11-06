@@ -5,6 +5,8 @@ const clean = value => String(value ?? '').trim();
 
 function routeKind(method, path) {
   if (path.startsWith('/api/surplus-savings/admin') || path.startsWith('/api/tenant/members') || (method === 'POST' && path.endsWith('/onboard'))) return null;
+  if (path.startsWith('/api/v1/admin/tenants')) return null;
+  if (path.startsWith('/api/tenant/branches') && (method === 'POST' || (method === 'PATCH' && !path.endsWith('/status')))) return null;
   if (path.startsWith('/api/orders/')) return 'ORDER';
   if (path.startsWith('/api/admin/riders') || path.startsWith('/api/riders/')) return 'RIDER';
   if (path.startsWith('/api/v1/vendor/profile') && method !== 'GET') return 'TENANT_PROFILE';
@@ -28,7 +30,7 @@ function eventName(kind, method, req, entity) {
   if (kind === 'RIDER') return method === 'POST' ? 'RIDER_CREATED' : 'RIDER_UPDATED';
   if (kind === 'TENANT_PROFILE') return 'TENANT_PROFILE_UPDATED';
   if (kind === 'TENANT') return method === 'POST' ? 'TENANT_CREATED' : method === 'DELETE' ? 'TENANT_DELETED' : 'TENANT_UPDATED';
-  if (kind === 'TENANT_BRANCH') return method === 'POST' ? 'TENANT_BRANCH_CREATED' : method === 'DELETE' ? 'TENANT_BRANCH_DELETED' : 'TENANT_BRANCH_UPDATED';
+  if (kind === 'TENANT_BRANCH') return method === 'DELETE' ? 'BRANCH_ARCHIVED' : 'BRANCH_STATUS_UPDATED';
   return 'RECORD_UPDATED';
 }
 
