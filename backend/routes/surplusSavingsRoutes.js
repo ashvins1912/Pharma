@@ -8,6 +8,7 @@ import SurplusSavingsCampaign from '../models/SurplusSavingsCampaign.js';
 import SurplusSavingsRedemption from '../models/SurplusSavingsRedemption.js';
 import { tenantScopedFilter } from '../authorization/tenantScope.js';
 import { getIsConnected } from '../config/db.js';
+import { domainEvents } from '../shared/events/DomainEvents.js';
 
 const router = express.Router();
 const TENANT_ROLES = new Set(['TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF', 'BRANCH_ADMIN', 'PHARMACY']);
@@ -140,6 +141,7 @@ router.post('/admin', requireCampaignAdmin, requirePermission('promotions.manage
             medicineIds, discountType, discountValue, maxDiscountAmount, minOrderAmount,
             startsAt, endsAt, usageLimit, perCustomerLimit, createdBy: String(req.user.sub)
         });
+        domainEvents.emitDomainEvent('CAMPAIGN_CREATED', String(campaign._id), { campaignId: String(campaign._id), status: campaign.status }, req.user, tenantId, branchId);
         return res.status(201).json({ success: true, campaign });
     } catch (error) {
         console.error('[SurplusSavings] Campaign creation failed:', error);
@@ -167,6 +169,7 @@ router.patch('/admin/:campaignId', requireCampaignAdmin, requirePermission('prom
         if (updates.name !== undefined && !updates.name) return res.status(400).json({ message: 'Campaign name cannot be empty.' });
         const campaign = await SurplusSavingsCampaign.findOneAndUpdate(tenantScopedFilter(tenantId, { _id: req.params.campaignId }), { $set: updates }, { new: true, runValidators: true });
         if (!campaign) return res.status(404).json({ message: 'Campaign not found in this pharmacy.' });
+        domainEvents.emitDomainEvent('CAMPAIGN_UPDATED', String(campaign._id), { campaignId: String(campaign._id), status: campaign.status }, req.user, tenantId, req.user?.branchId || req.user?.app_metadata?.branchId || null);
         return res.json({ success: true, campaign });
     } catch (error) {
         return res.status(400).json({ message: error.message || 'Could not update campaign.' });
@@ -179,6 +182,7 @@ router.delete('/admin/:campaignId', requireCampaignAdmin, requirePermission('pro
         const tenantId = tenantOf(req);
         const campaign = await SurplusSavingsCampaign.findOneAndUpdate(tenantScopedFilter(tenantId, { _id: req.params.campaignId }), { $set: { status: 'PAUSED' } }, { new: true });
         if (!campaign) return res.status(404).json({ message: 'Campaign not found in this pharmacy.' });
+        domainEvents.emitDomainEvent('CAMPAIGN_PAUSED', String(campaign._id), { campaignId: String(campaign._id), status: campaign.status }, req.user, tenantId, req.user?.branchId || req.user?.app_metadata?.branchId || null);
         return res.json({ success: true, campaign, message: 'Campaign paused; existing order snapshots are unchanged.' });
     } catch {
         return res.status(500).json({ message: 'Could not pause campaign.' });
