@@ -128,7 +128,7 @@ export default function AdminOfferZoneManager() {
             Offer Zone Curation &amp; Intelligent Refill Engine
           </h2>
           <p className="text-xs sm:text-sm text-indigo-100 max-w-2xl mt-1 leading-relaxed">
-            Configure which products appear in the customer Offer Zone, set promotional discounts, and monitor platform-wide sales frequencies with seasonal demand intelligence (20 records per page).
+            Configure which products appear in the customer Offer Zone, set promotional discounts, and review available catalogue pages with seasonal/category guidance and observed order quantities.
           </p>
         </div>
 
@@ -179,6 +179,12 @@ export default function AdminOfferZoneManager() {
             </button>
           ))}
         </div>
+      </div>
+
+      <SavedCampaignsEditor />
+
+      <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-xs text-sky-900">
+        <strong>Where curation and intelligence are used:</strong> this screen provides staff with deterministic seasonal/category recommendations and observed order quantities when available. It is a review aid, not a trained AI prediction. The local switches below are a preview; customer-facing discounts are controlled by the persisted campaigns above.
       </div>
 
       {/* Product Offer Configuration Table */}
