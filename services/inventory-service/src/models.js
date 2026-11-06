@@ -23,6 +23,10 @@ const productSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 productSchema.index({ tenantId: 1, sku: 1 }, { unique: true });
+// Tenant-scoped catalogue filters and stable name sorting.
+productSchema.index({ tenantId: 1, active: 1, name: 1, _id: 1 });
+productSchema.index({ tenantId: 1, active: 1, category: 1, name: 1, _id: 1 });
+productSchema.index({ tenantId: 1, active: 1, requiresPrescription: 1, name: 1, _id: 1 });
 
 const inventorySchema = new mongoose.Schema({
   tenantId: { type: 'string', required: true, index: true },
@@ -40,6 +44,8 @@ const inventorySchema = new mongoose.Schema({
 }, { timestamps: true });
 
 inventorySchema.index({ tenantId: 1, branchId: 1, productId: 1, batchNumber: 1 }, { unique: true });
+// Supports tenant/branch/product batch lookups and expiry ordering in catalogue reads.
+inventorySchema.index({ tenantId: 1, branchId: 1, productId: 1, expiryDate: 1, _id: 1 });
 inventorySchema.index({ tenantId: 1, branchId: 1, sku: 1 });
 inventorySchema.index({ tenantId: 1, branchId: 1, sourceImportBatchId: 1 });
 
