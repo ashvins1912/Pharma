@@ -30,7 +30,33 @@ import { ensureAuthorizationCatalog } from './authorization/AuthorizationCatalog
 import { refreshStockWaitlistCases } from './services/intelligentFulfillment/waitlistMonitor.js';
 import internalGatewayRoutes from './routes/internalGatewayRoutes.js';
 import apiRoutes from './routes/apiRoutes.js';
+import AuditEvent from './models/AuditEvent.js';
+import { domainEvents } from './shared/events/DomainEvents.js';
 
+
+
+const safeAuditDetails = payload => {
+    const allowed = ['action', 'status', 'changes', 'changedFields', 'role', 'branchId', 'userId', 'campaignId', 'orderId', 'riderId', 'reason'];
+    const source = payload && typeof payload === 'object' ? payload : {};
+    return Object.fromEntries(allowed.filter(key => source[key] !== undefined).map(key => [key, source[key]]));
+};
+
+domainEvents.on('*', event => {
+    if (!getIsConnected() || !event?.eventType || !event?.tenantId) return;
+    const details = safeAuditDetails(event.payload);
+    const summary = String(event.eventType).toLowerCase().replaceAll('_', ' ');
+    void AuditEvent.create({
+        eventType: event.eventType,
+        entityId: String(event.entityId || ''),
+        tenantId: String(event.tenantId),
+        branchId: event.branchId ? String(event.branchId) : null,
+        actorId: String(event.actor?.userId || 'system'),
+        actorRole: String(event.actor?.role || 'system'),
+        summary,
+        details,
+        occurredAt: new Date(event.timestamp || Date.now())
+    }).catch(error => console.error('[AuditEvent] Could not persist domain event:', error.message));
+});
 
 const app = express();
 const corsAllowedOrigins = env.CORS_ALLOWED_ORIGINS
