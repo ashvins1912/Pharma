@@ -15,8 +15,9 @@ async function authorizeTenantManager(req, res) {
   resolveUserContext(req);
   const tenantId = clean(req.params.tenantId);
   const context = req.context || {};
-  const platform = context.isPlatformUser === true;
-  let role = clean(context.role || req.user?.app_metadata?.role || req.user?.role).toUpperCase();
+  const authenticatedRole = clean(req.user?.app_metadata?.role || req.user?.role).toUpperCase();
+  const platform = context.isPlatformUser === true || ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'ADMIN'].includes(authenticatedRole);
+  let role = authenticatedRole || clean(context.role).toUpperCase();
 
   if (!platform) {
     if (String(context.tenantId || '') !== tenantId || context.tenantMismatch) {
