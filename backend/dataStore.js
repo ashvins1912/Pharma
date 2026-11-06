@@ -1654,11 +1654,47 @@ export const dataStore = {
         return order;
     },
 
-    async getAllOrders() {
-        if (getIsConnected()) {
-            return Order.find().sort({ createdAt: -1 }).lean();
+    async getAllOrders(options = {}) {
+        const criteria = typeof options === 'string' ? { orderStatus: options } : (options || {});
+        const filter = {};
+        for (const key of ['tenantId', 'branchId', 'userId', 'customerId', 'orderStatus', 'assignmentType']) {
+            if (criteria[key] !== undefined && criteria[key] !== null && criteria[key] !== '') {
+                filter[key] = String(criteria[key]);
+            }
         }
-        return [...inMemoryOrders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        if (criteria.assignedRiderId) filter['rider.riderId'] = String(criteria.assignedRiderId);
+        if (criteria.from || criteria.to) {
+            const from = criteria.from ? new Date(criteria.from) : null;
+            const to = criteria.to ? new Date(criteria.to) : null;
+            if ((from && !Number.isFinite(from.getTime())) || (to && !Number.isFinite(to.getTime()))) {
+                throw new Error('Invalid order date range.');
+            }
+            filter.createdAt = { ...(from ? { $gte: from } : {}), ...(to ? { $lte: to } : {}) };
+        }
+        const limit = Number.isFinite(Number(criteria.limit)) && Number(criteria.limit) > 0
+            ? Math.min(500, Math.floor(Number(criteria.limit))) : null;
+        const skip = Number.isFinite(Number(criteria.skip)) && Number(criteria.skip) > 0
+            ? Math.floor(Number(criteria.skip)) : 0;
+        if (getIsConnected()) {
+            let query = Order.find(filter).sort({ createdAt: -1, _id: -1 }).skip(skip);
+            if (limit) query = query.limit(limit);
+            if (criteria.select) query = query.select(criteria.select);
+            return query.lean();
+        }
+        let orders = inMemoryOrders.filter(order =>
+            Object.entries(filter).every(([key, value]) => {
+                if (key === 'rider.riderId') return String(order.rider?.riderId || '') === value;
+                if (key === 'createdAt') {
+                    const createdAt = new Date(order.createdAt);
+                    return (!value.$gte || createdAt >= value.$gte) && (!value.$lte || createdAt <= value.$lte);
+                }
+                return String(order[key] ?? '') === value;
+            })
+        ).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+            || String(b._id || b.id).localeCompare(String(a._id || a.id)));
+        if (skip) orders = orders.slice(skip);
+        if (limit) orders = orders.slice(0, limit);
+        return orders;
     },
 
     async getDeliveredOrdersPage(page = 1, limit = 10, { startDate = null, endDate = null, tenantId = null } = {}) {
@@ -1957,15 +1993,58 @@ export const dataStore = {
         return this.getAllOrders();
     },
 
-    async getOrder(orderId) {
+    async getOrder(orderId, { tenantId = null, branchId = null } = {}) {
         if (getIsConnected()) {
-            return Order.findById(orderId).lean();
+            const filter = { _id: orderId };
+            if (tenantId) filter.tenantId = String(tenantId);
+            if (branchId) filter.branchId = String(branchId);
+            return Order.findOne(filter).lean();
         }
-        return inMemoryOrders.find(item => String(item._id) === String(orderId)) || null;
+        return inMemoryOrders.find(item =>
+            String(item._id) === String(orderId)
+            && (!tenantId || String(item.tenantId || '') === String(tenantId))
+            && (!branchId || String(item.branchId || '') === String(branchId))
+        ) || null;
     },
 
-    async getOrderById(orderId) {
-        return this.getOrder(orderId);
+    async getOrderById(orderId, scope = {}) {
+        return this.getOrder(orderId, scope);
+    },
+
+    async updateOrderForTenant(orderId, tenantId, updateData = {}) {
+        if (!tenantId) return null;
+        const safeUpdates = { ...updateData };
+        delete safeUpdates.tenantId;
+        if (getIsConnected()) {
+            const order = await Order.findOne({ _id: orderId, tenantId: String(tenantId) });
+            if (!order) return null;
+            Object.assign(order, safeUpdates);
+            if (updateData.rider) {
+                order.rider = { ...order.rider?.toObject?.() || order.rider || {}, ...updateData.rider };
+                order.deliveryPersonMobile = updateData.rider.riderMobile || order.deliveryPersonMobile || '';
+            }
+            if (updateData.assignmentDetails) {
+                order.assignmentDetails = { ...order.assignmentDetails || {}, ...updateData.assignmentDetails };
+            }
+            order.updatedAt = new Date();
+            await order.save();
+            return order.toObject({ virtuals: true });
+        }
+        const order = inMemoryOrders.find(item =>
+            String(item._id || item.id) === String(orderId)
+            && String(item.tenantId || '') === String(tenantId)
+        );
+        if (!order) return null;
+        Object.assign(order, safeUpdates);
+        if (updateData.rider) {
+            order.rider = { ...order.rider, ...updateData.rider };
+            order.deliveryPersonMobile = updateData.rider.riderMobile || order.deliveryPersonMobile || '';
+        }
+        if (updateData.assignmentDetails) {
+            order.assignmentDetails = { ...order.assignmentDetails, ...updateData.assignmentDetails };
+        }
+        order.updatedAt = new Date();
+        return order;
     },
 
     async transitionOrderStatus(orderId, newStatus, actor = 'Pharmacist', riderInfo = null, cashCollectionStatus = null, deliveryOtpVerified = false) {
