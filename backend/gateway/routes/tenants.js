@@ -108,8 +108,11 @@ router.post('/', authenticateUser, requireRoles(PlatformRoles.PLATFORM_SUPER_ADM
 });
 
 // Get branches for a tenant
-router.get('/:tenantId/branches', async (req, res, next) => {
+router.get('/:tenantId/branches', authenticateUser, requireRoles(PlatformRoles.PLATFORM_SUPER_ADMIN, TenantRoles.TENANT_OWNER, TenantRoles.TENANT_ADMIN), async (req, res, next) => {
     try {
+        if (!req.context?.isPlatformUser && String(req.context?.authorizedTenantId || '') !== String(req.params.tenantId)) {
+            return res.status(403).json({ success: false, code: 'CROSS_TENANT_BRANCH_ACCESS', message: 'You can only view branches for your authenticated pharmacy.' });
+        }
         const cacheKey = `cache:tenant:${req.params.tenantId}:branches:v2`;
         let branches = await cacheService.get(cacheKey);
         if (!branches) {
@@ -125,6 +128,9 @@ router.get('/:tenantId/branches', async (req, res, next) => {
 // Create a branch under a tenant - Invalids cache
 router.post('/:tenantId/branches', authenticateUser, requireRoles(PlatformRoles.PLATFORM_SUPER_ADMIN, TenantRoles.TENANT_OWNER, TenantRoles.TENANT_ADMIN), async (req, res, next) => {
     try {
+        if (!req.context?.isPlatformUser && String(req.context?.authorizedTenantId || '') !== String(req.params.tenantId)) {
+            return res.status(403).json({ success: false, code: 'CROSS_TENANT_BRANCH_ACCESS', message: 'You can only create branches for your authenticated pharmacy.' });
+        }
         const branch = await tenantService.createBranch(req.params.tenantId, req.body, req.context);
         await cacheService.del(CACHE_KEY_ALL_BRANCHES);
         await cacheService.del(`cache:tenant:${req.params.tenantId}:branches:v2`);
@@ -137,12 +143,44 @@ router.post('/:tenantId/branches', authenticateUser, requireRoles(PlatformRoles.
 // Update branch settings - Invalidates cache
 router.put('/branches/:branchId', authenticateUser, requireRoles(PlatformRoles.PLATFORM_SUPER_ADMIN, TenantRoles.TENANT_OWNER, TenantRoles.TENANT_ADMIN), async (req, res, next) => {
     try {
+        const current = await tenantService.getBranchById(req.params.branchId);
+        if (!current) return res.status(404).json({ success: false, code: 'BRANCH_NOT_FOUND', message: 'Branch not found.' });
+        if (!req.context?.isPlatformUser && String(req.context?.authorizedTenantId || '') !== String(current.tenantId)) {
+            return res.status(403).json({ success: false, code: 'CROSS_TENANT_BRANCH_ACCESS', message: 'You cannot modify a branch outside your pharmacy.' });
+        }
         const updated = await tenantService.updateBranch(req.params.branchId, req.body, req.context);
         await cacheService.del(CACHE_KEY_ALL_BRANCHES);
         if (updated?.tenantId) {
             await cacheService.del(`cache:tenant:${updated.tenantId}:branches:v2`);
         }
         res.json({ success: true, data: updated });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.post('/branches/:branchId/activate', authenticateUser, requireRoles(PlatformRoles.PLATFORM_SUPER_ADMIN, TenantRoles.TENANT_OWNER, TenantRoles.TENANT_ADMIN), async (req, res, next) => {
+    try {
+        const current = await tenantService.getBranchById(req.params.branchId);
+        if (!current) return res.status(404).json({ success: false, code: 'BRANCH_NOT_FOUND', message: 'Branch not found.' });
+        if (!req.context?.isPlatformUser && String(req.context?.authorizedTenantId || '') !== String(current.tenantId)) {
+            return res.status(403).json({ success: false, code: 'CROSS_TENANT_BRANCH_ACCESS', message: 'You cannot activate a branch outside your pharmacy.' });
+        }
+        const activated = await tenantService.activateBranch(req.params.branchId, current.tenantId, req.context);
+        const hasDefault = await TenantBranch.exists({ tenantId: current.tenantId, status: 'ACTIVE', isDefault: true, _id: { $ne: activated.id || activated._id } });
+        const shouldBecomeDefault = activated.makeDefaultOnActivation === true || !hasDefault;
+        if (shouldBecomeDefault) {
+            await TenantBranch.updateMany({ tenantId: current.tenantId, _id: { $ne: activated.id || activated._id } }, { $set: { isDefault: false } });
+            await TenantBranch.updateOne({ _id: activated.id || activated._id, tenantId: current.tenantId }, { $set: { isDefault: true, makeDefaultOnActivation: false } });
+            activated.isDefault = true;
+        } else {
+            await TenantBranch.updateOne({ _id: activated.id || activated._id, tenantId: current.tenantId }, { $set: { makeDefaultOnActivation: false, isDefault: false } });
+            activated.isDefault = false;
+        }
+        activated.makeDefaultOnActivation = false;
+        await cacheService.del(CACHE_KEY_ALL_BRANCHES);
+        await cacheService.del(`cache:tenant:${current.tenantId}:branches:v2`);
+        return res.json({ success: true, data: activated, message: 'Branch reviewed and activated.' });
     } catch (err) {
         next(err);
     }
