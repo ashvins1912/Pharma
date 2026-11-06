@@ -90,7 +90,7 @@ export default function AdminOfferZoneManager() {
       });
     });
 
-    const catalogItems = (Array.isArray(medicines) ? medicines : []).map(med => {
+    const catalogItems = (Array.isArray(medicines) ? medicines : []).map((med, idx) => {
       const name = med.name || med.title || 'Medicine';
       const category = (med.category || 'General').toLowerCase();
       const soldCount = salesFrequencyMap[name] || 0;
