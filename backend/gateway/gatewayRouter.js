@@ -21,6 +21,7 @@ import vendorRouter from './routes/vendorRoutes.js';
 import paymentActionRoutes from '../routes/paymentActionRoutes.js';
 import adminPaymentReminderRoutes from '../routes/adminPaymentReminderRoutes.js';
 import deliveryEventRoutes from '../routes/deliveryEventRoutes.js';
+import activityRouter from './routes/activity.js';
 
 const gateway = express.Router();
 
@@ -58,6 +59,7 @@ gateway.use('/notifications', notificationsRouter);
 gateway.use('/public/payments', paymentActionRoutes);
 gateway.use('/admin/payments', adminPaymentReminderRoutes);
 gateway.use('/delivery/events', deliveryEventRoutes);
+gateway.use('/activity', activityRouter);
 
 // 4. Gateway Standard Error Response Middleware
 gateway.use((err, req, res, next) => {

@@ -8,6 +8,7 @@ import { authenticateUser } from '../../middleware/auth.js';
 import { requireRoles } from '../../middleware/context.js';
 import { PlatformRoles, TenantRoles } from '../../shared/contracts/index.js';
 import { cacheService } from '../../services/cache/CacheService.js';
+import tenantMembershipsRouter from './tenantMemberships.js';
 
 const router = express.Router();
 const CACHE_KEY_ALL_BRANCHES = 'cache:tenants:branches:all:v2';
@@ -146,5 +147,7 @@ router.put('/branches/:branchId', authenticateUser, requireRoles(PlatformRoles.P
         next(err);
     }
 });
+
+router.use('/:tenantId/memberships', tenantMembershipsRouter);
 
 export default router;
