@@ -68,6 +68,7 @@ export class InMemoryOrderRepository extends IOrderRepository {
                 assignmentType: filter.assignmentType,
                 assignedRiderId: filter.assignedRiderId,
                 limit: filter.limit,
+                select: '_id tenantId branchId customerName customerMobile addressDetails deliveryAddress paymentMethod location coordinates orderStatus assignmentType rider assignedRiderId expectedOutForDeliveryAt outForDeliveryAt deliveredAt finalTotal items assignmentDetails createdAt updatedAt',
                 from: filter.from,
                 to: filter.to
             })
