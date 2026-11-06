@@ -452,6 +452,7 @@ export class TenantService {
         const city = String(data.address?.city || '').trim();
         const state = String(data.address?.state || '').trim();
         const pincode = String(data.address?.pincode || data.address?.zipCode || '').trim();
+        const numericOrDefault = (value, fallback) => value === '' || value == null ? fallback : (Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : fallback);
         const latitude = data.geolocation?.latitude === '' || data.geolocation?.latitude == null ? null : Number(data.geolocation.latitude);
         const longitude = data.geolocation?.longitude === '' || data.geolocation?.longitude == null ? null : Number(data.geolocation.longitude);
         if (name.length < 2 || name.length > 120) {
@@ -496,11 +497,11 @@ export class TenantService {
                 pincode,
                 ...(data.address?.coordinates ? { coordinates: data.address.coordinates } : {})
             },
-            serviceRadiusKm: Number.isFinite(Number(data.serviceRadiusKm)) && Number(data.serviceRadiusKm) >= 0 ? Number(data.serviceRadiusKm) : 10.0,
+            serviceRadiusKm: numericOrDefault(data.serviceRadiusKm, 10.0),
             deliveryMode: data.deliveryMode || 'OWN_RIDER',
-            minimumOrderValue: Number.isFinite(Number(data.minimumOrderValue)) && Number(data.minimumOrderValue) >= 0 ? Number(data.minimumOrderValue) : 149,
-            freeDeliveryAbove: Number.isFinite(Number(data.freeDeliveryAbove)) && Number(data.freeDeliveryAbove) >= 0 ? Number(data.freeDeliveryAbove) : 499,
-            deliveryFee: Number.isFinite(Number(data.deliveryFee)) && Number(data.deliveryFee) >= 0 ? Number(data.deliveryFee) : 30,
+            minimumOrderValue: numericOrDefault(data.minimumOrderValue, 149),
+            freeDeliveryAbove: numericOrDefault(data.freeDeliveryAbove, 499),
+            deliveryFee: numericOrDefault(data.deliveryFee, 30),
             operatingHours: data.operatingHours || { open: '08:00', close: '22:00' },
             status: 'PENDING',
             activatedAt: null,
