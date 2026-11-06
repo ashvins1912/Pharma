@@ -164,10 +164,17 @@ router.patch('/:branchId/status', async (req, res) => {
     if (!branch) return res.status(404).json({ success: false, code: 'BRANCH_NOT_FOUND', message: 'Branch not found for this pharmacy.' });
     if (branch.status === 'PENDING' && status === 'ACTIVE') {
       const activated = await tenantService.activateBranch(branch._id, scope.tenantId, { userId: req.user?.sub });
-      const hasDefault = await TenantBranch.exists({ tenantId: scope.tenantId, status: 'ACTIVE', isDefault: true });
-      if (!hasDefault) {
-        await TenantBranch.updateOne({ _id: activated.id || activated._id, tenantId: scope.tenantId }, { $set: { isDefault: true } });
+      const hasDefault = await TenantBranch.exists({ tenantId: scope.tenantId, status: 'ACTIVE', isDefault: true, _id: { $ne: activated.id || activated._id } });
+      const shouldBecomeDefault = activated.makeDefaultOnActivation === true || !hasDefault;
+      if (shouldBecomeDefault) {
+        await TenantBranch.updateMany({ tenantId: scope.tenantId, _id: { $ne: activated.id || activated._id } }, { $set: { isDefault: false } });
+        await TenantBranch.updateOne({ _id: activated.id || activated._id, tenantId: scope.tenantId }, { $set: { isDefault: true, makeDefaultOnActivation: false } });
         activated.isDefault = true;
+        activated.makeDefaultOnActivation = false;
+      } else {
+        await TenantBranch.updateOne({ _id: activated.id || activated._id, tenantId: scope.tenantId }, { $set: { isDefault: false, makeDefaultOnActivation: false } });
+        activated.isDefault = false;
+        activated.makeDefaultOnActivation = false;
       }
       return res.json({ success: true, branch: activated, message: 'Branch reviewed and activated.' });
     }
