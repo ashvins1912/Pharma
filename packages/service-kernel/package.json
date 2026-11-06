@@ -9,5 +9,8 @@
     "./errors": "./src/errors/AppError.js",
     "./result": "./src/result/Result.js",
     "./use-case": "./src/application/UseCase.js"
+  },
+  "scripts": {
+    "test": "node --test"
   }
 }
