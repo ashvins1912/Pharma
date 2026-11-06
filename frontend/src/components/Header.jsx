@@ -27,16 +27,20 @@ export default function Header({
   const { tenantId, branchId, setBranchId } = useTenant();
   const { language, setLanguage, t, languages } = useLanguage();
   const [branchOptions, setBranchOptions] = useState([]);
+  const [branchOptionsForTenant, setBranchOptionsForTenant] = useState(null);
 
   React.useEffect(() => {
     let cancelled = false;
     if (!tenantId) {
       setBranchOptions([]);
+      setBranchOptionsForTenant(null);
       return () => { cancelled = true; };
     }
 
     // Load only the selected pharmacy's active branches. The global branch list
     // can contain branches from other tenants and can race a tenant switch.
+    setBranchOptions([]);
+    setBranchOptionsForTenant(String(tenantId));
     apiClient.get('/api/v1/branches/all', { params: { tenantId } }).then(res => {
       const payload = res.data?.data || res.data?.branches || [];
       const items = Array.isArray(payload) ? payload : [];
@@ -61,10 +65,10 @@ export default function Header({
   }, [tenantId]);
 
   React.useEffect(() => {
-    if (!tenantId || branchOptions.length === 0) return;
+    if (!tenantId || branchOptionsForTenant !== String(tenantId) || branchOptions.length === 0) return;
     const selectedBranchIsValid = branchOptions.some(option => option.id === String(branchId || ''));
     if (!selectedBranchIsValid) setBranchId(branchOptions[0].id);
-  }, [tenantId, branchOptions, branchId, setBranchId]);
+  }, [tenantId, branchOptionsForTenant, branchOptions, branchId, setBranchId]);
 
   const cartItemCount = cart.reduce((total, item) => total + item.quantity, 0);
   const proposalsWaitingCount = (medicineRequests || []).filter(r => r.status === 'PROPOSAL_SENT').length;
