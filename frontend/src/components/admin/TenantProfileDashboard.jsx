@@ -31,10 +31,19 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
   const [availableTenants, setAvailableTenants] = useState([]);
   const [internalTenantId, setInternalTenantId] = useState('');
   const selectedTenantId = platformTenantId || internalTenantId;
+  const effectiveTenantId = selectedTenantId || user?.tenantId || user?.app_metadata?.tenantId || '';
   const [tenantsLoading, setTenantsLoading] = useState(false);
   const [profile, setProfile] = useState(emptyProfile);
   const [draft, setDraft] = useState(emptyProfile);
   const [personnel, setPersonnel] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [memberDraft, setMemberDraft] = useState({ email: '', role: 'PHARMACY_STAFF', branchId: '' });
+  const [memberSaving, setMemberSaving] = useState(false);
+  const [memberError, setMemberError] = useState('');
+  const [memberNotice, setMemberNotice] = useState('');
+  const [activityEvents, setActivityEvents] = useState([]);
+  const [activityError, setActivityError] = useState('');
+  const [activityLoading, setActivityLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profileMissing, setProfileMissing] = useState(false);
@@ -104,6 +113,47 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
     return () => { cancelled = true; };
   }, [isSuperAdmin, showTenantSelector, platformTenantId]);
 
+
+  useEffect(() => {
+    if (!effectiveTenantId) { setBranches([]); return undefined; }
+    let cancelled = false;
+    apiClient.get('/api/v1/branches/all', { params: { tenantId: effectiveTenantId } })
+      .then(response => {
+        if (cancelled) return;
+        const payload = response.data?.branches || response.data?.data?.branches || response.data?.data || [];
+        setBranches(Array.isArray(payload) ? payload.filter(item => String(item.status || 'ACTIVE').toUpperCase() === 'ACTIVE') : []);
+      })
+      .catch(() => { if (!cancelled) setBranches([]); });
+    return () => { cancelled = true; };
+  }, [effectiveTenantId]);
+
+
+  useEffect(() => {
+    if (!effectiveTenantId) { setActivityEvents([]); return undefined; }
+    let cancelled = false;
+    const refreshActivity = () => {
+      apiClient.get('/api/v1/vendor/profile/activity', {
+        params: isSuperAdmin ? { tenantId: effectiveTenantId, limit: 50 } : { limit: 50 }
+      }).then(response => {
+        if (cancelled) return;
+        const events = response.data?.data?.events || response.data?.events || [];
+        setActivityEvents(Array.isArray(events) ? events : []);
+        setActivityError('');
+      }).catch(error => {
+        if (!cancelled) setActivityError(error?.response?.data?.message || 'Activity history could not be loaded.');
+      }).finally(() => { if (!cancelled) setActivityLoading(false); });
+    };
+    setActivityLoading(true);
+    refreshActivity();
+    const interval = window.setInterval(refreshActivity, 30_000);
+    window.addEventListener('pharma:activity-updated', refreshActivity);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener('pharma:activity-updated', refreshActivity);
+    };
+  }, [effectiveTenantId, isSuperAdmin]);
+
   useEffect(() => { loadProfile(); }, [loadProfile]);
 
   const canEdit = isSuperAdmin || pharmacyCanEdit;
@@ -144,6 +194,7 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
       setDraft(next);
       setEditing(false);
       setNotice(response.data?.message || 'Pharmacy details saved.');
+      window.dispatchEvent(new Event('pharma:activity-updated'));
       setBranchRegistryVersion(version => version + 1);
     } catch (err) {
       setError(err?.response?.data?.message || 'Pharmacy details could not be saved.');
@@ -166,6 +217,32 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
       setPolicySaving(false);
     }
   };
+
+
+  const assignPersonnel = async event => {
+    event.preventDefault();
+    setMemberSaving(true);
+    setMemberError('');
+    setMemberNotice('');
+    try {
+      const response = await apiClient.post('/api/v1/vendor/profile/personnel', {
+        ...(isSuperAdmin ? { tenantId: selectedTenantId } : {}),
+        email: memberDraft.email.trim(),
+        role: memberDraft.role,
+        branchId: memberDraft.role === 'TENANT_ADMIN' ? '' : memberDraft.branchId
+      });
+      const member = response.data?.data?.data || response.data?.data || response.data?.member;
+      if (member) setPersonnel(current => [...current.filter(item => String(item.email).toLowerCase() !== String(member.email).toLowerCase()), member]);
+      setMemberDraft({ email: '', role: 'PHARMACY_STAFF', branchId: '' });
+      setMemberNotice(response.data?.message || 'User role and branch access updated.');
+      window.dispatchEvent(new Event('pharma:activity-updated'));
+    } catch (err) {
+      setMemberError(err?.response?.data?.message || err?.response?.data?.error?.message || 'Could not assign this user.');
+    } finally {
+      setMemberSaving(false);
+    }
+  };
+  const canManagePersonnel = isSuperAdmin || ['TENANT_OWNER', 'TENANT_ADMIN'].includes(role);
 
   return (
     <div className="space-y-6">
@@ -298,12 +375,71 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
           <div><h3 className="text-sm font-black uppercase tracking-wide text-slate-900">Tenant personnel</h3><p className="mt-1 text-xs text-slate-500">Authorized users linked to this pharmacy</p></div>
           <span className="text-xs font-bold text-slate-500">{personnel.length} members</span>
         </div>
+
+        {canManagePersonnel && (
+          <form onSubmit={assignPersonnel} className="grid gap-3 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 sm:grid-cols-2">
+            <label className="space-y-1 text-xs font-bold text-slate-700">Registered user email
+              <input type="email" required value={memberDraft.email} onChange={event => setMemberDraft(current => ({ ...current, email: event.target.value }))} placeholder="staff@pharmacy.com" className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm" />
+            </label>
+            <label className="space-y-1 text-xs font-bold text-slate-700">Assign role
+              <select value={memberDraft.role} onChange={event => setMemberDraft(current => ({ ...current, role: event.target.value, branchId: event.target.value === 'TENANT_ADMIN' ? '' : current.branchId }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                <option value="PHARMACY_STAFF">Pharmacy staff</option><option value="PHARMACIST">Pharmacist</option><option value="ORDER_MANAGER">Order manager</option><option value="INVENTORY_MANAGER">Inventory manager</option><option value="DISPATCHER">Dispatcher</option><option value="RIDER">Rider</option><option value="TENANT_RIDER">Tenant rider</option><option value="TENANT_ADMIN">Tenant administrator</option>
+              </select>
+            </label>
+            {memberDraft.role !== 'TENANT_ADMIN' && (
+              <label className="space-y-1 text-xs font-bold text-slate-700 sm:col-span-2">Assign branch
+                <select required value={memberDraft.branchId} onChange={event => setMemberDraft(current => ({ ...current, branchId: event.target.value }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                  <option value="">Select an active branch</option>
+                  {branches.map(branch => <option key={branch.id || branch._id} value={branch.id || branch._id}>{branch.name || branch.code || branch.id}</option>)}
+                </select>
+              </label>
+            )}
+            {memberError && <p role="alert" className="text-xs text-rose-700 sm:col-span-2">{memberError}</p>}
+            {memberNotice && <p role="status" className="text-xs text-emerald-700 sm:col-span-2">{memberNotice}</p>}
+            <div className="sm:col-span-2">
+              <button type="submit" disabled={memberSaving || !effectiveTenantId || (memberDraft.role !== 'TENANT_ADMIN' && !memberDraft.branchId)} className="rounded-xl bg-blue-700 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50">{memberSaving ? 'Saving access…' : 'Add user / update role'}</button>
+              <p className="mt-2 text-[11px] text-slate-500">The email must belong to an active registered user of this pharmacy. Branch-specific roles require an active branch.</p>
+            </div>
+          </form>
+        )}
+
         {personnel.length ? personnel.map(member => (
           <div key={member._id || member.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 p-3">
             <div><p className="text-sm font-bold text-slate-800">{member.name || 'Name not added'}</p><p className="text-xs text-slate-500">{member.email || 'Email not added'}</p></div>
-            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">{member.role}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">{member.role}</span>
+              <span className="text-[10px] text-slate-500">{member.branchId ? branches.find(branch => String(branch.id || branch._id) === String(member.branchId))?.name || member.branchId : 'All branches'}</span>
+              <span className="text-[10px] text-slate-400">{member.status || 'ACTIVE'}</span>
+            </div>
           </div>
         )) : <p className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-500">No personnel records are available yet.</p>}
+      </section>
+
+      <section className="space-y-3 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div><h3 className="text-sm font-black uppercase tracking-wide text-slate-900">Tenant activity</h3><p className="mt-1 text-xs text-slate-500">Persisted changes and operational events for this pharmacy</p></div>
+          <button type="button" onClick={() => {
+            apiClient.get('/api/v1/vendor/profile/activity', { params: isSuperAdmin ? { tenantId: effectiveTenantId, limit: 50 } : { limit: 50 } })
+              .then(response => setActivityEvents(response.data?.data?.events || response.data?.events || []))
+              .catch(error => setActivityError(error?.response?.data?.message || 'Activity history could not be refreshed.'));
+          }} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">Refresh activity</button>
+        </div>
+        {activityLoading ? <p className="text-xs text-slate-500">Loading activity…</p>
+          : activityError ? <p role="alert" className="text-xs text-rose-700">{activityError}</p>
+          : activityEvents.length ? (
+            <div className="space-y-2">
+              {activityEvents.map(event => (
+                <div key={event.eventId} className="flex flex-wrap items-start justify-between gap-2 rounded-xl bg-slate-50 p-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold capitalize text-slate-800">{String(event.summary || event.eventType || 'activity').replaceAll('_', ' ')}</p>
+                    <p className="mt-1 break-all text-[10px] text-slate-500">Record: {event.entityId} · By: {event.actor?.userId || 'system'} ({event.actor?.role || 'system'})</p>
+                    {event.metadata?.status && <p className="mt-1 text-[10px] text-slate-600">Status: {event.metadata.status}</p>}
+                  </div>
+                  <time className="whitespace-nowrap text-[10px] text-slate-400">{event.createdAt ? new Date(event.createdAt).toLocaleString() : ''}</time>
+                </div>
+              ))}
+            </div>
+          ) : <p className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-xs text-slate-500">No recorded activity yet. New supported changes will appear here.</p>}
       </section>
 
       <section className="space-y-3">
