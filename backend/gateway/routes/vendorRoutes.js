@@ -62,14 +62,19 @@ router.get('/profile', authenticateUser, async (req, res) => {
             return sendError(res, { code: 'TENANT_PROFILE_NOT_FOUND', message: 'The selected pharmacy profile was not found.', statusCode: 404, req });
         }
 
-        const [vendor, personnel] = await Promise.all([
+        const [vendor, personnel, memberships] = await Promise.all([
             Vendor.findOne({ tenantId }).sort({ onboardingCompletedAt: -1, updatedAt: -1 }).lean(),
             canViewPersonnel
                 ? UserProfile.find({ tenantId, status: 'ACTIVE' })
                     .select('userId name firstName lastName email role roles')
                     .sort({ createdAt: 1 }).lean()
+                : Promise.resolve([]),
+            canViewPersonnel
+                ? TenantMembership.find({ tenantId, status: { $in: ['ACTIVE', 'INVITED'] } })
+                    .select('userId branchId role status').lean()
                 : Promise.resolve([])
         ]);
+        const membershipByUserId = new Map(memberships.map(item => [String(item.userId), item]));
 
         const address = tenant.address || vendor?.address || {};
         const owner = personnel.find(member => ['TENANT_OWNER', 'TENANT_ADMIN', 'OWNER'].includes(String(member.role || '').toUpperCase()))
@@ -106,12 +111,17 @@ router.get('/profile', authenticateUser, async (req, res) => {
                     timezone: tenant.timezone || '',
                     currency: tenant.currency || ''
                 },
-                personnel: personnel.map(member => ({
-                    id: String(member._id),
-                    name: member.name || [member.firstName, member.lastName].filter(Boolean).join(' '),
-                    email: member.email || '',
-                    role: member.role || (member.roles || [])[0] || ''
-                }))
+                personnel: personnel.map(member => {
+                    const membership = membershipByUserId.get(String(member.userId));
+                    return {
+                        id: String(member.userId || member._id),
+                        name: member.name || [member.firstName, member.lastName].filter(Boolean).join(' '),
+                        email: member.email || '',
+                        role: membership?.role || member.role || (member.roles || [])[0] || '',
+                        branchId: membership?.branchId || null,
+                        status: membership?.status || 'ACTIVE'
+                    };
+                })
             },
             message: 'Tenant profile retrieved successfully.',
             statusCode: 200,
