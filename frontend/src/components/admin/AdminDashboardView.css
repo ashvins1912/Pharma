@@ -1195,12 +1195,6 @@ html.dark .admin-screen :where(.overflow-x-auto) {
   min-width: 680px;
 }
 
-.admin-screen--inventory :where(.grid),
-.admin-screen--routes :where(.grid),
-.admin-screen--riders :where(.grid) {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
-}
-
 .admin-screen--fulfillment-board > :where(.flex.overflow-x-auto) {
   display: flex;
   width: 100%;
@@ -1283,5 +1277,144 @@ html.dark .admin-screen :where(.overflow-x-auto) {
   .admin-screen--routes,
   .admin-screen--riders {
     padding: 0.75rem;
+  }
+}
+
+
+/* Remaining admin modules: keep layouts fluid without overriding component grids. */
+.admin-screen--tenants,
+.admin-screen--access,
+.admin-screen--telemetry,
+.admin-screen--matrix,
+.admin-screen--tenant-profile,
+.admin-screen--csquare,
+.admin-screen--promotions,
+.admin-screen--surplus-savings,
+.admin-screen--offer-zone,
+.admin-screen--payments,
+.admin-screen--routes,
+.admin-screen--audits {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.admin-screen--tenants :where(.overflow-x-auto),
+.admin-screen--telemetry :where(.overflow-x-auto),
+.admin-screen--matrix :where(.overflow-x-auto),
+.admin-screen--offer-zone :where(.overflow-x-auto) {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-screen--tenants :where(table),
+.admin-screen--telemetry :where(table),
+.admin-screen--matrix :where(table),
+.admin-screen--offer-zone :where(table) {
+  min-width: 680px;
+}
+
+.admin-screen--access :where([class*="grid-cols-"]) {
+  min-width: 0;
+}
+
+.admin-screen--access :where(.max-h-\[560px\]) {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.admin-screen--promotions :where(input, select, textarea),
+.admin-screen--offer-zone :where(input, select, textarea),
+.admin-screen--payments :where(input, select, textarea),
+.admin-screen--csquare :where(input, select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.admin-screen--matrix :where(th),
+.admin-screen--matrix :where(td) {
+  white-space: nowrap;
+}
+
+.admin-screen--tenants :where(.fixed.inset-0) {
+  align-items: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: max(0.75rem, env(safe-area-inset-top)) 0.75rem max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.admin-screen--tenants :where(.fixed.inset-0 > .bg-white) {
+  width: min(100%, 42rem);
+  max-height: min(92dvh, 52rem);
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.admin-screen--tenants :where(.fixed.inset-0 > .bg-white.rounded-3xl) {
+  padding: clamp(1rem, 3vw, 1.5rem);
+}
+
+.admin-screen--telemetry :where(pre, code) {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.admin-screen--surplus-savings :where(.max-h-64),
+.admin-screen--promotions :where(.max-h-\[430px\]) {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 767px) {
+  .admin-screen--tenants :where(.grid.grid-cols-2.sm\:grid-cols-4) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-screen--tenants :where(.fixed.inset-0) {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .admin-screen--tenants :where(.fixed.inset-0 > .bg-white) {
+    width: 100%;
+    max-height: 94dvh;
+    border-radius: 1.5rem 1.5rem 0 0;
+    padding: 1rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  .admin-screen--access :where(.grid.lg\:grid-cols-\[300px_1fr\]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-screen--access :where(.max-h-\[560px\]) {
+    max-height: 15rem;
+  }
+
+  .admin-screen--matrix,
+  .admin-screen--telemetry,
+  .admin-screen--promotions,
+  .admin-screen--offer-zone,
+  .admin-screen--payments,
+  .admin-screen--csquare,
+  .admin-screen--surplus-savings,
+  .admin-screen--tenant-profile {
+    gap: 1rem;
+  }
+
+  .admin-screen--telemetry :where(.grid.grid-cols-2) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 380px) {
+  .admin-screen--tenants :where(.grid.grid-cols-2.sm\:grid-cols-4) {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
