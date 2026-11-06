@@ -72,14 +72,15 @@ export class InMemoryOrderRepository extends IOrderRepository {
                 to: filter.to
             })
             : [];
-        let orders = rawList.map(o => this._toDomain(o));
-
-        if (filter.assignmentType) {
-            orders = orders.filter(o => o.assignmentType === filter.assignmentType);
-        }
-        if (filter.assignedRiderId) {
-            orders = orders.filter(o => o.assignedRiderId === filter.assignedRiderId);
-        }
+        // Keep a defensive in-process scope check for injected/test adapters;
+        // the production datastore also applies these predicates in MongoDB.
+        let orders = rawList
+            .filter(order => String(order.tenantId || '') === String(filter.tenantId))
+            .filter(order => !filter.branchId || String(order.branchId || '') === String(filter.branchId))
+            .filter(order => !filter.orderStatus || order.orderStatus === filter.orderStatus)
+            .filter(order => !filter.assignmentType || order.assignmentType === filter.assignmentType)
+            .filter(order => !filter.assignedRiderId || String(order.rider?.riderId || order.assignedRiderId || '') === String(filter.assignedRiderId))
+            .map(o => this._toDomain(o));
         return orders;
     }
 
