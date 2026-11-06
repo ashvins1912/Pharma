@@ -41,6 +41,17 @@ describe('API capability registry', () => {
     assert.equal(resolveApiCapability('GET', '/api/tenants/nearby'), null);
   });
 
+  it('maps tenant staff, branch approval and activity APIs to scoped permissions', () => {
+    assert.equal(resolveApiCapability('GET', '/api/v1/tenants/tenant-1/memberships')?.permission, 'tenant.branches.read');
+    assert.equal(resolveApiCapability('POST', '/api/v1/tenants/tenant-1/memberships')?.permission, 'tenant.branches.manage');
+    assert.equal(resolveApiCapability('PATCH', '/api/v1/tenants/tenant-1/memberships/member-1')?.permission, 'tenant.branches.manage');
+    assert.equal(resolveApiCapability('DELETE', '/api/v1/tenants/tenant-1/memberships/member-1')?.permission, 'tenant.branches.manage');
+    assert.equal(resolveApiCapability('GET', '/api/v1/activity?page=1')?.permission, 'tenant.branches.read');
+    assert.equal(resolveApiCapability('GET', '/api/tenant/branches?includePending=true')?.permission, 'tenant.branches.read');
+    assert.equal(resolveApiCapability('POST', '/api/tenant/branches')?.permission, 'tenant.branches.manage');
+    assert.equal(resolveApiCapability('POST', '/api/v1/branches/branch-1/activate')?.permission, 'tenant.branches.manage');
+  });
+
   it('requires tenant management permissions for administrative tenant changes', () => {
     assert.equal(
       resolveApiCapability('POST', '/api/v1/admin/tenants')?.permission,
