@@ -3,7 +3,6 @@ import Tenant from '../../models/Tenant.js';
 import Vendor from '../../models/Vendor.js';
 import TenantMembership from '../../models/TenantMembership.js';
 import TenantBranch from '../../models/TenantBranch.js';
-import { domainEvents } from '../../shared/events/DomainEvents.js';
 import { authenticateUser } from '../../middleware/auth.js';
 
 const router = express.Router();
