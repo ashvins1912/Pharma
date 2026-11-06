@@ -5,6 +5,7 @@ import { config } from './config.js';
 import { Order, OrderEvent } from './models.js';
 import { createInventoryToken } from './service-auth.js';
 import { verifyPrescriptionAgainstItems } from './prescription-client.js';
+import { AppError } from '@pharma/service-kernel';
 
 const allowedSources = new Set(['WEB', 'MOBILE', 'ADMIN', 'POS', 'ERP', 'PARTNER', 'API', 'MEDICINE_REQUEST']);
 const allowedStatuses = new Set([
@@ -12,7 +13,16 @@ const allowedStatuses = new Set([
   'Dispatched', 'Delivered', 'Cancelled'
 ]);
 
-const fail = (statusCode, message) => Object.assign(new Error(message), { statusCode });
+const ERROR_CODES = {
+  400: 'VALIDATION_ERROR',
+  403: 'FORBIDDEN',
+  409: 'CONFLICT',
+  503: 'DEPENDENCY_UNAVAILABLE'
+};
+const fail = (statusCode, message) => new AppError(message, {
+  statusCode,
+  code: ERROR_CODES[statusCode] || 'ORDER_OPERATION_FAILED'
+});
 export function isFulfillmentReady(order) {
   if (!order) return false;
   if (['Cancelled', 'Rejected'].includes(order.orderStatus)) return false;
