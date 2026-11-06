@@ -466,8 +466,9 @@ export class TenantService {
             freeDeliveryAbove: Number(data.freeDeliveryAbove) || 499,
             deliveryFee: Number(data.deliveryFee) || 30,
             operatingHours: data.operatingHours || { open: '08:00', close: '22:00' },
-            status: 'ACTIVE',
-            isDefault: Boolean(data.isDefault),
+            status: 'PENDING',
+            activatedAt: null,
+            isDefault: false,
             isTenantLocation: Boolean(data.isTenantLocation),
             createdAt: new Date().toISOString()
         };
@@ -478,6 +479,42 @@ export class TenantService {
         this.branches.set(id, newBranch);
         domainEvents.emitDomainEvent('BRANCH_CREATED', id, newBranch, actor, tenantId, id);
         return newBranch;
+    }
+
+    async activateBranch(branchId, tenantId, actor = null) {
+        const branch = await this.getBranchById(branchId);
+        if (!branch || String(branch.tenantId) !== String(tenantId)) {
+            const error = new Error('Branch not found for this pharmacy.');
+            error.statusCode = 404;
+            error.code = 'BRANCH_NOT_FOUND';
+            throw error;
+        }
+        if (branch.status === 'ACTIVE') return branch;
+        if (branch.status !== 'PENDING') {
+            const error = new Error('Only a pending branch can be activated.');
+            error.statusCode = 409;
+            error.code = 'BRANCH_NOT_PENDING';
+            throw error;
+        }
+        const activatedAt = new Date();
+        let updated = { ...branch, status: 'ACTIVE', activatedAt, updatedAt: activatedAt };
+        if (getIsConnected()) {
+            const persisted = await TenantBranch.findOneAndUpdate(
+                { _id: String(branchId), tenantId: String(tenantId), status: 'PENDING' },
+                { $set: { status: 'ACTIVE', activatedAt, updatedAt: activatedAt } },
+                { new: true, runValidators: true }
+            ).lean();
+            if (!persisted) {
+                const error = new Error('Branch activation conflict. Refresh and try again.');
+                error.statusCode = 409;
+                error.code = 'BRANCH_ACTIVATION_CONFLICT';
+                throw error;
+            }
+            updated = { ...persisted, id: String(persisted._id) };
+        }
+        this.branches.set(String(branchId), updated);
+        domainEvents.emitDomainEvent('BRANCH_ACTIVATED', String(branchId), { status: 'ACTIVE' }, actor, String(tenantId), String(branchId));
+        return updated;
     }
 
     async updateBranch(branchId, updates, actor = null) {
