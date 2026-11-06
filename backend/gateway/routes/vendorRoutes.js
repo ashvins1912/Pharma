@@ -236,6 +236,9 @@ router.get('/profile/activity', authenticateUser, async (req, res) => {
                 status: 'ACTIVE'
             }).select('role branchId').lean();
             if (!membership) return sendError(res, { code: 'TENANT_MEMBERSHIP_REQUIRED', message: 'An active pharmacy membership is required.', statusCode: 403, req });
+            if (!['TENANT_OWNER', 'TENANT_ADMIN'].includes(String(membership.role || '').toUpperCase()) && !membership.branchId) {
+                return sendError(res, { code: 'BRANCH_ACTIVITY_SCOPE_REQUIRED', message: 'Branch-scoped membership is required to view branch activity.', statusCode: 403, req });
+            }
         }
 
         const filter = { tenantId };
