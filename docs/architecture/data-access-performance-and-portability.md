@@ -53,6 +53,12 @@ Previously the service loaded all matching products and all branch batches into 
 
 The bounded bulk lookup path now selects only its required product and inventory fields and sorts batches at the database.
 
+### Order list and detail reads
+
+`services/order-service/src/orders.js` now uses an explicit projection matching the existing order response serializer for list and detail reads. Internal reconciliation leases, idempotency fingerprints, worker state and other non-response fields are no longer transferred for those GET requests. Order lists use a deterministic `createdAt DESC, _id DESC` order so records sharing a timestamp do not jump between pages.
+
+`services/order-service/src/models.js` aligns the user, status, source and tenant/branch timestamp indexes with the list sort and adds the stable `_id` tie-breaker. These indexes should still be validated with explain plans and production cardinalities.
+
 ### Indexes
 
 `services/inventory-service/src/models.js` adds compound indexes for:
