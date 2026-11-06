@@ -54,11 +54,11 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
   if (!filters.length) return [];
   const productFilter = { $or: filters, active: true };
   productFilter.tenantId = scopeTenantId;
-  const products = await Product.find(productFilter).lean();
+  const products = await Product.find(productFilter).select('_id version sku name genericName strength form manufacturer category requiresPrescription baseCostPrice discountPercentage marginTier').lean();
   const inventoryFilter = { productId: { $in: products.map(product => product._id) } };
   inventoryFilter.tenantId = scopeTenantId;
   inventoryFilter.branchId = scopeBranchId;
-  const inventories = await Inventory.find(inventoryFilter).lean();
+  const inventories = await Inventory.find(inventoryFilter).select('productId tenantId branchId batchNumber expiryDate stockQuantity reservedQuantity price').sort({ expiryDate: 1, _id: 1 }).lean();
   const today = new Date(new Date().toISOString().slice(0, 10));
   const byProductId = new Map();
   for (const row of inventories) {
@@ -124,99 +124,145 @@ export async function searchInventoryProducts({
     error.statusCode = 403;
     throw error;
   }
+
   const normalizedPage = Math.max(1, Math.floor(Number(page) || 1));
   const normalizedLimit = Math.min(100, Math.max(1, Math.floor(Number(limit) || 50)));
   const normalizedQuery = String(query || '').trim();
   const isSearching = Boolean(normalizedQuery);
   const showOutOfStock = includeOutOfStock === true || String(includeOutOfStock).toLowerCase() === 'true';
-  const filter = { active: true };
-  filter.tenantId = scopeTenantId;
-  if (category && category !== 'All') filter.category = String(category).trim();
-  if (hideRx === true || String(hideRx).toLowerCase() === 'true') filter.requiresPrescription = false;
+  const showExpired = includeExpiredBatches === true || String(includeExpiredBatches).toLowerCase() === 'true';
+  const today = new Date(new Date().toISOString().slice(0, 10));
+
+  // Filter and aggregate in MongoDB before pagination. The previous implementation
+  // loaded every tenant product and every branch batch into Node, then sorted and
+  // paginated in memory; response time and memory therefore grew with catalogue size.
+  const productMatch = { tenantId: scopeTenantId, active: true };
+  if (category && category !== 'All') productMatch.category = String(category).trim();
+  if (hideRx === true || String(hideRx).toLowerCase() === 'true') productMatch.requiresPrescription = false;
   if (isSearching) {
     const escapedQuery = normalizedQuery.replace(/[.*+?^()|[\]{}\\]/g, '\\$&');
     const pattern = new RegExp(escapedQuery, 'i');
-    filter.$or = [{ sku: pattern }, { name: pattern }, { genericName: pattern }, { manufacturer: pattern }, { category: pattern }, { strength: pattern }, { form: pattern }];
+    productMatch.$or = [
+      { sku: pattern }, { name: pattern }, { genericName: pattern },
+      { manufacturer: pattern }, { category: pattern }, { strength: pattern }, { form: pattern }
+    ];
   }
-  const products = await Product.find(filter).lean();
-  const productIds = products.map(product => product._id);
-  const inventoryFilter = { productId: { $in: productIds } };
-  inventoryFilter.tenantId = scopeTenantId;
-  inventoryFilter.branchId = scopeBranchId;
-  const inventories = productIds.length ? await Inventory.find(inventoryFilter).lean() : [];
-  const byProductId = new Map();
-  const expiredByProductId = new Map();
-  const today = new Date(new Date().toISOString().slice(0, 10));
-  for (const row of inventories) {
-    const key = String(row.productId);
-    if (row.expiryDate && new Date(row.expiryDate) < today) {
-      if (includeExpiredBatches === true || String(includeExpiredBatches).toLowerCase() === 'true') {
-        if (!expiredByProductId.has(key)) expiredByProductId.set(key, []);
-        expiredByProductId.get(key).push(row);
-      }
-      continue;
-    }
-    if (!byProductId.has(key)) byProductId.set(key, []);
-    byProductId.get(key).push(row);
-  }
-  const allItems = products.map(product => {
-    const batches = byProductId.get(String(product._id)) || [];
-    const expiredBatches = expiredByProductId.get(String(product._id)) || [];
-    batches.sort((a, b) => {
-      const ae = a.expiryDate ? new Date(a.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
-      const be = b.expiryDate ? new Date(b.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
-      return ae - be || String(a._id).localeCompare(String(b._id));
-    });
-    const stockQuantity = batches.reduce((sum, row) => sum + Number(row.stockQuantity || 0), 0);
-    const reservedQuantity = batches.reduce((sum, row) => sum + Number(row.reservedQuantity || 0), 0);
-    const availableQuantity = batches.reduce((sum, row) => sum + Math.max(0, Number(row.stockQuantity || 0) - Number(row.reservedQuantity || 0)), 0);
-    const priceBatch = batches.find(row => Number(row.stockQuantity || 0) > Number(row.reservedQuantity || 0)) || batches[0];
-    const listingBatch = batches[0];
-    const price = priceBatch?.price ?? null;
+
+  const pipeline = [
+    { $match: productMatch },
+    { $lookup: {
+      from: Inventory.collection.name,
+      let: { productId: '$_id' },
+      pipeline: [
+        { $match: { $expr: { $and: [
+          { $eq: ['$productId', '$$productId'] },
+          { $eq: ['$tenantId', scopeTenantId] },
+          { $eq: ['$branchId', scopeBranchId] }
+        ] } } },
+        { $sort: { expiryDate: 1, _id: 1 } },
+        { $project: {
+          _id: 1, tenantId: 1, branchId: 1, batchNumber: 1, expiryDate: 1,
+          stockQuantity: 1, reservedQuantity: 1, price: 1
+        } }
+      ],
+      as: 'inventoryBatches'
+    } },
+    { $set: {
+      activeBatches: { $filter: {
+        input: '$inventoryBatches', as: 'batch',
+        cond: { $or: [
+          { $eq: [{ $ifNull: ['$$batch.expiryDate', null] }, null] },
+          { $gte: ['$$batch.expiryDate', today] }
+        ] }
+      } },
+      expiredBatches: { $filter: {
+        input: '$inventoryBatches', as: 'batch',
+        cond: { $lt: ['$$batch.expiryDate', today] }
+      } }
+    } },
+    { $set: {
+      stockQuantity: { $sum: { $map: { input: '$activeBatches', as: 'batch', in: { $ifNull: ['$$batch.stockQuantity', 0] } } } },
+      reservedQuantity: { $sum: { $map: { input: '$activeBatches', as: 'batch', in: { $ifNull: ['$$batch.reservedQuantity', 0] } } } },
+      availableQuantity: { $sum: { $map: { input: '$activeBatches', as: 'batch', in: { $max: [0, { $subtract: [{ $ifNull: ['$$batch.stockQuantity', 0] }, { $ifNull: ['$$batch.reservedQuantity', 0] }] }] } } } },
+      listingBatch: { $arrayElemAt: ['$activeBatches', 0] },
+      priceBatch: { $ifNull: [
+        { $arrayElemAt: [{ $filter: {
+          input: '$activeBatches', as: 'batch',
+          cond: { $gt: ['$$batch.stockQuantity', '$$batch.reservedQuantity'] }
+        } }, 0] },
+        { $arrayElemAt: ['$activeBatches', 0] }
+      ] },
+      expiredStockQuantity: { $sum: { $map: { input: '$expiredBatches', as: 'batch', in: { $ifNull: ['$$batch.stockQuantity', 0] } } } }
+    } },
+    ...(!isSearching && !showOutOfStock ? [{ $match: { availableQuantity: { $gt: 0 } } }] : []),
+    { $set: {
+      price: { $ifNull: ['$priceBatch.price', null] },
+      sellingPrice: { $round: [
+        { $multiply: [
+          { $ifNull: ['$priceBatch.price', 0] },
+          { $subtract: [1, { $divide: [{ $min: [100, { $max: [0, { $ifNull: ['$discountPercentage', 0] }] }] }, 100] }] }
+        ] }, 2
+      ] },
+      _sortPrice: { $ifNull: ['$priceBatch.price', sort === 'price-desc' ? -1 : Number.MAX_SAFE_INTEGER] }
+    } },
+    { $sort: sort === 'price-asc' ? { sellingPrice: 1, name: 1, _id: 1 }
+      : sort === 'price-desc' ? { sellingPrice: -1, name: 1, _id: 1 }
+      : sort === 'stock-asc' ? { availableQuantity: 1, name: 1, _id: 1 }
+      : { name: 1, _id: 1 } },
+    { $facet: {
+      metadata: [{ $count: 'total' }],
+      items: [
+        { $skip: (normalizedPage - 1) * normalizedLimit },
+        { $limit: normalizedLimit },
+        { $project: {
+          _id: 1, version: 1, sku: 1, name: 1, genericName: 1, description: 1,
+          imageUrl: 1, hsnSac: 1, manufacturer: 1, strength: 1, form: 1,
+          category: 1, requiresPrescription: 1, baseCostPrice: 1,
+          discountPercentage: 1, marginTier: 1, price: 1, sellingPrice: 1,
+          stockQuantity: 1, reservedQuantity: 1, availableQuantity: 1,
+          activeBatches: 1, expiredBatches: 1, listingBatch: 1, expiredStockQuantity: 1
+        } }
+      ]
+    } }
+  ];
+
+  const [result] = await Product.aggregate(pipeline).allowDiskUse(true);
+  const total = result?.metadata?.[0]?.total || 0;
+  const batchDto = batch => ({
+    batchNumber: batch.batchNumber || '',
+    expiryDate: batch.expiryDate || null,
+    stockQuantity: batch.stockQuantity,
+    reservedQuantity: batch.reservedQuantity,
+    availableQuantity: Math.max(0, Number(batch.stockQuantity || 0) - Number(batch.reservedQuantity || 0)),
+    price: batch.price
+  });
+  const items = (result?.items || []).map(product => {
+    const listingBatch = product.listingBatch;
+    const batches = product.activeBatches || [];
+    const expiredBatches = showExpired ? (product.expiredBatches || []) : [];
+    const price = product.price ?? null;
+    const genericName = product.genericName || '';
     return {
       listingId: listingBatch ? String(listingBatch.tenantId) + ':' + String(listingBatch.branchId) + ':' + String(product._id) : null,
       _id: String(product._id), productId: String(product._id), productVersion: product.version, sku: product.sku,
-      name: product.name, genericName: product.genericName, composition: product.genericName, drug: product.genericName, activeSalt: product.genericName,
+      name: product.name, genericName, composition: genericName, drug: genericName, activeSalt: genericName,
       description: product.description || '', imageUrl: product.imageUrl || '', hsnSac: product.hsnSac || '',
       manufacturer: product.manufacturer, brand: product.manufacturer, strength: product.strength, dosage: product.strength, dosageForm: product.form, form: product.form,
       category: product.category, requiresPrescription: product.requiresPrescription, isPrescriptionRequired: product.requiresPrescription,
       baseCostPrice: product.baseCostPrice || 0, discountPercentage: product.discountPercentage || 0, marginTier: product.marginTier || 'LOW',
-      mrp: price, basePrice: price,
-      sellingPrice: Math.round(Number(price || 0) * (1 - Math.min(100, Math.max(0, Number(product.discountPercentage || 0))) / 100) * 100) / 100,
-      price, stockQuantity, reservedQuantity, availableQuantity,
-      stock: stockQuantity, quantity: availableQuantity,
-      stockStatus: availableQuantity > 10 ? 'IN_STOCK' : availableQuantity > 0 ? 'LOW_STOCK' : 'OUT_OF_STOCK',
+      mrp: price, basePrice: price, sellingPrice: product.sellingPrice,
+      price, stockQuantity: product.stockQuantity, reservedQuantity: product.reservedQuantity, availableQuantity: product.availableQuantity,
+      stock: product.stockQuantity, quantity: product.availableQuantity,
+      stockStatus: product.availableQuantity > 10 ? 'IN_STOCK' : product.availableQuantity > 0 ? 'LOW_STOCK' : 'OUT_OF_STOCK',
       batchNumber: listingBatch?.batchNumber || '', expiryDate: listingBatch?.expiryDate || null,
-      batchCount: batches.length,
-      expiredStockQuantity: expiredBatches.reduce((sum, row) => sum + Number(row.stockQuantity || 0), 0),
-      expiredBatchAvailability: expiredBatches.map(row => ({
-        batchNumber: row.batchNumber || '', expiryDate: row.expiryDate || null,
-        stockQuantity: row.stockQuantity, reservedQuantity: row.reservedQuantity,
-        availableQuantity: Math.max(0, Number(row.stockQuantity || 0) - Number(row.reservedQuantity || 0)),
-        price: row.price
-      })),
-      batchAvailability: batches.map(row => ({
-        batchNumber: row.batchNumber || '', expiryDate: row.expiryDate || null,
-        stockQuantity: row.stockQuantity, reservedQuantity: row.reservedQuantity,
-        availableQuantity: Math.max(0, Number(row.stockQuantity || 0) - Number(row.reservedQuantity || 0)),
-        price: row.price
-      })),
+      batchCount: batches.length, expiredStockQuantity: product.expiredStockQuantity || 0,
+      expiredBatchAvailability: expiredBatches.map(batchDto),
+      batchAvailability: batches.map(batchDto),
       tenantId: listingBatch?.tenantId || scopeTenantId,
       branchId: listingBatch?.branchId || scopeBranchId
     };
   });
-  const visibleItems = !isSearching && !showOutOfStock
-    ? allItems.filter(item => item.availableQuantity > 0)
-    : allItems;
-  const comparators = {
-    'price-asc': (a, b) => (a.sellingPrice ?? a.price ?? Number.MAX_SAFE_INTEGER) - (b.sellingPrice ?? b.price ?? Number.MAX_SAFE_INTEGER),
-    'price-desc': (a, b) => (b.sellingPrice ?? b.price ?? -1) - (a.sellingPrice ?? a.price ?? -1),
-    'name-asc': (a, b) => String(a.name).localeCompare(String(b.name)),
-    'stock-asc': (a, b) => a.availableQuantity - b.availableQuantity
-  };
-  visibleItems.sort(comparators[sort] || comparators['name-asc']);
-  const total = visibleItems.length;
-  const items = visibleItems.slice((normalizedPage - 1) * normalizedLimit, normalizedPage * normalizedLimit);
+
   return {
     items, total, page: normalizedPage, limit: normalizedLimit,
     pages: Math.ceil(total / normalizedLimit) || 1,
