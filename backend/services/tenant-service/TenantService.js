@@ -534,12 +534,13 @@ export class TenantService {
             throw error;
         }
 
-        const activatedAt = branch.activatedAt || new Date();
+        const now = new Date();
+        const activatedAt = branch.activatedAt || now;
         let updated = {
             ...branch,
             status: 'ACTIVE',
             activatedAt,
-            updatedAt: activatedAt
+            updatedAt: now
         };
         const branchIdString = String(branchId);
         const tenantIdString = String(tenantId);
@@ -547,7 +548,7 @@ export class TenantService {
         if (getIsConnected()) {
             const persisted = await TenantBranch.findOneAndUpdate(
                 { _id: branchIdString, tenantId: tenantIdString, status: { $in: ['PENDING', 'ACTIVE'] } },
-                { $set: { status: 'ACTIVE', activatedAt, updatedAt: activatedAt } },
+                { $set: { status: 'ACTIVE', activatedAt, updatedAt: now } },
                 { new: true, runValidators: true }
             ).lean();
             if (!persisted) {
