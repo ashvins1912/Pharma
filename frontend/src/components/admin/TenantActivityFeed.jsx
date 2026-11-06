@@ -4,8 +4,10 @@ import { useTenant } from '../../context/TenantContext';
 
 const formatLabel = value => String(value || '').replace(/[-_]/g, ' ').toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
 
-export default function TenantActivityFeed() {
-  const { tenantId, branchId } = useTenant();
+export default function TenantActivityFeed({ tenantId: selectedTenantId = '' } = {}) {
+  const { tenantId: contextTenantId, branchId } = useTenant();
+  const tenantId = selectedTenantId || contextTenantId;
+  const effectiveBranchId = selectedTenantId && String(selectedTenantId) !== String(contextTenantId) ? '' : branchId;
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 0, total: 0 });
   const [loading, setLoading] = useState(false);
@@ -21,7 +23,7 @@ export default function TenantActivityFeed() {
     setError('');
     try {
       const response = await apiClient.get('/api/v1/activity', {
-        params: { tenantId, ...(branchId ? { branchId } : {}), page, limit: 15 }
+        params: { tenantId, ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}), page, limit: 15 }
       });
       const payload = response.data || {};
       setItems(Array.isArray(payload.items) ? payload.items : []);
@@ -32,7 +34,7 @@ export default function TenantActivityFeed() {
     } finally {
       setLoading(false);
     }
-  }, [tenantId, branchId]);
+  }, [tenantId, effectiveBranchId]);
 
   useEffect(() => { void load(1); }, [load]);
 
