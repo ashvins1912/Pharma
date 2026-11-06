@@ -141,11 +141,25 @@ router.patch('/:branchId', async (req, res) => {
     if (invalid) return res.status(400).json({ success: false, code: 'INVALID_BRANCH', message: invalid });
     const duplicate = await TenantBranch.findOne({ tenantId: scope.tenantId, code: data.code, _id: { $ne: branch._id } }).lean();
     if (duplicate) return res.status(409).json({ success: false, code: 'BRANCH_CODE_EXISTS', message: 'This branch code is already used by this pharmacy.' });
+    let defaultReplacement = null;
+    if (branch.status === 'ACTIVE' && branch.isDefault && req.body?.isDefault === false) {
+      defaultReplacement = await TenantBranch.findOne({ tenantId: scope.tenantId, status: 'ACTIVE', isDefault: false, _id: { $ne: branch._id } }).sort({ createdAt: 1 }).lean();
+      if (!defaultReplacement) return res.status(409).json({ success: false, code: 'LAST_ACTIVE_DEFAULT_BRANCH', message: 'Choose another active branch as default before removing the current default.' });
+    }
     const updated = await tenantService.updateBranch(branch._id, data, { userId: req.user?.sub });
-    if (req.body?.isDefault === true) {
-      await TenantBranch.updateMany({ tenantId: scope.tenantId }, { $set: { isDefault: false } });
-      await TenantBranch.updateOne({ _id: branch._id, tenantId: scope.tenantId, status: 'ACTIVE' }, { $set: { isDefault: true } });
+    if (branch.status === 'PENDING' && req.body?.isDefault !== undefined) {
+      const makeDefaultOnActivation = Boolean(req.body.isDefault);
+      await TenantBranch.updateOne({ _id: branch._id, tenantId: scope.tenantId, status: 'PENDING' }, { $set: { isDefault: false, makeDefaultOnActivation } });
+      updated.isDefault = false;
+      updated.makeDefaultOnActivation = makeDefaultOnActivation;
+    } else if (branch.status === 'ACTIVE' && req.body?.isDefault === true) {
+      await TenantBranch.updateMany({ tenantId: scope.tenantId, _id: { $ne: branch._id } }, { $set: { isDefault: false } });
+      await TenantBranch.updateOne({ _id: branch._id, tenantId: scope.tenantId, status: 'ACTIVE' }, { $set: { isDefault: true, makeDefaultOnActivation: false } });
       updated.isDefault = true;
+    } else if (branch.status === 'ACTIVE' && req.body?.isDefault === false && branch.isDefault && defaultReplacement) {
+      await TenantBranch.updateOne({ _id: defaultReplacement._id, tenantId: scope.tenantId }, { $set: { isDefault: true } });
+      await TenantBranch.updateOne({ _id: branch._id, tenantId: scope.tenantId }, { $set: { isDefault: false, makeDefaultOnActivation: false } });
+      updated.isDefault = false;
     }
     return res.json({ success: true, branch: updated, message: 'Branch updated successfully.' });
   } catch (error) {
