@@ -707,10 +707,12 @@ class VendorService {
         // Register in TenantService
         await tenantService.createTenant(tenantDoc);
         if (tenantDoc.usesTenantAsBranch && !getIsConnected()) {
-            await tenantService.createBranch(tenantId, {
+            const mainBranch = await tenantService.createBranch(tenantId, {
                 id: tenantId, name: companyName, code: 'MAIN', phone: mobile, email: vendorEmail,
                 address: { street, city, state, pincode }, geolocation: { latitude, longitude }, isDefault: true, isTenantLocation: true
-            });
+            }, { userId });
+            // Keep the disconnected/local path consistent with the connected tenant-onboarding path.
+            await tenantService.activateBranch(mainBranch.id, tenantId, { userId });
         }
         await tenantService.assignMembership(userId, tenantId, null, 'TENANT_ADMIN', membershipDoc.permissions);
 
