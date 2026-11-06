@@ -106,6 +106,29 @@ Do not add a pattern just to satisfy a checklist. A simple function is preferabl
 
 Each service should have exactly one composition root. Only the composition root may know concrete adapter classes. A service container is process-scoped; request context is passed explicitly as an argument or resolved from request middleware, never stored in singleton instances.
 
+## Authorization and RBAC design
+
+Use **Policy/Specification + Middleware/Decorator + Resource Policy**. Authorization must be declarative at inbound boundaries and reusable by application use cases; do not scatter role-name comparisons across controllers and service methods.
+
+- The shared `@pharma/service-kernel` `isPermissionGranted` evaluator is the common grant/deny algorithm for API Gateway and backend services. It supports canonical permissions, legacy aliases, wildcard grants, explicit revocations and narrowly-scoped role overrides.
+- The gateway capability registry maps HTTP method + path to a permission. Unregistered protected capabilities fail closed. This is an edge gate, not the only authorization boundary.
+- Backend `requirePermission(permission)` is a middleware factory/decorator backed by the same evaluator. It resolves the authoritative authorization context and enforces explicit revocations before any role or wildcard grant.
+- `requireTenantScope()` is a reusable scope policy. It accepts platform context or an active resolved tenant membership; it does not maintain another role allow-list.
+- Resource ownership is a separate policy. `AuthorizationService.canAccessTenantResource` checks tenant and branch ownership after loading the resource. Return a not-found response for inaccessible tenant resources where enumeration would leak identifiers.
+- Application use cases that can be invoked by HTTP, jobs, events or other services must receive an actor/authorization context and enforce their required policy at the use-case boundary. Never assume route middleware ran for an internal invocation.
+- UI route guards and hidden buttons are usability controls only; the server remains authoritative.
+- Never trust a role, tenantId, branchId, permission list or target resource scope supplied in an arbitrary request body/header. Resolve identity and membership from signed claims and authoritative membership records; validate requested branch selection against tenant ownership.
+- Platform administrator shortcuts must still respect explicit revocations. A permission revoke is a deny rule and wins over wildcard grants.
+
+Example route declaration:
+
+```js
+router.use(authenticateUser, requireTenantScope());
+router.post('/orders/:orderId/assign', requirePermission('delivery.manage'), controller);
+```
+
+A controller may still perform object-level checks, but it should call the shared resource policy rather than compare role names. Domain invariants (for example, order must be ready for dispatch) are not RBAC and belong in the application/domain policy.
+
 ## Data ownership and service boundaries
 
 - Inventory owns product catalogue, branch stock, batch/expiry, reservation and stock adjustment writes.
@@ -127,12 +150,12 @@ Each service should have exactly one composition root. Only the composition root
 
 ## Migration sequence
 
-1. **Foundation (this change):** add the shared kernel, DI builder, error/result/use-case primitives and migrate the delivery composition root to explicit factory registrations.
+1. **Foundation (this change):** add the shared kernel, DI builder, error/result/use-case primitives, shared RBAC policy evaluator and migrate the delivery composition root to explicit factory registrations.
 2. **Inventory:** extract read/write ports from the current inventory module; move Mongo queries to Mongo adapters; move validation and stock policies to domain/application modules; keep HTTP DTOs unchanged.
 3. **Orders:** split order lifecycle use cases from Mongo persistence and prescription/inventory HTTP clients; isolate event/outbox persistence and idempotency behavior.
 4. **Prescription and notifications:** extract provider clients/storage adapters, preserve encryption and access/removal policy boundaries.
 5. **Legacy backend:** migrate bounded contexts one at a time; keep compatibility facades until all callers move, then remove direct model imports from application services.
-6. **Operational hardening:** add adapter contract tests, Mongo integration tests, explain-plan baselines, failure/retry tests, service contract tests and deployment canaries.
+6. **Operational hardening:** add adapter contract tests, Mongo integration tests, explain-plan baselines, failure/retry tests, service contract tests, authorization matrix tests and deployment canaries.
 
 ## Definition of done for each migrated use case
 
