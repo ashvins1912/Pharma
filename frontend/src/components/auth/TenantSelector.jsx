@@ -95,8 +95,8 @@ export default function TenantSelector({ onTenantSelected }) {
   };
 
   const handleSelectTenant = (tenant) => {
+    // One atomic store update persists tenant identity and display data together.
     setActiveTenant(tenant);
-    setTenantId(tenant._id);
     if (onTenantSelected) onTenantSelected(tenant);
   };
 
