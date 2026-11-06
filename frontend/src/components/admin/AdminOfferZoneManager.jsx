@@ -93,19 +93,19 @@ export default function AdminOfferZoneManager() {
     const catalogItems = (Array.isArray(medicines) ? medicines : []).map((med, idx) => {
       const name = med.name || med.title || 'Medicine';
       const category = (med.category || 'General').toLowerCase();
-      const soldCount = salesFrequencyMap[name] || (15 + (idx * 7) % 60);
+      const soldCount = salesFrequencyMap[name] || 0;
 
       let isSeasonalRecommended = false;
       let seasonReason = 'Standard essential medicine';
       if (isColdSeason && (category.includes('cough') || category.includes('cold') || category.includes('fever') || name.toLowerCase().includes('paracetamol') || name.toLowerCase().includes('azithromycin'))) {
         isSeasonalRecommended = true;
-        seasonReason = 'High winter demand for cold, flu & cough relief.';
+        seasonReason = 'Seasonal category match: cold, flu and cough care.';
       } else if (isMonsoonSeason && (category.includes('fever') || category.includes('infection') || name.toLowerCase().includes('multivitamin'))) {
         isSeasonalRecommended = true;
-        seasonReason = 'High monsoon demand for infection & immunity support.';
+        seasonReason = 'Seasonal category match: fever, infection and immunity support.';
       } else if (!isColdSeason && !isMonsoonSeason && (category.includes('allergy') || category.includes('stomach') || category.includes('antacid') || name.toLowerCase().includes('cetirizine'))) {
         isSeasonalRecommended = true;
-        seasonReason = 'High seasonal allergy & digestion care demand.';
+        seasonReason = 'Seasonal category match: allergy and digestion care.';
       }
 
       const override = offerZoneOverrides[med.id || med._id] ?? (idx < 6);
@@ -171,10 +171,10 @@ export default function AdminOfferZoneManager() {
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/10 skew-x-12 pointer-events-none" />
         <div className="relative z-10">
           <span className="bg-white/20 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider backdrop-blur-md">
-            ⚡ Pharmacy Admin Offer Zone &amp; Recommendations
+            ⚡ Pharmacy Admin Offer Zone &amp; Rule-based Recommendations
           </span>
           <h2 className="text-xl sm:text-2xl font-black tracking-tight mt-2 text-white">
-            Offer Zone Curation &amp; Intelligent Refill Engine
+            Offer Zone Curation &amp; Seasonal Demand Insights
           </h2>
           <p className="text-xs sm:text-sm text-indigo-100 max-w-2xl mt-1 leading-relaxed">
             Review seasonal and sales-based product recommendations. Only saved, active campaigns in the Saved campaigns section are published to customers.
