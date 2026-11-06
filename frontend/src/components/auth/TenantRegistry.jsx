@@ -106,7 +106,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
         setNotice('Branch details updated successfully.');
       } else {
         await apiClient.post('/api/tenant/branches', form);
-        setNotice('Branch created successfully.');
+        setNotice('Branch created as Pending. Review the details and activate it before it appears in customer branch selection.');
       }
       setModalOpen(false);
       await fetchBranches();
@@ -166,7 +166,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-500">{branches.length} branch{branches.length === 1 ? '' : 'es'} registered</p>
         <select aria-label="Filter branches by status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-          <option value="ALL">All branches</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive / archived</option><option value="SUSPENDED">Suspended</option>
+          <option value="ALL">All branches</option><option value="PENDING">Pending review</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive / archived</option><option value="SUSPENDED">Suspended</option>
         </select>
       </div>
 
@@ -193,7 +193,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
                   <button type="button" onClick={() => openEdit(branch)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Edit</button>
                   {branch.status === 'ACTIVE'
                     ? <button type="button" onClick={() => changeStatus(branch, 'INACTIVE')} className="rounded-lg border border-amber-200 px-3 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50">Deactivate</button>
-                    : <button type="button" onClick={() => changeStatus(branch, 'ACTIVE')} className="rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50">Activate</button>}
+                    : <button type="button" onClick={() => changeStatus(branch, 'ACTIVE')} className="rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50">{branch.status === 'PENDING' ? 'Review & activate' : 'Activate'}</button>}
                   <button type="button" onClick={() => archiveBranch(branch)} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Remove</button>
                   </>}
                 </div>
