@@ -125,14 +125,18 @@ export default function TenantStaffManager({ tenantId }) {
         {memberships.length === 0 && !loading ? <p className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-xs text-slate-500">No staff memberships found.</p> : memberships.map(member => (
           <div key={idOf(member)} className="grid gap-2 rounded-xl border border-slate-100 p-3 md:grid-cols-[minmax(0,1fr)_180px_180px_auto] md:items-center">
             <div className="min-w-0"><p className="break-all text-xs font-bold text-slate-800">{member.name || member.email || member.userId}</p><p className="break-all text-[10px] text-slate-400">{member.userId} · {member.status}</p></div>
-            <select aria-label="Staff role" value={member.role} onChange={event => updateStaff(member, { role: event.target.value, branchId: event.target.value === 'TENANT_ADMIN' ? null : (member.branchId || null), permissions: ROLE_PERMISSIONS[event.target.value] || [] })} className="rounded-lg border border-slate-300 px-2 py-2 text-xs">
+            <select aria-label="Staff role" value={member.role} disabled={member.status !== 'ACTIVE'} onChange={event => updateStaff(member, { role: event.target.value, branchId: event.target.value === 'TENANT_ADMIN' ? null : (member.branchId || null), permissions: ROLE_PERMISSIONS[event.target.value] || [] })} className="rounded-lg border border-slate-300 px-2 py-2 text-xs disabled:opacity-50">
               {ROLES.map(role => <option key={role} value={role}>{role.replace(/_/g, ' ')}</option>)}
             </select>
-            <select aria-label="Staff branch" value={member.branchId || ''} onChange={event => updateStaff(member, { branchId: event.target.value || null })} className="rounded-lg border border-slate-300 px-2 py-2 text-xs">
-              <option value="">All branches</option>
+            <select aria-label="Staff branch" value={member.branchId || ''} disabled={member.status !== 'ACTIVE'} onChange={event => {
+              const branchId = event.target.value || null;
+              const role = member.role === 'TENANT_ADMIN' && branchId ? 'PHARMACY_STAFF' : member.role;
+              updateStaff(member, { role, branchId, permissions: ROLE_PERMISSIONS[role] || [] });
+            }} className="rounded-lg border border-slate-300 px-2 py-2 text-xs disabled:opacity-50">
+              <option value="">{member.role === 'TENANT_ADMIN' ? 'Choose branch to scope' : 'All branches'}</option>
               {branches.map(branch => <option key={idOf(branch)} value={idOf(branch)}>{branch.name || branch.code}</option>)}
             </select>
-            <button type="button" onClick={() => void revokeStaff(member)} disabled={String(member.role).toUpperCase() === 'TENANT_OWNER'} className="rounded-lg border border-rose-200 disabled:cursor-not-allowed disabled:opacity-40 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Revoke</button>
+            <button type="button" onClick={() => void revokeStaff(member)} disabled={String(member.role).toUpperCase() === 'TENANT_OWNER' || member.status !== 'ACTIVE'} className="rounded-lg border border-rose-200 disabled:cursor-not-allowed disabled:opacity-40 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Revoke</button>
           </div>
         ))}
       </div>
