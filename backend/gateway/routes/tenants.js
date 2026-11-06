@@ -48,7 +48,7 @@ router.get('/branches/all', async (req, res, next) => {
     try {
         const tenantId = String(req.query.tenantId || '').trim();
         if (tenantId) {
-            const cacheKey = `cache:tenant:${tenantId}:branches:active`;
+            const cacheKey = `cache:tenant:${tenantId}:branches:v2`;
             let branches = await cacheService.get(cacheKey);
             if (!branches) {
                 branches = await tenantService.getBranches(tenantId, { status: 'ACTIVE' });
