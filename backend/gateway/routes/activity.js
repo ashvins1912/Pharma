@@ -9,6 +9,7 @@ router.use(authenticateUser);
 
 router.get('/', async (req, res) => {
   try {
+    resolveUserContext(req);
     const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
     const platformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
     const tenantId = String(
