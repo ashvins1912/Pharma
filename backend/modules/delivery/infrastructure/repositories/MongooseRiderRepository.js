@@ -71,13 +71,23 @@ export class MongooseRiderRepository extends IRiderRepository {
             query.status = compatibleStatuses ? { $in: compatibleStatuses } : filter.status;
         }
         if (filter.search) {
-            const escapedSearch = String(filter.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\        if (filter.search) {
-            query.$or = [
-                { name: { $regex: filter.search, $options: 'i' } },
-                { mobile: { $regex: filter.search, $options: 'i' } }
-            ];
+            const escapedSearch = String(filter.search).trim().replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&');
+            if (escapedSearch) {
+                query.$or = [
+                    { name: { $regex: escapedSearch, $options: 'i' } },
+                    { mobile: { $regex: escapedSearch, $options: 'i' } }
+                ];
+            }
         }
-        const docs = await RiderModel.find(query).sort({ status: 1, name: 1 });
+        const requestedLimit = Number.parseInt(filter.limit, 10);
+        const limit = Number.isInteger(requestedLimit) && requestedLimit > 0
+            ? Math.min(MAX_RIDER_LIST_LIMIT, requestedLimit)
+            : 200;
+        const docs = await RiderModel.find(query)
+            .select(RIDER_DOMAIN_PROJECTION)
+            .sort({ status: 1, name: 1, _id: 1 })
+            .limit(limit)
+            .lean();
         return docs.map(d => this._toDomain(d));');
             if (escapedSearch) {
                 query.$or = [
