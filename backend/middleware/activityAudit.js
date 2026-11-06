@@ -8,7 +8,7 @@ const SENSITIVE_FIELDS = /password|token|secret|authorization|cookie|prescriptio
 
 function describeResource(pathname) {
   const parts = pathname.split('/').filter(Boolean);
-  const normalized = parts.filter(part => !/^v\d+$/i.test(part));
+  const normalized = parts.filter(part => !/^v\d+$/i.test(part) && !['api', 'admin'].includes(part.toLowerCase()));
   const resource = normalized.find(part => !/^[a-f0-9]{16,}$/i.test(part)) || 'record';
   const entityType = resource.replace(/[-_]/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
   const actionPart = normalized.find(part => ['accept', 'reject', 'approve', 'pause', 'activate', 'suspend', 'status', 'invite', 'assign'].includes(part.toLowerCase()));
