@@ -102,6 +102,9 @@ const CAPABILITIES = [
   ['DELETE', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.manage'],
   // Tenant-scoped branch listing is available to tenant admins/owners; backend enforces tenant membership.
   ['GET', /^\/api\/v1\/tenants\/[^/]+\/branches(?:\/|$)/, 'tenant.branches.read'],
+  ['POST', /^\/api\/v1\/tenants\/[^/]+\/branches\/?$/, 'tenant.branches.manage'],
+  ['PUT', /^\/api\/v1\/branches\/[^/]+$/, 'tenant.branches.manage'],
+  ['POST', /^\/api\/v1\/branches\/[^/]+\/activate$/, 'tenant.branches.manage'],
   // Staff membership and tenant activity routes use tenant-scoped capabilities.
   ['GET', /^\/api\/v1\/tenants\/[^/]+\/memberships(?:\/|$)/, 'tenant.branches.read'],
   ['POST', /^\/api\/v1\/tenants\/[^/]+\/memberships\/?$/, 'tenant.branches.manage'],
