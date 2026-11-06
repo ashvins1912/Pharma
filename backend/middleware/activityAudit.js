@@ -100,7 +100,7 @@ export function auditMutation(req, res, next) {
 }
 
 export async function queryActivity({ tenantId, branchId, page = 1, limit = 20 } = {}) {
-  const safePage = Math.max(1, Number.parseInt(page, 10) || 1);
+  const safePage = Math.min(100, Math.max(1, Number.parseInt(page, 10) || 1));
   const safeLimit = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
   const filter = {};
   if (tenantId) filter.tenantId = String(tenantId);
@@ -121,20 +121,19 @@ export async function queryActivity({ tenantId, branchId, page = 1, limit = 20 }
     const pending = buffered.filter(item => !item.requestId || !persistedIds.has(item.requestId));
 
     const start = (safePage - 1) * safeLimit;
-    const bufferedPage = pending.slice(start, start + safeLimit);
-    const remaining = safeLimit - bufferedPage.length;
-    let databaseItems = [];
-    if (remaining > 0) {
-      const databaseSkip = Math.max(0, start - pending.length);
-      databaseItems = await ActivityAudit.find(filter)
+    const [databaseItems, databaseTotal] = await Promise.all([
+      ActivityAudit.find(filter)
         .sort({ createdAt: -1, _id: -1 })
-        .skip(databaseSkip)
-        .limit(remaining)
-        .lean();
-    }
-    const databaseTotal = await ActivityAudit.countDocuments(filter);
+        .limit(Math.min(10_500, start + safeLimit + MAX_MEMORY_ACTIVITY))
+        .lean(),
+      ActivityAudit.countDocuments(filter)
+    ]);
+    const merged = [...pending, ...databaseItems].sort((a, b) => {
+      const timeDifference = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      return timeDifference || String(b._id || '').localeCompare(String(a._id || ''));
+    });
     const total = databaseTotal + pending.length;
-    const items = [...bufferedPage, ...databaseItems];
+    const items = merged.slice(start, start + safeLimit);
     return {
       items,
       pagination: {
