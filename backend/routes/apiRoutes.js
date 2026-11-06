@@ -14,6 +14,7 @@ import whatsappRoutes from './whatsappRoutes.js';
 import versionedOrderRoutes from './versionedOrderRoutes.js';
 import adminRoutes from './adminRoutes.js';
 import tenantBranchRoutes from './tenantBranchRoutes.js';
+import tenantMemberRoutes from './tenantMemberRoutes.js';
 import { authenticateUser } from '../middleware/auth.js';
 import TenantMembership from '../models/TenantMembership.js';
 import tenantService from '../services/tenant-service/TenantService.js';
@@ -140,6 +141,7 @@ router.get('/vendor/profile', async (req, res) => {
 });
 
 router.use('/tenant/branches', tenantBranchRoutes);
+router.use('/tenant/members', tenantMemberRoutes);
 
 import Tenant from '../models/Tenant.js';
 import Vendor from '../models/Vendor.js';
