@@ -527,18 +527,26 @@ export class TenantService {
             error.code = 'BRANCH_NOT_FOUND';
             throw error;
         }
-        if (branch.status === 'ACTIVE') return branch;
-        if (branch.status !== 'PENDING') {
+        if (branch.status !== 'PENDING' && branch.status !== 'ACTIVE') {
             const error = new Error('Only a pending branch can be activated.');
             error.statusCode = 409;
             error.code = 'BRANCH_NOT_PENDING';
             throw error;
         }
-        const activatedAt = new Date();
-        let updated = { ...branch, status: 'ACTIVE', activatedAt, updatedAt: activatedAt };
+
+        const activatedAt = branch.activatedAt || new Date();
+        let updated = {
+            ...branch,
+            status: 'ACTIVE',
+            activatedAt,
+            updatedAt: activatedAt
+        };
+        const branchIdString = String(branchId);
+        const tenantIdString = String(tenantId);
+
         if (getIsConnected()) {
             const persisted = await TenantBranch.findOneAndUpdate(
-                { _id: String(branchId), tenantId: String(tenantId), status: 'PENDING' },
+                { _id: branchIdString, tenantId: tenantIdString, status: { $in: ['PENDING', 'ACTIVE'] } },
                 { $set: { status: 'ACTIVE', activatedAt, updatedAt: activatedAt } },
                 { new: true, runValidators: true }
             ).lean();
@@ -549,9 +557,50 @@ export class TenantService {
                 throw error;
             }
             updated = { ...persisted, id: String(persisted._id) };
+
+            const hasOtherDefault = await TenantBranch.exists({
+                tenantId: tenantIdString,
+                status: 'ACTIVE',
+                isDefault: true,
+                _id: { $ne: branchIdString }
+            });
+            const shouldBecomeDefault = updated.makeDefaultOnActivation === true || !hasOtherDefault;
+            if (shouldBecomeDefault) {
+                await TenantBranch.updateMany(
+                    { tenantId: tenantIdString, _id: { $ne: branchIdString } },
+                    { $set: { isDefault: false } }
+                );
+            }
+            const finalized = await TenantBranch.findOneAndUpdate(
+                { _id: branchIdString, tenantId: tenantIdString, status: 'ACTIVE' },
+                { $set: { isDefault: shouldBecomeDefault, makeDefaultOnActivation: false } },
+                { new: true, runValidators: true }
+            ).lean();
+            updated = { ...finalized, id: String(finalized._id) };
+        } else {
+            const hasOtherDefault = Array.from(this.branches.values()).some(item =>
+                String(item.tenantId) === tenantIdString
+                && String(item.id || item._id) !== branchIdString
+                && item.status === 'ACTIVE'
+                && item.isDefault === true
+            );
+            const shouldBecomeDefault = updated.makeDefaultOnActivation === true || !hasOtherDefault;
+            if (shouldBecomeDefault) {
+                for (const [id, item] of this.branches.entries()) {
+                    if (String(item.tenantId) === tenantIdString) {
+                        this.branches.set(id, { ...item, isDefault: false });
+                    }
+                }
+            }
+            updated = {
+                ...updated,
+                isDefault: shouldBecomeDefault,
+                makeDefaultOnActivation: false
+            };
         }
-        this.branches.set(String(branchId), updated);
-        domainEvents.emitDomainEvent('BRANCH_ACTIVATED', String(branchId), { status: 'ACTIVE' }, actor, String(tenantId), String(branchId));
+
+        this.branches.set(branchIdString, updated);
+        domainEvents.emitDomainEvent('BRANCH_ACTIVATED', branchIdString, { status: 'ACTIVE', isDefault: updated.isDefault }, actor, tenantIdString, branchIdString);
         return updated;
     }
 
