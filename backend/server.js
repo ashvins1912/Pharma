@@ -30,6 +30,7 @@ import { ensureAuthorizationCatalog } from './authorization/AuthorizationCatalog
 import { refreshStockWaitlistCases } from './services/intelligentFulfillment/waitlistMonitor.js';
 import internalGatewayRoutes from './routes/internalGatewayRoutes.js';
 import apiRoutes from './routes/apiRoutes.js';
+import { auditMutation } from './middleware/activityAudit.js';
 
 
 const app = express();
