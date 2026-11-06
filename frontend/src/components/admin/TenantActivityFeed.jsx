@@ -52,7 +52,8 @@ export default function TenantActivityFeed() {
           <li key={item._id} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-100 p-3">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold text-slate-900">{formatLabel(item.action)} · {formatLabel(item.entityType)}</p>
-              <p className="mt-1 text-xs text-slate-600">{item.actorName || 'User'} <span className="text-slate-400">({formatLabel(item.actorRole)})</span></p>
+              <p className="mt-1 text-xs text-slate-600">{item.actorName || 'User'} <span className="text-slate-400">({formatLabel(item.actorRole)})</span> · {item.method} · HTTP {item.statusCode}</p>
+              {item.entityId && <p className="mt-1 break-all font-mono text-[10px] text-slate-500">Record: {item.entityId}</p>}
               {item.changedFields?.length > 0 && <p className="mt-1 text-[11px] text-slate-500">Fields: {item.changedFields.join(', ')}</p>}
               <p className="mt-1 break-all font-mono text-[10px] text-slate-400">{item.path}</p>
             </div>
