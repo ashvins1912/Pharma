@@ -32,12 +32,23 @@ router.get('/', async (req, res, next) => {
 // Keep this route before /:tenantId so "all" is never interpreted as a tenant ID.
 router.get('/all', async (req, res, next) => {
     try {
+        const tenantId = String(req.query.tenantId || '').trim();
+        if (tenantId) {
+            const cacheKey = `cache:tenant:${tenantId}:branches:v2`;
+            let branches = await cacheService.get(cacheKey);
+            if (!branches) {
+                branches = await tenantService.getBranches(tenantId, { status: 'ACTIVE' });
+                await cacheService.set(cacheKey, branches, TTL_SECONDS);
+            }
+            return res.json({ success: true, data: branches });
+        }
+
         let branches = await cacheService.get(CACHE_KEY_ALL_BRANCHES);
         if (!branches) {
             branches = await tenantService.getAllActiveBranches();
             await cacheService.set(CACHE_KEY_ALL_BRANCHES, branches, TTL_SECONDS);
         }
-        res.json({ success: true, data: branches });
+        return res.json({ success: true, data: branches });
     } catch (err) {
         next(err);
     }
