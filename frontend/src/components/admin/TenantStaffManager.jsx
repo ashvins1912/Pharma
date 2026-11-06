@@ -9,7 +9,7 @@ const ROLE_PERMISSIONS = {
   DISPATCHER: ['orders.read', 'orders.manage', 'delivery.read', 'delivery.manage'],
   RIDER: ['delivery.read'],
   TENANT_RIDER: ['delivery.read'],
-  TENANT_ADMIN: ['*']
+  TENANT_ADMIN: []
 };
 const ROLES = Object.keys(ROLE_PERMISSIONS);
 const idOf = item => String(item?._id || item?.id || '');
