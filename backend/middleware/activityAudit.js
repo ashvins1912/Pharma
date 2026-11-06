@@ -28,15 +28,15 @@ function makeAuditRecord(req, statusCode) {
         : 'UPDATE';
   const actor = req.user || {};
   const context = req.context || {};
-  const tenantId = context.tenantId || context.tenant?.id || req.get?.('x-tenant-id') || req.body?.tenantId || null;
-  const branchId = context.branchId || context.branch?.id || req.get?.('x-branch-id') || req.body?.branchId || null;
+  const tenantId = context.tenantId || context.tenant?.id || req.get?.('x-tenant-id') || req.body?.tenantId || req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
+  const branchId = context.branchId || context.branch?.id || req.get?.('x-branch-id') || req.body?.branchId || req.user?.branchId || req.user?.app_metadata?.branchId || null;
   const changedFields = Object.keys(req.body || {}).filter(key => !SENSITIVE_FIELDS.test(key)).slice(0, 30);
   const idParam = Object.entries(req.params || {}).find(([key]) => /id$/i.test(key));
   return {
     tenantId: tenantId ? String(tenantId) : null,
     branchId: branchId ? String(branchId) : null,
     actorId: String(actor.sub || actor.id || actor.userId || 'unknown'),
-    actorName: String(actor.user_metadata?.name || actor.user_metadata?.full_name || actor.email || 'User'),
+    actorName: String(actor.user_metadata?.name || actor.user_metadata?.full_name || actor.name || actor.email || 'User'),
     actorRole: String(actor.app_metadata?.role || actor.role || context.role || 'user'),
     action,
     entityType,
