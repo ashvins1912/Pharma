@@ -2,7 +2,7 @@ import deliveryContainer from '../container.js';
 import { sendCustomWhatsAppAlert } from '../../../config/whatsapp.js';
 import mongoose from 'mongoose';
 import OrderModel from '../../../models/Order.js';
-import { isSameTenant } from '../../../authorization/tenantScope.js';
+import { authorizationService } from '../../../authorization/AuthorizationService.js';
 
 const validOrderId = value => typeof value === 'string'
     && value !== 'undefined'
@@ -31,18 +31,8 @@ const validateAssignmentEligibility = async (req, res, orderId) => {
         return null;
     }
 
-    const role = String(req.user?.app_metadata?.role || req.user?.role || req.context?.role || 'customer').toUpperCase();
-    const globalAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
-    const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId || null;
-    const branchId = req.user?.branchId || req.user?.app_metadata?.branchId || req.context?.branchId || null;
-    if (!globalAdmin && !isSameTenant(tenantId, order.tenantId)) {
-        res.status(404).json({
-            success: false,
-            error: { code: 'NOT_FOUND', message: 'Order not found.', retryable: false, requestId: req.requestId || null }
-        });
-        return null;
-    }
-    if (!globalAdmin && branchId && (!order.branchId || String(order.branchId) !== String(branchId))) {
+    const authz = req.authz || req.user;
+    if (!authorizationService.canAccessTenantResource(authz, order.tenantId, order.branchId)) {
         res.status(404).json({
             success: false,
             error: { code: 'NOT_FOUND', message: 'Order not found.', retryable: false, requestId: req.requestId || null }
@@ -177,9 +167,9 @@ export const manualAssignOrder = async (req, res) => {
 export const getEngineStatus = async (req, res) => {
     try {
         const strategies = deliveryContainer.assignmentEngine.getActiveStrategies();
-        const role = String(req.user?.role || req.user?.app_metadata?.role || req.context?.role || '').toUpperCase();
-        const isPlatform = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
-        const tenantId = req.user?.tenantId || req.user?.app_metadata?.tenantId || req.context?.tenantId || req.query?.tenantId || null;
+        const authz = req.authz || req.user;
+        const isPlatform = authorizationService.isPlatformContext(authz);
+        const tenantId = isPlatform ? (req.query?.tenantId || null) : authz?.tenantId;
         if (!isPlatform && !tenantId) return res.status(403).json({ code: 'TENANT_CONTEXT_REQUIRED', message: 'A pharmacy tenant context is required.' });
         const allLogs = deliveryContainer.assignmentEngine.getExecutionLogs(100);
         const logs = allLogs.filter(log => isPlatform ? (!tenantId || String(log.tenantId || '') === String(tenantId)) : String(log.tenantId || '') === String(tenantId)).slice(0, 30);
