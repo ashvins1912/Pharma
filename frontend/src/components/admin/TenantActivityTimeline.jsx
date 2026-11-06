@@ -29,7 +29,7 @@ export default function TenantActivityTimeline({ tenantId = '' }) {
       <div className="space-y-2">
         {events.map(event => <article key={event._id || event.entityId + event.occurredAt} className="flex gap-3 rounded-xl border border-slate-100 p-3">
           <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-indigo-500" />
-          <div className="min-w-0 flex-1"><p className="text-xs font-bold text-slate-800">{label(event.eventType)}</p><p className="mt-1 text-[11px] text-slate-500">By {event.actorId || 'system'} · {label(event.actorRole)}{event.branchId ? ` · Branch ${event.branchId}` : ''}</p>
+          <div className="min-w-0 flex-1"><p className="text-xs font-bold text-slate-800">{event.summary || label(event.eventType)}</p><p className="mt-1 break-all text-[10px] text-slate-500">Record {event.entityId || '—'} · By {event.actorId || 'system'} · {label(event.actorRole)}{event.branchId ? ` · Branch ${event.branchId}` : ''}</p>
             {event.details && Object.keys(event.details).length > 0 && <p className="mt-1 break-words text-[10px] text-slate-500">{Object.entries(event.details).map(([key, value]) => `${label(key)}: ${Array.isArray(value) ? value.join(', ') : String(value)}`).join(' · ')}</p>}
             <time className="mt-1 block text-[10px] text-slate-400">{event.occurredAt ? new Date(event.occurredAt).toLocaleString() : ''}</time></div>
         </article>)}
