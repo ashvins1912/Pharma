@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { useRiderOnboarding } from '../../../hooks/useRiderOnboarding';
 import { useToast } from '../../../context/ToastContext';
 
@@ -57,8 +58,8 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay animate-fade-in">
-            <div className="pharma-modal-surface relative max-w-lg w-full p-6 sm:p-8 overflow-hidden max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-[1000] flex items-start sm:items-center justify-center overflow-y-auto overscroll-contain p-3 sm:p-4 modal-overlay animate-fade-in">
+            <div className="pharma-modal-surface relative max-w-lg w-full p-4 sm:p-8 max-h-[calc(100dvh-1.5rem)] sm:max-h-[90dvh] overflow-y-auto overscroll-contain">
                 {/* Header */}
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100 pr-10">
                     <div className="flex items-center gap-3">
@@ -258,6 +259,7 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
                     </div>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
