@@ -157,7 +157,7 @@ router.post('/profile/personnel', authenticateUser, async (req, res) => {
         const assignedRole = String(req.body?.role || '').trim().toUpperCase();
         const branchId = String(req.body?.branchId || '').trim() || null;
         const allowedRoles = new Set(['TENANT_ADMIN', 'PHARMACY_STAFF', 'PHARMACIST', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'RIDER', 'TENANT_RIDER']);
-        if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || !allowedRoles.has(assignedRole)) {
+        if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || !allowedRoles.has(assignedRole) || (!branchId && assignedRole !== 'TENANT_ADMIN')) {
             return sendError(res, { code: 'INVALID_PERSONNEL_ASSIGNMENT', message: 'Provide a valid registered email and supported tenant role.', statusCode: 400, req });
         }
         if (branchId) {
