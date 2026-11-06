@@ -126,7 +126,7 @@ router.post('/:tenantId/branches', authenticateUser, requireRoles(PlatformRoles.
     try {
         const branch = await tenantService.createBranch(req.params.tenantId, req.body, req.context);
         await cacheService.del(CACHE_KEY_ALL_BRANCHES);
-        await cacheService.del(`cache:tenant:${req.params.tenantId}:branches`);
+        await cacheService.del(`cache:tenant:${req.params.tenantId}:branches:v2`);
         res.status(201).json({ success: true, data: branch });
     } catch (err) {
         next(err);
