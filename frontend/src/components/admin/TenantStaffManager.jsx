@@ -5,7 +5,7 @@ const ROLE_PERMISSIONS = {
   PHARMACY_STAFF: ['orders.read', 'inventory.read'],
   PHARMACIST: ['orders.read', 'orders.manage', 'inventory.read', 'medicine_requests.read', 'medicine_requests.manage'],
   ORDER_MANAGER: ['orders.read', 'orders.manage', 'medicine_requests.read', 'medicine_requests.manage'],
-  INVENTORY_MANAGER: ['inventory.read', 'inventory.write', 'inventory.import'],
+  INVENTORY_MANAGER: ['inventory.read', 'inventory.write'],
   DISPATCHER: ['orders.read', 'orders.manage', 'delivery.read', 'delivery.manage'],
   RIDER: ['delivery.read'],
   TENANT_RIDER: ['delivery.read'],
@@ -17,7 +17,7 @@ const idOf = item => String(item?._id || item?.id || '');
 export default function TenantStaffManager({ tenantId }) {
   const [memberships, setMemberships] = useState([]);
   const [branches, setBranches] = useState([]);
-  const [form, setForm] = useState({ userId: '', branchId: '', role: 'PHARMACY_STAFF' });
+  const [form, setForm] = useState({ email: '', branchId: '', role: 'PHARMACY_STAFF' });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -35,7 +35,7 @@ export default function TenantStaffManager({ tenantId }) {
       const staff = staffResponse.data?.data || [];
       const branchPayload = branchResponse.data?.data || [];
       setMemberships(Array.isArray(staff) ? staff : []);
-      setBranches(Array.isArray(branchPayload) ? branchPayload : []);
+      setBranches(Array.isArray(branchPayload) ? branchPayload.filter(branch => String(branch.status || 'ACTIVE').toUpperCase() === 'ACTIVE') : []);
     } catch (err) {
       setError(err?.response?.data?.message || 'Branch staff could not be loaded. Check tenant administrator access.');
     } finally {
@@ -47,18 +47,18 @@ export default function TenantStaffManager({ tenantId }) {
 
   const addStaff = async event => {
     event.preventDefault();
-    if (!tenantId || !form.userId.trim()) return;
+    if (!tenantId || !form.email.trim()) return;
     setSaving(true);
     setError('');
     setNotice('');
     try {
       await apiClient.post(`/api/v1/tenants/${encodeURIComponent(tenantId)}/memberships`, {
-        userId: form.userId.trim(),
+        email: form.email.trim(),
         branchId: form.branchId || null,
         role: form.role,
         permissions: ROLE_PERMISSIONS[form.role]
       });
-      setForm(current => ({ ...current, userId: '' }));
+      setForm(current => ({ ...current, email: '' }));
       setNotice('User access assigned. The change is recorded in pharmacy activity.');
       await load();
     } catch (err) {
@@ -96,13 +96,13 @@ export default function TenantStaffManager({ tenantId }) {
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
       <div>
         <h3 className="text-lg font-black text-slate-900">Branch staff &amp; role access</h3>
-        <p className="mt-1 text-xs text-slate-500">Assign an existing authenticated user to this pharmacy or a specific branch. Role presets grant only the listed operational permissions.</p>
+        <p className="mt-1 text-xs text-slate-500">Assign an existing registered pharmacy user by email to this pharmacy or a specific branch. Role presets grant only the listed operational permissions.</p>
       </div>
       {error && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-800">{error}</p>}
       {notice && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">{notice}</p>}
       <form onSubmit={addStaff} className="grid gap-3 rounded-2xl border border-blue-100 bg-blue-50/50 p-4 md:grid-cols-4">
-        <label className="space-y-1 text-xs font-bold text-slate-600 md:col-span-2">Authenticated user ID
-          <input required value={form.userId} onChange={event => setForm(current => ({ ...current, userId: event.target.value }))} placeholder="Supabase user UUID" className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm" />
+        <label className="space-y-1 text-xs font-bold text-slate-600 md:col-span-2">Registered pharmacy user email
+          <input required type="email" value={form.email} onChange={event => setForm(current => ({ ...current, email: event.target.value }))} placeholder="staff@pharmacy.com" className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm" />
         </label>
         <label className="space-y-1 text-xs font-bold text-slate-600">Branch
           <select value={form.branchId} onChange={event => setForm(current => ({ ...current, branchId: event.target.value }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
@@ -116,8 +116,8 @@ export default function TenantStaffManager({ tenantId }) {
           </select>
         </label>
         <div className="md:col-span-4 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[11px] text-slate-500">New membership replaces any existing branch assignment for this user in this tenant.</p>
-          <button disabled={saving || !form.userId.trim()} className="rounded-xl bg-blue-700 px-4 py-2.5 text-xs font-extrabold text-white disabled:opacity-50">{saving ? 'Saving…' : 'Add / assign user'}</button>
+          <p className="text-[11px] text-slate-500">The email must belong to an active registered user of this pharmacy. Existing owner/admin memberships are protected.</p>
+          <button disabled={saving || !form.email.trim()} className="rounded-xl bg-blue-700 px-4 py-2.5 text-xs font-extrabold text-white disabled:opacity-50">{saving ? 'Saving…' : 'Add / assign user'}</button>
         </div>
       </form>
       <div className="space-y-2">
