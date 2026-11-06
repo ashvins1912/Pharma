@@ -12,7 +12,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
   const { tenantId, branchId } = useTenant();
   const refreshStorefrontInventory = () => {
     invalidatePublicCatalogCache();
-    fetchMedicines();
+    void fetchMedicines({ force: true });
   };
   const { addToast } = useToast();
   
