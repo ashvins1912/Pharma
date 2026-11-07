@@ -27,6 +27,7 @@ import DataMartRefreshService from './services/DataMartRefreshService.js';
 import { authenticateUser, isAdmin } from './middleware/auth.js';
 import localDemoAuthRoutes from './routes/localDemoAuthRoutes.js';
 import { ensureAuthorizationCatalog } from './authorization/AuthorizationCatalogService.js';
+import Rider from './models/Rider.js';
 import { refreshStockWaitlistCases } from './services/intelligentFulfillment/waitlistMonitor.js';
 import internalGatewayRoutes from './routes/internalGatewayRoutes.js';
 import apiRoutes from './routes/apiRoutes.js';
@@ -122,6 +123,16 @@ const refreshStockWaitlists = async () => {
 connectDB()
     .then(async connected => {
         if (!connected) return;
+        // Remove legacy global mobile uniqueness (mobile_1) which conflicts with
+        // the tenant-scoped unique index and prevents separate pharmacies from
+        // onboarding the same courier phone number.
+        const riderIndexes = await Rider.collection.indexes();
+        const legacyGlobalMobileIndex = riderIndexes.find(index => index.name === 'mobile_1' && index.unique === true && Object.keys(index.key || {}).length === 1 && index.key.mobile === 1);
+        if (legacyGlobalMobileIndex) {
+            await Rider.collection.dropIndex('mobile_1');
+            console.info('[RiderIndexMigration] Dropped obsolete global mobile_1 index.');
+        }
+        await Rider.collection.createIndex({ tenantId: 1, mobile: 1 }, { unique: true, name: 'tenantId_1_mobile_1' });
         await dataStore.ensureCatalogSeeded();
         await ensureAuthorizationCatalog();
         await refreshDataMart();
