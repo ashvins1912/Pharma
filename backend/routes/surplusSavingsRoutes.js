@@ -74,7 +74,7 @@ router.get('/', async (req, res) => {
                 savingsAmount: money(totalSavings), discountPercent: listPrice > 0 ? money(totalSavings / listPrice * 100) : 0,
                 campaignId: String(best.campaign._id), campaignName: best.campaign.name,
                 campaignDescription: best.campaign.description, minOrderAmount: Number(best.campaign.minOrderAmount || 0), endsAt: best.campaign.endsAt,
-                claimedCount: Number(best.campaign.usageCount || 0),
+                redemptionCount: Number(best.campaign.usageCount || 0),
                 claimLimit: best.campaign.usageLimit == null ? null : Number(best.campaign.usageLimit),
                 remainingClaims: best.campaign.usageLimit == null ? null : Math.max(0, Number(best.campaign.usageLimit) - Number(best.campaign.usageCount || 0)),
                 stock: medicine.stockQuantity ?? medicine.stock ?? medicine.quantity ?? 0,
