@@ -26,6 +26,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { getAdminMedicineRequests, getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { useTenant } from '../../context/TenantContext';
 import Pagination from '../common/Pagination';
 import { ComponentLoader, TableSkeleton, CardSkeleton, ErrorState, EmptyState } from '../common/ComponentLoader';
 import './AdminDashboardView.css';
