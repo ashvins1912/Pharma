@@ -907,7 +907,7 @@ export function AppProvider({ children }) {
       return;
     }
 
-    setCart([...cart, { ...med, quantity: 1, stock, maxCartQuantity, _cartTenantId: tenantId || med.tenantId || null }]);
+    setCart([...cart, { ...med, quantity: 1, stock, maxCartQuantity, _cartTenantId: tenantId || med.tenantId || null, _cartBranchId: branchId || med.branchId || null }]);
     addToast(`Added ${med.name} to cart`, 'success');
   };
 
