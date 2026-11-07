@@ -630,10 +630,14 @@ export function AuthProvider({ children }) {
     }
 
     const granted = Array.isArray(permissions) ? permissions : [];
+    const normalizedRole = String(role || user.app_metadata?.role || '').toUpperCase();
+    const tenantManagerDefaults = ['TENANT_OWNER', 'TENANT_ADMIN', 'OWNER'].includes(normalizedRole)
+      && ['tenant.profile.read', 'tenant.branches.read', 'tenant.branches.manage'].includes(permission);
     return granted.includes('*')
       || granted.includes(permission)
-      || granted.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)));
-  }, [user, permissions, revokedPermissions]);
+      || granted.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)))
+      || tenantManagerDefaults;
+  }, [user, role, permissions, revokedPermissions]);
 
   const hasAnyPermission = useCallback((requiredPermissions = []) =>
     Array.isArray(requiredPermissions) && requiredPermissions.some(hasPermission),
@@ -647,6 +651,7 @@ export function AuthProvider({ children }) {
     || (hasPermission('orders.read') && hasPermission('orders.manage'))
     || (hasPermission('medicine_requests.read')
       && hasAnyPermission(['medicine_requests.pending_count', 'medicine_requests.manage', 'medicine_requests.proposal']))
+    || hasPermission('tenant.branches.manage')
     || (['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'admin'].includes(role)
       && hasAnyPermission(['tenants.read', 'users.manage']))
   ));

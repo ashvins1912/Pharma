@@ -45,6 +45,10 @@ export const registerRider = async (req, res) => {
             rider: rider.toJSON()
         });
     } catch (error) {
+        if (error?.code === 11000) {
+            const field = Object.keys(error.keyPattern || {})[0] || 'mobile';
+            return res.status(409).json({ code: 'RIDER_DUPLICATE', message: field === 'mobile' ? 'This mobile number is already registered to a rider in this pharmacy.' : 'A rider with this identifier already exists.' });
+        }
         console.error('Rider registration error:', error);
         res.status(400).json({ message: error.message || 'Failed to onboard rider.' });
     }

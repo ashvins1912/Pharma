@@ -56,6 +56,30 @@ test('registering a disabled rider with the same mobile re-enables their existin
     assert.equal((await repository.findAll({ tenantId })).length, 1);
 });
 
+test('mobile formatting is canonicalized and duplicate rider registration is rejected within tenant', async () => {
+    const repository = new InMemoryRiderRepository();
+    const registerRider = new RegisterRiderUseCase({
+        riderRepository: repository,
+        storageService: { upload: async () => ({ publicUrl: 'photo-url' }) }
+    });
+    const rider = await registerRider.execute({
+        tenantId: 'tenant-a',
+        name: 'Canonical Rider',
+        mobile: '+91 95899 16475'
+    });
+    assert.equal(rider.mobile, '9589916475');
+    await assert.rejects(
+        registerRider.execute({ tenantId: 'tenant-a', name: 'Duplicate Rider', mobile: '95899-164-75' }),
+        /already registered/
+    );
+    const otherTenantRider = await registerRider.execute({
+        tenantId: 'tenant-b',
+        name: 'Independent Tenant Rider',
+        mobile: '9589916475'
+    });
+    assert.equal(otherTenantRider.tenantId, 'tenant-b');
+});
+
 test('rider suspension requires a supported action and non-empty remark', async () => {
     const repository = new InMemoryRiderRepository();
     const tenantId = 'tenant-a';

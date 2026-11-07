@@ -33,6 +33,7 @@ export function usePersistentState(
 ) {
   const initialRef = useRef(initialValue);
   const hydratedKeyRef = useRef(null);
+  const skipPersistKeyRef = useRef(null);
   const [value, setValue] = useState(() => {
     if (!enabled || !key) return initialRef.current;
     hydratedKeyRef.current = key;
@@ -41,12 +42,17 @@ export function usePersistentState(
 
   useEffect(() => {
     if (!enabled || !key) return;
+    skipPersistKeyRef.current = key;
     setValue(readValue(key, initialRef.current, storage, ttl));
     hydratedKeyRef.current = key;
   }, [key, storage, ttl, enabled]);
 
   useEffect(() => {
     if (!enabled || !key || hydratedKeyRef.current !== key) return;
+    if (skipPersistKeyRef.current === key) {
+      skipPersistKeyRef.current = null;
+      return;
+    }
 
     try {
       const target = getStorage(storage);

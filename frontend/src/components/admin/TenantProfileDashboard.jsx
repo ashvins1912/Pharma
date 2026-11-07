@@ -3,7 +3,6 @@ import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import TenantRegistry from '../auth/TenantRegistry';
-import TenantStaffManager from './TenantStaffManager';
 import TenantActivityFeed from './TenantActivityFeed';
 import { useTenant } from '../../context/TenantContext';
 
@@ -32,7 +31,6 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
   const { tenantId: activeTenantId } = useTenant();
   const role = String(user?.app_metadata?.role || user?.role || '').toUpperCase();
   const isSuperAdmin = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'ADMIN'].includes(role);
-  const canManageStaff = isSuperAdmin || ['TENANT_OWNER', 'TENANT_ADMIN'].includes(role);
   const [availableTenants, setAvailableTenants] = useState([]);
   const [internalTenantId, setInternalTenantId] = useState('');
   const selectedTenantId = platformTenantId || internalTenantId;
@@ -312,8 +310,7 @@ export default function TenantProfileDashboard({ tenantId: platformTenantId = ''
         )) : <p className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-500">No personnel records are available yet.</p>}
       </section>
 
-      {canManageStaff && staffTenantId && <TenantStaffManager tenantId={staffTenantId} />}
-      {canManageStaff && staffTenantId && <TenantActivityFeed tenantId={staffTenantId} />}
+      {isSuperAdmin && staffTenantId && <TenantActivityFeed tenantId={staffTenantId} />}
 
       <section className="space-y-3">
         <div><h3 className="text-lg font-black text-slate-900">Tenant branches</h3><p className="text-sm text-slate-500">Create and activate branches for this pharmacy.</p></div>

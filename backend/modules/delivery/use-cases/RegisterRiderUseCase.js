@@ -41,9 +41,13 @@ export class RegisterRiderUseCase {
         if (!mobile?.trim()) {
             throw new Error('Rider mobile number is required.');
         }
+        // Canonicalize mobile input so formatting differences do not bypass tenant duplicate checks.
+        const mobileDigits = String(mobile).replace(/\D/g, '');
+        const canonicalMobile = mobileDigits.length === 12 && mobileDigits.startsWith('91') ? mobileDigits.slice(2) : mobileDigits;
+        if (canonicalMobile.length < 10 || canonicalMobile.length > 15) throw new Error('Enter a valid mobile number.');
 
         // Reuse a disabled rider record so a returning rider keeps their history.
-        const existingRider = await this.riderRepository.findByMobile(mobile, tenantId);
+        const existingRider = await this.riderRepository.findByMobile(canonicalMobile, tenantId);
         if (existingRider?.enabled) {
             throw new Error(`A rider with mobile number ${mobile} is already registered.`);
         }
@@ -80,7 +84,7 @@ export class RegisterRiderUseCase {
                 tenantId: String(tenantId),
                 branchId,
                 name: name.trim(),
-                mobile: mobile.trim(),
+                mobile: canonicalMobile,
                 photoUrl,
                 status: existingRider.activeOrderIds.length
                     ? Rider.STATUSES.BUSY
@@ -99,7 +103,8 @@ export class RegisterRiderUseCase {
             tenantId,
             branchId,
             name,
-            mobile,
+            mobile: canonicalMobile,
+            phone: canonicalMobile,
             photoUrl,
             status: Rider.STATUSES.AVAILABLE,
             vehicleType,

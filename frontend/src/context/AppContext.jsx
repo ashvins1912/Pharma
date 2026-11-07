@@ -39,20 +39,13 @@ export function AppProvider({ children }) {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(16);
 
-  // Cart & Checkout State
-  const [cart, setCart] = useState([]);
-  const previousCartTenantId = useRef(tenantId);
+  // Cart cache is partitioned by account, pharmacy and branch; the hook TTL is 30 days.
+  const cartCacheKey = user?.id && tenantId ? `${CUSTOMER_CACHE_PREFIX}${user.id}:cart:${tenantId}:branch:${branchId || 'default'}` : null;
+  const [cart, setCart] = usePersistentState(cartCacheKey, [], { storage: 'local', ttl: 30 * 24 * 60 * 60 * 1000, enabled: Boolean(isFullyAuthenticated && cartCacheKey) });
   useEffect(() => {
-    const previousTenantId = previousCartTenantId.current;
-    if (String(previousTenantId || '') !== String(tenantId || '') && cart.length > 0) {
-      // A cart is bound to exactly one pharmacy. Clear it on every tenant
-      // transition, including tenant -> no selection -> another tenant.
-      setCart([]);
-      setAppliedCoupon(null);
-      setCouponCode('');
-    }
-    previousCartTenantId.current = tenantId;
-  }, [tenantId, cart.length]);
+    // Logout/no pharmacy hides cart contents in memory without deleting scoped cache.
+    if (!isFullyAuthenticated || !user?.id || !tenantId) setCart([]);
+  }, [isFullyAuthenticated, user?.id, tenantId, setCart]);
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponCode, setCouponCode] = useState('');
   const [couponError, setCouponError] = useState('');
@@ -907,7 +900,7 @@ export function AppProvider({ children }) {
       return;
     }
 
-    setCart([...cart, { ...med, quantity: 1, stock, maxCartQuantity, _cartTenantId: tenantId || med.tenantId || null }]);
+    setCart([...cart, { ...med, quantity: 1, stock, maxCartQuantity, _cartTenantId: tenantId || med.tenantId || null, _cartBranchId: branchId || med.branchId || null }]);
     addToast(`Added ${med.name} to cart`, 'success');
   };
 
