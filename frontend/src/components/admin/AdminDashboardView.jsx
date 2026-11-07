@@ -58,6 +58,7 @@ export default function AdminDashboardView() {
   const { t } = useLanguage();
   const {
     isSuperAdmin,
+    user,
     canAccessOperations,
     hasPermission,
     hasAnyPermission,
@@ -65,7 +66,8 @@ export default function AdminDashboardView() {
     loading: authLoading
   } = useAuth();
   const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen, setAdminBulkImportModalOpen, setAdminNewStockModalOpen } = useApp();
-  const { tenantId: activeTenantId } = useTenant();
+  const { tenantId: contextTenantId } = useTenant();
+  const activeTenantId = contextTenantId || user?.tenantId || user?.app_metadata?.tenantId || '';
   const [adminTab, setAdminTab] = useState('tenantProfile');
 
   // Navigation visibility and component rendering share these exact permission gates.
