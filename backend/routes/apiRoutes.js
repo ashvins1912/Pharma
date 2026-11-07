@@ -1,0 +1,282 @@
+import express from 'express';
+import authRoutes from './authRoutes.js';
+import couponRoutes from './couponRoutes.js';
+import surplusSavingsRoutes from './surplusSavingsRoutes.js';
+import medicineRequestRoutes from './medicineRequestRoutes.js';
+import medicineRoutes from './medicineRoutes.js';
+import orderRoutes from './orderRoutes.js';
+import { legacyProfileRoutes } from './profileRoutes.js';
+import profileRoutes from './profileRoutes.js';
+import proposalRoutes from './proposalRoutes.js';
+import riderProfileRoutes from './riderProfileRoutes.js';
+import testRoutes from './testRoutes.js';
+import whatsappRoutes from './whatsappRoutes.js';
+import versionedOrderRoutes from './versionedOrderRoutes.js';
+import adminRoutes from './adminRoutes.js';
+import tenantBranchRoutes from './tenantBranchRoutes.js';
+import { authenticateUser } from '../middleware/auth.js';
+import TenantMembership from '../models/TenantMembership.js';
+import tenantService from '../services/tenant-service/TenantService.js';
+import UserProfile from '../models/UserProfile.js';
+import riderRoutes from '../modules/delivery/routes/riderRoutes.js';
+import assignmentRoutes from '../modules/delivery/routes/assignmentRoutes.js';
+import { GoogleGenAI } from '@google/genai';
+
+const ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY,
+    httpOptions: {
+        headers: {
+            'User-Agent': 'aistudio-build'
+        }
+    }
+});
+
+const router = express.Router();
+
+router.use('/auth', authRoutes);
+router.use('/medicines', medicineRoutes);
+router.use('/orders', orderRoutes);
+router.use('/riders', riderProfileRoutes);
+router.use('/profile', profileRoutes);
+router.use('/user', legacyProfileRoutes);
+router.use('/coupons', couponRoutes);
+router.use('/surplus-savings', surplusSavingsRoutes);
+router.use('/admin/whatsapp', whatsappRoutes);
+router.use('/admin', adminRoutes);
+router.use('/admin/riders', riderRoutes);
+router.use('/admin/assignment', assignmentRoutes);
+router.use('/medicine-requests', medicineRequestRoutes);
+router.use('/admin/medicine-requests', (req, _res, next) => {
+    req.medicineRequestAudience = 'staff';
+    return next();
+}, medicineRequestRoutes);
+router.use('/proposals', proposalRoutes);
+router.use('/v1/orders', versionedOrderRoutes);
+router.use('/test', testRoutes);
+
+router.get('/vendor/profile', async (req, res) => {
+    try {
+        const tenantId = String(
+            req.query.tenantId
+            || req.headers['x-tenant-id']
+            || '65a1234567890abcdef12345'
+        ).trim();
+        const [tenant, vendor, memberships] = await Promise.all([
+            Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).lean(),
+            Vendor.findOne({ tenantId, status: 'ACTIVE' }).lean(),
+            TenantMembership.find({ tenantId, status: 'ACTIVE' }).select('userId role branchId').lean()
+        ]);
+        if (!tenant || !vendor) {
+            return res.json({
+                status: 'success',
+                tenant: {
+                    _id: tenantId || '65a1234567890abcdef12345',
+                    shopName: 'City Health Pharmacy & Wellness',
+                    legalName: 'City Health Pharma Pvt Ltd',
+                    licenseNumber: 'DL-2026-SF-99887',
+                    gstNumber: '27AABCC1234F1Z9',
+                    address: { street: '123 Main Street', city: 'San Francisco', state: 'CA', zipCode: '94105' },
+                    ownerDetails: { name: 'Ashvin Singh', email: 'ashvinsingh25@gmail.com', phone: '+19876543210' }
+                },
+                personnel: [
+                    { _id: 'user-1', name: 'Ashvin Singh', email: 'ashvinsingh25@gmail.com', role: 'OWNER' },
+                    { _id: 'user-2', name: 'Jane Admin', email: 'jane.admin@pharmacy.com', role: 'TENANT_ADMIN' }
+                ]
+            });
+        }
+        const userIds = [...new Set(memberships.map(item => String(item.userId)))];
+        const profiles = userIds.length ? await UserProfile.find({
+            $or: [
+                { supabase_user_id: { $in: userIds } },
+                { supabaseId: { $in: userIds } },
+                { userId: { $in: userIds } }
+            ]
+        }).select('supabase_user_id supabaseId userId name email').lean() : [];
+        const profileById = new Map();
+        for (const profile of profiles) {
+            for (const id of [profile.supabase_user_id, profile.supabaseId, profile.userId].filter(Boolean)) {
+                profileById.set(String(id), profile);
+            }
+        }
+        const personnel = memberships.map(member => {
+            const profile = profileById.get(String(member.userId)) || {};
+            return {
+                _id: String(member.userId),
+                name: profile.name || 'Pharmacy Staff',
+                email: profile.email || '',
+                role: member.role,
+                branchId: member.branchId || null
+            };
+        });
+        const hasCoordinates = Number.isFinite(Number(vendor.latitude)) && Number.isFinite(Number(vendor.longitude));
+        return res.json({
+            status: 'success',
+            tenant: {
+                _id: tenant._id,
+                shopName: tenant.name || vendor.companyName,
+                address: {
+                    street: vendor.address?.street || '',
+                    city: vendor.address?.city || '',
+                    state: vendor.address?.state || '',
+                    zipCode: vendor.address?.pincode || ''
+                },
+                geoLocation: hasCoordinates ? {
+                    type: 'Point',
+                    coordinates: [Number(vendor.longitude), Number(vendor.latitude)]
+                } : null,
+                shopPhotoUrl: vendor.shopPhotoUrl || null,
+                ownerDetails: {
+                    name: vendor.name || '',
+                    email: vendor.email || '',
+                    phone: vendor.mobile || ''
+                }
+            },
+            personnel
+        });
+    } catch (err) {
+        console.error('[TenantProfile] Scoped vendor profile lookup failed:', err);
+        res.status(503).json({ message: 'Pharmacy profile is temporarily unavailable.' });
+    }
+});
+
+router.use('/tenant/branches', tenantBranchRoutes);
+
+import Tenant from '../models/Tenant.js';
+import Vendor from '../models/Vendor.js';
+
+router.get('/tenants/nearby', async (req, res) => {
+    try {
+        const hasLat = req.query.lat !== undefined;
+        const hasLng = req.query.lng !== undefined;
+        const userLat = hasLat ? Number(req.query.lat) : null;
+        const userLng = hasLng ? Number(req.query.lng) : null;
+        const requestedCity = String(req.query.city || '').trim().toLowerCase();
+        const requestedPincode = String(req.query.pincode || '').replace(/\\D/g, '').slice(0, 10);
+        if (hasLat !== hasLng || (hasLat && (!Number.isFinite(userLat) || userLat < -90 || userLat > 90
+            || !Number.isFinite(userLng) || userLng < -180 || userLng > 180))) {
+            return res.status(400).json({ message: 'Provide valid latitude and longitude coordinates.' });
+        }
+        const dbTenants = await Tenant.find({ status: 'ACTIVE' }).lean();
+        const tenantIds = dbTenants.map(tenant => String(tenant._id));
+        const vendors = tenantIds.length
+            ? await Vendor.find({ status: 'ACTIVE', tenantId: { $in: tenantIds } }).lean()
+            : [];
+        const vendorByTenant = new Map(vendors.map(vendor => [String(vendor.tenantId), vendor]));
+        const radians = value => value * Math.PI / 180;
+        const distanceKm = (lat1, lng1, lat2, lng2) => {
+            const dLat = radians(lat2 - lat1);
+            const dLng = radians(lng2 - lng1);
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(radians(lat1))
+                * Math.cos(radians(lat2)) * Math.sin(dLng / 2) ** 2;
+            return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        };
+        let tenants = dbTenants.flatMap(tenant => {
+            const vendor = vendorByTenant.get(String(tenant._id));
+            if (!vendor) return [];
+            const lat = Number(vendor.latitude ?? vendor.geoLocation?.coordinates?.[1]);
+            const lng = Number(vendor.longitude ?? vendor.geoLocation?.coordinates?.[0]);
+            const hasCoordinates = Number.isFinite(lat) && lat >= -90 && lat <= 90
+                && Number.isFinite(lng) && lng >= -180 && lng <= 180
+                && (vendor.latitude != null || vendor.longitude != null || vendor.geoLocation?.coordinates?.length === 2);
+            const distance = userLat != null && hasCoordinates ? distanceKm(userLat, userLng, lat, lng) : null;
+            const vendorPincode = String(vendor.address?.pincode || '').replace(/\\D/g, '');
+            const vendorCity = String(vendor.address?.city || '').trim().toLowerCase();
+            const locationMatch = requestedPincode && vendorPincode === requestedPincode
+                ? 'PINCODE'
+                : requestedCity && vendorCity === requestedCity
+                    ? 'CITY'
+                    : null;
+            return [{
+                _id: tenant._id,
+                shopName: tenant.name || vendor.companyName,
+                address: {
+                    street: vendor.address?.street || '',
+                    city: vendor.address?.city || '',
+                    state: vendor.address?.state || '',
+                    zipCode: vendor.address?.pincode || ''
+                },
+                geoLocation: hasCoordinates ? { type: 'Point', coordinates: [lng, lat] } : null,
+                shopPhotoUrl: vendor.shopPhotoUrl || null,
+                distanceKm: distance == null ? null : Number(distance.toFixed(1)),
+                locationMatch
+            }];
+        });
+        // Keep pharmacies without GPS pins visible. Older vendor records may have
+        // a complete postal address but no coordinates yet.
+        if (userLat != null) {
+            tenants.sort((a, b) => {
+                const distanceA = a.distanceKm == null ? Number.POSITIVE_INFINITY : a.distanceKm;
+                const distanceB = b.distanceKm == null ? Number.POSITIVE_INFINITY : b.distanceKm;
+                return distanceA - distanceB;
+            });
+        } else if (requestedPincode || requestedCity) {
+            tenants.sort((a, b) => {
+                const score = item => item.locationMatch === 'PINCODE' ? 0 : item.locationMatch === 'CITY' ? 1 : 2;
+                return score(a) - score(b);
+            });
+        }
+        return res.json({ status: 'success', tenants });
+    } catch (err) {
+        console.error('[TenantDiscovery] Nearby pharmacy lookup failed:', err);
+        return res.status(503).json({ message: 'Nearby pharmacy discovery is temporarily unavailable.' });
+    }
+});
+
+router.post('/med-search-grounding', async (req, res) => {
+    try {
+        const { query } = req.body;
+        if (!query || !query.trim()) {
+            return res.status(400).json({ error: 'Search query is required.' });
+        }
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: `Provide real-time medical information, clinical usage, indications, dosage guidance, warnings, and local pharmacy availability insights for the medicine or query: "${query.trim()}". Keep it concise, professional, and clear for a pharmacy customer or dispenser.`,
+            config: {
+                tools: [{ googleSearch: {} }]
+            }
+        });
+
+        const text = response.text || 'No medical summary found.';
+        const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        const sources = chunks
+            .map(c => c.web ? { title: c.web.title, uri: c.web.uri } : null)
+            .filter(Boolean);
+
+        res.json({
+            status: 'success',
+            query: query.trim(),
+            summary: text,
+            sources
+        });
+    } catch (error) {
+        console.error('Search grounding error:', error);
+        res.status(500).json({ error: error.message || 'Failed to fetch grounded medical search results.' });
+    }
+});
+
+import multer from 'multer';
+import { imageOptimizationService } from '../services/ImageOptimizationService.js';
+
+const upload = multer({ limits: { fileSize: 5 * 1024 * 1024 } });
+
+router.post('/upload/image', upload.single('image'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No image file uploaded.' });
+        }
+        const result = await imageOptimizationService.processAndStore(
+            req.file.buffer,
+            req.file.originalname,
+            req.file.mimetype
+        );
+        res.json({
+            status: 'success',
+            data: result
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+export default router;

@@ -1,0 +1,164 @@
+{
+  "services": [
+    {
+      "type": "web",
+      "name": "ashvin-pharmacy",
+      "runtime": "node",
+      "plan": "starter",
+      "buildCommand": "npm install --include=dev && npm run build",
+      "startCommand": "./node_modules/.bin/tsx server.ts",
+      "healthCheckPath": "/api/v1/health",
+      "envVars": [
+        {
+          "key": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "key": "PORT",
+          "value": "10000"
+        },
+        {
+          "key": "HOST",
+          "value": "0.0.0.0"
+        },
+        {
+          "key": "CORS_ALLOWED_ORIGINS",
+          "sync": false
+        },
+        {
+          "key": "FRONTEND_URL",
+          "sync": false
+        },
+        {
+          "key": "MONGO_URI",
+          "sync": false
+        },
+        {
+          "key": "MONGO_TRANSACTIONS_CONFIRMED",
+          "value": "false"
+        },
+        {
+          "key": "SUPABASE_URL",
+          "sync": false
+        },
+        {
+          "key": "SUPABASE_ANON_KEY",
+          "sync": false
+        },
+        {
+          "key": "SUPABASE_SERVICE_ROLE_KEY",
+          "sync": false
+        },
+        {
+          "key": "ENCRYPTION_SECRET_KEY",
+          "sync": false
+        },
+        {
+          "key": "SYSTEM_SECRET_KEY",
+          "sync": false
+        },
+        {
+          "key": "GATEWAY_AUTH_SECRET",
+          "sync": false
+        },
+        {
+          "key": "SERVICE_AUTH_SECRET",
+          "sync": false
+        },
+        {
+          "key": "SERVICE_JWT_ISSUER",
+          "value": "ashvin-pharmacy"
+        },
+        {
+          "key": "SERVICE_JWT_AUDIENCE",
+          "value": "inventory-service"
+        },
+        {
+          "key": "ORDER_SERVICE_JWT_AUDIENCE",
+          "value": "order-service"
+        },
+        {
+          "key": "DELIVERY_EVENT_SECRET",
+          "sync": false
+        },
+        {
+          "key": "DELIVERY_ACTION_BASE_URL",
+          "sync": false
+        },
+        {
+          "key": "DELIVERY_MAX_ATTEMPTS",
+          "value": "3"
+        },
+        {
+          "key": "PAYMENT_REMINDER_ENABLED",
+          "value": "false"
+        },
+        {
+          "key": "PAYMENT_REMINDER_ENGINE_ENABLED",
+          "value": "false"
+        },
+        {
+          "key": "PAYMENT_ACTION_BASE_URL",
+          "sync": false
+        },
+        {
+          "key": "WHATSAPP_DELIVERY_TRACKING_ENABLED",
+          "value": "false"
+        },
+        {
+          "key": "WHATSAPP_AUTH_DIR",
+          "value": "/var/data/whatsapp-auth"
+        },
+        {
+          "key": "DEMO_ADMIN_ENABLED",
+          "value": "false"
+        },
+        {
+          "key": "DEMO_ADMIN_INSTANT_ACCESS_ENABLED",
+          "value": "false"
+        },
+        {
+          "key": "DEMO_CUSTOMER_ENABLED",
+          "value": "false"
+        },
+        {
+          "key": "VITE_API_URL",
+          "value": "/api"
+        },
+        {
+          "key": "VITE_SUPABASE_URL",
+          "sync": false
+        },
+        {
+          "key": "VITE_SUPABASE_ANON_KEY",
+          "sync": false
+        },
+        {
+          "key": "VITE_FRONTEND_URL",
+          "sync": false
+        },
+        {
+          "key": "VITE_GOOGLE_MAPS_API_KEY",
+          "sync": false
+        },
+        {
+          "key": "VITE_DEMO_ADMIN_ENABLED",
+          "value": "false"
+        },
+        {
+          "key": "VITE_DEMO_CUSTOMER_ENABLED",
+          "value": "false"
+        },
+        {
+          "key": "VITE_INSTANT_DEMO_ACCESS_ENABLED",
+          "value": "false"
+        }
+      ],
+      "disk": {
+        "name": "whatsapp-session",
+        "mountPath": "/var/data",
+        "sizeGB": 1
+      }
+    }
+  ]
+}

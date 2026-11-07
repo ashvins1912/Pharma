@@ -1,0 +1,217 @@
+import { isPermissionGranted } from '@pharma/service-kernel';
+
+const CAPABILITIES = [
+  ['GET', /^\/api\/orders\/[^/]+\/scan-prescription$/, 'prescription.read'],
+  ['GET', /^\/api\/orders\/notifications\/logs$/, 'whatsapp.read'],
+  ['GET', /^\/api\/orders\/[^/]+\/notify-whatsapp$/, 'whatsapp.manage'],
+  ['POST', /^\/api\/orders\/[^/]+\/notify-whatsapp$/, 'whatsapp.manage'],
+  ['POST', /^\/api\/orders\/[^/]+\/rating$/, 'orders.read'],
+  ['POST', /^\/api\/orders\/[^/]+\/verify-delivery$/, 'delivery.manage'],
+  ['PUT', /^\/api\/orders\/[^/]+\/review$/, 'prescription.review'],
+  ['POST', /^\/api\/orders\/admin\/[^/]+\/prescription\/(?:reinitiate|manual-approve)$/, 'prescription.review'],
+  ['PUT', /^\/api\/orders\/[^/]+\/dispatch$/, 'delivery.manage'],
+  ['POST', /^\/api\/orders\/admin\/(?:optimize-and-club-routes|dispatch-batch)$/, 'delivery.manage'],
+  ['POST', /^\/api\/orders\/?$/, 'orders.create'],
+  ['GET', /^\/api\/orders\/admin(?:\/|$)/, 'orders.manage'],
+  ['GET', /^\/api\/orders(?:\/|$)/, 'orders.read'],
+  ['POST', /^\/api\/orders\/checkout(?:\/|$)/, 'orders.create'],
+  ['POST', /^\/api\/orders\/checkout\/quote(?:\/|$)/, 'orders.create'],
+  ['POST', /^\/api\/orders\/fulfillment\/(?:preview|waitlist(?:\/[^/]+\/(?:confirm|cancel|link-order))?)$/, 'orders.create'],
+  ['POST', /^\/api\/orders\/fulfillment\/from-medicine-request\/[^/]+$/, 'medicine_requests.decide'],
+  ['POST', /^\/api\/orders\/admin(?:\/|$)/, 'orders.manage'],
+  ['PUT', /^\/api\/orders\/[^/]+(?:\/|$)/, 'orders.manage'],
+  ['PATCH', /^\/api\/orders\/[^/]+(?:\/|$)/, 'orders.manage'],
+  ['GET', /^\/api\/medicine-requests\/[^/]+\/fulfillment\/preview$/, 'medicine_requests.decide'],
+  ['POST', /^\/api\/medicine-requests\/[^/]+\/fulfillment\/confirm$/, 'medicine_requests.decide'],
+  ['GET', /^\/api\/medicine-requests(?:\/|$)/, 'medicine_requests.read'],
+  ['POST', /^\/api\/medicine-requests\/[^/]+\/waitlist$/, 'medicine_requests.decide'],
+  ['POST', /^\/api\/medicine-requests(?:\/|$)/, 'medicine_requests.create'],
+  ['PUT', /^\/api\/medicine-requests\/[^/]+\/prescription(?:\/|$)/, 'medicine_requests.create'],
+  ['POST', /^\/api\/medicine-requests\/[^/]+\/proposal(?:\/|$)/, 'medicine_requests.proposal'],
+  ['POST', /^\/api\/medicine-requests\/admin\/[^/]+\/proposal(?:\/|$)/, 'medicine_requests.proposal'],
+  ['GET', /^\/api\/admin\/medicine-requests(?:\/|$)/, 'medicine_requests.read'],
+  ['POST', /^\/api\/admin\/medicine-requests\/[^/]+\/proposal(?:\/|$)/, 'medicine_requests.proposal'],
+  ['PUT', /^\/api\/admin\/medicine-requests\/[^/]+\/review(?:\/|$)/, 'medicine_requests.manage'],
+  ['POST', /^\/api\/admin\/medicine-requests\/[^/]+\/reject-request(?:\/|$)/, 'medicine_requests.manage'],
+  ['GET', /^\/api\/medicines\/admin\/inventory$/, 'inventory.read'],
+  ['GET', /^\/api\/medicines\/alerts$/, 'inventory.read'],
+  ['GET', /^\/api\/medicines\/audits$/, 'inventory.read'],
+  ['GET', /^\/api\/medicines\/imports\/[^/]+\/(?:status|failed-records)$/, 'inventory.read'],
+  ['POST', /^\/api\/medicines\/(?:imports|imports\/[^/]+\/retry|validate-import|confirm-import|upload-excel)$/, 'inventory.import'],
+  ['POST', /^\/api\/medicines(?:\/|$)/, 'inventory.write'],
+  ['PUT', /^\/api\/medicines(?:\/|$)/, 'inventory.write'],
+  ['PATCH', /^\/api\/medicines(?:\/|$)/, 'inventory.write'],
+  ['DELETE', /^\/api\/medicines(?:\/|$)/, 'inventory.write'],
+  ['POST', /^\/api\/coupons\/?$/, 'promotions.manage'],
+  ['GET', /^\/api\/coupons\/my-offer(?:\/|$)/, 'orders.read'],
+  ['GET', /^\/api\/coupons\/admin\/(?:customers|customer-promotions)(?:\/|$)/, 'promotions.read'],
+  ['POST', /^\/api\/coupons\/admin\/customer-promotions(?:\/|$)/, 'promotions.manage'],
+  ['PATCH', /^\/api\/coupons\/admin\/customer-promotions\/[^/]+(?:\/|$)/, 'promotions.manage'],
+  ['GET', /^\/api\/surplus-savings\/?$/, 'orders.read'],
+  ['GET', /^\/api\/surplus-savings\/admin\/?$/, 'promotions.read'],
+  ['POST', /^\/api\/surplus-savings\/admin\/?$/, 'promotions.manage'],
+  ['PATCH', /^\/api\/surplus-savings\/admin\/[^/]+(?:\/|$)/, 'promotions.manage'],
+  ['DELETE', /^\/api\/surplus-savings\/admin\/[^/]+(?:\/|$)/, 'promotions.manage'],
+  ['GET', /^\/api\/user\/profile(?:\/|$)/, 'profile.read'],
+  ['POST', /^\/api\/user\/profile(?:\/|$)/, 'profile.write'],
+  ['GET', /^\/api\/user\/addresses(?:\/|$)/, 'profile.read'],
+  ['POST', /^\/api\/user\/addresses(?:\/|$)/, 'profile.write'],
+  ['PATCH', /^\/api\/user\/addresses\/[^/]+(?:\/|$)/, 'profile.write'],
+  ['DELETE', /^\/api\/user\/addresses\/[^/]+(?:\/|$)/, 'profile.write'],
+  ['POST', /^\/api\/profile(?:\/|$)/, 'profile.write'],
+  ['PUT', /^\/api\/profile(?:\/|$)/, 'profile.write'],
+  ['DELETE', /^\/api\/profile(?:\/|$)/, 'profile.write'],
+  ['GET', /^\/api\/profile(?:\/|$)/, 'profile.read'],
+  ['PATCH', /^\/api\/profile(?:\/|$)/, 'profile.write'],
+  ['POST', /^\/api\/riders\/?$/, 'delivery.manage'],
+  ['GET', /^\/api\/riders(?:\/|$)/, 'delivery.read'],
+  ['GET', /^\/api\/admin\/riders(?:\/|$)/, 'delivery.read'],
+  ['POST', /^\/api\/admin\/riders(?:\/|$)/, 'delivery.manage'],
+  ['PATCH', /^\/api\/admin\/riders(?:\/|$)/, 'delivery.manage'],
+  ['GET', /^\/api\/admin\/assignment\/engine-status$/, 'delivery.read'],
+  ['POST', /^\/api\/admin\/assignment(?:\/|$)/, 'delivery.manage'],
+  ['PATCH', /^\/api\/admin\/assignment(?:\/|$)/, 'delivery.manage'],
+  ['GET', /^\/api\/admin\/audit-logs(?:\/|$)/, 'users.read'],
+  ['GET', /^\/api\/admin\/whatsapp\/(?:status|logs)(?:\/|$)/, 'whatsapp.read'],
+  ['POST', /^\/api\/admin\/whatsapp\/(?:generate-qr|disconnect)(?:\/|$)/, 'whatsapp.manage'],
+  ['GET', /^\/api\/v1\/auth\/me$/, 'profile.read'],
+  ['POST', /^\/api\/v1\/auth\/logout$/, 'profile.write'],
+  ['PUT', /^\/api\/v1\/auth\/(?:onboarding|complete-profile)$/, 'profile.complete'],
+  ['POST', /^\/api\/v1\/auth\/mfa\/(?:enroll|confirm-enroll|mfa-disable)$/, 'profile.write'],
+  ['GET', /^\/api\/v1\/profile\/access\/users(?:\/|$)/, 'users.read'],
+  ['PATCH', /^\/api\/v1\/profile\/access\/users(?:\/|$)/, 'users.manage'],
+  ['GET', /^\/api\/v1\/admin\/payments\/outstanding$/, 'billing.read'],
+  ['POST', /^\/api\/v1\/admin\/payments\/reminders\/dispatch$/, 'billing.write'],
+  ['GET', /^\/api\/v1\/billing(?:\/|$)/, 'billing.read'],
+  ['POST', /^\/api\/v1\/billing(?:\/|$)/, 'billing.write'],
+  ['PUT', /^\/api\/v1\/billing(?:\/|$)/, 'billing.write'],
+  ['PATCH', /^\/api\/v1\/billing(?:\/|$)/, 'billing.write'],
+  ['DELETE', /^\/api\/v1\/billing(?:\/|$)/, 'billing.write'],
+  ['GET', /^\/api\/v1\/referrals(?:\/|$)/, 'referrals.read'],
+  ['POST', /^\/api\/v1\/referrals(?:\/|$)/, 'referrals.manage'],
+  ['PUT', /^\/api\/v1\/referrals(?:\/|$)/, 'referrals.manage'],
+  ['PATCH', /^\/api\/v1\/referrals(?:\/|$)/, 'referrals.manage'],
+  ['GET', /^\/api\/v1\/profile(?:\/|$)/, 'profile.read'],
+  ['POST', /^\/api\/v1\/profile(?:\/|$)/, 'profile.write'],
+  ['PUT', /^\/api\/v1\/profile(?:\/|$)/, 'profile.write'],
+  ['PATCH', /^\/api\/v1\/profile(?:\/|$)/, 'profile.write'],
+  ['GET', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.read'],
+  ['POST', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.manage'],
+  ['PUT', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.manage'],
+  ['PATCH', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.manage'],
+  ['DELETE', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.manage'],
+  // Tenant-scoped branch listing is available to tenant admins/owners; backend enforces tenant membership.
+  ['GET', /^\/api\/v1\/tenants\/[^/]+\/branches(?:\/|$)/, 'tenant.branches.read'],
+  ['POST', /^\/api\/v1\/tenants\/[^/]+\/branches\/?$/, 'tenant.branches.manage'],
+  ['PUT', /^\/api\/v1\/branches\/[^/]+$/, 'tenant.branches.manage'],
+  ['POST', /^\/api\/v1\/branches\/[^/]+\/activate$/, 'tenant.branches.manage'],
+  // Staff membership and tenant activity routes use tenant-scoped capabilities.
+  ['GET', /^\/api\/v1\/tenants\/[^/]+\/memberships(?:\/|$)/, 'tenant.branches.read'],
+  ['POST', /^\/api\/v1\/tenants\/[^/]+\/memberships\/?$/, 'tenant.branches.manage'],
+  ['PATCH', /^\/api\/v1\/tenants\/[^/]+\/memberships\/[^/]+$/, 'tenant.branches.manage'],
+  ['DELETE', /^\/api\/v1\/tenants\/[^/]+\/memberships\/[^/]+$/, 'tenant.branches.manage'],
+  ['GET', /^\/api\/v1\/activity(?:\/|$)/, 'tenant.branches.read'],
+  ['GET', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.read'],
+  ['GET', /^\/api\/tenant\/branches(?:\/|$)/, 'tenant.branches.read'],
+  ['POST', /^\/api\/tenant\/branches\/?$/, 'tenant.branches.manage'],
+  ['PATCH', /^\/api\/tenant\/branches\/[^/]+(?:\/status)?$/, 'tenant.branches.manage'],
+  ['DELETE', /^\/api\/tenant\/branches\/[^/]+$/, 'tenant.branches.manage'],
+  ['POST', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.manage'],
+  ['PUT', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.manage'],
+  ['PATCH', /^\/api\/v1\/(?:tenants|branches)(?:\/|$)/, 'tenants.manage'],
+  ['GET', /^\/api\/v1\/customers(?:\/|$)/, 'profile.read'],
+  ['POST', /^\/api\/v1\/customers(?:\/|$)/, 'profile.write'],
+  ['PATCH', /^\/api\/v1\/customers(?:\/|$)/, 'profile.write'],
+  // Explicitly register managed-person deletion; keep the mutation limited to
+  // the persons resource and subject to the same profile.write authorization.
+  ['DELETE', /^\/api\/v1\/customers\/persons\/[^/]+$/, 'profile.write'],
+  ['POST', /^\/api\/v1\/inventory\/imports\/preview$/, 'inventory.import'],
+  ['POST', /^\/api\/v1\/inventory\/imports\/?$/, 'inventory.import'],
+  ['GET', /^\/api\/v1\/inventory\/imports\/[^/]+(?:\/failures(?:\/download)?)?$/, 'inventory.import'],
+  ['POST', /^\/api\/v1\/inventory\/imports\/[^/]+\/retry$/, 'inventory.import'],
+  ['GET', /^\/api\/v1\/inventory\/imports\/batches(?:\/[^/]+(?:\/rows|\/invalid-records\/download)?)?$/, 'inventory.import'],
+  ['PATCH', /^\/api\/v1\/inventory\/imports\/batches\/[^/]+\/rows\/[^/]+$/, 'inventory.import'],
+  ['POST', /^\/api\/v1\/inventory\/imports\/batches\/[^/]+\/(?:publish|unpublish|rows\/edit-selected|rows\/[^/]+\/publish)$/, 'inventory.import'],
+  ['POST', /^\/api\/v1\/inventory\/imports\/batches\/[^/]+\/rollback$/, 'inventory.import'],
+  ['POST', /^\/api\/v1\/inventory\/adjust$/, 'inventory.write'],
+  ['POST', /^\/api\/v1\/prescriptions\/[^/]+\/review(?:\/(?:claim|approve|reject|wait))?$/, 'prescription.review'],
+  ['POST', /^\/api\/v1\/prescriptions\/hospitals$/, 'prescription.write'],
+  ['POST', /^\/api\/v1\/prescriptions\/[^/]+\/(?:link-order|convert-to-order|remove)$/, 'prescription.write'],
+  ['GET', /^\/api\/v1\/prescriptions\/reviews\/queue$/, 'prescription.review'],
+  ['GET', /^\/api\/v1\/orders\/[^/]+\/events$/, 'orders.manage'],
+  ['PATCH', /^\/api\/v1\/orders\/[^/]+\/status$/, 'orders.manage'],
+  ['GET', /^\/api\/v1\/orders(?:\/|$)/, 'orders.read'],
+  ['POST', /^\/api\/v1\/orders\/?$/, 'orders.create'],
+  ['GET', /^\/api\/v1\/catalog(?:\/|$)/, 'inventory.read'],
+  ['GET', /^\/api\/v1\/pricing(?:\/|$)/, 'orders.read'],
+  ['GET', /^\/api\/v1\/delivery(?:\/|$)/, 'delivery.read'],
+  ['POST', /^\/api\/v1\/delivery(?:\/|$)/, 'delivery.manage'],
+  ['PATCH', /^\/api\/v1\/delivery(?:\/|$)/, 'delivery.manage'],
+  ['GET', /^\/api\/v1\/medicine-requests(?:\/|$)/, 'medicine_requests.read'],
+  ['POST', /^\/api\/v1\/medicine-requests(?:\/|$)/, 'medicine_requests.create'],
+  ['POST', /^\/api\/v1\/integrations\/sync(?:\/|$)/, 'csquare.sync'],
+  ['GET', /^\/api\/v1\/integrations(?:\/|$)/, 'csquare.read'],
+  ['PUT', /^\/api\/v1\/integrations(?:\/|$)/, 'csquare.manage'],
+  ['POST', /^\/api\/v1\/integrations(?:\/|$)/, 'csquare.manage'],
+  ['GET', /^\/api\/v1\/notifications(?:\/|$)/, 'profile.read'],
+  ['POST', /^\/api\/v1\/notifications(?:\/|$)/, 'profile.write'],
+  // Tenant-scoped pharmacy profile reads are explicitly available to that tenant's admins/owners.
+  ['GET', /^\/api\/v1\/vendor\/profile(?:\/edit-policy)?$/, 'tenant.profile.read'],
+  ['PATCH', /^\/api\/v1\/vendor\/profile$/, 'profile.write'],
+  ['PATCH', /^\/api\/v1\/vendor\/profile\/edit-policy$/, 'tenants.manage'],
+  ['GET', /^\/api\/v1\/vendors?(?:\/|$)/, 'tenants.read'],
+  ['PATCH', /^\/api\/v1\/vendor\/profile$/, 'profile.write'],
+  ['GET', /^\/api\/v1\/vendor\/profile\/edit-policy$/, 'tenants.read'],
+  ['PATCH', /^\/api\/v1\/vendor\/profile\/edit-policy$/, 'tenants.manage'],
+  ['POST', /^\/api\/v1\/vendors?(?:\/|$)/, 'tenants.manage']
+];
+
+const PUBLIC_PATHS = [
+  ['POST', /^\/api\/v1\/auth\/(?:signup|activate|verify-email|login|google|resend-verification|refresh|password\/forgot|password\/reset|mfa\/verify)$/],
+  ['GET', /^\/api\/v1\/auth\/csrf$/],
+  ['GET', /^\/api\/v1\/health(?:\/|$)/],
+  // Public storefront catalog. Backend exposes GET /api/medicines as a
+  // deliberately unauthenticated, sanitized catalog endpoint. Keep admin
+  // inventory (/admin/inventory) and all mutations protected by capabilities.
+  ['GET', /^\/api\/medicines$/],
+  // Public storefront branch discovery powers the pharmacy selector before sign-in.
+  // The endpoint returns active branch directory data only; mutations remain protected.
+  ['GET', /^\/api\/v1\/branches\/all$/],
+  // Nearby pharmacy discovery is a read-only storefront feature; do not require staff RBAC.
+  ['GET', /^\/api\/tenants\/nearby$/],
+  ['GET', /^\/api\/medicines\/discovery$/],
+  ['GET', /^\/api\/public\//], ['POST', /^\/api\/public\//],
+  ['GET', /^\/api\/vendors\//], ['POST', /^\/api\/vendors\//],
+  // Token-based vendor onboarding is a public invitation flow. Only the
+  // high-entropy token can authorize these two operations; administration
+  // endpoints remain session- and capability-protected.
+  ['GET', /^\/api\/v1\/vendor\/onboarding\/[^/]+$/],
+  ['POST', /^\/api\/v1\/vendor\/onboarding\/[^/]+\/complete$/],
+  ['GET', /^\/api\/vendor\//], ['POST', /^\/api\/vendor\//]
+];
+
+export function resolveGatewayCapability(method, url) {
+  const path = String(url || '').split('?')[0];
+  const normalizedMethod = String(method || 'GET').toUpperCase();
+  if (PUBLIC_PATHS.some(([m, pattern]) => m === normalizedMethod && pattern.test(path))) return null;
+  return CAPABILITIES.find(([m, pattern]) => m === normalizedMethod && pattern.test(path))?.[2] || null;
+}
+
+export function isGatewayPublicPath(method, url) {
+  const path = String(url || '').split('?')[0];
+  const normalizedMethod = String(method || 'GET').toUpperCase();
+  return PUBLIC_PATHS.some(([m, pattern]) => m === normalizedMethod && pattern.test(path));
+}
+
+export function isGatewayPermissionAllowed(user, permission) {
+  const role = String(user?.app_metadata?.role || user?.role || '').toUpperCase();
+  return isPermissionGranted({
+    subject: user,
+    permission,
+    roleOverrides: {
+      TENANT_ADMIN: ['tenant.profile.read', 'tenant.branches.read', 'tenant.branches.manage'],
+      TENANT_OWNER: ['tenant.profile.read', 'tenant.branches.read', 'tenant.branches.manage'],
+      OWNER: ['tenant.profile.read', 'tenant.branches.read', 'tenant.branches.manage']
+    }
+  });
+}

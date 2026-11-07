@@ -1,0 +1,573 @@
+/**
+ * Centralized Notification Service
+ * Dispatches domain events across IN_APP, WHATSAPP, SMS, and EMAIL channels
+ * and consumes data from Redis/Cache broker on getting message alerts from WebSockets.
+ */
+import { domainEvents } from '../../shared/events/DomainEvents.js';
+import { logger } from '../../shared/observability/logger.js';
+import { emailService } from './EmailService.js';
+import { sendCustomWhatsAppAlert, sendWhatsAppMedicineRequestAlert } from '../../config/whatsapp.js';
+import { cacheService } from '../cache/CacheService.js';
+import { randomUUID } from 'node:crypto';
+import { getIsConnected } from '../../config/db.js';
+import Notification from '../../models/Notification.js';
+import NotificationDeliveryEvent from '../../models/NotificationDeliveryEvent.js';
+
+export class NotificationService {
+    constructor() {
+        this.notifications = []; // in-app notifications
+        this.deliveryEvents = []; // delivery push events history
+        this.sseClients = new Map(); // clientId -> { res, context }
+        this.emailService = emailService;
+        this._bindDomainEvents();
+        this._bindCacheConsumer();
+    }
+
+    _bindCacheConsumer() {
+        try {
+            cacheService.subscribe((envelope) => {
+                const { channel, payload } = envelope;
+                if (payload?.source === 'notification-service' || payload?.source === 'whatsapp-service') return;
+                logger.info(`[NotificationService] Consuming message from cache/Redis broker on channel [${channel}]`);
+                if (payload && (payload.title || payload.body || payload.message)) {
+                    this.send({
+                        tenantId: payload.tenantId || null,
+                        branchId: payload.branchId || null,
+                        recipientUserId: payload.userId || payload.recipientUserId || null,
+                        title: payload.title || 'WebSocket Message Alert',
+                        body: payload.body || payload.message || JSON.stringify(payload),
+                        channels: ['IN_APP']
+                    });
+                }
+            });
+        } catch (err) {
+            logger.warn('[NotificationService] Failed to bind cache/Redis consumer:', err?.message);
+        }
+    }
+
+    addSseClient(clientId, res, context = {}) {
+        this.sseClients.set(clientId, { res, context });
+    }
+
+    removeSseClient(clientId) {
+        this.sseClients.delete(clientId);
+    }
+
+    async getDeliveryEvents(tenantId = null, branchId = null, isSuperAdmin = false) {
+        if (getIsConnected()) {
+            const filter = {};
+            if (!isSuperAdmin) filter.tenantId = String(tenantId || '');
+            if (branchId) filter.branchId = String(branchId);
+            return NotificationDeliveryEvent.find(filter).sort({ occurredAt: -1 }).limit(500).lean();
+        }
+        return this.deliveryEvents.filter(event => {
+            if (!isSuperAdmin && event.tenantId && String(event.tenantId) !== String(tenantId || '')) return false;
+            if (branchId && event.branchId && String(event.branchId) !== String(branchId)) return false;
+            return true;
+        });
+    }
+
+    async _broadcastDeliveryEvent(eventData) {
+        const persistedEvent = {
+            ...eventData,
+            eventId: eventData.eventId || randomUUID(),
+            occurredAt: eventData.timestamp ? new Date(eventData.timestamp) : new Date()
+        };
+        let eventToBroadcast = persistedEvent;
+        if (getIsConnected()) {
+            const existing = await NotificationDeliveryEvent.findOne({ eventId: persistedEvent.eventId }).lean();
+            if (existing) return existing;
+            try {
+                eventToBroadcast = (await NotificationDeliveryEvent.create(persistedEvent)).toObject();
+            } catch (error) {
+                if (error.code === 11000) {
+                    return NotificationDeliveryEvent.findOne({ eventId: persistedEvent.eventId }).lean();
+                }
+                throw error;
+            }
+        } else if (process.env.NODE_ENV !== 'production') {
+            this.deliveryEvents.unshift(persistedEvent);
+            if (this.deliveryEvents.length > 500) this.deliveryEvents.pop();
+        } else {
+            logger.error('[NotificationService] Delivery event was not broadcast because durable storage is unavailable.', {
+                eventId: persistedEvent.eventId, tenantId: persistedEvent.tenantId
+            });
+            return null;
+        }
+
+        for (const [clientId, client] of this.sseClients.entries()) {
+            try {
+                if (!client.context.isSuperAdmin && (
+                    !eventToBroadcast.tenantId
+                    || !client.context.tenantId
+                    || String(client.context.tenantId) !== String(eventToBroadcast.tenantId)
+                )) continue;
+                if (!client.context.isSuperAdmin && client.context.branchId && (
+                    !eventToBroadcast.branchId
+                    || String(client.context.branchId) !== String(eventToBroadcast.branchId)
+                )) continue;
+                client.res.write(`data: ${JSON.stringify(eventToBroadcast)}\n\n`);
+            } catch (err) {
+                logger.warn(`Failed to push SSE event to client ${clientId}:`, err?.message);
+                this.sseClients.delete(clientId);
+            }
+        }
+        return eventToBroadcast;
+    }
+    _recipientUserId(evt) {
+        const payload = evt?.payload || {};
+        const order = payload.order || {};
+        return payload.customerUserId || payload.recipientUserId || payload.userId
+            || order.userId || order.customerUserId || payload.customerId || order.customerId
+            || (evt?.eventType === 'ORDER_CREATED' ? evt?.actor?.userId : null) || null;
+    }
+
+    _bindDomainEvents() {
+        domainEvents.on('MEDICINE_REQUEST_CREATED', (evt) => {
+            const requestNumber = evt.payload?.requestNumber || evt.entityId;
+            const medicineName = evt.payload?.medicineName || 'a medicine';
+            this.send({ sourceEventId: evt.eventId,
+                tenantId: evt.tenantId, branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: 'New Medicine Request',
+                body: `Medicine request ${requestNumber} was created for ${medicineName}.`,
+                eventType: 'MEDICINE_REQUEST_CREATED', medicineRequestId: evt.entityId, channels: ['IN_APP', 'WHATSAPP']
+            });
+            if (evt.tenantId) {
+                this.send({ sourceEventId: evt.eventId,
+                    tenantId: evt.tenantId,
+                    branchId: evt.branchId,
+                    recipientUserId: null,
+                    title: 'New medicine request needs inventory review',
+                    body: `Medicine request ${requestNumber} for ${medicineName} is ready for pharmacy inventory review.`,
+                    eventType: 'INVENTORY_MEDICINE_REQUEST_RECEIVED',
+                    medicineRequestId: evt.entityId,
+                    channels: ['IN_APP']
+                });
+            }
+            if (evt.payload?.request) sendWhatsAppMedicineRequestAlert(evt.payload.request, 'MedicineRequestCreated').catch(err => logger.warn('[WhatsApp] Medicine request creation alert failed:', err?.message));
+        });
+
+        domainEvents.on('TENANT_CREATED', async (evt) => {
+            const tenant = evt.payload;
+            this.send({ sourceEventId: evt.eventId,
+                tenantId: evt.tenantId,
+                title: `Pharmacy Tenant Onboarded: ${tenant?.name || evt.tenantId}`,
+                body: `Tenant ${tenant?.name || evt.tenantId} has been successfully registered on the platform.`,
+                channels: ['IN_APP', 'EMAIL']
+            });
+        });
+        domainEvents.on('ORDER_CREATED', (evt) => {
+            const orderNumber = evt.payload?.orderNumber || evt.entityId;
+            this.send({ sourceEventId: evt.eventId,
+                tenantId: evt.tenantId,
+                branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: 'Order Confirmed',
+                body: `Your order #${orderNumber} has been received and queued for pharmacy verification.`,
+                eventType: 'ORDER_CREATED', orderId: evt.entityId,
+                channels: ['IN_APP', 'WHATSAPP']
+            });
+
+            // Customer and pharmacy staff are separate audiences. The customer
+            // notification above is private; this tenant-scoped event ensures
+            // inventory/order staff also see new orders in their notification feed.
+            if (evt.tenantId) {
+                this.send({ sourceEventId: evt.eventId,
+                    tenantId: evt.tenantId,
+                    branchId: evt.branchId,
+                    recipientUserId: null,
+                    title: 'New order requires inventory review',
+                    body: `Order #${orderNumber} was placed and is ready for pharmacy inventory verification and fulfilment.`,
+                    eventType: 'INVENTORY_ORDER_RECEIVED',
+                    orderId: evt.entityId,
+                    channels: ['IN_APP']
+                });
+            }
+            if (evt.payload?.order) {
+                sendCustomWhatsAppAlert(evt.payload.order, 'Placed').catch(err => logger.warn('[WhatsApp] OrderCreated alert failed:', err?.message));
+            }
+        });
+
+        domainEvents.on('FULFILLMENT_STOCK_AVAILABLE', (evt) => {
+            const lines = Array.isArray(evt.payload?.lines) ? evt.payload.lines : [];
+            const summary = lines.map(line => `${line.name || 'Medicine'}: ${line.availableToConfirm}/${line.requestedQuantity}`).join(', ');
+            this.send({ sourceEventId: evt.eventId,
+                tenantId: evt.tenantId, branchId: evt.branchId,
+                recipientUserId: evt.payload?.recipientUserId || null,
+                title: 'Your medicine is available',
+                body: `Stock is now available for waitlist ${evt.payload?.caseNumber || evt.entityId}. ${summary}. Review and confirm to reserve it.`,
+                eventType: 'FULFILLMENT_STOCK_AVAILABLE',
+                fulfillmentCaseId: evt.entityId,
+                channels: ['IN_APP', 'WHATSAPP']
+            });
+        });
+
+        domainEvents.on('FULFILLMENT_REMAINDER_CANCELLED', (evt) => {
+            this.send({ sourceEventId: evt.eventId,
+                tenantId: evt.tenantId, branchId: evt.branchId,
+                recipientUserId: evt.payload?.recipientUserId || null,
+                title: 'Remaining medicine quantities cancelled',
+                body: `${evt.payload?.cancelledLineCount || 0} remaining medicine line(s) were cancelled. ${evt.payload?.remainingLineCount || 0} line(s) remain active in your stock watch.`,
+                eventType: 'FULFILLMENT_REMAINDER_CANCELLED',
+                fulfillmentCaseId: evt.entityId,
+                channels: ['IN_APP']
+            });
+        });
+
+        domainEvents.on('FULFILLMENT_WAITLIST_EXPIRED', (evt) => {
+            this.send({ sourceEventId: evt.eventId,
+                tenantId: evt.tenantId, branchId: evt.branchId,
+                recipientUserId: evt.payload?.recipientUserId || null,
+                title: 'Medicine waitlist expired',
+                body: `Your stock waitlist ${evt.payload?.caseNumber || evt.entityId} has expired. You can submit a new request if you still need the medicine.`,
+                eventType: 'FULFILLMENT_WAITLIST_EXPIRED',
+                fulfillmentCaseId: evt.entityId,
+                channels: ['IN_APP']
+            });
+        });
+
+        domainEvents.on('ORDER_STATUS_CHANGED', (evt) => {
+            const status = evt.payload?.newStatus || 'updated';
+            this.send({ sourceEventId: evt.eventId,
+                tenantId: evt.tenantId,
+                branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: `Order Status Updated: ${status}`,
+                body: `Order #${evt.payload?.orderNumber || evt.entityId} changed from ${evt.payload?.previousStatus || 'previous status'} to ${status}.`,
+                eventType: 'ORDER_STATUS_CHANGED',
+                orderId: evt.entityId,
+                status,
+                channels: ['IN_APP', 'WHATSAPP']
+            });
+            if (['delivered', 'order delivered'].includes(String(status).trim().toLowerCase())) {
+                this.send({ sourceEventId: evt.eventId,
+                    tenantId: evt.tenantId,
+                    branchId: evt.branchId,
+                    recipientUserId: this._recipientUserId(evt),
+                    title: 'How was your delivery?',
+                    body: 'Your order has been delivered. Tap to rate your experience.',
+                    eventType: 'ORDER_DELIVERED_RATING_PROMPT',
+                    orderId: evt.entityId,
+                    status: 'Delivered',
+                    channels: ['IN_APP']
+                });
+            } else if (['dispatched', 'out_for_delivery'].includes(String(status).trim().toLowerCase())) {
+                this.send({ sourceEventId: evt.eventId,
+                    tenantId: evt.tenantId,
+                    branchId: evt.branchId,
+                    recipientUserId: this._recipientUserId(evt),
+                    title: 'Order out for delivery',
+                    body: 'A 4-digit delivery code is required at handover. Check WhatsApp for the code, and contact the pharmacy if it has not arrived.',
+                    eventType: 'ORDER_OUT_FOR_DELIVERY_OTP_SENT',
+                    orderId: evt.entityId,
+                    status: 'Dispatched',
+                    channels: ['IN_APP']
+                });
+            }
+        });
+
+        domainEvents.on('ORDER_ACCEPTED', (evt) => {
+            this.send({ sourceEventId: evt.eventId,
+                tenantId: evt.tenantId,
+                branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: 'Order Processing',
+                body: `Pharmacist has verified your medicines and started packing.`,
+                eventType: 'ORDER_ACCEPTED', orderId: evt.entityId,
+                channels: ['IN_APP', 'WHATSAPP']
+            });
+            if (evt.payload?.order) {
+                sendCustomWhatsAppAlert(evt.payload.order, 'Ready to Dispatch').catch(err => logger.warn('[WhatsApp] OrderAccepted alert failed:', err?.message));
+            }
+        });
+
+        domainEvents.on('RIDER_ASSIGNED', (evt) => {
+            this.send({ sourceEventId: evt.eventId,
+                tenantId: evt.tenantId,
+                branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: 'Delivery Partner Assigned',
+                body: `Rider ${evt.payload?.riderName} has been assigned to deliver your order.`,
+                eventType: 'RIDER_ASSIGNED', orderId: evt.entityId, riderId: evt.payload?.riderId,
+                channels: ['IN_APP', 'WHATSAPP']
+            });
+            void this._broadcastDeliveryEvent({
+                eventId: evt.eventId,
+                type: 'DELIVERY_STATUS_CHANGED',
+                eventType: 'RIDER_ASSIGNED',
+                status: 'ASSIGNED',
+                tenantId: evt.tenantId,
+                branchId: evt.branchId,
+                orderId: evt.entityId,
+                riderId: evt.payload?.riderId,
+                riderName: evt.payload?.riderName,
+                jobId: evt.payload?.jobId,
+                timestamp: new Date().toISOString()
+            }).catch(err => logger.warn('[NotificationService] Delivery event persistence failed:', err?.message));
+            if (evt.payload?.order) {
+                sendCustomWhatsAppAlert(evt.payload.order, 'Assigned', evt.payload?.riderMobile).catch(err => logger.warn('[WhatsApp] RiderAssigned alert failed:', err?.message));
+            }
+        });
+
+        domainEvents.on('DELIVERY_STATUS_CHANGED', (evt) => {
+            this.send({ sourceEventId: evt.eventId,
+                tenantId: evt.tenantId,
+                branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: `Delivery Update: ${evt.payload?.status}`,
+                body: `Order #${evt.payload?.orderNumber || evt.entityId} status changed to ${evt.payload?.status}.`,
+                eventType: 'DELIVERY_STATUS_CHANGED', orderId: evt.entityId, status: evt.payload?.status,
+                channels: ['IN_APP', 'WHATSAPP']
+            });
+            void this._broadcastDeliveryEvent({
+                eventId: evt.eventId,
+                type: 'DELIVERY_STATUS_CHANGED',
+                eventType: 'DELIVERY_STATUS_CHANGED',
+                status: evt.payload?.status,
+                tenantId: evt.tenantId,
+                branchId: evt.branchId,
+                orderId: evt.entityId || evt.payload?.orderNumber,
+                riderName: evt.payload?.riderName,
+                riderMobile: evt.payload?.riderMobile,
+                jobId: evt.payload?.jobId,
+                timestamp: new Date().toISOString()
+            }).catch(err => logger.warn('[NotificationService] Delivery event persistence failed:', err?.message));
+            if (evt.payload?.order) {
+                sendCustomWhatsAppAlert(evt.payload.order, evt.payload?.status, evt.payload?.riderMobile).catch(err => logger.warn('[WhatsApp] DeliveryStatus alert failed:', err?.message));
+            }
+        });
+
+        domainEvents.on('ORDER_DELIVERED', (evt) => {
+            this.send({ sourceEventId: evt.eventId,
+                tenantId: evt.tenantId,
+                branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: 'Order Delivered',
+                body: `Order #${evt.payload?.orderNumber || evt.entityId} was delivered successfully. Stay healthy!`,
+                eventType: 'ORDER_DELIVERED', orderId: evt.entityId, status: 'DELIVERED',
+                channels: ['IN_APP', 'WHATSAPP']
+            });
+            void this._broadcastDeliveryEvent({
+                eventId: evt.eventId,
+                type: 'DELIVERY_STATUS_CHANGED',
+                eventType: 'ORDER_DELIVERED',
+                status: 'DELIVERED',
+                tenantId: evt.tenantId,
+                branchId: evt.branchId,
+                orderId: evt.aggregateId || evt.payload?.orderNumber,
+                riderName: evt.payload?.riderName,
+                riderMobile: evt.payload?.riderMobile,
+                jobId: evt.payload?.jobId,
+                timestamp: new Date().toISOString()
+            }).catch(err => logger.warn('[NotificationService] Delivery event persistence failed:', err?.message));
+            if (evt.payload?.order) {
+                sendCustomWhatsAppAlert(evt.payload.order, 'Delivered', evt.payload?.riderMobile).catch(err => logger.warn('[WhatsApp] OrderDelivered alert failed:', err?.message));
+            }
+        });
+
+        domainEvents.on('PROPOSAL_CREATED', (evt) => {
+            this.send({ sourceEventId: evt.eventId,
+                tenantId: evt.tenantId,
+                branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: 'Medicine Proposal Ready',
+                body: `Pharmacy formulated a proposal for your medicine request. Please review and approve.`,
+                eventType: 'PROPOSAL_CREATED', medicineRequestId: evt.entityId,
+                channels: ['IN_APP', 'WHATSAPP']
+            });
+            if (evt.payload?.request) {
+                sendWhatsAppMedicineRequestAlert(evt.payload.request, 'MedicineProposalReady').catch(err => logger.warn('[WhatsApp] Proposal alert failed:', err?.message));
+            }
+        });
+        domainEvents.on('PROPOSAL_APPROVED', (evt) => {
+            this.send({ sourceEventId: evt.eventId,
+                tenantId: evt.tenantId, branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: 'Medicine Request Approved',
+                body: `Request ${evt.payload?.requestNumber || evt.entityId} was approved and converted to order ${evt.payload?.orderId || ''}.`,
+                eventType: 'PROPOSAL_APPROVED', medicineRequestId: evt.entityId, orderId: evt.payload?.orderId,
+                channels: ['IN_APP', 'WHATSAPP']
+            });
+            if (evt.payload?.request) sendWhatsAppMedicineRequestAlert(evt.payload.request, 'MedicineRequestApproved').catch(err => logger.warn('[WhatsApp] Medicine request approval alert failed:', err?.message));
+        });
+        domainEvents.on('PROPOSAL_REJECTED', (evt) => {
+            this.send({ sourceEventId: evt.eventId,
+                tenantId: evt.tenantId, branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: 'Medicine Proposal Rejected',
+                body: `The proposal for request ${evt.payload?.requestNumber || evt.entityId} was rejected.`,
+                eventType: 'PROPOSAL_REJECTED', medicineRequestId: evt.entityId,
+                channels: ['IN_APP', 'WHATSAPP']
+            });
+            if (evt.payload?.request) sendWhatsAppMedicineRequestAlert(evt.payload.request, 'MedicineRequestRejected').catch(err => logger.warn('[WhatsApp] Medicine request rejection alert failed:', err?.message));
+        });
+        domainEvents.on('REQUEST_CANCELLED', (evt) => {
+            this.send({ sourceEventId: evt.eventId,
+                tenantId: evt.tenantId, branchId: evt.branchId,
+                recipientUserId: this._recipientUserId(evt),
+                title: 'Medicine Request Cancelled',
+                body: `Medicine request ${evt.payload?.requestNumber || evt.entityId} was cancelled.`,
+                eventType: 'REQUEST_CANCELLED', medicineRequestId: evt.entityId,
+                channels: ['IN_APP', 'WHATSAPP']
+            });
+            if (evt.payload?.request) sendWhatsAppMedicineRequestAlert(evt.payload.request, 'MedicineRequestCancelled').catch(err => logger.warn('[WhatsApp] Medicine request cancellation alert failed:', err?.message));
+        });
+    }
+
+    send({
+        tenantId = null,
+        branchId = null,
+        recipientUserId = null,
+        title,
+        body,
+        channels = ['IN_APP'],
+        eventType = 'NOTIFICATION_CREATED',
+        orderId = null,
+        riderId = null,
+        medicineRequestId = null,
+        fulfillmentCaseId = null,
+        status = null,
+        promotionId = null,
+        pharmacyName = null,
+        actionUrl = null,
+        dedupeKey = null,
+        sourceEventId = null
+    }) {
+        const notification = {
+            id: `notif-${randomUUID()}`,
+            dedupeKey: dedupeKey || (sourceEventId ? `${sourceEventId}:${eventType}` : null),
+            tenantId: tenantId ? String(tenantId) : null,
+            branchId: branchId ? String(branchId) : null,
+            recipientUserId: recipientUserId ? String(recipientUserId) : null,
+            title: String(title || 'Pharmacy update'),
+            body: String(body || ''),
+            channels,
+            eventType,
+            orderId: orderId ? String(orderId) : null,
+            riderId: riderId ? String(riderId) : null,
+            medicineRequestId: medicineRequestId ? String(medicineRequestId) : null,
+            fulfillmentCaseId: fulfillmentCaseId ? String(fulfillmentCaseId) : null,
+            promotionId: promotionId ? String(promotionId) : null,
+            pharmacyName: pharmacyName ? String(pharmacyName) : null,
+            actionUrl: typeof actionUrl === 'string' && actionUrl.startsWith('/') ? actionUrl : null,
+            status,
+            read: false,
+            createdAt: new Date()
+        };
+
+        void this._persistAndPublish(notification).catch(error => {
+            logger.error('[NotificationService] Durable notification dispatch failed.', {
+                notificationId: notification.id, eventType, tenantId, branchId,
+                recipientUserId, error: error?.message
+            });
+        });
+        return notification;
+    }
+
+    async _persistAndPublish(notification) {
+        let saved = notification;
+        let shouldPublish = true;
+        if (getIsConnected()) {
+            if (notification.dedupeKey) {
+                saved = await Notification.findOneAndUpdate(
+                    { dedupeKey: notification.dedupeKey },
+                    { $setOnInsert: notification },
+                    { upsert: true, new: true, setDefaultsOnInsert: true }
+                ).lean();
+                shouldPublish = saved?.id === notification.id;
+            } else {
+                saved = (await Notification.create(notification)).toObject();
+            }
+        } else if (process.env.NODE_ENV !== 'production') {
+            this.notifications.unshift(notification);
+            if (this.notifications.length > 200) this.notifications.pop();
+        } else {
+            throw new Error('MongoDB is unavailable; refusing to publish a non-persistent notification.');
+        }
+
+        if (shouldPublish) {
+            logger.info(`Notification persisted: "${saved.title}" via [${(saved.channels || []).join(', ')}]`, {
+                notificationId: saved.id, tenantId: saved.tenantId, branchId: saved.branchId
+            });
+            this._publishNotification(saved);
+        }
+        return saved;
+    }
+
+    _publishNotification(notification) {
+        const { recipientUserId, tenantId, riderId, channels, orderId, eventType, medicineRequestId } = notification;
+        if (!(recipientUserId || tenantId)) return;
+        const eventPayload = { ...notification, userId: recipientUserId, tenantId, source: 'notification-service' };
+        const target = { userId: recipientUserId, tenantId, riderId };
+        void cacheService.publishEvent('notification', eventPayload, target);
+        if (channels?.includes('WHATSAPP')) {
+            void cacheService.publishEvent('whatsapp_notification', { ...eventPayload, deliveryState: 'REQUESTED' }, target);
+        }
+        if (orderId && ['ORDER_CREATED', 'ORDER_ACCEPTED', 'ORDER_STATUS_CHANGED', 'RIDER_ASSIGNED', 'DELIVERY_STATUS_CHANGED', 'ORDER_DELIVERED', 'ORDER_DELIVERED_RATING_PROMPT', 'ORDER_OUT_FOR_DELIVERY_OTP_SENT', 'PROPOSAL_APPROVED'].includes(eventType)) {
+            void cacheService.publishEvent('order_status_changed', eventPayload, target);
+        }
+        if (medicineRequestId || eventType.startsWith('MEDICINE_REQUEST') || eventType.startsWith('PROPOSAL_') || eventType.startsWith('REQUEST_') || eventType.startsWith('FULFILLMENT_')) {
+            void cacheService.publishEvent('medicine_request_updated', eventPayload, target);
+        }
+    }
+
+    async getUserNotifications(userId, { tenantId = null, branchId = null, isSuperAdmin = false } = {}) {
+        if (getIsConnected()) {
+            const filter = isSuperAdmin ? {} : {
+                $or: [
+                    { recipientUserId: String(userId) },
+                    {
+                        recipientUserId: null,
+                        tenantId: String(tenantId || ''),
+                        ...(branchId ? { $or: [{ branchId: null }, { branchId: String(branchId) }] } : {})
+                    }
+                ]
+            };
+            return Notification.find(filter).sort({ createdAt: -1 }).limit(200).lean();
+        }
+        return this.notifications.filter(notification => {
+            if (!isSuperAdmin && notification.recipientUserId && notification.recipientUserId !== userId) return false;
+            if (!isSuperAdmin && !notification.recipientUserId && notification.tenantId && notification.tenantId !== tenantId) return false;
+            if (!isSuperAdmin && !notification.recipientUserId && notification.branchId && notification.branchId !== branchId) return false;
+            if (!isSuperAdmin && !notification.recipientUserId && !notification.tenantId) return false;
+            return true;
+        });
+    }
+
+    async markAsRead(notificationId, userId, { tenantId = null, branchId = null, isSuperAdmin = false } = {}) {
+        if (getIsConnected()) {
+            const access = isSuperAdmin ? {} : {
+                $or: [
+                    { recipientUserId: String(userId) },
+                    {
+                        recipientUserId: null,
+                        tenantId: String(tenantId || ''),
+                        ...(branchId ? { $or: [{ branchId: null }, { branchId: String(branchId) }] } : {})
+                    }
+                ]
+            };
+            return Notification.findOneAndUpdate(
+                { id: String(notificationId), ...access },
+                { $set: { read: true, readAt: new Date() } },
+                { new: true }
+            ).lean();
+        }
+        const notif = this.notifications.find(notification => {
+            if (String(notification.id) !== String(notificationId)) return false;
+            if (!isSuperAdmin && notification.recipientUserId && notification.recipientUserId !== userId) return false;
+            if (!isSuperAdmin && notification.tenantId && notification.tenantId !== tenantId) return false;
+            if (!isSuperAdmin && notification.branchId && notification.branchId !== branchId) return false;
+            if (!isSuperAdmin && !notification.recipientUserId && !notification.tenantId) return false;
+            return true;
+        });
+        if (notif) {
+            notif.read = true;
+            notif.readAt = new Date();
+        }
+        return notif || null;
+    }
+}
+
+export const notificationService = new NotificationService();
+export default notificationService;

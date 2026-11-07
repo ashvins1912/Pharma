@@ -1,0 +1,1420 @@
+/* Responsive operations dashboard layout. Scoped to AdminDashboardView. */
+.dashboard-shell {
+  width: 100%;
+  max-width: 1800px;
+  margin-inline: auto;
+  padding-inline: clamp(0px, 0.8vw, 12px);
+}
+
+.dashboard-hero {
+  min-width: 0;
+}
+
+.dashboard-hero > div:first-child {
+  min-width: 0;
+}
+
+.dashboard-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+}
+
+.dashboard-metrics > div {
+  min-width: 0;
+}
+
+.dashboard-workspace {
+  min-width: 0;
+}
+
+.dashboard-workspace-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  align-items: stretch;
+  gap: 0.55rem;
+}
+
+.dashboard-nav-item {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.25;
+  padding: 0.65rem 0.8rem !important;
+  border-radius: 0.85rem !important;
+}
+
+.dashboard-nav-item > span:first-child {
+  flex: 0 0 1.35rem;
+  width: 1.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+}
+
+.dashboard-nav-item > span:nth-child(2) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-nav-item > span:last-child:not(:nth-child(2)) {
+  flex: 0 0 auto;
+}
+
+.dashboard-workspace-nav button:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 2px;
+}
+
+@media (min-width: 1440px) {
+  .dashboard-workspace-nav {
+    grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .dashboard-shell {
+    padding-inline: 0;
+    gap: 1rem;
+  }
+
+  .dashboard-hero {
+    border-radius: 1.25rem;
+  }
+
+  .dashboard-workspace-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .dashboard-nav-item {
+    min-height: 52px;
+    padding: 0.65rem 0.7rem !important;
+    font-size: 0.7rem;
+  }
+
+  .dashboard-workspace {
+    border-radius: 1.25rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .dashboard-workspace-nav {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-nav-item {
+    min-height: 46px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-nav-item {
+    transition: none !important;
+  }
+}
+
+html.dark .dashboard-nav-item:not(.bg-blue-600):not(.bg-indigo-600):not(.bg-purple-600) {
+  color: #e2e8f0;
+}
+
+
+/* Workflow-based admin workspace structure. */
+.dashboard-workspace-nav {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+  gap: 0.85rem;
+}
+
+.dashboard-nav-group {
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid rgb(226 232 240 / 0.85);
+  border-radius: 1rem;
+  background: rgb(248 250 252 / 0.72);
+}
+
+.dashboard-nav-group-title {
+  margin: 0 0 0.65rem;
+  color: #64748b;
+  font-size: 0.64rem;
+  font-weight: 900;
+  letter-spacing: 0.075em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.dashboard-nav-group-items {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.45rem;
+}
+
+.dashboard-nav-group .dashboard-nav-item {
+  min-height: 44px;
+  padding: 0.55rem 0.65rem !important;
+  font-size: 0.7rem;
+  border-radius: 0.7rem !important;
+}
+
+.dashboard-nav-group .dashboard-nav-item > span:first-child {
+  flex-basis: 1.2rem;
+  width: 1.2rem;
+  font-size: 1rem;
+}
+
+.dashboard-nav-item[aria-current="page"] {
+  outline: 2px solid rgb(37 99 235 / 0.16);
+  outline-offset: 1px;
+}
+
+.dashboard-content {
+  min-width: 0;
+  width: 100%;
+}
+
+@media (max-width: 1180px) {
+  .dashboard-workspace-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .dashboard-workspace-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .dashboard-nav-group {
+    padding: 0.6rem;
+  }
+
+  .dashboard-nav-group-title {
+    min-height: 2.2em;
+    margin-bottom: 0.5rem;
+    font-size: 0.59rem;
+  }
+
+  .dashboard-nav-group .dashboard-nav-item {
+    min-height: 48px;
+    padding: 0.55rem 0.5rem !important;
+    font-size: 0.66rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .dashboard-workspace-nav {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-nav-group-title {
+    min-height: 0;
+  }
+}
+
+html.dark .dashboard-nav-group {
+  border-color: rgb(71 85 105 / 0.65);
+  background: rgb(15 23 42 / 0.45);
+}
+
+html.dark .dashboard-nav-group-title {
+  color: #94a3b8;
+}
+
+
+/* --------------------------------------------------------------------------
+   QuickMeds Rx admin module redesign
+   Shared interaction, surface, form, table and responsive layout system.
+   -------------------------------------------------------------------------- */
+.dashboard-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(1rem, 1.8vw, 1.5rem);
+  min-width: 0;
+  width: 100%;
+  align-content: start;
+}
+
+.admin-screen {
+  --admin-surface: #ffffff;
+  --admin-surface-muted: #f8fafc;
+  --admin-border: #e2e8f0;
+  --admin-ink: #0f172a;
+  --admin-muted: #64748b;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(0.85rem, 1.5vw, 1.25rem);
+  min-width: 0;
+  width: 100%;
+  color: var(--admin-ink);
+  overflow-wrap: anywhere;
+}
+
+.admin-screen *,
+.admin-screen *::before,
+.admin-screen *::after {
+  min-width: 0;
+}
+
+.admin-screen :where(h1, h2, h3, h4) {
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.admin-screen :where(p) {
+  line-height: 1.55;
+}
+
+.admin-screen :where(input:not([type="checkbox"]):not([type="radio"]),
+select, textarea) {
+  width: 100%;
+  min-height: 42px;
+  max-width: 100%;
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.admin-screen :where(textarea) {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.admin-screen :where(button) {
+  max-width: 100%;
+  min-height: 38px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.admin-screen :where(button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible) {
+  outline: 3px solid rgb(37 99 235 / 0.28);
+  outline-offset: 2px;
+}
+
+.admin-screen :where(form) {
+  min-width: 0;
+}
+
+.admin-screen :where(form > div, form > section) {
+  min-width: 0;
+}
+
+.admin-screen :where(article, .admin-panel) {
+  min-width: 0;
+  border-radius: 1rem;
+}
+
+.admin-screen :where(table) {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-screen :where(th) {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  white-space: nowrap;
+}
+
+.admin-screen :where(td, th) {
+  vertical-align: middle;
+}
+
+.admin-screen :where(.overflow-x-auto) {
+  max-width: 100%;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.admin-screen :where(.grid) {
+  min-width: 0;
+}
+
+.admin-screen :where(.rounded-2xl, .rounded-3xl) {
+  min-width: 0;
+}
+
+.admin-screen :where(.text-xs) {
+  overflow-wrap: anywhere;
+}
+
+/* Make the main operations screens feel like one coherent product. */
+.admin-screen--inventory > div:first-child,
+.admin-screen--requests > div:first-child,
+.admin-screen--tenants > div:first-child,
+.admin-screen--tenant-profile > div:first-child,
+.admin-screen--access > section:first-child,
+.admin-screen--riders > div:first-child,
+.admin-screen--routes > div:first-child {
+  min-width: 0;
+  width: 100%;
+}
+
+.admin-screen--inventory .grid,
+.admin-screen--payments .grid,
+.admin-screen--promotions .grid,
+.admin-screen--surplus-savings .grid,
+.admin-screen--offer-zone .grid,
+.admin-screen--routes .grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 245px), 1fr));
+}
+
+.admin-screen--inventory .relative input {
+  padding-left: 2.75rem;
+}
+
+.admin-screen--inventory :where(img) {
+  object-fit: contain;
+  max-width: 100%;
+}
+
+.admin-screen--requests :where(form) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.admin-screen--requests :where(form input, form select) {
+  flex: 1 1 190px;
+}
+
+.admin-screen--requests :where(article) {
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.admin-screen--payments :where(article) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.admin-screen--payments :where(article ul) {
+  margin-top: auto;
+}
+
+.admin-screen--riders :where(.grid) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+}
+
+.admin-screen--csquare :where(input, select) {
+  min-height: 44px;
+}
+
+.admin-screen--csquare :where(button) {
+  min-height: 42px;
+}
+
+.admin-screen--telemetry :where(article) {
+  min-height: 132px;
+}
+
+.admin-screen--matrix .overflow-x-auto,
+.admin-screen--tenants .overflow-x-auto,
+.admin-screen--audits .overflow-x-auto {
+  border: 1px solid var(--admin-border);
+  border-radius: 0.9rem;
+  background: white;
+}
+
+.admin-screen--matrix table,
+.admin-screen--tenants table,
+.admin-screen--audits table {
+  min-width: 720px;
+}
+
+.admin-screen--access :where(input[type="checkbox"]) {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  accent-color: #2563eb;
+}
+
+.admin-screen--tenant-profile :where(label) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.admin-screen--tenant-profile :where(input, select, textarea) {
+  min-height: 44px;
+}
+
+.admin-screen--promotions :where(button),
+.admin-screen--offer-zone :where(button),
+.admin-screen--surplus-savings :where(button) {
+  min-height: 40px;
+}
+
+/* Fulfilment board: preserve lane workflows while making each lane scroll-safe. */
+.admin-screen--fulfillment {
+  overflow: hidden;
+}
+
+.admin-screen--fulfillment :where(.overflow-x-auto) {
+  max-width: 100%;
+}
+
+.admin-screen--fulfillment :where(article) {
+  overflow-wrap: anywhere;
+}
+
+/* Narrow screens: stack action bars, preserve usable controls, avoid clipped labels. */
+@media (max-width: 767px) {
+  .dashboard-content {
+    gap: 0.9rem;
+  }
+
+  .admin-screen {
+    gap: 0.85rem;
+  }
+
+  .admin-screen :where(header) {
+    align-items: stretch;
+  }
+
+  .admin-screen :where(header > div, .flex.items-center.justify-between) {
+    flex-wrap: wrap;
+  }
+
+  .admin-screen :where(form) {
+    gap: 0.6rem;
+  }
+
+  .admin-screen :where(button) {
+    min-height: 42px;
+  }
+
+  .admin-screen :where(.p-5, .p-6, .p-8) {
+    padding: 1rem;
+  }
+
+  .admin-screen :where(.gap-5, .gap-6) {
+    gap: 0.85rem;
+  }
+
+  .admin-screen :where(.overflow-x-auto) {
+    margin-inline: -0.15rem;
+    padding-bottom: 0.25rem;
+  }
+
+  .admin-screen--matrix table,
+  .admin-screen--tenants table,
+  .admin-screen--audits table {
+    min-width: 680px;
+  }
+
+  .admin-screen--inventory .grid,
+  .admin-screen--payments .grid,
+  .admin-screen--promotions .grid,
+  .admin-screen--surplus-savings .grid,
+  .admin-screen--offer-zone .grid,
+  .admin-screen--routes .grid,
+  .admin-screen--riders .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 380px) {
+  .admin-screen :where(.flex) {
+    min-width: 0;
+  }
+
+  .admin-screen :where(button) {
+    padding-inline: 0.65rem;
+    font-size: 0.7rem;
+  }
+
+  .admin-screen :where(.p-4, .p-5, .p-6) {
+    padding: 0.75rem;
+  }
+
+  .admin-screen :where(.text-xl, .text-2xl) {
+    font-size: 1.05rem;
+  }
+}
+
+html.dark .admin-screen {
+  --admin-surface: #0f172a;
+  --admin-surface-muted: #1e293b;
+  --admin-border: #334155;
+  --admin-ink: #f8fafc;
+  --admin-muted: #94a3b8;
+}
+
+html.dark .admin-screen :where(.overflow-x-auto) {
+  border-color: var(--admin-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-screen *,
+  .admin-screen *::before,
+  .admin-screen *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Fluid readability and touch sizing across phones, laptops and large displays. */
+.dashboard-shell {
+  max-width: 1920px;
+  padding-inline: clamp(0.5rem, 1.25vw, 1.75rem);
+}
+
+.dashboard-hero {
+  font-size: clamp(0.9375rem, 0.22vw + 0.875rem, 1.125rem);
+}
+
+.dashboard-nav-group {
+  padding: clamp(0.8rem, 0.8vw, 1.15rem);
+}
+
+.dashboard-nav-group-title {
+  font-size: clamp(0.75rem, 0.12vw + 0.72rem, 0.875rem);
+  letter-spacing: 0.055em;
+  margin-bottom: 0.8rem;
+}
+
+.dashboard-nav-group-items {
+  gap: clamp(0.55rem, 0.45vw, 0.8rem);
+}
+
+.dashboard-nav-group .dashboard-nav-item {
+  min-height: clamp(48px, 3.2vw, 58px);
+  padding: 0.7rem 0.85rem !important;
+  font-size: clamp(0.8125rem, 0.18vw + 0.77rem, 0.9375rem);
+  line-height: 1.35;
+  gap: 0.65rem;
+}
+
+.dashboard-nav-group .dashboard-nav-item > span:first-child {
+  flex-basis: 1.5rem;
+  width: 1.5rem;
+  font-size: 1.2rem;
+}
+
+.admin-screen {
+  font-size: clamp(0.9375rem, 0.22vw + 0.875rem, 1.125rem);
+  line-height: 1.55;
+  gap: clamp(1rem, 1.35vw, 1.6rem);
+}
+
+.admin-screen :where(h1) {
+  font-size: clamp(1.5rem, 1.05vw + 1.15rem, 2.15rem);
+}
+
+.admin-screen :where(h2) {
+  font-size: clamp(1.25rem, 0.72vw + 1rem, 1.75rem);
+}
+
+.admin-screen :where(h3) {
+  font-size: clamp(1.1rem, 0.48vw + 0.95rem, 1.45rem);
+}
+
+.admin-screen :where(h4) {
+  font-size: clamp(1rem, 0.3vw + 0.9rem, 1.2rem);
+}
+
+/* Tailwind's small fixed text utilities were too small on desktop displays. */
+.admin-screen :where(.text-xs) {
+  font-size: clamp(0.8125rem, 0.16vw + 0.77rem, 0.9375rem);
+  line-height: 1.45;
+}
+
+.admin-screen :where(.text-sm) {
+  font-size: clamp(0.9rem, 0.18vw + 0.85rem, 1.0625rem);
+  line-height: 1.5;
+}
+
+.admin-screen :where(.text-base) {
+  font-size: clamp(1rem, 0.22vw + 0.94rem, 1.1875rem);
+  line-height: 1.45;
+}
+
+.admin-screen :where([class~="text-[10px]"]) {
+  font-size: clamp(0.75rem, 0.12vw + 0.72rem, 0.875rem);
+  line-height: 1.4;
+}
+
+.admin-screen :where([class~="text-[11px]"]) {
+  font-size: clamp(0.8125rem, 0.14vw + 0.77rem, 0.9rem);
+  line-height: 1.45;
+}
+
+.admin-screen :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-height: clamp(46px, 3vw, 54px);
+  padding: 0.7rem 0.85rem;
+  font-size: clamp(0.9375rem, 0.18vw + 0.89rem, 1.0625rem);
+}
+
+.admin-screen :where(button) {
+  min-height: clamp(44px, 2.8vw, 52px);
+  padding-block: 0.65rem;
+  font-size: clamp(0.875rem, 0.16vw + 0.83rem, 1rem);
+}
+
+.admin-screen :where(th, td) {
+  padding-block: clamp(0.7rem, 0.6vw, 1rem);
+  padding-inline: clamp(0.75rem, 0.8vw, 1.1rem);
+}
+
+.admin-screen :where(article, .admin-panel) {
+  border-radius: clamp(1rem, 1vw, 1.35rem);
+}
+
+@media (min-width: 1440px) {
+  .dashboard-content {
+    gap: 1.6rem;
+  }
+
+  .admin-screen--matrix table,
+  .admin-screen--tenants table,
+  .admin-screen--audits table {
+    min-width: 900px;
+  }
+
+  .admin-screen :where(.overflow-x-auto) {
+    scrollbar-width: auto;
+  }
+}
+
+@media (max-width: 767px) {
+  .dashboard-shell {
+    padding-inline: 0.35rem;
+  }
+
+  .dashboard-nav-group-title {
+    font-size: 0.75rem;
+  }
+
+  .dashboard-nav-group .dashboard-nav-item {
+    min-height: 50px;
+    padding: 0.65rem 0.6rem !important;
+    font-size: 0.78rem;
+  }
+
+  .admin-screen {
+    font-size: 0.9375rem;
+    line-height: 1.55;
+  }
+
+  .admin-screen :where(.text-xs) {
+    font-size: 0.8125rem;
+  }
+
+  .admin-screen :where(.text-sm) {
+    font-size: 0.9rem;
+  }
+
+  .admin-screen :where([class~="text-[10px]"]) {
+    font-size: 0.75rem;
+  }
+
+  .admin-screen :where([class~="text-[11px]"]) {
+    font-size: 0.8rem;
+  }
+
+  .admin-screen :where(button) {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 380px) {
+  .dashboard-shell {
+    padding-inline: 0.2rem;
+  }
+
+  .dashboard-nav-group .dashboard-nav-item {
+    font-size: 0.75rem;
+    padding-inline: 0.5rem !important;
+  }
+
+  .admin-screen :where(button) {
+    font-size: 0.8125rem;
+  }
+}
+
+/* Platform tenant directory: prevent long governance heading and tabs colliding on phones. */
+.admin-screen--tenants .platform-tenants-view {
+  min-width: 0;
+  width: 100%;
+}
+
+.admin-screen--tenants .platform-directory-header {
+  align-items: flex-start;
+}
+
+.admin-screen--tenants .platform-directory-heading {
+  flex: 1 1 32rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.admin-screen--tenants .platform-directory-title {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  text-wrap: balance;
+  line-height: 1.18;
+}
+
+.admin-screen--tenants .platform-directory-description {
+  max-width: 68ch;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+
+.admin-screen--tenants .platform-directory-actions {
+  flex: 0 1 auto;
+  max-width: 100%;
+  align-items: stretch;
+}
+
+.admin-screen--tenants .platform-directory-actions button {
+  white-space: normal;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.admin-screen--tenants .platform-directory-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 0.5rem;
+  width: 100%;
+  overflow: visible;
+  padding-bottom: 0;
+}
+
+.admin-screen--tenants .platform-directory-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0.65rem 0.75rem;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  border-bottom-width: 2px;
+}
+
+@media (max-width: 900px) {
+  .admin-screen--tenants .platform-directory-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-screen--tenants .platform-directory-heading {
+    flex-basis: auto;
+    width: 100%;
+  }
+
+  .admin-screen--tenants .platform-directory-actions {
+    width: 100%;
+  }
+
+  .admin-screen--tenants .platform-directory-actions button {
+    flex: 1 1 220px;
+  }
+
+  .admin-screen--tenants .platform-directory-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-screen--tenants .platform-directory-title {
+    font-size: 1.3rem;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+  }
+
+  .admin-screen--tenants .platform-directory-description {
+    font-size: 0.8125rem;
+  }
+
+  .admin-screen--tenants .platform-directory-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-screen--tenants .platform-directory-actions button {
+    width: 100%;
+    min-height: 48px;
+  }
+
+  .admin-screen--tenants .platform-directory-tabs {
+    gap: 0.4rem;
+  }
+
+  .admin-screen--tenants .platform-directory-tab {
+    min-height: 56px;
+    padding: 0.6rem 0.45rem;
+    font-size: 0.8125rem;
+  }
+}
+
+@media (max-width: 340px) {
+  .admin-screen--tenants .platform-directory-tabs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-screen--tenants .platform-directory-tab {
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
+
+
+
+/* Final responsive safeguards: stable typography and flexible action/content rows. */
+.admin-screen,
+.dashboard-content {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.admin-screen :where(header, .flex.items-center, .flex.justify-between) {
+  min-width: 0;
+}
+
+.admin-screen :where(.text-xs) {
+  font-size: clamp(0.75rem, 0.12vw + 0.72rem, 0.875rem);
+}
+
+.admin-screen :where(.text-sm) {
+  font-size: clamp(0.8125rem, 0.12vw + 0.78rem, 0.9375rem);
+}
+
+.admin-screen :where(.text-base) {
+  font-size: clamp(0.875rem, 0.14vw + 0.84rem, 1rem);
+}
+
+.admin-screen :where(input, select, textarea) {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.admin-screen :where(button) {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.admin-screen :where(table) {
+  width: 100%;
+  max-width: 100%;
+}
+
+.admin-screen :where(th, td) {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.admin-screen :where(.grid) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+}
+
+@media (max-width: 639px) {
+  .admin-screen :where(h1) {
+    font-size: clamp(1.25rem, 5vw, 1.5rem);
+    line-height: 1.25;
+  }
+
+  .admin-screen :where(h2) {
+    font-size: clamp(1.125rem, 4vw, 1.25rem);
+    line-height: 1.3;
+  }
+
+  .admin-screen :where(h3) {
+    font-size: clamp(1rem, 3.5vw, 1.125rem);
+    line-height: 1.35;
+  }
+
+  .admin-screen :where(button) {
+    min-height: 44px;
+  }
+
+  .admin-screen :where(.flex.items-center.justify-between) {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+}
+
+
+/* --------------------------------------------------------------------------
+   Responsive coverage for every operations workspace rendered by this shell.
+   These rules intentionally scope to dashboard-shell so child tabs which do
+   not use .admin-screen still receive consistent width/overflow behavior.
+   -------------------------------------------------------------------------- */
+.dashboard-shell,
+.dashboard-shell :where(section, article, aside, form, fieldset, main, header, footer) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dashboard-shell :where(h1, h2, h3, h4, h5, h6) {
+  max-width: 100%;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.dashboard-shell :where(p, label, span, small, strong, a, button, td, th, li, dt, dd) {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.dashboard-shell :where(.flex, .inline-flex, .grid) > * {
+  min-width: 0;
+}
+
+.dashboard-shell :where(input, select, textarea, button) {
+  max-width: 100%;
+}
+
+.dashboard-shell :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-width: 0;
+  font-size: 16px;
+}
+
+.dashboard-shell :where(table) {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.dashboard-shell :where(.overflow-x-auto, [style*="overflow-x"]) {
+  max-width: 100%;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dashboard-shell :where(.overflow-x-auto table) {
+  width: max-content;
+  min-width: 100%;
+}
+
+.dashboard-shell :where(.flex.items-center.justify-between, .flex.justify-between.items-center) {
+  min-width: 0;
+}
+
+.dashboard-shell :where([role="dialog"]) {
+  min-width: 0;
+  max-height: calc(100dvh - 1rem);
+}
+
+.dashboard-shell :where([role="dialog"] input, [role="dialog"] select, [role="dialog"] textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 767px) {
+  .dashboard-shell {
+    padding-inline: 0.35rem;
+  }
+
+  .dashboard-shell :where(.flex.items-center.justify-between, .flex.justify-between.items-center) {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .dashboard-shell :where(button) {
+    min-height: 44px;
+    white-space: normal;
+    line-height: 1.35;
+  }
+
+  .dashboard-shell :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .dashboard-shell :where(.overflow-x-auto) {
+    margin-inline: 0;
+    padding-bottom: 0.25rem;
+  }
+
+  .dashboard-shell :where(.grid:not(.dashboard-workspace-nav)) {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  }
+
+  .dashboard-shell :where([role="dialog"]) {
+    width: calc(100vw - 1rem);
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+@media (max-width: 380px) {
+  .dashboard-shell {
+    padding-inline: 0.2rem;
+  }
+
+  .dashboard-shell :where(button) {
+    padding-inline: 0.65rem;
+    font-size: 0.8125rem;
+  }
+
+  .dashboard-shell :where(.p-4, .p-5, .p-6, .p-8) {
+    padding: 0.75rem;
+  }
+
+  .dashboard-shell :where(.grid:not(.dashboard-workspace-nav)) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+
+/* Medicine-request workspace: fluid KPI cards, filter controls and data table. */
+.admin-screen--requests > :first-child {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(0.65rem, 1.2vw, 1rem);
+}
+
+.admin-screen--requests > :first-child > * {
+  min-width: 0;
+}
+
+.admin-screen--requests > :nth-child(2) {
+  align-items: stretch;
+}
+
+.admin-screen--requests > :nth-child(2) > :first-child {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.admin-screen--requests > :nth-child(2) form {
+  min-width: min(100%, 18rem);
+  flex: 0 1 22rem;
+}
+
+.admin-screen--requests #admin-medicine-requests-list > :first-child {
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.admin-screen--requests #admin-medicine-requests-list table {
+  min-width: 900px;
+}
+
+.admin-screen--requests #admin-medicine-requests-list td {
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 768px) {
+  .admin-screen--requests > :first-child {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .admin-screen--requests > :nth-child(2) {
+    align-items: stretch;
+  }
+
+  .admin-screen--requests > :nth-child(2) > :first-child {
+    flex-wrap: nowrap;
+    width: 100%;
+    padding-bottom: 0.25rem;
+  }
+
+  .admin-screen--requests > :nth-child(2) form {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .admin-screen--requests #admin-medicine-requests-list {
+    padding: 0.9rem;
+    border-radius: 1.25rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .admin-screen--requests > :first-child {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+
+/* Shared responsive polish for inventory, fulfilment, riders and routing. */
+.admin-screen--inventory,
+.admin-screen--riders,
+.admin-screen--routes,
+.admin-screen--fulfillment-board {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.admin-screen--inventory > :first-child,
+.admin-screen--routes > :first-child {
+  min-width: 0;
+  width: 100%;
+}
+
+.admin-screen--inventory :where(.flex.items-center.justify-between),
+.admin-screen--routes :where(.flex.items-center.justify-between),
+.admin-screen--riders :where(.flex.items-center.justify-between) {
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.admin-screen--inventory :where(.overflow-x-auto),
+.admin-screen--routes :where(.overflow-x-auto),
+.admin-screen--riders :where(.overflow-x-auto) {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-screen--inventory :where(table),
+.admin-screen--routes :where(table),
+.admin-screen--riders :where(table) {
+  width: 100%;
+  min-width: 680px;
+}
+
+.admin-screen--fulfillment-board > :where(.flex.overflow-x-auto) {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.75rem;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-screen--fulfillment-board > :where(.flex.overflow-x-auto) > * {
+  flex: 0 0 min(21rem, 86vw);
+  min-width: min(17rem, 82vw);
+  max-width: 22rem;
+  scroll-snap-align: start;
+}
+
+.admin-screen--fulfillment-board > :where(.grid) {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.admin-screen--fulfillment-board :where(article, section) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-screen--fulfillment-board :where(button) {
+  min-width: 0;
+  white-space: normal;
+}
+
+@media (min-width: 768px) {
+  .admin-screen--fulfillment-board > :where(.grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .admin-screen--fulfillment-board > :where(.grid) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .admin-screen--inventory,
+  .admin-screen--routes,
+  .admin-screen--riders {
+    padding: 1rem;
+    border-radius: 1.25rem;
+  }
+
+  .admin-screen--inventory :where(header),
+  .admin-screen--routes :where(header),
+  .admin-screen--riders :where(header) {
+    align-items: stretch;
+  }
+
+  .admin-screen--inventory :where(form),
+  .admin-screen--routes :where(form) {
+    width: 100%;
+  }
+
+  .admin-screen--inventory :where(input, select),
+  .admin-screen--routes :where(input, select) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .admin-screen--fulfillment-board > :where(.flex.overflow-x-auto) > * {
+    flex-basis: min(19rem, 88vw);
+    min-width: min(16rem, 84vw);
+  }
+}
+
+@media (max-width: 380px) {
+  .admin-screen--inventory,
+  .admin-screen--routes,
+  .admin-screen--riders {
+    padding: 0.75rem;
+  }
+}
+
+
+/* Remaining admin modules: keep layouts fluid without overriding component grids. */
+.admin-screen--tenants,
+.admin-screen--access,
+.admin-screen--telemetry,
+.admin-screen--matrix,
+.admin-screen--tenant-profile,
+.admin-screen--csquare,
+.admin-screen--promotions,
+.admin-screen--surplus-savings,
+.admin-screen--offer-zone,
+.admin-screen--payments,
+.admin-screen--routes,
+.admin-screen--audits {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.admin-screen--tenants :where(.overflow-x-auto),
+.admin-screen--telemetry :where(.overflow-x-auto),
+.admin-screen--matrix :where(.overflow-x-auto),
+.admin-screen--offer-zone :where(.overflow-x-auto) {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-screen--tenants :where(table),
+.admin-screen--telemetry :where(table),
+.admin-screen--matrix :where(table),
+.admin-screen--offer-zone :where(table) {
+  min-width: 680px;
+}
+
+.admin-screen--access :where([class*="grid-cols-"]) {
+  min-width: 0;
+}
+
+.admin-screen--access :where(.max-h-\[560px\]) {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.admin-screen--promotions :where(input, select, textarea),
+.admin-screen--offer-zone :where(input, select, textarea),
+.admin-screen--payments :where(input, select, textarea),
+.admin-screen--csquare :where(input, select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.admin-screen--matrix :where(th),
+.admin-screen--matrix :where(td) {
+  white-space: nowrap;
+}
+
+.admin-screen--tenants :where(.fixed.inset-0) {
+  align-items: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: max(0.75rem, env(safe-area-inset-top)) 0.75rem max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.admin-screen--tenants :where(.fixed.inset-0 > .bg-white) {
+  width: min(100%, 42rem);
+  max-height: min(92dvh, 52rem);
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.admin-screen--tenants :where(.fixed.inset-0 > .bg-white.rounded-3xl) {
+  padding: clamp(1rem, 3vw, 1.5rem);
+}
+
+.admin-screen--telemetry :where(pre, code) {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.admin-screen--surplus-savings :where(.max-h-64),
+.admin-screen--promotions :where(.max-h-\[430px\]) {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 767px) {
+  .admin-screen--tenants :where(.grid.grid-cols-2.sm\:grid-cols-4) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-screen--tenants :where(.fixed.inset-0) {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .admin-screen--tenants :where(.fixed.inset-0 > .bg-white) {
+    width: 100%;
+    max-height: 94dvh;
+    border-radius: 1.5rem 1.5rem 0 0;
+    padding: 1rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  .admin-screen--access :where(.grid.lg\:grid-cols-\[300px_1fr\]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-screen--access :where(.max-h-\[560px\]) {
+    max-height: 15rem;
+  }
+
+  .admin-screen--matrix,
+  .admin-screen--telemetry,
+  .admin-screen--promotions,
+  .admin-screen--offer-zone,
+  .admin-screen--payments,
+  .admin-screen--csquare,
+  .admin-screen--surplus-savings,
+  .admin-screen--tenant-profile {
+    gap: 1rem;
+  }
+
+  .admin-screen--telemetry :where(.grid.grid-cols-2) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 380px) {
+  .admin-screen--tenants :where(.grid.grid-cols-2.sm\:grid-cols-4) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

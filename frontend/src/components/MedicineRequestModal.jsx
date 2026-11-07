@@ -1,0 +1,336 @@
+import React, { useState, useEffect } from 'react';
+import apiClient from '../api/apiClient';
+import { useToast } from '../context/ToastContext';
+import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
+import { useApp } from '../context/AppContext';
+import { useLanguage } from '../context/LanguageContext';
+import { useTenant } from '../context/TenantContext';
+
+export default function MedicineRequestModal({ isOpen, onClose, initialMedicineName = '', onRequestSubmitted }) {
+  const { t } = useLanguage();
+  const { addToast } = useToast();
+  const { runAction, isActionLoading } = useActionLoading();
+  const { addresses, selectedAddressId, setSelectedAddressId, loadAddresses } = useApp();
+  const { tenantId, branchId } = useTenant();
+  const submitting = isActionLoading(LOADING_ACTIONS.CREATE_MEDICINE);
+
+  const [medicineName, setMedicineName] = useState(initialMedicineName);
+  const [saltComposition, setSaltComposition] = useState('');
+  const [quantity, setQuantity] = useState(1);
+  const [urgency, setUrgency] = useState('Normal');
+  const [preferredDeliveryPreference, setPreferredDeliveryPreference] = useState('Flexible');
+  const [customerNote, setCustomerNote] = useState('');
+  const [prescriptionFile, setPrescriptionFile] = useState(null);
+  const [addressError, setAddressError] = useState('');
+  const [people, setPeople] = useState([]);
+  const [patientPuid, setPatientPuid] = useState('');
+
+  // Sync initial medicine name and relatives when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      void loadAddresses();
+      let cancelled = false;
+      apiClient.get('/api/v1/customers/persons')
+        .then(({ data }) => {
+          if (cancelled) return;
+          const list = data?.data || data?.people || data || [];
+          setPeople(Array.isArray(list) ? list : []);
+          const self = Array.isArray(list) ? list.find((p) => String(p.relationshipToOwner).toUpperCase() === 'SELF') : null;
+          if (self) setPatientPuid((current) => current || self.puid);
+        })
+        .catch(() => {});
+      return () => { cancelled = true; };
+    }
+  }, [isOpen, loadAddresses]);
+
+  useEffect(() => {
+    if (isOpen && addresses.length && !selectedAddressId) {
+      const defaultAddress = addresses.find(address => address.isDefault) || addresses[0];
+      setSelectedAddressId(defaultAddress?._id || '');
+    }
+  }, [isOpen, addresses, selectedAddressId, setSelectedAddressId]);
+
+  useEffect(() => {
+    if (initialMedicineName) {
+      setMedicineName(initialMedicineName);
+    }
+  }, [initialMedicineName]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!medicineName.trim()) {
+      addToast(t('enterMedicineName'), 'warning');
+      return;
+    }
+
+    await runAction(LOADING_ACTIONS.CREATE_MEDICINE, async () => {
+      if (!selectedAddressId) {
+        setAddressError(t('selectSavedAddress'));
+        return;
+      }
+      setAddressError('');
+      try {
+      const selectedAddress = addresses.find(a => (a._id || a.id) === selectedAddressId);
+      const requestedItems = [{
+        requestedName: medicineName.trim(),
+        composition: saltComposition.trim(),
+        quantity: Math.max(1, Number(quantity) || 1),
+        originalAvailabilityStatus: 'NOT_IN_CATALOG'
+      }];
+      const requestFields = {
+        tenantId: String(tenantId || ''),
+        branchId: String(branchId || ''),
+        requestedItems,
+        addressId: selectedAddressId,
+        deliveryAddress: selectedAddress?.addressLine || (selectedAddress ? `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}` : undefined),
+        coordinates: selectedAddress?.coordinates,
+        urgencyLevel: urgency,
+        preferredDeliveryPreference,
+        customerNote: customerNote.trim(),
+        patientPuid: patientPuid || undefined
+      };
+
+      // Send ordinary requests as JSON. Use multipart only when a file must
+      // be uploaded; the browser will set its own multipart boundary.
+      let requestBody = requestFields;
+      if (prescriptionFile) {
+        requestBody = new FormData();
+        requestBody.append('tenantId', String(tenantId || ''));
+        requestBody.append('branchId', String(branchId || ''));
+        requestBody.append('requestedItems', JSON.stringify(requestedItems));
+        requestBody.append('addressId', selectedAddressId);
+        if (requestFields.deliveryAddress) {
+          requestBody.append('deliveryAddress', requestFields.deliveryAddress);
+        }
+        if (requestFields.coordinates) {
+          requestBody.append('coordinates', typeof requestFields.coordinates === 'string' ? requestFields.coordinates : JSON.stringify(requestFields.coordinates));
+        }
+        requestBody.append('urgencyLevel', urgency);
+        requestBody.append('preferredDeliveryPreference', preferredDeliveryPreference);
+        requestBody.append('customerNote', customerNote.trim());
+        if (patientPuid) {
+          requestBody.append('patientPuid', patientPuid);
+        }
+        requestBody.append('prescription', prescriptionFile);
+      }
+      const res = await apiClient.post('/api/medicine-requests', requestBody);
+
+      addToast(res.data.message || t('requestSubmitted'), 'success');
+      if (onRequestSubmitted) onRequestSubmitted(res.data.request);
+      onClose();
+      // Reset form
+      setMedicineName('');
+      setSaltComposition('');
+      setQuantity(1);
+      setUrgency('Normal');
+      setPreferredDeliveryPreference('Flexible');
+      setCustomerNote('');
+      setPrescriptionFile(null);
+      setAddressError('');
+      } catch (err) {
+        addToast(err.message || t('requestSubmitFailed'), 'error');
+      }
+    });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/45 backdrop-blur-[2px] animate-fade-in overscroll-none"
+      aria-modal="true"
+      role="dialog"
+      aria-labelledby="medicine-request-title"
+    >
+      <div
+        className="modal-backdrop absolute inset-0 touch-none"
+        onClick={onClose}
+        onWheel={(e) => e.preventDefault()}
+        onTouchMove={(e) => e.preventDefault()}
+        aria-hidden="true"
+      />
+
+      <div className="relative z-10 m-auto flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl overscroll-contain">
+        
+        {/* Sticky Header */}
+        <div className="shrink-0 flex justify-between items-start p-5 sm:p-6 pb-4 border-b border-slate-100 bg-white">
+          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+            <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center text-xl shrink-0">
+              📋
+            </div>
+            <div className="min-w-0">
+              <h3 id="medicine-request-title" className="text-base sm:text-lg font-black text-slate-900 truncate">
+                Request Special Medicine
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                Our licensed pharmacist will verify dispensary procurement.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition cursor-pointer shrink-0"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Scrollable Form Body */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto overscroll-contain p-5 sm:p-6 space-y-4">
+          <div>
+            <label htmlFor="preferred-delivery-timing" className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              Preferred Delivery Timing *
+            </label>
+            <select
+              id="preferred-delivery-timing"
+              value={preferredDeliveryPreference}
+              onChange={(e) => setPreferredDeliveryPreference(e.target.value)}
+              required
+              className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+            >
+              <option value="Morning">{t('morning')}</option>
+              <option value="Evening">{t('evening')}</option>
+              <option value="Next Day">{t('nextDay')}</option>
+              <option value="Flexible">{t('flexibleAnytime')}</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              Medicine / Formulation Name *
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. Augmentin 625 Duo, Remdesivir, Thyronorm 50mcg"
+              value={medicineName}
+              onChange={(e) => setMedicineName(e.target.value)}
+              className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              Active Salt / Composition (Optional)
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Amoxicillin + Clavulanic Acid"
+              value={saltComposition}
+              onChange={(e) => setSaltComposition(e.target.value)}
+              className="w-full px-3.5 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                Required Units / Quantity *
+              </label>
+              <input
+                type="number"
+                min="1"
+                required
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                className="w-full px-3.5 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                Urgency Level
+              </label>
+              <select
+                value={urgency}
+                onChange={(e) => setUrgency(e.target.value)}
+                className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white font-bold text-slate-700"
+              >
+                <option value="Normal">🟢 Standard Delivery</option>
+                <option value="Urgent (Same Day)">🟠 Urgent (Same Day)</option>
+                <option value="Critical / Life-Saving">🔴 Critical / Life-Saving</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              Delivery Address *
+            </label>
+            <select
+              value={selectedAddressId}
+              onChange={e => { setSelectedAddressId(e.target.value); setAddressError(''); }}
+              className="w-full px-3 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white"
+            >
+              <option value="">{t('selectSavedAddressOption')}</option>
+              {addresses.map(address => (
+                <option key={address._id} value={address._id}>
+                  {address.label || 'Address'} — {[address.addressLine1, address.city, address.pincode].filter(Boolean).join(', ')}
+                </option>
+              ))}
+            </select>
+            {addressError && <p className="mt-1 text-[11px] font-bold text-rose-600">{addressError}</p>}
+            {!addresses.length && <p className="mt-1 text-[11px] text-amber-700">{t('saveDeliveryAddressFirst')}</p>}
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              Prescription (Optional)
+            </label>
+            <input
+              type="file"
+              accept=".pdf,image/jpeg,image/png,image/webp"
+              onChange={e => setPrescriptionFile(e.target.files?.[0] || null)}
+              className="w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-xs file:font-bold file:text-blue-700"
+            />
+            <p className="mt-1 text-[10px] text-slate-500">
+              Attach a prescription when the pharmacist needs it. Requests without a prescription are also supported.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              Doctor Instructions / Patient Note (Optional)
+            </label>
+            <textarea
+              rows={3}
+              placeholder={t("requestDetailsPlaceholder")}
+              value={customerNote}
+              onChange={(e) => setCustomerNote(e.target.value)}
+              className="w-full px-3.5 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+            />
+          </div>
+
+          {/* Pharmacist SLA Note */}
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3 flex items-start gap-2.5 text-blue-900">
+            <span className="text-base flex-shrink-0">⏱️</span>
+            <p className="text-[11px] leading-relaxed">
+              <strong>{t('pharmacyCommitment')}:</strong> {t('pharmacistReviewCommitment')}
+            </p>
+          </div>
+
+          {/* Footer Actions */}
+          <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row gap-2.5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full sm:w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs cursor-pointer transition min-h-[44px]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || !medicineName.trim()}
+              className="w-full sm:w-2/3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-extrabold py-2.5 rounded-xl text-xs shadow-md shadow-blue-600/20 transition cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
+            >
+              {submitting && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}<span>{submitting ? t('createMedicineRequest') : t('sendRequestToPharmacist')}</span>
+              <span>→</span>
+            </button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  );
+}
