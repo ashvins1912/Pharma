@@ -124,13 +124,27 @@ export class NotificationService {
 
     _bindDomainEvents() {
         domainEvents.on('MEDICINE_REQUEST_CREATED', (evt) => {
+            const requestNumber = evt.payload?.requestNumber || evt.entityId;
+            const medicineName = evt.payload?.medicineName || 'a medicine';
             this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId, branchId: evt.branchId,
                 recipientUserId: this._recipientUserId(evt),
                 title: 'New Medicine Request',
-                body: `Medicine request ${evt.payload?.requestNumber || evt.entityId} was created for ${evt.payload?.medicineName || 'a medicine'}.`,
+                body: `Medicine request ${requestNumber} was created for ${medicineName}.`,
                 eventType: 'MEDICINE_REQUEST_CREATED', medicineRequestId: evt.entityId, channels: ['IN_APP', 'WHATSAPP']
             });
+            if (evt.tenantId) {
+                this.send({ sourceEventId: evt.eventId,
+                    tenantId: evt.tenantId,
+                    branchId: evt.branchId,
+                    recipientUserId: null,
+                    title: 'New medicine request needs inventory review',
+                    body: `Medicine request ${requestNumber} for ${medicineName} is ready for pharmacy inventory review.`,
+                    eventType: 'INVENTORY_MEDICINE_REQUEST_RECEIVED',
+                    medicineRequestId: evt.entityId,
+                    channels: ['IN_APP']
+                });
+            }
             if (evt.payload?.request) sendWhatsAppMedicineRequestAlert(evt.payload.request, 'MedicineRequestCreated').catch(err => logger.warn('[WhatsApp] Medicine request creation alert failed:', err?.message));
         });
 
