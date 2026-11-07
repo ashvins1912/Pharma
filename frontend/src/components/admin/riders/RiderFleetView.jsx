@@ -12,7 +12,8 @@ import { useAuth } from '../../../context/AuthContext';
  * Connects useRiderManagement and useOrderDashboard hooks with UI presentation components.
  */
 export default function RiderFleetView() {
-    const { isSuperAdmin } = useAuth();
+    const { isSuperAdmin, hasPermission } = useAuth();
+    const canViewTelemetry = isSuperAdmin && hasPermission('delivery.read');
     const [showDisabledRiders, setShowDisabledRiders] = useState(false);
     const {
         riders,
@@ -243,7 +244,7 @@ export default function RiderFleetView() {
             {activeSubTab === 'engine' && (
                 <AssignmentEngineMonitor
                     engineStatus={engineStatus}
-                    canViewTelemetry={isSuperAdmin}
+                    canViewTelemetry={canViewTelemetry}
                     unassignedOrders={groupedOrders.unassigned}
                     riders={riders.filter(rider => rider.enabled !== false)}
                     onAutoAssign={handleAutoAssign}
