@@ -232,7 +232,8 @@ export const requirePlatformSuperAdmin = (req, res, next) => {
         || req.context?.role
         || ''
     ).trim().toUpperCase();
-    const isPlatformSuperAdmin = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+    const isPlatformSuperAdmin = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)
+        || (role === 'ADMIN' && authz?.scope === 'PLATFORM');
     const isExplicitlyTenantScoped = authz?.scope === 'TENANT';
 
     if (isPlatformSuperAdmin && !isExplicitlyTenantScoped) return next();
