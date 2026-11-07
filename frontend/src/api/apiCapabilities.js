@@ -353,6 +353,16 @@ export const API_CAPABILITIES = [
   },
   {
     method: 'GET',
+    pattern: /^\/api\/v1\/admin\/feature-health(?:\/|$)/,
+    permission: 'tenants.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/admin\/feature-health(?:\/|$)/,
+    permission: 'tenants.manage'
+  },
+  {
+    method: 'GET',
     pattern: /^\/api\/v1\/admin\/tenants(?:\/|$)/,
     permission: 'tenants.read'
   },
@@ -374,6 +384,31 @@ export const API_CAPABILITIES = [
   {
     method: 'DELETE',
     pattern: /^\/api\/v1\/admin\/tenants(?:\/|$)/,
+    permission: 'tenants.manage'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/admin(?:\/|$)/,
+    permission: 'tenants.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/admin(?:\/|$)/,
+    permission: 'tenants.manage'
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/v1\/admin(?:\/|$)/,
+    permission: 'tenants.manage'
+  },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/v1\/admin(?:\/|$)/,
+    permission: 'tenants.manage'
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/v1\/admin(?:\/|$)/,
     permission: 'tenants.manage'
   },
   // Tenant-scoped branch approval, staff membership and activity APIs.
