@@ -95,6 +95,7 @@ const CAPABILITIES = [
   ['POST', /^\/api\/v1\/profile(?:\/|$)/, 'profile.write'],
   ['PUT', /^\/api\/v1\/profile(?:\/|$)/, 'profile.write'],
   ['PATCH', /^\/api\/v1\/profile(?:\/|$)/, 'profile.write'],
+  ['GET', /^\/api\/v1\/admin\/service-logs(?:\/|$)/, 'users.read'],
   ['GET', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.read'],
   ['POST', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.manage'],
   ['PUT', /^\/api\/v1\/admin\/tenants(?:\/|$)/, 'tenants.manage'],
