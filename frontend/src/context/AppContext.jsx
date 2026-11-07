@@ -110,6 +110,7 @@ export function AppProvider({ children }) {
   });
   const [inventoryAlertsStatus, setInventoryAlertsStatus] = useState({ loading: false, error: '' });
   const inventoryAlertsRequestRef = useRef(0);
+  const inventoryAlertsPromiseRef = useRef(null);
 
   // WhatsApp Gateway State
   const [whatsappStatus, setWhatsappStatus] = useState({
@@ -800,11 +801,14 @@ export function AppProvider({ children }) {
       return null;
     }
 
+    const scopeKey = `${tenantId}:${branchId}`;
+    if (inventoryAlertsPromiseRef.current?.scopeKey === scopeKey) return inventoryAlertsPromiseRef.current.promise;
     const requestId = ++inventoryAlertsRequestRef.current;
-    setInventoryAlertsStatus({ loading: true, error: '' });
-    try {
+    setInventoryAlertsStatus(prev => ({ ...prev, loading: true, error: '' }));
+    const requestPromise = (async () => { try {
+      const correlationId = `alerts-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const res = await apiClient.get('/api/medicines/alerts', {
-        params: { tenantId, branchId }
+        params: { tenantId, branchId }, headers: { 'X-Request-Id': correlationId }
       });
       if (requestId !== inventoryAlertsRequestRef.current) return null;
       const payload = res.data?.data || res.data || {};
@@ -832,7 +836,11 @@ export function AppProvider({ children }) {
         error: error.response?.data?.message || error.message || 'Could not refresh inventory safety alerts.'
       });
       return null;
-    }
+    } finally {
+      if (inventoryAlertsPromiseRef.current?.requestId === requestId) inventoryAlertsPromiseRef.current = null;
+    } })();
+    inventoryAlertsPromiseRef.current = { scopeKey, requestId, promise: requestPromise };
+    return requestPromise;
   }, [authLoading, isFullyAuthenticated, user?.id, isPharmacyOrAdmin, hasPermission, tenantId, branchId]);
 
   useEffect(() => {

@@ -27,6 +27,9 @@ const profitMarginRewardEngine = new ProfitMarginRewardEngine({
 });
 const deliveryRewardStrategy = new FixedDeliveryRewardStrategy();
 
+const inventoryAlertsCache = new Map();
+const inventoryAlertsInflight = new Map();
+
 const awardPointsOnce = async ({ customerId, accountType, points, order, description, session = null }) => {
     if (!getIsConnected() || !customerId || !Number.isSafeInteger(points) || points <= 0) return false;
     const orderId = order._id;
@@ -793,63 +796,60 @@ export const dataStore = {
         const scopeTenantId = String(tenantId || '').trim();
         const scopeBranchId = String(branchId || '').trim();
         if (!scopeTenantId || !scopeBranchId) throw inventoryError('Tenant and branch are required for inventory alerts.', 400);
-        const allMeds = [];
-        let page = 1;
-        let pages = 1;
-        do {
-            const result = await inventoryClient.searchProducts({
+
+        // Cache keys always include both verified scope dimensions and thresholds.
+        const cacheKey = `inventory-alerts:${scopeTenantId}:${scopeBranchId}:${lowStockThreshold}:${expiringThresholdDays}`;
+        const cached = inventoryAlertsCache.get(cacheKey);
+        if (cached && cached.expiresAt > Date.now()) return cached.value;
+        if (cached) inventoryAlertsCache.delete(cacheKey);
+        if (inventoryAlertsInflight.has(cacheKey)) return inventoryAlertsInflight.get(cacheKey);
+
+        const refresh = (async () => {
+            const startedAt = Date.now();
+            const first = await inventoryClient.searchProducts({
                 tenantId: scopeTenantId, branchId: scopeBranchId,
                 includeOutOfStock: true, includeExpiredBatches: true,
-                page, limit: 100, userId: 'inventory-alerts'
+                page: 1, limit: 100, userId: 'inventory-alerts'
             });
-            allMeds.push(...(result.items || []));
-            pages = Number(result.pages || 1);
-            page += 1;
-        } while (page <= pages && page <= 50);
+            const pages = Math.min(50, Math.max(1, Number(first.pages || 1)));
+            // Fetch independent pages concurrently; page one is reused, not requested again.
+            const rest = pages > 1 ? await Promise.all(Array.from({ length: pages - 1 }, (_, index) =>
+                inventoryClient.searchProducts({
+                    tenantId: scopeTenantId, branchId: scopeBranchId,
+                    includeOutOfStock: true, includeExpiredBatches: true,
+                    page: index + 2, limit: 100, userId: 'inventory-alerts'
+                })
+            )) : [];
+            const allMeds = [...(first.items || []), ...rest.flatMap(result => result.items || [])];
 
-        const now = new Date();
-        const utcDay = date => Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-        const daysUntilExpiry = value => {
-            const expiryDate = value ? new Date(value) : null;
-            if (!expiryDate || !Number.isFinite(expiryDate.getTime())) return null;
-            // Compare calendar days, not elapsed 24-hour periods. A batch expiring
-            // today must remain in the "expiring today" warning for the full day.
-            return Math.round((utcDay(expiryDate) - utcDay(now)) / 86400000);
-        };
-        const expired = [];
-        const expiringSoon = [];
-        const lowStock = [];
-        for (const med of allMeds) {
-            for (const batch of med.expiredBatchAvailability || []) {
-                const daysLeft = daysUntilExpiry(batch.expiryDate);
-                // Alert only when physical expired stock still exists; zeroed batches
-                // should not keep generating a safety incident after disposal.
-                if (Number(batch.stockQuantity || 0) > 0) {
-                    expired.push({ ...med, batchNumber: batch.batchNumber, expiryDate: batch.expiryDate, stock: Number(batch.stockQuantity || 0), availableQuantity: Number(batch.availableQuantity || 0), daysLeft });
+            const now = new Date();
+            const utcDay = date => Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+            const daysUntilExpiry = value => {
+                const expiryDate = value ? new Date(value) : null;
+                if (!expiryDate || !Number.isFinite(expiryDate.getTime())) return null;
+                return Math.round((utcDay(expiryDate) - utcDay(now)) / 86400000);
+            };
+            const expired = [], expiringSoon = [], lowStock = [];
+            for (const med of allMeds) {
+                for (const batch of med.expiredBatchAvailability || []) {
+                    const daysLeft = daysUntilExpiry(batch.expiryDate);
+                    if (Number(batch.stockQuantity || 0) > 0) expired.push({ ...med, batchNumber: batch.batchNumber, expiryDate: batch.expiryDate, stock: Number(batch.stockQuantity || 0), availableQuantity: Number(batch.availableQuantity || 0), daysLeft });
                 }
-            }
-            for (const batch of med.batchAvailability || []) {
-                if (!batch.expiryDate) continue;
-                const daysLeft = daysUntilExpiry(batch.expiryDate);
-                if (daysLeft !== null && daysLeft >= 0 && daysLeft <= expiringThresholdDays && Number(batch.stockQuantity || 0) > 0) {
-                    expiringSoon.push({ ...med, batchNumber: batch.batchNumber, expiryDate: batch.expiryDate, stock: Number(batch.stockQuantity || 0), availableQuantity: Number(batch.availableQuantity || 0), daysLeft });
+                for (const batch of med.batchAvailability || []) {
+                    if (!batch.expiryDate) continue;
+                    const daysLeft = daysUntilExpiry(batch.expiryDate);
+                    if (daysLeft !== null && daysLeft >= 0 && daysLeft <= expiringThresholdDays && Number(batch.stockQuantity || 0) > 0) expiringSoon.push({ ...med, batchNumber: batch.batchNumber, expiryDate: batch.expiryDate, stock: Number(batch.stockQuantity || 0), availableQuantity: Number(batch.availableQuantity || 0), daysLeft });
                 }
+                if (Number(med.batchCount || 0) > 0 && Number(med.availableQuantity || 0) <= lowStockThreshold) lowStock.push({ ...med, stock: Number(med.availableQuantity || 0) });
             }
-            // Product master records with no stock row in this branch are not
-            // restock alerts. A branch with a real batch at zero is still low stock.
-            if (Number(med.batchCount || 0) > 0 && Number(med.availableQuantity || 0) <= lowStockThreshold) {
-                lowStock.push({ ...med, stock: Number(med.availableQuantity || 0) });
-            }
-        }
-        return {
-            expiredCount: expired.length,
-            expiringSoonCount: expiringSoon.length,
-            lowStockCount: lowStock.length,
-            totalAlerts: expired.length + expiringSoon.length + lowStock.length,
-            expired: expired.slice(0, 20),
-            expiringSoon: expiringSoon.slice(0, 20),
-            lowStock: lowStock.slice(0, 20)
-        };
+            const value = { expiredCount: expired.length, expiringSoonCount: expiringSoon.length, lowStockCount: lowStock.length, totalAlerts: expired.length + expiringSoon.length + lowStock.length, expired: expired.slice(0, 20), expiringSoon: expiringSoon.slice(0, 20), lowStock: lowStock.slice(0, 20) };
+            inventoryAlertsCache.set(cacheKey, { value, expiresAt: Date.now() + 15_000 });
+            if (inventoryAlertsCache.size > 500) inventoryAlertsCache.delete(inventoryAlertsCache.keys().next().value);
+            console.info('[InventoryAlerts] refresh complete', { tenantId: scopeTenantId, branchId: scopeBranchId, productCount: allMeds.length, pages, durationMs: Date.now() - startedAt });
+            return value;
+        })();
+        inventoryAlertsInflight.set(cacheKey, refresh);
+        try { return await refresh; } finally { inventoryAlertsInflight.delete(cacheKey); }
     },
 
     async seedMedicines() {
