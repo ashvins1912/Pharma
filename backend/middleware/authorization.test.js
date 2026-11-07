@@ -86,6 +86,18 @@ test('tenant administrator cannot access platform-only diagnostics even with wil
   assert.equal(res.body.error.code, 'FORBIDDEN');
 });
 
+test('Super Admin role with a non-platform resolved scope is denied', () => {
+  const req = {
+    user: { role: 'SUPER_ADMIN' },
+    authz: { role: 'SUPER_ADMIN', scope: 'CUSTOMER' }
+  };
+  const res = response();
+  let nextCalled = false;
+  requirePlatformSuperAdmin(req, res, () => { nextCalled = true; });
+  assert.equal(nextCalled, false);
+  assert.equal(res.statusCode, 403);
+});
+
 test('tenant-scoped authorization context cannot inherit Super Admin access from a role label', () => {
   const req = {
     user: { role: 'SUPER_ADMIN' },
