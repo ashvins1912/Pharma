@@ -13,5 +13,7 @@ const serviceLogSchema = new mongoose.Schema({
 
 serviceLogSchema.index({ service: 1, createdAt: -1 });
 serviceLogSchema.index({ createdAt: -1, level: 1 });
+// Keep a short rolling operational history; the UI exposes the most recent 1-12 hours.
+serviceLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 14 * 24 * 60 * 60 });
 
 export default mongoose.models.ServiceLog || mongoose.model('ServiceLog', serviceLogSchema);
