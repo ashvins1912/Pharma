@@ -38,10 +38,9 @@ gateway.use((req, res, next) => {
         const status = Number(res.statusCode || 0);
         if (status < 500 && status !== 429) return;
         const requestId = req.context?.requestId || req.headers['x-request-id'] || 'req-unknown';
-        const message = String(res.locals?.serviceLogMessage || res.statusMessage || `Request failed with HTTP ${status}.`)
-            .replace(/Bearer\s+[A-Za-z0-9._~-]+/gi, 'Bearer [REDACTED]')
-            .replace(/(authorization|token|password|secret)\s*[:=]\s*[^,\s]+/gi, '$1=[REDACTED]')
-            .slice(0, 2000);
+        // Keep the log message generic: an exception message can contain
+        // user-supplied values, so only the machine error code is retained.
+        const message = `Request failed with HTTP ${status}.`;
         void ServiceLog.create({
             service: 'backend-api',
             level: status >= 500 ? 'ERROR' : 'WARN',
@@ -98,9 +97,9 @@ gateway.use((err, req, res, next) => {
     const status = err instanceof DomainError ? err.status : (err.status || err.statusCode || 500);
     const code = err.code || 'INTERNAL_SERVER_ERROR';
 
-    // Make the originating error available to the response-finish logger.
+    // Preserve only the machine error code; exception messages can contain
+    // user-supplied or sensitive values.
     if (status >= 500 || status === 429) {
-        res.locals.serviceLogMessage = String(err.message || 'Unexpected service error.').slice(0, 2000);
         res.locals.serviceLogCode = String(code).slice(0, 120);
     }
 
