@@ -30,6 +30,28 @@ const publicMedicine = medicine => {
     };
 };
 
+
+// Inventory scope is derived from the authenticated, signed identity. Platform
+// administrators may explicitly select a tenant/branch; tenant users cannot
+// override their membership scope with request query parameters.
+const resolveInventoryScope = req => {
+    const user = req.user || {};
+    const roleValues = [user.role, ...(Array.isArray(user.roles) ? user.roles : []), user.app_metadata?.role]
+        .map(value => String(value || '').trim().toUpperCase());
+    const isPlatformAdmin = user.scope === 'PLATFORM'
+        && roleValues.some(role => ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'ADMIN'].includes(role));
+    const tenantId = String((isPlatformAdmin ? req.query.tenantId : user.tenantId || user.app_metadata?.tenantId) || '').trim();
+    const branchId = String((isPlatformAdmin ? req.query.branchId : user.branchId || user.app_metadata?.branchId) || '').trim();
+    if (!tenantId || !branchId) {
+        throw Object.assign(new Error('Select an authorized pharmacy tenant and branch before accessing inventory.'), { statusCode: 403 });
+    }
+    if (!isPlatformAdmin && (req.query.tenantId || req.query.branchId)
+        && (String(req.query.tenantId || tenantId) !== tenantId || String(req.query.branchId || branchId) !== branchId)) {
+        throw Object.assign(new Error('Requested inventory scope does not match your authorized pharmacy membership.'), { statusCode: 403 });
+    }
+    return { tenantId, branchId };
+};
+
 const getErrorStatus = error => error.statusCode
     || (error.name === 'ValidationError' || error.name === 'CastError' ? 400 : 500);
 
@@ -166,23 +188,24 @@ router.get('/discovery', async (req, res) => {
 // Admin Inventory Alerts
 router.get('/alerts', authenticateUser, async (req, res) => {
     try {
-        const alerts = await dataStore.getInventoryAlerts();
-        res.json(alerts);
+        const scope = resolveInventoryScope(req);
+        res.set('Cache-Control', 'private, no-store');
+        res.json(await dataStore.getInventoryAlerts(3, 30, scope));
     } catch (err) {
-        console.error("Error fetching inventory alerts:", err);
-        res.status(500).json({ message: "Failed to fetch alerts" });
+        res.status(err.statusCode || 500).json({ message: err.statusCode ? err.message : 'Failed to fetch alerts' });
     }
 });
 
 // Inventory merge audits
 router.get('/audits', authenticateUser, async (req, res) => {
     try {
+        const scope = resolveInventoryScope(req);
         const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
         const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
-        res.json(await dataStore.getInventoryAudits(page, limit));
+        res.set('Cache-Control', 'private, no-store');
+        res.json(await dataStore.getInventoryAudits(page, limit, scope));
     } catch (err) {
-        console.error('Inventory audit list failed:', err);
-        res.status(500).json({ message: "Failed to fetch audit logs" });
+        res.status(err.statusCode || 500).json({ message: err.statusCode ? err.message : 'Failed to fetch audit logs' });
     }
 });
 
