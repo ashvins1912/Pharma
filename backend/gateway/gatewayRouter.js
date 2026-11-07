@@ -76,8 +76,8 @@ gateway.use((err, req, res, next) => {
     // bodies, headers, cookies, access tokens or patient/order payloads.
     if (status >= 500 || status === 429) {
         const safeMessage = String(err.message || 'Unexpected service error.')
-            .replace(/Bearer\\s+[A-Za-z0-9._~-]+/gi, 'Bearer [REDACTED]')
-            .replace(/(authorization|token|password|secret)\\s*[:=]\\s*[^,\\s]+/gi, '$1=[REDACTED]')
+            .replace(/Bearer\s+[A-Za-z0-9._~-]+/gi, 'Bearer [REDACTED]')
+            .replace(/(authorization|token|password|secret)\s*[:=]\s*[^,\s]+/gi, '$1=[REDACTED]')
             .slice(0, 2000);
         void ServiceLog.create({
             service: 'backend-api',
