@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLanguage } from '../../context/LanguageContext';
 import apiClient from '../../api/apiClient';
 import { useActionLoading, LOADING_ACTIONS } from '../../context/LoadingContext';
@@ -1277,9 +1278,9 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       </div>
 
       {/* Assign Rider Modal */}
-      {assignRiderModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 modal-overlay animate-fade-in">
-          <div role="dialog" aria-modal="true" aria-labelledby="assign-rider-title" className="pharma-modal-surface relative max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto p-5 sm:p-6 space-y-4">
+      {assignRiderModal && typeof document !== 'undefined' && createPortal(
+        <div className="pharma-rider-assignment-overlay fixed inset-0 z-[10000] flex items-center justify-center overflow-y-auto p-3 sm:p-4 animate-fade-in">
+          <div role="dialog" aria-modal="true" aria-labelledby="assign-rider-title" className="pharma-rider-assignment-dialog relative w-full max-w-sm max-h-[calc(100dvh-1.5rem)] overflow-y-auto p-4 sm:p-6 space-y-4">
             <div className="sticky top-0 z-10 flex justify-between items-center bg-white pr-10">
               <h4 id="assign-rider-title" className="text-sm font-black text-slate-900 uppercase tracking-wider">
                 🛵 Assign Delivery Rider
@@ -1389,7 +1390,8 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {prescriptionModalOrder && (
