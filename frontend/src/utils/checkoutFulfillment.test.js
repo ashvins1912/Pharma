@@ -55,3 +55,11 @@ test('pharmacist-approval alternatives are excluded from customer checkout quote
     { medicineId: 'medicine-a', quantity: 2 }
   ]);
 });
+
+test('waiting-only fulfilment produces an empty payable quote basket', () => {
+  const waitingOnlyPlan = {
+    customerDecisionRequired: true,
+    lines: [{ productId: 'medicine-out', fulfilNowQuantity: 0, waitingQuantity: 5, alternatives: [] }]
+  };
+  assert.deepEqual(buildFulfillmentQuoteItems(waitingOnlyPlan, {}), []);
+});
