@@ -361,6 +361,7 @@ export const API_CAPABILITIES = [
     pattern: /^\/api\/v1\/admin\/feature-health(?:\/|$)/,
     permission: 'tenants.manage'
   },
+  { method: 'GET', pattern: /^\/api\/v1\/admin\/service-logs(?:\/|$)/, permission: 'users.read' },
   {
     method: 'GET',
     pattern: /^\/api\/v1\/admin\/tenants(?:\/|$)/,
