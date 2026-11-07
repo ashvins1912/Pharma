@@ -8,7 +8,7 @@ import { useTenant } from '../context/TenantContext';
  * Encapsulates fleet data loading, status toggling, GPS tracking, and assignment engine telemetry.
  */
 export function useRiderManagement({ includeDisabled = false } = {}) {
-    const { hasPermission, loading: authLoading } = useAuth();
+    const { hasPermission, isSuperAdmin, loading: authLoading } = useAuth();
     const { tenantId } = useTenant();
     const [riders, setRiders] = useState([]);
     const [loadingRiders, setLoadingRiders] = useState(false);
@@ -49,7 +49,10 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
     }, [authLoading, includeDisabled, hasPermission, tenantId]);
 
     const fetchEngineStatus = useCallback(async () => {
-        if (authLoading || !hasPermission('delivery.read')) return;
+        if (authLoading || !isSuperAdmin || !hasPermission('delivery.read')) {
+            setEngineStatus({ pipeline: [], logs: [], totalEvaluations: 0 });
+            return;
+        }
         setLoadingEngine(true);
         try {
             const res = await apiClient.get('/api/admin/assignment/engine-status', { params: tenantId ? { tenantId } : {} });
@@ -59,7 +62,7 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
         } finally {
             setLoadingEngine(false);
         }
-    }, [authLoading, hasPermission, tenantId]);
+    }, [authLoading, isSuperAdmin, hasPermission, tenantId]);
 
     const updateStatus = async (riderId, newStatus) => {
         if (!hasPermission('delivery.manage')) throw new Error('Your account cannot update rider status.');
@@ -89,11 +92,16 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
     };
 
     useEffect(() => {
-        if (!authLoading && hasPermission('delivery.read')) {
-            fetchRiders();
+        if (authLoading) return;
+        if (hasPermission('delivery.read')) fetchRiders();
+        if (isSuperAdmin && hasPermission('delivery.read')) {
             fetchEngineStatus();
+        } else {
+            // Clear any previously loaded platform telemetry on account/role changes.
+            setEngineStatus({ pipeline: [], logs: [], totalEvaluations: 0 });
+            setLoadingEngine(false);
         }
-    }, [fetchRiders, fetchEngineStatus]);
+    }, [authLoading, hasPermission, fetchRiders, fetchEngineStatus, isSuperAdmin]);
 
     const stats = useMemo(() => {
         const list = Array.isArray(riders) ? riders : [];

@@ -221,8 +221,23 @@ export const authenticateUser = async (req, res, next, options = {}) => {
 };
 
 export const requirePlatformSuperAdmin = (req, res, next) => {
-    const role = req.user?.app_metadata?.role || req.user?.role || req.context?.role;
-    if (role === 'SUPER_ADMIN' || role === 'PLATFORM_SUPER_ADMIN') return next();
+    // Prefer the server-resolved authorization context. It normalizes legacy
+    // platform ADMIN identities to SUPER_ADMIN after membership/scope resolution.
+    // A tenant-scoped context must never inherit platform access from a role label.
+    const authz = req.authz;
+    const role = String(
+        authz?.role
+        || req.user?.app_metadata?.role
+        || req.user?.role
+        || req.context?.role
+        || ''
+    ).trim().toUpperCase();
+    const isPlatformSuperAdmin = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role)
+        || (role === 'ADMIN' && authz?.scope === 'PLATFORM');
+    const hasResolvedAuthorization = Boolean(authz && typeof authz === 'object');
+    const hasPlatformScope = !hasResolvedAuthorization || authz.scope === 'PLATFORM';
+
+    if (isPlatformSuperAdmin && hasPlatformScope) return next();
     return res.status(403).json({
         success: false,
         error: {

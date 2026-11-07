@@ -5,12 +5,15 @@ import RiderCard from './RiderCard';
 import RiderOnboardingModal from './RiderOnboardingModal';
 import AssignmentEngineMonitor from './AssignmentEngineMonitor';
 import RiderTerminal from './RiderTerminal';
+import { useAuth } from '../../../context/AuthContext';
 
 /**
  * Pure Presentation View: RiderFleetView
  * Connects useRiderManagement and useOrderDashboard hooks with UI presentation components.
  */
 export default function RiderFleetView() {
+    const { isSuperAdmin, hasPermission } = useAuth();
+    const canViewTelemetry = isSuperAdmin && hasPermission('delivery.read');
     const [showDisabledRiders, setShowDisabledRiders] = useState(false);
     const {
         riders,
@@ -241,6 +244,7 @@ export default function RiderFleetView() {
             {activeSubTab === 'engine' && (
                 <AssignmentEngineMonitor
                     engineStatus={engineStatus}
+                    canViewTelemetry={canViewTelemetry}
                     unassignedOrders={groupedOrders.unassigned}
                     riders={riders.filter(rider => rider.enabled !== false)}
                     onAutoAssign={handleAutoAssign}
