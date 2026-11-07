@@ -651,6 +651,7 @@ export function AuthProvider({ children }) {
     || (hasPermission('orders.read') && hasPermission('orders.manage'))
     || (hasPermission('medicine_requests.read')
       && hasAnyPermission(['medicine_requests.pending_count', 'medicine_requests.manage', 'medicine_requests.proposal']))
+    || hasPermission('tenant.branches.manage')
     || (['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'admin'].includes(role)
       && hasAnyPermission(['tenants.read', 'users.manage']))
   ));
