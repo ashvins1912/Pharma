@@ -478,13 +478,13 @@ export default function AdminDashboardView() {
                 : 'bg-white text-blue-700 hover:bg-blue-50 border border-blue-200'
             }`}
           >
-            <span>🌐</span>
-            <span>Platform Tenants</span>
+            <span>👥</span>
+            <span>Team Management</span>
           </button>
         )}
         {canManagePlatformAccess && (
           <button onClick={() => setAdminTab('access')} className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${adminTab === 'access' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-blue-700 hover:bg-blue-50 border border-blue-200'}`}>
-            <span>🛡️</span><span>Security Access</span>
+            <span>🛡️</span><span>Team Management · Access</span>
           </button>
         )}
       </div>

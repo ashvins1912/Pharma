@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../../../context/AuthContext';
 import { useRiderManagement } from '../../../hooks/useRiderManagement';
 import { useOrderDashboard } from '../../../hooks/useOrderDashboard';
 import RiderCard from './RiderCard';
@@ -10,6 +11,7 @@ import AssignmentEngineMonitor from './AssignmentEngineMonitor';
  * Connects useRiderManagement and useOrderDashboard hooks with UI presentation components.
  */
 export default function RiderFleetView() {
+    const { isSuperAdmin } = useAuth();
     const [showDisabledRiders, setShowDisabledRiders] = useState(false);
     const {
         riders,
@@ -229,6 +231,7 @@ export default function RiderFleetView() {
                     onAutoAssign={handleAutoAssign}
                     onManualAssign={handleManualAssign}
                     executing={assignmentExecuting}
+                    isSuperAdmin={isSuperAdmin}
                 />
             )}
 

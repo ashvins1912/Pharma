@@ -10,7 +10,8 @@ export default function AssignmentEngineMonitor({
     riders = [],
     onAutoAssign,
     onManualAssign,
-    executing = false
+    executing = false,
+    isSuperAdmin = false
 }) {
     const [selectedOrderId, setSelectedOrderId] = useState(null);
     const [selectedRiderId, setSelectedRiderId] = useState('');
@@ -65,7 +66,8 @@ export default function AssignmentEngineMonitor({
                 </div>
             )}
 
-            {/* Pipeline Strategy Chain Overview */}
+            {isSuperAdmin && (
+            
             <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -114,6 +116,7 @@ export default function AssignmentEngineMonitor({
                     </div>
                 </div>
             </div>
+            )}
 
             {/* Unassigned Orders Queue Ready for Assignment */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
@@ -209,7 +212,8 @@ export default function AssignmentEngineMonitor({
                 )}
             </div>
 
-            {/* Real-time Strategy Evaluation Logs */}
+            {isSuperAdmin && (
+            
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
                     <div>
@@ -254,6 +258,8 @@ export default function AssignmentEngineMonitor({
                     </div>
                 )}
             </div>
+            )}
+
         </div>
     );
 }
