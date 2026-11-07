@@ -18,6 +18,21 @@ app.use((req, res, next) => {
   res.set('X-Correlation-Id', req.correlationId);
   res.set('X-Content-Type-Options', 'nosniff');
   res.set('Cache-Control', 'no-store');
+  const origin = req.get('origin');
+  const allowedOrigins = new Set([
+    process.env.ORDER_CORS_ORIGIN,
+    'https://pharma-ui.onrender.com'
+  ].filter(Boolean));
+  if (origin && allowedOrigins.has(origin)) {
+    res.set('Access-Control-Allow-Origin', origin);
+    res.set('Access-Control-Allow-Credentials', 'true');
+    res.set('Vary', 'Origin');
+  }
+  if (req.method === 'OPTIONS') {
+    res.set('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Authorization,Content-Type,Idempotency-Key,X-Request-Id,X-Correlation-Id,X-Tenant-Id,X-Branch-Id,X-Gateway-Authorization');
+    return res.sendStatus(origin && allowedOrigins.has(origin) ? 204 : 403);
+  }
   res.on('finish', () => console.info(JSON.stringify({
     serviceName: 'order-service',
     requestId: req.requestId,

@@ -7,10 +7,14 @@ const PORT = Number(process.env.PORT || process.env.WS_PORT || 4000);
 const HEARTBEAT_INTERVAL_MS = Number(process.env.WS_HEARTBEAT_INTERVAL_MS || 25_000);
 const PING_INTERVAL_MS = Number(process.env.WS_PING_INTERVAL_MS || 25_000);
 const PING_TIMEOUT_MS = Number(process.env.WS_PING_TIMEOUT_MS || 20_000);
-const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
   .split(',')
   .map(value => value.trim())
   .filter(Boolean);
+const allowedOrigins = Array.from(new Set([
+  ...configuredOrigins,
+  'https://pharma-ui.onrender.com'
+]));
 const pharmaJwtPublicKey = String(process.env.PHARMA_JWT_PUBLIC_KEY || '').replace(/\\n/g, '\n').trim();
 const pharmaJwtIssuer = process.env.PHARMA_JWT_ISSUER || 'pharma-auth';
 const pharmaJwtAudience = process.env.PHARMA_JWT_AUDIENCE || 'pharma-api';
@@ -35,6 +39,18 @@ for (const [name, value] of Object.entries({
 }
 
 const server = http.createServer((req, res) => {
+  const reqOrigin = req.headers.origin;
+  if (reqOrigin && allowedOrigins.includes(reqOrigin)) {
+    res.setHeader('Access-Control-Allow-Origin', reqOrigin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Request-ID, X-Correlation-ID');
+  }
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
   const path = new URL(req.url || '/', 'http://localhost').pathname;
   if (req.method === 'GET' && (path === '/healthz' || path === '/health')) {
     const healthy = !shuttingDown && server.listening && (process.env.NODE_ENV !== 'production' || authConfigured);

@@ -19,7 +19,9 @@ export const authenticateUser = async (req, res, next, options = {}) => {
     // RBAC before forwarding. The backend still verifies the gateway signature,
     // request binding, expiry and audience; it does not trust browser-supplied
     // identity headers.
-    const trustedHeader = req.headers['x-gateway-trusted-authorization'];
+    const trustedHeader = !options.allowDirect
+        ? (req.headers['x-gateway-trusted-authorization'] || req.headers['x-gateway-authorization'])
+        : req.headers['x-gateway-trusted-authorization'];
     if (typeof trustedHeader === 'string' && trustedHeader.startsWith('Bearer ')) {
         try {
             const { payload } = await verifyGatewayTrustedRequestToken(trustedHeader.slice(7).trim());

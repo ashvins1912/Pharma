@@ -76,7 +76,9 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
       'X-Tenant-Id',
       'X-Branch-Id',
       'X-XSRF-TOKEN',
-      'X-CSRF-TOKEN'
+      'X-CSRF-TOKEN',
+      'X-Gateway-Authorization',
+      'X-Gateway-Trusted-Authorization'
     ],
     exposedHeaders: ['X-Request-Id', 'X-Correlation-Id'],
     maxAge: 600,

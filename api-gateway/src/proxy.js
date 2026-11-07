@@ -43,7 +43,12 @@ export function proxyRequest(
     delete headers['x-xsrf-token'];
     delete headers['x-csrf-token'];
     headers.authorization = serviceAuthorization;
-    if (req.gatewayAuthenticated) headers['x-gateway-trusted-authorization'] = serviceAuthorization;
+    if (req.gatewayAuthenticated) {
+      headers['x-gateway-trusted-authorization'] = serviceAuthorization;
+      if (upstreamName === 'Backend') {
+        headers['x-gateway-authorization'] = serviceAuthorization;
+      }
+    }
     // The canonical application identity is the verified token subject (sub).
     // Some auth adapters do not populate a separate id field.
     const userId = req.user?.sub || req.user?.id;

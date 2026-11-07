@@ -3,7 +3,10 @@ import cors from 'cors';
 export const corsOriginErrorCode = 'CORS_ORIGIN_NOT_ALLOWED';
 
 export function createCorsMiddleware(allowedOrigins) {
-    const allowed = new Set(allowedOrigins);
+    const allowed = new Set([
+        ...allowedOrigins,
+        'https://pharma-ui.onrender.com'
+    ]);
     return cors({
         origin(origin, callback) {
             if (!origin || allowed.has(origin)) return callback(null, true);
@@ -43,7 +46,9 @@ export function createCorsMiddleware(allowedOrigins) {
             'X-CSRF-TOKEN',
             'X-Pharma-Client',
             'X-Tenant-Id',
+            'X-Branch-Id',
             'X-Pharma-Tenant-Id',
+            'X-Gateway-Authorization',
             'X-Gateway-Trusted-Authorization'
         ],
         exposedHeaders: ['X-Request-Id', 'X-Correlation-Id'],
