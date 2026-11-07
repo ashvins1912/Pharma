@@ -1,0 +1,131 @@
+/*
+ * Responsive layout guardrails.
+ * Keep these rules scoped to known component roots; avoid changing all buttons,
+ * grids, and nested content globally. Explicit Tailwind width utilities remain
+ * authoritative for controls that intentionally fill their container.
+ */
+
+.pharma-responsive-scope,
+.pharma-responsive-scope * {
+  min-width: 0;
+}
+
+.pharma-responsive-scope {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Controls size to their label by default; .w-full remains intentional. */
+.pharma-responsive-scope :where(button:not(.w-full):not([data-full-width="true"])) {
+  width: auto;
+  max-width: 100%;
+  flex: 0 1 auto;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/* Action rows wrap instead of forcing children to expand or overflow. */
+.pharma-responsive-scope :where(.flex.items-center, .flex.justify-end, .flex.justify-between) {
+  min-width: 0;
+}
+
+.pharma-responsive-scope :where(.flex.items-center.gap-2, .flex.items-center.gap-3,
+  .flex.justify-end.gap-2, .flex.justify-end.gap-3) {
+  flex-wrap: wrap;
+}
+
+/* Grid cards use a bounded minimum, with a single column when space is scarce. */
+.pharma-responsive-scope :where(.grid:not([class*="grid-cols-"])) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+
+/* Prevent nested panels, forms and media from exceeding their parent. */
+.pharma-responsive-scope :where(article, section, form, fieldset, .rounded-xl,
+  .rounded-2xl, .rounded-3xl, [role="dialog"]) {
+  max-width: 100%;
+}
+
+.pharma-responsive-scope :where(input:not([type="checkbox"]):not([type="radio"]),
+  select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pharma-responsive-scope :where(img, video, canvas, iframe) {
+  max-width: 100%;
+}
+
+/* Keep tables usable without widening the page; scroll only their wrapper. */
+.pharma-responsive-scope :where(.overflow-x-auto, [data-table-scroll="true"]) {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 639px) {
+  .pharma-responsive-scope :where(.flex.items-center, .flex.justify-end,
+    .flex.justify-between) {
+    gap: 0.5rem;
+  }
+
+  .pharma-responsive-scope :where(button:not(.w-full):not([data-full-width="true"])) {
+    min-height: 40px;
+    padding-inline: 0.75rem;
+  }
+}
+
+/* Admin dashboard module-specific sizing; intentionally isolated. */
+.admin-screen {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.admin-screen :where(.grid) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+
+.admin-screen :where(button:not(.w-full):not([data-full-width="true"])) {
+  width: auto;
+  max-width: 100%;
+  flex: 0 1 auto;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.admin-screen :where(.flex.items-center, .flex.justify-end, .flex.justify-between) {
+  min-width: 0;
+}
+
+.admin-screen :where(.flex.items-center.gap-2, .flex.items-center.gap-3,
+  .flex.justify-end.gap-2, .flex.justify-end.gap-3) {
+  flex-wrap: wrap;
+}
+
+.admin-screen :where(.overflow-x-auto) {
+  width: 100%;
+  max-width: 100%;
+}
+
+@media (max-width: 639px) {
+  .admin-screen :where(.grid) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-screen :where(button:not(.w-full):not([data-full-width="true"])) {
+    min-height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pharma-responsive-scope *,
+  .admin-screen * {
+    scroll-behavior: auto;
+    animation-duration: 0.01ms;
+    transition-duration: 0.01ms;
+  }
+}

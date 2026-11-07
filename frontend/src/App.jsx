@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import './styles/responsive-guardrails.css';
 import { useAuth } from './context/AuthContext';
 import { useToast } from './context/ToastContext';
 import { useApp } from './context/AppContext';
@@ -364,7 +365,7 @@ function MainApp() {
   }
 
   return (
-    <div className="min-h-screen min-h-dvh w-full min-w-0 bg-slate-50 flex flex-col font-sans text-slate-800 antialiased selection:bg-blue-100 selection:text-blue-900 overflow-x-clip">
+    <div className="pharma-responsive-scope min-h-screen min-h-dvh w-full min-w-0 bg-slate-50 flex flex-col font-sans text-slate-800 antialiased selection:bg-blue-100 selection:text-blue-900 overflow-x-clip">
       
       {/* Responsive Header */}
       <Header
