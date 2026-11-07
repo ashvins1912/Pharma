@@ -67,7 +67,7 @@ export default function AssignmentEngineMonitor({
             )}
 
             {isSuperAdmin && (
-            {/* Pipeline Strategy Chain Overview */}
+            
             <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -213,7 +213,7 @@ export default function AssignmentEngineMonitor({
             </div>
 
             {isSuperAdmin && (
-            {/* Real-time Strategy Evaluation Logs */}
+            
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
                     <div>
