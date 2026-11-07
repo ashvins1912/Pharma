@@ -39,20 +39,16 @@ export function AppProvider({ children }) {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(16);
 
-  // Cart & Checkout State
-  const [cart, setCart] = useState([]);
-  const previousCartTenantId = useRef(tenantId);
-  useEffect(() => {
-    const previousTenantId = previousCartTenantId.current;
-    if (String(previousTenantId || '') !== String(tenantId || '') && cart.length > 0) {
-      // A cart is bound to exactly one pharmacy. Clear it on every tenant
-      // transition, including tenant -> no selection -> another tenant.
-      setCart([]);
-      setAppliedCoupon(null);
-      setCouponCode('');
-    }
-    previousCartTenantId.current = tenantId;
-  }, [tenantId, cart.length]);
+  // Cart & Checkout State. Persist separately per authenticated customer and
+  // pharmacy so refreshes restore the cart without leaking items/prices between tenants.
+  const cartCacheKey = user?.id && tenantId
+    ? `${CUSTOMER_CACHE_PREFIX}${user.id}:cart:${tenantId}`
+    : null;
+  const [cart, setCart] = usePersistentState(
+    cartCacheKey,
+    [],
+    { storage: 'local', ttl: 30 * 24 * 60 * 60 * 1000, enabled: Boolean(isFullyAuthenticated && cartCacheKey) }
+  );
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponCode, setCouponCode] = useState('');
   const [couponError, setCouponError] = useState('');
