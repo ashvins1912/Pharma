@@ -540,14 +540,17 @@ export class NotificationService {
             ).lean();
         }
         const notif = this.notifications.find(notification => {
-            if (notification.id !== notificationId) return false;
+            if (String(notification.id) !== String(notificationId)) return false;
             if (!isSuperAdmin && notification.recipientUserId && notification.recipientUserId !== userId) return false;
             if (!isSuperAdmin && notification.tenantId && notification.tenantId !== tenantId) return false;
             if (!isSuperAdmin && notification.branchId && notification.branchId !== branchId) return false;
             if (!isSuperAdmin && !notification.recipientUserId && !notification.tenantId) return false;
             return true;
         });
-        if (notif) notif.read = true;
+        if (notif) {
+            notif.read = true;
+            notif.readAt = new Date();
+        }
         return notif || null;
     }
 }
