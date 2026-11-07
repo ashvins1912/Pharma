@@ -7,6 +7,7 @@ import apiClient from '../api/apiClient';
 import AddressManager from './AddressManager';
 import { useTenant } from '../context/TenantContext';
 import { useLanguage } from '../context/LanguageContext';
+import { buildFulfillmentQuoteItems, getCheckoutQuoteEffectAction } from '../utils/checkoutFulfillment.js';
 
 export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const { t } = useLanguage();
@@ -56,47 +57,6 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     return () => { cancelled = true; };
   }, [isOpen, user?.id]);
 
-  const splitQuoteRequestId = useRef(0);
-  useEffect(() => {
-    if (!isOpen || !fulfillmentPlan?.customerDecisionRequired || !fulfillmentConfirmed) return undefined;
-    const requestId = ++splitQuoteRequestId.current;
-    const items = [];
-    for (const line of fulfillmentPlan.lines || []) {
-      if (line.fulfilNowQuantity > 0) items.push({ medicineId: line.productId, quantity: line.fulfilNowQuantity });
-      if (line.waitingQuantity > 0) {
-        const choice = alternativeChoices[line.productId];
-        if (choice && choice !== 'REMOVE') {
-          items.push({ medicineId: choice, quantity: line.waitingQuantity });
-        }
-      }
-    }
-    if (!items.length) {
-      setRewardQuote(null);
-      setQuoteError('');
-      setQuoteLoading(false);
-      return undefined;
-    }
-    setQuoteLoading(true);
-    setQuoteError('');
-    apiClient.post('/api/orders/checkout/quote', {
-      tenantId: tenantId || '',
-      branchId: String(branchId || activeTenant?.branchId || ''),
-      items,
-      pointsToRedeem: usePoints ? Number(pointsRequested) || 0 : 0,
-      couponCode: appliedCoupon?.code || ''
-    }).then(response => {
-      if (requestId === splitQuoteRequestId.current) setRewardQuote(response.data);
-    }).catch(error => {
-      if (requestId === splitQuoteRequestId.current) {
-        setRewardQuote(null);
-        setQuoteError(error.response?.data?.message || error.message || 'Could not calculate the updated order total.');
-      }
-    }).finally(() => {
-      if (requestId === splitQuoteRequestId.current) setQuoteLoading(false);
-    });
-    return () => { splitQuoteRequestId.current += 1; };
-  }, [isOpen, fulfillmentPlan, fulfillmentConfirmed, alternativeChoices, tenantId, branchId, activeTenant?.branchId, usePoints, pointsRequested, appliedCoupon?.code]);
-
   const quoteRequestId = useRef(0);
   const cartForQuote = JSON.stringify(cart.map(item => ({
     medicineId: item._id,
@@ -117,10 +77,17 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   }, [alternativeChoices, waitDays, usePoints, pointsRequested, appliedCoupon?.code, selectedAddressId, patientPuid]);
 
   useEffect(() => {
-    if (!isOpen || cart.length === 0 || (fulfillmentPlan?.customerDecisionRequired && fulfillmentConfirmed)) {
+    const quoteEffectAction = getCheckoutQuoteEffectAction({
+      isOpen,
+      cartLength: cart.length,
+      fulfillmentPlan,
+      fulfillmentConfirmed
+    });
+    if (quoteEffectAction === 'clear') {
       setRewardQuote(null);
       return undefined;
     }
+    if (quoteEffectAction === 'preserve') return undefined;
     const requestId = ++quoteRequestId.current;
     setQuoteLoading(true);
     const timeout = window.setTimeout(async () => {
@@ -240,6 +207,8 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         setFulfillmentPlanSignature(currentPlanSignature);
         setWaitlistKey(current => current || (window.crypto?.randomUUID?.() || `wait-${Date.now()}-${Math.random().toString(36).slice(2)}`));
         setFulfillmentConfirmed(false);
+        setRewardQuote(null);
+        setQuoteError('');
         setFulfillmentLoading(false);
         return;
       }
@@ -429,19 +398,8 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
   const handleConfirmFulfillmentChoices = async () => {
     if (!fulfillmentPlan) return;
-    const selectedItems = [];
-    for (const line of fulfillmentPlan.lines || []) {
-      if (line.fulfilNowQuantity > 0) selectedItems.push({ medicineId: line.productId, quantity: line.fulfilNowQuantity });
-      if (line.waitingQuantity > 0) {
-        const alternativeId = alternativeChoices[line.productId];
-        const alternative = line.alternatives?.find(item => item.productId === alternativeId);
-        if (alternativeId && alternativeId !== 'REMOVE' && alternative
-          && !alternative.requiresPharmacistApproval
-          && alternative.availableQuantity >= line.waitingQuantity) {
-          selectedItems.push({ medicineId: alternative.productId, quantity: line.waitingQuantity });
-        }
-      }
-    }
+    const selectedItems = buildFulfillmentQuoteItems(fulfillmentPlan, alternativeChoices);
+    setQuoteError('');
     if (selectedItems.length) {
       setQuoteLoading(true);
       try {
@@ -453,15 +411,16 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           couponCode: appliedCoupon?.code || ''
         });
         setRewardQuote(response.data);
-        setQuoteError('');
       } catch (error) {
-        setErrorMsg(error.response?.data?.message || error.message || 'Could not calculate the updated order total. Please try again.');
-        setQuoteLoading(false);
+        const message = error.response?.data?.message || error.message || 'Could not calculate the updated order total. Please try again.';
+        setQuoteError(message);
+        setErrorMsg(message);
         return;
       } finally {
         setQuoteLoading(false);
       }
     } else {
+      // Waiting-only and remove-only selections have no payable basket.
       setRewardQuote(null);
     }
     setFulfillmentConfirmed(true);
@@ -829,11 +788,11 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           </button>
           <button
             onClick={handlePlaceOrder}
-            disabled={loading || !tenantId || !selectedAddress || cart.length === 0}
+            disabled={loading || !tenantId || !selectedAddress || cart.length === 0 || (fulfillmentPlan?.customerDecisionRequired && fulfillmentConfirmed && quoteLoading)}
             className="w-full sm:w-2/3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold py-3 rounded-2xl text-xs shadow-lg shadow-emerald-600/25 transition cursor-pointer flex items-center justify-center gap-2"
           >
             {(loading || fulfillmentLoading) && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
-            <span>{loading ? t('creatingOrder') : fulfillmentPlan?.customerDecisionRequired && !fulfillmentConfirmed ? 'Review stock options' : t('confirmCodOrder')}</span>
+            <span>{loading ? t('creatingOrder') : fulfillmentPlan?.customerDecisionRequired && !fulfillmentConfirmed ? 'Review stock options' : fulfillmentPlan?.customerDecisionRequired && quoteLoading ? 'Updating order total…' : t('confirmCodOrder')}</span>
             <span>✓</span>
           </button>
         </div>
