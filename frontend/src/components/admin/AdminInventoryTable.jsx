@@ -86,7 +86,6 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
     setMedicineDraft(medicine ? {
       ...medicine,
       drug: medicine.drug || medicine.activeSalt || '',
-      batchNumber: medicine.batchNumber || '',
       hsnSac: medicine.hsnSac || '',
       imageUrl: medicine.imageUrl || '',
       stockQuantity: medicine.batchAvailability?.[0]?.stockQuantity ?? medicine.stockQuantity ?? medicine.stock ?? medicine.quantity ?? 0,

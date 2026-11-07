@@ -17,6 +17,7 @@ import notificationsRouter from './routes/notifications.js';
 import authRouter from './routes/auth.js';
 import profileRouter from './routes/profile.js';
 import adminTenantsRouter from './routes/adminTenants.js';
+import adminFeatureHealthRouter from './routes/adminFeatureHealth.js';
 import vendorRouter from './routes/vendorRoutes.js';
 import paymentActionRoutes from '../routes/paymentActionRoutes.js';
 import adminPaymentReminderRoutes from '../routes/adminPaymentReminderRoutes.js';
@@ -40,10 +41,36 @@ gateway.get('/health', (req, res) => {
     });
 });
 
+import { probeAllServices } from './routes/adminFeatureHealth.js';
+
+gateway.get('/health/services', async (_req, res, next) => {
+    try {
+        const services = await probeAllServices(8000);
+        res.json({
+            success: true,
+            checkedAt: new Date().toISOString(),
+            overallStatus: services.every(s => s.healthy) ? 'HEALTHY' : 'DEGRADED',
+            services: services.map(s => ({
+                serviceName: s.id,
+                status: s.healthy ? 'HEALTHY' : 'UNHEALTHY',
+                checkedAt: s.lastChecked,
+                responseTimeMs: s.latencyMs,
+                httpStatus: s.httpStatus,
+                errorType: s.healthy ? null : (s.error || 'UNREACHABLE'),
+                errorMessage: s.error || null,
+                telemetry: s.details
+            }))
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
 // 3. Domain Subrouters
 gateway.use('/auth', authRouter);
 gateway.use('/profile', profileRouter);
 gateway.use('/admin/tenants', adminTenantsRouter);
+gateway.use('/admin/feature-health', adminFeatureHealthRouter);
 gateway.use('/vendors', vendorRouter);
 gateway.use('/vendor', vendorRouter);
 gateway.use('/tenants', tenantsRouter);

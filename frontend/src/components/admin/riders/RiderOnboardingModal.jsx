@@ -57,7 +57,9 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
         );
     };
 
-    return (
+    if (typeof document === 'undefined') return null;
+
+    return createPortal(
         <div className="fixed inset-0 z-[1000] flex items-start sm:items-center justify-center overflow-y-auto overscroll-contain p-3 sm:p-4 modal-overlay animate-fade-in">
             <div className="pharma-modal-surface relative max-w-lg w-full p-4 sm:p-8 max-h-[calc(100dvh-1.5rem)] sm:max-h-[90dvh] overflow-y-auto overscroll-contain">
                 {/* Header */}

@@ -190,6 +190,36 @@ export default function AutomationTestCenterTab() {
       attempts++;
       const reqStart = performance.now();
       try {
+        // Try probing via API Gateway proxy first to bypass browser CORS restrictions on Render services
+        let probeResult = null;
+        try {
+          const proxyRes = await apiClient.get('/api/v1/admin/feature-health/probe-service', {
+            params: { serviceId: service.id, url: service.url, timeoutMs: 15000 }
+          });
+          if (proxyRes.data?.success) {
+            probeResult = proxyRes.data;
+          }
+        } catch {
+          // Fall back to direct browser fetch if gateway is unreachable
+        }
+
+        if (probeResult && probeResult.healthy) {
+          setMicroservicesHealth(prev => ({
+            ...prev,
+            [serviceId]: {
+              status: 'ONLINE',
+              statusCode: probeResult.statusCode || 200,
+              latencyMs: probeResult.latencyMs || Math.round(performance.now() - reqStart),
+              attempts,
+              elapsedSeconds: Math.round((Date.now() - startTime) / 1000),
+              lastChecked: new Date().toLocaleTimeString(),
+              payload: probeResult.payload ? String(probeResult.payload).slice(0, 300) : '{"status":"healthy","service":"connected"}'
+            }
+          }));
+          return true;
+        }
+
+        // Direct browser fetch fallback
         const response = await fetch(service.url, {
           method: 'GET',
           mode: 'cors',
@@ -210,7 +240,7 @@ export default function AutomationTestCenterTab() {
               attempts,
               elapsedSeconds: Math.round((Date.now() - startTime) / 1000),
               lastChecked: new Date().toLocaleTimeString(),
-              payload: payloadText ? payloadText.slice(0, 300) : '{"status":"healthy","service":"connected"}'
+              payload: payloadText ? String(payloadText).slice(0, 300) : '{"status":"healthy","service":"connected"}'
             }
           }));
           return true;
@@ -230,7 +260,7 @@ export default function AutomationTestCenterTab() {
         }
       }));
 
-      await new Promise(r => setTimeout(r, 3000));
+      await new Promise(r => setTimeout(r, 2500));
     }
 
     // Timed out after 60s

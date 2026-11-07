@@ -18,6 +18,7 @@ import PlatformAccessControl from './PlatformAccessControl';
 import LiveTelemetryTab from './LiveTelemetryTab';
 import RoleFeatureMatrixTab from './RoleFeatureMatrixTab';
 import AutomationTestCenterTab from './AutomationTestCenterTab';
+import FeatureHealthDashboard from './FeatureHealthDashboard';
 import TenantProfileDashboard from './TenantProfileDashboard';
 import { useLanguage } from '../../context/LanguageContext';
 import { getAdminMedicineRequests, getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
@@ -663,6 +664,20 @@ export default function AdminDashboardView() {
             </button>
           )}
 
+          {isSuperAdmin && (
+            <button
+              onClick={() => setAdminTab('featureHealth')}
+              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                adminTab === 'featureHealth'
+                  ? 'bg-rose-600 text-white shadow-md'
+                  : 'bg-slate-50 dark:bg-gray-800 text-rose-600 dark:text-rose-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-rose-200 dark:border-gray-700'
+              }`}
+            >
+              <span>🛡️</span>
+              <span>Feature Health &amp; Blocker Intelligence</span>
+            </button>
+          )}
+
           {!isSuperAdmin && (
           <button
             onClick={() => setAdminTab('tenantProfile')}
@@ -698,6 +713,9 @@ export default function AdminDashboardView() {
       )}
       {adminTab === 'automation' && isSuperAdmin && (
         <div className="admin-screen admin-screen--automation"><AutomationTestCenterTab /></div>
+      )}
+      {adminTab === 'featureHealth' && isSuperAdmin && (
+        <div className="admin-screen admin-screen--feature-health"><FeatureHealthDashboard /></div>
       )}
       {adminTab === 'tenantProfile' && !isSuperAdmin && (
         <div className="admin-screen admin-screen--tenant-profile"><TenantProfileDashboard /></div>
