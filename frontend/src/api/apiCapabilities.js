@@ -352,11 +352,11 @@ export const API_CAPABILITIES = [
     permission: 'users.manage'
   },
   {
-  {
     method: 'GET',
     pattern: /^\/api\/v1\/admin\/service-logs(?:\/|$)/,
     permission: 'users.read'
   },
+  {
     method: 'GET',
     pattern: /^\/api\/v1\/admin\/tenants(?:\/|$)/,
     permission: 'tenants.read'
