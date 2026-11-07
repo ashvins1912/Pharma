@@ -77,7 +77,10 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
         });
       }
     }
-    if (entry.status === 'CONFIRMING' && entry.confirmingAt && new Date(entry.confirmingAt).getTime() < now.getTime() - 10 * 60 * 1000) {
+    const confirmingTimestamp = new Date(entry.confirmingAt || entry.updatedAt || entry.createdAt || 0).getTime();
+    const staleConfirmation = !Number.isFinite(confirmingTimestamp)
+      || confirmingTimestamp <= now.getTime() - 10 * 60 * 1000;
+    if (entry.status === 'CONFIRMING' && staleConfirmation) {
       const recoveredOrder = entry.confirmationId ? await Order.findOne({ fulfillmentConfirmationId: entry.confirmationId }).lean() : null;
       if (recoveredOrder) {
         const confirmationLines = entry.confirmationLines || [];
@@ -86,15 +89,25 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
           const quantity = Math.min(Number(confirmed?.allocatedQuantity || 0), Number(line.waitingQuantity || 0));
           return { ...line, requestedQuantity: Math.max(0, Number(line.waitingQuantity || 0) - quantity), allocatedQuantity: 0, waitingQuantity: Math.max(0, Number(line.waitingQuantity || 0) - quantity), notifiedAvailableQuantity: 0 };
         }).filter(line => line.requestedQuantity > 0);
-        const rootOrderId = String(entry.parentOrderId || recoveredOrder._id);
-        const isChildOrder = rootOrderId !== String(recoveredOrder._id);
-        const parentUpdate = await Order.updateOne(
+        let rootOrderId = String(entry.parentOrderId || recoveredOrder._id);
+        let isChildOrder = rootOrderId !== String(recoveredOrder._id);
+        let parentUpdate = await Order.updateOne(
           { _id: rootOrderId, tenantId: entry.tenantId },
           {
             $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' },
             ...(isChildOrder ? { $addToSet: { childOrderIds: String(recoveredOrder._id) } } : {})
           }
         );
+        if (!parentUpdate.matchedCount && isChildOrder) {
+          // The original parent may have been removed; promote the committed
+          // child order so this confirmation can still be finalized.
+          rootOrderId = String(recoveredOrder._id);
+          isChildOrder = false;
+          parentUpdate = await Order.updateOne(
+            { _id: rootOrderId, tenantId: entry.tenantId },
+            { $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' } }
+          );
+        }
         if (!parentUpdate.matchedCount) {
           // Keep the claim for a later recovery pass; never discard the committed order link.
           continue;
@@ -107,7 +120,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
         await FulfillmentCase.updateOne({ _id: entry._id, status: 'CONFIRMING', confirmationId: entry.confirmationId }, recoveryUpdate);
         if (entry.sourceType === 'MEDICINE_REQUEST' && entry.sourceId) await MedicineRequest.updateOne({ _id: entry.sourceId, fulfillmentCaseId: String(entry._id) }, { $set: { status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'CONVERTED_TO_ORDER', convertedOrderId: rootOrderId } });
       } else {
-        await FulfillmentCase.updateOne({ _id: entry._id, status: 'CONFIRMING', confirmationId: entry.confirmationId }, {
+        await FulfillmentCase.updateOne({ _id: entry._id, status: 'CONFIRMING', confirmationId: entry.confirmationId || null }, {
           $set: { status: entry.confirmationPreviousStatus || 'WAITING_FOR_STOCK', confirmationId: null, confirmingAt: null, confirmationPreviousStatus: null, confirmationLines: [], lastAvailabilityCheckAt: null },
           $push: { auditTrail: { action: 'CONFIRMATION_CLAIM_RECOVERED', at: now, actorId: 'system' } }
         });
