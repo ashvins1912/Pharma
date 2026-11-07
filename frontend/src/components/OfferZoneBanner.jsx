@@ -110,7 +110,9 @@ export default function OfferZoneBanner() {
 
   if (authLoading || !user || !tenantId || (displayedTenantId && displayedTenantId !== tenantId)) return null;
 
-  const cartQuantityFor = item => Number(cart.find(cartItem => String(cartItem._id) === String(item.medicineId || item._id) && String(cartItem._cartTenantId || cartItem.tenantId || '') === String(tenantId) && String(cartItem._cartBranchId || cartItem.branchId || '') === String(branchId || ''))?.quantity || 0);\n\n  const totalPages = Math.max(1, Math.ceil(items.length / itemsPerPage));
+  const cartQuantityFor = item => Number(cart.find(cartItem => String(cartItem._id) === String(item.medicineId || item._id) && String(cartItem._cartTenantId || cartItem.tenantId || '') === String(tenantId) && String(cartItem._cartBranchId || cartItem.branchId || '') === String(branchId || ''))?.quantity || 0);
+
+  const totalPages = Math.max(1, Math.ceil(items.length / itemsPerPage));
   const currentOffers = items.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const handleAddToCart = item => {
@@ -173,7 +175,8 @@ export default function OfferZoneBanner() {
                 </span>
               </div>
               <h3 className="font-extrabold text-xs sm:text-sm line-clamp-2">{item.name}</h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">{item.campaignName}{item.campaignDescription ? ` · ${item.campaignDescription}` : ''}</p>\n              <div className="flex flex-wrap items-center gap-2 text-[10px]"><span className="rounded-full bg-indigo-50 px-2 py-1 font-bold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">{Number(item.redemptionCount || 0).toLocaleString()} redeemed</span>{item.remainingClaims != null && <span className="rounded-full bg-amber-50 px-2 py-1 font-bold text-amber-700 dark:bg-amber-950 dark:text-amber-300">{Number(item.remainingClaims).toLocaleString()} left</span>}</div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">{item.campaignName}{item.campaignDescription ? ` · ${item.campaignDescription}` : ''}</p>
+              <div className="flex flex-wrap items-center gap-2 text-[10px]"><span className="rounded-full bg-indigo-50 px-2 py-1 font-bold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">{Number(item.redemptionCount || 0).toLocaleString()} redeemed</span>{item.remainingClaims != null && <span className="rounded-full bg-amber-50 px-2 py-1 font-bold text-amber-700 dark:bg-amber-950 dark:text-amber-300">{Number(item.remainingClaims).toLocaleString()} left</span>}</div>
               {Number(item.minOrderAmount) > 0 && <p className="text-[10px] text-amber-700 dark:text-amber-300">Minimum basket ₹{Number(item.minOrderAmount).toFixed(0)}</p>}
             </div>
             <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
@@ -182,9 +185,7 @@ export default function OfferZoneBanner() {
                 <div className="text-sm font-black text-emerald-600 dark:text-emerald-400">₹{Number(item.discountedPrice).toFixed(2)}</div>
                 <div className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300">Save ₹{Number(item.savingsAmount).toFixed(2)}</div>
               </div>
-              <button type="button" onClick={() => handleAddToCart(item)} disabled={Number(item.stock) <= 0} className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-bold text-xs px-3 py-2 rounded-xl transition shadow-sm">
-                Claim Offer
-              </button>
+              <button type="button" onClick={() => handleAddToCart(item)} disabled={Number(item.stock) <= 0} aria-label={cartQuantityFor(item) > 0 ? `${item.name}, ${cartQuantityFor(item)} in cart` : `Claim offer for ${item.name}`} className={`offer-claim-flip rounded-xl text-white font-bold text-xs shadow-sm disabled:bg-slate-400 disabled:cursor-not-allowed ${cartQuantityFor(item) > 0 ? 'is-added' : ''}`}><span className="offer-claim-flip-inner"><span className="offer-claim-flip-face offer-claim-flip-front bg-blue-600 hover:bg-blue-700">Claim Offer</span><span className="offer-claim-flip-face offer-claim-flip-back bg-emerald-600">{cartQuantityFor(item) > 0 ? `In cart · ${cartQuantityFor(item)}` : 'Added to cart'}</span></span></button>
             </div>
           </article>
         ))}
