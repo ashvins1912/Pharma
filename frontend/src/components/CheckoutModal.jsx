@@ -84,10 +84,17 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       fulfillmentConfirmed
     });
     if (quoteEffectAction === 'clear') {
+      // Invalidate any in-flight original-basket quote before clearing it.
+      quoteRequestId.current += 1;
       setRewardQuote(null);
+      setQuoteLoading(false);
       return undefined;
     }
-    if (quoteEffectAction === 'preserve') return undefined;
+    if (quoteEffectAction === 'preserve') {
+      // An older original-basket request must not overwrite the confirmed split quote.
+      quoteRequestId.current += 1;
+      return undefined;
+    }
     const requestId = ++quoteRequestId.current;
     setQuoteLoading(true);
     const timeout = window.setTimeout(async () => {
@@ -436,6 +443,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     } else {
       // Waiting-only and remove-only selections have no payable basket.
       setRewardQuote(null);
+      setQuoteLoading(false);
     }
   };
 
