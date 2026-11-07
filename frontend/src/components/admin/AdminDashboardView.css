@@ -1418,3 +1418,92 @@ html.dark .admin-screen :where(.overflow-x-auto) {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+
+/* Final layout normalization: keep navigation labels readable without mid-word
+   breaks, and let navigation groups gain width on narrow phones. */
+.dashboard-nav-item {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  text-align: start;
+}
+
+.dashboard-nav-item > span:first-child {
+  flex: 0 0 1.5rem;
+  width: 1.5rem;
+  max-width: 1.5rem;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.dashboard-nav-item > span:nth-child(2) {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: auto;
+}
+
+.dashboard-nav-group,
+.dashboard-nav-group-items,
+.dashboard-workspace-nav > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dashboard-nav-group-title {
+  overflow-wrap: normal;
+  word-break: normal;
+  text-wrap: balance;
+}
+
+@media (max-width: 480px) {
+  /* At phone widths, each workflow group receives the full row. This avoids
+     cramped two-column groups and keeps icon + label aligned horizontally. */
+  .dashboard-workspace-nav {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.65rem;
+  }
+
+  .dashboard-nav-group {
+    padding: 0.75rem;
+  }
+
+  .dashboard-nav-group-title {
+    min-height: 0;
+    margin-bottom: 0.6rem;
+    font-size: 0.7rem;
+    line-height: 1.35;
+  }
+
+  .dashboard-nav-group-items {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+  }
+
+  .dashboard-nav-group .dashboard-nav-item {
+    min-height: 44px;
+    padding: 0.6rem 0.75rem !important;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    gap: 0.6rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .dashboard-shell {
+    padding-inline: 0.25rem;
+  }
+
+  .dashboard-nav-group {
+    padding: 0.65rem;
+  }
+
+  .dashboard-nav-group .dashboard-nav-item {
+    padding-inline: 0.6rem !important;
+    font-size: 0.8rem;
+  }
+}
