@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import './styles/responsive-guardrails.css';
 import { useAuth } from './context/AuthContext';
 import { useToast } from './context/ToastContext';
 import { useApp } from './context/AppContext';
