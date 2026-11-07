@@ -144,15 +144,32 @@ export class NotificationService {
             });
         });
         domainEvents.on('ORDER_CREATED', (evt) => {
+            const orderNumber = evt.payload?.orderNumber || evt.entityId;
             this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
                 recipientUserId: this._recipientUserId(evt),
                 title: 'Order Confirmed',
-                body: `Your order #${evt.payload?.orderNumber || evt.entityId} has been received and queued for pharmacy verification.`,
+                body: `Your order #${orderNumber} has been received and queued for pharmacy verification.`,
                 eventType: 'ORDER_CREATED', orderId: evt.entityId,
                 channels: ['IN_APP', 'WHATSAPP']
             });
+
+            // Customer and pharmacy staff are separate audiences. The customer
+            // notification above is private; this tenant-scoped event ensures
+            // inventory/order staff also see new orders in their notification feed.
+            if (evt.tenantId) {
+                this.send({ sourceEventId: evt.eventId,
+                    tenantId: evt.tenantId,
+                    branchId: evt.branchId,
+                    recipientUserId: null,
+                    title: 'New order requires inventory review',
+                    body: `Order #${orderNumber} was placed and is ready for pharmacy inventory verification and fulfilment.`,
+                    eventType: 'INVENTORY_ORDER_RECEIVED',
+                    orderId: evt.entityId,
+                    channels: ['IN_APP']
+                });
+            }
             if (evt.payload?.order) {
                 sendCustomWhatsAppAlert(evt.payload.order, 'Placed').catch(err => logger.warn('[WhatsApp] OrderCreated alert failed:', err?.message));
             }
