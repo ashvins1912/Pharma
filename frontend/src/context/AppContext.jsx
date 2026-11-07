@@ -42,7 +42,7 @@ export function AppProvider({ children }) {
   // Cart & Checkout State. Persist separately per authenticated customer and
   // pharmacy so refreshes restore the cart without leaking items/prices between tenants.
   const cartCacheKey = user?.id && tenantId
-    ? `${CUSTOMER_CACHE_PREFIX}${user.id}:cart:${tenantId}`
+    ? `${CUSTOMER_CACHE_PREFIX}${user.id}:cart:${tenantId}:branch:${branchId || 'default'}`
     : null;
   const [cart, setCart] = usePersistentState(
     cartCacheKey,
@@ -900,7 +900,7 @@ export function AppProvider({ children }) {
       return;
     }
 
-    setCart([...cart, { ...med, quantity: 1, stock, maxCartQuantity, _cartTenantId: tenantId || med.tenantId || null }]);
+    setCart([...cart, { ...med, quantity: 1, stock, maxCartQuantity, _cartTenantId: tenantId || med.tenantId || null, _cartBranchId: branchId || med.branchId || null }]);
     addToast(`Added ${med.name} to cart`, 'success');
   };
 
