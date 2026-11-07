@@ -4,6 +4,8 @@ import AdminFulfillmentKanban from './AdminFulfillmentKanban';
 import AdminInventoryTable from './AdminInventoryTable';
 import AdminRouteOptimizer from './AdminRouteOptimizer';
 import TenantActivityFeed from './TenantActivityFeed';
+import TenantStaffManager from './TenantStaffManager';
+import ServiceLogsTab from './ServiceLogsTab';
 
 import RiderFleetView from './riders/RiderFleetView';
 import AdminOrderFinancials from './AdminOrderFinancials';
@@ -22,6 +24,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { getAdminMedicineRequests, getAdminPendingMedicineRequestCount } from '../../api/medicineRequestService';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { useTenant } from '../../context/TenantContext';
 import Pagination from '../common/Pagination';
 import './AdminDashboardView.css';
 
@@ -62,6 +65,7 @@ export default function AdminDashboardView() {
     loading: authLoading
   } = useAuth();
   const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen, setAdminBulkImportModalOpen, setAdminNewStockModalOpen } = useApp();
+  const { tenantId: activeTenantId } = useTenant();
   const [adminTab, setAdminTab] = useState('tenantProfile');
 
   // Navigation visibility and component rendering share these exact permission gates.
@@ -78,6 +82,7 @@ export default function AdminDashboardView() {
   const canImportInventory = canAccessOperations || isSuperAdmin || hasPermission('inventory.import');
   const canManageRoutes = hasPermission('delivery.manage') && hasPermission('orders.manage');
   const canViewAudits = hasPermission('inventory.read');
+  const canManageMembers = Boolean(activeTenantId && hasPermission('tenant.branches.manage'));
   const canViewTenants = isSuperAdmin && hasPermission('tenants.read');
 
   useEffect(() => {
@@ -528,6 +533,18 @@ export default function AdminDashboardView() {
           <section className="dashboard-nav-group" aria-label="Inventory & logistics">
             <h4 className="dashboard-nav-group-title">Inventory & logistics</h4>
             <div className="dashboard-nav-group-items">
+              {canManageMembers && (
+                <button
+                  onClick={() => setAdminTab('members')}
+                  className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${adminTab === 'members'
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'}`}
+                >
+                  <span>👥</span>
+                  <span>Members &amp; Staff</span>
+                </button>
+              )}
+
 {canViewInventory && (
             <button
               onClick={() => setAdminTab('inventory')}
@@ -606,6 +623,17 @@ export default function AdminDashboardView() {
 
           {isSuperAdmin && (
             <button
+              onClick={() => setAdminTab('serviceLogs')}
+              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${adminTab === 'serviceLogs'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-slate-50 dark:bg-gray-800 text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-blue-200 dark:border-gray-700'}`}
+            >
+              <span>🧾</span>
+              <span>Service Logs</span>
+            </button>
+          )}
+          {isSuperAdmin && (
+            <button
               onClick={() => setAdminTab('telemetry')}
               className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
                 adminTab === 'telemetry'
@@ -664,6 +692,14 @@ export default function AdminDashboardView() {
       )}
       {adminTab === 'matrix' && isSuperAdmin && (
         <div className="admin-screen admin-screen--matrix"><RoleFeatureMatrixTab /></div>
+      )}
+      {adminTab === 'members' && canManageMembers && (
+        <div className="admin-screen admin-screen--members">
+          <TenantStaffManager tenantId={activeTenantId} />
+        </div>
+      )}
+      {adminTab === 'serviceLogs' && isSuperAdmin && (
+        <div className="admin-screen admin-screen--service-logs"><ServiceLogsTab /></div>
       )}
       {adminTab === 'tenantProfile' && !isSuperAdmin && (
         <div className="admin-screen admin-screen--tenant-profile"><TenantProfileDashboard /></div>
@@ -762,7 +798,7 @@ export default function AdminDashboardView() {
 
       {adminTab === 'audits' && canViewAudits && (
         <div className="admin-screen admin-screen--audits space-y-5">
-          <TenantActivityFeed />
+          {isSuperAdmin && <TenantActivityFeed />}
           <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
           <div className="flex justify-between items-center">
             <div>
