@@ -65,6 +65,14 @@ test('legacy ADMIN identity is accepted only through normalized platform authori
   assert.equal(nextCalled, true);
 });
 
+test('legacy ADMIN role is accepted when the resolved authorization scope is platform', () => {
+  const req = { user: { role: 'admin' }, authz: { role: 'ADMIN', scope: 'PLATFORM' } };
+  const res = response();
+  let nextCalled = false;
+  requirePlatformSuperAdmin(req, res, () => { nextCalled = true; });
+  assert.equal(nextCalled, true);
+});
+
 test('tenant administrator cannot access platform-only diagnostics even with wildcard permissions', () => {
   const req = {
     user: { role: 'TENANT_ADMIN' },
