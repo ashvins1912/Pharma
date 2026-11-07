@@ -532,21 +532,28 @@ export default function AdminDashboardView() {
           
             </div>
           </section>
+          {canManageMembers && (
+            <section className="dashboard-nav-group" aria-label="Team management">
+              <h4 className="dashboard-nav-group-title">Team management</h4>
+              <div className="dashboard-nav-group-items">
+                {canManageMembers && (
+                  <button
+                    onClick={() => setAdminTab('members')}
+                    className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${adminTab === 'members'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'}`}
+                  >
+                    <span>👥</span>
+                    <span>Members &amp; Staff</span>
+                  </button>
+                )}
+              </div>
+            </section>
+          )}
+
           <section className="dashboard-nav-group" aria-label="Inventory & logistics">
             <h4 className="dashboard-nav-group-title">Inventory & logistics</h4>
             <div className="dashboard-nav-group-items">
-              {canManageMembers && (
-                <button
-                  onClick={() => setAdminTab('members')}
-                  className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${adminTab === 'members'
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'}`}
-                >
-                  <span>👥</span>
-                  <span>Members &amp; Staff</span>
-                </button>
-              )}
-
 {canViewInventory && (
             <button
               onClick={() => setAdminTab('inventory')}
