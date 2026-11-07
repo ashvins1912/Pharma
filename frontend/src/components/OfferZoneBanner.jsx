@@ -31,7 +31,7 @@ const writeCampaignCache = (key, items) => {
 
 export default function OfferZoneBanner() {
   const { t } = useLanguage();
-  const { addToCart } = useApp();
+  const { addToCart, cart } = useApp();
   const { user, loading: authLoading, isFullyAuthenticated } = useAuth();
   const { tenantId, branchId, activeTenant } = useTenant();
   const { addToast } = useToast();
@@ -110,7 +110,7 @@ export default function OfferZoneBanner() {
 
   if (authLoading || !user || !tenantId || (displayedTenantId && displayedTenantId !== tenantId)) return null;
 
-  const totalPages = Math.max(1, Math.ceil(items.length / itemsPerPage));
+  const cartQuantityFor = item => Number(cart.find(cartItem => String(cartItem._id) === String(item.medicineId || item._id) && String(cartItem._cartTenantId || cartItem.tenantId || '') === String(tenantId) && String(cartItem._cartBranchId || cartItem.branchId || '') === String(branchId || ''))?.quantity || 0);\n\n  const totalPages = Math.max(1, Math.ceil(items.length / itemsPerPage));
   const currentOffers = items.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const handleAddToCart = item => {
@@ -173,7 +173,7 @@ export default function OfferZoneBanner() {
                 </span>
               </div>
               <h3 className="font-extrabold text-xs sm:text-sm line-clamp-2">{item.name}</h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">{item.campaignName}{item.campaignDescription ? ` · ${item.campaignDescription}` : ''}</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">{item.campaignName}{item.campaignDescription ? ` · ${item.campaignDescription}` : ''}</p>\n              <div className="flex flex-wrap items-center gap-2 text-[10px]"><span className="rounded-full bg-indigo-50 px-2 py-1 font-bold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">{Number(item.redemptionCount || 0).toLocaleString()} redeemed</span>{item.remainingClaims != null && <span className="rounded-full bg-amber-50 px-2 py-1 font-bold text-amber-700 dark:bg-amber-950 dark:text-amber-300">{Number(item.remainingClaims).toLocaleString()} left</span>}</div>
               {Number(item.minOrderAmount) > 0 && <p className="text-[10px] text-amber-700 dark:text-amber-300">Minimum basket ₹{Number(item.minOrderAmount).toFixed(0)}</p>}
             </div>
             <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
