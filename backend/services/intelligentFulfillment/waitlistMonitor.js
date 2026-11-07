@@ -11,15 +11,9 @@ const available = medicine => Math.max(0,
   Number(medicine?.stockQuantity ?? medicine?.stock ?? medicine?.quantity ?? 0)
   - Number(medicine?.reservedQuantity || 0));
 
-export async function refreshStockWaitlistCases({ limit = 250, now = new Date(), customerId = null } = {}) {
-  if (!getIsConnected()) return { scanned: 0, ready: 0, expired: 0 };
-  const cases = await FulfillmentCase.find({
-    ...(customerId ? { customerId: String(customerId) } : {}),
-    status: { $in: ['WAITING_FOR_STOCK', 'PARTIALLY_FULFILLED', 'READY_FOR_CONFIRMATION', 'CONFIRMING'] }
-  }).sort({ updatedAt: 1 }).limit(Math.max(1, Math.min(1000, Number(limit) || 250))).lean();
-  let ready = 0;
-  let expired = 0;
-
+export async function recoverStaleMedicineRequestConfirmations({ limit = 100, now = new Date(), customerId = null } = {}) {
+  if (!getIsConnected()) return { scanned: 0, recovered: 0 };
+  let recoveredCount = 0;
   // Recover medicine-request confirmations if the process stopped after the
   // order transaction committed but before the request record was finalized.
   const staleRequests = await MedicineRequest.find({
@@ -60,6 +54,21 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
       });
     }
   }
+  recoveredCount = staleRequests.length;
+  return { scanned: staleRequests.length, recovered: recoveredCount };
+}
+
+export async function refreshStockWaitlistCases({ limit = 250, now = new Date(), customerId = null } = {}) {
+  if (!getIsConnected()) return { scanned: 0, ready: 0, expired: 0 };
+  const cases = await FulfillmentCase.find({
+    ...(customerId ? { customerId: String(customerId) } : {}),
+    status: { $in: ['WAITING_FOR_STOCK', 'PARTIALLY_FULFILLED', 'READY_FOR_CONFIRMATION', 'CONFIRMING'] }
+  }).sort({ updatedAt: 1 }).limit(Math.max(1, Math.min(1000, Number(limit) || 250))).lean();
+  let ready = 0;
+  let expired = 0;
+  await recoverStaleMedicineRequestConfirmations({ limit: 100, now, customerId });
+
+
 
   for (const entry of cases) {
     if (!entry.tenantId) continue;
