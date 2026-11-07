@@ -743,15 +743,18 @@ export const dataStore = {
         return inMemoryAuditLogs.slice(0, 50);
     },
 
-    async getInventoryAudits(page = 1, limit = 10) {
+    async getInventoryAudits(page = 1, limit = 10, scope = {}) {
+        const tenantId = String(scope.tenantId || '').trim();
+        const branchId = String(scope.branchId || '').trim();
+        if (!tenantId || !branchId) throw inventoryError('Tenant and branch are required for inventory audit history.', 403);
         const parsedLimit = Math.min(50, Math.max(1, Number(limit) || 10));
         const parsedPage = Math.max(1, Number(page) || 1);
         const deliveredOrders = getIsConnected()
-            ? await Order.find({ orderStatus: 'Delivered' })
-                .select('_id deliveredAt createdAt customerName statusHistory medicineItems items')
+            ? await Order.find({ orderStatus: 'Delivered', tenantId, branchId })
+                .select('_id deliveredAt createdAt customerName statusHistory medicineItems items tenantId branchId')
                 .sort({ deliveredAt: -1, createdAt: -1 })
                 .lean()
-            : inMemoryOrders.filter(order => order.orderStatus === 'Delivered')
+            : inMemoryOrders.filter(order => order.orderStatus === 'Delivered' && String(order.tenantId || '') === tenantId && String(order.branchId || '') === branchId)
                 .sort((a, b) => new Date(b.deliveredAt || b.createdAt) - new Date(a.deliveredAt || a.createdAt));
         const deliveryAudits = deliveredOrders.flatMap(order => {
             const actor = order.statusHistory?.findLast?.(entry => entry.newStatus === 'Delivered')?.changedBy || 'Delivery';
@@ -770,7 +773,8 @@ export const dataStore = {
                 adminId: actor
             }));
         });
-        const allAudits = [...inMemoryInventoryAudits, ...deliveryAudits].sort(
+        const scopedInventoryAudits = inMemoryInventoryAudits.filter(audit => String(audit.tenantId || '') === tenantId && String(audit.branchId || '') === branchId);
+        const allAudits = [...scopedInventoryAudits, ...deliveryAudits].sort(
             (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
         );
         const total = allAudits.length;
@@ -909,9 +913,12 @@ export const dataStore = {
         };
     },
 
-    async getInventoryAlerts(lowStockThreshold = 3, expiringThresholdDays = 30) {
+    async getInventoryAlerts(lowStockThreshold = 3, expiringThresholdDays = 30, scope = {}) {
+        const tenantId = String(scope.tenantId || '').trim();
+        const branchId = String(scope.branchId || '').trim();
+        if (!tenantId || !branchId) throw inventoryError('Tenant and branch are required for inventory alerts.', 403);
         // Inspect all medicines including out of stock for admin alerts
-        const inventory = getIsConnected() ? await Medicine.find() : inMemoryMedicines;
+        const inventory = getIsConnected() ? await Medicine.find({ tenantId, branchId }) : inMemoryMedicines.filter(medicine => String(medicine.tenantId || '') === tenantId && String(medicine.branchId || '') === branchId);
         const allMeds = inventory.map(formatMedicine);
         const now = new Date();
 
