@@ -6,6 +6,7 @@ import React, { useState } from 'react';
  */
 export default function AssignmentEngineMonitor({
     engineStatus,
+    canViewTelemetry = false,
     unassignedOrders = [],
     riders = [],
     onAutoAssign,
@@ -65,6 +66,7 @@ export default function AssignmentEngineMonitor({
                 </div>
             )}
 
+            {canViewTelemetry && (
             {/* Pipeline Strategy Chain Overview */}
             <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
@@ -114,6 +116,8 @@ export default function AssignmentEngineMonitor({
                     </div>
                 </div>
             </div>
+
+            )}
 
             {/* Unassigned Orders Queue Ready for Assignment */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
@@ -209,6 +213,7 @@ export default function AssignmentEngineMonitor({
                 )}
             </div>
 
+            {canViewTelemetry && (
             {/* Real-time Strategy Evaluation Logs */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
@@ -254,6 +259,7 @@ export default function AssignmentEngineMonitor({
                     </div>
                 )}
             </div>
+            )}
         </div>
     );
 }
