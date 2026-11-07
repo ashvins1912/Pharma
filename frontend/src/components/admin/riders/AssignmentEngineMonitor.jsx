@@ -81,7 +81,7 @@ export default function AssignmentEngineMonitor({
                         </div>
                     </div>
                     <span className="text-[10px] font-black uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2.5 py-1 rounded-full">
-                        {engineStatus.pipeline?.length || 2} Strategies Active
+                        {engineStatus.pipeline?.length ?? 0} Strategies Active
                     </span>
                 </div>
 
