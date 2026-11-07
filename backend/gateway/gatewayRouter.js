@@ -39,8 +39,8 @@ gateway.use((req, res, next) => {
         if (status < 500 && status !== 429) return;
         const requestId = req.context?.requestId || req.headers['x-request-id'] || 'req-unknown';
         const message = String(res.locals?.serviceLogMessage || res.statusMessage || `Request failed with HTTP ${status}.`)
-            .replace(/Bearer\\s+[A-Za-z0-9._~-]+/gi, 'Bearer [REDACTED]')
-            .replace(/(authorization|token|password|secret)\\s*[:=]\\s*[^,\\s]+/gi, '$1=[REDACTED]')
+            .replace(/Bearer\s+[A-Za-z0-9._~-]+/gi, 'Bearer [REDACTED]')
+            .replace(/(authorization|token|password|secret)\s*[:=]\s*[^,\s]+/gi, '$1=[REDACTED]')
             .slice(0, 2000);
         void ServiceLog.create({
             service: 'backend-api',
