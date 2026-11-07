@@ -637,7 +637,7 @@ export function AuthProvider({ children }) {
       || granted.includes(permission)
       || granted.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)))
       || tenantManagerDefaults;
-  }, [user, permissions, revokedPermissions]);
+  }, [user, role, permissions, revokedPermissions]);
 
   const hasAnyPermission = useCallback((requiredPermissions = []) =>
     Array.isArray(requiredPermissions) && requiredPermissions.some(hasPermission),
