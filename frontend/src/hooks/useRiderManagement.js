@@ -49,7 +49,7 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
     }, [authLoading, includeDisabled, hasPermission, tenantId]);
 
     const fetchEngineStatus = useCallback(async () => {
-        if (authLoading || !isSuperAdmin) {
+        if (authLoading || !isSuperAdmin || !hasPermission('delivery.read')) {
             setEngineStatus({ pipeline: [], logs: [], totalEvaluations: 0 });
             return;
         }
@@ -62,7 +62,7 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
         } finally {
             setLoadingEngine(false);
         }
-    }, [authLoading, isSuperAdmin, tenantId]);
+    }, [authLoading, isSuperAdmin, hasPermission, tenantId]);
 
     const updateStatus = async (riderId, newStatus) => {
         if (!hasPermission('delivery.manage')) throw new Error('Your account cannot update rider status.');
@@ -94,7 +94,7 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
     useEffect(() => {
         if (authLoading) return;
         if (hasPermission('delivery.read')) fetchRiders();
-        if (isSuperAdmin) {
+        if (isSuperAdmin && hasPermission('delivery.read')) {
             fetchEngineStatus();
         } else {
             // Clear any previously loaded platform telemetry on account/role changes.
