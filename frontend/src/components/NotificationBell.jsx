@@ -57,6 +57,7 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
         'whatsappStatusBody'
       ]
     };
+    const keys = values[notification.eventType];
     if (!keys) {
       const rawBody = notification.message ?? notification.body ?? '';
       return {
