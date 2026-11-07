@@ -62,7 +62,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
   }
 
   for (const entry of cases) {
-    if (!entry.tenantId || !entry.branchId) continue;
+    if (!entry.tenantId) continue;
     if (!entry.parentOrderId) {
       const linkedOrder = await Order.findOne({
         fulfillmentCaseId: String(entry._id),
@@ -128,6 +128,9 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
       continue;
     }
     if (entry.status === 'CONFIRMING') continue;
+    // Confirmation recovery is tenant-scoped and does not require a branch.
+    // Stock refresh itself still requires an explicitly resolved branch.
+    if (!entry.branchId) continue;
     const oldCheck = entry.lastAvailabilityCheckAt || null;
     if (entry.waitUntil && new Date(entry.waitUntil) <= now) {
       const result = await FulfillmentCase.updateOne({
