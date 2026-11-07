@@ -1256,9 +1256,9 @@ export default function AutomationTestCenterTab() {
                       </div>
 
                       {/* Response Payload Box */}
-                      {health.payload && (
-                        <div className="text-[10px] font-mono p-2 bg-slate-950 text-slate-300 rounded-xl border border-slate-800 max-h-20 overflow-y-auto">
-                          {health.payload}
+                      {Boolean(health.payload) && (
+                        <div className="text-[10px] font-mono p-2 bg-slate-950 text-slate-300 rounded-xl border border-slate-800 max-h-20 overflow-y-auto break-all">
+                          {typeof health.payload === 'string' ? health.payload : JSON.stringify(health.payload)}
                         </div>
                       )}
                     </div>

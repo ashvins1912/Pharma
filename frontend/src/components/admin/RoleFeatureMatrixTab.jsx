@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import apiClient from '../../api/apiClient';
+import { ComponentLoader, TableSkeleton, ErrorState } from '../common/ComponentLoader';
 
 const ROLES = [
   'SUPER_ADMIN',
@@ -42,17 +43,24 @@ export default function RoleFeatureMatrixTab() {
 
   if (loading) {
     return (
-      <div className="p-12 text-center text-xs text-slate-400">
-        Loading Role-Feature Permission Matrix...
+      <div className="space-y-4 animate-fade-in">
+        <ComponentLoader
+          title="Loading Role-Feature Permission Matrix…"
+          subtitle="Cataloging system roles, functional features, and authorization rules."
+          variant="spinner"
+        />
+        <TableSkeleton rows={8} columns={6} />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-6 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs">
-        {error}
-      </div>
+      <ErrorState
+        title="Failed to load Role-Feature Permission Matrix"
+        message={error}
+        onRetry={loadCatalog}
+      />
     );
   }
 

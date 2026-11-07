@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import apiClient from '../../api/apiClient';
+import { ComponentLoader, CardSkeleton, TableSkeleton, ErrorState, EmptyState } from '../common/ComponentLoader';
 
 const TAXONOMY_COLORS = {
   RBAC_BLOCKER: 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800',
@@ -207,11 +208,13 @@ export default function FeatureHealthDashboard() {
 
   if (loading && !healthData) {
     return (
-      <div className="flex flex-col items-center justify-center p-16 space-y-4">
-        <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
-          Executing Continuous RBAC Validation &amp; Microservice Health Probes…
-        </p>
+      <div className="space-y-6 animate-fade-in">
+        <ComponentLoader
+          title="Executing Continuous RBAC Validation & Microservice Health Probes…"
+          subtitle="Verifying 9 master roles, multi-tenant isolation boundaries, and probing upstream Render services."
+          variant="spinner"
+        />
+        <CardSkeleton count={6} columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" />
       </div>
     );
   }
@@ -360,10 +363,11 @@ export default function FeatureHealthDashboard() {
       </div>
 
       {error && (
-        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 flex items-center justify-between">
-          <span>{error}</span>
-          <button type="button" onClick={() => setError('')} className="font-black text-rose-900 cursor-pointer">✕</button>
-        </div>
+        <ErrorState
+          title="Feature Health Telemetry Notice"
+          message={error}
+          onRetry={() => fetchHealth(true)}
+        />
       )}
 
       {/* Microservices Health Section (Green/Red signal + 60s probe) */}
@@ -585,11 +589,11 @@ export default function FeatureHealthDashboard() {
         </div>
 
         {filteredBlockers.length === 0 ? (
-          <div className="py-12 text-center text-xs text-slate-400 bg-slate-50 dark:bg-gray-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-gray-800">
-            <span className="text-2xl block mb-1">🎉</span>
-            <span className="font-bold text-slate-700 dark:text-slate-300">Zero active blockers detected matching criteria!</span>
-            <p className="text-[11px] text-slate-400 mt-1">All role boundaries, scopes, and upstream microservices are operating nominally.</p>
-          </div>
+          <EmptyState
+            icon="🛡️"
+            title="Zero active blockers detected"
+            description="All evaluated role boundaries, scopes, and upstream microservices are operating nominally."
+          />
         ) : (
           <div className="space-y-3">
             {filteredBlockers.map(blocker => {

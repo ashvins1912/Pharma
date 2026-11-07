@@ -57,8 +57,13 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
         'whatsappStatusBody'
       ]
     };
-    const keys = values[notification.eventType];
-    if (!keys) return { title: notification.title, body: notification.message || notification.body || '' };
+    if (!keys) {
+      const rawBody = notification.message ?? notification.body ?? '';
+      return {
+        title: notification.title || '',
+        body: typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody)
+      };
+    }
     const params = {
       id,
       orderId: notification.orderId || '',

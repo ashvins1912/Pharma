@@ -25,6 +25,7 @@ import { getAdminMedicineRequests, getAdminPendingMedicineRequestCount } from '.
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import Pagination from '../common/Pagination';
+import { ComponentLoader, TableSkeleton, CardSkeleton, ErrorState, EmptyState } from '../common/ComponentLoader';
 import './AdminDashboardView.css';
 
 function PendingMedicineRequestsNotice({ count, onOpen }) {
@@ -727,21 +728,20 @@ export default function AdminDashboardView() {
       {adminTab === 'fulfillment' && canViewFulfillment && (
         <div className="admin-screen admin-screen--fulfillment space-y-3">
           {ordersError && (
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
-              <span>{ordersError}</span>
-              <button
-                type="button"
-                onClick={loadAllOrders}
-                disabled={loadingOrders}
-                className="shrink-0 font-bold underline disabled:opacity-50"
-              >
-                Retry
-              </button>
-            </div>
+            <ErrorState
+              title="Failed to load ongoing and delivered orders"
+              message={ordersError}
+              onRetry={loadAllOrders}
+            />
           )}
           {loadingOrders && orders.length === 0 ? (
-            <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center text-sm text-slate-500">
-              Loading ongoing and delivered orders…
+            <div className="space-y-4 animate-fade-in">
+              <ComponentLoader
+                title="Loading fulfillment queue…"
+                subtitle="Fetching ongoing dispensary orders, dispatch assignments, and prescription checks."
+                variant="spinner"
+              />
+              <TableSkeleton rows={6} columns={5} />
             </div>
           ) : (
             <>

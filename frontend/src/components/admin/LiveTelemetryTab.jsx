@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
+import { ComponentLoader, CardSkeleton, EmptyState, ErrorState } from '../common/ComponentLoader';
 
 const STATUS_STYLES = {
   HEALTHY: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300',
@@ -192,10 +193,11 @@ export default function LiveTelemetryTab() {
       </section>
 
       {error && (
-        <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
-          <p className="font-extrabold">Telemetry unavailable</p>
-          <p className="mt-1">{error}</p>
-        </div>
+        <ErrorState
+          title="Live Telemetry Unavailable"
+          message={error}
+          onRetry={() => void pollTelemetry()}
+        />
       )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -214,9 +216,15 @@ export default function LiveTelemetryTab() {
           <span className="text-xs text-slate-500">{services.length} services · refreshed {formatTime(snapshot?.checkedAt)}</span>
         </div>
         {loading && !snapshot ? (
-          <div className="rounded-2xl bg-slate-50 p-8 text-center text-sm text-slate-500 dark:bg-slate-800">Loading service telemetry…</div>
+          <CardSkeleton count={6} columns="grid-cols-1 md:grid-cols-2 2xl:grid-cols-3" />
         ) : services.length === 0 ? (
-          <div className="rounded-2xl bg-slate-50 p-8 text-center text-sm text-slate-500 dark:bg-slate-800">No service health data has been returned yet.</div>
+          <EmptyState
+            icon="📡"
+            title="No service telemetry data returned"
+            description="The gateway has not published service telemetry yet. Click below to probe all upstream services."
+            actionLabel="Probe Live Services ↻"
+            onAction={() => void pollTelemetry()}
+          />
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
             {services.map(service => {
