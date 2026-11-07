@@ -632,8 +632,8 @@ export function AuthProvider({ children }) {
     const granted = Array.isArray(permissions) ? permissions : [];
     return granted.includes('*')
       || granted.includes(permission)
-      || granted.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)));
-  }, [user, permissions, revokedPermissions]);
+      || granted.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)))\n      || tenantManagerDefaults;
+  }, [user, role, permissions, revokedPermissions]);
 
   const hasAnyPermission = useCallback((requiredPermissions = []) =>
     Array.isArray(requiredPermissions) && requiredPermissions.some(hasPermission),
