@@ -35,11 +35,21 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
   }, [loadUserMedicineRequests]);
 
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const hasProcessingRequest = medicineRequests.some(request => request.status === 'FULFILLMENT_PROCESSING');
+
+  useEffect(() => {
+    if (!hasProcessingRequest) return undefined;
+    const refresh = () => {
+      void loadUserMedicineRequests({ page: pagination.page || 1, statusGroup: statusFilter });
+    };
+    const timer = window.setInterval(refresh, 15 * 1000);
+    return () => window.clearInterval(timer);
+  }, [hasProcessingRequest, loadUserMedicineRequests, pagination.page, statusFilter]);
 
   const filteredRequests = medicineRequests.filter(r => {
     if (statusFilter === 'ALL') return true;
     if (statusFilter === 'ACTIVE') {
-      return ['REQUESTED', 'UNDER_REVIEW', 'PROPOSAL_SENT', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION'].includes(r.status);
+      return ['REQUESTED', 'UNDER_REVIEW', 'FULFILLMENT_PROCESSING', 'PROPOSAL_SENT', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION'].includes(r.status);
     }
     if (statusFilter === 'COMPLETED') {
       return ['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(r.status);

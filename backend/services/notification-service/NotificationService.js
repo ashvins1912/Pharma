@@ -124,13 +124,27 @@ export class NotificationService {
 
     _bindDomainEvents() {
         domainEvents.on('MEDICINE_REQUEST_CREATED', (evt) => {
+            const requestNumber = evt.payload?.requestNumber || evt.entityId;
+            const medicineName = evt.payload?.medicineName || 'a medicine';
             this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId, branchId: evt.branchId,
                 recipientUserId: this._recipientUserId(evt),
                 title: 'New Medicine Request',
-                body: `Medicine request ${evt.payload?.requestNumber || evt.entityId} was created for ${evt.payload?.medicineName || 'a medicine'}.`,
+                body: `Medicine request ${requestNumber} was created for ${medicineName}.`,
                 eventType: 'MEDICINE_REQUEST_CREATED', medicineRequestId: evt.entityId, channels: ['IN_APP', 'WHATSAPP']
             });
+            if (evt.tenantId) {
+                this.send({ sourceEventId: evt.eventId,
+                    tenantId: evt.tenantId,
+                    branchId: evt.branchId,
+                    recipientUserId: null,
+                    title: 'New medicine request needs inventory review',
+                    body: `Medicine request ${requestNumber} for ${medicineName} is ready for pharmacy inventory review.`,
+                    eventType: 'INVENTORY_MEDICINE_REQUEST_RECEIVED',
+                    medicineRequestId: evt.entityId,
+                    channels: ['IN_APP']
+                });
+            }
             if (evt.payload?.request) sendWhatsAppMedicineRequestAlert(evt.payload.request, 'MedicineRequestCreated').catch(err => logger.warn('[WhatsApp] Medicine request creation alert failed:', err?.message));
         });
 
@@ -144,15 +158,32 @@ export class NotificationService {
             });
         });
         domainEvents.on('ORDER_CREATED', (evt) => {
+            const orderNumber = evt.payload?.orderNumber || evt.entityId;
             this.send({ sourceEventId: evt.eventId,
                 tenantId: evt.tenantId,
                 branchId: evt.branchId,
                 recipientUserId: this._recipientUserId(evt),
                 title: 'Order Confirmed',
-                body: `Your order #${evt.payload?.orderNumber || evt.entityId} has been received and queued for pharmacy verification.`,
+                body: `Your order #${orderNumber} has been received and queued for pharmacy verification.`,
                 eventType: 'ORDER_CREATED', orderId: evt.entityId,
                 channels: ['IN_APP', 'WHATSAPP']
             });
+
+            // Customer and pharmacy staff are separate audiences. The customer
+            // notification above is private; this tenant-scoped event ensures
+            // inventory/order staff also see new orders in their notification feed.
+            if (evt.tenantId) {
+                this.send({ sourceEventId: evt.eventId,
+                    tenantId: evt.tenantId,
+                    branchId: evt.branchId,
+                    recipientUserId: null,
+                    title: 'New order requires inventory review',
+                    body: `Order #${orderNumber} was placed and is ready for pharmacy inventory verification and fulfilment.`,
+                    eventType: 'INVENTORY_ORDER_RECEIVED',
+                    orderId: evt.entityId,
+                    channels: ['IN_APP']
+                });
+            }
             if (evt.payload?.order) {
                 sendCustomWhatsAppAlert(evt.payload.order, 'Placed').catch(err => logger.warn('[WhatsApp] OrderCreated alert failed:', err?.message));
             }
@@ -523,14 +554,17 @@ export class NotificationService {
             ).lean();
         }
         const notif = this.notifications.find(notification => {
-            if (notification.id !== notificationId) return false;
+            if (String(notification.id) !== String(notificationId)) return false;
             if (!isSuperAdmin && notification.recipientUserId && notification.recipientUserId !== userId) return false;
             if (!isSuperAdmin && notification.tenantId && notification.tenantId !== tenantId) return false;
             if (!isSuperAdmin && notification.branchId && notification.branchId !== branchId) return false;
             if (!isSuperAdmin && !notification.recipientUserId && !notification.tenantId) return false;
             return true;
         });
-        if (notif) notif.read = true;
+        if (notif) {
+            notif.read = true;
+            notif.readAt = new Date();
+        }
         return notif || null;
     }
 }

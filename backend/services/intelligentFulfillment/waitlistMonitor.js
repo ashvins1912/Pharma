@@ -11,26 +11,20 @@ const available = medicine => Math.max(0,
   Number(medicine?.stockQuantity ?? medicine?.stock ?? medicine?.quantity ?? 0)
   - Number(medicine?.reservedQuantity || 0));
 
-export async function refreshStockWaitlistCases({ limit = 250, now = new Date(), customerId = null } = {}) {
-  if (!getIsConnected()) return { scanned: 0, ready: 0, expired: 0 };
-  const cases = await FulfillmentCase.find({
-    ...(customerId ? { customerId: String(customerId) } : {}),
-    status: { $in: ['WAITING_FOR_STOCK', 'PARTIALLY_FULFILLED', 'READY_FOR_CONFIRMATION', 'CONFIRMING'] }
-  }).sort({ updatedAt: 1 }).limit(Math.max(1, Math.min(1000, Number(limit) || 250))).lean();
-  let ready = 0;
-  let expired = 0;
-
+export async function recoverStaleMedicineRequestConfirmations({ limit = 100, now = new Date(), customerId = null } = {}) {
+  if (!getIsConnected()) return { scanned: 0, recovered: 0 };
+  let recoveredCount = 0;
   // Recover medicine-request confirmations if the process stopped after the
   // order transaction committed but before the request record was finalized.
   const staleRequests = await MedicineRequest.find({
     ...(customerId ? { customerId: String(customerId) } : {}),
     status: 'FULFILLMENT_PROCESSING',
     updatedAt: { $lt: new Date(now.getTime() - 10 * 60 * 1000) }
-  }).limit(100).lean();
+  }).limit(Math.max(1, Math.min(500, Number(limit) || 100))).lean();
   for (const request of staleRequests) {
-    const order = await Order.findOne({ medicineRequestId: String(request._id) }).lean();
+    const order = await Order.findOne({ medicineRequestId: String(request._id), userId: String(request.customerId), tenantId: String(request.tenantId || '') }).lean();
     const waitlist = await FulfillmentCase.findOne({
-      sourceType: 'MEDICINE_REQUEST', sourceId: String(request._id),
+      sourceType: 'MEDICINE_REQUEST', sourceId: String(request._id), customerId: String(request.customerId), tenantId: String(request.tenantId || ''),
       status: { $nin: ['CANCELLED', 'EXPIRED', 'FULFILLED'] }
     }).lean();
     if (order) {
@@ -44,25 +38,41 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
         $set: {
           status: 'CONVERTED_TO_ORDER',
           convertedOrderId: String(order._id),
-          fulfillmentCaseId: waitlist?._id || null
+          fulfillmentCaseId: waitlist?._id || null,
+          fulfillmentProcessingAt: null
         },
         $push: { auditTrail: { action: 'FULFILLMENT_CONFIRMATION_RECOVERED', actorId: 'System', role: 'System', timestamp: now, notes: 'Recovered committed order after an interrupted confirmation.' } }
       });
     } else if (waitlist) {
       await MedicineRequest.updateOne({ _id: request._id, status: 'FULFILLMENT_PROCESSING' }, {
-        $set: { status: 'WAITING_FOR_STOCK', fulfillmentCaseId: waitlist._id },
+        $set: { status: 'WAITING_FOR_STOCK', fulfillmentCaseId: waitlist._id, fulfillmentProcessingAt: null },
         $push: { auditTrail: { action: 'WAITLIST_CONFIRMATION_RECOVERED', actorId: 'System', role: 'System', timestamp: now, notes: 'Recovered the pending stock waitlist after an interrupted confirmation.' } }
       });
     } else {
       await MedicineRequest.updateOne({ _id: request._id, status: 'FULFILLMENT_PROCESSING' }, {
-        $set: { status: 'PROPOSAL_SENT' },
+        $set: { status: 'PROPOSAL_SENT', fulfillmentProcessingAt: null },
         $push: { auditTrail: { action: 'FULFILLMENT_CONFIRMATION_RESET', actorId: 'System', role: 'System', timestamp: now, notes: 'No committed order or waitlist was found; the proposal can be retried.' } }
       });
     }
   }
+  recoveredCount = staleRequests.length;
+  return { scanned: staleRequests.length, recovered: recoveredCount };
+}
+
+export async function refreshStockWaitlistCases({ limit = 250, now = new Date(), customerId = null } = {}) {
+  if (!getIsConnected()) return { scanned: 0, ready: 0, expired: 0 };
+  const cases = await FulfillmentCase.find({
+    ...(customerId ? { customerId: String(customerId) } : {}),
+    status: { $in: ['WAITING_FOR_STOCK', 'PARTIALLY_FULFILLED', 'READY_FOR_CONFIRMATION', 'CONFIRMING'] }
+  }).sort({ updatedAt: 1 }).limit(Math.max(1, Math.min(1000, Number(limit) || 250))).lean();
+  let ready = 0;
+  let expired = 0;
+  await recoverStaleMedicineRequestConfirmations({ limit: 100, now, customerId });
+
+
 
   for (const entry of cases) {
-    if (!entry.tenantId || !entry.branchId) continue;
+    if (!entry.tenantId) continue;
     if (!entry.parentOrderId) {
       const linkedOrder = await Order.findOne({
         fulfillmentCaseId: String(entry._id),
@@ -77,7 +87,10 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
         });
       }
     }
-    if (entry.status === 'CONFIRMING' && entry.confirmingAt && new Date(entry.confirmingAt).getTime() < now.getTime() - 10 * 60 * 1000) {
+    const confirmingTimestamp = new Date(entry.confirmingAt || entry.updatedAt || entry.createdAt || 0).getTime();
+    const staleConfirmation = !Number.isFinite(confirmingTimestamp)
+      || confirmingTimestamp <= now.getTime() - 10 * 60 * 1000;
+    if (entry.status === 'CONFIRMING' && staleConfirmation) {
       const recoveredOrder = entry.confirmationId ? await Order.findOne({ fulfillmentConfirmationId: entry.confirmationId }).lean() : null;
       if (recoveredOrder) {
         const confirmationLines = entry.confirmationLines || [];
@@ -86,15 +99,25 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
           const quantity = Math.min(Number(confirmed?.allocatedQuantity || 0), Number(line.waitingQuantity || 0));
           return { ...line, requestedQuantity: Math.max(0, Number(line.waitingQuantity || 0) - quantity), allocatedQuantity: 0, waitingQuantity: Math.max(0, Number(line.waitingQuantity || 0) - quantity), notifiedAvailableQuantity: 0 };
         }).filter(line => line.requestedQuantity > 0);
-        const rootOrderId = String(entry.parentOrderId || recoveredOrder._id);
-        const isChildOrder = rootOrderId !== String(recoveredOrder._id);
-        const parentUpdate = await Order.updateOne(
+        let rootOrderId = String(entry.parentOrderId || recoveredOrder._id);
+        let isChildOrder = rootOrderId !== String(recoveredOrder._id);
+        let parentUpdate = await Order.updateOne(
           { _id: rootOrderId, tenantId: entry.tenantId },
           {
             $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' },
             ...(isChildOrder ? { $addToSet: { childOrderIds: String(recoveredOrder._id) } } : {})
           }
         );
+        if (!parentUpdate.matchedCount && isChildOrder) {
+          // The original parent may have been removed; promote the committed
+          // child order so this confirmation can still be finalized.
+          rootOrderId = String(recoveredOrder._id);
+          isChildOrder = false;
+          parentUpdate = await Order.updateOne(
+            { _id: rootOrderId, tenantId: entry.tenantId },
+            { $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' } }
+          );
+        }
         if (!parentUpdate.matchedCount) {
           // Keep the claim for a later recovery pass; never discard the committed order link.
           continue;
@@ -107,7 +130,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
         await FulfillmentCase.updateOne({ _id: entry._id, status: 'CONFIRMING', confirmationId: entry.confirmationId }, recoveryUpdate);
         if (entry.sourceType === 'MEDICINE_REQUEST' && entry.sourceId) await MedicineRequest.updateOne({ _id: entry.sourceId, fulfillmentCaseId: String(entry._id) }, { $set: { status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'CONVERTED_TO_ORDER', convertedOrderId: rootOrderId } });
       } else {
-        await FulfillmentCase.updateOne({ _id: entry._id, status: 'CONFIRMING', confirmationId: entry.confirmationId }, {
+        await FulfillmentCase.updateOne({ _id: entry._id, status: 'CONFIRMING', confirmationId: entry.confirmationId || null }, {
           $set: { status: entry.confirmationPreviousStatus || 'WAITING_FOR_STOCK', confirmationId: null, confirmingAt: null, confirmationPreviousStatus: null, confirmationLines: [], lastAvailabilityCheckAt: null },
           $push: { auditTrail: { action: 'CONFIRMATION_CLAIM_RECOVERED', at: now, actorId: 'system' } }
         });
@@ -115,6 +138,9 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
       continue;
     }
     if (entry.status === 'CONFIRMING') continue;
+    // Confirmation recovery is tenant-scoped and does not require a branch.
+    // Stock refresh itself still requires an explicitly resolved branch.
+    if (!entry.branchId) continue;
     const oldCheck = entry.lastAvailabilityCheckAt || null;
     if (entry.waitUntil && new Date(entry.waitUntil) <= now) {
       const result = await FulfillmentCase.updateOne({

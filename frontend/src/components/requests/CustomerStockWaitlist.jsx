@@ -21,16 +21,18 @@ export default function CustomerStockWaitlist() {
     }
   }, [addToast]);
 
+  const hasConfirmingEntry = items.some(item => item.status === 'CONFIRMING');
+
   useEffect(() => {
     void load();
     const refresh = () => { void load(); };
     window.addEventListener('stock-waitlist-updated', refresh);
-    const poll = window.setInterval(() => { void load(); }, 60 * 1000);
+    const poll = window.setInterval(() => { void load(); }, hasConfirmingEntry ? 10 * 1000 : 60 * 1000);
     return () => {
       window.removeEventListener('stock-waitlist-updated', refresh);
       window.clearInterval(poll);
     };
-  }, [load]);
+  }, [load, hasConfirmingEntry]);
 
   const confirm = async entry => {
     if (busyId) return;
@@ -129,8 +131,10 @@ export default function CustomerStockWaitlist() {
             })}
             {entry.parentOrderId && <p className="text-[10px] text-indigo-700">Linked to order #{String(entry.parentOrderId).slice(-6).toUpperCase()}</p>}
             <p className="text-[10px] text-slate-500">Wait window ends: {until || 'Not specified'}</p>
-            <div className="flex gap-2">
+            {confirming && <p role="status" className="text-[11px] text-amber-800">We are reconciling your order confirmation. This panel checks again automatically; you can refresh the status below.</p>}
+            <div className="flex flex-wrap gap-2">
               {ready && <button type="button" disabled={busyId === String(entry._id)} onClick={() => confirm(entry)} className="flex-1 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50">{busyId === String(entry._id) ? 'Processing…' : 'Confirm available stock'}</button>}
+              {confirming && <button type="button" onClick={() => void load()} className="flex-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">Refresh status</button>}
               {!confirming && !terminal && <button type="button" disabled={busyId === String(entry._id)} onClick={() => cancel(entry)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 disabled:opacity-50">Cancel wait</button>}
             </div>
           </article>

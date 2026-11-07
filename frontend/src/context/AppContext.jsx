@@ -100,6 +100,7 @@ export function AppProvider({ children }) {
   const [deliveryEvents, setDeliveryEvents] = useState([]);
   const [realtimeConnectionStatus, setRealtimeConnectionStatus] = useState('offline');
   const notificationLoadSequence = useRef(0);
+  const notificationReadOverrides = useRef(new Set());
   const deliveryEventsLoadSequence = useRef(0);
 
   // Admin Alerts State
@@ -493,6 +494,7 @@ export function AppProvider({ children }) {
   const loadNotifications = useCallback(async () => {
     const sequence = ++notificationLoadSequence.current;
     if (!isFullyAuthenticated) {
+      notificationReadOverrides.current.clear();
       setNotifications([]);
       return [];
     }
@@ -500,13 +502,17 @@ export function AppProvider({ children }) {
       const response = await apiClient.get('/api/v1/notifications');
       const rows = Array.isArray(response.data?.data) ? response.data.data : [];
       if (sequence !== notificationLoadSequence.current) return [];
-      const mapped = rows.map(item => ({
-        id: String(item.id || item.notificationId || ''),
+      const mapped = rows.map(item => {
+        const id = String(item.id || item.notificationId || '');
+        const serverRead = Boolean(item.read);
+        if (serverRead) notificationReadOverrides.current.delete(id);
+        return {
+        id,
         title: item.title || 'Pharmacy Update',
         message: item.body || item.message || 'There is an update to your pharmacy activity.',
         time: item.createdAt ? new Date(item.createdAt).toLocaleTimeString() : 'Recent',
         createdAt: item.createdAt || null,
-        read: Boolean(item.read),
+        read: serverRead || notificationReadOverrides.current.has(id),
         type: item.status === 'FAILED' || item.status === 'ERROR' ? 'warning' : 'info',
         eventType: item.eventType || 'NOTIFICATION_CREATED',
         orderId: item.orderId || null,
@@ -517,7 +523,8 @@ export function AppProvider({ children }) {
         actionType: item.promotionId ? 'VIEW_PHARMACY_CATALOG' : item.medicineRequestId ? 'VIEW_PROPOSAL' : undefined,
         channels: Array.isArray(item.channels) ? item.channels : [],
         whatsappDeliveryState: item.deliveryState || null
-      })).filter(item => item.id);
+      };
+      }).filter(item => item.id);
       setNotifications(previous => {
         const serverIds = new Set(mapped.map(item => item.id));
         // Preserve socket events received while this snapshot request was in flight.
@@ -1181,16 +1188,19 @@ export function AppProvider({ children }) {
         notifications,
         unreadNotificationsCount: notifications.filter(n => !n.read).length,
         markNotificationRead: async (id) => {
-          const target = notifications.find(item => String(item.id) === String(id));
+          const notificationId = String(id);
+          const target = notifications.find(item => String(item.id) === notificationId);
           if (!target || target.read) return;
-          setNotifications(prev => prev.map(item => String(item.id) === String(id) ? { ...item, read: true } : item));
+          notificationReadOverrides.current.add(notificationId);
+          setNotifications(prev => prev.map(item => String(item.id) === notificationId ? { ...item, read: true } : item));
           // Proposal/WhatsApp prompts synthesized locally do not have a persisted
           // NotificationService record and must not be sent to the read API.
-          if (String(id).startsWith('notif-prop-') || String(id).startsWith('notif-wa')) return;
+          if (notificationId.startsWith('notif-prop-') || notificationId.startsWith('notif-wa')) return;
           try {
-            await apiClient.patch(`/api/v1/notifications/${encodeURIComponent(id)}/read`);
+            await apiClient.patch(`/api/v1/notifications/${encodeURIComponent(notificationId)}/read`);
           } catch (error) {
-            setNotifications(prev => prev.map(item => String(item.id) === String(id) ? { ...item, read: false } : item));
+            notificationReadOverrides.current.delete(notificationId);
+            setNotifications(prev => prev.map(item => String(item.id) === notificationId ? { ...item, read: false } : item));
             console.warn('[Notifications] Could not persist read state:', error?.message || error);
           }
         },

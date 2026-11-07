@@ -14,6 +14,7 @@ import Tenant from '../models/Tenant.js';
 import TenantBranch from '../models/TenantBranch.js';
 import FulfillmentCase from '../models/FulfillmentCase.js';
 import { validateWaitWindow } from '../services/intelligentFulfillment/fulfillmentPlanner.js';
+import { recoverStaleMedicineRequestConfirmations } from '../services/intelligentFulfillment/waitlistMonitor.js';
 import { customerService } from '../services/customer-service/CustomerService.js';
 import prescriptionClient from '../services/prescription-service-client/PrescriptionClient.js';
 
@@ -638,11 +639,17 @@ router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
         if (req.baseUrl.startsWith('/api/admin/') || staff) {
             return getAdminMedicineRequests(req, res);
         }
+
+        // Customer request-list refresh is also the recovery trigger for an
+        // interrupted intelligent confirmation. Without this, an abandoned
+        // FULFILLMENT_PROCESSING state could remain visible indefinitely when
+        // the customer has no stock-waitlist card to open.
+        await recoverStaleMedicineRequestConfirmations({ customerId: String(req.user.sub) });
         const query = { customerId: req.user.sub };
 
         const statusGroup = String(req.query.statusGroup || '').toUpperCase();
         if (statusGroup === 'ACTIVE') {
-            query.status = { $in: ['REQUESTED', 'UNDER_REVIEW', 'PROPOSAL_SENT', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION'] };
+            query.status = { $in: ['REQUESTED', 'UNDER_REVIEW', 'FULFILLMENT_PROCESSING', 'PROPOSAL_SENT', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION'] };
         } else if (statusGroup === 'COMPLETED') {
             query.status = { $in: ['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'] };
         } else if (req.query.status && req.query.status !== 'ALL') {

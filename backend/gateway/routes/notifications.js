@@ -15,8 +15,11 @@ const TENANT_STAFF_ROLES = new Set([
     'DISPATCHER', 'BRANCH_ADMIN'
 ]);
 const isTenantStaff = user => {
-    const roles = [user?.role, ...(Array.isArray(user?.roles) ? user.roles : [])]
-        .filter(Boolean).map(value => String(value).toUpperCase());
+    const roles = [
+        user?.role,
+        ...(Array.isArray(user?.roles) ? user.roles : []),
+        ...(Array.isArray(user?.app_metadata?.roles) ? user.app_metadata.roles : [])
+    ].filter(Boolean).map(value => String(value).toUpperCase());
     const appRole = String(user?.app_metadata?.role || '').toUpperCase();
     return TENANT_STAFF_ROLES.has(appRole) || roles.some(role => TENANT_STAFF_ROLES.has(role));
 };
