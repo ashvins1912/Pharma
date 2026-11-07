@@ -664,20 +664,29 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
                 notifiedAvailableQuantity: 0
             };
         }).filter(line => line.requestedQuantity > 0);
-        const rootOrderId = String(claimed.parentOrderId || order._id);
-        const isChildOrder = rootOrderId !== String(order._id);
+        let rootOrderId = String(claimed.parentOrderId || order._id);
+        let isChildOrder = rootOrderId !== String(order._id);
 
-        // Persist the order hierarchy before finalizing the waitlist. If this
-        // update fails, the CONFIRMING claim remains recoverable by the monitor.
-        const parentUpdate = await Order.updateOne(
+        // Persist the order hierarchy before finalizing the waitlist. If an old
+        // parent order was removed, safely promote the committed child order to
+        // the root so the confirmation can complete instead of remaining stuck.
+        let parentUpdate = await Order.updateOne(
             { _id: rootOrderId, userId: String(req.user.sub), tenantId: claimed.tenantId },
             {
                 $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' },
                 ...(isChildOrder ? { $addToSet: { childOrderIds: String(order._id) } } : {})
             }
         );
+        if (!parentUpdate.matchedCount && isChildOrder) {
+            rootOrderId = String(order._id);
+            isChildOrder = false;
+            parentUpdate = await Order.updateOne(
+                { _id: rootOrderId, userId: String(req.user.sub), tenantId: claimed.tenantId },
+                { $set: { fulfillmentState: remainingLines.length ? 'PARTIAL' : 'COMPLETE' } }
+            );
+        }
         if (!parentUpdate.matchedCount) {
-            throw Object.assign(new Error('The fulfilment order link could not be saved. The reservation will be reconciled automatically.'), { statusCode: 202 });
+            throw Object.assign(new Error('The confirmed order could not be linked. The confirmation will be retried automatically.'), { statusCode: 202 });
         }
 
         const caseUpdate = {
