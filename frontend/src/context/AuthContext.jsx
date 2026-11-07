@@ -635,7 +635,8 @@ export function AuthProvider({ children }) {
       && ['tenant.profile.read', 'tenant.branches.read', 'tenant.branches.manage'].includes(permission);
     return granted.includes('*')
       || granted.includes(permission)
-      || granted.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)))\n      || tenantManagerDefaults;
+      || granted.some(item => item.endsWith('.*') && permission.startsWith(item.slice(0, -1)))
+      || tenantManagerDefaults;
   }, [user, role, permissions, revokedPermissions]);
 
   const hasAnyPermission = useCallback((requiredPermissions = []) =>
