@@ -379,6 +379,7 @@ router.get('/audits', authenticateUser, async (req, res) => {
         const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
         const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
         const scope = await getVerifiedInventoryScope(req, 'inventory.read');
+        res.set('Cache-Control', 'private, no-store');
         res.json(await dataStore.getInventoryAudits(page, limit, scope));
     } catch (err) {
         console.error('Inventory audit list failed:', err);
