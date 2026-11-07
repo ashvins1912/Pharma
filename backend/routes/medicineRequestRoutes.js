@@ -649,7 +649,7 @@ router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
 
         const statusGroup = String(req.query.statusGroup || '').toUpperCase();
         if (statusGroup === 'ACTIVE') {
-            query.status = { $in: ['REQUESTED', 'UNDER_REVIEW', 'PROPOSAL_SENT', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION'] };
+            query.status = { $in: ['REQUESTED', 'UNDER_REVIEW', 'FULFILLMENT_PROCESSING', 'PROPOSAL_SENT', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION'] };
         } else if (statusGroup === 'COMPLETED') {
             query.status = { $in: ['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'] };
         } else if (req.query.status && req.query.status !== 'ALL') {
