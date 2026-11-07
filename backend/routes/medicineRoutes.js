@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
 import { getIsConnected } from '../config/db.js';
@@ -357,13 +358,18 @@ router.get('/discovery', async (req, res) => {
 
 // Admin Inventory Alerts (Tenant and Role Scoped for Data Privacy)
 router.get('/alerts', authenticateUser, async (req, res) => {
+    const requestId = String(req.get('x-request-id') || '').slice(0, 128) || crypto.randomUUID();
+    const startedAt = Date.now();
+    res.set('X-Request-Id', requestId);
     try {
         const scope = await getVerifiedInventoryScope(req, 'inventory.read');
         const alerts = await dataStore.getInventoryAlerts(3, 30, scope);
-        res.json(alerts);
+        res.set('Cache-Control', 'private, no-store');
+        console.info('[InventoryAlerts] request complete', { requestId, tenantId: scope.tenantId, branchId: scope.branchId, durationMs: Date.now() - startedAt });
+        return res.json(alerts);
     } catch (err) {
-        console.error("Error fetching inventory alerts:", err);
-        res.status(err.statusCode || 500).json({ message: err.message || "Failed to fetch alerts" });
+        console.error('[InventoryAlerts] request failed', { requestId, durationMs: Date.now() - startedAt, code: err.code, message: err.message });
+        return res.status(err.statusCode || 500).json({ requestId, message: err.message || 'Failed to fetch alerts' });
     }
 });
 
