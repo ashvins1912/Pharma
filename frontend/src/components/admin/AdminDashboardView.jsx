@@ -630,6 +630,8 @@ export default function AdminDashboardView() {
             </button>
           )}
 
+          {isSuperAdmin && <button onClick={() => setAdminTab('serviceLogs')} className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${adminTab === 'serviceLogs' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-gray-800 text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-blue-200 dark:border-gray-700'}`}><span>🧾</span><span>Service Logs</span></button>}
+
           {isSuperAdmin && (
             <button
               onClick={() => setAdminTab('telemetry')}
