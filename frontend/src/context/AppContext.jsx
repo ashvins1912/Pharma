@@ -49,6 +49,11 @@ export function AppProvider({ children }) {
     [],
     { storage: 'local', ttl: 30 * 24 * 60 * 60 * 1000, enabled: Boolean(isFullyAuthenticated && cartCacheKey) }
   );
+  useEffect(() => {
+    // Hide stale cart contents during logout or while no pharmacy is selected.
+    // The per-account/per-tenant cache remains intact for a later return.
+    if (!isFullyAuthenticated || !user?.id || !tenantId) setCart([]);
+  }, [isFullyAuthenticated, user?.id, tenantId, setCart]);
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponCode, setCouponCode] = useState('');
   const [couponError, setCouponError] = useState('');
