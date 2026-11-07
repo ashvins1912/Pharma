@@ -725,7 +725,9 @@ export default function AdminDashboardView() {
       {adminTab === 'featureHealth' && isSuperAdmin && (
         <div className="admin-screen admin-screen--feature-health"><FeatureHealthDashboard /></div>
       )}
-      {adminTab === 'members' && canManageMembers && <div className="admin-screen admin-screen--members"><TenantStaffManager tenantId={activeTenantId} /></div>}\n      {adminTab === 'serviceLogs' && isSuperAdmin && <div className="admin-screen admin-screen--service-logs"><ServiceLogsTab /></div>}\n      {adminTab === 'tenantProfile' && !isSuperAdmin && (
+      {adminTab === 'members' && canManageMembers && <div className="admin-screen admin-screen--members"><TenantStaffManager tenantId={activeTenantId} /></div>}
+      {adminTab === 'serviceLogs' && isSuperAdmin && <div className="admin-screen admin-screen--service-logs"><ServiceLogsTab /></div>}
+      {adminTab === 'tenantProfile' && !isSuperAdmin && (
         <div className="admin-screen admin-screen--tenant-profile"><TenantProfileDashboard /></div>
       )}
       {adminTab === 'csquare' && canViewCSquare && <div className="admin-screen admin-screen--csquare"><AdminCSquareTab /></div>}
