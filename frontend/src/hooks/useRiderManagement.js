@@ -92,11 +92,16 @@ export function useRiderManagement({ includeDisabled = false } = {}) {
     };
 
     useEffect(() => {
-        if (!authLoading && hasPermission('delivery.read')) {
-            fetchRiders();
-            if (isSuperAdmin) fetchEngineStatus();
+        if (authLoading) return;
+        if (hasPermission('delivery.read')) fetchRiders();
+        if (isSuperAdmin) {
+            fetchEngineStatus();
+        } else {
+            // Clear any previously loaded platform telemetry on account/role changes.
+            setEngineStatus({ pipeline: [], logs: [], totalEvaluations: 0 });
+            setLoadingEngine(false);
         }
-    }, [fetchRiders, fetchEngineStatus, isSuperAdmin]);
+    }, [authLoading, hasPermission, fetchRiders, fetchEngineStatus, isSuperAdmin]);
 
     const stats = useMemo(() => {
         const list = Array.isArray(riders) ? riders : [];
