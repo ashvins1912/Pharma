@@ -22,6 +22,8 @@ import paymentActionRoutes from '../routes/paymentActionRoutes.js';
 import adminPaymentReminderRoutes from '../routes/adminPaymentReminderRoutes.js';
 import deliveryEventRoutes from '../routes/deliveryEventRoutes.js';
 import activityRouter from './routes/activity.js';
+import adminServiceLogsRouter from './routes/adminServiceLogs.js';
+import ServiceLog from '../models/ServiceLog.js';
 
 const gateway = express.Router();
 
@@ -44,6 +46,7 @@ gateway.get('/health', (req, res) => {
 gateway.use('/auth', authRouter);
 gateway.use('/profile', profileRouter);
 gateway.use('/admin/tenants', adminTenantsRouter);
+gateway.use('/admin/service-logs', adminServiceLogsRouter);
 gateway.use('/vendors', vendorRouter);
 gateway.use('/vendor', vendorRouter);
 gateway.use('/tenants', tenantsRouter);
@@ -66,13 +69,31 @@ gateway.use((err, req, res, next) => {
     if (res.headersSent) return next(err);
 
     const requestId = req.context?.requestId || req.headers['x-request-id'] || 'req-unknown';
+    const status = err instanceof DomainError ? err.status : (err.status || err.statusCode || 500);
+    const code = err.code || 'INTERNAL_SERVER_ERROR';
+
+    // Persist only service failures/throttling metadata. Never store request
+    // bodies, headers, cookies, access tokens or patient/order payloads.
+    if (status >= 500 || status === 429) {
+        const safeMessage = String(err.message || 'Unexpected service error.')
+            .replace(/Bearer\\s+[A-Za-z0-9._~-]+/gi, 'Bearer [REDACTED]')
+            .replace(/(authorization|token|password|secret)\\s*[:=]\\s*[^,\\s]+/gi, '$1=[REDACTED]')
+            .slice(0, 2000);
+        void ServiceLog.create({
+            service: 'backend-api',
+            level: status >= 500 ? 'ERROR' : 'WARN',
+            message: safeMessage,
+            code: String(code).slice(0, 120),
+            statusCode: status,
+            method: String(req.method || 'GET').slice(0, 12),
+            path: String(req.path || '/').slice(0, 500),
+            requestId: String(requestId).slice(0, 120)
+        }).catch(logError => console.warn('[ServiceLogs] Could not persist service failure:', logError.message));
+    }
 
     if (err instanceof DomainError) {
         return res.status(err.status).json(err.toJSON(requestId));
     }
-
-    const status = err.status || err.statusCode || 500;
-    const code = err.code || 'INTERNAL_SERVER_ERROR';
 
     res.status(status).json({
         success: false,
