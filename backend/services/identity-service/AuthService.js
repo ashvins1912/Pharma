@@ -257,7 +257,7 @@ export class AuthService {
      * Create platform JWT session token
      */
     async createAuthToken(user, aal = 'aal1') {
-        const authorization = await authorizationService.resolve(user);
+        const authorization = await authorizationService.resolve({ ...user, tenantId: tenantId || user.tenantId || user.app_metadata?.tenantId || null });
         const userId = user.id || user.userId || user.supabase_user_id;
         const name = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim();
 
