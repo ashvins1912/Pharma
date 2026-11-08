@@ -7,7 +7,7 @@ import apiClient from '../api/apiClient';
 import AddressManager from './AddressManager';
 import { useTenant } from '../context/TenantContext';
 import { useLanguage } from '../context/LanguageContext';
-import { buildFulfillmentQuoteItems, getCheckoutQuoteEffectAction } from '../utils/checkoutFulfillment.js';
+import { buildCheckoutWaitlistRequest, buildFulfillmentQuoteItems, getCheckoutQuoteEffectAction } from '../utils/checkoutFulfillment.js';
 
 export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const { t } = useLanguage();
@@ -292,12 +292,13 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         return;
       }
       try {
-        await apiClient.post('/api/orders/fulfillment/waitlist', {
+        const waitlistRequest = buildCheckoutWaitlistRequest({
           tenantId: String(tenantId), branchId: fulfillmentPlanForCheckout?.branchId || branchId || activeTenant?.branchId || null, items: pendingStockItems, waitDays,
           sourceType: 'CHECKOUT', addressId: selectedAddress._id || selectedAddress.id || '',
           deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
           coordinates: selectedAddress.coordinates, addressDetails: selectedAddress, customerMobile: selectedAddress.mobile || user?.user_metadata?.mobile || '', orderedForName: (people.find((p) => p.puid === patientPuid)?.displayName) || user?.name || user?.email || 'Customer', prescriptionRequired, paymentMethod: 'Cash on Delivery (COD)', patientPuid
-        }, { headers: { 'Idempotency-Key': waitlistKey } });
+        }, waitlistKey);
+        await apiClient.post('/api/orders/fulfillment/waitlist', waitlistRequest.body, waitlistRequest.config);
         addToast(`Your medicines are on the stock waitlist for ${waitDays} day(s). We will notify you when they are available.`, 'success');
         clearCart();
         setFulfillmentPlan(null);
@@ -314,16 +315,17 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     let createdWaitlistCaseId = null;
     if (pendingStockItems.length && checkoutItems.length) {
       try {
-        const waitlistResponse = await apiClient.post('/api/orders/fulfillment/waitlist', {
+        const waitlistRequest = buildCheckoutWaitlistRequest({
           tenantId: String(tenantId), branchId: fulfillmentPlanForCheckout?.branchId || branchId || activeTenant?.branchId || null, items: pendingStockItems,
-          sourceType: 'CHECKOUT',
+          sourceType: 'CHECKOUT', waitDays,
           addressId: selectedAddress._id || selectedAddress.id || '',
           deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
           coordinates: selectedAddress.coordinates, addressDetails: selectedAddress,
           customerMobile: selectedAddress.mobile || user?.user_metadata?.mobile || '',
           orderedForName: (people.find((p) => p.puid === patientPuid)?.displayName) || user?.name || user?.email || 'Customer',
           prescriptionRequired, paymentMethod: 'Cash on Delivery (COD)', patientPuid
-        }, { headers: { 'Idempotency-Key': waitlistKey } });
+        }, waitlistKey);
+        const waitlistResponse = await apiClient.post('/api/orders/fulfillment/waitlist', waitlistRequest.body, waitlistRequest.config);
         createdWaitlistCaseId = waitlistResponse.data?.case?._id || null;
         if (!createdWaitlistCaseId) throw new Error('The pending stock request was not saved.');
       } catch (waitError) {
