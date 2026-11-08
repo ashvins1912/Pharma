@@ -298,8 +298,10 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           deliveryAddress: selectedAddress.addressLine || `${selectedAddress.addressLine1}, ${selectedAddress.city} - ${selectedAddress.pincode}`,
           coordinates: selectedAddress.coordinates, addressDetails: selectedAddress, customerMobile: selectedAddress.mobile || user?.user_metadata?.mobile || '', orderedForName: (people.find((p) => p.puid === patientPuid)?.displayName) || user?.name || user?.email || 'Customer', prescriptionRequired, paymentMethod: 'Cash on Delivery (COD)', patientPuid
         }, waitlistKey);
-        await apiClient.post('/api/orders/fulfillment/waitlist', waitlistRequest.body, waitlistRequest.config);
-        addToast(`Your medicines are on the stock waitlist for ${waitDays} day(s). We will notify you when they are available.`, 'success');
+        const waitlistResponse = await apiClient.post('/api/orders/fulfillment/waitlist', waitlistRequest.body, waitlistRequest.config);
+        const savedCase = waitlistResponse.data?.case;
+        if (!savedCase?._id) throw new Error('Your stock watch could not be confirmed. No order has been placed.');
+        addToast(`Stock watch ${savedCase.caseNumber ? `#${savedCase.caseNumber} ` : ''}created for ${pendingStockItems.reduce((sum, item) => sum + Number(item.requestedQuantity || 0), 0)} unit(s), for up to ${waitDays} day(s). No order has been placed yet. We will notify you when stock is available; confirm it then to create an order.`, 'success');
         clearCart();
         setFulfillmentPlan(null);
         setFulfillmentConfirmed(false);
@@ -313,6 +315,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     }
 
     let createdWaitlistCaseId = null;
+    let waitlistLinkedToOrder = !pendingStockItems.length;
     if (pendingStockItems.length && checkoutItems.length) {
       try {
         const waitlistRequest = buildCheckoutWaitlistRequest({
@@ -367,6 +370,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       if (createdWaitlistCaseId) {
         try {
           const orderId = String(res.data.orderId || res.data.order?._id || '');
+          if (!orderId) throw new Error('The order was created but its tracking reference was missing.');
           await apiClient.post(`/api/orders/fulfillment/waitlist/${createdWaitlistCaseId}/link-order`, {
             orderId,
             prescriptionRequired,
@@ -374,16 +378,23 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             prescriptionId: res.data.order?.prescriptionId || null,
             patientPuid: patientPuid || null
           });
+          waitlistLinkedToOrder = true;
         } catch (linkError) {
-          addToast('Your available items were ordered and the pending stock request was saved, but the two records could not be linked automatically. You can still track the waitlist separately.', 'warning');
+          waitlistLinkedToOrder = false;
+          addToast('Your order was created and the pending stock watch was saved, but automatic linking needs attention. You can track the order and stock watch separately.', 'warning');
         }
       }
 
+      const createdOrder = res.data.order || {};
+      const orderReference = createdOrder.orderNumber || res.data.orderId || createdOrder._id || 'confirmed';
+      const orderedQuantity = checkoutItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+      const waitingQuantity = pendingStockItems.reduce((sum, item) => sum + Number(item.requestedQuantity || 0), 0);
+      const successMessage = createdWaitlistCaseId
+        ? `Order #${orderReference} placed for ${orderedQuantity} available unit(s). ${waitingQuantity} unit(s) are on stock watch for ${waitDays} day(s)${waitlistLinkedToOrder ? ' and linked to this order' : ' and saved separately'}. We will notify you when stock is available; confirm before those remaining items become an order.`
+        : `Order #${orderReference} placed successfully for ${orderedQuantity} unit(s) and sent to the pharmacy for verification.`;
       addToast(
-        res.data.rewardNotice
-          ? `Order placed. ${res.data.rewardNotice}`
-          : "🎉 Order placed successfully! Dispensary queue assigned.",
-        res.data.rewardNotice ? "warning" : "success"
+        res.data.rewardNotice ? `${successMessage} ${res.data.rewardNotice}` : successMessage,
+        res.data.rewardNotice ? 'warning' : 'success'
       );
       clearCart();
       setFulfillmentPlan(null);
