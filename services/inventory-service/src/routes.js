@@ -21,6 +21,7 @@ import {
   archiveProduct,
   lookupInventory,
   searchInventoryProducts,
+  getInventoryAlertSummary,
   reserveInventory,
   transitionReservation
 } from './inventory.js';
@@ -94,6 +95,17 @@ router.get('/audits', requireServiceScope('inventory.read'), asyncHandler(async 
     Audit.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean()
   ]);
   return res.json({ items, total, page, limit, pages: Math.ceil(total / limit) || 1 });
+}));
+
+router.get('/alerts/summary', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
+  const scope = getInventoryScope(req, req.query || {});
+  const summary = await getInventoryAlertSummary({
+    ...scope,
+    lowStockThreshold: req.query.lowStockThreshold || 3,
+    expiringThresholdDays: req.query.expiringThresholdDays || 30
+  });
+  res.set('Cache-Control', 'private, no-store');
+  return res.json(summary);
 }));
 
 router.get('/products/search', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
