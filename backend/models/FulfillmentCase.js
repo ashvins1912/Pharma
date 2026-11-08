@@ -47,6 +47,8 @@ const fulfillmentCaseSchema = new mongoose.Schema({
   waitUntil: { type: Date, default: null, index: true },
   lastAvailabilityCheckAt: { type: Date, default: null },
   confirmationId: { type: String, default: null, index: true },
+  lastConfirmedOrderId: { type: String, default: null, index: true },
+  lastConfirmedAt: { type: Date, default: null },
   confirmingAt: { type: Date, default: null },
   confirmationPreviousStatus: { type: String, default: null },
   confirmationLines: { type: [mongoose.Schema.Types.Mixed], default: [] },
