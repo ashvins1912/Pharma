@@ -30,7 +30,10 @@ export default function RelativeProfiles({ user, onSelfPuid }) {
     try {
       setLoading(true);
       const { data } = await apiClient.get('/api/v1/customers/persons');
-      setPeople(data?.data || data || []);
+      const list = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+      setPeople(list);
+      const selfPerson = list.find(person => String(person.relationshipToOwner || '').toUpperCase() === 'SELF');
+      if (selfPerson?.puid) onSelfPuid?.(selfPerson.puid);
     } catch (error) {
       addToast(error.message || t('couldNotLoadRelatives'), 'error');
     } finally {
