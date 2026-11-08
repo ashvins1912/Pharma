@@ -529,6 +529,7 @@ export class NotificationService {
             return Notification.find(filter).sort({ createdAt: -1 }).limit(200).lean();
         }
         return this.notifications.filter(notification => {
+            if (notification.read) return false;
             if (!isSuperAdmin && notification.recipientUserId && notification.recipientUserId !== userId) return false;
             if (!isSuperAdmin && !notification.recipientUserId && notification.tenantId && notification.tenantId !== tenantId) return false;
             if (!isSuperAdmin && !notification.recipientUserId && notification.branchId && notification.branchId !== branchId) return false;
