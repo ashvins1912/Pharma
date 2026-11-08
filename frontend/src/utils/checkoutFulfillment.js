@@ -22,3 +22,18 @@ export function buildFulfillmentQuoteItems(plan, choices = {}) {
   }
   return items;
 }
+
+export function buildCheckoutWaitlistRequest(payload, idempotencyKey) {
+  const waitDays = Number(payload?.waitDays);
+  if (!Number.isInteger(waitDays) || waitDays < 1 || waitDays > 5) {
+    throw new Error('Choose a stock wait period from 1 to 5 days.');
+  }
+  const key = String(idempotencyKey || '').trim();
+  if (!key || key.length > 128) {
+    throw new Error('A valid stock waitlist idempotency key is required.');
+  }
+  return {
+    body: { ...payload, waitDays },
+    config: { headers: { 'Idempotency-Key': key } }
+  };
+}
