@@ -707,6 +707,8 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
                 lines: remainingLines,
                 status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'FULFILLED',
                 parentOrderId: rootOrderId,
+                lastConfirmedOrderId: String(order._id),
+                lastConfirmedAt: new Date(),
                 confirmationId: null, confirmingAt: null,
                 confirmationPreviousStatus: null, confirmationLines: [],
                 lastAvailabilityCheckAt: new Date()
@@ -735,11 +737,37 @@ router.post('/fulfillment/waitlist/:id/confirm', authenticateUser, async (req, r
     };
     try {
         const initial = await FulfillmentCase.findOne({
-            _id: req.params.id, customerId: String(req.user.sub),
-            status: { $in: ['READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'] },
-            waitUntil: { $gt: new Date() }
+            _id: req.params.id,
+            customerId: String(req.user.sub)
         }).lean();
-        if (!initial) return res.status(404).json({ message: 'No active stock-ready waitlist entry was found.' });
+        if (!initial) return res.status(404).json({ message: 'Stock waitlist entry was not found.' });
+
+        const hasAvailableQuantity = (initial.lines || []).some(line => Number(line.allocatedQuantity || 0) > 0);
+        const isConfirmationReady = ['READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'].includes(initial.status)
+            && initial.waitUntil && new Date(initial.waitUntil) > new Date();
+        if (!isConfirmationReady) {
+            if (initial.status === 'CONFIRMING') {
+                return res.status(409).json({ message: 'Your stock confirmation is already processing. Refresh the waitlist shortly.' });
+            }
+            // If the previous response was lost after the order committed, return
+            // that same order instead of making the customer see a false failure.
+            if (!hasAvailableQuantity && initial.lastConfirmedOrderId) {
+                const previousOrder = await Order.findOne({
+                    _id: initial.lastConfirmedOrderId,
+                    userId: String(req.user.sub),
+                    tenantId: String(initial.tenantId)
+                }).lean();
+                if (previousOrder) {
+                    return res.status(200).json({
+                        order: previousOrder,
+                        waitlistCaseId: String(initial._id),
+                        alreadyConfirmed: true,
+                        message: 'This stock confirmation was already completed. No duplicate order was created.'
+                    });
+                }
+            }
+            return res.status(409).json({ message: 'No new stock is ready to confirm. Refresh your stock watch for the latest availability.' });
+        }
         if (!initial.addressId || !initial.deliveryAddress || !hasValidCoordinates(initial.coordinates)) {
             return res.status(409).json({ message: 'Please update a verified delivery address before confirming this stock-ready request.' });
         }
