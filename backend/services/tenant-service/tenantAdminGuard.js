@@ -1,6 +1,7 @@
 export function isActiveTenantAdmin(membership) {
   return String(membership?.role || '').toUpperCase() === 'TENANT_ADMIN'
-    && String(membership?.status || '').toUpperCase() === 'ACTIVE';
+    && String(membership?.status || '').toUpperCase() === 'ACTIVE'
+    && !membership?.branchId;
 }
 
 export function wouldRemoveLastActiveTenantAdmin(current, updates = {}, activeAdminCount = 0) {
