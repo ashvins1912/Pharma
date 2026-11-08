@@ -90,11 +90,11 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
           setIsOpen(!isOpen);
         }}
         className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition cursor-pointer flex items-center justify-center flex-shrink-0"
-        aria-label={t("notifications")}
+        aria-label={`${t("notifications")} (${unreadNotificationsCount})`}
       >
         <span className="text-sm sm:text-base select-none">🔔</span>
         {unreadNotificationsCount > 0 && (
-          <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[9px] sm:text-[10px] font-black w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center shadow">
+          <span aria-live="polite" aria-atomic="true" className="absolute -top-1 -right-1 bg-blue-600 text-white text-[9px] sm:text-[10px] font-black min-w-4 h-4 sm:min-w-5 sm:h-5 px-1 rounded-full flex items-center justify-center shadow">
             {unreadNotificationsCount}
           </span>
         )}
@@ -110,7 +110,7 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
             <div className="flex justify-between items-center border-b border-slate-100 pb-2.5">
               <div className="min-w-0">
                 <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <span>🔔</span> {t('notifications')} ({notifications.length})
+                  <span>🔔</span> {t('notifications')} ({unreadNotificationsCount})
                 </h4>
                 <p className={`mt-1 text-[10px] font-bold ${realtimeConnectionStatus === 'connected' ? 'text-emerald-600' : realtimeConnectionStatus === 'reconnecting' ? 'text-amber-600' : 'text-slate-400'}`}>
                   {realtimeConnectionStatus === 'connected' ? `● ${t('liveUpdatesConnected')}` : realtimeConnectionStatus === 'reconnecting' ? `● ${t('reconnectingLive')}` : `● ${t('liveOffline')}`}
