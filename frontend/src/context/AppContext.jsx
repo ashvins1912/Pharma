@@ -801,7 +801,7 @@ export function AppProvider({ children }) {
     const requestPromise = (async () => { try {
       const correlationId = `alerts-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const res = await apiClient.get('/api/medicines/alerts', {
-        params: { tenantId, branchId }, headers: { 'X-Request-Id': correlationId }
+        params: { tenantId, branchId }, headers: { 'X-Request-Id': correlationId }, timeout: 25_000
       });
       if (requestId !== inventoryAlertsRequestRef.current) return null;
       const payload = res.data?.data || res.data || {};
