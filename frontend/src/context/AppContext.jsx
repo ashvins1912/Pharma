@@ -800,7 +800,7 @@ export function AppProvider({ children }) {
     setInventoryAlertsStatus(prev => ({ ...prev, loading: true, error: '' }));
     const requestPromise = (async () => { try {
       const correlationId = `alerts-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      const res = await apiClient.get('/api/medicines/alerts', {
+      const res = await apiClient.get('/api/v1/inventory/alerts', {
         params: { tenantId, branchId }, headers: { 'X-Request-Id': correlationId }
       });
       if (requestId !== inventoryAlertsRequestRef.current) return null;
