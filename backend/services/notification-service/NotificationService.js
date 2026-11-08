@@ -524,6 +524,8 @@ export class NotificationService {
                     }
                 ]
             };
+            // Read notifications are acknowledged and should no longer appear in the bell.
+            filter.read = { $ne: true };
             return Notification.find(filter).sort({ createdAt: -1 }).limit(200).lean();
         }
         return this.notifications.filter(notification => {
