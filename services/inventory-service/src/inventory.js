@@ -279,43 +279,116 @@ export async function searchInventoryProducts({
 }
 
 
-export async function getInventoryAlerts({
-  tenantId,
-  branchId,
-  lowStockThreshold = 3,
-  expiringThresholdDays = 30
+export async function getInventoryAlerts(options = {}) {
+  return getInventoryAlertSummary(options);
+}
+
+export async function getInventoryAlertSummary({
+  tenantId = null, branchId = null, lowStockThreshold = 3, expiringThresholdDays = 30
 } = {}) {
   const scopeTenantId = typeof tenantId === 'string' ? tenantId.trim() : '';
   const scopeBranchId = typeof branchId === 'string' ? branchId.trim() : '';
+  const lowThreshold = Math.max(0, Number(lowStockThreshold) || 0);
+  const expiryDays = Math.max(0, Math.min(365, Math.floor(Number(expiringThresholdDays) || 30)));
   if (!scopeTenantId || !scopeBranchId) {
-    const error = new Error('Verified tenantId and branchId are required for inventory alerts.');
+    const error = new Error('Verified tenantId and branchId are required for inventory alert summaries.');
     error.statusCode = 403;
     throw error;
   }
 
-  const first = await searchInventoryProducts({
-    tenantId: scopeTenantId,
-    branchId: scopeBranchId,
-    includeOutOfStock: true,
-    includeExpiredBatches: true,
-    page: 1,
-    limit: 100
-  });
-  const pages = Math.min(50, Math.max(1, Number(first.pages) || 1));
-  const remaining = pages > 1
-    ? await Promise.all(Array.from({ length: pages - 1 }, (_, index) =>
-      searchInventoryProducts({
-        tenantId: scopeTenantId,
-        branchId: scopeBranchId,
-        includeOutOfStock: true,
-        includeExpiredBatches: true,
-        page: index + 2,
-        limit: 100
-      })
-    ))
-    : [];
-  const items = [...(first.items || []), ...remaining.flatMap(page => page.items || [])];
-  return buildInventoryAlerts(items, { lowStockThreshold, expiringThresholdDays });
+  const today = new Date(new Date().toISOString().slice(0, 10));
+  const cutoff = new Date(today);
+  cutoff.setUTCDate(cutoff.getUTCDate() + expiryDays);
+  const productLookup = [{
+    $lookup: {
+      from: Product.collection.name,
+      let: { productId: '$productId' },
+      pipeline: [
+        { $match: { $expr: { $and: [
+          { $eq: ['$_id', '$$productId'] },
+          { $eq: ['$tenantId', scopeTenantId] },
+          { $eq: ['$active', true] }
+        ] } } },
+        { $project: { _id: 1, sku: 1, name: 1, genericName: 1, strength: 1, form: 1, manufacturer: 1, category: 1 } }
+      ],
+      as: 'product'
+    }
+  }, { $unwind: '$product' }];
+  const batchDto = {
+    productId: '$product._id',
+    sku: '$product.sku',
+    name: '$product.name',
+    genericName: '$product.genericName',
+    strength: '$product.strength',
+    form: '$product.form',
+    manufacturer: '$product.manufacturer',
+    category: '$product.category',
+    batchNumber: { $ifNull: ['$batchNumber', ''] },
+    expiryDate: '$expiryDate',
+    stock: { $ifNull: ['$stockQuantity', 0] },
+    availableQuantity: { $max: [0, { $subtract: [{ $ifNull: ['$stockQuantity', 0] }, { $ifNull: ['$reservedQuantity', 0] }] }] }
+  };
+  const countedTop20 = (sortField, sortDirection = 1) => [
+    { $sort: { [sortField]: sortDirection, _id: 1 } },
+    { $facet: { metadata: [{ $count: 'count' }], items: [{ $limit: 20 }] } }
+  ];
+
+  const [result = {}] = await Inventory.aggregate([
+    { $match: { tenantId: scopeTenantId, branchId: scopeBranchId } },
+    ...productLookup,
+    { $facet: {
+      expired: [
+        { $match: { expiryDate: { $lt: today }, stockQuantity: { $gt: 0 } } },
+        { $project: { ...batchDto, expiryDate: 1 } },
+        ...countedTop20('expiryDate', 1)
+      ],
+      expiringSoon: [
+        { $match: { expiryDate: { $gte: today, $lte: cutoff }, stockQuantity: { $gt: 0 } } },
+        { $project: { ...batchDto, expiryDate: 1 } },
+        ...countedTop20('expiryDate', 1)
+      ],
+      lowStock: [
+        { $match: { $or: [{ expiryDate: null }, { expiryDate: { $gte: today } }] } },
+        { $group: {
+          _id: '$product._id',
+          product: { $first: '$product' },
+          stockQuantity: { $sum: { $ifNull: ['$stockQuantity', 0] } },
+          reservedQuantity: { $sum: { $ifNull: ['$reservedQuantity', 0] } },
+          availableQuantity: { $sum: { $max: [0, { $subtract: [{ $ifNull: ['$stockQuantity', 0] }, { $ifNull: ['$reservedQuantity', 0] }] }] } },
+          batchCount: { $sum: 1 }
+        } },
+        { $match: { batchCount: { $gt: 0 }, availableQuantity: { $lte: lowThreshold } } },
+        { $project: {
+          _id: 0, productId: '$_id', sku: '$product.sku', name: '$product.name',
+          genericName: '$product.genericName', strength: '$product.strength',
+          form: '$product.form', manufacturer: '$product.manufacturer', category: '$product.category',
+          stock: '$availableQuantity', availableQuantity: '$availableQuantity',
+          stockQuantity: 1, reservedQuantity: 1, batchCount: 1
+        } },
+        { $sort: { availableQuantity: 1, name: 1, productId: 1 } },
+        { $facet: { metadata: [{ $count: 'count' }], items: [{ $limit: 20 }] } }
+      ]
+    } }
+  ]).allowDiskUse(true).exec();
+
+  const unpack = key => {
+    const facet = result[key]?.[0] || {};
+    return { count: Number(facet.metadata?.[0]?.count || 0), items: facet.items || [] };
+  };
+  const expired = unpack('expired');
+  const expiringSoon = unpack('expiringSoon');
+  const lowStock = unpack('lowStock');
+  const daysLeft = value => Math.floor((new Date(value).getTime() - today.getTime()) / 86400000);
+  const withDays = item => ({ ...item, daysLeft: daysLeft(item.expiryDate) });
+  return {
+    expiredCount: expired.count,
+    expiringSoonCount: expiringSoon.count,
+    lowStockCount: lowStock.count,
+    totalAlerts: expired.count + expiringSoon.count + lowStock.count,
+    expired: expired.items.map(withDays),
+    expiringSoon: expiringSoon.items.map(withDays),
+    lowStock: lowStock.items
+  };
 }
 
 const normalizeProductFields = input => ({

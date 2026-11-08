@@ -28,7 +28,8 @@ const request = async (method, path, {
   scopes = ['inventory.read'],
   data,
   params,
-  idempotencyKey
+  idempotencyKey,
+  timeout = 10_000
 } = {}) => {
   const url = baseUrl();
   if (!url) {
@@ -44,7 +45,7 @@ const request = async (method, path, {
       url: `${url}${path}`,
       params,
       data,
-      timeout: 10_000,
+      timeout,
       headers: {
         Authorization: `Bearer ${buildToken({ userId, scopes })}`,
         ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {})
@@ -78,6 +79,14 @@ export const inventoryClient = {
   async getAudits({ tenantId, branchId, page = 1, limit = 50, userId = 'backend' } = {}) {
     return request('GET', '/api/v1/inventory/audits', {
       userId, params: { tenantId, branchId, page, limit }
+    });
+  },
+
+  async getAlertSummary({ tenantId, branchId, lowStockThreshold = 3, expiringThresholdDays = 30, userId = 'backend' } = {}) {
+    return request('GET', '/api/v1/inventory/alerts/summary', {
+      userId,
+      params: { tenantId, branchId, lowStockThreshold, expiringThresholdDays },
+      timeout: 20_000
     });
   },
 

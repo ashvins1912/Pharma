@@ -103,6 +103,7 @@ export function AppProvider({ children }) {
   });
   const [inventoryAlertsStatus, setInventoryAlertsStatus] = useState({ loading: false, error: '' });
   const inventoryAlertsRequestRef = useRef(0);
+  const inventoryAlertsScopeRef = useRef(null);
   const inventoryAlertsPromiseRef = useRef(null);
 
   // WhatsApp Gateway State
@@ -779,6 +780,7 @@ export function AppProvider({ children }) {
       authLoading || !isFullyAuthenticated || !user?.id || !isPharmacyOrAdmin ||
       !hasPermission('inventory.read') || !tenantId || !branchId
     ) {
+      inventoryAlertsScopeRef.current = null;
       setInventoryAlerts({
         expiredCount: 0, expiringSoonCount: 0, lowStockCount: 0, totalAlerts: 0,
         expired: [], expiringSoon: [], lowStock: []
@@ -795,13 +797,17 @@ export function AppProvider({ children }) {
     }
 
     const scopeKey = `${tenantId}:${branchId}`;
+    if (inventoryAlertsScopeRef.current !== scopeKey) {
+      inventoryAlertsScopeRef.current = scopeKey;
+      setInventoryAlerts({ expiredCount: 0, expiringSoonCount: 0, lowStockCount: 0, totalAlerts: 0, expired: [], expiringSoon: [], lowStock: [] });
+    }
     if (inventoryAlertsPromiseRef.current?.scopeKey === scopeKey) return inventoryAlertsPromiseRef.current.promise;
     const requestId = ++inventoryAlertsRequestRef.current;
     setInventoryAlertsStatus(prev => ({ ...prev, loading: true, error: '' }));
     const requestPromise = (async () => { try {
       const correlationId = `alerts-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const res = await apiClient.get('/api/v1/inventory/alerts', {
-        params: { tenantId, branchId }, headers: { 'X-Request-Id': correlationId }
+        params: { tenantId, branchId }, headers: { 'X-Request-Id': correlationId }, timeout: 25_000
       });
       if (requestId !== inventoryAlertsRequestRef.current) return null;
       const payload = res.data?.data || res.data || {};
