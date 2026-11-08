@@ -32,7 +32,7 @@ const requireCustomerIdentity = (req, res, next) => {
 router.post('/ensure', authenticateUser, requireCustomerIdentity, async (req, res, next) => {
     try {
         const customer = await customerService.ensureCustomerForUser(req.context.userId, {
-            name: req.body?.name || req.user.user_metadata?.name || req.user.name,
+            name: req.body?.name || req.user.user_metadata?.name || req.user.name || [req.user.firstName, req.user.lastName].filter(Boolean).join(' '),
             email: req.body?.email || req.user.email,
             phone: req.body?.phone || req.user.user_metadata?.mobile || req.user.mobile,
             dateOfBirth: req.body?.dateOfBirth || req.user.dateOfBirth,
