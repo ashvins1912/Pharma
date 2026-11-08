@@ -457,8 +457,9 @@ export function AppProvider({ children }) {
       if (proposalsWaiting.length > 0) {
         proposalsWaiting.forEach(p => {
           const notifId = `notif-prop-${p._id}`;
+          if (notificationReadOverrides.current.has(notifId)) return;
           setNotifications(prev => {
-            if (prev.some(n => n.id === notifId)) return prev;
+            if (notificationReadOverrides.current.has(notifId) || prev.some(n => n.id === notifId)) return prev;
             return [
               {
                 id: notifId,
@@ -500,31 +501,36 @@ export function AppProvider({ children }) {
       const mapped = rows.map(item => {
         const id = String(item.id || item.notificationId || '');
         const serverRead = Boolean(item.read);
+        const locallyAcknowledged = notificationReadOverrides.current.has(id);
         if (serverRead) notificationReadOverrides.current.delete(id);
+        // Read/acknowledged notifications are deliberately absent from every
+        // customer notification surface, including snapshots after reconnect.
+        if (!id || serverRead || locallyAcknowledged) return null;
         return {
-        id,
-        title: item.title || 'Pharmacy Update',
-        message: item.body || item.message || 'There is an update to your pharmacy activity.',
-        time: item.createdAt ? new Date(item.createdAt).toLocaleTimeString() : 'Recent',
-        createdAt: item.createdAt || null,
-        read: serverRead || notificationReadOverrides.current.has(id),
-        type: item.status === 'FAILED' || item.status === 'ERROR' ? 'warning' : 'info',
-        eventType: item.eventType || 'NOTIFICATION_CREATED',
-        orderId: item.orderId || null,
-        requestId: item.medicineRequestId || null,
-        promotionId: item.promotionId || null,
-        pharmacyName: item.pharmacyName || null,
-        actionUrl: typeof item.actionUrl === 'string' && item.actionUrl.startsWith('/') ? item.actionUrl : null,
-        actionType: item.promotionId ? 'VIEW_PHARMACY_CATALOG' : item.medicineRequestId ? 'VIEW_PROPOSAL' : undefined,
-        channels: Array.isArray(item.channels) ? item.channels : [],
-        whatsappDeliveryState: item.deliveryState || null
-      };
-      }).filter(item => item.id);
+          id,
+          title: item.title || 'Pharmacy Update',
+          message: item.body || item.message || 'There is an update to your pharmacy activity.',
+          time: item.createdAt ? new Date(item.createdAt).toLocaleTimeString() : 'Recent',
+          createdAt: item.createdAt || null,
+          read: false,
+          type: item.status === 'FAILED' || item.status === 'ERROR' ? 'warning' : 'info',
+          eventType: item.eventType || 'NOTIFICATION_CREATED',
+          orderId: item.orderId || null,
+          requestId: item.medicineRequestId || null,
+          promotionId: item.promotionId || null,
+          pharmacyName: item.pharmacyName || null,
+          actionUrl: typeof item.actionUrl === 'string' && item.actionUrl.startsWith('/') ? item.actionUrl : null,
+          actionType: item.promotionId ? 'VIEW_PHARMACY_CATALOG' : item.medicineRequestId ? 'VIEW_PROPOSAL' : undefined,
+          channels: Array.isArray(item.channels) ? item.channels : [],
+          whatsappDeliveryState: item.deliveryState || null
+        };
+      }).filter(Boolean);
       setNotifications(previous => {
         const serverIds = new Set(mapped.map(item => item.id));
         // Preserve socket events received while this snapshot request was in flight.
         const localItems = previous.filter(item =>
-          (item.sourceChannel === 'realtime' || String(item.id).startsWith('notif-prop-') || String(item.id).startsWith('notif-wa'))
+          !notificationReadOverrides.current.has(String(item.id))
+          && (item.sourceChannel === 'realtime' || String(item.id).startsWith('notif-prop-') || String(item.id).startsWith('notif-wa'))
           && !serverIds.has(String(item.id))
         );
         return [...mapped, ...localItems].slice(0, 50);
