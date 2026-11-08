@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import OrderHistory from './OrderHistory';
 import { useActionLoading, LOADING_ACTIONS } from '../context/LoadingContext';
 import { useLanguage } from '../context/LanguageContext';
+import CustomerStockWaitlist from './requests/CustomerStockWaitlist';
 
 export default function OrderHistoryView({ onTrackOrder }) {
   const { t } = useLanguage();
@@ -71,6 +72,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
 
   return (
     <div className="space-y-4">
+    <CustomerStockWaitlist />
     <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
       <div className="flex items-center justify-between">
         <div>
