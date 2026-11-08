@@ -452,29 +452,8 @@ export function AppProvider({ children }) {
         page: medicineRequestPage.current.page, pageSize: 10, limit: 10, total: list.length, totalPages: list.length ? 1 : 0, hasNextPage: false
       });
 
-      // Check if any proposals are ready to notify customer in notification bell
-      const proposalsWaiting = (list || []).filter(r => r.status === 'PROPOSAL_SENT');
-      if (proposalsWaiting.length > 0) {
-        proposalsWaiting.forEach(p => {
-          const notifId = `notif-prop-${p._id}`;
-          setNotifications(prev => {
-            if (prev.some(n => n.id === notifId)) return prev;
-            return [
-              {
-                id: notifId,
-                title: `💊 Proposal Ready for #${p.requestNumber}`,
-                message: `Price: ₹${p.pharmacyProposal?.totalPrice || p.pharmacyProposal?.approximatePrice}. Tap to review and confirm.`,
-                time: 'Just now',
-                read: false,
-                type: 'info',
-                requestId: p._id,
-                actionType: 'VIEW_PROPOSAL'
-              },
-              ...prev
-            ];
-          });
-        });
-      }
+      // Proposal alerts are delivered by the durable NotificationService feed.
+      // Do not synthesize local IDs here: they cannot be acknowledged across sessions.
     } catch (error) {
       console.error('Failed to load customer medicine requests:', error);
       setMedicineRequestsError(error.message || 'Medicine requests are temporarily unavailable. Please try again in a moment.');
@@ -500,31 +479,36 @@ export function AppProvider({ children }) {
       const mapped = rows.map(item => {
         const id = String(item.id || item.notificationId || '');
         const serverRead = Boolean(item.read);
+        const locallyAcknowledged = notificationReadOverrides.current.has(id);
         if (serverRead) notificationReadOverrides.current.delete(id);
+        // Read/acknowledged notifications are deliberately absent from every
+        // customer notification surface, including snapshots after reconnect.
+        if (!id || serverRead || locallyAcknowledged) return null;
         return {
-        id,
-        title: item.title || 'Pharmacy Update',
-        message: item.body || item.message || 'There is an update to your pharmacy activity.',
-        time: item.createdAt ? new Date(item.createdAt).toLocaleTimeString() : 'Recent',
-        createdAt: item.createdAt || null,
-        read: serverRead || notificationReadOverrides.current.has(id),
-        type: item.status === 'FAILED' || item.status === 'ERROR' ? 'warning' : 'info',
-        eventType: item.eventType || 'NOTIFICATION_CREATED',
-        orderId: item.orderId || null,
-        requestId: item.medicineRequestId || null,
-        promotionId: item.promotionId || null,
-        pharmacyName: item.pharmacyName || null,
-        actionUrl: typeof item.actionUrl === 'string' && item.actionUrl.startsWith('/') ? item.actionUrl : null,
-        actionType: item.promotionId ? 'VIEW_PHARMACY_CATALOG' : item.medicineRequestId ? 'VIEW_PROPOSAL' : undefined,
-        channels: Array.isArray(item.channels) ? item.channels : [],
-        whatsappDeliveryState: item.deliveryState || null
-      };
-      }).filter(item => item.id);
+          id,
+          title: item.title || 'Pharmacy Update',
+          message: item.body || item.message || 'There is an update to your pharmacy activity.',
+          time: item.createdAt ? new Date(item.createdAt).toLocaleTimeString() : 'Recent',
+          createdAt: item.createdAt || null,
+          read: false,
+          type: item.status === 'FAILED' || item.status === 'ERROR' ? 'warning' : 'info',
+          eventType: item.eventType || 'NOTIFICATION_CREATED',
+          orderId: item.orderId || null,
+          requestId: item.medicineRequestId || null,
+          promotionId: item.promotionId || null,
+          pharmacyName: item.pharmacyName || null,
+          actionUrl: typeof item.actionUrl === 'string' && item.actionUrl.startsWith('/') ? item.actionUrl : null,
+          actionType: item.promotionId ? 'VIEW_PHARMACY_CATALOG' : item.medicineRequestId ? 'VIEW_PROPOSAL' : undefined,
+          channels: Array.isArray(item.channels) ? item.channels : [],
+          whatsappDeliveryState: item.deliveryState || null
+        };
+      }).filter(Boolean);
       setNotifications(previous => {
         const serverIds = new Set(mapped.map(item => item.id));
         // Preserve socket events received while this snapshot request was in flight.
         const localItems = previous.filter(item =>
-          (item.sourceChannel === 'realtime' || String(item.id).startsWith('notif-prop-') || String(item.id).startsWith('notif-wa'))
+          !notificationReadOverrides.current.has(String(item.id))
+          && (item.sourceChannel === 'realtime' || String(item.id).startsWith('notif-wa'))
           && !serverIds.has(String(item.id))
         );
         return [...mapped, ...localItems].slice(0, 50);
@@ -1202,7 +1186,7 @@ export function AppProvider({ children }) {
           notificationReadOverrides.current.add(notificationId);
           setNotifications(prev => prev.filter(item => String(item.id) !== notificationId));
           // Proposal/WhatsApp prompts synthesized locally have no persisted NotificationService record.
-          if (notificationId.startsWith('notif-prop-') || notificationId.startsWith('notif-wa')) return;
+          if (notificationId.startsWith('notif-wa')) return;
           try {
             await apiClient.patch(`/api/v1/notifications/${encodeURIComponent(notificationId)}/read`);
           } catch (error) {
