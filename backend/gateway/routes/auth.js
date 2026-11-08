@@ -26,6 +26,7 @@ import { sendSuccess, sendError } from '../../shared/responses.js';
 import { setSessionCookies, clearSessionCookies, generateCsrfToken } from '../../security/sessionCookie.js';
 import { verifySupabaseExchangeToken, verifyPharmaRefreshToken } from '../../security/pharmaToken.js';
 import { env } from '../../config/env.js';
+import { customerService } from '../../services/customer-service/CustomerService.js';
 
 const router = express.Router();
 
@@ -450,6 +451,15 @@ const handleProfileCompletion = async (req, res) => {
             mobileNumber: phone,
             gender,
             password
+        });
+        const completedUser = result?.user || {};
+        await customerService.ensureCustomerForUser(userId, {
+            name: completedUser.name || [firstName, lastName].filter(Boolean).join(' '),
+            email: completedUser.email || req.user?.email,
+            phone: completedUser.mobileNumber || phone,
+            dateOfBirth: completedUser.dateOfBirth || dateOfBirth,
+            gender: completedUser.gender || gender,
+            tenantId: req.user?.tenantId || req.user?.app_metadata?.tenantId || null
         });
 
         if (result.accessToken) {
