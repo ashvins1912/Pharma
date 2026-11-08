@@ -1888,11 +1888,15 @@ export class AuthService {
         const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
 
         const scope = isPlatform ? 'PLATFORM' : (tenantId ? 'TENANT' : 'CUSTOMER');
-        const effectiveRole = isPlatform ? 'SUPER_ADMIN' : (role === 'TENANT_ADMIN' ? 'TENANT_ADMIN' : (role.toLowerCase() === 'customer' ? 'customer' : role));
         // /auth/me is the frontend capability contract. Resolve from the same
         // authorization service used to mint Pharma access tokens so UI gates
         // and API enforcement always use the same effective permissions.
+        // The verified token may still carry the legacy "pharmacy" role while
+        // the persisted tenant membership is TENANT_ADMIN/TENANT_OWNER. Expose
+        // the effective membership role to the UI so tenant-only tabs are not
+        // hidden behind stale token role claims.
         const authorization = await authorizationService.resolve(user);
+        const effectiveRole = isPlatform ? 'SUPER_ADMIN' : (authorization.role || (role.toLowerCase() === 'customer' ? 'customer' : role));
 
         const age = calculateAge(user.dateOfBirth);
         // If canonical user storage is available but the profile row does not yet
