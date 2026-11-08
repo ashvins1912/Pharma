@@ -87,7 +87,7 @@ export default function CustomerStockWaitlist() {
     <section className="rounded-2xl border border-indigo-100 bg-white p-4 sm:p-5 space-y-3">
       <div>
         <h3 className="text-sm font-black text-slate-900">Stock availability watch</h3>
-        <p className="mt-1 text-xs text-slate-500">We keep checking the selected pharmacy. Stock is only reserved after you confirm.</p>
+        <p className="mt-1 text-xs text-slate-500">This is a stock watch, not an order. We keep checking the selected pharmacy; stock is reserved and a separate order is created only after you confirm available quantities.</p>
       </div>
       {items.map(entry => {
         const ready = ['READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'].includes(entry.status);
