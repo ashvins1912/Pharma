@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import mongoose from 'mongoose';
+import { buildInventoryAlerts } from './alerts.js';
 import { config } from './config.js';
 import { Audit, Inventory, Product, Reservation } from './models.js';
 
@@ -275,6 +276,46 @@ export async function searchInventoryProducts({
     isSearching,
     outOfStockHidden: !isSearching && !showOutOfStock
   };
+}
+
+
+export async function getInventoryAlerts({
+  tenantId,
+  branchId,
+  lowStockThreshold = 3,
+  expiringThresholdDays = 30
+} = {}) {
+  const scopeTenantId = typeof tenantId === 'string' ? tenantId.trim() : '';
+  const scopeBranchId = typeof branchId === 'string' ? branchId.trim() : '';
+  if (!scopeTenantId || !scopeBranchId) {
+    const error = new Error('Verified tenantId and branchId are required for inventory alerts.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const first = await searchInventoryProducts({
+    tenantId: scopeTenantId,
+    branchId: scopeBranchId,
+    includeOutOfStock: true,
+    includeExpiredBatches: true,
+    page: 1,
+    limit: 100
+  });
+  const pages = Math.min(50, Math.max(1, Number(first.pages) || 1));
+  const remaining = pages > 1
+    ? await Promise.all(Array.from({ length: pages - 1 }, (_, index) =>
+      searchInventoryProducts({
+        tenantId: scopeTenantId,
+        branchId: scopeBranchId,
+        includeOutOfStock: true,
+        includeExpiredBatches: true,
+        page: index + 2,
+        limit: 100
+      })
+    ))
+    : [];
+  const items = [...(first.items || []), ...remaining.flatMap(page => page.items || [])];
+  return buildInventoryAlerts(items, { lowStockThreshold, expiringThresholdDays });
 }
 
 const normalizeProductFields = input => ({
