@@ -26,7 +26,7 @@ export default function TenantStaffManager({ tenantId }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const activeTenantAdminCount = memberships.filter(member => String(member.role).toUpperCase() === 'TENANT_ADMIN' && String(member.status).toUpperCase() === 'ACTIVE').length;
+  const activeTenantAdminCount = memberships.filter(member => String(member.role).toUpperCase() === 'TENANT_ADMIN' && String(member.status).toUpperCase() === 'ACTIVE' && !member.branchId).length;
 
   const load = useCallback(async () => {
     if (!tenantId) return;
