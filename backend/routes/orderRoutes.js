@@ -425,7 +425,20 @@ router.post('/fulfillment/waitlist', authenticateUser, async (req, res) => {
             dosageForm: String(item.dosageForm || '').trim(),
             requestedQuantity: Number(item.requestedQuantity ?? item.waitingQuantity)
         })).sort((a, b) => a.productId.localeCompare(b.productId) || a.requestedName.localeCompare(b.requestedName));
-        requestFingerprint = createHash('sha256').update(JSON.stringify({ tenantId, branchId: selectedBranchId, sourceType: req.body?.sourceType || 'CHECKOUT', sourceId: req.body?.sourceId || null, parentOrderId: req.body?.parentOrderId || null, waitDays, items: normalizedWaitItems })).digest('hex');
+        requestFingerprint = createHash('sha256').update(JSON.stringify({
+            tenantId,
+            branchId: selectedBranchId,
+            sourceType: req.body?.sourceType || 'CHECKOUT',
+            sourceId: req.body?.sourceId || null,
+            parentOrderId: req.body?.parentOrderId || null,
+            waitDays,
+            addressId: String(req.body?.addressId || ''),
+            deliveryAddress: String(req.body?.deliveryAddress || req.body?.addressDetails?.addressLine || ''),
+            coordinates: req.body?.coordinates || null,
+            patientPuid: String(req.body?.patientPuid || ''),
+            orderedForName: String(req.body?.orderedForName || ''),
+            items: normalizedWaitItems
+        })).digest('hex');
         const ids = [...new Set(items.map(item => String(item.productId || item.medicineId || '')).filter(Boolean))];
         if (!items.every(item => {
             const productId = String(item.productId || item.medicineId || '');
