@@ -10,6 +10,7 @@ import Permission from '../../models/Permission.js';
 import { getRolePermissions, isKnownPermission } from '../../authorization/AuthorizationCatalogService.js';
 import { sendSuccess, sendError } from '../../shared/responses.js';
 import { setSessionCookies } from '../../security/sessionCookie.js';
+import { customerService } from '../../services/customer-service/CustomerService.js';
 
 
 
@@ -32,6 +33,15 @@ router.put('/me', authenticateUser, async (req, res) => {
             mobileNumber: mobileNumber || mobile,
             gender,
             dateOfBirth
+        });
+        const updatedUser = result?.user || {};
+        await customerService.ensureCustomerForUser(userId, {
+            name: updatedUser.name || [updatedUser.firstName, updatedUser.lastName].filter(Boolean).join(' '),
+            email: updatedUser.email || req.user.email,
+            phone: updatedUser.mobileNumber || updatedUser.mobile || mobileNumber || mobile,
+            dateOfBirth: updatedUser.dateOfBirth || dateOfBirth,
+            gender: updatedUser.gender || gender,
+            tenantId: req.user?.tenantId || req.user?.app_metadata?.tenantId || null
         });
         if (result.accessToken) setSessionCookies(res, { accessToken: result.accessToken });
         return sendSuccess(res, { data: result, message: 'Profile updated successfully.', statusCode: 200, req });
