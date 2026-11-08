@@ -452,30 +452,8 @@ export function AppProvider({ children }) {
         page: medicineRequestPage.current.page, pageSize: 10, limit: 10, total: list.length, totalPages: list.length ? 1 : 0, hasNextPage: false
       });
 
-      // Check if any proposals are ready to notify customer in notification bell
-      const proposalsWaiting = (list || []).filter(r => r.status === 'PROPOSAL_SENT');
-      if (proposalsWaiting.length > 0) {
-        proposalsWaiting.forEach(p => {
-          const notifId = `notif-prop-${p._id}`;
-          if (notificationReadOverrides.current.has(notifId)) return;
-          setNotifications(prev => {
-            if (notificationReadOverrides.current.has(notifId) || prev.some(n => n.id === notifId)) return prev;
-            return [
-              {
-                id: notifId,
-                title: `💊 Proposal Ready for #${p.requestNumber}`,
-                message: `Price: ₹${p.pharmacyProposal?.totalPrice || p.pharmacyProposal?.approximatePrice}. Tap to review and confirm.`,
-                time: 'Just now',
-                read: false,
-                type: 'info',
-                requestId: p._id,
-                actionType: 'VIEW_PROPOSAL'
-              },
-              ...prev
-            ];
-          });
-        });
-      }
+      // Proposal alerts are delivered by the durable NotificationService feed.
+      // Do not synthesize local IDs here: they cannot be acknowledged across sessions.
     } catch (error) {
       console.error('Failed to load customer medicine requests:', error);
       setMedicineRequestsError(error.message || 'Medicine requests are temporarily unavailable. Please try again in a moment.');
@@ -530,7 +508,7 @@ export function AppProvider({ children }) {
         // Preserve socket events received while this snapshot request was in flight.
         const localItems = previous.filter(item =>
           !notificationReadOverrides.current.has(String(item.id))
-          && (item.sourceChannel === 'realtime' || String(item.id).startsWith('notif-prop-') || String(item.id).startsWith('notif-wa'))
+          && (item.sourceChannel === 'realtime' || String(item.id).startsWith('notif-wa'))
           && !serverIds.has(String(item.id))
         );
         return [...mapped, ...localItems].slice(0, 50);
@@ -1208,7 +1186,7 @@ export function AppProvider({ children }) {
           notificationReadOverrides.current.add(notificationId);
           setNotifications(prev => prev.filter(item => String(item.id) !== notificationId));
           // Proposal/WhatsApp prompts synthesized locally have no persisted NotificationService record.
-          if (notificationId.startsWith('notif-prop-') || notificationId.startsWith('notif-wa')) return;
+          if (notificationId.startsWith('notif-wa')) return;
           try {
             await apiClient.patch(`/api/v1/notifications/${encodeURIComponent(notificationId)}/read`);
           } catch (error) {
