@@ -297,7 +297,7 @@ export async function getInventoryAlertSummary({
   const productLookup = [{
     $lookup: {
       from: Product.collection.name,
-      let: { productId: '$productId' },
+      let: { productId: '$$productId' },
       pipeline: [
         { $match: { $expr: { $and: [
           { $eq: ['$_id', '$productId'] },
