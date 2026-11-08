@@ -103,6 +103,7 @@ export function AppProvider({ children }) {
   });
   const [inventoryAlertsStatus, setInventoryAlertsStatus] = useState({ loading: false, error: '' });
   const inventoryAlertsRequestRef = useRef(0);
+  const inventoryAlertsScopeRef = useRef(null);
   const inventoryAlertsPromiseRef = useRef(null);
 
   // WhatsApp Gateway State
@@ -779,6 +780,7 @@ export function AppProvider({ children }) {
       authLoading || !isFullyAuthenticated || !user?.id || !isPharmacyOrAdmin ||
       !hasPermission('inventory.read') || !tenantId || !branchId
     ) {
+      inventoryAlertsScopeRef.current = null;
       setInventoryAlerts({
         expiredCount: 0, expiringSoonCount: 0, lowStockCount: 0, totalAlerts: 0,
         expired: [], expiringSoon: [], lowStock: []
@@ -795,6 +797,15 @@ export function AppProvider({ children }) {
     }
 
     const scopeKey = `${tenantId}:${branchId}`;
+    // Keep last-good data only within the same verified scope; never show a
+    // previous tenant/branch snapshot while the newly selected scope loads.
+    if (inventoryAlertsScopeRef.current !== scopeKey) {
+      inventoryAlertsScopeRef.current = scopeKey;
+      setInventoryAlerts({
+        expiredCount: 0, expiringSoonCount: 0, lowStockCount: 0, totalAlerts: 0,
+        expired: [], expiringSoon: [], lowStock: []
+      });
+    }
     if (inventoryAlertsPromiseRef.current?.scopeKey === scopeKey) return inventoryAlertsPromiseRef.current.promise;
     const requestId = ++inventoryAlertsRequestRef.current;
     setInventoryAlertsStatus(prev => ({ ...prev, loading: true, error: '' }));
