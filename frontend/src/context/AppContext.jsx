@@ -609,7 +609,7 @@ export function AppProvider({ children }) {
     const upsertNotification = (payload, sourceChannel = 'notification') => {
       if (!payload || typeof payload !== 'object') return;
       const id = String(payload.id || payload.notificationId || '');
-      if (!id) return;
+      if (!id || notificationReadOverrides.current.has(id)) return;
       const notification = {
         id,
         title: payload.title || 'Pharmacy Update',
@@ -1191,17 +1191,19 @@ export function AppProvider({ children }) {
         markNotificationRead: async (id) => {
           const notificationId = String(id);
           const target = notifications.find(item => String(item.id) === notificationId);
-          if (!target || target.read) return;
+          if (!target || notificationReadOverrides.current.has(notificationId)) return;
+          // Remove immediately from the bell; restore it if durable acknowledgement fails.
           notificationReadOverrides.current.add(notificationId);
-          setNotifications(prev => prev.map(item => String(item.id) === notificationId ? { ...item, read: true } : item));
-          // Proposal/WhatsApp prompts synthesized locally do not have a persisted
-          // NotificationService record and must not be sent to the read API.
+          setNotifications(prev => prev.filter(item => String(item.id) !== notificationId));
+          // Proposal/WhatsApp prompts synthesized locally have no persisted NotificationService record.
           if (notificationId.startsWith('notif-prop-') || notificationId.startsWith('notif-wa')) return;
           try {
             await apiClient.patch(`/api/v1/notifications/${encodeURIComponent(notificationId)}/read`);
           } catch (error) {
             notificationReadOverrides.current.delete(notificationId);
-            setNotifications(prev => prev.map(item => String(item.id) === notificationId ? { ...item, read: false } : item));
+            setNotifications(prev => prev.some(item => String(item.id) === notificationId)
+              ? prev
+              : [target, ...prev].slice(0, 50));
             console.warn('[Notifications] Could not persist read state:', error?.message || error);
           }
         },
