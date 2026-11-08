@@ -136,7 +136,7 @@ export default function TenantStaffManager({ tenantId }) {
               : <select aria-label="Staff role" value={member.role} disabled={member.status !== 'ACTIVE' || (member.role === 'TENANT_ADMIN' && (!canManageTenantAdmins || activeTenantAdminCount <= 1))} onChange={event => updateStaff(member, { role: event.target.value, branchId: event.target.value === 'TENANT_ADMIN' ? null : (member.branchId || null), permissions: ROLE_PERMISSIONS[event.target.value] || [] })} className="rounded-lg border border-slate-300 px-2 py-2 text-xs disabled:opacity-50">
                   {ROLES.filter(role => role !== 'TENANT_ADMIN' || canManageTenantAdmins).map(role => <option key={role} value={role}>{role.replace(/_/g, ' ')}</option>)}
                 </select>}
-            <select aria-label="Staff branch" value={member.branchId || ''} disabled={member.status !== 'ACTIVE' || member.role === 'TENANT_OWNER'} onChange={event => {
+            <select aria-label="Staff branch" value={member.branchId || ''} disabled={member.status !== 'ACTIVE' || member.role === 'TENANT_OWNER' || (member.role === 'TENANT_ADMIN' && (!canManageTenantAdmins || activeTenantAdminCount <= 1))} onChange={event => {
               const branchId = event.target.value || null;
               const role = member.role === 'TENANT_ADMIN' && branchId ? 'PHARMACY_STAFF' : member.role;
               updateStaff(member, { role, branchId, permissions: ROLE_PERMISSIONS[role] || [] });
