@@ -32,9 +32,11 @@ const requireCustomerIdentity = (req, res, next) => {
 router.post('/ensure', authenticateUser, requireCustomerIdentity, async (req, res, next) => {
     try {
         const customer = await customerService.ensureCustomerForUser(req.context.userId, {
-            name: req.body?.name || req.user.user_metadata?.name || req.user.name,
+            name: req.body?.name || req.user.user_metadata?.name || req.user.name || [req.user.firstName, req.user.lastName].filter(Boolean).join(' '),
             email: req.body?.email || req.user.email,
             phone: req.body?.phone || req.user.user_metadata?.mobile || req.user.mobile,
+            dateOfBirth: req.body?.dateOfBirth || req.user.dateOfBirth,
+            gender: req.body?.gender || req.user.gender,
             tenantId: req.user?.tenantId || req.user?.app_metadata?.tenantId || null
         });
         res.status(200).json({ success: true, data: customer });
@@ -46,6 +48,17 @@ router.post('/ensure', authenticateUser, requireCustomerIdentity, async (req, re
 // Managed persons CRUD fallback when the standalone Customer Service is not configured.
 router.get('/persons', authenticateUser, requireCustomerIdentity, async (req, res, next) => {
     try {
+        // The profile/relatives panel is often the first customer-service call
+        // after signup. Ensure the canonical self person and owner relationship
+        // exist before listing relatives, including for legacy accounts.
+        await customerService.ensureCustomerForUser(req.context.userId, {
+            name: req.user.user_metadata?.name || req.user.name || [req.user.firstName, req.user.lastName].filter(Boolean).join(' '),
+            email: req.user.email,
+            phone: req.user.user_metadata?.mobile || req.user.mobileNumber || req.user.mobile,
+            dateOfBirth: req.user.dateOfBirth,
+            gender: req.user.gender,
+            tenantId: req.user?.tenantId || req.user?.app_metadata?.tenantId || null
+        });
         const persons = await customerService.listManagedPersons(req.context.userId);
         res.json({ success: true, data: persons });
     } catch (err) { next(err); }
@@ -93,10 +106,13 @@ router.post('/family-invitations', authenticateUser, requireCustomerIdentity, as
 // Get authenticated customer profile
 router.get('/me', authenticateUser, requireCustomerIdentity, async (req, res, next) => {
     try {
-        const customer = await identityService.getOrCreateCustomer(req.context.userId, {
-            name: req.user.user_metadata?.name || req.user.name,
+        const customer = await customerService.ensureCustomerForUser(req.context.userId, {
+            name: req.user.user_metadata?.name || req.user.name || [req.user.firstName, req.user.lastName].filter(Boolean).join(' '),
             email: req.user.email,
-            phone: req.user.user_metadata?.mobile || req.user.mobile
+            phone: req.user.user_metadata?.mobile || req.user.mobileNumber || req.user.mobile,
+            dateOfBirth: req.user.dateOfBirth,
+            gender: req.user.gender,
+            tenantId: req.user?.tenantId || req.user?.app_metadata?.tenantId || null
         });
         res.json({ success: true, data: customer });
     } catch (err) {

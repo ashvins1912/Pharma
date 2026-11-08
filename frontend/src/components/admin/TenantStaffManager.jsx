@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import apiClient from '../../api/apiClient';
+import { useAuth } from '../../context/AuthContext';
 
 const ROLE_PERMISSIONS = {
   PHARMACY_STAFF: ['orders.read', 'inventory.read'],
@@ -15,6 +16,9 @@ const ROLES = Object.keys(ROLE_PERMISSIONS);
 const idOf = item => String(item?._id || item?.id || '');
 
 export default function TenantStaffManager({ tenantId }) {
+  const { role: actorRole, user } = useAuth();
+  const normalizedActorRole = String(actorRole || user?.app_metadata?.role || user?.role || '').toUpperCase();
+  const canManageTenantAdmins = normalizedActorRole === 'TENANT_OWNER' || ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'ADMIN'].includes(normalizedActorRole);
   const [memberships, setMemberships] = useState([]);
   const [branches, setBranches] = useState([]);
   const [form, setForm] = useState({ email: '', branchId: '', role: 'PHARMACY_STAFF' });
@@ -22,6 +26,7 @@ export default function TenantStaffManager({ tenantId }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const activeTenantAdminCount = memberships.filter(member => String(member.role).toUpperCase() === 'TENANT_ADMIN' && String(member.status).toUpperCase() === 'ACTIVE' && !member.branchId).length;
 
   const load = useCallback(async () => {
     if (!tenantId) return;
@@ -96,7 +101,8 @@ export default function TenantStaffManager({ tenantId }) {
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
       <div>
         <h3 className="text-lg font-black text-slate-900">Branch staff &amp; role access</h3>
-        <p className="mt-1 text-xs text-slate-500">Assign an existing registered pharmacy user by email to this pharmacy or a specific branch. Role presets grant only the listed operational permissions.</p>
+        <p className="mt-1 text-xs text-slate-500">Add existing registered pharmacy users, edit their role and branch access, and suspend or reactivate access. At least one tenant-wide TENANT_ADMIN must remain active.</p>
+        <p className="mt-2 inline-flex rounded-lg bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-800">Active tenant administrators: {activeTenantAdminCount}</p>
       </div>
       {error && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-800">{error}</p>}
       {notice && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">{notice}</p>}
@@ -112,7 +118,7 @@ export default function TenantStaffManager({ tenantId }) {
         </label>
         <label className="space-y-1 text-xs font-bold text-slate-600">Role
           <select value={form.role} onChange={event => setForm(current => ({ ...current, role: event.target.value, branchId: event.target.value === 'TENANT_ADMIN' ? '' : current.branchId }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
-            {ROLES.map(role => <option key={role} value={role}>{role.replace(/_/g, ' ')}</option>)}
+            {ROLES.filter(role => role !== 'TENANT_ADMIN' || canManageTenantAdmins).map(role => <option key={role} value={role}>{role.replace(/_/g, ' ')}</option>)}
           </select>
         </label>
         <div className="md:col-span-4 flex flex-wrap items-center justify-between gap-2">
@@ -127,10 +133,10 @@ export default function TenantStaffManager({ tenantId }) {
             <div className="min-w-0"><p className="break-all text-xs font-bold text-slate-800">{member.name || member.email || member.userId}</p><p className="break-all text-[10px] text-slate-400">{member.userId} · {member.status}</p></div>
             {member.role === 'TENANT_OWNER'
               ? <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">TENANT OWNER · protected</span>
-              : <select aria-label="Staff role" value={member.role} disabled={member.status !== 'ACTIVE'} onChange={event => updateStaff(member, { role: event.target.value, branchId: event.target.value === 'TENANT_ADMIN' ? null : (member.branchId || null), permissions: ROLE_PERMISSIONS[event.target.value] || [] })} className="rounded-lg border border-slate-300 px-2 py-2 text-xs disabled:opacity-50">
-                  {ROLES.map(role => <option key={role} value={role} disabled={member.role === 'TENANT_ADMIN' && role !== 'TENANT_ADMIN'}>{role.replace(/_/g, ' ')}</option>)}
+              : <select aria-label="Staff role" value={member.role} disabled={member.status !== 'ACTIVE' || (member.role === 'TENANT_ADMIN' && (!canManageTenantAdmins || activeTenantAdminCount <= 1))} onChange={event => updateStaff(member, { role: event.target.value, branchId: event.target.value === 'TENANT_ADMIN' ? null : (member.branchId || null), permissions: ROLE_PERMISSIONS[event.target.value] || [] })} className="rounded-lg border border-slate-300 px-2 py-2 text-xs disabled:opacity-50">
+                  {ROLES.filter(role => role !== 'TENANT_ADMIN' || canManageTenantAdmins).map(role => <option key={role} value={role}>{role.replace(/_/g, ' ')}</option>)}
                 </select>}
-            <select aria-label="Staff branch" value={member.branchId || ''} disabled={member.status !== 'ACTIVE' || member.role === 'TENANT_OWNER'} onChange={event => {
+            <select aria-label="Staff branch" value={member.branchId || ''} disabled={member.status !== 'ACTIVE' || member.role === 'TENANT_OWNER' || (member.role === 'TENANT_ADMIN' && (!canManageTenantAdmins || activeTenantAdminCount <= 1))} onChange={event => {
               const branchId = event.target.value || null;
               const role = member.role === 'TENANT_ADMIN' && branchId ? 'PHARMACY_STAFF' : member.role;
               updateStaff(member, { role, branchId, permissions: ROLE_PERMISSIONS[role] || [] });
@@ -138,8 +144,8 @@ export default function TenantStaffManager({ tenantId }) {
               <option value="" disabled={member.role !== 'TENANT_ADMIN'}>{member.role === 'TENANT_ADMIN' ? 'Choose branch to scope' : member.role === 'TENANT_OWNER' ? 'Tenant-wide owner' : 'Branch required'}</option>
               {branches.map(branch => <option key={idOf(branch)} value={idOf(branch)}>{branch.name || branch.code}</option>)}
             </select>
-            <button type="button" onClick={() => void updateStaff(member, { status: member.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED' })} disabled={member.role === 'TENANT_OWNER' || !['ACTIVE', 'SUSPENDED'].includes(member.status)} className="rounded-lg border border-amber-200 disabled:cursor-not-allowed disabled:opacity-40 px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50">{member.status === 'SUSPENDED' ? 'Reactivate' : 'Suspend'}</button>
-            <button type="button" onClick={() => void revokeStaff(member)} disabled={String(member.role).toUpperCase() === 'TENANT_OWNER' || !['ACTIVE', 'SUSPENDED'].includes(member.status)} className="rounded-lg border border-rose-200 disabled:cursor-not-allowed disabled:opacity-40 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Revoke</button>
+            <button type="button" onClick={() => void updateStaff(member, { status: member.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED' })} disabled={member.role === 'TENANT_OWNER' || !['ACTIVE', 'SUSPENDED'].includes(member.status) || (member.role === 'TENANT_ADMIN' && (!canManageTenantAdmins || activeTenantAdminCount <= 1))} className="rounded-lg border border-amber-200 disabled:cursor-not-allowed disabled:opacity-40 px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50">{member.status === 'SUSPENDED' ? 'Reactivate' : 'Suspend'}</button>
+            <button type="button" onClick={() => void revokeStaff(member)} disabled={String(member.role).toUpperCase() === 'TENANT_OWNER' || !['ACTIVE', 'SUSPENDED'].includes(member.status) || (String(member.role).toUpperCase() === 'TENANT_ADMIN' && (!canManageTenantAdmins || activeTenantAdminCount <= 1))} className="rounded-lg border border-rose-200 disabled:cursor-not-allowed disabled:opacity-40 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Revoke</button>
           </div>
         ))}
       </div>
