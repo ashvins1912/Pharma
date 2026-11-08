@@ -539,6 +539,9 @@ export class NotificationService {
     }
 
     async markAsRead(notificationId, userId, { tenantId = null, branchId = null, isSuperAdmin = false } = {}) {
+        // Opening a notification is a dismiss action: remove it from the active
+        // notification system. Delivery events remain available in their own
+        // audit collection; read notifications are not retained in the inbox.
         if (getIsConnected()) {
             const access = isSuperAdmin ? {} : {
                 $or: [
@@ -550,13 +553,11 @@ export class NotificationService {
                     }
                 ]
             };
-            return Notification.findOneAndUpdate(
-                { id: String(notificationId), ...access },
-                { $set: { read: true, readAt: new Date() } },
-                { new: true }
+            return Notification.findOneAndDelete(
+                { id: String(notificationId), ...access }
             ).lean();
         }
-        const notif = this.notifications.find(notification => {
+        const index = this.notifications.findIndex(notification => {
             if (String(notification.id) !== String(notificationId)) return false;
             if (!isSuperAdmin && notification.recipientUserId && notification.recipientUserId !== userId) return false;
             if (!isSuperAdmin && notification.tenantId && notification.tenantId !== tenantId) return false;
@@ -564,11 +565,8 @@ export class NotificationService {
             if (!isSuperAdmin && !notification.recipientUserId && !notification.tenantId) return false;
             return true;
         });
-        if (notif) {
-            notif.read = true;
-            notif.readAt = new Date();
-        }
-        return notif || null;
+        if (index < 0) return null;
+        return this.notifications.splice(index, 1)[0];
     }
 }
 
