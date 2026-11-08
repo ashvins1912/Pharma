@@ -9,6 +9,7 @@ import { useAuth } from './AuthContext';
 import { useTenant } from './TenantContext';
 import usePersistentState from '../hooks/usePersistentState';
 import { useToast } from './ToastContext';
+import { getUnreadNotificationsCount } from '../utils/notificationCount.js';
 import { useActionLoading, LOADING_ACTIONS } from './LoadingContext';
 
 const AppContext = createContext(null);
@@ -1177,7 +1178,7 @@ export function AppProvider({ children }) {
 
         // Notifications
         notifications,
-        unreadNotificationsCount: notifications.filter(n => !n.read).length,
+        unreadNotificationsCount: getUnreadNotificationsCount(notifications),
         markNotificationRead: async (id) => {
           const notificationId = String(id);
           const target = notifications.find(item => String(item.id) === notificationId);
@@ -1185,11 +1186,14 @@ export function AppProvider({ children }) {
           // Remove immediately from the bell; restore it if durable acknowledgement fails.
           notificationReadOverrides.current.add(notificationId);
           setNotifications(prev => prev.filter(item => String(item.id) !== notificationId));
-          // Proposal/WhatsApp prompts synthesized locally have no persisted NotificationService record.
+          // WhatsApp connection prompts are local-only; all persisted notifications are acknowledged server-side.
           if (notificationId.startsWith('notif-wa')) return;
           try {
             await apiClient.patch(`/api/v1/notifications/${encodeURIComponent(notificationId)}/read`);
           } catch (error) {
+            // A 404 means the record was already acknowledged/deleted by an
+            // earlier request or another active session. Keep it dismissed.
+            if (error?.response?.status === 404) return;
             notificationReadOverrides.current.delete(notificationId);
             setNotifications(prev => prev.some(item => String(item.id) === notificationId)
               ? prev
