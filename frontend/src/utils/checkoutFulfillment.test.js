@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildFulfillmentQuoteItems, getCheckoutQuoteEffectAction } from './checkoutFulfillment.js';
+import { buildCheckoutWaitlistRequest, buildFulfillmentQuoteItems, getCheckoutQuoteEffectAction } from './checkoutFulfillment.js';
 
 const plan = {
   customerDecisionRequired: true,
@@ -62,4 +62,24 @@ test('waiting-only fulfilment produces an empty payable quote basket', () => {
     lines: [{ productId: 'medicine-out', fulfilNowQuantity: 0, waitingQuantity: 5, alternatives: [] }]
   };
   assert.deepEqual(buildFulfillmentQuoteItems(waitingOnlyPlan, {}), []);
+});
+
+
+test('partial-stock checkout sends the selected wait window and required idempotency header', () => {
+  const request = buildCheckoutWaitlistRequest({
+    tenantId: 'tenant-1',
+    branchId: 'branch-1',
+    sourceType: 'CHECKOUT',
+    items: [{ productId: 'medicine-a', requestedQuantity: 2 }],
+    waitDays: 4
+  }, 'waitlist-attempt-1');
+
+  assert.equal(request.body.waitDays, 4);
+  assert.deepEqual(request.body.items, [{ productId: 'medicine-a', requestedQuantity: 2 }]);
+  assert.equal(request.config.headers['Idempotency-Key'], 'waitlist-attempt-1');
+});
+
+test('checkout waitlist request rejects a missing wait window or idempotency key', () => {
+  assert.throws(() => buildCheckoutWaitlistRequest({ waitDays: undefined }, 'wait-key'), /1 to 5 days/);
+  assert.throws(() => buildCheckoutWaitlistRequest({ waitDays: 3 }, ''), /idempotency key/);
 });
