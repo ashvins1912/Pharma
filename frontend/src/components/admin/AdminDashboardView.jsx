@@ -201,6 +201,7 @@ export default function AdminDashboardView() {
       canViewInventory && 'inventory',
       canManageRoutes && 'routes',
       canViewAudits && 'audits',
+      canManageMembers && 'members',
       canViewTenants && 'tenants',
       canManagePlatformAccess && 'access',
       isSuperAdmin && 'telemetry',
@@ -211,7 +212,7 @@ export default function AdminDashboardView() {
   }, [
     adminTab, canViewFulfillment, canViewCSquare, canViewAdminRequests,
     canManageRiders, canViewPromotions, canViewSurplusSavings, canViewPayments, canViewInventory,
-    canManageRoutes, canViewAudits, canViewTenants, canManagePlatformAccess, isSuperAdmin
+    canManageRoutes, canViewAudits, canManageMembers, canViewTenants, canManagePlatformAccess, isSuperAdmin
   ]);
 
   // Derived Metrics
@@ -232,7 +233,7 @@ export default function AdminDashboardView() {
     );
   }
 
-  if (role === 'pharmacy' && canViewAdminRequests) {
+  if (role === 'pharmacy' && canViewAdminRequests && !canManageMembers) {
     return (
       <div className="dashboard-shell min-w-0 space-y-5 animate-fade-in">
         <div className="bg-slate-950 text-white rounded-3xl p-6 shadow-md">
