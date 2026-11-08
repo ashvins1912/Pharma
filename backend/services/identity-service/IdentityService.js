@@ -4,6 +4,7 @@
  */
 import crypto from 'node:crypto';
 import { logger } from '../../shared/observability/logger.js';
+import { customerService } from '../customer-service/CustomerService.js';
 
 export class IdentityService {
     constructor() {
@@ -84,28 +85,37 @@ export class IdentityService {
     }
 
     async getOrCreateCustomer(userId, data = {}) {
-        let customerId = this.userToCustomer.get(userId);
-        if (customerId && this.customers.has(customerId)) {
-            const existing = this.customers.get(customerId);
-            if (data.name && !existing.name) existing.name = data.name;
-            if (data.phone && !existing.phone) existing.phone = data.phone;
-            return existing;
-        }
-
-        customerId = `cust-${crypto.randomUUID().slice(0, 8)}`;
+        // Keep the in-process tenant-profile/address adapter keyed by the same
+        // durable customer ID used by CustomerService. This prevents /me,
+        // tenant-profile and address APIs from creating competing customer IDs.
+        const persisted = await customerService.ensureCustomerForUser(userId, {
+            name: data.name || data.fullName,
+            email: data.email,
+            phone: data.phone || data.mobile,
+            dateOfBirth: data.dateOfBirth,
+            gender: data.gender,
+            tenantId: data.tenantId || null
+        });
+        const customerId = String(persisted.customerId || persisted.id);
+        const existing = this.customers.get(customerId);
         const customer = {
+            ...(existing || {}),
             id: customerId,
             userId,
-            name: data.name || data.fullName || 'Valued Customer',
-            email: data.email || '',
-            phone: data.phone || data.mobile || '',
-            status: 'ACTIVE',
-            savedAddresses: [],
-            createdAt: new Date().toISOString()
+            name: persisted.name || data.name || data.fullName || existing?.name || 'Valued Customer',
+            email: persisted.email || data.email || existing?.email || '',
+            phone: persisted.phone || data.phone || data.mobile || existing?.phone || '',
+            status: persisted.status || 'ACTIVE',
+            savedAddresses: existing?.savedAddresses || [],
+            createdAt: existing?.createdAt || new Date().toISOString()
         };
+        const previousCustomerId = this.userToCustomer.get(userId);
+        if (previousCustomerId && previousCustomerId !== customerId && previousCustomerId !== 'cust-demo-ashvin') {
+            this.customers.delete(previousCustomerId);
+        }
         this.customers.set(customerId, customer);
         this.userToCustomer.set(userId, customerId);
-        logger.info(`New global customer registered: ${customer.name}`, { customerId, userId });
+        if (!existing) logger.info(`New global customer registered: ${customer.name}`, { customerId, userId });
         return customer;
     }
 
