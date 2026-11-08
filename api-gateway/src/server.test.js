@@ -36,6 +36,12 @@ const testSecrets = {
   service: 'test-service-secret-that-is-longer-than-thirty-two-characters'
 };
 
+test('inventory safety alerts are registered as a protected inventory read capability', () => {
+  assert.equal(resolveGatewayCapability('GET', '/api/v1/inventory/alerts'), 'inventory.read');
+  assert.equal(isGatewayPermissionAllowed({ role: 'TENANT_ADMIN', permissions: ['inventory.read'] }, 'inventory.read'), true);
+  assert.equal(isGatewayPermissionAllowed({ role: 'TENANT_ADMIN', permissions: [] }, 'inventory.read'), false);
+});
+
 test('storefront medicine catalog is public and does not require inventory RBAC', () => {
   const url = '/api/medicines?page=1&limit=16';
   assert.equal(isGatewayPublicPath('GET', url), true);
