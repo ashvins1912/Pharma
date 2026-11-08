@@ -96,7 +96,7 @@ async function remediateCustomerIndexes() {
 }
 
 export class CustomerService {
-  async ensureCustomerForUser(userId, { name, email, phone, tenantId } = {}) {
+  async ensureCustomerForUser(userId, { name, email, phone, dateOfBirth, gender, tenantId } = {}) {
     if (!userId) throw Object.assign(new Error('userId required'), { statusCode: 401 });
     await remediateCustomerIndexes();
     let customer = await CustomerProfile.findOne({ $or: [{ userId }, { supabaseId: userId }] });
@@ -127,6 +127,8 @@ export class CustomerService {
             createdByUserId: userId,
             displayName: name?.trim() || customer.name || 'Self',
             relationshipToOwner: 'SELF',
+            dateOfBirth: dateOfBirth || null,
+            gender: gender || null,
             status: 'ACTIVE',
             tenantId: tenantId || null
           });
@@ -140,6 +142,8 @@ export class CustomerService {
           { $set: {
             ...(name?.trim() ? { displayName: name.trim() } : {}),
             ...(tenantId ? { tenantId } : {}),
+            ...(dateOfBirth !== undefined ? { dateOfBirth: dateOfBirth || null } : {}),
+            ...(gender !== undefined ? { gender: gender || null } : {}),
             status: 'ACTIVE'
           } }
         );
@@ -197,6 +201,8 @@ export class CustomerService {
           puid: customer.selfPuid,
           displayName: name || customer.name || 'Self',
           relationshipToOwner: 'SELF',
+          dateOfBirth: dateOfBirth || null,
+          gender: gender || null,
           createdByUserId: userId,
           tenantId: tenantId || null
         });
@@ -339,6 +345,7 @@ export class CustomerService {
 
   _serializeCustomer(customer) {
     return {
+      id: customer.customerId,
       customerId: customer.customerId,
       userId: customer.userId,
       selfPuid: customer.selfPuid,
