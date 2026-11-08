@@ -539,9 +539,9 @@ export class NotificationService {
     }
 
     async markAsRead(notificationId, userId, { tenantId = null, branchId = null, isSuperAdmin = false } = {}) {
-        // Opening a notification is a dismiss action: remove it from the active
-        // notification system. Delivery events remain available in their own
-        // audit collection; read notifications are not retained in the inbox.
+        // Acknowledge, do not hard-delete: the durable record retains its unique
+        // dedupeKey so a replayed domain event cannot recreate the same alert.
+        // GET /notifications filters read records from the active inbox.
         if (getIsConnected()) {
             const access = isSuperAdmin ? {} : {
                 $or: [
@@ -553,20 +553,24 @@ export class NotificationService {
                     }
                 ]
             };
-            return Notification.findOneAndDelete(
-                { id: String(notificationId), ...access }
+            return Notification.findOneAndUpdate(
+                { id: String(notificationId), ...access },
+                { $set: { read: true, readAt: new Date() } },
+                { new: true }
             ).lean();
         }
-        const index = this.notifications.findIndex(notification => {
-            if (String(notification.id) !== String(notificationId)) return false;
-            if (!isSuperAdmin && notification.recipientUserId && notification.recipientUserId !== userId) return false;
-            if (!isSuperAdmin && notification.tenantId && notification.tenantId !== tenantId) return false;
-            if (!isSuperAdmin && notification.branchId && notification.branchId !== branchId) return false;
-            if (!isSuperAdmin && !notification.recipientUserId && !notification.tenantId) return false;
+        const notification = this.notifications.find(item => {
+            if (String(item.id) !== String(notificationId)) return false;
+            if (!isSuperAdmin && item.recipientUserId && item.recipientUserId !== userId) return false;
+            if (!isSuperAdmin && item.tenantId && item.tenantId !== tenantId) return false;
+            if (!isSuperAdmin && item.branchId && item.branchId !== branchId) return false;
+            if (!isSuperAdmin && !item.recipientUserId && !item.tenantId) return false;
             return true;
         });
-        if (index < 0) return null;
-        return this.notifications.splice(index, 1)[0];
+        if (!notification) return null;
+        notification.read = true;
+        notification.readAt = notification.readAt || new Date();
+        return notification;
     }
 }
 

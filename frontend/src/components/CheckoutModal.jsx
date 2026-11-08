@@ -76,6 +76,13 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     setCheckoutKey('');
   }, [alternativeChoices, waitDays, usePoints, pointsRequested, appliedCoupon?.code, selectedAddressId, patientPuid]);
 
+  // A waitlist key is bound to its exact request fingerprint. Changing the
+  // pending quantities, alternatives, wait window, recipient or address must
+  // start a new idempotent request rather than replay a conflicting payload.
+  useEffect(() => {
+    setWaitlistKey('');
+  }, [alternativeChoices, waitDays, selectedAddressId, patientPuid, tenantId, branchId]);
+
   useEffect(() => {
     const quoteEffectAction = getCheckoutQuoteEffectAction({
       isOpen,
@@ -220,6 +227,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         alternatives: (line.alternatives || []).map(option => ({ id: option.productId, price: option.discountedUnitPrice, listPrice: option.listPrice, requiresPharmacistApproval: option.requiresPharmacistApproval }))
       })));
       if (availability.data.customerDecisionRequired && (!fulfillmentConfirmed || currentPlanSignature !== fulfillmentPlanSignature)) {
+        if (currentPlanSignature !== fulfillmentPlanSignature) setWaitlistKey('');
         setFulfillmentPlan(availability.data);
         setFulfillmentPlanSignature(currentPlanSignature);
         setWaitlistKey(current => current || (window.crypto?.randomUUID?.() || `wait-${Date.now()}-${Math.random().toString(36).slice(2)}`));
@@ -307,6 +315,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         setFulfillmentConfirmed(false);
         setAlternativeChoices({});
         setWaitlistKey('');
+        window.dispatchEvent(new Event('stock-waitlist-updated'));
         onClose();
       } catch (waitError) {
         setErrorMsg(waitError.response?.data?.message || waitError.message || 'Could not save your stock waitlist.');
@@ -396,6 +405,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         res.data.rewardNotice ? `${successMessage} ${res.data.rewardNotice}` : successMessage,
         res.data.rewardNotice ? 'warning' : 'success'
       );
+      if (createdWaitlistCaseId) window.dispatchEvent(new Event('stock-waitlist-updated'));
       clearCart();
       setFulfillmentPlan(null);
       setFulfillmentPlanSignature('');

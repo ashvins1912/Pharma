@@ -123,7 +123,7 @@ export async function refreshStockWaitlistCases({ limit = 250, now = new Date(),
           continue;
         }
         const recoveryUpdate = {
-          $set: { lines: remainingLines, status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'FULFILLED', parentOrderId: rootOrderId, confirmationId: null, confirmingAt: null, confirmationPreviousStatus: null, confirmationLines: [] },
+          $set: { lines: remainingLines, status: remainingLines.length ? 'WAITING_FOR_STOCK' : 'FULFILLED', parentOrderId: rootOrderId, lastConfirmedOrderId: String(recoveredOrder._id), lastConfirmedAt: now, confirmationId: null, confirmingAt: null, confirmationPreviousStatus: null, confirmationLines: [] },
           $push: { auditTrail: { action: 'CONFIRMATION_RECOVERED', at: now, actorId: 'system', details: { orderId: String(recoveredOrder._id), rootOrderId } } }
         };
         if (isChildOrder) recoveryUpdate.$addToSet = { childOrderIds: String(recoveredOrder._id) };
