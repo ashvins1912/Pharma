@@ -98,7 +98,8 @@ async function updateMembershipPreservingAdmin(tenantId, membershipId, updates) 
       const activeAdminCount = await TenantMembership.countDocuments({
         tenantId,
         role: 'TENANT_ADMIN',
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        branchId: null
       }).session(session);
       if (wouldRemoveLastActiveTenantAdmin(current, updates, activeAdminCount)) {
         throw lastActiveTenantAdminError();
