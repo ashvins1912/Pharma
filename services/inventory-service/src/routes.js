@@ -21,6 +21,7 @@ import {
   archiveProduct,
   lookupInventory,
   searchInventoryProducts,
+  getInventoryAlerts,
   getInventoryAlertSummary,
   reserveInventory,
   transitionReservation
@@ -77,6 +78,16 @@ router.delete('/products/:productId', requireServiceScope('inventory.write'), as
     requestId: req.requestId,
     correlationId: req.correlationId
   });
+  return res.json(result);
+}));
+
+router.get('/alerts', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
+  const result = await getInventoryAlerts({
+    ...getInventoryScope(req, req.query || {}),
+    lowStockThreshold: 3,
+    expiringThresholdDays: 30
+  });
+  res.set('Cache-Control', 'private, no-store');
   return res.json(result);
 }));
 

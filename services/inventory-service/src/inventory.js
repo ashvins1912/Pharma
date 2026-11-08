@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import mongoose from 'mongoose';
+import { buildInventoryAlerts } from './alerts.js';
 import { config } from './config.js';
 import { Audit, Inventory, Product, Reservation } from './models.js';
 
@@ -277,6 +278,10 @@ export async function searchInventoryProducts({
   };
 }
 
+
+export async function getInventoryAlerts(options = {}) {
+  return getInventoryAlertSummary(options);
+}
 
 export async function getInventoryAlertSummary({
   tenantId = null, branchId = null, lowStockThreshold = 3, expiringThresholdDays = 30

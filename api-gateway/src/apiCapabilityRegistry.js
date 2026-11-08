@@ -35,6 +35,7 @@ const CAPABILITIES = [
   ['POST', /^\/api\/admin\/medicine-requests\/[^/]+\/reject-request(?:\/|$)/, 'medicine_requests.manage'],
   ['GET', /^\/api\/medicines\/admin\/inventory$/, 'inventory.read'],
   ['GET', /^\/api\/medicines\/alerts$/, 'inventory.read'],
+  ['GET', /^\/api\/v1\/inventory\/alerts$/, 'inventory.read'],
   ['GET', /^\/api\/medicines\/audits$/, 'inventory.read'],
   ['GET', /^\/api\/medicines\/imports\/[^/]+\/(?:status|failed-records)$/, 'inventory.read'],
   ['POST', /^\/api\/medicines\/(?:imports|imports\/[^/]+\/retry|validate-import|confirm-import|upload-excel)$/, 'inventory.import'],
