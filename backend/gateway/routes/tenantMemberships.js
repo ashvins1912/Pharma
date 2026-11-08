@@ -1,11 +1,14 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { authenticateUser } from '../../middleware/auth.js';
 import { resolveUserContext } from '../../middleware/context.js';
 import TenantMembership from '../../models/TenantMembership.js';
 import TenantBranch from '../../models/TenantBranch.js';
+import Tenant from '../../models/Tenant.js';
 import UserProfile from '../../models/UserProfile.js';
 import { tenantService } from '../../services/tenant-service/TenantService.js';
 import { domainEvents } from '../../shared/events/DomainEvents.js';
+import { wouldRemoveLastActiveTenantAdmin, lastActiveTenantAdminError } from '../../services/tenant-service/tenantAdminGuard.js';
 
 const router = express.Router({ mergeParams: true });
 const ALLOWED_ROLES = new Set(['PHARMACY_STAFF', 'PHARMACIST', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'RIDER', 'TENANT_RIDER', 'TENANT_ADMIN']);
@@ -69,6 +72,48 @@ async function validateBranch(tenantId, branchId, res) {
     return false;
   }
   return true;
+}
+
+/**
+ * Serialize membership mutations through the tenant document. The shared
+ * tenant write makes concurrent demotion/suspension requests conflict and
+ * retry before the active-admin count is evaluated again.
+ */
+async function updateMembershipPreservingAdmin(tenantId, membershipId, updates) {
+  const session = await mongoose.startSession();
+  let updated = null;
+  try {
+    await session.withTransaction(async () => {
+      await Tenant.updateOne(
+        { _id: tenantId },
+        { $set: { updatedAt: new Date() } },
+        { session }
+      );
+      const current = await TenantMembership.findOne({
+        _id: membershipId,
+        tenantId
+      }).session(session).lean();
+      if (!current) return;
+
+      const activeAdminCount = await TenantMembership.countDocuments({
+        tenantId,
+        role: 'TENANT_ADMIN',
+        status: 'ACTIVE'
+      }).session(session);
+      if (wouldRemoveLastActiveTenantAdmin(current, updates, activeAdminCount)) {
+        throw lastActiveTenantAdminError();
+      }
+
+      updated = await TenantMembership.findOneAndUpdate(
+        { _id: membershipId, tenantId },
+        { $set: updates },
+        { new: true, runValidators: true, session }
+      ).lean();
+    });
+    return updated;
+  } finally {
+    await session.endSession();
+  }
 }
 
 router.use(authenticateUser);
@@ -229,15 +274,12 @@ router.patch('/:membershipId', async (req, res) => {
       updates.status = status;
     }
 
-    const updated = await TenantMembership.findOneAndUpdate(
-      { _id: current._id, tenantId: scope.tenantId },
-      { $set: updates },
-      { new: true, runValidators: true }
-    ).lean();
+    const updated = await updateMembershipPreservingAdmin(scope.tenantId, current._id, updates);
+    if (!updated) return res.status(404).json({ success: false, code: 'MEMBERSHIP_NOT_FOUND', message: 'Staff membership not found.' });
     domainEvents.emitDomainEvent('TENANT_STAFF_UPDATED', updated._id, { userId: updated.userId, changes: Object.keys(updates) }, scope.actor, scope.tenantId, updated.branchId);
     return res.json({ success: true, data: updated, message: 'Staff membership updated.' });
   } catch (error) {
-    return res.status(400).json({ success: false, code: 'STAFF_UPDATE_FAILED', message: error.message || 'Staff membership could not be updated.' });
+    return res.status(error.statusCode || 400).json({ success: false, code: error.code || 'STAFF_UPDATE_FAILED', message: error.message || 'Staff membership could not be updated.' });
   }
 });
 
@@ -259,16 +301,12 @@ router.delete('/:membershipId', async (req, res) => {
       return res.status(403).json({ success: false, code: 'SELF_MEMBERSHIP_CHANGE_FORBIDDEN', message: 'You cannot revoke your own pharmacy membership.' });
     }
 
-    const updated = await TenantMembership.findOneAndUpdate(
-      { _id: req.params.membershipId, tenantId: scope.tenantId },
-      { $set: { status: 'REVOKED', invitationToken: null } },
-      { new: true }
-    ).lean();
+    const updated = await updateMembershipPreservingAdmin(scope.tenantId, req.params.membershipId, { status: 'REVOKED', invitationToken: null });
     if (!updated) return res.status(404).json({ success: false, code: 'MEMBERSHIP_NOT_FOUND', message: 'Staff membership not found.' });
     domainEvents.emitDomainEvent('TENANT_STAFF_REVOKED', updated._id, { userId: updated.userId }, scope.actor, scope.tenantId, updated.branchId);
     return res.json({ success: true, data: updated, message: 'Staff access revoked. Historical records are preserved.' });
   } catch (error) {
-    return res.status(400).json({ success: false, code: 'STAFF_REVOKE_FAILED', message: error.message || 'Staff access could not be revoked.' });
+    return res.status(error.statusCode || 400).json({ success: false, code: error.code || 'STAFF_REVOKE_FAILED', message: error.message || 'Staff access could not be revoked.' });
   }
 });
 
