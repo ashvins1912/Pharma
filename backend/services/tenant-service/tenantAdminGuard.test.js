@@ -9,6 +9,7 @@ test('only active tenant-wide TENANT_ADMIN memberships count toward continuity',
   assert.equal(isActiveTenantAdmin({ role: 'TENANT_ADMIN', status: 'ACTIVE' }), true);
   assert.equal(isActiveTenantAdmin({ role: 'TENANT_ADMIN', status: 'SUSPENDED' }), false);
   assert.equal(isActiveTenantAdmin({ role: 'TENANT_OWNER', status: 'ACTIVE' }), false);
+  assert.equal(isActiveTenantAdmin({ role: 'TENANT_ADMIN', status: 'ACTIVE', branchId: 'branch-1' }), false);
 });
 
 test('last active tenant admin cannot be demoted, suspended, or revoked', () => {
