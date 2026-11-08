@@ -81,6 +81,13 @@ export const inventoryClient = {
     });
   },
 
+  async getAlertSummary({ tenantId, branchId, lowStockThreshold = 3, expiringThresholdDays = 30, userId = 'backend' } = {}) {
+    return request('GET', '/api/v1/inventory/alerts/summary', {
+      userId,
+      params: { tenantId, branchId, lowStockThreshold, expiringThresholdDays }
+    });
+  },
+
   async searchProducts({ tenantId = null, branchId = null, query = '', category = '', hideRx = false, includeOutOfStock = false, includeExpiredBatches = false, sort = 'default', page = 1, limit = 50, userId = 'backend' } = {}) {
     return request('GET', '/api/v1/inventory/products/search', {
       userId,
