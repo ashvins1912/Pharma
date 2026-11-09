@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { useOrderFinancials } from '../../hooks/useOrderFinancials';
 
 export default function AdminOrderFinancials({ order, currency = 'INR' }) {
   const financials = useOrderFinancials(order, currency);
   const orderId = String(order?._id || order?.orderId || '').slice(-6).toUpperCase();
+  const sectionId = useId();
 
   return (
     <article className="order-financial-card">
@@ -22,8 +23,8 @@ export default function AdminOrderFinancials({ order, currency = 'INR' }) {
         </span>
       </header>
 
-      <section className="order-financial-card__section" aria-labelledby={`financial-breakdown-${orderId}`}>
-        <h4 id={`financial-breakdown-${orderId}`} className="order-financial-card__section-title">
+      <section className="order-financial-card__section" aria-labelledby={sectionId}>
+        <h4 id={sectionId} className="order-financial-card__section-title">
           Financial breakdown
         </h4>
         <dl className="order-financial-card__metrics">
@@ -41,7 +42,7 @@ export default function AdminOrderFinancials({ order, currency = 'INR' }) {
           </div>
           <div className="order-financial-card__metric order-financial-card__metric--discount">
             <dt>Points discount</dt>
-            <dd>−{financials.formatted.cashDiscount}</dd>
+            <dd>{financials.cashDiscount > 0 ? `−${financials.formatted.cashDiscount}` : '—'}</dd>
           </div>
         </dl>
       </section>
