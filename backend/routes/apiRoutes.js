@@ -272,28 +272,6 @@ router.post('/med-search-grounding', async (req, res) => {
     }
 });
 
-import multer from 'multer';
-import { imageOptimizationService } from '../services/ImageOptimizationService.js';
 
-const upload = multer({ limits: { fileSize: 5 * 1024 * 1024 } });
-
-router.post('/upload/image', upload.single('image'), async (req, res) => {
-    try {
-        if (!req.file) {
-            return res.status(400).json({ error: 'No image file uploaded.' });
-        }
-        const result = await imageOptimizationService.processAndStore(
-            req.file.buffer,
-            req.file.originalname,
-            req.file.mimetype
-        );
-        res.json({
-            status: 'success',
-            data: result
-        });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
 
 export default router;
