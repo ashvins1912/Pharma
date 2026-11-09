@@ -11,7 +11,7 @@ export default function MedicineCard({ med, onAddToCart }) {
             <div>
                 <div className="w-full h-28 sm:h-36 bg-slate-50 rounded-xl overflow-hidden mb-3 flex items-center justify-center relative">
                     <img
-                        src={med.imageUrl || "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&q=80"}
+                        src={med.imageAssetId ? `/api/private-images/${encodeURIComponent(med.imageAssetId)}/content` : (med.imageUrl || "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&q=80")}
                         alt={med.name}
                         className="w-full h-full object-cover p-1 rounded-xl"
                         loading="lazy"
