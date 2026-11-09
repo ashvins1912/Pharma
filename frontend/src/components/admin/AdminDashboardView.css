@@ -2413,3 +2413,143 @@ html.dark .dashboard-workspace--command-center .dashboard-nav-item.is-active {
   .dashboard-shell--command-center .dashboard-hero > div:first-child > div:last-child { grid-template-columns:minmax(0,1fr); }
   .dashboard-shell--command-center .dashboard-metrics > div > div { align-items:flex-start; flex-direction:column; }
 }
+
+/* Medicine procurement request center redesign */
+.admin-request-center { --request-accent:#2563eb; --request-ink:#0f172a; --request-muted:#64748b; }
+.request-center-hero {
+  display:flex; align-items:center; justify-content:space-between; gap:1rem; min-width:0;
+  padding:clamp(1rem,1.5vw,1.5rem); border:1px solid #dbeafe; border-radius:1.2rem;
+  background:linear-gradient(115deg,#eff6ff 0%,#f8fafc 55%,#f0fdfa 100%);
+}
+.request-center-hero-copy { min-width:0; }
+.request-center-eyebrow { display:block; color:#2563eb; font-size:.65rem; font-weight:900; letter-spacing:.13em; }
+.request-center-hero h2 { margin:.35rem 0 0; color:#0f172a; font-size:clamp(1.35rem,1.5vw + .8rem,1.9rem); font-weight:900; letter-spacing:-.045em; line-height:1.15; }
+.request-center-hero p { margin:.45rem 0 0; max-width:70ch; color:#64748b; font-size:.82rem; line-height:1.5; }
+.request-center-hero-status { display:inline-flex; align-items:center; gap:.5rem; flex:0 0 auto; padding:.5rem .75rem; border:1px solid #dbeafe; border-radius:999px; background:rgb(255 255 255 / .75); color:#475569; font-size:.7rem; font-weight:800; }
+.request-center-live-dot { width:.45rem; height:.45rem; border-radius:50%; background:#10b981; box-shadow:0 0 0 3px rgb(16 185 129 / .12); }
+.request-center-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.75rem; min-width:0; }
+.request-center-metric { display:flex; min-width:0; flex-direction:column; gap:.35rem; padding:.85rem 1rem; border:1px solid #e2e8f0; border-radius:1rem; background:#fff; box-shadow:0 3px 12px rgb(15 23 42 / .025); }
+.request-center-metric-label { color:#64748b; font-size:.68rem; font-weight:800; }
+.request-center-metric strong { color:#0f172a; font-size:clamp(1.3rem,1.4vw + .7rem,1.8rem); font-weight:900; letter-spacing:-.04em; line-height:1.1; font-variant-numeric:tabular-nums; }
+.request-center-metric small { color:#94a3b8; font-size:.66rem; line-height:1.4; }
+.request-center-metric--attention { border-color:#fde68a; background:linear-gradient(135deg,#fffbeb,#fff); }
+.request-center-metric--attention strong { color:#d97706; }
+.request-center-metric--proposal { border-color:#bfdbfe; background:linear-gradient(135deg,#eff6ff,#fff); }
+.request-center-metric--proposal strong { color:#2563eb; }
+.request-center-metric--success { border-color:#bbf7d0; background:linear-gradient(135deg,#f0fdf4,#fff); }
+.request-center-metric--success strong { color:#059669; }
+.request-center-controls,.request-center-queue { min-width:0; border:1px solid #e2e8f0; border-radius:1.1rem; background:#fff; box-shadow:0 4px 16px rgb(15 23 42 / .025); }
+.request-center-controls { padding:1rem; }
+.request-center-filter-heading,.request-center-queue-heading { display:flex; align-items:center; justify-content:space-between; gap:.75rem; min-width:0; }
+.request-center-filter-heading h3,.request-center-queue-heading h3 { margin:0; color:#0f172a; font-size:.95rem; font-weight:900; letter-spacing:-.02em; }
+.request-center-filter-heading p,.request-center-queue-heading p { margin:.25rem 0 0; color:#94a3b8; font-size:.7rem; line-height:1.4; }
+.request-center-refresh { display:inline-flex; align-items:center; justify-content:center; gap:.4rem; flex:0 0 auto; min-height:38px; padding:.5rem .75rem; border:1px solid #e2e8f0; border-radius:.7rem; background:#f8fafc; color:#475569; font-size:.72rem; font-weight:800; }
+.request-center-refresh:disabled { opacity:.5; cursor:wait; }
+.request-center-filter-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(230px,300px); align-items:start; gap:1rem; margin-top:1rem; }
+.request-center-status-filters { display:flex; flex-wrap:wrap; align-items:center; gap:.4rem; min-width:0; }
+.request-center-status-filters button { display:inline-flex; align-items:center; justify-content:center; gap:.35rem; min-height:34px; max-width:100%; padding:.45rem .65rem; border:1px solid #e2e8f0; border-radius:.65rem; background:#f8fafc; color:#64748b; font-size:.68rem; font-weight:750; line-height:1.2; text-align:center; }
+.request-center-status-filters button.is-selected { border-color:#bfdbfe; background:#eff6ff; color:#1d4ed8; box-shadow:inset 0 0 0 1px rgb(37 99 235 / .04); }
+.request-center-status-filters button span { display:inline-flex; min-width:1.2rem; height:1.2rem; align-items:center; justify-content:center; border-radius:999px; background:#fef3c7; color:#92400e; font-size:.6rem; }
+.request-center-search { display:flex; min-width:0; flex-direction:column; gap:.35rem; }
+.request-center-search label { color:#64748b; font-size:.65rem; font-weight:800; }
+.request-center-search-field { display:flex; align-items:center; gap:.45rem; min-width:0; padding:.3rem; border:1px solid #e2e8f0; border-radius:.75rem; background:#f8fafc; }
+.request-center-search-field > span { padding-left:.4rem; color:#94a3b8; font-size:1.15rem; }
+.request-center-search-field input { flex:1 1 auto; width:100%; min-width:0; border:0; outline:0; background:transparent; color:#0f172a; font-size:.72rem; }
+.request-center-search-field button { flex:0 0 auto; min-height:34px; padding:.45rem .7rem; border-radius:.55rem; background:#2563eb; color:#fff; font-size:.68rem; font-weight:850; }
+.request-center-queue { padding:1rem; }
+.request-center-queue-heading { padding-bottom:.85rem; border-bottom:1px solid #f1f5f9; }
+.request-center-queue-icon { display:flex; width:2.25rem; height:2.25rem; flex:0 0 auto; align-items:center; justify-content:center; border-radius:.7rem; background:#eff6ff; color:#2563eb; font-size:1rem; }
+.request-center-card-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.85rem; padding-top:.85rem; min-width:0; }
+.request-center-card { display:flex; min-width:0; flex-direction:column; gap:.8rem; padding:.9rem; border:1px solid #e2e8f0; border-radius:1rem; background:#fff; transition:border-color .15s ease,box-shadow .15s ease; }
+.request-center-card:hover { border-color:#cbd5e1; box-shadow:0 5px 16px rgb(15 23 42 / .045); }
+.request-center-card-top { display:flex; align-items:flex-start; justify-content:space-between; gap:.65rem; }
+.request-center-request-id { display:grid; grid-template-columns:auto auto; align-items:baseline; gap:.1rem .45rem; min-width:0; }
+.request-center-request-id span { grid-column:1/-1; color:#94a3b8; font-size:.58rem; font-weight:900; letter-spacing:.1em; }
+.request-center-request-id strong { color:#0f172a; font-size:.85rem; font-weight:900; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+.request-center-request-id small { color:#94a3b8; font-size:.62rem; }
+.request-center-card-status { flex:0 0 auto; max-width:65%; }
+.request-center-card-status > span { max-width:100%; white-space:normal; line-height:1.3; text-align:center; }
+.request-center-card-customer { display:flex; align-items:center; gap:.6rem; min-width:0; padding:.65rem; border-radius:.75rem; background:#f8fafc; }
+.request-center-avatar { display:inline-flex; width:2.1rem; height:2.1rem; flex:0 0 auto; align-items:center; justify-content:center; border:1px solid #dbeafe; border-radius:.65rem; background:#eff6ff; color:#2563eb; font-size:.8rem; font-weight:900; }
+.request-center-customer-details { display:flex; min-width:0; flex:1 1 auto; flex-direction:column; gap:.15rem; }
+.request-center-customer-details strong { overflow:hidden; color:#0f172a; font-size:.75rem; font-weight:850; text-overflow:ellipsis; white-space:nowrap; }
+.request-center-customer-details span { color:#64748b; font-size:.65rem; overflow-wrap:anywhere; }
+.request-center-location { flex:0 1 38%; min-width:0; max-width:38%; color:#64748b; font-size:.62rem; line-height:1.35; overflow-wrap:anywhere; }
+.request-center-medicines { display:flex; min-width:0; flex-direction:column; gap:.45rem; }
+.request-center-section-label { display:flex; align-items:center; justify-content:space-between; gap:.5rem; color:#64748b; font-size:.62rem; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
+.request-center-section-label b { color:#94a3b8; font-size:.6rem; font-weight:800; text-transform:none; letter-spacing:0; }
+.request-center-medicine { display:flex; align-items:center; gap:.55rem; min-width:0; padding:.55rem .6rem; border:1px solid #f1f5f9; border-radius:.7rem; background:#fff; }
+.request-center-medicine-symbol { display:flex; width:1.65rem; height:1.65rem; flex:0 0 auto; align-items:center; justify-content:center; border-radius:.5rem; background:#f0fdf4; color:#059669; font-size:.8rem; }
+.request-center-medicine-details { display:flex; min-width:0; flex:1 1 auto; flex-direction:column; gap:.15rem; }
+.request-center-medicine-details strong { color:#1e293b; font-size:.7rem; font-weight:800; overflow-wrap:anywhere; }
+.request-center-medicine-details span { color:#94a3b8; font-size:.62rem; overflow-wrap:anywhere; }
+.request-center-quantity { flex:0 0 auto; color:#475569; font-size:.62rem; font-weight:850; }
+.request-center-stock-tag { flex:0 0 auto; padding:.2rem .35rem; border-radius:.4rem; background:#fffbeb; color:#b45309; font-size:.55rem; font-weight:850; }
+.request-center-more-items { margin:0; color:#2563eb; font-size:.65rem; font-weight:750; }
+.request-center-card-details { display:flex; min-width:0; flex-direction:column; gap:.55rem; }
+.request-center-customer-note { display:flex; flex-direction:column; gap:.2rem; margin:0; color:#64748b; font-size:.65rem; line-height:1.45; overflow-wrap:anywhere; }
+.request-center-customer-note span { color:#94a3b8; font-size:.58rem; font-weight:900; letter-spacing:.06em; text-transform:uppercase; }
+.request-center-detail-actions { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem; min-width:0; }
+.request-center-detail-actions button,.request-center-detail-actions a { display:inline-flex; min-height:32px; align-items:center; justify-content:center; padding:.4rem .55rem; border:1px solid #dbeafe; border-radius:.55rem; background:#eff6ff; color:#1d4ed8; font-size:.62rem; font-weight:800; text-decoration:none; }
+.request-center-proposal-price { display:flex; flex:1 1 auto; align-items:center; justify-content:space-between; gap:.5rem; min-width:0; padding:.4rem .6rem; border:1px solid #bbf7d0; border-radius:.55rem; background:#f0fdf4; }
+.request-center-proposal-price span { color:#64748b; font-size:.6rem; }
+.request-center-proposal-price strong { color:#059669; font-size:.8rem; font-weight:900; overflow-wrap:anywhere; }
+.request-center-card-footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.65rem; margin-top:auto; padding-top:.75rem; border-top:1px solid #f1f5f9; }
+.request-center-card-footer > span { color:#94a3b8; font-size:.62rem; font-weight:700; }
+.request-center-action { display:inline-flex; min-height:38px; align-items:center; justify-content:center; gap:.55rem; padding:.55rem .75rem; border:1px solid #2563eb; border-radius:.65rem; background:#2563eb; color:#fff; font-size:.68rem; font-weight:850; }
+.request-center-action--secondary { border-color:#e2e8f0; background:#f8fafc; color:#475569; }
+.request-center-empty { display:flex; min-height:200px; flex-direction:column; align-items:center; justify-content:center; gap:.5rem; padding:2rem 1rem; text-align:center; }
+.request-center-empty > span { display:flex; width:3rem; height:3rem; align-items:center; justify-content:center; border-radius:1rem; background:#f1f5f9; color:#94a3b8; font-size:1.6rem; }
+.request-center-empty h4 { margin:0; color:#334155; font-size:.85rem; font-weight:850; }
+.request-center-empty p { margin:0; max-width:45ch; color:#94a3b8; font-size:.7rem; }
+.request-center-error { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.75rem; margin-top:.75rem; padding:.75rem; border:1px solid #fecdd3; border-radius:.7rem; background:#fff1f2; color:#9f1239; font-size:.72rem; }
+.request-center-error button { min-height:36px; padding:.45rem .7rem; border-radius:.55rem; background:#be123c; color:#fff; font-size:.68rem; font-weight:850; }
+.request-center-skeletons { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.8rem; padding-top:.8rem; }
+.request-center-skeleton { height:240px; border-radius:1rem; background:linear-gradient(90deg,#f1f5f9,#e2e8f0,#f1f5f9); animation:request-center-pulse 1.3s ease-in-out infinite; }
+.request-center-pagination { padding-top:.85rem; border-top:1px solid #f1f5f9; }
+@keyframes request-center-pulse { 0%,100% { opacity:.55; } 50% { opacity:1; } }
+html.dark .request-center-hero { border-color:#1e3a8a; background:linear-gradient(115deg,#172554,#0f172a 55%,#042f2e); }
+html.dark .request-center-hero h2 { color:#f8fafc; }
+html.dark .request-center-hero p { color:#cbd5e1; }
+html.dark .request-center-hero-status { border-color:#334155; background:#172033; color:#cbd5e1; }
+html.dark .request-center-metric,html.dark .request-center-controls,html.dark .request-center-queue,html.dark .request-center-card { border-color:#334155; background:#0f172a; }
+html.dark .request-center-metric strong,html.dark .request-center-filter-heading h3,html.dark .request-center-queue-heading h3,html.dark .request-center-request-id strong,html.dark .request-center-customer-details strong,html.dark .request-center-medicine-details strong { color:#f1f5f9; }
+html.dark .request-center-metric-label,html.dark .request-center-metric small,html.dark .request-center-filter-heading p,html.dark .request-center-queue-heading p,html.dark .request-center-section-label,html.dark .request-center-card-footer > span { color:#94a3b8; }
+html.dark .request-center-metric--attention,html.dark .request-center-metric--proposal,html.dark .request-center-metric--success { background:#111c2e; }
+html.dark .request-center-refresh,html.dark .request-center-status-filters button,html.dark .request-center-search-field,html.dark .request-center-card-customer,html.dark .request-center-medicine,html.dark .request-center-action--secondary { border-color:#334155; background:#172033; color:#cbd5e1; }
+html.dark .request-center-status-filters button.is-selected { border-color:#1d4ed8; background:rgb(30 64 175 / .22); color:#bfdbfe; }
+html.dark .request-center-search-field input { color:#f1f5f9; }
+html.dark .request-center-queue-heading,html.dark .request-center-card-footer,html.dark .request-center-pagination { border-color:#1e293b; }
+html.dark .request-center-proposal-price { border-color:#166534; background:rgb(20 83 45 / .2); }
+html.dark .request-center-proposal-price strong { color:#86efac; }
+html.dark .request-center-empty h4 { color:#e2e8f0; }
+@media (max-width:1150px) {
+  .request-center-filter-layout { grid-template-columns:minmax(0,1fr); }
+  .request-center-search { max-width:none; }
+}
+@media (max-width:900px) {
+  .request-center-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .request-center-card-grid,.request-center-skeletons { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (max-width:640px) {
+  .request-center-hero { align-items:flex-start; flex-direction:column; }
+  .request-center-hero-status { align-self:flex-start; }
+  .request-center-controls,.request-center-queue { padding:.75rem; border-radius:.95rem; }
+  .request-center-filter-heading { align-items:flex-start; }
+  .request-center-status-filters { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; }
+  .request-center-status-filters button { min-width:0; min-height:40px; justify-content:space-between; text-align:left; }
+  .request-center-card-grid,.request-center-skeletons { grid-template-columns:minmax(0,1fr); }
+  .request-center-card { padding:.8rem; }
+  .request-center-location { max-width:34%; flex-basis:34%; }
+}
+@media (max-width:380px) {
+  .request-center-metrics { gap:.5rem; }
+  .request-center-metric { padding:.7rem; }
+  .request-center-metric-label { font-size:.62rem; }
+  .request-center-metric small { font-size:.6rem; }
+  .request-center-card-customer { flex-wrap:wrap; }
+  .request-center-location { flex:1 0 100%; max-width:100%; padding-left:2.7rem; }
+  .request-center-card-footer { align-items:stretch; flex-direction:column; }
+  .request-center-action { width:100%; }
+}
+@media (prefers-reduced-motion:reduce) { .request-center-card,.request-center-skeleton { transition:none; animation:none; } }
