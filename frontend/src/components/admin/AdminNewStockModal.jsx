@@ -95,7 +95,8 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
     const { name, value, type, checked } = e.target;
     setForm(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: type === 'checkbox' ? checked : value,
+      ...(name === 'imageUrl' ? { imageAssetId: '' } : {})
     }));
   };
 
@@ -341,7 +342,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                   {PRESET_IMAGE_ASSETS.map((asset, i) => (
                     <div
                       key={i}
-                      onClick={() => setForm(prev => ({ ...prev, imageUrl: asset.url }))}
+                      onClick={() => setForm(prev => ({ ...prev, imageUrl: asset.url, imageAssetId: '' }))}
                       className={`cursor-pointer rounded-xl border-2 p-1.5 transition text-center space-y-1 ${
                         form.imageUrl === asset.url ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/40' : 'border-slate-200 dark:border-slate-700 hover:border-blue-400'
                       }`}
