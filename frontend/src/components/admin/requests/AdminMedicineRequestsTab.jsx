@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   getAdminMedicineRequests,
   getAdminMedicineRequestMetrics
@@ -9,7 +9,7 @@ import { normalizePrescriptionBlob } from '../../../utils/prescriptionFile';
 import Pagination from '../../common/Pagination';
 import { useLanguage } from '../../../context/LanguageContext';
 
-export default function AdminMedicineRequestsTab({ initialData = null, initialLoading = false, onPendingCountRefresh }) {
+export default function AdminMedicineRequestsTab({ initialData = null, initialLoading = false, onPendingCountRefresh, dateRange = {} }) {
   const { t } = useLanguage();
   const [requests, setRequests] = useState(initialData?.requests || []);
   const [metrics, setMetrics] = useState({
@@ -25,6 +25,8 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
   });
 
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const requestSequence = useRef(0);
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeRequest, setActiveRequest] = useState(null);
@@ -32,25 +34,32 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
   const [pagination, setPagination] = useState(initialData?.pagination || { page: 1, pageSize: 15, total: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false });
 
   const loadRequests = async (targetPage = 1) => {
+    const sequence = ++requestSequence.current;
+    setLoading(true);
+    setLoadError('');
     try {
-      setLoading(true);
-      const [list, m] = await Promise.all([
+      const [list, nextMetrics] = await Promise.all([
         getAdminMedicineRequests({
           page: targetPage,
           pageSize: 15,
           status: selectedStatus !== 'ALL' ? selectedStatus : undefined,
-          search: searchQuery.trim() || undefined
+          search: searchQuery.trim() || undefined,
+          ...dateRange
         }),
         getAdminMedicineRequestMetrics()
       ]);
-      setRequests(list.requests || []);
-      setPagination(list.pagination || pagination);
-      if (m) setMetrics(m);
-    } catch (err) {
-      console.error('Failed to load admin medicine requests:', err);
-    } finally {
-      setLoading(false);
+      if (sequence !== requestSequence.current) return;
+      setRequests(Array.isArray(list?.requests) ? list.requests : []);
+      setPagination(list?.pagination || { page: targetPage, pageSize: 15, total: 0, totalPages: 1 });
+      if (nextMetrics) setMetrics(nextMetrics);
       onPendingCountRefresh?.();
+    } catch (err) {
+      if (sequence !== requestSequence.current) return;
+      console.error('Failed to load admin medicine requests:', err);
+      setLoadError(err?.response?.data?.message || err?.message || 'Unable to load medicine requests.');
+      setRequests([]);
+    } finally {
+      if (sequence === requestSequence.current) setLoading(false);
     }
   };
 
@@ -66,7 +75,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
     if (selectedStatus === 'ALL' && !searchQuery.trim() && initialLoading) return;
     if (selectedStatus === 'ALL' && !searchQuery.trim() && initialData) return;
     loadRequests(1);
-  }, [selectedStatus, initialLoading, initialData]);
+  }, [selectedStatus, initialLoading, initialData, dateRange.startDate, dateRange.endDate]);
 
   useEffect(() => {
     if (!initialData) return;
@@ -312,7 +321,18 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
           </button>
         </div>
 
-        {requests.length === 0 ? (
+        {loadError && (
+          <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800">
+            <span>{loadError}</span>
+            <button type="button" onClick={() => loadRequests(pagination.page || 1)} className="min-h-10 rounded-lg bg-rose-700 px-4 font-bold text-white">Retry</button>
+          </div>
+        )}
+        {loading && requests.length === 0 && (
+          <div role="status" className="space-y-3 py-6" aria-label="Loading medicine requests">
+            {[1, 2, 3].map(row => <div key={row} className="h-16 animate-pulse rounded-xl bg-slate-100" />)}
+          </div>
+        )}
+        {!loading && !loadError && requests.length === 0 ? (
           <div className="py-16 text-center text-slate-400 space-y-2">
             <p className="text-3xl">📭</p>
             <p className="text-xs font-bold text-slate-700">{t('noMedicineRequestsFound')}</p>
@@ -320,7 +340,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
               {t('noMedicineRequestsHelp')}
             </p>
           </div>
-        ) : (
+        ) : !loadError && requests.length > 0 ? (
           <>
             <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -538,7 +558,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
             })}
           </div>
           </>
-        )}
+        ) : null}
 
         {pagination.total > 0 && (
           <Pagination
