@@ -1274,7 +1274,7 @@ router.get('/metrics/overview', authenticateUser, requirePermission('medicine_re
     try {
         const tenantId = isPlatformRequestAdmin(req) ? null : getRequestActorTenantId(req);
         if (!isPlatformRequestAdmin(req) && !tenantId) return res.status(403).json({ message: 'An active pharmacy tenant is required.' });
-        const metrics = await dataStore.getMedicineRequestMetrics(req.user);
+        const metrics = await dataStore.getMedicineRequestMetrics(req.user, { startDate: req.query.startDate, endDate: req.query.endDate });
         res.json(metrics);
     } catch (err) {
         console.error('Failed to get medicine request metrics:', err);
