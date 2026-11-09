@@ -1258,3 +1258,31 @@ form select, form textarea) {
     border-radius: 1.25rem;
   }
 }
+
+
+/* Let wide data tables size to their columns inside explicit scroll containers. */
+.pharma-responsive-scope :where(.admin-screen .overflow-x-auto table) {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+}
+
+.pharma-responsive-scope :where(.fulfillment-stage-tabs) {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pharma-responsive-scope :where(.fulfillment-stage-tab) {
+  flex: 0 0 auto;
+  min-height: 2.75rem;
+}
+
+@media (max-width: 639px) {
+  .pharma-responsive-scope :where(.admin-screen--tenants .platform-directory-tab) {
+    min-height: 2.75rem;
+    padding-inline: 0.75rem;
+  }
+}
