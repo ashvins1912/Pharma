@@ -62,6 +62,7 @@ export const MONITORED_SERVICES = [
 
 let cachedServiceHealth = null;
 let lastProbeTimestamp = null;
+let serviceProbeInFlight = null;
 
 async function probeService(service, timeoutMs = 60000) {
   const start = Date.now();
@@ -105,16 +106,26 @@ async function probeService(service, timeoutMs = 60000) {
       latencyMs: latency,
       healthy: false,
       lastChecked: new Date().toISOString(),
-      error: err.name === 'TimeoutError' ? 'Probe timed out (60s)' : err.message
+      error: err.name === 'TimeoutError' ? `Probe timed out (${timeoutMs}ms)` : err.message
     };
   }
 }
 
 async function probeAllServices(timeoutMs = 15000) {
-  const results = await Promise.all(MONITORED_SERVICES.map(s => probeService(s, timeoutMs)));
-  cachedServiceHealth = results;
-  lastProbeTimestamp = new Date().toISOString();
-  return results;
+  if (serviceProbeInFlight) return serviceProbeInFlight;
+
+  const run = Promise.all(MONITORED_SERVICES.map(service => probeService(service, timeoutMs)))
+    .then(results => {
+      cachedServiceHealth = results;
+      lastProbeTimestamp = new Date().toISOString();
+      return results;
+    })
+    .finally(() => {
+      if (serviceProbeInFlight === run) serviceProbeInFlight = null;
+    });
+
+  serviceProbeInFlight = run;
+  return run;
 }
 
 let cachedRbacReport = null;
@@ -123,6 +134,7 @@ let rbacReportInFlight = null;
 const RBAC_CACHE_TTL_MS = 30000;
 
 async function getRbacReport({ fresh = false } = {}) {
+  if (rbacReportInFlight) return rbacReportInFlight;
   if (!fresh && cachedRbacReport && Date.now() - lastRbacTimestamp < RBAC_CACHE_TTL_MS) {
     return cachedRbacReport;
   }
@@ -277,13 +289,15 @@ async function handleSingleServiceProbe(req, res, next) {
       ? Math.min(Math.max(requestedTimeout, 1000), 60000)
       : 15000;
 
-    const service = MONITORED_SERVICES.find(s => s.id === serviceId) || {
+    const matchedService = MONITORED_SERVICES.find(s => s.id === serviceId);
+    const service = matchedService ? { ...matchedService } : {
       id: serviceId || 'custom_service',
       name: serviceId || 'Custom Service',
       url: customUrl || 'https://pharma-api-gateway.onrender.com/health',
       category: 'CUSTOM'
     };
 
+    // Never mutate the shared monitored-service registry from a request override.
     if (customUrl) service.url = customUrl;
 
     const probe = await probeService(service, timeout);
