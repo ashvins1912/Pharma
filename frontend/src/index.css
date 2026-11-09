@@ -1,9 +1,9 @@
+/* Typography is served from jsDelivr; the system stack remains the offline fallback. */
+@import url('https://cdn.jsdelivr.net/npm/@fontsource/inter@5.2.6/latin.css');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Typography is served from jsDelivr; the system stack remains the offline fallback. */
-@import url('https://cdn.jsdelivr.net/npm/@fontsource/inter@5.2.6/latin.css');
 
 @font-face {
   font-family: 'SystemFont';
