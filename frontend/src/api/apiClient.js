@@ -227,8 +227,23 @@ apiClient.interceptors.request.use(async (config) => {
         config.headers.delete?.('authorization');
         delete config.headers.Authorization;
         delete config.headers.authorization;
-    } else if (runtimeAccessToken && !config.__skipRuntimeAuth && !config.headers.Authorization) {
-        config.headers.Authorization = `Bearer ${runtimeAccessToken}`;
+        config.headers.delete?.('X-Gateway-Authorization');
+        config.headers.delete?.('x-gateway-authorization');
+        delete config.headers['X-Gateway-Authorization'];
+        delete config.headers['x-gateway-authorization'];
+    } else {
+        if (runtimeAccessToken && !config.__skipRuntimeAuth && !config.headers.Authorization && !config.headers.authorization) {
+            config.headers.Authorization = `Bearer ${runtimeAccessToken}`;
+        }
+        const effectiveAuthToken = config.headers.Authorization
+            || config.headers.authorization
+            || (runtimeAccessToken ? `Bearer ${runtimeAccessToken}` : null);
+
+        if (effectiveAuthToken && !config.headers['X-Gateway-Authorization'] && !config.headers['x-gateway-authorization']) {
+            config.headers['X-Gateway-Authorization'] = effectiveAuthToken;
+        } else if (!config.headers['X-Gateway-Authorization'] && !config.headers['x-gateway-authorization'] && applicationSessionAuthenticated) {
+            config.headers['X-Gateway-Authorization'] = 'Bearer session';
+        }
     }
     return config;
 }, (error) => Promise.reject(error));

@@ -46,7 +46,8 @@ export const useGlobalStore = create(
       }),
 
       markNotificationRead: (id) => set((state) => {
-        const updated = state.notifications.map(n => n.id === id ? { ...n, read: true } : n);
+        const targetId = String(id || '').trim();
+        const updated = state.notifications.filter(n => String(n.id || n._id || '').trim() !== targetId);
         const unreadCount = updated.filter(n => !n.read).length;
         return { notifications: updated, unreadNotificationsCount: unreadCount };
       }),

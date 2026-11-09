@@ -761,27 +761,28 @@ export function AppProvider({ children }) {
 
   // Load tenant+branch scoped safety alerts from the authoritative Inventory Service.
   const loadInventoryAlerts = useCallback(async () => {
-    if (
-      authLoading || !isFullyAuthenticated || !user?.id || !isPharmacyOrAdmin ||
-      !hasPermission('inventory.read') || !tenantId || !branchId
-    ) {
+    const effectiveTenantId = tenantId || user?.tenantId || user?.app_metadata?.tenantId || null;
+    const effectiveBranchId = branchId || user?.branchId || user?.app_metadata?.branchId || null;
+    const hasBranchContext = Boolean(effectiveTenantId && effectiveBranchId);
+    const canSeeAlerts = !authLoading && isFullyAuthenticated && Boolean(user?.id)
+      && isPharmacyOrAdmin && hasPermission('inventory.read');
+
+    if (!canSeeAlerts || (!hasBranchContext && !isSuperAdmin)) {
       inventoryAlertsScopeRef.current = null;
       setInventoryAlerts({
         expiredCount: 0, expiringSoonCount: 0, lowStockCount: 0, totalAlerts: 0,
         expired: [], expiringSoon: [], lowStock: []
       });
-      const canSeeAlerts = !authLoading && isFullyAuthenticated && Boolean(user?.id)
-        && isPharmacyOrAdmin && hasPermission('inventory.read');
       setInventoryAlertsStatus({
         loading: false,
-        error: canSeeAlerts && (!tenantId || !branchId)
+        error: canSeeAlerts && !hasBranchContext && !isSuperAdmin
           ? 'Select an active pharmacy and branch to check inventory safety alerts.'
           : ''
       });
       return null;
     }
 
-    const scopeKey = `${tenantId}:${branchId}`;
+    const scopeKey = `${effectiveTenantId || 'platform'}:${effectiveBranchId || 'all'}`;
     if (inventoryAlertsScopeRef.current !== scopeKey) {
       inventoryAlertsScopeRef.current = scopeKey;
       setInventoryAlerts({ expiredCount: 0, expiringSoonCount: 0, lowStockCount: 0, totalAlerts: 0, expired: [], expiringSoon: [], lowStock: [] });
@@ -791,8 +792,16 @@ export function AppProvider({ children }) {
     setInventoryAlertsStatus(prev => ({ ...prev, loading: true, error: '' }));
     const requestPromise = (async () => { try {
       const correlationId = `alerts-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const requestHeaders = { 'X-Request-Id': correlationId };
+      if (effectiveTenantId) requestHeaders['X-Tenant-Id'] = effectiveTenantId;
+      if (effectiveBranchId) requestHeaders['X-Branch-Id'] = effectiveBranchId;
       const res = await apiClient.get('/api/v1/inventory/alerts', {
-        params: { tenantId, branchId }, headers: { 'X-Request-Id': correlationId }, timeout: 25_000
+        params: {
+          ...(effectiveTenantId ? { tenantId: effectiveTenantId } : {}),
+          ...(effectiveBranchId ? { branchId: effectiveBranchId } : {})
+        },
+        headers: requestHeaders,
+        timeout: 25_000
       });
       if (requestId !== inventoryAlertsRequestRef.current) return null;
       const payload = res.data?.data || res.data || {};
@@ -825,12 +834,15 @@ export function AppProvider({ children }) {
     } })();
     inventoryAlertsPromiseRef.current = { scopeKey, requestId, promise: requestPromise };
     return requestPromise;
-  }, [authLoading, isFullyAuthenticated, user?.id, isPharmacyOrAdmin, hasPermission, tenantId, branchId]);
+  }, [authLoading, isFullyAuthenticated, user, isPharmacyOrAdmin, isSuperAdmin, hasPermission, tenantId, branchId]);
 
   useEffect(() => {
+    const effectiveTenantId = tenantId || user?.tenantId || user?.app_metadata?.tenantId || null;
+    const effectiveBranchId = branchId || user?.branchId || user?.app_metadata?.branchId || null;
+    const hasBranchContext = Boolean(effectiveTenantId && effectiveBranchId);
     if (
       authLoading || !isFullyAuthenticated || !user?.id || !isPharmacyOrAdmin ||
-      !hasPermission('inventory.read') || !tenantId || !branchId
+      !hasPermission('inventory.read') || (!hasBranchContext && !isSuperAdmin)
     ) {
       inventoryAlertsRequestRef.current += 1;
       setInventoryAlerts({
@@ -841,7 +853,7 @@ export function AppProvider({ children }) {
         && isPharmacyOrAdmin && hasPermission('inventory.read');
       setInventoryAlertsStatus({
         loading: false,
-        error: canSeeAlerts && (!tenantId || !branchId)
+        error: canSeeAlerts && !hasBranchContext && !isSuperAdmin
           ? 'Select an active pharmacy and branch to check inventory safety alerts.'
           : ''
       });
@@ -858,7 +870,7 @@ export function AppProvider({ children }) {
       window.removeEventListener('pharma:inventory-updated', handleInventoryUpdated);
       window.clearInterval(refreshTimer);
     };
-  }, [authLoading, isFullyAuthenticated, user?.id, isPharmacyOrAdmin, hasPermission, tenantId, branchId, loadInventoryAlerts]);
+  }, [authLoading, isFullyAuthenticated, user, isPharmacyOrAdmin, isSuperAdmin, hasPermission, tenantId, branchId, loadInventoryAlerts]);
 
   // Cart operations
   const addToCart = (med) => {
