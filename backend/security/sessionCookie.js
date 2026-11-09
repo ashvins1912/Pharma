@@ -14,6 +14,7 @@ export const COOKIE_CONFIG = {
     ACCESS_TOKEN: {
         httpOnly: true,
         secure: isProduction,
+        sameSite: 'lax',
         // Production browser traffic is same-origin through the frontend /api rewrite.
         // Lax is the stronger compatible posture for this deployment.
         path: '/',

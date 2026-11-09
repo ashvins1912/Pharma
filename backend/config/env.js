@@ -82,6 +82,7 @@ export const envSchema = z.object({
     PAYMENT_ACTION_BASE_URL: optionalString(z.string().url().refine(value => !isProduction || value.startsWith('https://'), {
         message: 'Payment action URLs must use HTTPS in production.'
     })),
+    ENCRYPTION_SECRET_KEY: optionalString(z.string().trim()),
     SYSTEM_SECRET_KEY: optionalString(z.string().min(32)),
     WHATSAPP_DELIVERY_TRACKING_ENABLED: z.enum(['true', 'false']).default('false'),
     MONGO_TRANSACTIONS_CONFIRMED: z.enum(['true', 'false']).default('false'),
@@ -98,6 +99,19 @@ export const envSchema = z.object({
     SMTP_FROM: optionalString(z.string().trim()),
     SMTP_SERVICE: optionalString(z.string().trim())
 }).superRefine((value, context) => {
+    if (value.NODE_ENV === 'production') {
+        if (!value.ENCRYPTION_SECRET_KEY || value.ENCRYPTION_SECRET_KEY.length < 32) {
+            context.addIssue({ code: 'custom', path: ['ENCRYPTION_SECRET_KEY'], message: 'A dedicated encryption key of at least 32 characters is required in production.' });
+        }
+        const insecureEncryptionDefaults = new Set([
+            'change-me', 'secret123', 'default-secret',
+            'ashvin-pharmacy-zero-cost-pii-encryption-key-32chars!'
+        ]);
+        if (insecureEncryptionDefaults.has(value.ENCRYPTION_SECRET_KEY)
+            || value.ENCRYPTION_SECRET_KEY === process.env.DEMO_ADMIN_JWT_SECRET) {
+            context.addIssue({ code: 'custom', path: ['ENCRYPTION_SECRET_KEY'], message: 'Use a dedicated high-entropy encryption key; do not reuse the demo-admin signing secret.' });
+        }
+    }
     if (value.PAYMENT_REMINDER_ENABLED === 'true' || value.PAYMENT_REMINDER_ENGINE_ENABLED === 'true') {
         if (!value.SYSTEM_SECRET_KEY) context.addIssue({ code: 'custom', path: ['SYSTEM_SECRET_KEY'], message: 'Required when payment reminders are enabled.' });
         if (!value.PAYMENT_ACTION_BASE_URL) context.addIssue({ code: 'custom', path: ['PAYMENT_ACTION_BASE_URL'], message: 'Required when payment reminders are enabled.' });

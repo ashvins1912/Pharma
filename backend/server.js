@@ -6,6 +6,7 @@ dotenv.config();
 import { env } from './config/env.js';
 import connectDB, { getIsConnected } from './config/db.js';
 import { corsErrorHandler, createCorsMiddleware } from './security/corsPolicy.js';
+import { applySecurityHeaders } from './security/securityHeaders.js';
 import { requestContext } from './security/requestContext.js';
 import medicineRoutes from './routes/medicineRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
@@ -35,6 +36,7 @@ import { auditMutation } from './middleware/activityAudit.js';
 
 
 const app = express();
+app.use((req, res, next) => applySecurityHeaders(req, res, next, { production: env.NODE_ENV === 'production' }));
 const corsAllowedOrigins = env.CORS_ALLOWED_ORIGINS
     ? env.CORS_ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
     : ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173'];

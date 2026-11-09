@@ -1,9 +1,9 @@
 import crypto from 'node:crypto';
 
 /**
- * Enterprise Application-Level Field Encryption (AES-256-GCM)
- * Encrypts sensitive PII (Physical addresses, contact numbers, health notes) at rest
- * before storing into MongoDB or intermediate datastores.
+ * Application-level AES-256-GCM encryption for secrets such as MFA seeds.
+ * This helper protects only fields that explicitly call encryptPII; it is not
+ * a blanket encryption layer for every customer, order or pharmacy field.
  * 
  * Ciphertext Format: aes-256-gcm:<iv_hex>:<auth_tag_hex>:<ciphertext_hex>
  */
@@ -12,9 +12,14 @@ const IV_LENGTH = 12; // 96 bits recommended for GCM
 const AUTH_TAG_LENGTH = 16; // 128 bits authentication tag
 
 // Derive 256-bit encryption key using scrypt from secret
+const DEVELOPMENT_ONLY_SECRET = 'local-only-pharma-pii-encryption-key-not-for-production';
 const MASTER_SECRET = process.env.ENCRYPTION_SECRET_KEY
-    || process.env.DEMO_ADMIN_JWT_SECRET
-    || 'ashvin-pharmacy-zero-cost-pii-encryption-key-32chars!';
+    || (process.env.NODE_ENV === 'production' ? '' : process.env.DEMO_ADMIN_JWT_SECRET || DEVELOPMENT_ONLY_SECRET);
+
+if (!MASTER_SECRET || MASTER_SECRET.length < 32
+    || (process.env.NODE_ENV === 'production' && MASTER_SECRET === process.env.DEMO_ADMIN_JWT_SECRET)) {
+    throw new Error('ENCRYPTION_SECRET_KEY must be configured as a dedicated secret of at least 32 characters before production startup.');
+}
 
 const SALT = Buffer.from('ashvin-pharmacy-salt-2026', 'utf-8');
 const DERIVED_KEY = crypto.scryptSync(MASTER_SECRET, SALT, 32);
