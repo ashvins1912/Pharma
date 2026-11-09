@@ -87,10 +87,13 @@ test('staged inventory batch APIs require the explicit inventory.import capabili
   assert.equal(resolveGatewayCapability('DELETE', `${batch}/rows/550e8400-e29b-41d4-a716-446655440000%3A2`), null);
 });
 
-test('delivery OTP verification requires delivery management permission', () => {
-  assert.equal(resolveGatewayCapability('POST', '/api/orders/6accca6691b2129986259f9c/verify-delivery'), 'delivery.manage');
-  assert.equal(isGatewayPermissionAllowed({ role: 'TENANT_ADMIN', permissions: ['delivery.manage'] }, 'delivery.manage'), true);
-  assert.equal(isGatewayPermissionAllowed({ role: 'TENANT_ADMIN', permissions: ['orders.read'] }, 'delivery.manage'), false);
+test('delivery OTP endpoints use least-privilege rider and pharmacy capabilities', () => {
+  const orderId = '6accca6691b2129986259f9c';
+  assert.equal(resolveGatewayCapability('GET', `/api/orders/${orderId}/reveal-otp`), 'orders.read');
+  assert.equal(resolveGatewayCapability('POST', `/api/orders/${orderId}/resend-otp`), 'delivery.manage');
+  assert.equal(resolveGatewayCapability('POST', `/api/orders/${orderId}/verify-delivery`), 'delivery.read');
+  assert.equal(isGatewayPermissionAllowed({ role: 'RIDER', permissions: ['delivery.read'] }, 'delivery.read'), true);
+  assert.equal(isGatewayPermissionAllowed({ role: 'RIDER', permissions: ['delivery.read'] }, 'delivery.manage'), false);
 });
 
 test('intelligent order and medicine-request waitlist endpoints require explicit capabilities', () => {
