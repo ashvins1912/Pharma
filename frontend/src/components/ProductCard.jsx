@@ -21,7 +21,8 @@ export default function ProductCard({ med }) {
   // Catalog records can come from the legacy API, Inventory Service, or imported
   // feeds. Accept their known image fields and keep a CDN fallback chain so one
   // stale tenant image never leaves a broken product tile.
-  const imageValue = med.imageUrl || med.image_url || med.productImageUrl || med.photoUrl || med.thumbnailUrl || med.image;
+  const privateAssetUrl = med.imageAssetId ? `/api/private-images/${encodeURIComponent(med.imageAssetId)}/content` : '';
+  const imageValue = privateAssetUrl || med.imageUrl || med.image_url || med.productImageUrl || med.photoUrl || med.thumbnailUrl || med.image;
   const rawImageUrl = typeof imageValue === 'string'
     ? imageValue.trim()
     : imageValue && typeof imageValue === 'object'
