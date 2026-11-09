@@ -8,7 +8,7 @@ export const isRiderOwnedByOrderTenant = (rider, order) => Boolean(
 
 export const isAssignedRiderForOrder = (rider, order) => {
     if (!isRiderOwnedByOrderTenant(rider, order)) return false;
-    const assignedRiderId = order.rider?.riderId || order.riderId || '';
+    const assignedRiderId = order.rider?.riderId || order.riderId || order.assignedRiderId || '';
     const riderId = rider._id || rider.id;
     return Boolean(assignedRiderId && riderId && String(assignedRiderId) === String(riderId));
 };
