@@ -1865,7 +1865,7 @@ export const dataStore = {
             'Ready to Dispatch', 'ready_to_dispatch', 'Ready_To_Dispatch', 'ready', 'Ready',
             'Dispatched', 'dispatched', 'Out for Delivery', 'out_for_delivery',
             'VERIFICATION_NEEDED', 'PACKING', 'WAITING_FOR_STOCK', 'PARTIALLY_FULFILLED'];
-        const deliveredStatuses = ['Delivered', 'delivered', 'DELIVERED', 'Delivered_Order', 'delivered_order', 'DELIVEREDORDER', 'DELIVERED_ORDER'];
+        const deliveredStatuses = ['Delivered', 'delivered', 'DELIVERED', 'Completed', 'completed', 'COMPLETED', 'Delivered_Order', 'delivered_order', 'DELIVEREDORDER', 'DELIVERED_ORDER'];
         const cancelledStatuses = ['Cancelled', 'cancelled', 'CANCELLED', 'Cancelled_Order', 'cancelled_order', 'CANCELLED_ORDER'];
         const statusFilter = values => buildOrderStatusFilter(values);
         const closedStatusExclusion = {
