@@ -62,7 +62,12 @@ app.use((req, res, next) => {
 });
 app.use(createCorsMiddleware(corsAllowedOrigins));
 app.use(corsErrorHandler);
-app.use(express.json({ verify: (req, _res, buffer) => { req.rawBody = Buffer.from(buffer); } }));
+// Medicine image updates send optimized base64 image data in JSON. A 5 MiB
+// image expands to ~6.7 MiB when base64-encoded, so allow bounded headroom.
+app.use(express.json({
+    limit: '8mb',
+    verify: (req, _res, buffer) => { req.rawBody = Buffer.from(buffer); }
+}));
 app.use(cookieParser());
 app.use(csrfProtection);
 app.use(auditMutation);
@@ -278,6 +283,13 @@ app.use((err, req, res, next) => {
     }
     if (res.headersSent) {
         return next(err);
+    }
+    if (err.type === 'entity.too.large' || err.status === 413) {
+        return res.status(413).json({
+            success: false,
+            code: 'REQUEST_BODY_TOO_LARGE',
+            message: 'The update payload is too large. Compress the medicine image and try again.'
+        });
     }
     if (err.name === 'MongooseError' || err.name === 'MongoNetworkError' || (err.message && err.message.includes('buffering timed out'))) {
         console.warn('[AI Studio] Database offline — returning mock fallback response');
