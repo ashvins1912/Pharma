@@ -404,5 +404,5 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
           onRefresh={loadRequests} />
       )}
     </div>
-
+  );
 }
