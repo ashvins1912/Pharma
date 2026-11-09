@@ -83,7 +83,10 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
     setPagination(initialData.pagination || pagination);
   }, [initialData]);
 
-  const handleSearchSubmit = (e) => {\n    e.preventDefault();\n    loadRequests(1);\n  };
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    loadRequests(1);
+  };
 
   const [prescriptionPreview, setPrescriptionPreview] = useState(null);
   const [prescriptionLoading, setPrescriptionLoading] = useState(false);
