@@ -3897,9 +3897,14 @@ export const dataStore = {
         return this.approveMedicineProposalAndConvertToOrder(id, param2, param3);
     },
 
-    async getMedicineRequestMetrics(user = null) {
+    async getMedicineRequestMetrics(user = null, range = {}) {
         const actor = user || { app_metadata: { role: 'admin' } };
-        const requests = await this.getMedicineRequests({}, actor);
+        const requests = (await this.getMedicineRequests({}, actor)).filter(request => {
+            if (!range.startDate && !range.endDate) return true;
+            const created = new Date(request.createdAt).getTime();
+            return Number.isFinite(created) && (!range.startDate || created >= new Date(range.startDate).getTime())
+                && (!range.endDate || created < new Date(range.endDate).getTime());
+        });
 
         const total = requests.length;
         const requested = requests.filter(r => r.status === 'REQUESTED').length;
