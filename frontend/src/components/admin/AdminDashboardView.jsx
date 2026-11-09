@@ -218,9 +218,11 @@ export default function AdminDashboardView() {
       canManageMembers && 'members',
       canViewTenants && 'tenants',
       canManagePlatformAccess && 'access',
+      isSuperAdmin && 'serviceLogs',
       isSuperAdmin && 'telemetry',
       isSuperAdmin && 'matrix',
-      isSuperAdmin && 'automation'
+      isSuperAdmin && 'automation',
+      isSuperAdmin && 'featureHealth'
     ].filter(Boolean);
     if (!allowedTabs.includes(adminTab)) setAdminTab(allowedTabs[0] || '');
   }, [
@@ -426,106 +428,99 @@ export default function AdminDashboardView() {
         </div>
       )}
 
-      {/* Operations workspace: task-oriented navigation with the existing permission gates. */}
-      <section className="dashboard-workspace" aria-labelledby="operations-workspace-title">
+      {/* Compact command center: permission-filtered task groups share the available width. */}
+      <section className="dashboard-workspace dashboard-workspace--command-center" aria-labelledby="operations-workspace-title">
         <header className="dashboard-workspace-header">
           <div className="dashboard-workspace-heading">
             <span className="dashboard-workspace-eyebrow">PHARMA / OPERATIONS</span>
-            <h3 id="operations-workspace-title">Operations workspace</h3>
-            <p>Manage orders, medicine requests, inventory, deliveries and platform operations from one place.</p>
+            <h3 id="operations-workspace-title">Dispensary Command Center</h3>
+            <p>Real-time dispensary workflows, logistics routing, and platform governance.</p>
           </div>
-          <div className="dashboard-workspace-context" aria-label="Workspace context">
-            <span className="dashboard-workspace-context-dot" aria-hidden="true" />
-            <span>Workspace</span>
+          <div className="dashboard-workspace-header-actions">
+            <span className="dashboard-workspace-context"><span className="dashboard-workspace-context-dot" aria-hidden="true" /> Operations hub</span>
+            <span className="dashboard-workspace-tab-hint">Choose a workspace below</span>
           </div>
         </header>
 
-        <nav className="dashboard-workspace-nav" aria-label="Operations workspace navigation">
-          {(canViewFulfillment || canViewAdminRequests || canViewCSquare) && (
-            <section className="dashboard-nav-group" aria-label="Orders and requests">
-              <div className="dashboard-nav-group-heading">
-                <h4 className="dashboard-nav-group-title">Orders &amp; requests</h4>
-                <p>Review demand and move orders forward</p>
-              </div>
-              <div className="dashboard-nav-group-items">
-                {canViewFulfillment && renderWorkspaceItem('fulfillment', t('fulfillmentQueue'), '📦', orders.length)}
-                {canViewAdminRequests && renderWorkspaceItem('requests', t('medicineRequests'), '📋', pendingMedicineRequestCount > 0 ? pendingMedicineRequestCount : null, 'attention')}
-                {canViewCSquare && renderWorkspaceItem('csquare', 'C-Square', '🔗')}
-              </div>
-            </section>
-          )}
-
-          {(canManageRiders || canManageRoutes) && (
-            <section className="dashboard-nav-group" aria-label="Delivery and logistics">
-              <div className="dashboard-nav-group-heading">
-                <h4 className="dashboard-nav-group-title">Delivery &amp; logistics</h4>
-                <p>Coordinate riders, dispatch and routes</p>
-              </div>
-              <div className="dashboard-nav-group-items">
-                {canManageRiders && renderWorkspaceItem('riders', t('riderFleet'), '🛵')}
-                {canManageRoutes && renderWorkspaceItem('routes', t('smartRoute'), '🗺️')}
-              </div>
-            </section>
-          )}
-
-          {(canViewInventory || canViewAudits) && (
-            <section className="dashboard-nav-group" aria-label="Inventory">
-              <div className="dashboard-nav-group-heading">
-                <h4 className="dashboard-nav-group-title">Inventory</h4>
-                <p>Maintain stock accuracy and traceability</p>
-              </div>
-              <div className="dashboard-nav-group-items">
-                {canViewInventory && renderWorkspaceItem('inventory', t('inventoryCatalog'), '📊')}
-                {canViewAudits && renderWorkspaceItem('audits', t('inventoryAudits'), '📜')}
-              </div>
-            </section>
-          )}
-
-          {(canViewPromotions || canViewSurplusSavings || canViewPayments) && (
-            <section className="dashboard-nav-group" aria-label="Finance and growth">
-              <div className="dashboard-nav-group-heading">
-                <h4 className="dashboard-nav-group-title">Finance &amp; growth</h4>
-                <p>Manage payments, offers and savings</p>
-              </div>
-              <div className="dashboard-nav-group-items">
-                {canViewPromotions && renderWorkspaceItem('promotions', t('customerOffers'), '🏷️')}
-                {canViewSurplusSavings && renderWorkspaceItem('surplusSavings', t('surplusSavings'), '⚡')}
-                {canViewPromotions && renderWorkspaceItem('offerZone', t('offerZone'), '✨')}
-                {canViewPayments && renderWorkspaceItem('payments', t('paymentReminders'), '💳')}
-              </div>
-            </section>
-          )}
-
-          {(canManageMembers || !isSuperAdmin) && (
-            <section className="dashboard-nav-group" aria-label="People and workspace">
-              <div className="dashboard-nav-group-heading">
-                <h4 className="dashboard-nav-group-title">People &amp; workspace</h4>
-                <p>Manage your team and pharmacy profile</p>
-              </div>
-              <div className="dashboard-nav-group-items">
-                {canManageMembers && renderWorkspaceItem('members', 'Members & Staff', '👥')}
-                {!isSuperAdmin && renderWorkspaceItem('tenantProfile', t('tenantProfileBranches'), '🏢')}
-              </div>
-            </section>
-          )}
-
-          {(canViewTenants || canManagePlatformAccess || isSuperAdmin) && (
-            <section className="dashboard-nav-group dashboard-nav-group--governance" aria-label="Platform governance">
-              <div className="dashboard-nav-group-heading">
-                <h4 className="dashboard-nav-group-title">Platform governance</h4>
-                <p>Security, tenants and platform oversight</p>
-              </div>
-              <div className="dashboard-nav-group-items">
-                {canViewTenants && renderWorkspaceItem('tenants', t('platformTenants'), '🌐', null, 'governance')}
-                {canManagePlatformAccess && renderWorkspaceItem('access', t('securityAccess'), '🛡️', null, 'governance')}
-                {isSuperAdmin && renderWorkspaceItem('serviceLogs', 'Service logs', '🧾', null, 'governance')}
-                {isSuperAdmin && renderWorkspaceItem('telemetry', t('liveTelemetry'), '📡', null, 'governance')}
-                {isSuperAdmin && renderWorkspaceItem('matrix', t('roleFeatureMatrix'), '📐', null, 'governance')}
-                {isSuperAdmin && renderWorkspaceItem('automation', 'Automation test engine', '🧪', null, 'governance')}
-                {isSuperAdmin && renderWorkspaceItem('featureHealth', 'Feature health & blockers', '🩺', null, 'governance')}
-              </div>
-            </section>
-          )}
+        <nav className="dashboard-workspace-nav dashboard-workspace-nav--dense" aria-label="Operations command center">
+          {[
+            {
+              id: 'orders',
+              title: 'Orders & requests',
+              description: 'Fulfillment and procurement',
+              items: [
+                canViewFulfillment && { tab: 'fulfillment', label: t('fulfillmentQueue'), icon: '📦', count: orders.length },
+                canViewAdminRequests && { tab: 'requests', label: t('medicineRequests'), icon: '📋', count: pendingMedicineRequestCount, tone: 'attention' },
+                canViewCSquare && { tab: 'csquare', label: 'C-Square', icon: '🔗' }
+              ]
+            },
+            {
+              id: 'delivery',
+              title: 'Delivery & logistics',
+              description: 'Riders, dispatch and routes',
+              items: [
+                canManageRiders && { tab: 'riders', label: t('riderFleet'), icon: '🛵' },
+                canManageRoutes && { tab: 'routes', label: t('smartRoute'), icon: '🗺️' }
+              ]
+            },
+            {
+              id: 'inventory',
+              title: 'Inventory',
+              description: 'Stock and traceability',
+              items: [
+                canViewInventory && { tab: 'inventory', label: t('inventoryCatalog'), icon: '📊' },
+                canViewAudits && { tab: 'audits', label: t('inventoryAudits'), icon: '📜' }
+              ]
+            },
+            {
+              id: 'growth',
+              title: 'Finance & growth',
+              description: 'Payments, offers and savings',
+              items: [
+                canViewPromotions && { tab: 'promotions', label: t('customerOffers'), icon: '🏷️' },
+                canViewSurplusSavings && { tab: 'surplusSavings', label: t('surplusSavings'), icon: '⚡' },
+                canViewPromotions && { tab: 'offerZone', label: t('offerZone'), icon: '✨' },
+                canViewPayments && { tab: 'payments', label: t('paymentReminders'), icon: '💳' }
+              ]
+            },
+            {
+              id: 'workspace',
+              title: 'People & workspace',
+              description: 'Team and pharmacy profile',
+              items: [
+                canManageMembers && { tab: 'members', label: 'Members & Staff', icon: '👥' },
+                !isSuperAdmin && { tab: 'tenantProfile', label: t('tenantProfileBranches'), icon: '🏢' }
+              ]
+            },
+            {
+              id: 'governance',
+              title: 'Platform governance',
+              description: 'Security and platform oversight',
+              items: [
+                canViewTenants && { tab: 'tenants', label: t('platformTenants'), icon: '🌐', tone: 'governance' },
+                canManagePlatformAccess && { tab: 'access', label: t('securityAccess'), icon: '🛡️', tone: 'governance' },
+                isSuperAdmin && { tab: 'serviceLogs', label: 'Service logs', icon: '🧾', tone: 'governance' },
+                isSuperAdmin && { tab: 'telemetry', label: t('liveTelemetry'), icon: '📡', tone: 'governance' },
+                isSuperAdmin && { tab: 'matrix', label: t('roleFeatureMatrix'), icon: '📐', tone: 'governance' },
+                isSuperAdmin && { tab: 'automation', label: 'Automation test engine', icon: '🧪', tone: 'governance' },
+                isSuperAdmin && { tab: 'featureHealth', label: 'Feature health & blockers', icon: '🩺', tone: 'governance' }
+              ]
+            }
+          ].map(group => {
+            const items = group.items.filter(Boolean);
+            if (!items.length) return null;
+            return (
+              <section key={group.id} className={`dashboard-nav-group dashboard-nav-group--${group.id}`} aria-label={group.title}>
+                <div className="dashboard-nav-group-heading">
+                  <h4 className="dashboard-nav-group-title">{group.title}</h4>
+                  <p>{group.description}</p>
+                </div>
+                <div className="dashboard-nav-group-items">
+                  {items.map(item => renderWorkspaceItem(item.tab, item.label, item.icon, item.count === 0 && item.tone === 'attention' ? null : item.count, item.tone || 'default'))}
+                </div>
+              </section>
+            );
+          })}
         </nav>
       </section>
 
