@@ -530,11 +530,11 @@ export default function PlatformTenantsView() {
       <section className="platform-governance-strip" aria-label="Access governance review">
         <div className="platform-governance-intro">
           <span className="platform-governance-icon" aria-hidden="true">🛡️</span>
-          <div><h3>Access governance review</h3><p>Platform-level oversight with tenant and branch boundaries kept explicit.</p></div>
+          <div><h3>Access governance overview</h3><p>Review the scope boundaries used by platform and tenant administration.</p></div>
         </div>
-        <div className="platform-governance-check"><span className="platform-governance-checkmark">✓</span><div><strong>Tenant isolation</strong><span>Tenant context is distinct</span></div></div>
-        <div className="platform-governance-check"><span className="platform-governance-checkmark">✓</span><div><strong>Branch scope</strong><span>Memberships remain branch-aware</span></div></div>
-        <div className="platform-governance-check"><span className="platform-governance-checkmark">✓</span><div><strong>Admin delegation</strong><span>Invite tenant admins explicitly</span></div></div>
+        <div className="platform-governance-check"><span className="platform-governance-checkmark">01</span><div><strong>Tenant boundary</strong><span>Server-side tenant context</span></div></div>
+        <div className="platform-governance-check"><span className="platform-governance-checkmark">02</span><div><strong>Branch scope</strong><span>Memberships can be branch-bound</span></div></div>
+        <div className="platform-governance-check"><span className="platform-governance-checkmark">03</span><div><strong>Admin delegation</strong><span>Tenant-scoped admin invitations</span></div></div>
       </section>
 
       {platformTab === 'profile' ? (
