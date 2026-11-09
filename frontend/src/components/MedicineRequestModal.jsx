@@ -76,7 +76,7 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
       const requestedItems = [{
         requestedName: medicineName.trim(),
         composition: saltComposition.trim(),
-        quantity: Math.max(1, Number(quantity) || 1),
+        quantity: Math.max(1, Number.parseInt(String(quantity), 10) || 1),
         originalAvailabilityStatus: 'NOT_IN_CATALOG'
       }];
       const requestFields = {
@@ -231,9 +231,11 @@ export default function MedicineRequestModal({ isOpen, onClose, initialMedicineN
               <input
                 type="number"
                 min="1"
+                step="1"
+                inputMode="numeric"
                 required
                 value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
+                onChange={(e) => setQuantity(Math.max(1, Number.parseInt(e.target.value, 10) || 1))}
                 className="w-full px-3.5 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
               />
             </div>
