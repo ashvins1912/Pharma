@@ -38,10 +38,12 @@ export default function RiderTerminal({ riderId, onClose }) {
       }
 
       // Fetch pending orders for delivery dispatch
-      const ordersRes = await apiClient.get('/api/orders/admin/all', { params: { tenantId } });
+      const currentRiderId = String(currentRider?._id || currentRider?.id || '');
+      const ordersRes = currentRiderId
+        ? await apiClient.get('/api/orders', { params: { riderId: currentRiderId } })
+        : { data: { orders: [] } };
       const ordersRaw = ordersRes.data?.orders || ordersRes.data?.items || ordersRes.data?.data || ordersRes.data || [];
       const allOrders = Array.isArray(ordersRaw) ? ordersRaw : (ordersRaw?.items || ordersRaw?.orders || ordersRaw?.data || []);
-      const currentRiderId = String(currentRider?._id || currentRider?.id || '');
       const pending = Array.isArray(allOrders) ? allOrders.filter(order => {
         const assignedRiderId = String(order.rider?.riderId || order.riderId || order.assignedRiderId || '');
         const orderStatus = String(order.orderStatus || order.status || '').toLowerCase();
