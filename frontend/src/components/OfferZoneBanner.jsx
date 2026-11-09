@@ -31,7 +31,7 @@ const writeCampaignCache = (key, items) => {
 
 export default function OfferZoneBanner() {
   const { t } = useLanguage();
-  const { addToCart, cart } = useApp();
+  const { addToCart, updateQuantity, cart } = useApp();
   const { user, loading: authLoading, isFullyAuthenticated } = useAuth();
   const { tenantId, branchId, activeTenant } = useTenant();
   const { addToast } = useToast();
@@ -110,7 +110,8 @@ export default function OfferZoneBanner() {
 
   if (authLoading || !user || !tenantId || (displayedTenantId && displayedTenantId !== tenantId)) return null;
 
-  const cartQuantityFor = item => Number(cart.find(cartItem => String(cartItem._id) === String(item.medicineId || item._id) && String(cartItem._cartTenantId || cartItem.tenantId || '') === String(tenantId) && String(cartItem._cartBranchId || cartItem.branchId || '') === String(branchId || ''))?.quantity || 0);
+  const cartItemFor = item => cart.find(cartItem => String(cartItem._id) === String(item.medicineId || item._id) && String(cartItem._cartTenantId || cartItem.tenantId || '') === String(tenantId) && String(cartItem._cartBranchId || cartItem.branchId || '') === String(branchId || ''));
+  const cartQuantityFor = item => Number(cartItemFor(item)?.quantity || 0);
 
   const totalPages = Math.max(1, Math.ceil(items.length / itemsPerPage));
   const currentOffers = items.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -125,7 +126,10 @@ export default function OfferZoneBanner() {
       _id: item.medicineId || item._id,
       price: Number(item.discountedPrice),
       originalPrice: Number(item.originalPrice),
-      tenantId
+      stock: Number(item.stock || 0),
+      availableQuantity: Number(item.stock || 0),
+      tenantId,
+      branchId
     });
     addToast(`Added ${item.name} with ${Number(item.discountPercent).toFixed(0)}% Surplus Savings.`, 'success');
   };
@@ -185,7 +189,15 @@ export default function OfferZoneBanner() {
                 <div className="text-sm font-black text-emerald-600 dark:text-emerald-400">₹{Number(item.discountedPrice).toFixed(2)}</div>
                 <div className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300">Save ₹{Number(item.savingsAmount).toFixed(2)}</div>
               </div>
-              <button type="button" onClick={() => handleAddToCart(item)} disabled={Number(item.stock) <= 0} aria-label={cartQuantityFor(item) > 0 ? `${item.name}, ${cartQuantityFor(item)} in cart` : `Claim offer for ${item.name}`} className={`offer-claim-flip rounded-xl text-white font-bold text-xs shadow-sm disabled:bg-slate-400 disabled:cursor-not-allowed ${cartQuantityFor(item) > 0 ? 'is-added' : ''}`}><span className="offer-claim-flip-inner"><span className="offer-claim-flip-face offer-claim-flip-front bg-blue-600 hover:bg-blue-700">Claim Offer</span><span className="offer-claim-flip-face offer-claim-flip-back bg-emerald-600">{cartQuantityFor(item) > 0 ? `In cart · ${cartQuantityFor(item)}` : 'Added to cart'}</span></span></button>
+              {cartQuantityFor(item) > 0 ? (
+                <div className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 p-1.5 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/50" aria-label={`Quantity controls for ${item.name}`}>
+                  <button type="button" onClick={() => updateQuantity(cartItemFor(item)._id, -1)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-lg font-black text-emerald-700 shadow-sm transition hover:bg-emerald-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600 dark:bg-slate-900 dark:text-emerald-300" aria-label={`Decrease ${item.name} quantity`}>−</button>
+                  <span className="min-w-8 px-1 text-center text-sm font-black tabular-nums text-emerald-800 dark:text-emerald-200" aria-live="polite">{cartQuantityFor(item)}</span>
+                  <button type="button" onClick={() => handleAddToCart(item)} disabled={cartQuantityFor(item) >= Number(cartItemFor(item)?.maxCartQuantity || cartItemFor(item)?.stock || item.stock)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-lg font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Increase ${item.name} quantity`}>+</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => handleAddToCart(item)} disabled={Number(item.stock) <= 0} aria-label={`Claim offer for ${item.name}`} className="min-h-10 rounded-xl bg-blue-600 px-4 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-400">Claim Offer</button>
+              )}
             </div>
           </article>
         ))}
