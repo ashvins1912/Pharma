@@ -1,5 +1,5 @@
 import express from 'express';
-import { createHash, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, randomInt, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import dataStore from '../dataStore.js';
@@ -2275,6 +2275,10 @@ router.get('/:id/reveal-otp', authenticateUser, async (req, res) => {
 // Regenerate and resend delivery OTP (cached for 1 day, notifies customer)
 router.post('/:id/resend-otp', authenticateUser, async (req, res) => {
     try {
+        // Resending is a pharmacy operation; riders only submit the customer-provided OTP.
+        if (!isPlatformOrderAdmin(req) && !isTenantOrderStaff(req)) {
+            return res.status(403).json({ message: 'Only pharmacy staff can resend a delivery OTP.' });
+        }
         if (!getIsConnected() || !mongoose.isValidObjectId(req.params.id)) {
             return res.status(503).json({ message: 'Service unavailable.' });
         }

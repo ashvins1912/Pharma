@@ -24,11 +24,16 @@ describe('API capability registry', () => {
     );
   });
 
-  it('requires delivery management permission to verify a delivery OTP', () => {
+  it('allows an assigned rider to verify a delivery OTP with delivery-read permission', () => {
     assert.equal(
       resolveApiCapability('POST', '/api/orders/6accca6691b2129986259f9c/verify-delivery')?.permission,
-      'delivery.manage'
+      'delivery.read'
     );
+  });
+
+  it('maps reveal and resend OTP to their intended roles', () => {
+    assert.equal(resolveApiCapability('GET', '/api/orders/order-1/reveal-otp')?.permission, 'orders.read');
+    assert.equal(resolveApiCapability('POST', '/api/orders/order-1/resend-otp')?.permission, 'orders.read');
   });
 
   it('does not classify public auth APIs as protected capabilities', () => {
