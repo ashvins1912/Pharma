@@ -255,7 +255,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
       <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
         
         {/* Status Filters */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto text-xs">
+        <div className="admin-request-status-tabs flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto text-xs">
           {[
             { id: 'ALL', label: 'All Requests' },
             { id: 'REQUESTED', label: 'Pending Review' },
@@ -282,7 +282,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
         </div>
 
         {/* Search input */}
-        <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 w-full sm:w-72">
+        <form onSubmit={handleSearchSubmit} className="admin-request-search flex items-center gap-2 w-full sm:w-72">
           <input
             type="text"
             placeholder="Search medicine, customer, #MR..."
