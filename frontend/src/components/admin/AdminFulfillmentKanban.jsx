@@ -77,7 +77,18 @@ const COLUMNS = [
 
 const normalizeOrderStatus = (order) => {
   if (!order) return '';
-  const s = String(order.orderStatus || order.status || '').trim();
+  const rawStatuses = [order.orderStatus, order.status]
+    .map(value => String(value ?? '').trim())
+    .filter(Boolean);
+  const deliveredStatus = rawStatuses.find(value =>
+    ['delivered', 'completed', 'delivered_order', 'deliveredorder'].includes(value.toLowerCase())
+  );
+  if (deliveredStatus) return 'Delivered';
+  const cancelledStatus = rawStatuses.find(value =>
+    ['cancelled', 'cancelled_order'].includes(value.toLowerCase())
+  );
+  if (cancelledStatus) return 'Cancelled';
+  const s = rawStatuses[0] || '';
   if (['Pending_Review', 'pending', 'Pending'].includes(s)) return 'Pending_Review';
   if (['Approved', 'accepted', 'approved'].includes(s)) return 'Approved';
   if (['Processing Order', 'processing', 'Processing', 'Processing_Order', 'ProcessingOrder'].includes(s)) return 'Processing Order';
@@ -201,7 +212,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
     let isCurrentRequest = true;
     setCancelledLoading(true);
     setCancelledError('');
-    apiClient.get('/api/orders/admin/all', { params: { status: 'Cancelled', page: cancelledPage, limit: 10 } })
+    apiClient.get('/api/orders/admin/all', { params: { status: 'Cancelled', page: cancelledPage, limit: 10, ...dateRange } })
       .then(response => {
         if (!isCurrentRequest) return;
         const data = response.data || {};
@@ -214,7 +225,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
         }
       }).finally(() => { if (isCurrentRequest) setCancelledLoading(false); });
     return () => { isCurrentRequest = false; };
-  }, [cancelledPage, cancelledRetryKey]);
+  }, [cancelledPage, cancelledRetryKey, dateRange.startDate, dateRange.endDate]);
 
   useEffect(() => {
     if (!appliedSearch) return undefined;
@@ -676,7 +687,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
       />
 
       {/* Columns Container */}
-      <div className={viewMode === 'tabbed' ? 'w-full' : layoutDirection === 'horizontal' ? 'flex overflow-x-auto gap-4 pb-4 snap-x' : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4'}>
+      <div className={`fulfillment-board-columns min-w-0 ${viewMode === 'tabbed' ? 'w-full' : layoutDirection === 'horizontal' ? 'flex overflow-x-auto gap-4 pb-4 snap-x' : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4'}`}>
         {(viewMode === 'tabbed' ? COLUMNS.filter(c => c.id === activeTabId) : COLUMNS).map((col) => {
           const searchMode = Boolean(appliedSearch);
           const rawColOrders = searchMode
@@ -1193,9 +1204,16 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                                              otp: code,
                                              riderId: order.rider?.riderId || order.riderId || order.assignedRiderId || null
                                            });
+                                           // The server has already marked this order delivered. Do not
+                                           // update the removed closedOrderIds state: it was never declared
+                                           // and caused a ReferenceError after a successful OTP response.
+                                           setDeliveryOtps(prev => {
+                                             const next = { ...prev };
+                                             delete next[order._id];
+                                             return next;
+                                           });
                                            addToast('Delivery verified successfully by server!', 'success');
-                                           setClosedOrderIds(prev => [...prev, String(order._id)]);
-                                           await refreshBoard();
+                                           refreshBoard();
                                          } catch (err) {
                                            addToast(err.response?.data?.message || err.message || 'OTP verification failed.', 'error');
                                          } finally {

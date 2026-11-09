@@ -255,7 +255,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
       <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
         
         {/* Status Filters */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto text-xs">
+        <div className="admin-request-status-tabs flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto text-xs">
           {[
             { id: 'ALL', label: 'All Requests' },
             { id: 'REQUESTED', label: 'Pending Review' },
@@ -282,7 +282,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
         </div>
 
         {/* Search input */}
-        <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 w-full sm:w-72">
+        <form onSubmit={handleSearchSubmit} className="admin-request-search flex items-center gap-2 w-full sm:w-72">
           <input
             type="text"
             placeholder="Search medicine, customer, #MR..."
@@ -301,7 +301,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
       </div>
 
       {/* Request Table / Cards */}
-      <div id="admin-medicine-requests-list" className="bg-white border border-slate-200 rounded-3xl p-3 sm:p-5 shadow-xs space-y-4 min-w-0">
+      <div id="admin-medicine-requests-list" className="admin-medicine-request-list bg-white border border-slate-200 rounded-3xl p-3 sm:p-5 shadow-xs space-y-4 min-w-0">
         
         <div className="flex items-center justify-between">
           <div>
@@ -497,7 +497,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
             </table>
           </div>
 
-          <div className="lg:hidden space-y-3">
+          <div className="admin-medicine-request-mobile-cards lg:hidden space-y-3">
             {requests.map((req) => {
               const firstItem = req.requestedItems?.[0] || {};
               const proposal = req.pharmacyProposal;

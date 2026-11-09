@@ -2057,7 +2057,7 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
                         startDate: req.query.startDate,
                         endDate: req.query.endDate
                     })
-                    : await dataStore.getCancelledOrdersPage(page, limit, { tenantId: String(tenantId) });
+                    : await dataStore.getCancelledOrdersPage(page, limit, { tenantId: String(tenantId), startDate: req.query.startDate, endDate: req.query.endDate });
                 await sanitizeTenantRiderReferences(result.items || []);
                 return res.json(paginationResult(result.items, result.total, result.page || page, limit));
             }
@@ -2091,7 +2091,7 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
                         startDate: req.query.startDate,
                         endDate: req.query.endDate
                     })
-                    : await dataStore.getCancelledOrdersPage(page, limit, { tenantId });
+                    : await dataStore.getCancelledOrdersPage(page, limit, { tenantId, startDate: req.query.startDate, endDate: req.query.endDate });
                 await sanitizeTenantRiderReferences(result.items || []);
                 return res.json(paginationResult(result.items, result.total, result.page || page, limit));
             }
@@ -2119,7 +2119,7 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
             const limit = Number.isSafeInteger(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 50) : 10;
             let result;
             if (req.query.status === 'Delivered') result = await dataStore.getDeliveredOrdersPage(requestedPage, limit, { startDate: req.query.startDate, endDate: req.query.endDate });
-            else if (req.query.status === 'Cancelled') result = await dataStore.getCancelledOrdersPage(requestedPage, limit);
+            else if (req.query.status === 'Cancelled') result = await dataStore.getCancelledOrdersPage(requestedPage, limit, { startDate: req.query.startDate, endDate: req.query.endDate });
             else return res.status(400).json({ message: 'Only Delivered and Cancelled orders support pagination on this endpoint.' });
             return res.json(paginationResult(result.items, result.total, result.page || 1, limit));
         }
