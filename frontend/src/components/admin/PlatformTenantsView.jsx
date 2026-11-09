@@ -3,6 +3,7 @@ import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import TenantProfileDashboard from './TenantProfileDashboard';
+import './PlatformTenantsView.css';
 
 export default function PlatformTenantsView() {
   const { t } = useLanguage();
@@ -526,6 +527,15 @@ export default function PlatformTenantsView() {
         <button type="button" onClick={() => setPlatformTab('compare')} className={`platform-directory-tab pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'compare' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}>⚖️ Compare Tenants ({compareTenantIds.length})</button>
         <button type="button" onClick={() => setPlatformTab('vendors')} className={`platform-directory-tab pb-3 text-xs font-black border-b-2 whitespace-nowrap ${platformTab === 'vendors' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500'}`}>✉️ Vendor Invitations ({vendors.length})</button>
       </div>
+      <section className="platform-governance-strip" aria-label="Access governance review">
+        <div className="platform-governance-intro">
+          <span className="platform-governance-icon" aria-hidden="true">🛡️</span>
+          <div><h3>Access governance overview</h3><p>Review the scope boundaries used by platform and tenant administration.</p></div>
+        </div>
+        <div className="platform-governance-check"><span className="platform-governance-checkmark">01</span><div><strong>Tenant boundary</strong><span>Server-side tenant context</span></div></div>
+        <div className="platform-governance-check"><span className="platform-governance-checkmark">02</span><div><strong>Branch scope</strong><span>Memberships can be branch-bound</span></div></div>
+        <div className="platform-governance-check"><span className="platform-governance-checkmark">03</span><div><strong>Admin delegation</strong><span>Tenant-scoped admin invitations</span></div></div>
+      </section>
 
       {platformTab === 'profile' ? (
         <section className="space-y-4">
@@ -718,7 +728,7 @@ export default function PlatformTenantsView() {
       ) : (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="platform-tenants-table w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold uppercase tracking-wider text-[10px]">
                   <th className="py-3 px-3">Compare</th>

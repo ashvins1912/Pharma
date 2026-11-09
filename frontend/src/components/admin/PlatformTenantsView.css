@@ -1,0 +1,80 @@
+/* Platform tenant directory: responsive layout and access-governance presentation */
+.platform-tenants-view { --directory-ink: #0f172a; --directory-muted: #64748b; --directory-border: #e2e8f0; }
+.platform-tenants-view .platform-directory-header { align-items: center; }
+.platform-tenants-view .platform-directory-title { max-width: 58rem; line-height: 1.18; text-wrap: balance; }
+.platform-tenants-view .platform-directory-description { max-width: 56rem; line-height: 1.65; }
+.platform-tenants-view .platform-directory-actions button { min-height: 42px; white-space: normal; }
+.platform-tenants-view .platform-directory-tabs { scrollbar-width: thin; padding: 0 2px; }
+.platform-tenants-view .platform-directory-tab { min-height: 42px; padding-inline: 8px; display: inline-flex; align-items: center; }
+.platform-governance-strip { display: grid; grid-template-columns: minmax(240px, 1.35fr) repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px; border: 1px solid #dbeafe; border-radius: 18px; background: linear-gradient(110deg, #f8fbff, #fff 62%); min-width: 0; }
+.platform-governance-intro, .platform-governance-check { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.platform-governance-icon { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 38px; border-radius: 12px; background: #dbeafe; font-size: 18px; }
+.platform-governance-intro h3 { margin: 0; color: #0f172a; font-size: 12px; font-weight: 900; }
+.platform-governance-intro p { margin: 3px 0 0; color: #64748b; font-size: 10px; line-height: 1.5; }
+.platform-governance-check { padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 12px; background: rgba(255,255,255,.86); }
+.platform-governance-checkmark { display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 24px; border-radius: 50%; background: #eff6ff; color: #1d4ed8; font-size: 10px; font-weight: 900; }
+.platform-governance-check strong, .platform-governance-check span:not(.platform-governance-checkmark) { display: block; }
+.platform-governance-check strong { color: #334155; font-size: 10px; font-weight: 900; }
+.platform-governance-check div > span { margin-top: 2px; color: #64748b; font-size: 9px; line-height: 1.4; }
+.platform-tenants-view .platform-tenants-table { table-layout: fixed; }
+.platform-tenants-view .platform-tenants-table th, .platform-tenants-view .platform-tenants-table td { overflow-wrap: anywhere; }
+.platform-tenants-view .platform-tenants-table thead th { padding: 14px 12px; }
+.platform-tenants-view .platform-tenants-table tbody td { vertical-align: top; }
+.platform-tenants-view .platform-tenants-table tbody tr { transition: background-color .15s ease; }
+.platform-tenants-view .platform-tenants-table tbody tr:hover { background: #f8fafc; }
+.platform-tenants-view .platform-tenants-table tbody td:last-child > div { flex-wrap: wrap; }
+.platform-tenants-view input, .platform-tenants-view select, .platform-tenants-view button { max-width: 100%; }
+@media (max-width: 1024px) {
+  .platform-governance-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .platform-governance-intro { grid-column: 1 / -1; }
+  .platform-tenants-view .platform-tenants-table thead th { padding-inline: 9px; }
+  .platform-tenants-view .platform-tenants-table tbody td { padding-inline: 9px; }
+}
+@media (max-width: 860px) {
+  .platform-governance-strip { grid-template-columns: 1fr; gap: 8px; }
+  .platform-governance-intro { grid-column: auto; padding-bottom: 4px; }
+  .platform-tenants-view .platform-tenants-table { display: block; width: 100%; }
+  .platform-tenants-view .platform-tenants-table thead { display: none; }
+  .platform-tenants-view .platform-tenants-table tbody { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .platform-tenants-view .platform-tenants-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr); border: 1px solid #e2e8f0; border-radius: 16px; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.04); overflow: hidden; }
+  .platform-tenants-view .platform-tenants-table tbody tr:hover { background: #fff; }
+  .platform-tenants-view .platform-tenants-table tbody td { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; width: 100%; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; text-align: right; font-size: 11px; min-width: 0; }
+  .platform-tenants-view .platform-tenants-table tbody td::before { content: attr(data-label); flex: 0 0 34%; max-width: 34%; color: #64748b; text-align: left; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; line-height: 1.5; }
+  .platform-tenants-view .platform-tenants-table tbody td:first-child { justify-content: flex-start; align-items: center; }
+  .platform-tenants-view .platform-tenants-table tbody td:first-child::before { content: "Compare"; }
+  .platform-tenants-view .platform-tenants-table tbody td:last-child { display: block; text-align: left; border-bottom: 0; padding-top: 12px; background: #f8fafc; }
+  .platform-tenants-view .platform-tenants-table tbody td:last-child::before { content: "Tenant actions"; display: block; max-width: none; margin-bottom: 8px; }
+  .platform-tenants-view .platform-tenants-table tbody td:last-child > div { display: flex; justify-content: flex-start; gap: 6px; }
+  .platform-tenants-view .platform-tenants-table tbody td:last-child button { min-height: 34px; padding: 7px 9px; }
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(2) > div:first-child { font-size: 12px; }
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(3) { font-size: 10px; }
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(4) { align-items: center; }
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(7) { display: block; }
+  .platform-tenants-view .platform-tenants-table tbody tr > td[colspan] { display: block; text-align: center; }
+  .platform-tenants-view .platform-tenants-table tbody tr > td[colspan]::before { content: none; }
+  .platform-tenants-view .platform-tenants-table tbody tr > td[colspan] { grid-column: 1 / -1; }
+  .platform-tenants-view .platform-tenants-table tbody tr > td:nth-child(1) input { width: 18px; height: 18px; }
+  .platform-tenants-view .platform-tenants-table tbody tr > td:nth-child(1)::before { content: "Select for comparison"; }
+}
+@media (max-width: 480px) {
+  .platform-tenants-view .platform-directory-title { font-size: 20px; }
+  .platform-tenants-view .platform-directory-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .platform-tenants-view .platform-directory-actions button { width: 100%; justify-content: center; }
+  .platform-tenants-view .platform-directory-tabs { gap: 8px; }
+  .platform-tenants-view .platform-directory-tab { font-size: 10px; padding-inline: 6px; }
+  .platform-tenants-view .platform-tenants-table tbody td { gap: 8px; padding-inline: 10px; }
+  .platform-tenants-view .platform-tenants-table tbody td::before { flex-basis: 31%; max-width: 31%; }
+  .platform-tenants-view .platform-tenants-table tbody td:last-child > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .platform-tenants-view .platform-tenants-table tbody td:last-child button { width: 100%; text-align: center; justify-content: center; }
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(2) { display: block; text-align: left; }
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(2)::before { display: block; max-width: none; margin-bottom: 4px; }
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(2) > div:first-child { font-size: 13px; }
+}
+
+@media (max-width: 860px) {
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(2)::before { content: "Pharmacy"; }
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(3)::before { content: "Identifiers"; }
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(4)::before { content: "Status"; }
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(5)::before { content: "Contact"; }
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(6)::before { content: "Locale & currency"; }
+}
