@@ -20,6 +20,21 @@ services:
         value: https://caching-v0et.onrender.com
       - key: CACHE_SERVICE_TOKEN
         sync: false
+      # Cloudinary credentials are backend-only secrets. Enter them in Render.
+      - key: IMAGE_STORAGE_PROVIDER
+        value: cloudinary
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLOUDINARY_UPLOAD_FOLDER
+        value: pharma/catalog
+      - key: IMAGE_MAX_BYTES
+        value: 5242880
+      - key: IMAGE_MAX_PIXELS
+        value: 25000000
 
   - type: web
     name: ashvin-pharma-websocket
