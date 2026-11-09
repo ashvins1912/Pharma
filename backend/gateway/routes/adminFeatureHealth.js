@@ -265,12 +265,15 @@ router.get('/', async (req, res, next) => {
     const fresh = req.query.fresh === 'true';
     // Run independent checks concurrently and cap the RBAC wait. A slow database
     // or a sleeping Render dependency must not leave the admin dashboard request hanging.
-    const [rbacOutcome, serviceHealth] = await Promise.all([
+    const [rbacOutcome, serviceOutcome] = await Promise.all([
       settleWithin(getRbacReport({ fresh }), RBAC_REQUEST_TIMEOUT_MS),
-      (fresh || !cachedServiceHealth
-        || (Date.now() - new Date(lastProbeTimestamp || 0).getTime() > 120000))
-        ? probeAllServices(4000)
-        : Promise.resolve(cachedServiceHealth)
+      settleWithin(
+        (fresh || !cachedServiceHealth
+          || (Date.now() - new Date(lastProbeTimestamp || 0).getTime() > 120000))
+          ? probeAllServices(4000)
+          : Promise.resolve(cachedServiceHealth),
+        4500
+      )
     ]);
 
     const rbacReport = rbacOutcome.value || unavailableRbacReport(
@@ -278,11 +281,27 @@ router.get('/', async (req, res, next) => {
         ? `RBAC validation exceeded ${RBAC_REQUEST_TIMEOUT_MS}ms and was marked unavailable.`
         : `RBAC validation failed: ${rbacOutcome.error?.message || 'Unknown error'}`
     );
+    const serviceHealth = serviceOutcome.value || cachedServiceHealth || MONITORED_SERVICES.map(service => ({
+      id: service.id,
+      name: service.name,
+      url: service.url,
+      category: service.category,
+      required: service.required,
+      status: 'UNKNOWN',
+      httpStatus: 0,
+      latencyMs: 4500,
+      healthy: false,
+      lastChecked: new Date().toISOString(),
+      error: 'Service health probe exceeded the 4500ms response deadline.'
+    }));
+    const warnings = [];
+    if (rbacReport.unavailable) warnings.push('RBAC validation is unavailable; the health score is fail-closed.');
+    if (serviceOutcome.timeout) warnings.push('One or more service probes exceeded the response deadline; cached or unknown status is shown.');
 
     res.json({
       success: true,
       data: buildHealthData(rbacReport, serviceHealth),
-      warnings: rbacReport.unavailable ? ['RBAC validation is unavailable; the health score is fail-closed.'] : []
+      warnings
     });
   } catch (err) {
     next(err);
