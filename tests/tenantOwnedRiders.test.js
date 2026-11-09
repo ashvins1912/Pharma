@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import mongoose from 'mongoose';
 import { InMemoryRiderRepository } from '../backend/modules/delivery/infrastructure/repositories/InMemoryRiderRepository.js';
 import { RegisterRiderUseCase } from '../backend/modules/delivery/use-cases/RegisterRiderUseCase.js';
 import { ManualAssignOrderUseCase } from '../backend/modules/delivery/use-cases/ManualAssignOrderUseCase.js';
@@ -82,6 +83,11 @@ test('delivery verification requires the assigned rider and the order tenant to 
     assert.equal(isAssignedRiderForOrder({ _id: 'rider-a', tenantId: 'tenant-a' }, {
         tenantId: 'tenant-a', assignedRiderId: 'rider-a'
     }), true);
+    const legacyTenantId = new mongoose.Types.ObjectId('507f1f77bcf86cd799439011');
+    assert.equal(isAssignedRiderForOrder(
+        { _id: 'rider-a', tenantId: legacyTenantId },
+        { tenantId: String(legacyTenantId), rider: { riderId: 'rider-a' } }
+    ), true);
     assert.equal(isAssignedRiderForOrder({ id: 'rider-b', tenantId: 'tenant-a' }, order), false);
     assert.equal(isAssignedRiderForOrder({ id: 'rider-a', tenantId: 'tenant-b' }, order), false);
     assert.equal(isAssignedRiderForOrder({ id: 'rider-a' }, order), false);
