@@ -31,11 +31,11 @@ export default function AdminAlertBell({
           if (onOpenAlerts) onOpenAlerts();
         }}
         className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 transition cursor-pointer flex items-center justify-center flex-shrink-0"
-        aria-label={t("authorizedPharmacyAlerts")}
+        aria-label={`${t("authorizedPharmacyAlerts")} (${displayTotal})`}
       >
-        <span className="text-sm sm:text-base select-none">🔔</span>
+        <span className="text-sm sm:text-base select-none" aria-hidden="true">⚠️</span>
         {total > 0 && (
-          <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] sm:text-[10px] font-black w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center shadow animate-pulse">
+          <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex min-w-[1.15rem] sm:min-w-[1.3rem] h-[1.15rem] sm:h-[1.3rem] max-w-[2.6rem] items-center justify-center rounded-full border-2 border-white bg-rose-600 px-1 text-[9px] sm:text-[10px] font-black leading-none tabular-nums shadow-md whitespace-nowrap">
             {total}
           </span>
         )}

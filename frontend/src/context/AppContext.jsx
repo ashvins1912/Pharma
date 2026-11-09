@@ -1265,6 +1265,34 @@ export function AppProvider({ children }) {
             console.warn('[Notifications] Could not persist read state on server:', error?.message || error);
           }
         },
+        markAllNotificationsRead: async () => {
+          const ids = Array.from(new Set((notifications || [])
+            .map(item => String(item.id || item._id || '').trim())
+            .filter(Boolean)));
+          if (!ids.length) return;
+          ids.forEach(id => notificationReadOverrides.current.add(id));
+          if (user?.id && typeof window !== 'undefined') {
+            try {
+              window.localStorage.setItem(
+                `pharma_read_notifs_${user.id}`,
+                JSON.stringify(Array.from(notificationReadOverrides.current))
+              );
+            } catch {}
+          }
+          setNotifications(prev => prev.filter(item => !ids.includes(String(item.id || item._id || '').trim())));
+          try {
+            ids.forEach(id => useGlobalStore?.getState?.()?.markNotificationRead?.(id));
+          } catch {}
+          const persistentIds = ids.filter(id => !id.startsWith('notif-wa'));
+          const results = await Promise.allSettled(persistentIds.map(id =>
+            apiClient.patch(`/api/v1/notifications/${encodeURIComponent(id)}/read`)
+          ));
+          const failures = results.filter(result => result.status === 'rejected'
+            && Number(result.reason?.status || result.reason?.response?.status || 0) !== 404);
+          if (failures.length) {
+            console.warn(`[Notifications] ${failures.length} read acknowledgements could not be persisted.`);
+          }
+        },
         loadNotifications,
         deliveryEvents,
         loadDeliveryEvents,
