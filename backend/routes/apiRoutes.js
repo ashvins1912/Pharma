@@ -20,6 +20,9 @@ import tenantService from '../services/tenant-service/TenantService.js';
 import UserProfile from '../models/UserProfile.js';
 import riderRoutes from '../modules/delivery/routes/riderRoutes.js';
 import assignmentRoutes from '../modules/delivery/routes/assignmentRoutes.js';
+import multer from 'multer';
+import { authenticateUser, requirePermission } from '../middleware/auth.js';
+import { imageOptimizationService } from '../services/ImageOptimizationService.js';
 import privateImageAssetRoutes from './privateImageAssetRoutes.js';
 import { GoogleGenAI } from '@google/genai';
 
@@ -33,6 +36,18 @@ const ai = new GoogleGenAI({
 });
 
 const router = express.Router();
+const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: Number(process.env.IMAGE_MAX_BYTES || 5 * 1024 * 1024), files: 1 } });
+
+router.post('/upload/image', authenticateUser, requirePermission('inventory.write'), imageUpload.single('image'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No image file uploaded.' });
+        const result = await imageOptimizationService.processAndStore(req.file.buffer, req.file.originalname, req.file.mimetype);
+        return res.json({ status: 'success', data: result });
+    } catch (error) {
+        console.error('[ImageUpload] Image storage provider failed:', error);
+        return res.status(503).json({ error: 'Image upload is temporarily unavailable.' });
+    }
+});
 
 router.use('/private-images', privateImageAssetRoutes);
 router.use('/auth', authRoutes);
