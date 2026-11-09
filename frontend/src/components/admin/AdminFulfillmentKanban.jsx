@@ -1155,7 +1155,8 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                                       onClick={async () => {
                                          try {
                                            const res = await apiClient.get(`/api/orders/${order._id}/reveal-otp`);
-                                           const otp = res.data?.otp || '4821';
+                                           const otp = String(res.data?.otp || '');
+                                           if (!/^\\d{4}$/.test(otp)) throw new Error('The server did not return a valid delivery OTP.');
                                            setDeliveryOtps(prev => ({ ...prev, [order._id]: otp }));
                                            addToast(`Revealed Customer OTP (Cached 24h): ${otp}`, 'info');
                                          } catch (err) {
