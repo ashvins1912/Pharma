@@ -232,7 +232,10 @@ router.get('/', async (req, res, next) => {
  */
 router.post('/probe-services', async (req, res, next) => {
   try {
-    const timeout = req.body?.timeoutMs ? Math.min(Number(req.body.timeoutMs), 60000) : 60000;
+    const requestedTimeout = Number(req.body?.timeoutMs);
+    const timeout = Number.isFinite(requestedTimeout) && requestedTimeout > 0
+      ? Math.min(Math.max(requestedTimeout, 1000), 15000)
+      : 8000;
     const serviceHealth = await probeAllServices(timeout);
     res.json({
       success: true,
@@ -269,7 +272,10 @@ async function handleSingleServiceProbe(req, res, next) {
   try {
     const serviceId = req.query.serviceId || req.body?.serviceId;
     const customUrl = req.query.url || req.body?.url;
-    const timeout = Math.min(Number(req.query.timeoutMs || req.body?.timeoutMs || 60000), 60000);
+    const requestedTimeout = Number(req.query.timeoutMs || req.body?.timeoutMs);
+    const timeout = Number.isFinite(requestedTimeout) && requestedTimeout > 0
+      ? Math.min(Math.max(requestedTimeout, 1000), 60000)
+      : 15000;
 
     const service = MONITORED_SERVICES.find(s => s.id === serviceId) || {
       id: serviceId || 'custom_service',
