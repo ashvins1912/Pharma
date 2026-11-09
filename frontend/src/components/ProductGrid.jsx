@@ -153,7 +153,7 @@ export default function ProductGrid() {
       </div>
 
       {/* Responsive Product Grid: 2 cols on mobile, 4 on desktop */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4">
+      <div className="pharma-product-grid grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4">
         {medicines.map((med) => (
           <ProductCard key={med._id} med={med} />
         ))}

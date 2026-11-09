@@ -984,3 +984,305 @@ form select, form textarea) {
 .offer-claim-flip-face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: .65rem .85rem; border-radius: .75rem; backface-visibility: hidden; -webkit-backface-visibility: hidden; white-space: nowrap; }
 .offer-claim-flip-back { transform: rotateX(180deg); }
 @media (prefers-reduced-motion: reduce) { .offer-claim-flip-inner { transition: none; } }
+
+
+/* ==========================================================================
+   Responsive system-wide layout contract
+   --------------------------------------------------------------------------
+   Breakpoints align with Tailwind defaults. These rules are intentionally
+   component-scoped: they preserve explicit grid-cols utilities and business
+   workflows while preventing intrinsic content from widening the viewport.
+   ========================================================================== */
+:root {
+  --pharma-page-gutter: clamp(0.75rem, 2.2vw, 2rem);
+  --pharma-card-radius: clamp(0.875rem, 1.4vw, 1.5rem);
+  --pharma-control-height: 2.75rem;
+  --pharma-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pharma-responsive-scope {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+  isolation: isolate;
+}
+
+.pharma-responsive-scope main {
+  padding-left: var(--pharma-page-gutter);
+  padding-right: var(--pharma-page-gutter);
+}
+
+.pharma-responsive-scope :where(.rounded-xl, .rounded-2xl, .rounded-3xl) {
+  min-width: 0;
+}
+
+.pharma-responsive-scope :where(.flex, .inline-flex, .grid) > * {
+  min-width: 0;
+}
+
+.pharma-responsive-scope :where(button, [role="button"], input, select, textarea) {
+  max-width: 100%;
+}
+
+.pharma-responsive-scope :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pharma-responsive-scope :where(.overflow-x-auto, [data-table-scroll="true"]) {
+  max-width: 100%;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pharma-responsive-scope :where(table) {
+  max-width: 100%;
+}
+
+.pharma-responsive-scope :where(.admin-screen table) {
+  min-width: 100%;
+  width: max-content;
+}
+
+.pharma-responsive-scope :where(.admin-screen .overflow-x-auto table) {
+  min-width: max-content;
+}
+
+.pharma-responsive-scope :where(.admin-screen th) {
+  white-space: nowrap;
+}
+
+.pharma-responsive-scope :where(.admin-screen td) {
+  overflow-wrap: anywhere;
+}
+
+.pharma-responsive-scope :where(.admin-screen .dashboard-content, .admin-screen .dashboard-workspace,
+  .admin-screen .dashboard-workspace-nav, .admin-screen .dashboard-nav-group) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pharma-mobile-nav-panel {
+  width: min(100%, 24rem);
+  max-width: min(100vw, 24rem);
+  padding-top: max(1.25rem, env(safe-area-inset-top, 0px));
+  padding-right: max(1.25rem, env(safe-area-inset-right, 0px));
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pharma-cart-drawer {
+  padding-bottom: var(--pharma-safe-bottom);
+}
+
+.pharma-checkout-modal,
+.pharma-modal-surface,
+.pharma-medicine-request-modal,
+.pharma-rider-assignment-dialog {
+  min-width: 0;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pharma-responsive-scope :where(.pharma-storefront, .pharma-tab-panel) {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 1023px) {
+  .pharma-responsive-scope main {
+    padding-top: 1rem;
+    padding-bottom: 1.25rem;
+  }
+
+  .dashboard-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-workspace-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 639px) {
+  .pharma-responsive-scope main {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    padding-top: 0.875rem;
+  }
+
+  .pharma-responsive-scope :where(.flex.items-center.justify-between, .flex.justify-between.items-center) {
+    flex-wrap: wrap;
+    row-gap: 0.625rem;
+  }
+
+  .pharma-responsive-scope :where(.admin-screen) {
+    gap: 0.875rem;
+  }
+
+  .pharma-responsive-scope :where(.admin-screen .overflow-x-auto) {
+    border-radius: 0.75rem;
+  }
+
+  .pharma-mobile-nav-panel {
+    width: min(88vw, 24rem);
+    max-width: 24rem;
+    padding: 1rem;
+    padding-top: max(1rem, env(safe-area-inset-top, 0px));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .pharma-responsive-scope :where(.pharma-modal-surface, .pharma-checkout-modal) {
+    max-height: calc(100dvh - 0.5rem);
+  }
+}
+
+@media (max-width: 380px) {
+  .pharma-responsive-scope main {
+    padding-left: 0.625rem;
+    padding-right: 0.625rem;
+  }
+
+  .dashboard-workspace-nav {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pharma-mobile-nav-panel {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+@media (min-width: 1536px) {
+  .pharma-responsive-scope main {
+    --pharma-page-gutter: clamp(2rem, 3vw, 3.5rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pharma-responsive-scope :where(*, *::before, *::after) {
+    scroll-behavior: auto;
+  }
+}
+
+
+/* Narrow-screen refinements for dense, frequently used workflows. */
+@media (max-width: 419px) {
+  .pharma-responsive-scope :where(.admin-screen--riders .grid.grid-cols-2) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pharma-responsive-scope :where(.admin-screen--platform-tenants .grid.grid-cols-2) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 639px) {
+  .pharma-responsive-scope :where(.admin-screen .overflow-x-auto table) {
+    font-size: 0.75rem;
+  }
+
+  .pharma-responsive-scope :where(.admin-screen .overflow-x-auto th,
+    .admin-screen .overflow-x-auto td) {
+    padding: 0.625rem 0.75rem;
+  }
+
+  .pharma-responsive-scope :where(.admin-screen--fulfillment .fulfillment-board-columns) {
+    min-width: 0;
+  }
+}
+
+
+/* Onboarding dialogs: keep the header visible and the long form independently scrollable. */
+.pharma-vendor-onboarding-overlay {
+  padding: max(0.75rem, env(safe-area-inset-top, 0px))
+    max(0.75rem, env(safe-area-inset-right, 0px))
+    max(0.75rem, env(safe-area-inset-bottom, 0px))
+    max(0.75rem, env(safe-area-inset-left, 0px));
+}
+
+.pharma-vendor-onboarding-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-height: calc(100dvh - 1.5rem);
+}
+
+.pharma-vendor-onboarding-panel > :first-child {
+  flex: 0 0 auto;
+}
+
+.pharma-vendor-onboarding-form {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pharma-google-profile-panel {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rider-otp-controls > input {
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
+.rider-otp-controls > button {
+  flex: 0 1 auto;
+}
+
+@media (max-width: 639px) {
+  .pharma-vendor-onboarding-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .pharma-vendor-onboarding-panel {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px));
+    margin: 0;
+    border-radius: 1.25rem 1.25rem 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .pharma-google-profile-panel {
+    max-height: calc(100dvh - 1rem - env(safe-area-inset-top, 0px));
+    border-radius: 1.25rem;
+  }
+}
+
+
+/* Let wide data tables size to their columns inside explicit scroll containers. */
+.pharma-responsive-scope :where(.admin-screen .overflow-x-auto table) {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+}
+
+.pharma-responsive-scope :where(.fulfillment-stage-tabs) {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pharma-responsive-scope :where(.fulfillment-stage-tab) {
+  flex: 0 0 auto;
+  min-height: 2.75rem;
+}
+
+@media (max-width: 639px) {
+  .pharma-responsive-scope :where(.admin-screen--tenants .platform-directory-tab) {
+    min-height: 2.75rem;
+    padding-inline: 0.75rem;
+  }
+}

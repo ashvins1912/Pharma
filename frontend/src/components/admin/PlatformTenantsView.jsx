@@ -1500,7 +1500,7 @@ export default function PlatformTenantsView() {
                       onChange={(e) => setVendorForm({ ...vendorForm, street: e.target.value })}
                       className="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:border-blue-500 focus:outline-hidden"
                     />
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <input
                         type="text"
                         placeholder={t("city")}

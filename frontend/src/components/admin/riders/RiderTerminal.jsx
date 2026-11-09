@@ -325,7 +325,7 @@ export default function RiderTerminal({ riderId, onClose }) {
                 <label className="block text-xs font-black uppercase text-slate-400">
                   Secure Customer Delivery OTP (4 Digits)
                 </label>
-                <div className="flex gap-2">
+                <div className="rider-otp-controls flex flex-wrap gap-2">
                   <input
                     type="text"
                     maxLength={4}

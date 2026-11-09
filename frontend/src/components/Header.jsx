@@ -363,7 +363,7 @@ export default function Header({
             />
 
             {/* Slide-in Panel */}
-            <div className="absolute inset-y-0 right-0 max-w-xs w-full bg-white border-l border-slate-200 shadow-2xl flex flex-col justify-between p-6 animate-slide-in-right overflow-y-auto">
+            <div className="pharma-mobile-nav-panel absolute inset-y-0 right-0 max-w-xs w-full bg-white border-l border-slate-200 shadow-2xl flex flex-col justify-between animate-slide-in-right overflow-y-auto">
               
               {/* Drawer Header */}
               <div className="flex items-center justify-between pb-4 border-b border-slate-100">

@@ -166,7 +166,7 @@ export default function TenantOnboardingView({ onSuccess }) {
           <div className={`h-2 rounded-full transition-all ${step >= 2 ? 'bg-emerald-600' : 'bg-gray-200 dark:bg-gray-800'}`} />
           <div className={`h-2 rounded-full transition-all ${step >= 3 ? 'bg-emerald-600' : 'bg-gray-200 dark:bg-gray-800'}`} />
         </div>
-        <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-2 font-medium">
+        <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-1.5 text-xs text-gray-500 dark:text-gray-400 mt-2 font-medium">
           <span className={step === 1 ? 'text-emerald-600 font-bold' : ''}>1. Shop & Address</span>
           <span className={step === 2 ? 'text-emerald-600 font-bold' : ''}>2. Location & Media</span>
           <span className={step === 3 ? 'text-emerald-600 font-bold' : ''}>3. Owner & Admin</span>

@@ -636,7 +636,7 @@ export default function AddressManager({
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               Address Label
             </label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 min-[420px]:grid-cols-4 gap-2">
               {['Home', 'Office', 'Hospital', 'Other'].map((l) => (
                 <button
                   type="button"
