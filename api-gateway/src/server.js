@@ -11,6 +11,7 @@ import { isGatewayPublicPath, resolveGatewayCapability, isGatewayPermissionAllow
 import { authenticateUser, requireAdmin } from './authenticateUser.js';
 import { createHealthMonitor } from './healthMonitor.js';
 import { enforceBrowserRequestSecurity } from './browserRequestSecurity.js';
+import { applySecurityHeaders } from './securityHeaders.js';
 
 export function createGatewayApp(gatewayConfig = config, healthMonitor = createHealthMonitor({
   services: gatewayConfig.healthServices || [],
@@ -25,6 +26,7 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
   const app = express();
   app.locals.healthMonitor = healthMonitor;
   app.disable('x-powered-by');
+  app.use((req, res, next) => applySecurityHeaders(req, res, next, { production: gatewayConfig.isProduction ?? process.env.NODE_ENV === 'production' }));
   app.use((req, res, next) => {
     const suppliedRequestId = req.get('x-request-id') || '';
     const suppliedCorrelationId = req.get('x-correlation-id') || '';
