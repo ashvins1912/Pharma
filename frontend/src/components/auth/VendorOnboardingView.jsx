@@ -137,8 +137,8 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
 
   const v = data?.vendor || {};
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl my-8 overflow-hidden">
+    <div className="pharma-vendor-onboarding-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="pharma-vendor-onboarding-panel bg-white rounded-3xl max-w-2xl w-full shadow-2xl my-8 overflow-hidden">
         <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-slate-900 p-6 text-white">
           <div className="flex items-center gap-2">
             <span className="text-[11px] uppercase font-extrabold bg-blue-500/30 px-3 py-1 rounded-full">{t('firstTimeUser')}</span>
@@ -150,7 +150,7 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
           <div className="text-[11px] mt-2 text-blue-200">Step {step} of 2 — {step === 1 ? 'Personal Profile' : 'Tenant / Pharmacy Setup'}</div>
         </div>
 
-        <form onSubmit={submit} className="p-6 md:p-8 space-y-6">
+        <form onSubmit={submit} className="pharma-vendor-onboarding-form p-4 sm:p-6 md:p-8 space-y-6">
           {error && <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl">{error}</div>}
 
           {step === 1 && <>
@@ -216,7 +216,7 @@ export default function VendorOnboardingView({ token, onClose, onSuccess }) {
   );
 }
 
-function Overlay({ children }) { return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"><div className="bg-white rounded-2xl max-w-lg w-full p-8 shadow-2xl text-center">{children}</div></div>; }
+function Overlay({ children }) { return <div className="pharma-vendor-onboarding-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"><div className="pharma-vendor-onboarding-panel bg-white rounded-2xl max-w-lg w-full p-6 sm:p-8 shadow-2xl text-center">{children}</div></div>; }
 function Spinner() { return <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />; }
 function Section({ title, children }) { return <section className="space-y-4"><h3 className="text-xs font-black uppercase text-blue-700 tracking-wider border-b border-blue-100 pb-2">{title}</h3>{children}</section>; }
 function Field({ label, value, onChange, error, type='text' }) { return <div><label className="block text-xs font-bold text-slate-700 mb-1">{label}</label><input type={type} value={value} onChange={e => onChange(e.target.value)} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />{error && <Err x={error}/>}</div>; }
