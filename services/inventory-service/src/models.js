@@ -11,6 +11,7 @@ const productSchema = new mongoose.Schema({
   category: { type: 'string', default: 'General Medicine' },
   description: { type: 'string', default: '' },
   imageUrl: { type: 'string', default: '' },
+  imageAssetId: { type: 'string', default: '' },
   hsnSac: { type: 'string', default: '' },
   baseCostPrice: { type: 'number', min: 0, default: 0 },
   discountPercentage: { type: 'number', min: 0, max: 100, default: 0 },

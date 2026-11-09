@@ -29,6 +29,8 @@
     "nodemailer": "^10.0.14",
     "bcryptjs": "^3.0.3",
     "@google/genai": "^2.25.0",
-    "@pharma/service-kernel": "1.0.0"
+    "@pharma/service-kernel": "1.0.0",
+    "cloudinary": "^2.5.1",
+    "sharp": "^0.33.5"
   }
 }

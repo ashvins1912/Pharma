@@ -55,7 +55,7 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
   if (!filters.length) return [];
   const productFilter = { $or: filters, active: true };
   productFilter.tenantId = scopeTenantId;
-  const products = await Product.find(productFilter).select('_id version sku name genericName strength form manufacturer category requiresPrescription baseCostPrice discountPercentage marginTier').lean();
+  const products = await Product.find(productFilter).select('_id version sku name genericName strength form manufacturer category requiresPrescription imageUrl imageAssetId baseCostPrice discountPercentage marginTier').lean();
   const inventoryFilter = { productId: { $in: products.map(product => product._id) } };
   inventoryFilter.tenantId = scopeTenantId;
   inventoryFilter.branchId = scopeBranchId;
@@ -91,6 +91,8 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
       manufacturer: product.manufacturer,
       category: product.category,
       requiresPrescription: product.requiresPrescription,
+      imageUrl: product.imageUrl || '',
+      imageAssetId: product.imageAssetId || '',
       baseCostPrice: product.baseCostPrice || 0, discountPercentage: product.discountPercentage || 0, marginTier: product.marginTier || 'LOW',
       price: priceBatch?.price ?? null,
       stockQuantity,
@@ -154,7 +156,7 @@ export async function searchInventoryProducts({
     // Keep only catalogue fields needed by the UI contract before joining stock.
     { $project: {
       _id: 1, version: 1, sku: 1, name: 1, genericName: 1, description: 1,
-      imageUrl: 1, hsnSac: 1, manufacturer: 1, strength: 1, form: 1,
+      imageUrl: 1, imageAssetId: 1, hsnSac: 1, manufacturer: 1, strength: 1,
       category: 1, requiresPrescription: 1, baseCostPrice: 1,
       discountPercentage: 1, marginTier: 1
     } },
@@ -408,6 +410,7 @@ const normalizeProductFields = input => ({
   category: String(input.category || 'General Medicine').trim(),
   description: String(input.description || '').trim(),
   imageUrl: String(input.imageUrl || '').trim(),
+  imageAssetId: String(input.imageAssetId || '').trim(),
   hsnSac: String(input.hsnSac || '').trim(),
   baseCostPrice: Number(input.baseCostPrice || 0),
   discountPercentage: Number(input.discountPercentage || 0),
@@ -495,7 +498,7 @@ export async function updateProduct({ productId, product: input = {}, tenantId, 
         error.statusCode = 400;
         throw error;
       }
-      const editableFields = ['name', 'genericName', 'strength', 'form', 'manufacturer', 'category', 'description', 'imageUrl', 'hsnSac', 'baseCostPrice', 'discountPercentage', 'marginTier', 'requiresPrescription'];
+      const editableFields = ['name', 'genericName', 'strength', 'form', 'manufacturer', 'category', 'description', 'imageUrl', 'imageAssetId', 'hsnSac', 'baseCostPrice', 'discountPercentage', 'marginTier', 'requiresPrescription'];
       for (const field of editableFields) {
         if (Object.prototype.hasOwnProperty.call(input, field)
           || (field === 'genericName' && ('drug' in input || 'activeSalt' in input))

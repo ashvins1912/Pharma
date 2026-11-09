@@ -28,6 +28,7 @@ const medicineSchema = new mongoose.Schema({
     requiresPrescription: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true, index: true },
     imageUrl: { type: String, default: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&q=80" },
+    imageAssetId: { type: String, default: null, index: true },
     manufacturer: { type: String, default: "Pharma Labs" },
     importDeduplicationKeys: { type: [String], default: [], select: false }
 }, { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });

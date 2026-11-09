@@ -143,10 +143,12 @@ const medicineRequestSchema = new mongoose.Schema({
     requestedItems: { type: [requestedItemSchema], default: [] },
 
     prescriptionUrl: { type: String, default: null },
+    productImageAssetId: { type: String, default: null, index: true },
     prescriptionId: { type: String, default: null, index: true },
     patientPuid: { type: String, default: null, index: true },
     prescriptionVerification: { type: prescriptionVerificationSchema, default: () => ({}) },
     productImageUrl: { type: String, default: null },
+    productImageAssetId: { type: String, default: null, index: true },
 
     customerNote: { type: String, default: '', maxlength: 2000 },
     deliveryAddress: { type: String, default: 'Pending address confirmation' },

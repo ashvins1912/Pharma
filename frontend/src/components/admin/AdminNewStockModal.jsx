@@ -59,7 +59,8 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
     stockQuantity: 100,
     expiryDate: '',
     isPrescriptionRequired: true,
-    imageUrl: PRESET_IMAGE_ASSETS[0].url
+    imageUrl: PRESET_IMAGE_ASSETS[0].url,
+    imageAssetId: ''
   });
 
   useEffect(() => {
@@ -94,7 +95,8 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
     const { name, value, type, checked } = e.target;
     setForm(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: type === 'checkbox' ? checked : value,
+      ...(name === 'imageUrl' ? { imageAssetId: '' } : {})
     }));
   };
 
@@ -104,16 +106,17 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
 
     const formData = new FormData();
     formData.append('image', file);
+    formData.append('purpose', 'medicine-image');
 
     try {
       setUploadingImage(true);
-      const res = await apiClient.post('/api/upload/image', formData, {
+      const res = await apiClient.post('/api/private-images', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      const url = res.data?.data?.url;
-      if (url) {
-        setForm(prev => ({ ...prev, imageUrl: url }));
-        addToast('Image compressed, optimized & stored in folder successfully!', 'success');
+      const assetId = res.data?.asset?.assetId;
+      if (assetId) {
+        setForm(prev => ({ ...prev, imageAssetId: assetId, imageUrl: `/api/private-images/${encodeURIComponent(assetId)}/content` }));
+        addToast('Image securely uploaded and optimized for this pharmacy branch.', 'success');
       }
     } catch (err) {
       addToast(err?.response?.data?.error || err.message || 'Image upload failed.', 'error');
@@ -168,7 +171,8 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
           stockQuantity: 100,
           expiryDate: '',
           isPrescriptionRequired: form.isPrescriptionRequired,
-          imageUrl: form.imageUrl
+          imageUrl: form.imageUrl,
+          imageAssetId: form.imageAssetId
         });
       } else {
         onClose();
@@ -338,7 +342,7 @@ export default function AdminNewStockModal({ isOpen, onClose, onStockCreated }) 
                   {PRESET_IMAGE_ASSETS.map((asset, i) => (
                     <div
                       key={i}
-                      onClick={() => setForm(prev => ({ ...prev, imageUrl: asset.url }))}
+                      onClick={() => setForm(prev => ({ ...prev, imageUrl: asset.url, imageAssetId: '' }))}
                       className={`cursor-pointer rounded-xl border-2 p-1.5 transition text-center space-y-1 ${
                         form.imageUrl === asset.url ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/40' : 'border-slate-200 dark:border-slate-700 hover:border-blue-400'
                       }`}
