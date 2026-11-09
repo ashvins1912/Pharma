@@ -1612,7 +1612,6 @@ html.dark .dashboard-nav-group { background: #0f172a; }
 .admin-screen--fulfillment-board > div:nth-of-type(4) { min-width: 0; }
 .admin-screen--fulfillment-board section { overflow-wrap: anywhere; }
 .admin-screen--requests #admin-medicine-requests-list { min-width: 0; }
-.admin-screen--requests .admin-medicine-request-mobile-cards { display: none; }
 
 @media (max-width: 767px) {
   .admin-screen--fulfillment-board { gap: .75rem; }
