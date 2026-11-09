@@ -98,8 +98,8 @@ export const getAdminMedicineRequests = async (params = {}) => {
   };
 };
 
-export const getAdminMedicineRequestMetrics = async () => {
-  const response = await apiClient.get('/api/admin/medicine-requests/metrics/overview');
+export const getAdminMedicineRequestMetrics = async (params = {}) => {
+  const response = await apiClient.get('/api/admin/medicine-requests/metrics/overview', { params });
   return response.data;
 };
 
