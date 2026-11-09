@@ -362,7 +362,16 @@ router.get('/alerts', authenticateUser, async (req, res) => {
     const startedAt = Date.now();
     res.set('X-Request-Id', requestId);
     try {
-        const scope = await getVerifiedInventoryScope(req, 'inventory.read');
+        const scope = await getVerifiedInventoryScope(req, 'inventory.read').catch(err => {
+            if (err.code === 'PHARMACY_SCOPE_REQUIRED') return null;
+            throw err;
+        });
+        if (!scope) {
+            return res.json({
+                expiredCount: 0, expiringSoonCount: 0, lowStockCount: 0, totalAlerts: 0,
+                expired: [], expiringSoon: [], lowStock: []
+            });
+        }
         const alerts = await dataStore.getInventoryAlerts(3, 30, scope);
         res.set('Cache-Control', 'private, no-store');
         console.info('[InventoryAlerts] request complete', { requestId, tenantId: scope.tenantId, branchId: scope.branchId, durationMs: Date.now() - startedAt });

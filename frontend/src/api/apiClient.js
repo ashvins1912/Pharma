@@ -83,6 +83,9 @@ function hasCapability(permission) {
         return false;
     }
 
+    const role = String(authorizationCapabilities.role || '').toUpperCase();
+    if (['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'ADMIN'].includes(role)) return true;
+
     const granted = authorizationCapabilities.permissions;
     return granted.includes('*')
         || granted.includes(permission)

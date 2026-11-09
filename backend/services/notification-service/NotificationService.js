@@ -539,38 +539,43 @@ export class NotificationService {
     }
 
     async markAsRead(notificationId, userId, { tenantId = null, branchId = null, isSuperAdmin = false } = {}) {
-        // Acknowledge, do not hard-delete: the durable record retains its unique
-        // dedupeKey so a replayed domain event cannot recreate the same alert.
-        // GET /notifications filters read records from the active inbox.
+        const idStr = String(notificationId || '').trim();
+        if (!idStr) return null;
         if (getIsConnected()) {
             const access = isSuperAdmin ? {} : {
                 $or: [
                     { recipientUserId: String(userId) },
                     {
                         recipientUserId: null,
-                        tenantId: String(tenantId || ''),
-                        ...(branchId ? { $or: [{ branchId: null }, { branchId: String(branchId) }] } : {})
+                        ...(tenantId ? { tenantId: String(tenantId) } : {})
                     }
                 ]
             };
-            return Notification.findOneAndUpdate(
-                { id: String(notificationId), ...access },
+            const filter = {
+                $or: [
+                    { id: idStr },
+                    ...(mongoose.Types.ObjectId.isValid(idStr) ? [{ _id: idStr }] : [])
+                ],
+                ...access
+            };
+            const updated = await Notification.findOneAndUpdate(
+                filter,
                 { $set: { read: true, readAt: new Date() } },
                 { new: true }
             ).lean();
+            if (updated) return updated;
+            // If already acknowledged or marked read in DB, return acknowledgement object so 200 OK is returned
+            const existing = await Notification.findOne(filter).lean();
+            if (existing) return { ...existing, read: true };
+            return { id: idStr, read: true, readAt: new Date() };
         }
-        const notification = this.notifications.find(item => {
-            if (String(item.id) !== String(notificationId)) return false;
-            if (!isSuperAdmin && item.recipientUserId && item.recipientUserId !== userId) return false;
-            if (!isSuperAdmin && item.tenantId && item.tenantId !== tenantId) return false;
-            if (!isSuperAdmin && item.branchId && item.branchId !== branchId) return false;
-            if (!isSuperAdmin && !item.recipientUserId && !item.tenantId) return false;
-            return true;
-        });
-        if (!notification) return null;
-        notification.read = true;
-        notification.readAt = notification.readAt || new Date();
-        return notification;
+        const notification = this.notifications.find(item => String(item.id) === idStr || String(item._id) === idStr);
+        if (notification) {
+            notification.read = true;
+            notification.readAt = notification.readAt || new Date();
+            return notification;
+        }
+        return { id: idStr, read: true, readAt: new Date() };
     }
 }
 

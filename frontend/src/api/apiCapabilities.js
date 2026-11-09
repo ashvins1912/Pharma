@@ -198,7 +198,12 @@ export const API_CAPABILITIES = [
   },
   {
     method: 'GET',
-    pattern: /^\/api\/medicines\/(?:alerts|audits)$/,
+    pattern: /^\/api\/(?:medicines|v1\/inventory)\/alerts$/,
+    permission: 'inventory.read'
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/medicines\/audits$/,
     permission: 'inventory.read'
   },
   {

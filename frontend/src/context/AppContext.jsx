@@ -1180,25 +1180,19 @@ export function AppProvider({ children }) {
         notifications,
         unreadNotificationsCount: getUnreadNotificationsCount(notifications),
         markNotificationRead: async (id) => {
-          const notificationId = String(id);
-          const target = notifications.find(item => String(item.id) === notificationId);
-          if (!target || notificationReadOverrides.current.has(notificationId)) return;
-          // Remove immediately from the bell; restore it if durable acknowledgement fails.
+          const notificationId = String(id || '').trim();
+          if (!notificationId) return;
+          // Mark in local override set so reloads and socket broadcasts never restore this notification.
           notificationReadOverrides.current.add(notificationId);
           setNotifications(prev => prev.filter(item => String(item.id) !== notificationId));
-          // WhatsApp connection prompts are local-only; all persisted notifications are acknowledged server-side.
           if (notificationId.startsWith('notif-wa')) return;
           try {
             await apiClient.patch(`/api/v1/notifications/${encodeURIComponent(notificationId)}/read`);
           } catch (error) {
-            // A 404 means the record was already acknowledged/deleted by an
-            // earlier request or another active session. Keep it dismissed.
-            if (error?.response?.status === 404) return;
-            notificationReadOverrides.current.delete(notificationId);
-            setNotifications(prev => prev.some(item => String(item.id) === notificationId)
-              ? prev
-              : [target, ...prev].slice(0, 50));
-            console.warn('[Notifications] Could not persist read state:', error?.message || error);
+            const status = Number(error?.status || error?.response?.status || 0);
+            // 404 means already read/acknowledged; keep it dismissed.
+            if (status === 404) return;
+            console.warn('[Notifications] Could not persist read state on server:', error?.message || error);
           }
         },
         loadNotifications,
