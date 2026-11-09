@@ -676,7 +676,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
       />
 
       {/* Columns Container */}
-      <div className={viewMode === 'tabbed' ? 'w-full' : layoutDirection === 'horizontal' ? 'flex overflow-x-auto gap-4 pb-4 snap-x' : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4'}>
+      <div className={`fulfillment-board-columns min-w-0 ${viewMode === 'tabbed' ? 'w-full' : layoutDirection === 'horizontal' ? 'flex overflow-x-auto gap-4 pb-4 snap-x' : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4'}`}>
         {(viewMode === 'tabbed' ? COLUMNS.filter(c => c.id === activeTabId) : COLUMNS).map((col) => {
           const searchMode = Boolean(appliedSearch);
           const rawColOrders = searchMode
