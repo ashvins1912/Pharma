@@ -77,7 +77,18 @@ const COLUMNS = [
 
 const normalizeOrderStatus = (order) => {
   if (!order) return '';
-  const s = String(order.orderStatus || order.status || '').trim();
+  const rawStatuses = [order.orderStatus, order.status]
+    .map(value => String(value ?? '').trim())
+    .filter(Boolean);
+  const deliveredStatus = rawStatuses.find(value =>
+    ['delivered', 'completed', 'delivered_order', 'deliveredorder'].includes(value.toLowerCase())
+  );
+  if (deliveredStatus) return 'Delivered';
+  const cancelledStatus = rawStatuses.find(value =>
+    ['cancelled', 'cancelled_order'].includes(value.toLowerCase())
+  );
+  if (cancelledStatus) return 'Cancelled';
+  const s = rawStatuses[0] || '';
   if (['Pending_Review', 'pending', 'Pending'].includes(s)) return 'Pending_Review';
   if (['Approved', 'accepted', 'approved'].includes(s)) return 'Approved';
   if (['Processing Order', 'processing', 'Processing', 'Processing_Order', 'ProcessingOrder'].includes(s)) return 'Processing Order';
