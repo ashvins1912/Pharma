@@ -371,7 +371,8 @@ export async function getInventoryAlertSummary({
           stockQuantity: 1, reservedQuantity: 1, batchCount: 1
         } },
         { $sort: { availableQuantity: 1, name: 1, productId: 1 } },
-        { $facet: { metadata: [{ $count: 'count' }], items: [{ $limit: 20 }] } }
+        { $setWindowFields: { output: { totalCount: { $count: {} } } } },
+        { $limit: 20 }
       ]
     } }
   ]).allowDiskUse(true).exec();
