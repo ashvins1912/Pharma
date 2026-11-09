@@ -119,7 +119,7 @@ export default function Header({
   const handleSignOut = async () => {
     setSigningOut(true);
     await logout();
-    setMobileMenuOpen(false);
+    closeMobileMenu();
   };
 
   return (
@@ -270,6 +270,7 @@ export default function Header({
             {/* Mobile / Small Screen Navigation Hamburger Menu Toggle */}
             <button
               type="button"
+              ref={mobileMenuToggleRef}
               onClick={() => {
                 const nextState = !mobileMenuOpen;
                 setMobileMenuOpen(nextState);
@@ -277,6 +278,8 @@ export default function Header({
               }}
               className="md:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center shrink-0"
               aria-label={t('toggleMenu')}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="quickmeds-mobile-navigation"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 {mobileMenuOpen ? (
@@ -394,7 +397,8 @@ export default function Header({
           <div className="fixed inset-0 z-[99999] overflow-hidden animate-fade-in" aria-modal="true" role="dialog" aria-labelledby="quickmeds-mobile-navigation-title">
             {/* Backdrop */}
             <div
-              onClick={() => setMobileMenuOpen(false)}
+              onClick={closeMobileMenu}
+              aria-label="Close navigation"
               className="absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity"
             />
 
@@ -414,8 +418,8 @@ export default function Header({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition cursor-pointer"
+                  onClick={closeMobileMenu}
+                  className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition cursor-pointer"
                   aria-label="Close menu"
                 >
                   ✕
