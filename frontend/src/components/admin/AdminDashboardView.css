@@ -1597,3 +1597,115 @@ html.dark .admin-screen :where(.overflow-x-auto) {
 }
 @media (prefers-reduced-motion: reduce) { .dashboard-metrics > div { transition: none; } }
 html.dark .dashboard-nav-group { background: #0f172a; }
+
+
+/* Mobile-first fulfillment and medicine-request workspaces. */
+.admin-screen--fulfillment-board { min-width: 0; }
+.admin-screen--fulfillment-board .fulfillment-toolbar { align-items: stretch; }
+.admin-screen--fulfillment-board .fulfillment-mode-actions { min-width: 0; }
+.admin-screen--fulfillment-board .fulfillment-stage-tabs {
+  scrollbar-width: thin;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.admin-screen--fulfillment-board .fulfillment-stage-tab { flex: 0 0 auto; }
+.admin-screen--fulfillment-board > div:nth-of-type(4) { min-width: 0; }
+.admin-screen--fulfillment-board section { overflow-wrap: anywhere; }
+.admin-screen--requests #admin-medicine-requests-list { min-width: 0; }
+.admin-screen--requests .admin-medicine-request-mobile-cards { display: none; }
+
+@media (max-width: 767px) {
+  .admin-screen--fulfillment-board { gap: .75rem; }
+  .admin-screen--fulfillment-board > div:first-child {
+    align-items: stretch;
+    gap: .65rem;
+  }
+  .admin-screen--fulfillment-board > div:first-child > button { width: 100%; }
+  .admin-screen--fulfillment-board > form { padding: .8rem; }
+  .admin-screen--fulfillment-board .fulfillment-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0,1fr);
+    gap: .7rem;
+    padding: .75rem;
+  }
+  .admin-screen--fulfillment-board .fulfillment-mode-actions {
+    display: grid;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    width: 100%;
+  }
+  .admin-screen--fulfillment-board .fulfillment-mode-actions button {
+    justify-content: center;
+    min-width: 0;
+    padding-inline: .55rem;
+    font-size: .7rem;
+  }
+  .admin-screen--fulfillment-board .fulfillment-stage-tabs {
+    display: grid;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    gap: .45rem;
+    width: 100%;
+    overflow: visible;
+  }
+  .admin-screen--fulfillment-board .fulfillment-stage-tab {
+    justify-content: space-between;
+    min-width: 0;
+    min-height: 44px;
+    padding: .55rem .65rem;
+    white-space: normal;
+    text-align: left;
+    line-height: 1.2;
+    font-size: .68rem;
+  }
+  .admin-screen--fulfillment-board > div:nth-of-type(4) > div {
+    min-height: 0;
+    padding: .75rem;
+    border-radius: 1rem;
+  }
+  .admin-screen--fulfillment-board section {
+    border-radius: .9rem;
+  }
+  .admin-screen--fulfillment-board section > div { min-width: 0; }
+  .admin-screen--fulfillment-board input:not([type="checkbox"]):not([type="radio"]) {
+    min-width: 0;
+  }
+  .admin-screen--requests #admin-medicine-requests-list {
+    padding: .7rem;
+    border-radius: 1rem;
+    gap: .8rem;
+  }
+  .admin-screen--requests #admin-medicine-requests-list > :first-child {
+    align-items: stretch;
+    flex-wrap: wrap;
+    gap: .65rem;
+  }
+  .admin-screen--requests #admin-medicine-requests-list > :first-child > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .admin-screen--requests .admin-medicine-request-mobile-cards {
+    display: grid;
+    grid-template-columns: minmax(0,1fr);
+    gap: .7rem;
+  }
+  .admin-screen--requests .admin-medicine-request-mobile-cards article {
+    padding: .85rem;
+    border-radius: .95rem;
+    gap: .7rem;
+  }
+  .admin-screen--requests .admin-medicine-request-mobile-cards article button {
+    width: 100%;
+    min-height: 44px;
+  }
+}
+@media (max-width: 380px) {
+  .admin-screen--fulfillment-board .fulfillment-mode-actions {
+    grid-template-columns: minmax(0,1fr);
+  }
+  .admin-screen--fulfillment-board .fulfillment-stage-tab {
+    padding-inline: .5rem;
+    font-size: .65rem;
+  }
+  .admin-screen--requests .admin-medicine-request-mobile-cards article {
+    padding: .7rem;
+  }
+}
