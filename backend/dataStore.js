@@ -1,5 +1,6 @@
 // Comprehensive in-memory and MongoDB data store layer
 import { getIsConnected } from './config/db.js';
+import { buildOrderStatusFilter, orderHasStatus } from './utils/orderStatusFilters.js';
 import mongoose from 'mongoose';
 import { createHash } from 'node:crypto';
 import Medicine from './models/Medicine.js';
@@ -1757,19 +1758,7 @@ export const dataStore = {
         const deliveredStatusSet = new Set(deliveredStatuses.map(status => status.toLowerCase()));
         const safeLimit = Math.min(50, Math.max(1, Number(limit) || 10));
         const requestedPage = Math.max(1, Number(page) || 1);
-        const statusMissing = {
-            $or: [
-                { orderStatus: { $exists: false } },
-                { orderStatus: null },
-                { orderStatus: '' }
-            ]
-        };
-        let filter = {
-            $or: [
-                { orderStatus: { $in: deliveredStatuses } },
-                { $and: [statusMissing, { status: { $in: deliveredStatuses } }] }
-            ]
-        };
+        let filter = buildOrderStatusFilter(deliveredStatuses);
 
         const start = startDate ? new Date(startDate) : null;
         const end = endDate ? new Date(endDate) : null;
@@ -1797,10 +1786,7 @@ export const dataStore = {
         const delivered = inMemoryOrders
             .filter(order => {
                 if (tenantId && String(order.tenantId || '') !== String(tenantId)) return false;
-                const rawStatus = order.orderStatus == null || String(order.orderStatus).trim() === ''
-                    ? order.status
-                    : order.orderStatus;
-                if (!deliveredStatusSet.has(String(rawStatus || '').trim().toLowerCase())) return false;
+                if (!orderHasStatus(order, deliveredStatusSet)) return false;
                 const createdAt = new Date(order.createdAt);
                 if (hasValidStart && (!Number.isFinite(createdAt.getTime()) || createdAt < start)) return false;
                 if (hasValidEnd && (!Number.isFinite(createdAt.getTime()) || createdAt >= end)) return false;
@@ -1819,7 +1805,7 @@ export const dataStore = {
         };
     },
 
-    async getCancelledOrdersPage(page = 1, limit = 10, { tenantId = null } = {}) {
+    async getCancelledOrdersPage(page = 1, limit = 10, { tenantId = null, startDate = null, endDate = null } = {}) {
         const cancelledStatuses = [
             'Cancelled', 'cancelled', 'CANCELLED',
             'Cancelled_Order', 'cancelled_order', 'CANCELLED_ORDER'
@@ -1827,19 +1813,17 @@ export const dataStore = {
         const cancelledStatusSet = new Set(cancelledStatuses.map(status => status.toLowerCase()));
         const safeLimit = Math.min(50, Math.max(1, Number(limit) || 10));
         const requestedPage = Math.max(1, Number(page) || 1);
-        const statusMissing = {
-            $or: [
-                { orderStatus: { $exists: false } },
-                { orderStatus: null },
-                { orderStatus: '' }
-            ]
-        };
-        let filter = {
-            $or: [
-                { orderStatus: { $in: cancelledStatuses } },
-                { $and: [statusMissing, { status: { $in: cancelledStatuses } }] }
-            ]
-        };
+        let filter = buildOrderStatusFilter(cancelledStatuses);
+        const start = startDate ? new Date(startDate) : null;
+        const end = endDate ? new Date(endDate) : null;
+        const hasValidStart = start && Number.isFinite(start.getTime());
+        const hasValidEnd = end && Number.isFinite(end.getTime());
+        if (hasValidStart || hasValidEnd) {
+            filter.createdAt = {
+                ...(hasValidStart ? { $gte: start } : {}),
+                ...(hasValidEnd ? { $lt: end } : {})
+            };
+        }
 
         if (getIsConnected()) {
             if (tenantId) filter = { $and: [filter, { tenantId: String(tenantId) }] };
@@ -1856,10 +1840,11 @@ export const dataStore = {
         const cancelled = inMemoryOrders
             .filter(order => {
                 if (tenantId && String(order.tenantId || '') !== String(tenantId)) return false;
-                const rawStatus = order.orderStatus == null || String(order.orderStatus).trim() === ''
-                    ? order.status
-                    : order.orderStatus;
-                return cancelledStatusSet.has(String(rawStatus || '').trim().toLowerCase());
+                if (!orderHasStatus(order, cancelledStatusSet)) return false;
+                const createdAt = new Date(order.createdAt);
+                if (hasValidStart && (!Number.isFinite(createdAt.getTime()) || createdAt < start)) return false;
+                if (hasValidEnd && (!Number.isFinite(createdAt.getTime()) || createdAt >= end)) return false;
+                return true;
             })
             .sort((a, b) => {
                 const updatedAtDelta = new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
@@ -1881,10 +1866,7 @@ export const dataStore = {
             'Dispatched', 'dispatched', 'Out for Delivery', 'out_for_delivery',
             'VERIFICATION_NEEDED', 'PACKING', 'WAITING_FOR_STOCK', 'PARTIALLY_FULFILLED'];
         const deliveredStatuses = ['Delivered', 'delivered', 'DELIVERED', 'Delivered_Order', 'delivered_order', 'DELIVEREDORDER', 'DELIVERED_ORDER'];
-        const missingStatus = { $or: [{ orderStatus: { $exists: false } }, { orderStatus: null }, { orderStatus: '' }] };
-        const statusFilter = values => ({
-            $or: [{ orderStatus: { $in: values } }, { $and: [missingStatus, { status: { $in: values } }] }]
-        });
+        const statusFilter = values => buildOrderStatusFilter(values);
         const start = startDate ? new Date(startDate) : null;
         const end = endDate ? new Date(endDate) : null;
         if ((startDate && !Number.isFinite(start?.getTime())) || (endDate && !Number.isFinite(end?.getTime())) || (start && end && start >= end)) {
