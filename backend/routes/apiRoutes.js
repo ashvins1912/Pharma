@@ -14,7 +14,7 @@ import whatsappRoutes from './whatsappRoutes.js';
 import versionedOrderRoutes from './versionedOrderRoutes.js';
 import adminRoutes from './adminRoutes.js';
 import tenantBranchRoutes from './tenantBranchRoutes.js';
-import { authenticateUser } from '../middleware/auth.js';
+import { authenticateUser, requirePermission } from '../middleware/auth.js';
 import TenantMembership from '../models/TenantMembership.js';
 import tenantService from '../services/tenant-service/TenantService.js';
 import UserProfile from '../models/UserProfile.js';
@@ -258,9 +258,9 @@ router.post('/med-search-grounding', async (req, res) => {
 import multer from 'multer';
 import { imageOptimizationService } from '../services/ImageOptimizationService.js';
 
-const upload = multer({ limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
 
-router.post('/upload/image', upload.single('image'), async (req, res) => {
+router.post('/upload/image', authenticateUser, requirePermission('inventory.write'), upload.single('image'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ error: 'No image file uploaded.' });
@@ -275,7 +275,8 @@ router.post('/upload/image', upload.single('image'), async (req, res) => {
             data: result
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('[ImageUpload] Cloudinary upload failed:', err);
+        res.status(503).json({ error: 'Image upload is temporarily unavailable.' });
     }
 });
 
