@@ -39,7 +39,7 @@ export const API_CAPABILITIES = [
   {
     method: 'POST',
     pattern: /^\/api\/orders\/[^/]+\/resend-otp$/,
-    permission: 'orders.manage'
+    permission: 'orders.read'
   },
   {
     method: 'POST',
