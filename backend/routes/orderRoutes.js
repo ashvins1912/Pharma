@@ -2322,9 +2322,12 @@ router.post('/:id/verify-delivery', authenticateUser, async (req, res) => {
         }
 
         if (!order.tenantId) return res.status(404).json({ message: 'Order not found.' });
+        // Resolve the authenticated rider by their unique account link first, then
+        // enforce tenant ownership with isAssignedRiderForOrder. Older rider rows
+        // may store tenantId as an ObjectId while newer rows use strings; querying
+        // tenantId directly here incorrectly hides a valid assigned rider.
         const rider = await Rider.findOne({
             supabaseId: req.user.sub,
-            tenantId: String(order.tenantId),
             enabled: true
         }).lean();
         if (rider) {
@@ -2336,16 +2339,18 @@ router.post('/:id/verify-delivery', authenticateUser, async (req, res) => {
             if (!platformStaff && !isSameTenant(getActorTenantId(req), order.tenantId)) {
                 return res.status(404).json({ message: 'Order not found.' });
             }
-            const requestedRiderId = String(req.body?.riderId || order.rider?.riderId || order.riderId || '');
-            const assignedRiderId = String(order.rider?.riderId || order.riderId || '');
+            const requestedRiderId = String(req.body?.riderId || order.rider?.riderId || order.riderId || order.assignedRiderId || '');
+            const assignedRiderId = String(order.rider?.riderId || order.riderId || order.assignedRiderId || '');
             if (!requestedRiderId || requestedRiderId !== assignedRiderId) {
                 return res.status(403).json({ message: 'Only the rider assigned to this order can verify delivery.' });
             }
+            // Load by globally unique rider ID, then validate tenant ownership in
+            // application code. This supports legacy ObjectId tenantId values
+            // without weakening the pharmacy boundary.
             const assignedRider = await Rider.findOne({
                 _id: requestedRiderId,
-                tenantId: String(order.tenantId),
                 enabled: true
-            }).select('_id').lean();
+            }).select('_id tenantId').lean();
             if (!isAssignedRiderForOrder(assignedRider, order)) return res.status(404).json({ message: 'Assigned rider not found for this pharmacy.' });
         }
 
