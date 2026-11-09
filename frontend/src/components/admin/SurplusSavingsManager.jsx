@@ -11,6 +11,8 @@ const toLocalDateTime = value => {
   return local.toISOString().slice(0, 16);
 };
 
+const money = value => `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
 export default function SurplusSavingsManager({ canManage = false }) {
   const { medicines } = useApp();
   const { tenantId, branchId } = useTenant();
@@ -20,6 +22,8 @@ export default function SurplusSavingsManager({ canManage = false }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [medicineQuery, setMedicineQuery] = useState('');
+  const [showSelectedOnly, setShowSelectedOnly] = useState(false);
   const [form, setForm] = useState({
     name: '', description: '', medicineIds: [], discountType: 'percentage',
     discountValue: '15', maxDiscountAmount: '', minOrderAmount: '0',
@@ -43,11 +47,25 @@ export default function SurplusSavingsManager({ canManage = false }) {
     } finally {
       setLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, branchId, t]);
 
   useEffect(() => { loadCampaigns(); }, [loadCampaigns]);
 
   const selectableMedicines = useMemo(() => Array.isArray(medicines) ? medicines.filter(item => item?._id) : [], [medicines]);
+  const filteredMedicines = useMemo(() => selectableMedicines.filter(item => {
+    const name = String(item.name || item.title || '');
+    const matchesQuery = name.toLocaleLowerCase().includes(medicineQuery.trim().toLocaleLowerCase());
+    const isSelected = form.medicineIds.includes(String(item._id));
+    return matchesQuery && (!showSelectedOnly || isSelected);
+  }), [selectableMedicines, medicineQuery, showSelectedOnly, form.medicineIds]);
+  const selectedMedicines = useMemo(() => selectableMedicines.filter(item => form.medicineIds.includes(String(item._id))), [selectableMedicines, form.medicineIds]);
+  const summary = useMemo(() => ({
+    active: campaigns.filter(item => item.status === 'ACTIVE').length,
+    drafts: campaigns.filter(item => item.status === 'DRAFT').length,
+    redemptions: campaigns.reduce((total, item) => total + Number(item.usageCount || 0), 0),
+    products: campaigns.reduce((total, item) => total + (Array.isArray(item.medicineIds) ? item.medicineIds.length : 0), 0)
+  }), [campaigns]);
+
   const updateForm = (field, value) => setForm(current => ({ ...current, [field]: value }));
   const toggleMedicine = id => updateForm('medicineIds', form.medicineIds.includes(id)
     ? form.medicineIds.filter(value => value !== id)
@@ -58,6 +76,12 @@ export default function SurplusSavingsManager({ canManage = false }) {
     if (!canManage || saving) return;
     if (!form.name.trim() || form.medicineIds.length === 0) {
       setError(t('enterCampaignSelectMedicine'));
+      return;
+    }
+    if (!Number.isFinite(Number(form.discountValue)) || Number(form.discountValue) <= 0
+      || (form.discountType === 'percentage' && Number(form.discountValue) > 100)
+      || new Date(form.endsAt) <= new Date(form.startsAt)) {
+      setError('Enter a valid discount and ensure the end date is after the start date.');
       return;
     }
     setSaving(true);
@@ -100,84 +124,100 @@ export default function SurplusSavingsManager({ canManage = false }) {
   };
 
   return (
-    <section className="space-y-5">
-      <header className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/30">
-        <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">{t('tenantPromotions')}</p>
-        <h2 className="mt-1 text-lg font-black text-slate-900 dark:text-white">{t('exclusiveSurplusSavings')}</h2>
-        <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{t('surplusCampaignDescription')}</p>
+    <section className="admin-screen admin-screen--surplus-savings space-y-5">
+      <header className="surplus-page-hero">
+        <div className="surplus-hero-copy">
+          <span className="surplus-eyebrow"><span aria-hidden="true">✦</span> {t('tenantPromotions')}</span>
+          <h2>{t('exclusiveSurplusSavings')}</h2>
+          <p>{t('surplusCampaignDescription')}</p>
+        </div>
+        {canManage && <a href="#surplus-campaign-form" className="surplus-hero-action">＋ Create campaign</a>}
       </header>
 
-      {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">{error}</div>}
+      {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">{error}</div>}
+
+      <div className="surplus-summary-grid" aria-label="Campaign overview">
+        <article className="surplus-summary-card"><span className="surplus-summary-icon surplus-summary-icon--active" aria-hidden="true">◉</span><div><p>Active campaigns</p><strong>{summary.active}</strong></div></article>
+        <article className="surplus-summary-card"><span className="surplus-summary-icon surplus-summary-icon--draft" aria-hidden="true">✎</span><div><p>Draft campaigns</p><strong>{summary.drafts}</strong></div></article>
+        <article className="surplus-summary-card"><span className="surplus-summary-icon surplus-summary-icon--redemptions" aria-hidden="true">↗</span><div><p>Total redemptions</p><strong>{summary.redemptions.toLocaleString('en-IN')}</strong></div></article>
+        <article className="surplus-summary-card"><span className="surplus-summary-icon surplus-summary-icon--products" aria-hidden="true">▦</span><div><p>Products enrolled</p><strong>{summary.products.toLocaleString('en-IN')}</strong></div></article>
+      </div>
 
       {canManage && (
-        <form onSubmit={createCampaign} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-4">
-          <h3 className="text-sm font-black text-slate-900 dark:text-white">{t('createCampaign')}</h3>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <label className="space-y-1 text-xs font-bold text-slate-600 dark:text-slate-300">{t('campaignName')}
-              <input required maxLength={120} value={form.name} onChange={e => updateForm('name', e.target.value)} className="w-full rounded-xl border border-slate-300 p-2.5 text-sm dark:border-slate-700 dark:bg-slate-950" placeholder={t('nearExpiryClearance')} />
-            </label>
-            <label className="space-y-1 text-xs font-bold text-slate-600 dark:text-slate-300">{t('discountType')}
-              <select value={form.discountType} onChange={e => updateForm('discountType', e.target.value)} className="w-full rounded-xl border border-slate-300 p-2.5 text-sm dark:border-slate-700 dark:bg-slate-950">
-                <option value="percentage">{t('percentage')}</option><option value="fixed">{t('fixedPerUnit')}</option>
-              </select>
-            </label>
-            <label className="space-y-1 text-xs font-bold text-slate-600 dark:text-slate-300">Discount value
-              <input required type="number" min="0.01" max={form.discountType === 'percentage' ? 100 : undefined} step="0.01" value={form.discountValue} onChange={e => updateForm('discountValue', e.target.value)} className="w-full rounded-xl border border-slate-300 p-2.5 text-sm dark:border-slate-700 dark:bg-slate-950" />
-            </label>
-            <label className="space-y-1 text-xs font-bold text-slate-600 dark:text-slate-300">Maximum savings per order (optional)
-              <input type="number" min="0.01" step="0.01" value={form.maxDiscountAmount} onChange={e => updateForm('maxDiscountAmount', e.target.value)} className="w-full rounded-xl border border-slate-300 p-2.5 text-sm dark:border-slate-700 dark:bg-slate-950" placeholder={t('noCap')} />
-            </label>
-            <label className="space-y-1 text-xs font-bold text-slate-600 dark:text-slate-300">Minimum basket value (₹)
-              <input type="number" min="0" step="0.01" value={form.minOrderAmount} onChange={e => updateForm('minOrderAmount', e.target.value)} className="w-full rounded-xl border border-slate-300 p-2.5 text-sm dark:border-slate-700 dark:bg-slate-950" />
-            </label>
-            <label className="space-y-1 text-xs font-bold text-slate-600 dark:text-slate-300">Total campaign redemptions (optional)
-              <input type="number" min="1" step="1" value={form.usageLimit} onChange={e => updateForm('usageLimit', e.target.value)} className="w-full rounded-xl border border-slate-300 p-2.5 text-sm dark:border-slate-700 dark:bg-slate-950" placeholder={t('unlimited')} />
-            </label>
-            <label className="space-y-1 text-xs font-bold text-slate-600 dark:text-slate-300">Starts at
-              <input required type="datetime-local" value={form.startsAt} onChange={e => updateForm('startsAt', e.target.value)} className="w-full rounded-xl border border-slate-300 p-2.5 text-sm dark:border-slate-700 dark:bg-slate-950" />
-            </label>
-            <label className="space-y-1 text-xs font-bold text-slate-600 dark:text-slate-300">Ends at
-              <input required type="datetime-local" value={form.endsAt} onChange={e => updateForm('endsAt', e.target.value)} className="w-full rounded-xl border border-slate-300 p-2.5 text-sm dark:border-slate-700 dark:bg-slate-950" />
-            </label>
+        <form id="surplus-campaign-form" onSubmit={createCampaign} className="surplus-form-card">
+          <div className="surplus-section-heading">
+            <div><span className="surplus-step">01</span><div><h3>Create a savings campaign</h3><p>Set your offer, schedule and eligible medicines.</p></div></div>
+            <span className="surplus-required-note">* Required</span>
           </div>
-          <label className="block space-y-1 text-xs font-bold text-slate-600 dark:text-slate-300">Description
-            <textarea maxLength={500} rows={2} value={form.description} onChange={e => updateForm('description', e.target.value)} className="w-full rounded-xl border border-slate-300 p-2.5 text-sm dark:border-slate-700 dark:bg-slate-950" placeholder={t('campaignDescriptionPlaceholder')} />
-          </label>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between"><h4 className="text-xs font-black text-slate-800 dark:text-slate-200">{t('selectPharmacyMedicines')}</h4><span className="text-[10px] text-slate-500">{form.medicineIds.length} {t('selectedCount')}</span></div>
-            {selectableMedicines.length === 0 ? <p className="text-xs text-slate-500">{t('noTenantMedicines')}</p> : (
-              <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200 p-2 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {selectableMedicines.map(item => (
-                  <label key={item._id} className="flex items-center gap-2 rounded-lg p-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-800">
-                    <input type="checkbox" checked={form.medicineIds.includes(String(item._id))} onChange={() => toggleMedicine(String(item._id))} />
-                    <span className="min-w-0 flex-1 truncate">{item.name || item.title}</span>
-                    <span className="text-slate-500">₹{Number(item.price || 0).toFixed(2)}</span>
-                  </label>
-                ))}
+
+          <section className="surplus-form-section" aria-labelledby="surplus-details-title">
+            <h4 id="surplus-details-title">Campaign details</h4>
+            <div className="surplus-form-grid">
+              <label className="surplus-field surplus-field--wide"><span>Campaign name <b>*</b></span><input required maxLength={120} value={form.name} onChange={e => updateForm('name', e.target.value)} placeholder={t('nearExpiryClearance')} /></label>
+              <label className="surplus-field"><span>Discount type</span><select value={form.discountType} onChange={e => updateForm('discountType', e.target.value)}><option value="percentage">{t('percentage')}</option><option value="fixed">{t('fixedPerUnit')}</option></select></label>
+              <label className="surplus-field"><span>Discount value <b>*</b></span><div className="surplus-input-suffix"><input required type="number" min="0.01" max={form.discountType === 'percentage' ? 100 : undefined} step="0.01" value={form.discountValue} onChange={e => updateForm('discountValue', e.target.value)} /><span>{form.discountType === 'percentage' ? '%' : '₹'}</span></div></label>
+              <label className="surplus-field"><span>Maximum savings per order</span><div className="surplus-input-suffix"><input type="number" min="0.01" step="0.01" value={form.maxDiscountAmount} onChange={e => updateForm('maxDiscountAmount', e.target.value)} placeholder={t('noCap')} /><span>₹</span></div></label>
+              <label className="surplus-field"><span>Minimum basket value</span><div className="surplus-input-suffix"><input type="number" min="0" step="0.01" value={form.minOrderAmount} onChange={e => updateForm('minOrderAmount', e.target.value)} /><span>₹</span></div></label>
+              <label className="surplus-field"><span>Total redemptions limit</span><input type="number" min="1" step="1" value={form.usageLimit} onChange={e => updateForm('usageLimit', e.target.value)} placeholder={t('unlimited')} /></label>
+            </div>
+          </section>
+
+          <section className="surplus-form-section" aria-labelledby="surplus-schedule-title">
+            <h4 id="surplus-schedule-title">Schedule & message</h4>
+            <div className="surplus-form-grid">
+              <label className="surplus-field"><span>Starts at <b>*</b></span><input required type="datetime-local" value={form.startsAt} onChange={e => updateForm('startsAt', e.target.value)} /></label>
+              <label className="surplus-field"><span>Ends at <b>*</b></span><input required type="datetime-local" min={form.startsAt} value={form.endsAt} onChange={e => updateForm('endsAt', e.target.value)} /></label>
+              <label className="surplus-field surplus-field--wide"><span>Customer-facing description</span><textarea maxLength={500} rows={3} value={form.description} onChange={e => updateForm('description', e.target.value)} placeholder={t('campaignDescriptionPlaceholder')} /></label>
+            </div>
+          </section>
+
+          <section className="surplus-form-section" aria-labelledby="surplus-medicines-title">
+            <div className="surplus-medicine-heading"><div><h4 id="surplus-medicines-title">Eligible medicines</h4><p>Choose the products included in this offer.</p></div><span className="surplus-selected-count">{form.medicineIds.length} selected</span></div>
+            <div className="surplus-medicine-tools"><label className="surplus-search"><span aria-hidden="true">⌕</span><input type="search" value={medicineQuery} onChange={e => setMedicineQuery(e.target.value)} placeholder="Search medicines by name…" aria-label="Search medicines" /></label><label className="surplus-selected-filter"><input type="checkbox" checked={showSelectedOnly} onChange={e => setShowSelectedOnly(e.target.checked)} /> Selected only</label></div>
+            {selectableMedicines.length === 0 ? <p className="surplus-empty-state">{t('noTenantMedicines')}</p> : filteredMedicines.length === 0 ? <p className="surplus-empty-state">No medicines match this filter.</p> : (
+              <div className="surplus-medicine-list">
+                {filteredMedicines.map(item => {
+                  const selected = form.medicineIds.includes(String(item._id));
+                  return <label key={item._id} className={`surplus-medicine-option${selected ? ' is-selected' : ''}`}>
+                    <input type="checkbox" checked={selected} onChange={() => toggleMedicine(String(item._id))} />
+                    <span className="surplus-medicine-name">{item.name || item.title}</span>
+                    <span className="surplus-medicine-price">{money(item.price)}</span>
+                  </label>;
+                })}
               </div>
             )}
-          </div>
-          <button type="submit" disabled={saving || form.medicineIds.length === 0} className="rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-black text-white hover:bg-amber-700 disabled:opacity-50">{saving ? 'Saving…' : 'Create campaign'}</button>
+          </section>
+
+          <aside className="surplus-offer-preview" aria-live="polite">
+            <span className="surplus-preview-mark" aria-hidden="true">✦</span>
+            <div><span className="surplus-preview-label">Offer preview</span><strong>{form.discountType === 'percentage' ? `${Number(form.discountValue || 0)}% off` : `${money(form.discountValue)} off per unit`}</strong><p>{form.name.trim() || 'Your campaign name'} · {form.medicineIds.length} eligible {form.medicineIds.length === 1 ? 'medicine' : 'medicines'}{Number(form.minOrderAmount) > 0 ? ` · Minimum basket ${money(form.minOrderAmount)}` : ''}</p></div>
+          </aside>
+
+          <div className="surplus-form-actions"><span>{form.medicineIds.length ? `${form.medicineIds.length} medicines included` : 'Select at least one medicine to continue'}</span><button type="submit" disabled={saving || form.medicineIds.length === 0}>{saving ? 'Saving campaign…' : 'Create campaign'} <span aria-hidden="true">→</span></button></div>
         </form>
       )}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-black text-slate-900 dark:text-white">{t('campaignHistory')}</h3><button type="button" onClick={loadCampaigns} disabled={loading} className="text-xs font-bold text-blue-600 disabled:opacity-50">{t('refreshStatus')}</button></div>
-        {loading ? <p className="py-6 text-center text-xs text-slate-500">{t('loadCampaigns')}</p> : campaigns.length === 0 ? <p className="py-6 text-center text-xs text-slate-500">{t('noCampaignsYet')}</p> : (
-          <div className="space-y-3">
-            {campaigns.map(campaign => (
-              <article key={campaign._id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-700">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2"><h4 className="text-xs font-black text-slate-900 dark:text-white">{campaign.name}</h4><span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${campaign.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{campaign.status}</span></div>
-                  <p className="mt-1 text-[11px] text-slate-500">{campaign.discountType === 'percentage' ? `${campaign.discountValue}% off` : `₹${campaign.discountValue} off per unit`} · {campaign.medicineIds?.length || 0} products · {campaign.usageCount || 0}{campaign.usageLimit ? `/${campaign.usageLimit}` : ''} redemptions</p>
-                  <p className="text-[10px] text-slate-400">{new Date(campaign.startsAt).toLocaleString()} – {new Date(campaign.endsAt).toLocaleString()}</p>
+      <section className="surplus-history-card" aria-labelledby="surplus-history-title">
+        <div className="surplus-history-heading"><div><span className="surplus-step">02</span><div><h3 id="surplus-history-title">{t('campaignHistory')}</h3><p>Review and manage your savings campaigns.</p></div></div><button type="button" onClick={loadCampaigns} disabled={loading} className="surplus-refresh-button"><span aria-hidden="true">↻</span> {loading ? 'Refreshing…' : t('refreshStatus')}</button></div>
+        {loading ? <div className="surplus-loading-state" role="status">Loading campaigns…</div> : campaigns.length === 0 ? <div className="surplus-empty-state"><span aria-hidden="true">✦</span><strong>{t('noCampaignsYet')}</strong><p>Create a savings campaign to start enrolling eligible medicines.</p>{canManage && <a href="#surplus-campaign-form">Create your first campaign</a>}</div> : (
+          <div className="surplus-campaign-list">
+            {campaigns.map(campaign => {
+              const status = String(campaign.status || 'DRAFT').toUpperCase();
+              const usageCount = Number(campaign.usageCount || 0);
+              const usageLimit = Number(campaign.usageLimit || 0);
+              const progress = usageLimit > 0 ? Math.min(100, usageCount / usageLimit * 100) : null;
+              return <article key={campaign._id} className="surplus-campaign-card">
+                <div className="surplus-campaign-main"><div className="surplus-campaign-title-row"><h4>{campaign.name}</h4><span className={`surplus-status-pill surplus-status-pill--${status.toLowerCase()}`}>{status}</span></div>
+                  <p className="surplus-campaign-offer">{campaign.discountType === 'percentage' ? `${campaign.discountValue}% off` : `${money(campaign.discountValue)} off per unit`} <span>·</span> {campaign.medicineIds?.length || 0} products</p>
+                  <p className="surplus-campaign-dates">{new Date(campaign.startsAt).toLocaleString()} <span>→</span> {new Date(campaign.endsAt).toLocaleString()}</p>
+                  <div className="surplus-redemption"><div className="surplus-redemption-label"><span>{usageCount.toLocaleString('en-IN')} redemptions</span><span>{usageLimit ? `${usageLimit.toLocaleString('en-IN')} limit` : 'No limit'}</span></div>{progress !== null && <div className="surplus-progress-track" role="progressbar" aria-label="Campaign redemption progress" aria-valuenow={Math.round(progress)} aria-valuemin="0" aria-valuemax="100"><span style={{ width: `${progress}%` }} /></div>}</div>
                 </div>
-                {canManage && <div className="flex gap-2">{campaign.status !== 'ACTIVE' && <button type="button" onClick={() => setCampaignStatus(campaign, 'ACTIVE')} className="rounded-lg bg-emerald-600 px-3 py-2 text-[10px] font-black text-white">{t('activate')}</button>}{campaign.status === 'ACTIVE' && <button type="button" onClick={() => setCampaignStatus(campaign, 'PAUSED')} className="rounded-lg bg-amber-600 px-3 py-2 text-[10px] font-black text-white">{t('pause')}</button>}</div>}
-              </article>
-            ))}
+                {canManage && <div className="surplus-campaign-actions">{status !== 'ACTIVE' && <button type="button" onClick={() => setCampaignStatus(campaign, 'ACTIVE')} className="surplus-activate-button">{t('activate')}</button>}{status === 'ACTIVE' && <button type="button" onClick={() => setCampaignStatus(campaign, 'PAUSED')} className="surplus-pause-button">{t('pause')}</button>}</div>}
+              </article>;
+            })}
           </div>
         )}
-      </div>
+      </section>
     </section>
   );
 }
