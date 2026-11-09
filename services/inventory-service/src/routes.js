@@ -32,9 +32,20 @@ const router = express.Router();
 const asyncHandler = handler => (req, res, next) => {
   Promise.resolve(handler(req, res, next)).catch(next);
 };
-const getInventoryScope = (req, fallback = {}) => req.service?.name === 'api-gateway'
-  ? { tenantId: req.service.tenantId, branchId: req.service.branchId }
-  : { tenantId: req.service?.tenantId || fallback.tenantId || null, branchId: req.service?.branchId || fallback.branchId || null };
+const getInventoryScope = (req, fallback = {}) => {
+  const serviceScope = req.service?.name === 'api-gateway' ? req.service : (req.service || {});
+  const tenantId = serviceScope.tenantId
+    || req.headers?.['x-tenant-id']
+    || req.query?.tenantId
+    || fallback.tenantId
+    || null;
+  const branchId = serviceScope.branchId
+    || req.headers?.['x-branch-id']
+    || req.query?.branchId
+    || fallback.branchId
+    || null;
+  return { tenantId, branchId };
+};
 const requireImportsEnabled = (_req, res, next) => config.importsEnabled
   ? next()
   : res.status(503).json({ code: 'INVENTORY_IMPORTS_DISABLED', message: 'Inventory import writes are disabled. Use preview only until a controlled test environment is explicitly enabled.' });

@@ -152,6 +152,8 @@ export function createServiceRouters(gatewayConfig = config) {
     validateTenantBranch: scope === 'inventory.import'
   }, gatewayConfig);
   inventoryRouter.get('/alerts', inventory('inventory.read'));
+  inventoryRouter.get('/alerts/summary', inventory('inventory.read'));
+  inventoryRouter.get('/audits', inventory('inventory.read'));
   inventoryRouter.post('/bulk/lookup', inventory('inventory.read'));
   inventoryRouter.post('/check-availability', inventory('inventory.read'));
   inventoryRouter.get('/products/:productId', inventory('inventory.read'));

@@ -517,7 +517,7 @@ router.get('/alerts', authenticateUser, async (req, res) => {
     res.set('X-Request-Id', requestId);
     try {
         const scope = await getVerifiedInventoryScope(req, 'inventory.read').catch(err => {
-            if (err.code === 'PHARMACY_SCOPE_REQUIRED') return null;
+            if (['PHARMACY_SCOPE_REQUIRED', 'INVALID_PHARMACY_BRANCH', 'TENANT_ACCESS_DENIED', 'FORBIDDEN'].includes(err.code)) return null;
             throw err;
         });
         if (!scope) {

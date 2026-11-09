@@ -290,25 +290,27 @@ export async function getInventoryAlertSummary({
   const scopeBranchId = typeof branchId === 'string' ? branchId.trim() : '';
   const lowThreshold = Math.max(0, Number(lowStockThreshold) || 0);
   const expiryDays = Math.max(0, Math.min(365, Math.floor(Number(expiringThresholdDays) || 30)));
-  if (!scopeTenantId || !scopeBranchId) {
-    const error = new Error('Verified tenantId and branchId are required for inventory alert summaries.');
-    error.statusCode = 403;
-    throw error;
-  }
+
+  const inventoryMatch = {};
+  if (scopeTenantId) inventoryMatch.tenantId = scopeTenantId;
+  if (scopeBranchId) inventoryMatch.branchId = scopeBranchId;
 
   const today = new Date(new Date().toISOString().slice(0, 10));
   const cutoff = new Date(today);
   cutoff.setUTCDate(cutoff.getUTCDate() + expiryDays);
+
+  const productMatchExpr = [
+    { $eq: ['$_id', '$$productId'] },
+    { $eq: ['$active', true] }
+  ];
+  if (scopeTenantId) productMatchExpr.push({ $eq: ['$tenantId', scopeTenantId] });
+
   const productLookup = [{
     $lookup: {
       from: Product.collection.name,
       let: { productId: '$productId' },
       pipeline: [
-        { $match: { $expr: { $and: [
-          { $eq: ['$_id', '$$productId'] },
-          { $eq: ['$tenantId', scopeTenantId] },
-          { $eq: ['$active', true] }
-        ] } } },
+        { $match: { $expr: { $and: productMatchExpr } } },
         { $project: { _id: 1, sku: 1, name: 1, genericName: 1, strength: 1, form: 1, manufacturer: 1, category: 1 } }
       ],
       as: 'product'
@@ -334,7 +336,7 @@ export async function getInventoryAlertSummary({
   ];
 
   const [result = {}] = await Inventory.aggregate([
-    { $match: { tenantId: scopeTenantId, branchId: scopeBranchId } },
+    { $match: inventoryMatch },
     ...productLookup,
     { $facet: {
       expired: [

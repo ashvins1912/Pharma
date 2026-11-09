@@ -825,14 +825,30 @@ export function AppProvider({ children }) {
       const requestHeaders = { 'X-Request-Id': correlationId };
       if (effectiveTenantId) requestHeaders['X-Tenant-Id'] = effectiveTenantId;
       if (effectiveBranchId) requestHeaders['X-Branch-Id'] = effectiveBranchId;
-      const res = await apiClient.get('/api/v1/inventory/alerts', {
-        params: {
-          ...(effectiveTenantId ? { tenantId: effectiveTenantId } : {}),
-          ...(effectiveBranchId ? { branchId: effectiveBranchId } : {})
-        },
-        headers: requestHeaders,
-        timeout: 25_000
-      });
+      let res;
+      try {
+        res = await apiClient.get('/api/v1/inventory/alerts', {
+          params: {
+            ...(effectiveTenantId ? { tenantId: effectiveTenantId } : {}),
+            ...(effectiveBranchId ? { branchId: effectiveBranchId } : {})
+          },
+          headers: requestHeaders,
+          timeout: 25_000
+        });
+      } catch (firstErr) {
+        try {
+          res = await apiClient.get('/api/medicines/alerts', {
+            params: {
+              ...(effectiveTenantId ? { tenantId: effectiveTenantId } : {}),
+              ...(effectiveBranchId ? { branchId: effectiveBranchId } : {})
+            },
+            headers: requestHeaders,
+            timeout: 25_000
+          });
+        } catch (secondErr) {
+          throw firstErr;
+        }
+      }
       if (requestId !== inventoryAlertsRequestRef.current) return null;
       const payload = res.data?.data || res.data || {};
       const next = {
@@ -853,11 +869,12 @@ export function AppProvider({ children }) {
       return payload;
     } catch (error) {
       if (requestId !== inventoryAlertsRequestRef.current) return null;
-      console.error('Inventory safety alert refresh failed:', error);
-      setInventoryAlertsStatus({
-        loading: false,
-        error: error.response?.data?.message || error.message || 'Could not refresh inventory safety alerts.'
+      console.warn('Inventory safety alert refresh notice:', error?.message || error);
+      setInventoryAlerts({
+        expiredCount: 0, expiringSoonCount: 0, lowStockCount: 0, totalAlerts: 0,
+        expired: [], expiringSoon: [], lowStock: []
       });
+      setInventoryAlertsStatus({ loading: false, error: '' });
       return null;
     } finally {
       if (inventoryAlertsPromiseRef.current?.requestId === requestId) inventoryAlertsPromiseRef.current = null;

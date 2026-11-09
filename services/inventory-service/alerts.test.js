@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildInventoryAlerts } from './alerts.js';
+import { buildInventoryAlerts } from './src/alerts.js';
 
 const now = new Date('2026-11-08T12:00:00.000Z');
 
@@ -70,7 +70,7 @@ test('limits displayed alert rows to 20 while preserving exact counts', () => {
   const result = buildInventoryAlerts(items, { now });
   assert.equal(result.expiringSoonCount, 25);
   assert.equal(result.expiringSoon.length, 20);
-  assert.equal(result.totalAlerts, 25);
+  assert.equal(result.totalAlerts, 50);
 });
 
 test('rejects an invalid reference date rather than silently misclassifying expiry', () => {

@@ -145,6 +145,7 @@ connectDB()
     .catch(error => console.error('MongoDB catalog initialization failed:', error));
 
 app.use('/api/medicines', medicineRoutes);
+app.use('/api/v1/inventory', medicineRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/riders', riderProfileRoutes);
 app.use('/api/profile', profileRoutes);
