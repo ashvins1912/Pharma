@@ -2035,7 +2035,7 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
             const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
             const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
             if (req.query.fulfillmentSnapshot === 'true') {
-                const snapshot = await dataStore.getFulfillmentSnapshot(page, limit, String(tenantId));
+                const snapshot = await dataStore.getFulfillmentSnapshot(page, limit, String(tenantId, { startDate: req.query.startDate, endDate: req.query.endDate }));
                 for (const key of ['orders', 'items', 'recentOrders', 'latestOrders']) if (Array.isArray(snapshot?.[key])) await sanitizeTenantRiderReferences(snapshot[key]);
                 return res.json(snapshot);
             }
@@ -2072,7 +2072,7 @@ router.get('/admin/all', authenticateUser, isAdmin, async (req, res) => {
             const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
             const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
             if (req.query.fulfillmentSnapshot === 'true') {
-                return res.json(await dataStore.getFulfillmentSnapshot(page, limit, tenantId));
+                return res.json(await dataStore.getFulfillmentSnapshot(page, limit, tenantId, { startDate: req.query.startDate, endDate: req.query.endDate }));
             }
             if (req.query.search !== undefined) {
                 const { type, value } = classifyOrderSearch(req.query.search);
