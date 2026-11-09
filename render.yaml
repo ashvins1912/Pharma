@@ -81,7 +81,10 @@ services:
     headers:
       # HTML must revalidate on every navigation so it never points at a
       # previous deployment's fingerprinted lazy chunks.
-      - path: /*
+      - path: /
+        name: Cache-Control
+        value: no-cache, no-store, must-revalidate
+      - path: /index.html
         name: Cache-Control
         value: no-cache, no-store, must-revalidate
       # Vite assets are content-hashed and safe to cache for their full lifetime.
