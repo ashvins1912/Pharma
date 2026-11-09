@@ -12,6 +12,7 @@ export default function MedicineRequestsView({ onOrderCreated }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [newRequestModalOpen, setNewRequestModalOpen] = useState(false);
+  const [requestBucket, setRequestBucket] = useState('active');
 
   const loadRequests = async () => {
     try {
@@ -94,12 +95,20 @@ export default function MedicineRequestsView({ onOrderCreated }) {
         </div>
       </div>
 
+      {/* Active work and completed request history stay separate. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+        <div><p className="text-xs font-black text-slate-800">Request workspace</p><p className="text-[11px] text-slate-500">Track pharmacist review, proposals and completed decisions.</p></div>
+        <div className="inline-flex rounded-xl bg-white p-1 shadow-sm" role="tablist" aria-label="Medicine request views">
+          <button type="button" role="tab" aria-selected={requestBucket === 'active'} onClick={() => setRequestBucket('active')} className={`rounded-lg px-4 py-2 text-xs font-extrabold ${requestBucket === 'active' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>Active ({requests.filter(r => !['Proposal Approved','Proposal Rejected','CUSTOMER_APPROVED','CUSTOMER_REJECTED','CONVERTED_TO_ORDER','PHARMACY_REJECTED','EXPIRED'].includes(r.status)).length})</button>
+          <button type="button" role="tab" aria-selected={requestBucket === 'history'} onClick={() => setRequestBucket('history')} className={`rounded-lg px-4 py-2 text-xs font-extrabold ${requestBucket === 'history' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>History ({requests.filter(r => ['Proposal Approved','Proposal Rejected','CUSTOMER_APPROVED','CUSTOMER_REJECTED','CONVERTED_TO_ORDER','PHARMACY_REJECTED','EXPIRED'].includes(r.status)).length})</button>
+        </div>
+      </div>
       {/* Requests List */}
       {loading && requests.length === 0 ? (
         <div className="text-center py-12 text-slate-400 text-xs font-semibold">
           Loading your medicine requests...
         </div>
-      ) : requests.length === 0 ? (
+      ) : requests.filter(req => requestBucket === 'history' ? ['Proposal Approved','Proposal Rejected','CUSTOMER_APPROVED','CUSTOMER_REJECTED','CONVERTED_TO_ORDER','PHARMACY_REJECTED','EXPIRED'].includes(req.status) : !['Proposal Approved','Proposal Rejected','CUSTOMER_APPROVED','CUSTOMER_REJECTED','CONVERTED_TO_ORDER','PHARMACY_REJECTED','EXPIRED'].includes(req.status)).length === 0 ? (
         <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-3">
           <span className="text-3xl block">💊</span>
           <h4 className="text-sm font-bold text-slate-700">{t('noSpecialRequests')}</h4>
@@ -115,9 +124,9 @@ export default function MedicineRequestsView({ onOrderCreated }) {
         </div>
       ) : (
         <div className="space-y-4">
-          {requests.map((req) => {
+          {requests.filter(req => requestBucket === 'history' ? ['Proposal Approved','Proposal Rejected','CUSTOMER_APPROVED','CUSTOMER_REJECTED','CONVERTED_TO_ORDER','PHARMACY_REJECTED','EXPIRED'].includes(req.status) : !['Proposal Approved','Proposal Rejected','CUSTOMER_APPROVED','CUSTOMER_REJECTED','CONVERTED_TO_ORDER','PHARMACY_REJECTED','EXPIRED'].includes(req.status)).map((req) => {
             const hasProposal = Boolean(req.proposal);
-            const isProcessing = actionLoadingId === req._id;
+            const isProcessing = isActionLoading(LOADING_ACTIONS.APPROVE_MEDICINE) || isActionLoading(LOADING_ACTIONS.REJECT_MEDICINE);
 
             return (
               <div

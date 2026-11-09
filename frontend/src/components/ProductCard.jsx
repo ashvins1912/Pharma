@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -18,9 +18,33 @@ export default function ProductCard({ med }) {
   const cartItem = cart.find(item => item._id === med._id);
   const cartQty = cartItem ? cartItem.quantity : 0;
 
-  // Fallback image placeholder
-  const fallbackUrl = "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80";
-  const displayImage = imageError || !med.imageUrl ? fallbackUrl : med.imageUrl;
+  // Catalog records can come from the legacy API, Inventory Service, or imported
+  // feeds. Accept their known image fields and keep a CDN fallback chain so one
+  // stale tenant image never leaves a broken product tile.
+  const imageValue = med.imageUrl || med.image_url || med.productImageUrl || med.photoUrl || med.thumbnailUrl || med.image;
+  const rawImageUrl = typeof imageValue === 'string'
+    ? imageValue.trim()
+    : imageValue && typeof imageValue === 'object'
+      ? String(imageValue.url || imageValue.src || '').trim()
+      : '';
+  const normalizeImageUrl = (value) => {
+    if (!value) return '';
+    if (/^(https?:|data:image\/|blob:)/i.test(value) || value.startsWith('//') || value.startsWith('/')) return value;
+    return `/${value.replace(/^\.\//, '')}`;
+  };
+  const categoryImage = /vitamin|supplement|herbal|ayurveda|wellness/i.test(String(med.category || ''))
+    ? 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&q=80'
+    : /syrup|liquid|drop|inhaler|device|surgical/i.test(String(med.category || ''))
+      ? 'https://images.unsplash.com/photo-1550572017-edd951b55106?w=500&q=80'
+      : 'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=500&q=80';
+  const imageSources = [...new Set([
+    normalizeImageUrl(rawImageUrl),
+    categoryImage,
+    'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80'
+  ].filter(Boolean))];
+  const [imageIndex, setImageIndex] = useState(0);
+  useEffect(() => { setImageIndex(0); setImageError(false); }, [rawImageUrl, categoryImage]);
+  const displayImage = imageSources[imageIndex];
 
   const categoryLabels = {
     'All': t('all'),
@@ -48,9 +72,13 @@ export default function ProductCard({ med }) {
               src={displayImage}
               alt={med.name}
               loading="lazy"
+              decoding="async"
               referrerPolicy="no-referrer"
-              onError={() => setImageError(true)}
-              className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+              onError={() => {
+                if (imageIndex + 1 < imageSources.length) setImageIndex(index => index + 1);
+                else setImageError(true);
+              }}
+              className="w-full h-full object-contain p-2 transition-transform duration-300 hover:scale-105"
             />
           ) : (
             <div className="flex flex-col items-center justify-center p-3 text-slate-400 select-none">

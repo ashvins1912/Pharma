@@ -331,9 +331,16 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <img
-                      src={med.imageUrl || med.image || 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&q=80'}
+                      src={med.imageUrl || med.image_url || med.productImageUrl || med.photoUrl || med.image?.url || med.image || 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&q=80'}
                       alt={med.name}
-                      className="w-12 h-12 rounded-xl object-cover border border-slate-200 bg-white flex-shrink-0"
+                      loading="lazy"
+                      decoding="async"
+                      referrerPolicy="no-referrer"
+                      onError={(event) => {
+                        event.currentTarget.onerror = null;
+                        event.currentTarget.src = 'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=300&q=80';
+                      }}
+                      className="w-12 h-12 rounded-xl object-contain p-1 border border-slate-200 bg-white flex-shrink-0"
                     />
                     <div className="flex-1 min-w-0">
                       <h4 className="font-extrabold text-slate-900 text-xs truncate">{med.name}</h4>
