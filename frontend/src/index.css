@@ -1194,3 +1194,67 @@ form select, form textarea) {
     min-width: 0;
   }
 }
+
+
+/* Onboarding dialogs: keep the header visible and the long form independently scrollable. */
+.pharma-vendor-onboarding-overlay {
+  padding: max(0.75rem, env(safe-area-inset-top, 0px))
+    max(0.75rem, env(safe-area-inset-right, 0px))
+    max(0.75rem, env(safe-area-inset-bottom, 0px))
+    max(0.75rem, env(safe-area-inset-left, 0px));
+}
+
+.pharma-vendor-onboarding-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-height: calc(100dvh - 1.5rem);
+}
+
+.pharma-vendor-onboarding-panel > :first-child {
+  flex: 0 0 auto;
+}
+
+.pharma-vendor-onboarding-form {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pharma-google-profile-panel {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rider-otp-controls > input {
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
+.rider-otp-controls > button {
+  flex: 0 1 auto;
+}
+
+@media (max-width: 639px) {
+  .pharma-vendor-onboarding-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .pharma-vendor-onboarding-panel {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px));
+    margin: 0;
+    border-radius: 1.25rem 1.25rem 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .pharma-google-profile-panel {
+    max-height: calc(100dvh - 1rem - env(safe-area-inset-top, 0px));
+    border-radius: 1.25rem;
+  }
+}
