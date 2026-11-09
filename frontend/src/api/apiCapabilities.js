@@ -32,9 +32,19 @@ export const API_CAPABILITIES = [
     permission: 'orders.read'
   },
   {
+    method: 'GET',
+    pattern: /^\/api\/orders\/[^/]+\/reveal-otp$/,
+    permission: 'orders.read'
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/orders\/[^/]+\/resend-otp$/,
+    permission: 'delivery.manage'
+  },
+  {
     method: 'POST',
     pattern: /^\/api\/orders\/[^/]+\/verify-delivery$/,
-    permission: 'delivery.manage'
+    permission: 'delivery.read'
   },
   {
     method: 'PUT',
