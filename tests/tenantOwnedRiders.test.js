@@ -79,6 +79,9 @@ test('delivery verification requires the assigned rider and the order tenant to 
     const order = { tenantId: 'tenant-a', rider: { riderId: 'rider-a' } };
     assert.equal(isRiderOwnedByOrderTenant({ id: 'rider-a', tenantId: 'tenant-a' }, order), true);
     assert.equal(isAssignedRiderForOrder({ id: 'rider-a', tenantId: 'tenant-a' }, order), true);
+    assert.equal(isAssignedRiderForOrder({ _id: 'rider-a', tenantId: 'tenant-a' }, {
+        tenantId: 'tenant-a', assignedRiderId: 'rider-a'
+    }), true);
     assert.equal(isAssignedRiderForOrder({ id: 'rider-b', tenantId: 'tenant-a' }, order), false);
     assert.equal(isAssignedRiderForOrder({ id: 'rider-a', tenantId: 'tenant-b' }, order), false);
     assert.equal(isAssignedRiderForOrder({ id: 'rider-a' }, order), false);
