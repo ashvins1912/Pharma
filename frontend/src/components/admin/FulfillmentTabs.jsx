@@ -11,8 +11,8 @@ export default function FulfillmentTabs({
     counts
 }) {
     return (
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 p-3.5 rounded-2xl shadow-sm">
-            <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="fulfillment-toolbar flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 p-3.5 rounded-2xl shadow-sm">
+            <div className="fulfillment-mode-actions flex items-center gap-1.5 flex-wrap">
                 <button
                     type="button"
                     onClick={() => setViewMode('tabbed')}
@@ -40,7 +40,7 @@ export default function FulfillmentTabs({
             </div>
 
             {viewMode === 'tabbed' ? (
-                <div className="flex items-center gap-1.5 overflow-x-auto py-1 max-w-full">
+                <div className="fulfillment-stage-tabs flex items-center gap-1.5 overflow-x-auto py-1 max-w-full">
                     {columns.map((col) => {
                         const count = counts[col.id] || 0;
                         const isSelected = activeTabId === col.id;
@@ -49,7 +49,7 @@ export default function FulfillmentTabs({
                                 key={col.id}
                                 type="button"
                                 onClick={() => setActiveTabId(col.id)}
-                                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition cursor-pointer flex items-center gap-2 ${
+                                className={`fulfillment-stage-tab px-3.5 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition cursor-pointer flex items-center gap-2 ${
                                     isSelected
                                         ? 'bg-slate-900 text-white shadow-md'
                                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
