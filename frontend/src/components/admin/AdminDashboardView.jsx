@@ -29,6 +29,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTenant } from '../../context/TenantContext';
 import Pagination from '../common/Pagination';
 import { ComponentLoader, TableSkeleton, CardSkeleton, ErrorState, EmptyState } from '../common/ComponentLoader';
+import { DASHBOARD_PERIODS, getDashboardDateRange } from '../../utils/dashboardDateRange';
 import './AdminDashboardView.css';
 
 function PendingMedicineRequestsNotice({ count, onOpen }) {
@@ -72,6 +73,8 @@ export default function AdminDashboardView() {
   const { tenantId: contextTenantId } = useTenant();
   const activeTenantId = contextTenantId || user?.tenantId || user?.app_metadata?.tenantId || '';
   const [adminTab, setAdminTab] = useState('tenantProfile');
+  const [dashboardPeriod, setDashboardPeriod] = useState('today');
+  const dashboardRange = getDashboardDateRange(dashboardPeriod);
 
   // Navigation visibility and component rendering share these exact permission gates.
   const canViewFulfillment = hasPermission('orders.read') && hasPermission('orders.manage');
@@ -150,7 +153,7 @@ export default function AdminDashboardView() {
     try {
       setLoadingOrders(true);
       setOrdersError('');
-      const res = await apiClient.get('/api/orders/admin/all', { params: { fulfillmentSnapshot: 'true', page: activeOrdersPage, limit: 10 } });
+      const res = await apiClient.get('/api/orders/admin/all', { params: { fulfillmentSnapshot: 'true', page: activeOrdersPage, limit: 10, ...dashboardRange } });
       const snapshot = res.data || {};
       setOrders(Array.isArray(snapshot.items) ? snapshot.items : []);
       setRecentOrders(Array.isArray(snapshot.recentOrders) ? snapshot.recentOrders : []);
@@ -187,7 +190,7 @@ export default function AdminDashboardView() {
   useEffect(() => {
     if (authLoading || !canViewFulfillment || adminTab !== 'fulfillment') return;
     loadAllOrders();
-  }, [adminTab, authLoading, canViewFulfillment, activeOrdersPage]);
+  }, [adminTab, authLoading, canViewFulfillment, activeOrdersPage, dashboardPeriod]);
 
   // Inventory alerts are loaded once by AppContext for the authenticated staff
   // session and shared with both the header alert bell and this dashboard.
@@ -387,6 +390,17 @@ export default function AdminDashboardView() {
               <span>{t('linkWhatsAppQr')}</span>
             </button>
           )}
+        </div>
+      )}
+
+      {(canViewFulfillment || canViewAdminRequests) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3">
+          <label htmlFor="operations-date-range" className="text-xs font-bold text-slate-700">Operations period</label>
+          <select id="operations-date-range" value={dashboardPeriod}
+            onChange={event => { setDashboardPeriod(event.target.value); setActiveOrdersPage(1); }}
+            className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800">
+            {DASHBOARD_PERIODS.map(period => <option key={period.value} value={period.value}>{period.label}</option>)}
+          </select>
         </div>
       )}
 
@@ -741,7 +755,7 @@ export default function AdminDashboardView() {
             </div>
           ) : (
             <>
-              <AdminFulfillmentKanban orders={orders} onRefresh={loadAllOrders} />
+              <AdminFulfillmentKanban orders={orders} onRefresh={loadAllOrders} dateRange={dashboardRange} />
               {!loadingOrders && !ordersError && (
                 <Pagination
                   page={activeOrdersPage}
@@ -781,7 +795,7 @@ export default function AdminDashboardView() {
       )}
 
       {adminTab === 'requests' && canViewAdminRequests && (
-        <div className="admin-screen admin-screen--requests"><AdminMedicineRequestsTab initialData={initialMedicineRequests} onPendingCountRefresh={loadPendingMedicineRequestCount} /></div>
+        <div className="admin-screen admin-screen--requests"><AdminMedicineRequestsTab initialData={dashboardPeriod === 'all' ? initialMedicineRequests : null} dateRange={dashboardRange} onPendingCountRefresh={loadPendingMedicineRequestCount} /></div>
       )}
 
       {adminTab === 'riders' && canManageRiders && (
