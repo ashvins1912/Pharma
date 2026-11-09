@@ -7,36 +7,42 @@ import { useTenant } from '../../context/TenantContext';
 const RENDER_MICROSERVICES = [
   {
     id: 'api_gateway',
+    gatewayServiceId: 'api-gateway',
     name: 'Pharma API Gateway',
     url: 'https://pharma-api-gateway.onrender.com/health',
     description: 'Central API Gateway routing authentication, rate limiting & microservice traffic.'
   },
   {
     id: 'caching_service',
+    gatewayServiceId: 'caching-service',
     name: 'Caching Service (Redis)',
     url: 'https://caching-v0et.onrender.com/health',
     description: 'Shared Redis key-value cache layer & response optimization service.'
   },
   {
     id: 'inventory_service',
+    gatewayServiceId: 'inventory-service',
     name: 'Inventory & Stock Service',
     url: 'https://inventory-axkq.onrender.com/health',
     description: 'Tenant & branch-scoped product catalog, batch stock & Excel ingestion service.'
   },
   {
     id: 'backend_core_api',
+    gatewayServiceId: 'pharma-core-api',
     name: 'Backend Core API Engine',
     url: 'https://pharma-api-j5j1.onrender.com/ready',
     description: 'Primary Express backend service handling orders, coupons, payments & data store.'
   },
   {
     id: 'prescription_service',
+    gatewayServiceId: 'prescription-service',
     name: 'Prescription Verification Service',
     url: 'https://prescription-service-sg6m.onrender.com/health',
     description: 'AI vision OCR extraction pipeline, document normalizer & encryption service.'
   },
   {
     id: 'websocket_service',
+    gatewayServiceId: 'websocket-service',
     name: 'WebSocket Real-time Engine',
     url: 'https://websockt.onrender.com/health',
     description: 'Real-time order telemetry, rider GPS location updates & notification streams.'
@@ -190,18 +196,12 @@ export default function AutomationTestCenterTab() {
       attempts++;
       const reqStart = performance.now();
       try {
-        // Try probing via API Gateway proxy first to bypass browser CORS restrictions on Render services
-        let probeResult = null;
-        try {
-          const proxyRes = await apiClient.get('/api/v1/admin/feature-health/probe-service', {
-            params: { serviceId: service.id, url: service.url, timeoutMs: 15000 }
-          });
-          if (proxyRes.data?.success) {
-            probeResult = proxyRes.data;
-          }
-        } catch {
-          // Fall back to direct browser fetch if gateway is unreachable
-        }
+        // All service probes run server-side through the authenticated API.
+        // Never fall back to browser fetches: private services do not expose CORS.
+        const proxyRes = await apiClient.get('/api/v1/admin/feature-health/probe-service', {
+          params: { serviceId: service.gatewayServiceId, timeoutMs: 15000 }
+        });
+        const probeResult = proxyRes.data?.success ? proxyRes.data : null;
 
         if (probeResult && probeResult.healthy) {
           setMicroservicesHealth(prev => ({
@@ -219,32 +219,7 @@ export default function AutomationTestCenterTab() {
           return true;
         }
 
-        // Direct browser fetch fallback
-        const response = await fetch(service.url, {
-          method: 'GET',
-          mode: 'cors',
-          cache: 'no-store'
-        }).catch(() => null);
 
-        if (response && (response.ok || response.status === 200 || response.status === 304)) {
-          const latency = Math.round(performance.now() - reqStart);
-          let payloadText = '';
-          try { payloadText = await response.text(); } catch {}
-
-          setMicroservicesHealth(prev => ({
-            ...prev,
-            [serviceId]: {
-              status: 'ONLINE',
-              statusCode: response.status || 200,
-              latencyMs: latency,
-              attempts,
-              elapsedSeconds: Math.round((Date.now() - startTime) / 1000),
-              lastChecked: new Date().toLocaleTimeString(),
-              payload: payloadText ? String(payloadText).slice(0, 300) : '{"status":"healthy","service":"connected"}'
-            }
-          }));
-          return true;
-        }
       } catch {
         // Cold start retry loop
       }
