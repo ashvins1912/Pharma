@@ -1507,3 +1507,60 @@ html.dark .admin-screen :where(.overflow-x-auto) {
     font-size: 0.8rem;
   }
 }
+
+/* Admin workspace alignment and responsive overflow hardening. */
+.dashboard-shell,.dashboard-workspace,.dashboard-content,.admin-screen {
+  box-sizing:border-box; min-width:0; max-width:100%;
+}
+.dashboard-shell { width:min(100%,1920px); margin-inline:auto; }
+.dashboard-workspace {
+  display:grid; grid-template-columns:minmax(230px,280px) minmax(0,1fr);
+  align-items:start; gap:clamp(1rem,1.6vw,1.5rem);
+}
+.dashboard-workspace-nav { min-width:0; align-content:start; }
+.dashboard-content { min-width:0; overflow:clip; }
+.admin-screen > * { min-width:0; max-width:100%; }
+.admin-screen :where(.flex,.grid) { min-width:0; }
+.admin-screen :where(input,select,textarea,button) { box-sizing:border-box; }
+.admin-screen :where(.overflow-x-auto) {
+  width:100%; max-width:100%; overflow-x:auto;
+  -webkit-overflow-scrolling:touch; overscroll-behavior-inline:contain;
+}
+.admin-screen :where(table) { min-width:760px; }
+.admin-screen--requests { gap:clamp(1rem,1.5vw,1.4rem); }
+.admin-screen--requests > .grid {
+  display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.85rem;
+}
+.admin-screen--requests > .grid > div {
+  display:flex; min-height:112px; flex-direction:column;
+  justify-content:space-between; gap:.55rem;
+  padding:clamp(.9rem,1.2vw,1.25rem); border-radius:1rem;
+}
+.admin-screen--requests #admin-medicine-requests-list {
+  display:grid; gap:1rem; padding:clamp(.85rem,1.5vw,1.4rem);
+}
+.admin-screen--requests #admin-medicine-requests-list table { min-width:980px; }
+.admin-screen--requests #admin-medicine-requests-list th {
+  background:#f8fafc; color:#475569; letter-spacing:.045em;
+}
+.admin-screen--requests #admin-medicine-requests-list td { vertical-align:top; line-height:1.45; }
+.admin-screen--requests #admin-medicine-requests-list tbody tr:hover { background:#f8fafc; }
+.admin-screen--fulfillment { display:grid; grid-template-columns:minmax(0,1fr); gap:1rem; }
+@media(max-width:1100px) {
+  .dashboard-workspace { grid-template-columns:minmax(0,1fr); }
+  .dashboard-workspace-nav { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .admin-screen--requests > .grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:640px) {
+  .dashboard-shell { padding-inline:.35rem; }
+  .dashboard-hero { padding:1rem; }
+  .dashboard-workspace-nav { grid-template-columns:minmax(0,1fr); }
+  .admin-screen--requests > .grid { grid-template-columns:minmax(0,1fr); }
+  .admin-screen--requests > .grid > div { min-height:88px; }
+  .admin-screen--requests #admin-medicine-requests-list { padding:.75rem; border-radius:1rem; }
+  .admin-screen--requests :where(form) { width:100%; align-items:stretch; }
+  .admin-screen--requests :where(form input,form select,form button) {
+    flex:1 1 100%; width:100%;
+  }
+  .admin-screen :where(.p-4,.p-5,.p-6,.p-8) { padding:.85rem; }
+}

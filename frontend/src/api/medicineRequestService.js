@@ -104,7 +104,8 @@ export const getAdminMedicineRequestMetrics = async () => {
 };
 
 export const getAdminPendingMedicineRequestCount = async () => {
-  return 0;
+  const response = await apiClient.get('/api/medicine-requests/pending-count');
+  return Math.max(0, Number(response.data?.count) || 0);
 };
 
 export const reviewMedicineRequest = async (id) => {
