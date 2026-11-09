@@ -1708,3 +1708,30 @@ html.dark .dashboard-nav-group { background: #0f172a; }
     padding: .7rem;
   }
 }
+
+@media (max-width: 767px) {
+  .admin-screen--requests .admin-request-status-tabs {
+    display: flex;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: .35rem;
+    scroll-snap-type: x proximity;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .admin-screen--requests .admin-request-status-tabs button {
+    flex: 0 0 auto;
+    min-height: 40px;
+    scroll-snap-align: start;
+    padding: .55rem .75rem;
+    font-size: .7rem;
+  }
+  .admin-screen--requests .admin-request-search {
+    display: grid;
+    grid-template-columns: minmax(0,1fr) auto;
+    width: 100%;
+  }
+  .admin-screen--requests .admin-request-search input { min-width: 0; }
+  .admin-screen--requests .admin-request-search button { min-width: 76px; }
+}
