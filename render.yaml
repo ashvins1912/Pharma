@@ -13,6 +13,9 @@ services:
         value: https://pharma-ui.onrender.com
       - key: MONGO_URI
         sync: false
+      # Keep the currently deployed value unchanged; it decrypts existing AES-GCM fields.
+      - key: ENCRYPTION_SECRET_KEY
+        sync: false
       - key: CACHE_SERVICE_URL
         value: https://caching-v0et.onrender.com
       - key: CACHE_SERVICE_TOKEN
@@ -75,6 +78,25 @@ services:
       - key: VITE_WS_URL
         value: https://websockt.onrender.com
 
+    headers:
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=31536000
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(self), geolocation=(self), microphone=()
+      - path: /*
+        name: Content-Security-Policy
+        value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
     routes:
       # Route API traffic through the API Gateway before the SPA fallback.
       - type: rewrite
