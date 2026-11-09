@@ -390,11 +390,11 @@ function MainApp() {
       />
 
       {/* Main Content Area - Full width layout */}
-      <main className="min-w-0 min-h-0 flex-[1_0_auto] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-visible">
+      <main className="pharma-main-content min-w-0 min-h-0 flex-[1_0_auto] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-visible">
         
         {/* TAB 1: MEDICINE STORE & CATALOG */}
         {activeTab === 'store' && (
-          <div className="space-y-6">
+          <div className="pharma-storefront space-y-6">
             
             {/* Friendly Hero Banner */}
             <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl sm:rounded-3xl p-4 sm:p-8 text-white shadow-lg shadow-blue-600/15 relative overflow-hidden">
