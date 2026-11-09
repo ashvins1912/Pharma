@@ -548,7 +548,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
 
                 {/* Reorder Table */}
                 <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
-                  <div className="max-h-80 overflow-y-auto">
+                  <div className="max-h-80 overflow-x-auto overflow-y-auto">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-100/90 text-[10px] font-black uppercase text-slate-500 sticky top-0 z-10 border-b border-slate-200">
                         <tr>
