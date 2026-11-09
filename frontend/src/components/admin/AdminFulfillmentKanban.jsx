@@ -201,7 +201,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
     let isCurrentRequest = true;
     setCancelledLoading(true);
     setCancelledError('');
-    apiClient.get('/api/orders/admin/all', { params: { status: 'Cancelled', page: cancelledPage, limit: 10 } })
+    apiClient.get('/api/orders/admin/all', { params: { status: 'Cancelled', page: cancelledPage, limit: 10, ...dateRange } })
       .then(response => {
         if (!isCurrentRequest) return;
         const data = response.data || {};
@@ -214,7 +214,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
         }
       }).finally(() => { if (isCurrentRequest) setCancelledLoading(false); });
     return () => { isCurrentRequest = false; };
-  }, [cancelledPage, cancelledRetryKey]);
+  }, [cancelledPage, cancelledRetryKey, dateRange.startDate, dateRange.endDate]);
 
   useEffect(() => {
     if (!appliedSearch) return undefined;
