@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
@@ -23,6 +23,42 @@ export default function Header({
   } = useAuth();
   const { cart, whatsappStatus, setWhatsappModalOpen, medicineRequests } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuToggleRef = useRef(null);
+  const mobileMenuPanelRef = useRef(null);
+
+  const closeMobileMenu = () => {
+    setMobileMenuOpen(false);
+    onToggleMobileMenu?.(false);
+  };
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const focusFirst = () => mobileMenuPanelRef.current?.querySelector('button, a, select, input, [tabindex]:not([tabindex="-1"])')?.focus();
+    focusFirst();
+    const handleKeyDown = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMobileMenu();
+        mobileMenuToggleRef.current?.focus();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(mobileMenuPanelRef.current?.querySelectorAll('button:not([disabled]), a[href], select:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])') || []);
+      if (!focusable.length) { event.preventDefault(); return; }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      mobileMenuToggleRef.current?.focus();
+    };
+  }, [mobileMenuOpen]);
   const [signingOut, setSigningOut] = useState(false);
   const { tenantId, branchId, setBranchId } = useTenant();
   const { language, setLanguage, t, languages } = useLanguage();
@@ -355,7 +391,7 @@ export default function Header({
 
         {/* Slide-in Mobile Navigation Drawer from the Right (Rendered via Portal) */}
         {mobileMenuOpen && typeof document !== 'undefined' && createPortal(
-          <div className="fixed inset-0 z-[99999] overflow-hidden animate-fade-in" aria-modal="true" role="dialog">
+          <div className="fixed inset-0 z-[99999] overflow-hidden animate-fade-in" aria-modal="true" role="dialog" aria-labelledby="quickmeds-mobile-navigation-title">
             {/* Backdrop */}
             <div
               onClick={() => setMobileMenuOpen(false)}
@@ -363,7 +399,7 @@ export default function Header({
             />
 
             {/* Slide-in Panel */}
-            <div className="pharma-mobile-nav-panel absolute inset-y-0 right-0 max-w-xs w-full bg-white border-l border-slate-200 shadow-2xl flex flex-col justify-between animate-slide-in-right overflow-y-auto">
+            <div id="quickmeds-mobile-navigation" ref={mobileMenuPanelRef} className="pharma-mobile-nav-panel absolute inset-y-0 right-0 max-w-xs w-full bg-white border-l border-slate-200 shadow-2xl flex flex-col justify-between animate-slide-in-right overflow-y-auto" tabIndex="-1">
               
               {/* Drawer Header */}
               <div className="flex items-center justify-between pb-4 border-b border-slate-100">
@@ -372,7 +408,7 @@ export default function Header({
                     ⚕️
                   </div>
                   <div>
-                    <h3 className="font-black text-sm text-slate-900">QuickMeds Rx</h3>
+                    <h3 id="quickmeds-mobile-navigation-title" className="font-black text-sm text-slate-900">QuickMeds Rx</h3>
                     <p className="text-[10px] text-slate-400 font-medium">{t('trustedTagline')}</p>
                   </div>
                 </div>
@@ -422,7 +458,7 @@ export default function Header({
                 <div className="space-y-1">
                   <button
                     type="button"
-                    onClick={() => { setActiveTab('store'); setMobileMenuOpen(false); }}
+                    onClick={() => { setActiveTab('store'); closeMobileMenu(); }}
                     className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-bold transition flex items-center gap-2.5 ${
                       activeTab === 'store' ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs' : 'text-slate-700 hover:bg-slate-100'
                     }`}
@@ -435,7 +471,7 @@ export default function Header({
                       {canViewCustomerOrders && (
                         <button
                           type="button"
-                          onClick={() => { setActiveTab('orders'); setMobileMenuOpen(false); }}
+                          onClick={() => { setActiveTab('orders'); closeMobileMenu(); }}
                           className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-bold transition flex items-center gap-2.5 ${
                             activeTab === 'orders' ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs' : 'text-slate-700 hover:bg-slate-100'
                           }`}
@@ -446,7 +482,7 @@ export default function Header({
                       {canViewCustomerRequests && (
                         <button
                           type="button"
-                          onClick={() => { setActiveTab('requests'); setMobileMenuOpen(false); }}
+                          onClick={() => { setActiveTab('requests'); closeMobileMenu(); }}
                           className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-bold transition flex items-center justify-between ${
                             activeTab === 'requests' ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs' : 'text-slate-700 hover:bg-slate-100'
                           }`}
@@ -462,7 +498,7 @@ export default function Header({
                       {canViewAddresses && (
                         <button
                           type="button"
-                          onClick={() => { setActiveTab('addresses'); setMobileMenuOpen(false); }}
+                          onClick={() => { setActiveTab('addresses'); closeMobileMenu(); }}
                           className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-bold transition flex items-center gap-2.5 ${
                             activeTab === 'addresses' ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs' : 'text-slate-700 hover:bg-slate-100'
                           }`}
@@ -473,7 +509,7 @@ export default function Header({
                       {canViewOperations && (
                         <button
                           type="button"
-                          onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }}
+                          onClick={() => { setActiveTab('admin'); closeMobileMenu(); }}
                           className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-bold transition flex items-center gap-2.5 ${
                             activeTab === 'admin' ? 'bg-blue-600 text-white font-extrabold' : 'text-blue-700 bg-blue-50'
                           }`}
@@ -485,7 +521,7 @@ export default function Header({
                   ) : (
                     <button
                       type="button"
-                      onClick={() => { setMobileMenuOpen(false); onOpenAuth?.(); }}
+                      onClick={() => { closeMobileMenu(); onOpenAuth?.(); }}
                       className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm text-center flex items-center justify-center gap-2"
                     >
                       <span>👤</span> {t('signIn')}
