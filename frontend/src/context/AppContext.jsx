@@ -733,6 +733,23 @@ export function AppProvider({ children }) {
     };
   }, [isFullyAuthenticated, user?.id, user?.tenantId, user?.app_metadata?.tenantId, user?.user_metadata?.tenantId, realtimeTokenVersion, loadUserOrders, loadUserMedicineRequests, loadNotifications, loadDeliveryEvents]);
 
+  // Hydrate user read notification overrides from localStorage
+  useEffect(() => {
+    if (user?.id && typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem(`pharma_read_notifs_${user.id}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            notificationReadOverrides.current = new Set(parsed);
+          }
+        }
+      } catch {}
+    } else {
+      notificationReadOverrides.current.clear();
+    }
+  }, [user?.id]);
+
   // Customer medicine requests are loaded by CustomerRequestsView when that tab opens.
   // Do not fetch or poll this customer-only list as part of global login hydration.
 
@@ -1209,6 +1226,14 @@ export function AppProvider({ children }) {
           if (!notificationId) return;
           // Mark in local override set so reloads and socket broadcasts never restore this notification.
           notificationReadOverrides.current.add(notificationId);
+          if (user?.id && typeof window !== 'undefined') {
+            try {
+              window.localStorage.setItem(
+                `pharma_read_notifs_${user.id}`,
+                JSON.stringify(Array.from(notificationReadOverrides.current))
+              );
+            } catch {}
+          }
           setNotifications(prev => prev.filter(item => String(item.id || item._id || '').trim() !== notificationId));
           try {
             useGlobalStore?.getState?.()?.markNotificationRead?.(notificationId);

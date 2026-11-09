@@ -513,24 +513,29 @@ export class NotificationService {
     }
 
     async getUserNotifications(userId, { tenantId = null, branchId = null, isSuperAdmin = false } = {}) {
+        const strUserId = String(userId || '').trim();
         if (getIsConnected()) {
             const filter = isSuperAdmin ? {} : {
                 $or: [
-                    { recipientUserId: String(userId) },
-                    {
+                    { recipientUserId: strUserId },
+                    ...(tenantId ? [{
                         recipientUserId: null,
                         tenantId: String(tenantId || ''),
                         ...(branchId ? { $or: [{ branchId: null }, { branchId: String(branchId) }] } : {})
-                    }
+                    }] : [{ recipientUserId: null }])
                 ]
             };
-            // Read notifications are acknowledged and should no longer appear in the bell.
+            // Read notifications are acknowledged and must NEVER appear in the system after being read
             filter.read = { $ne: true };
+            if (strUserId) {
+                filter.readBy = { $ne: strUserId };
+            }
             return Notification.find(filter).sort({ createdAt: -1 }).limit(200).lean();
         }
         return this.notifications.filter(notification => {
             if (notification.read) return false;
-            if (!isSuperAdmin && notification.recipientUserId && notification.recipientUserId !== userId) return false;
+            if (strUserId && Array.isArray(notification.readBy) && notification.readBy.includes(strUserId)) return false;
+            if (!isSuperAdmin && notification.recipientUserId && notification.recipientUserId !== strUserId) return false;
             if (!isSuperAdmin && !notification.recipientUserId && notification.tenantId && notification.tenantId !== tenantId) return false;
             if (!isSuperAdmin && !notification.recipientUserId && notification.branchId && notification.branchId !== branchId) return false;
             if (!isSuperAdmin && !notification.recipientUserId && !notification.tenantId) return false;
@@ -540,39 +545,46 @@ export class NotificationService {
 
     async markAsRead(notificationId, userId, { tenantId = null, branchId = null, isSuperAdmin = false } = {}) {
         const idStr = String(notificationId || '').trim();
+        const strUserId = String(userId || '').trim();
         if (!idStr) return null;
+
         if (getIsConnected()) {
-            const access = isSuperAdmin ? {} : {
-                $or: [
-                    { recipientUserId: String(userId) },
-                    {
-                        recipientUserId: null,
-                        ...(tenantId ? { tenantId: String(tenantId) } : {})
-                    }
-                ]
-            };
             const filter = {
                 $or: [
                     { id: idStr },
+                    { notificationId: idStr },
+                    { dedupeKey: idStr },
                     ...(mongoose.Types.ObjectId.isValid(idStr) ? [{ _id: idStr }] : [])
-                ],
-                ...access
+                ]
             };
+
+            const update = {
+                $set: { read: true, readAt: new Date() },
+                ...(strUserId ? { $addToSet: { readBy: strUserId } } : {})
+            };
+
             const updated = await Notification.findOneAndUpdate(
                 filter,
-                { $set: { read: true, readAt: new Date() } },
+                update,
                 { new: true }
             ).lean();
+
             if (updated) return updated;
-            // If already acknowledged or marked read in DB, return acknowledgement object so 200 OK is returned
+
             const existing = await Notification.findOne(filter).lean();
             if (existing) return { ...existing, read: true };
+
             return { id: idStr, read: true, readAt: new Date() };
         }
+
         const notification = this.notifications.find(item => String(item.id) === idStr || String(item._id) === idStr);
         if (notification) {
             notification.read = true;
             notification.readAt = notification.readAt || new Date();
+            if (strUserId) {
+                notification.readBy = Array.isArray(notification.readBy) ? notification.readBy : [];
+                if (!notification.readBy.includes(strUserId)) notification.readBy.push(strUserId);
+            }
             return notification;
         }
         return { id: idStr, read: true, readAt: new Date() };

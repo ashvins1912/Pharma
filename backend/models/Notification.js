@@ -19,7 +19,8 @@ const notificationSchema = new mongoose.Schema({
   actionUrl: { type: String, default: null },
   status: { type: String, default: null },
   read: { type: Boolean, default: false, index: true },
-  readAt: { type: Date, default: null }
+  readAt: { type: Date, default: null },
+  readBy: { type: [String], default: [], index: true }
 }, { timestamps: { createdAt: true, updatedAt: false } });
 
 notificationSchema.index({ dedupeKey: 1 }, { unique: true, partialFilterExpression: { dedupeKey: { $type: 'string' } } });
