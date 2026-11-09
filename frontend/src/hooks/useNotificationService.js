@@ -53,13 +53,18 @@ export function useNotificationService() {
       const title = payload?.title || `New Order #${orderId} Received!`;
       const body = payload?.body || payload?.message || `A new order has been placed and assigned to your pharmacy dispensary.`;
 
-      addNotification({
+      const alertPayload = {
         id: payload?.id || `ws-order-${Date.now()}`,
         title,
         body,
         type: 'success',
         ...payload
-      });
+      };
+
+      addNotification(alertPayload);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('pharma:realtime-notification', { detail: alertPayload }));
+      }
 
       addToast(`📦 ${title}: ${body}`, 'success');
     };

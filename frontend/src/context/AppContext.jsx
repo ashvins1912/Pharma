@@ -10,6 +10,7 @@ import { useTenant } from './TenantContext';
 import usePersistentState from '../hooks/usePersistentState';
 import { useToast } from './ToastContext';
 import { getUnreadNotificationsCount } from '../utils/notificationCount.js';
+import useGlobalStore from '../store/useGlobalStore';
 import { useActionLoading, LOADING_ACTIONS } from './LoadingContext';
 
 const AppContext = createContext(null);
@@ -701,6 +702,15 @@ export function AppProvider({ children }) {
       setRealtimeConnectionStatus('offline');
       console.warn('[Realtime] Socket connection was rejected or unavailable:', error?.message || 'connection error');
     };
+    const handleRealtimeNotif = evt => {
+      if (evt.detail && typeof evt.detail === 'object') {
+        upsertNotification(evt.detail, 'realtime');
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pharma:realtime-notification', handleRealtimeNotif);
+    }
+
     socket.on('connect', onSocketConnect);
     socket.on('disconnect', onSocketDisconnect);
     socket.on('connect_error', onSocketConnectError);
@@ -709,6 +719,9 @@ export function AppProvider({ children }) {
     socket.on('medicine_request_updated', onMedicineRequestUpdated);
     socket.on('order_status_changed', onOrderStatusChanged);
     return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pharma:realtime-notification', handleRealtimeNotif);
+      }
       socket.off('notification', onNotification);
       socket.off('whatsapp_notification', onWhatsAppNotification);
       socket.off('medicine_request_updated', onMedicineRequestUpdated);
@@ -1196,7 +1209,10 @@ export function AppProvider({ children }) {
           if (!notificationId) return;
           // Mark in local override set so reloads and socket broadcasts never restore this notification.
           notificationReadOverrides.current.add(notificationId);
-          setNotifications(prev => prev.filter(item => String(item.id) !== notificationId));
+          setNotifications(prev => prev.filter(item => String(item.id || item._id || '').trim() !== notificationId));
+          try {
+            useGlobalStore?.getState?.()?.markNotificationRead?.(notificationId);
+          } catch {}
           if (notificationId.startsWith('notif-wa')) return;
           try {
             await apiClient.patch(`/api/v1/notifications/${encodeURIComponent(notificationId)}/read`);

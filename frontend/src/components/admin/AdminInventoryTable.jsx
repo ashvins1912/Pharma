@@ -27,6 +27,85 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
   const [medicineDraft, setMedicineDraft] = useState(null);
   const [savingMedicine, setSavingMedicine] = useState(false);
 
+  // Suggest Restock State
+  const [showRestockModal, setShowRestockModal] = useState(false);
+  const [restockLoading, setRestockLoading] = useState(false);
+  const [restockSuggestions, setRestockSuggestions] = useState([]);
+  const [restockSummary, setRestockSummary] = useState(null);
+  const [restockQuantities, setRestockQuantities] = useState({});
+  const [applyingRestock, setApplyingRestock] = useState(false);
+
+  const fetchRestockSuggestions = async () => {
+    if (!tenantId || !branchId) {
+      addToast('Select an active pharmacy and branch first.', 'warning');
+      return;
+    }
+    try {
+      setRestockLoading(true);
+      setShowRestockModal(true);
+      const res = await apiClient.get('/api/medicines/admin/suggest-restock', {
+        params: { tenantId, branchId }
+      });
+      const data = res.data?.data || res.data || {};
+      const items = Array.isArray(data.items) ? data.items : [];
+      setRestockSuggestions(items);
+      setRestockSummary({
+        totalItems: data.totalItemsNeedingRestock || items.length,
+        totalUnits: data.totalSuggestedUnits || items.reduce((a, b) => a + (b.suggestedReorderQuantity || 0), 0),
+        totalCost: data.totalEstimatedCost || items.reduce((a, b) => a + (b.estimatedTotalCost || 0), 0)
+      });
+      const initialQty = {};
+      items.forEach(item => {
+        initialQty[item.productId] = item.suggestedReorderQuantity;
+      });
+      setRestockQuantities(initialQty);
+    } catch (err) {
+      console.error('Fetch restock suggestions error:', err);
+      addToast(err.response?.data?.message || err.message || 'Could not calculate restock suggestions.', 'error');
+    } finally {
+      setRestockLoading(false);
+    }
+  };
+
+  const handleApplyRestock = async (specificItemId = null) => {
+    if (!canManage) return;
+    try {
+      setApplyingRestock(true);
+      const itemsToRestock = specificItemId
+        ? [{ productId: specificItemId, quantity: Number(restockQuantities[specificItemId] || 10) }]
+        : restockSuggestions.map(item => ({
+            productId: item.productId,
+            quantity: Number(restockQuantities[item.productId] || item.suggestedReorderQuantity || 10)
+          })).filter(i => i.quantity > 0);
+
+      if (!itemsToRestock.length) {
+        addToast('No restock items selected.', 'warning');
+        return;
+      }
+
+      await apiClient.post('/api/medicines/admin/apply-restock', {
+        tenantId,
+        branchId,
+        restocks: itemsToRestock
+      });
+
+      addToast(`📦 Restock approved! Stock updated for ${itemsToRestock.length} items.`, 'success');
+      window.dispatchEvent(new Event('pharma:inventory-updated'));
+      void loadAdminInventory(adminPage, searchTerm);
+      refreshStorefrontInventory();
+
+      if (specificItemId) {
+        setRestockSuggestions(prev => prev.filter(i => i.productId !== specificItemId));
+      } else {
+        setShowRestockModal(false);
+      }
+    } catch (err) {
+      addToast(err.response?.data?.message || err.message || 'Restock application failed.', 'error');
+    } finally {
+      setApplyingRestock(false);
+    }
+  };
+
   const loadAdminInventory = async (page = 1, search = '') => {
     const requestVersion = ++inventoryRequestRef.current;
     if (!tenantId || !branchId) {
@@ -173,8 +252,18 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
           {canManage && (
             <button
               type="button"
+              onClick={fetchRestockSuggestions}
+              className="flex-1 sm:flex-initial rounded-xl bg-indigo-600 px-4 py-2 text-xs font-extrabold text-white transition hover:bg-indigo-700 shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>⚡</span>
+              <span>Suggest Restock</span>
+            </button>
+          )}
+          {canManage && (
+            <button
+              type="button"
               onClick={() => setAdminNewStockModalOpen(true)}
-              className="flex-1 sm:flex-initial rounded-xl bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white transition hover:bg-emerald-700 shadow-sm"
+              className="flex-1 sm:flex-initial rounded-xl bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white transition hover:bg-emerald-700 shadow-sm cursor-pointer"
             >
               + Add Medicine / Product
             </button>
@@ -363,6 +452,152 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Automated Restock & Reorder Suggestions Modal */}
+      {showRestockModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="max-h-[90vh] w-full max-w-4xl space-y-4 overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">⚡</span>
+                  <h3 className="text-base font-black text-slate-900">Automated Restock & Reorder Calculator</h3>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Calculated using 14-day sales velocity trends, current safety thresholds, and expiry dates.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRestockModal(false)}
+                className="rounded-xl bg-slate-100 p-2 text-slate-500 hover:text-slate-800 text-xs font-bold transition hover:bg-slate-200 cursor-pointer"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {restockLoading ? (
+              <div className="py-16 text-center space-y-3">
+                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+                <p className="text-xs font-bold text-slate-600">Analyzing threshold trends & 30-day sales velocity...</p>
+              </div>
+            ) : restockSuggestions.length === 0 ? (
+              <div className="py-12 text-center space-y-3">
+                <span className="text-3xl">🎉</span>
+                <h4 className="text-sm font-bold text-slate-800">Inventory Levels Optimal</h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  All inventory products currently maintain adequate safety stock buffers above sales velocity thresholds.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Summary Metrics */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="rounded-2xl border border-rose-100 bg-rose-50/70 p-3.5">
+                    <span className="text-[10px] font-black uppercase text-rose-700 tracking-wider">Reorder Needed</span>
+                    <p className="text-lg font-black text-rose-950 mt-1">{restockSummary?.totalItems || restockSuggestions.length} Products</p>
+                  </div>
+                  <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-3.5">
+                    <span className="text-[10px] font-black uppercase text-indigo-700 tracking-wider">Calculated Units Needed</span>
+                    <p className="text-lg font-black text-indigo-950 mt-1">{restockSummary?.totalUnits || 0} Units</p>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3.5">
+                    <span className="text-[10px] font-black uppercase text-emerald-700 tracking-wider">Est. Reorder Budget</span>
+                    <p className="text-lg font-black text-emerald-950 mt-1">₹{(restockSummary?.totalCost || 0).toLocaleString()}</p>
+                  </div>
+                </div>
+
+                {/* Bulk action bar */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                  <span className="text-xs font-bold text-slate-700">
+                    Review and adjust suggested reorder quantities below:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyRestock(null)}
+                    disabled={applyingRestock}
+                    className="w-full sm:w-auto rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-4 py-2 transition shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
+                  >
+                    {applyingRestock ? 'Processing Restock...' : `📦 Approve All (${restockSuggestions.length} Products)`}
+                  </button>
+                </div>
+
+                {/* Reorder Table */}
+                <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                  <div className="max-h-80 overflow-y-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-100/90 text-[10px] font-black uppercase text-slate-500 sticky top-0 z-10 border-b border-slate-200">
+                        <tr>
+                          <th className="p-3">Product / Drug</th>
+                          <th className="p-3">Current Stock</th>
+                          <th className="p-3">Daily Velocity</th>
+                          <th className="p-3">Urgency & Reason</th>
+                          <th className="p-3">Suggested Reorder Qty</th>
+                          <th className="p-3 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium">
+                        {restockSuggestions.map((item) => {
+                          const qty = restockQuantities[item.productId] ?? item.suggestedReorderQuantity;
+                          return (
+                            <tr key={item.productId} className="hover:bg-slate-50/80 transition">
+                              <td className="p-3">
+                                <p className="font-extrabold text-slate-900">{item.name}</p>
+                                <p className="text-[10px] text-slate-400 font-mono">SKU: {item.sku}</p>
+                              </td>
+                              <td className="p-3">
+                                <span className={`font-black ${item.currentStock <= 3 ? 'text-rose-700' : 'text-slate-800'}`}>
+                                  {item.currentStock} units
+                                </span>
+                              </td>
+                              <td className="p-3">
+                                <span className="font-bold text-slate-700">{item.dailyVelocity} / day</span>
+                                <p className="text-[10px] text-slate-400">({item.totalUnitsSold30d} in 30d)</p>
+                              </td>
+                              <td className="p-3">
+                                <span className={`inline-block text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
+                                  item.urgency === 'CRITICAL' ? 'bg-rose-100 text-rose-800' :
+                                  item.urgency === 'HIGH' ? 'bg-amber-100 text-amber-800' :
+                                  'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {item.urgency}
+                                </span>
+                                <p className="text-[10px] text-slate-500 mt-0.5">{item.reason}</p>
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={qty}
+                                  onChange={(e) => setRestockQuantities(prev => ({
+                                    ...prev,
+                                    [item.productId]: Math.max(1, parseInt(e.target.value, 10) || 1)
+                                  }))}
+                                  className="w-20 rounded-xl border border-slate-300 px-2.5 py-1 text-xs font-black text-slate-900 outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
+                                />
+                              </td>
+                              <td className="p-3 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => handleApplyRestock(item.productId)}
+                                  disabled={applyingRestock}
+                                  className="rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[11px] px-3 py-1.5 transition disabled:opacity-50 cursor-pointer"
+                                >
+                                  Restock
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

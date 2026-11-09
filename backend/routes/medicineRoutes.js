@@ -9,6 +9,8 @@ import SearchMetricIngestionService from '../services/SearchMetricIngestionServi
 import { inventoryClient } from '../services/inventory-client/InventoryClient.js';
 import { tenantService } from '../services/tenant-service/TenantService.js';
 import { authorizationService } from '../authorization/AuthorizationService.js';
+import Medicine from '../models/Medicine.js';
+import Order from '../models/Order.js';
 
 const router = express.Router();
 const productDiscovery = new ProductDiscoveryService();
@@ -61,6 +63,158 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
         return res.status(error.statusCode || 503).json({
             message: error.message || 'Failed to retrieve admin inventory.'
         });
+    }
+});
+
+router.get('/admin/suggest-restock', authenticateUser, async (req, res) => {
+    try {
+        const scope = await getVerifiedInventoryScope(req, 'inventory.read');
+        const { tenantId, branchId } = scope;
+        if (!tenantId || !branchId) {
+            return res.status(400).json({ success: false, message: 'Pharmacy tenant and branch identity are required.' });
+        }
+
+        const searchResult = await inventoryClient.searchProducts({
+            tenantId, branchId, page: 1, limit: 100, includeOutOfStock: true, userId: req.user?.sub || 'inventory-admin'
+        }).catch(() => null);
+
+        let products = searchResult?.items || [];
+        if (!products.length && getIsConnected()) {
+            products = await Medicine.find({ tenantId, branchId, isActive: true }).lean();
+        }
+
+        let salesVelocityMap = new Map();
+        if (getIsConnected()) {
+            const thirtyDaysAgo = new Date(Date.now() - 30 * 86400 * 1000);
+            const pastOrders = await Order.find({
+                tenantId, branchId, orderStatus: 'Delivered', createdAt: { $gte: thirtyDaysAgo }
+            }).select('medicineItems items').lean().catch(() => []);
+
+            for (const order of pastOrders) {
+                const items = Array.isArray(order.medicineItems) && order.medicineItems.length ? order.medicineItems : (order.items || []);
+                for (const item of items) {
+                    const key = String(item.medicineId || item.productId || item._id || '').trim();
+                    if (!key) continue;
+                    const qty = Number(item.quantity || 1);
+                    salesVelocityMap.set(key, (salesVelocityMap.get(key) || 0) + qty);
+                }
+            }
+        }
+
+        const now = new Date();
+        const fifteenDaysCutoff = new Date(Date.now() + 15 * 86400 * 1000);
+
+        const restockSuggestions = products.map(product => {
+            const productId = String(product.productId || product._id || product.id);
+            const currentStock = Number(product.availableQuantity ?? product.stockQuantity ?? product.stock ?? product.quantity ?? 0);
+            const totalUnitsSold30d = salesVelocityMap.get(productId) || 0;
+            const dailyVelocity = Math.round((totalUnitsSold30d / 30) * 100) / 100;
+            const exp = product.expiryDate ? new Date(product.expiryDate) : null;
+            const isExpired = exp && exp <= now;
+            const isExpiringSoon = exp && exp <= fifteenDaysCutoff;
+
+            const targetBuffer = Math.max(10, Math.ceil(dailyVelocity * 14));
+            const needsRestock = currentStock <= 3 || currentStock < targetBuffer || isExpired || isExpiringSoon;
+
+            if (!needsRestock) return null;
+
+            const deficit = Math.max(0, targetBuffer - currentStock);
+            const suggestedReorderQuantity = Math.max(10, deficit + (currentStock <= 3 ? 15 : 0));
+            const costPrice = Number(product.baseCostPrice || product.price || 50);
+
+            let urgency = 'MEDIUM';
+            let reason = 'Sales velocity buffer recommendation';
+
+            if (isExpired) {
+                urgency = 'CRITICAL';
+                reason = 'Batch expired — immediate replacement required';
+            } else if (currentStock <= 0) {
+                urgency = 'CRITICAL';
+                reason = 'Sold out — stockout risk active';
+            } else if (currentStock <= 3) {
+                urgency = 'HIGH';
+                reason = 'Low stock safety threshold crossed';
+            } else if (isExpiringSoon) {
+                urgency = 'HIGH';
+                reason = 'Batch expiring within 15 days';
+            }
+
+            return {
+                productId,
+                sku: product.sku || 'N/A',
+                name: product.name || 'Medicine Item',
+                brand: product.brand || 'Pharma Labs',
+                category: product.category || 'General',
+                currentStock,
+                dailyVelocity,
+                totalUnitsSold30d,
+                suggestedReorderQuantity,
+                estimatedUnitCost: costPrice,
+                estimatedTotalCost: Math.round(suggestedReorderQuantity * costPrice * 100) / 100,
+                urgency,
+                reason,
+                expiryDate: product.expiryDate || null
+            };
+        }).filter(Boolean).sort((a, b) => {
+            const urgencyRank = { CRITICAL: 1, HIGH: 2, MEDIUM: 3 };
+            return (urgencyRank[a.urgency] - urgencyRank[b.urgency]) || (b.suggestedReorderQuantity - a.suggestedReorderQuantity);
+        });
+
+        const totalSuggestedUnits = restockSuggestions.reduce((acc, curr) => acc + curr.suggestedReorderQuantity, 0);
+        const totalEstimatedCost = Math.round(restockSuggestions.reduce((acc, curr) => acc + curr.estimatedTotalCost, 0) * 100) / 100;
+
+        return res.json({
+            success: true,
+            tenantId,
+            branchId,
+            items: restockSuggestions,
+            totalItemsNeedingRestock: restockSuggestions.length,
+            totalSuggestedUnits,
+            totalEstimatedCost,
+            calculatedAt: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Suggest restock endpoint failed:', error);
+        return res.status(500).json({ success: false, message: error.message || 'Could not calculate restock suggestions.' });
+    }
+});
+
+router.post('/admin/apply-restock', authenticateUser, async (req, res) => {
+    try {
+        const scope = await getVerifiedInventoryScope(req, 'inventory.write');
+        const { tenantId, branchId } = scope;
+        const { restocks } = req.body || {};
+        if (!Array.isArray(restocks) || !restocks.length) {
+            return res.status(400).json({ success: false, message: 'Provide at least one restock entry to apply.' });
+        }
+
+        let updatedCount = 0;
+        for (const item of restocks) {
+            const productId = String(item.productId || item._id || '').trim();
+            const quantityToAdd = Math.max(1, Number(item.quantity || 0));
+            if (!productId || !quantityToAdd) continue;
+
+            try {
+                if (getIsConnected() && mongoose.isValidObjectId(productId)) {
+                    await Medicine.updateOne(
+                        { _id: productId, tenantId },
+                        { $inc: { stockQuantity: quantityToAdd, stock: quantityToAdd, quantity: quantityToAdd } }
+                    );
+                    updatedCount++;
+                }
+            } catch (err) {
+                console.warn('[ApplyRestock] Failed to adjust product:', productId, err?.message);
+            }
+        }
+
+        return res.json({
+            success: true,
+            updatedCount,
+            message: `Successfully restocked ${updatedCount} products.`
+        });
+    } catch (error) {
+        console.error('Apply restock failed:', error);
+        return res.status(500).json({ success: false, message: error.message || 'Could not apply restock.' });
     }
 });
 
