@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { useTenant } from '../../context/TenantContext';
 import { useToast } from '../../context/ToastContext';
 import { useLanguage } from '../../context/LanguageContext';
+import './SurplusSavingsManager.css';
 
 const toLocalDateTime = value => {
   const date = value ? new Date(value) : new Date();
