@@ -63,7 +63,7 @@ export default function GoogleProfileOnboarding({ user, onComplete, onLogout }) 
     <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-black/40 px-4 py-6 backdrop-blur-[2px] animate-fade-in" aria-modal="true" role="dialog">
       <form
         onSubmit={submit}
-        className="w-full max-w-lg overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+        className="pharma-google-profile-panel w-full max-w-lg overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
         aria-labelledby="profile-completion-title"
       >
         <div className="border-b border-slate-100 bg-gradient-to-br from-blue-50 via-white to-slate-50 px-5 py-6 sm:px-8">
