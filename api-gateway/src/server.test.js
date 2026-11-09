@@ -38,6 +38,8 @@ const testSecrets = {
 
 test('inventory safety alerts are registered as a protected inventory read capability', () => {
   assert.equal(resolveGatewayCapability('GET', '/api/v1/inventory/alerts'), 'inventory.read');
+  assert.equal(resolveGatewayCapability('GET', '/api/medicines/admin/suggest-restock'), 'inventory.read');
+  assert.equal(resolveGatewayCapability('POST', '/api/medicines/admin/apply-restock'), 'inventory.write');
   assert.equal(isGatewayPermissionAllowed({ role: 'TENANT_ADMIN', permissions: ['inventory.read'] }, 'inventory.read'), true);
   assert.equal(isGatewayPermissionAllowed({ role: 'TENANT_ADMIN', permissions: [] }, 'inventory.read'), false);
 });

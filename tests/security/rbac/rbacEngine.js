@@ -79,6 +79,16 @@ export const CORE_FEATURES = [
     requiredScope: 'TENANT',
     allowedRoles: ['TENANT_OWNER', 'TENANT_ADMIN', 'ORDER_MANAGER', 'SUPER_ADMIN'],
     deniedRoles: ['PHARMACY_STAFF', 'INVENTORY_MANAGER', 'CUSTOMER']
+  },
+  {
+    id: 'inventory_suggest_restock',
+    name: 'Automated Suggest Restock & Reorder Calculation',
+    endpoint: '/api/medicines/admin/suggest-restock',
+    method: 'GET',
+    requiredPermission: 'inventory.read',
+    requiredScope: 'TENANT',
+    allowedRoles: ['TENANT_OWNER', 'TENANT_ADMIN', 'PHARMACIST', 'PHARMACY_STAFF', 'INVENTORY_MANAGER', 'SUPER_ADMIN'],
+    deniedRoles: ['CUSTOMER', 'RIDER']
   }
 ];
 
