@@ -1,9 +1,9 @@
 import crypto from 'node:crypto';
 
 /**
- * Enterprise Application-Level Field Encryption (AES-256-GCM)
- * Encrypts sensitive PII (Physical addresses, contact numbers, health notes) at rest
- * before storing into MongoDB or intermediate datastores.
+ * Application-level AES-256-GCM encryption for secrets such as MFA seeds.
+ * This helper protects only fields that explicitly call encryptPII; it is not
+ * a blanket encryption layer for every customer, order or pharmacy field.
  * 
  * Ciphertext Format: aes-256-gcm:<iv_hex>:<auth_tag_hex>:<ciphertext_hex>
  */
