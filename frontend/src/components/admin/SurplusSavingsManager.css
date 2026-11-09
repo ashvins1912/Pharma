@@ -1,0 +1,97 @@
+/* Exclusive Surplus Savings: responsive campaign workspace */
+.admin-screen--surplus-savings { color: #0f172a; }
+.surplus-page-hero {
+  display:flex; align-items:center; justify-content:space-between; gap:1.25rem;
+  padding:clamp(1.25rem, 3vw, 2rem); border:1px solid #f2d9a4; border-radius:1.5rem;
+  background:radial-gradient(ellipse at 90% 0%, rgba(251,191,36,.18), transparent 42%),linear-gradient(135deg,#fffdf7,#fff8e8);
+}
+.surplus-hero-copy { min-width:0; }
+.surplus-eyebrow { display:inline-flex; align-items:center; gap:.4rem; color:#a16207; font-size:.68rem; font-weight:850; letter-spacing:.12em; text-transform:uppercase; }
+.surplus-page-hero h2 { margin:.45rem 0 0; color:#172033; font-size:clamp(1.35rem,2.3vw,1.85rem); line-height:1.2; font-weight:900; letter-spacing:-.035em; overflow-wrap:anywhere; }
+.surplus-page-hero p { max-width:42rem; margin:.55rem 0 0; color:#64748b; font-size:.875rem; line-height:1.6; }
+.surplus-hero-action { display:inline-flex; align-items:center; justify-content:center; gap:.4rem; flex:0 0 auto; min-height:2.75rem; padding:.7rem 1rem; border-radius:.85rem; background:#b7790b; color:#fff; text-decoration:none; font-size:.8rem; font-weight:850; box-shadow:0 5px 14px rgba(180,120,12,.15); transition:background .15s ease,transform .15s ease; }
+.surplus-hero-action:hover { background:#925d05; transform:translateY(-1px); }
+.surplus-summary-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.8rem; }
+.surplus-summary-card { display:flex; align-items:center; gap:.85rem; min-width:0; padding:1rem; border:1px solid #e2e8f0; border-radius:1.1rem; background:#fff; box-shadow:0 1px 2px rgba(15,23,42,.025); }
+.surplus-summary-icon { display:grid; place-items:center; width:2.6rem; height:2.6rem; flex:0 0 auto; border-radius:.85rem; font-size:1.1rem; font-weight:900; }
+.surplus-summary-icon--active { color:#047857; background:#d1fae5; } .surplus-summary-icon--draft { color:#475569; background:#f1f5f9; } .surplus-summary-icon--redemptions { color:#1d4ed8; background:#dbeafe; } .surplus-summary-icon--products { color:#a16207; background:#fef3c7; }
+.surplus-summary-card p { margin:0; color:#64748b; font-size:.72rem; font-weight:700; line-height:1.4; } .surplus-summary-card strong { display:block; margin-top:.2rem; color:#0f172a; font-size:1.4rem; font-weight:900; line-height:1.2; font-variant-numeric:tabular-nums; }
+.surplus-form-card,.surplus-history-card { min-width:0; padding:clamp(1rem,2.5vw,1.5rem); border:1px solid #e2e8f0; border-radius:1.35rem; background:#fff; box-shadow:0 2px 8px rgba(15,23,42,.035); }
+.surplus-section-heading,.surplus-history-heading { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding-bottom:1.15rem; border-bottom:1px solid #f1f5f9; }
+.surplus-section-heading > div,.surplus-history-heading > div { display:flex; align-items:center; gap:.85rem; min-width:0; }
+.surplus-step { display:grid; place-items:center; flex:0 0 auto; width:2.25rem; height:2.25rem; border-radius:.75rem; background:#fff7e6; color:#a16207; font-size:.75rem; font-weight:900; }
+.surplus-section-heading h3,.surplus-history-heading h3 { margin:0; color:#0f172a; font-size:1rem; font-weight:900; } .surplus-section-heading p,.surplus-history-heading p { margin:.25rem 0 0; color:#64748b; font-size:.75rem; line-height:1.5; }
+.surplus-required-note { color:#94a3b8; font-size:.7rem; font-weight:700; white-space:nowrap; }
+.surplus-form-section { padding:1.2rem 0; border-bottom:1px solid #f1f5f9; }
+.surplus-form-section > h4 { margin:0 0 .9rem; color:#334155; font-size:.82rem; font-weight:850; }
+.surplus-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; }
+.surplus-field { display:flex; flex-direction:column; gap:.45rem; min-width:0; color:#475569; font-size:.75rem; font-weight:750; }
+.surplus-field--wide { grid-column:1/-1; }
+.surplus-field > span b { color:#dc2626; }
+.surplus-field input,.surplus-field select,.surplus-field textarea { width:100%; min-width:0; min-height:2.75rem; padding:.7rem .8rem; border:1px solid #cbd5e1; border-radius:.75rem; background:#fff; color:#0f172a; font:inherit; font-size:.875rem; font-weight:500; outline:none; transition:border-color .15s ease,box-shadow .15s ease; }
+.surplus-field textarea { resize:vertical; min-height:5rem; }
+.surplus-field input:focus,.surplus-field select:focus,.surplus-field textarea:focus,.surplus-search input:focus { border-color:#d49a28; box-shadow:0 0 0 3px rgba(217,160,45,.16); }
+.surplus-input-suffix { display:flex; min-width:0; align-items:center; position:relative; }
+.surplus-input-suffix input { padding-right:2.7rem; } .surplus-input-suffix > span { position:absolute; right:.85rem; color:#94a3b8; font-size:.8rem; font-weight:800; pointer-events:none; }
+.surplus-medicine-heading { display:flex; justify-content:space-between; align-items:center; gap:.75rem; } .surplus-medicine-heading h4 { margin:0; color:#334155; font-size:.82rem; font-weight:850; } .surplus-medicine-heading p { margin:.25rem 0 0; color:#64748b; font-size:.75rem; }
+.surplus-selected-count { flex:0 0 auto; padding:.35rem .65rem; border-radius:999px; background:#fff7e6; color:#a16207; font-size:.7rem; font-weight:850; }
+.surplus-medicine-tools { display:flex; align-items:center; gap:.75rem; margin:.9rem 0; }
+.surplus-search { display:flex; align-items:center; gap:.5rem; flex:1 1 auto; min-width:0; padding:0 .8rem; border:1px solid #cbd5e1; border-radius:.75rem; color:#94a3b8; }
+.surplus-search > span { font-size:1.25rem; } .surplus-search input { width:100%; min-width:0; min-height:2.65rem; border:0; outline:0; background:transparent; color:#0f172a; font-size:.8rem; }
+.surplus-selected-filter { display:flex; align-items:center; gap:.45rem; flex:0 0 auto; color:#475569; font-size:.72rem; font-weight:750; white-space:nowrap; } .surplus-selected-filter input,.surplus-medicine-option input { width:1rem; height:1rem; accent-color:#b7790b; }
+.surplus-medicine-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.5rem; max-height:18rem; overflow:auto; padding:.2rem; border:1px solid #e2e8f0; border-radius:.9rem; overscroll-behavior:contain; }
+.surplus-medicine-option { display:flex; align-items:center; gap:.65rem; min-width:0; min-height:3rem; padding:.65rem .7rem; border:1px solid transparent; border-radius:.7rem; background:#f8fafc; cursor:pointer; transition:background .15s ease,border-color .15s ease; }
+.surplus-medicine-option:hover { background:#f1f5f9; } .surplus-medicine-option.is-selected { border-color:#f0d18d; background:#fffbeb; }
+.surplus-medicine-name { flex:1 1 auto; min-width:0; color:#334155; font-size:.75rem; font-weight:700; line-height:1.45; overflow-wrap:anywhere; } .surplus-medicine-price { flex:0 0 auto; color:#64748b; font-size:.7rem; font-weight:800; font-variant-numeric:tabular-nums; }
+.surplus-offer-preview { display:flex; align-items:flex-start; gap:.9rem; margin-top:1.15rem; padding:1rem; border:1px solid #f2d9a3; border-radius:1rem; background:linear-gradient(115deg,#fffbeb,#fff7e6); }
+.surplus-preview-mark { display:grid; place-items:center; flex:0 0 auto; width:2.5rem; height:2.5rem; border-radius:.8rem; background:#fef3c7; color:#a16207; font-size:1.2rem; }
+.surplus-preview-label { display:block; color:#a16207; font-size:.65rem; font-weight:900; letter-spacing:.1em; text-transform:uppercase; } .surplus-offer-preview strong { display:block; margin-top:.2rem; color:#713f12; font-size:1.05rem; font-weight:900; } .surplus-offer-preview p { margin:.25rem 0 0; color:#92400e; font-size:.75rem; line-height:1.5; overflow-wrap:anywhere; }
+.surplus-form-actions { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding-top:1.1rem; } .surplus-form-actions > span { color:#64748b; font-size:.72rem; font-weight:700; }
+.surplus-form-actions button { display:inline-flex; align-items:center; justify-content:center; gap:.6rem; min-height:2.8rem; padding:.75rem 1.1rem; border:0; border-radius:.85rem; background:#b7790b; color:white; font-size:.8rem; font-weight:850; cursor:pointer; } .surplus-form-actions button:hover:not(:disabled) { background:#925d05; } .surplus-form-actions button:disabled { cursor:not-allowed; opacity:.5; }
+.surplus-refresh-button { display:inline-flex; align-items:center; justify-content:center; gap:.4rem; min-height:2.5rem; padding:.55rem .8rem; border:1px solid #dbeafe; border-radius:.75rem; background:#eff6ff; color:#1d4ed8; font-size:.72rem; font-weight:800; cursor:pointer; } .surplus-refresh-button:disabled { opacity:.5; }
+.surplus-campaign-list { display:grid; gap:.75rem; margin-top:1rem; }
+.surplus-campaign-card { display:flex; align-items:center; justify-content:space-between; gap:1.25rem; min-width:0; padding:1rem; border:1px solid #e2e8f0; border-radius:1rem; background:#fff; }
+.surplus-campaign-main { flex:1 1 auto; min-width:0; }
+.surplus-campaign-title-row { display:flex; align-items:center; flex-wrap:wrap; gap:.6rem; } .surplus-campaign-title-row h4 { margin:0; color:#0f172a; font-size:.85rem; font-weight:900; overflow-wrap:anywhere; }
+.surplus-status-pill { padding:.3rem .55rem; border-radius:999px; font-size:.62rem; font-weight:900; letter-spacing:.03em; } .surplus-status-pill--active { background:#d1fae5; color:#047857; } .surplus-status-pill--draft { background:#f1f5f9; color:#475569; } .surplus-status-pill--paused { background:#fef3c7; color:#92400e; } .surplus-status-pill--expired { background:#fee2e2; color:#b91c1c; }
+.surplus-campaign-offer { margin:.45rem 0 0; color:#334155; font-size:.75rem; font-weight:800; } .surplus-campaign-offer span { padding:0 .25rem; color:#cbd5e1; } .surplus-campaign-dates { margin:.3rem 0 0; color:#64748b; font-size:.68rem; line-height:1.5; overflow-wrap:anywhere; } .surplus-campaign-dates span { padding:0 .2rem; }
+.surplus-redemption { max-width:28rem; margin-top:.75rem; } .surplus-redemption-label { display:flex; justify-content:space-between; gap:.5rem; color:#64748b; font-size:.65rem; font-weight:750; } .surplus-progress-track { height:.35rem; margin-top:.4rem; overflow:hidden; border-radius:999px; background:#f1f5f9; } .surplus-progress-track span { display:block; height:100%; border-radius:inherit; background:#d49a28; transition:width .2s ease; }
+.surplus-campaign-actions { display:flex; flex:0 0 auto; gap:.5rem; } .surplus-campaign-actions button { min-height:2.5rem; padding:.6rem .85rem; border:0; border-radius:.7rem; font-size:.7rem; font-weight:850; cursor:pointer; } .surplus-activate-button { background:#d1fae5; color:#047857; } .surplus-pause-button { background:#fef3c7; color:#92400e; }
+.surplus-empty-state,.surplus-loading-state { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.5rem; min-height:10rem; padding:2rem 1rem; text-align:center; color:#64748b; font-size:.8rem; } .surplus-empty-state > span { display:grid; place-items:center; width:2.5rem; height:2.5rem; border-radius:.8rem; background:#fff7e6; color:#a16207; font-size:1.2rem; } .surplus-empty-state strong { color:#334155; font-size:.9rem; } .surplus-empty-state p { margin:0; max-width:26rem; line-height:1.5; } .surplus-empty-state a { margin-top:.25rem; color:#a16207; font-weight:850; text-decoration:none; } .surplus-empty-state a:hover { text-decoration:underline; }
+html.dark .admin-screen--surplus-savings { color:#f1f5f9; }
+html.dark .surplus-page-hero { border-color:#713f12; background:radial-gradient(ellipse at 90% 0%,rgba(180,120,12,.2),transparent 42%),linear-gradient(135deg,#1c1a15,#211b10); }
+html.dark .surplus-page-hero h2,html.dark .surplus-section-heading h3,html.dark .surplus-history-heading h3,html.dark .surplus-campaign-title-row h4,html.dark .surplus-summary-card strong,html.dark .surplus-empty-state strong { color:#f8fafc; }
+html.dark .surplus-page-hero p,html.dark .surplus-section-heading p,html.dark .surplus-history-heading p,html.dark .surplus-summary-card p,html.dark .surplus-campaign-dates { color:#94a3b8; }
+html.dark .surplus-summary-card,html.dark .surplus-form-card,html.dark .surplus-history-card,html.dark .surplus-campaign-card { border-color:#334155; background:#111827; }
+html.dark .surplus-section-heading,html.dark .surplus-history-heading,html.dark .surplus-form-section { border-color:#273449; }
+html.dark .surplus-form-section > h4,html.dark .surplus-medicine-heading h4,html.dark .surplus-medicine-name,html.dark .surplus-campaign-offer { color:#e2e8f0; }
+html.dark .surplus-field { color:#cbd5e1; } html.dark .surplus-field input,html.dark .surplus-field select,html.dark .surplus-field textarea { border-color:#475569; background:#0b1220; color:#f8fafc; }
+html.dark .surplus-search { border-color:#475569; } html.dark .surplus-search input { color:#f8fafc; }
+html.dark .surplus-medicine-list { border-color:#334155; } html.dark .surplus-medicine-option { background:#0b1220; } html.dark .surplus-medicine-option:hover { background:#1e293b; } html.dark .surplus-medicine-option.is-selected { border-color:#854d0e; background:#292114; }
+html.dark .surplus-offer-preview { border-color:#713f12; background:linear-gradient(115deg,#211b10,#292114); } html.dark .surplus-preview-mark { background:#422f13; } html.dark .surplus-offer-preview strong { color:#fde68a; } html.dark .surplus-offer-preview p { color:#fcd34d; }
+html.dark .surplus-progress-track { background:#334155; } html.dark .surplus-empty-state > span { background:#422f13; }
+@media (max-width:900px) { .surplus-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:639px) {
+  .surplus-page-hero { align-items:flex-start; flex-direction:column; gap:1rem; border-radius:1.15rem; }
+  .surplus-hero-action { width:100%; }
+  .surplus-summary-grid { gap:.6rem; }
+  .surplus-summary-card { gap:.65rem; padding:.8rem; border-radius:.9rem; }
+  .surplus-summary-icon { width:2.2rem; height:2.2rem; border-radius:.7rem; }
+  .surplus-summary-card p { font-size:.65rem; } .surplus-summary-card strong { font-size:1.2rem; }
+  .surplus-form-grid { grid-template-columns:minmax(0,1fr); gap:.85rem; }
+  .surplus-field--wide { grid-column:auto; }
+  .surplus-medicine-tools { align-items:stretch; flex-direction:column; gap:.65rem; }
+  .surplus-selected-filter { padding:.2rem 0; }
+  .surplus-medicine-list { grid-template-columns:minmax(0,1fr); max-height:15rem; }
+  .surplus-section-heading,.surplus-history-heading { align-items:flex-start; }
+  .surplus-required-note { padding-top:.6rem; }
+  .surplus-form-actions { align-items:stretch; flex-direction:column; }
+  .surplus-form-actions button { width:100%; }
+  .surplus-campaign-card { align-items:stretch; flex-direction:column; gap:.85rem; }
+  .surplus-campaign-actions { justify-content:flex-end; }
+  .surplus-campaign-actions button { flex:1 1 auto; }
+  .surplus-history-heading { flex-wrap:wrap; }
+  .surplus-refresh-button { width:100%; }
+}
+@media (max-width:359px) { .surplus-summary-grid { grid-template-columns:minmax(0,1fr); } .surplus-summary-card { padding:.75rem; } .surplus-section-heading > div,.surplus-history-heading > div { gap:.6rem; } }
+@media (prefers-reduced-motion:reduce) { .surplus-page-hero *, .surplus-form-card *, .surplus-history-card * { transition:none !important; } }
