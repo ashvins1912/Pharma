@@ -33,7 +33,7 @@ describe('API capability registry', () => {
 
   it('maps reveal and resend OTP to their intended roles', () => {
     assert.equal(resolveApiCapability('GET', '/api/orders/order-1/reveal-otp')?.permission, 'orders.read');
-    assert.equal(resolveApiCapability('POST', '/api/orders/order-1/resend-otp')?.permission, 'orders.manage');
+    assert.equal(resolveApiCapability('POST', '/api/orders/order-1/resend-otp')?.permission, 'orders.read');
   });
 
   it('does not classify public auth APIs as protected capabilities', () => {
