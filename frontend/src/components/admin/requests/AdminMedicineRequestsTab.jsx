@@ -46,7 +46,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
           search: searchQuery.trim() || undefined,
           ...dateRange
         }),
-        getAdminMedicineRequestMetrics()
+        getAdminMedicineRequestMetrics(dateRange)
       ]);
       if (sequence !== requestSequence.current) return;
       setRequests(Array.isArray(list?.requests) ? list.requests : []);
@@ -67,18 +67,18 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
     const refreshRequests = () => { void loadRequests(1); };
     window.addEventListener('pharma:medicine-request-updated', refreshRequests);
     return () => window.removeEventListener('pharma:medicine-request-updated', refreshRequests);
-  }, []);
+  }, [selectedStatus, searchQuery, dateRange.startDate, dateRange.endDate]);
 
   useEffect(() => {
     // Dashboard owns the initial ALL/15 request. Wait for it rather than racing
     // with a second identical request when the pharmacy dashboard mounts.
     if (selectedStatus === 'ALL' && !searchQuery.trim() && initialLoading) return;
-    if (selectedStatus === 'ALL' && !searchQuery.trim() && initialData) return;
+    if (selectedStatus === 'ALL' && !searchQuery.trim() && initialData && !dateRange.startDate && !dateRange.endDate) return;
     loadRequests(1);
   }, [selectedStatus, initialLoading, initialData, dateRange.startDate, dateRange.endDate]);
 
   useEffect(() => {
-    if (!initialData) return;
+    if (!initialData || dateRange.startDate || dateRange.endDate) return;
     setRequests(initialData.requests || []);
     setPagination(initialData.pagination || pagination);
   }, [initialData]);
