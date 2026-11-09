@@ -2251,11 +2251,25 @@ router.get('/:id/reveal-otp', authenticateUser, async (req, res) => {
         }
         const order = await Order.findById(req.params.id);
         if (!order || !canTenantAccessOrder(req, order)) return res.status(404).json({ message: 'Order not found.' });
+        if (order.orderStatus !== 'Dispatched') {
+            return res.status(409).json({ message: 'The order must be out for delivery before its delivery OTP can be revealed.' });
+        }
         let cachedOtp = await cacheService.get(`delivery_otp:${req.params.id}`);
-        if (cachedOtp) {
+        const verification = order.deliveryVerification || {};
+        const verificationIsCurrent = Boolean(
+            cachedOtp
+            && verification.otpHash
+            && verification.expiresAt
+            && new Date(verification.expiresAt) > new Date()
+            && !verification.verifiedAt
+            && Number(verification.attempts || 0) < 5
+        );
+        if (verificationIsCurrent) {
             return res.json({ otp: cachedOtp, source: 'cache_service_1_day' });
         }
 
+        // Repair cache/database drift by issuing one fresh code and persisting
+        // its hash and expiry together before returning it.
         cachedOtp = String(randomInt(0, 10000)).padStart(4, '0');
         order.deliveryVerification = {
             otpHash: scryptSync(cachedOtp, String(order._id), 32).toString('hex'),
