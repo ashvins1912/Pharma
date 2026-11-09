@@ -802,7 +802,7 @@ export const dataStore = {
             };
         }
 
-        const cacheKey = \`inventory-alerts:\${scopeTenantId}:\${scopeBranchId}:\${lowStockThreshold}:\${expiringThresholdDays}\`;
+        const cacheKey = `inventory-alerts:${scopeTenantId}:${scopeBranchId}:${lowStockThreshold}:${expiringThresholdDays}`;
         const cached = inventoryAlertsCache.get(cacheKey);
         if (cached && cached.expiresAt > Date.now()) return cached.value;
         if (inventoryAlertsInflight.has(cacheKey)) return inventoryAlertsInflight.get(cacheKey);
