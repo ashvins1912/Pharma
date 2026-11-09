@@ -57,7 +57,7 @@ import { probeAllServices } from './routes/adminFeatureHealth.js';
 
 gateway.get('/health/services', async (_req, res, next) => {
     try {
-        const services = await probeAllServices(8000);
+        const services = await probeAllServices(4000);
         res.json({
             success: true,
             checkedAt: new Date().toISOString(),
