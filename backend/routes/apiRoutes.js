@@ -13,7 +13,7 @@ import whatsappRoutes from './whatsappRoutes.js';
 import versionedOrderRoutes from './versionedOrderRoutes.js';
 import adminRoutes from './adminRoutes.js';
 import riderRoutes from '../modules/delivery/routes/riderRoutes.js';
-import assignmentRoutes from '../modules/delivery/routes/assignmentRoutes.js';
+import assignmentRoutes from '../modules/delivery/routes/assignmentRoutes.js';\nimport privateImageAssetRoutes from './privateImageAssetRoutes.js';
 import multer from 'multer';
 import { authenticateUser, requirePermission } from '../middleware/auth.js';
 import { imageOptimizationService } from '../services/ImageOptimizationService.js';
@@ -38,7 +38,7 @@ router.post('/upload/image', authenticateUser, requirePermission('inventory.writ
     }
 });
 
-router.use('/auth', authRoutes);
+router.use('/private-images', privateImageAssetRoutes);\nrouter.use('/auth', authRoutes);
 router.use('/medicines', medicineRoutes);
 router.use('/orders', orderRoutes);
 router.use('/riders', riderProfileRoutes);
