@@ -70,3 +70,11 @@
   .platform-tenants-view .platform-tenants-table tbody td:nth-child(2)::before { display: block; max-width: none; margin-bottom: 4px; }
   .platform-tenants-view .platform-tenants-table tbody td:nth-child(2) > div:first-child { font-size: 13px; }
 }
+
+@media (max-width: 860px) {
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(2)::before { content: "Pharmacy"; }
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(3)::before { content: "Identifiers"; }
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(4)::before { content: "Status"; }
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(5)::before { content: "Contact"; }
+  .platform-tenants-view .platform-tenants-table tbody td:nth-child(6)::before { content: "Locale & currency"; }
+}
