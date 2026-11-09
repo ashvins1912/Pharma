@@ -1907,13 +1907,13 @@ export const dataStore = {
             const timestamp = new Date(order.createdAt).getTime();
             return (!start || timestamp >= start.getTime()) && (!end || timestamp < end.getTime());
         }).sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
-        const getStatus = order => String(order.orderStatus || order.status || '').trim().toLowerCase();
-        const active = allOrders.filter(order => activeSet.has(getStatus(order)));
+        const closedSet = new Set([...deliveredStatuses, ...cancelledStatuses].map(value => value.toLowerCase()));
+        const active = allOrders.filter(order => !orderHasStatus(order, closedSet) && orderHasStatus(order, activeSet));
         const totalPages = Math.max(1, Math.ceil(active.length / safeLimit));
         const currentPage = Math.min(requestedPage, totalPages);
         return { items: active.slice((currentPage - 1) * safeLimit, currentPage * safeLimit),
             total: allOrders.length, activeTotal: active.length,
-            deliveredCount: allOrders.filter(order => deliveredSet.has(getStatus(order))).length,
+            deliveredCount: allOrders.filter(order => orderHasStatus(order, deliveredSet)).length,
             recentOrders: allOrders.slice(0, 6),
             pagination: { page: currentPage, limit: safeLimit, total: active.length, totalPages,
                 hasNextPage: currentPage < totalPages, hasPreviousPage: currentPage > 1 } };
