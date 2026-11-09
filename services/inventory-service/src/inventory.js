@@ -156,7 +156,7 @@ export async function searchInventoryProducts({
     // Keep only catalogue fields needed by the UI contract before joining stock.
     { $project: {
       _id: 1, version: 1, sku: 1, name: 1, genericName: 1, description: 1,
-      imageUrl: 1, hsnSac: 1, manufacturer: 1, strength: 1, form: 1,
+      imageUrl: 1, imageAssetId: 1, hsnSac: 1, manufacturer: 1, strength: 1,
       category: 1, requiresPrescription: 1, baseCostPrice: 1,
       discountPercentage: 1, marginTier: 1
     } },
@@ -410,6 +410,7 @@ const normalizeProductFields = input => ({
   category: String(input.category || 'General Medicine').trim(),
   description: String(input.description || '').trim(),
   imageUrl: String(input.imageUrl || '').trim(),
+  imageAssetId: String(input.imageAssetId || '').trim(),
   hsnSac: String(input.hsnSac || '').trim(),
   baseCostPrice: Number(input.baseCostPrice || 0),
   discountPercentage: Number(input.discountPercentage || 0),
