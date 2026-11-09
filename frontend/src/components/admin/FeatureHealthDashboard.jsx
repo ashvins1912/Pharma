@@ -60,8 +60,10 @@ export default function FeatureHealthDashboard() {
       setAuditing(true);
       setError('');
       const res = await apiClient.post('/api/v1/admin/feature-health/run-audit');
-      if (res.data?.success) {
-        await fetchHealth(true);
+      if (res.data?.success && res.data?.data) {
+        setHealthData(res.data.data);
+      } else {
+        setError('Audit completed without a feature health report.');
       }
     } catch (err) {
       setError(err.response?.data?.error?.message || err.message || 'Audit execution failed.');
