@@ -1155,11 +1155,14 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                                       onClick={async () => {
                                          try {
                                            const res = await apiClient.get(`/api/orders/${order._id}/reveal-otp`);
-                                           const otp = res.data?.otp || '4821';
+                                           const otp = res.data?.otp;
+                                           if (!/^\\d{4}$/.test(String(otp || ''))) {
+                                             throw new Error('The server did not return a valid delivery OTP.');
+                                           }
                                            setDeliveryOtps(prev => ({ ...prev, [order._id]: otp }));
                                            addToast(`Revealed Customer OTP (Cached 24h): ${otp}`, 'info');
                                          } catch (err) {
-                                           addToast(t('otpFromCacheFailed'), 'error');
+                                           addToast(err.response?.data?.message || err.message || t('otpFromCacheFailed'), 'error');
                                          }
                                        }}
                                       className="text-[10px] font-black text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-lg hover:bg-amber-200 transition cursor-pointer"
@@ -1188,7 +1191,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                                            setUpdatingId(order._id);
                                            await apiClient.post('/api/orders/' + order._id + '/verify-delivery', {
                                              otp: code,
-                                             riderId: order.rider?.riderId || order.riderId || order.assignedRiderId || order.riderName || 'AdminAssignedRider'
+                                             riderId: order.rider?.riderId || order.riderId || order.assignedRiderId || null
                                            });
                                            addToast('Delivery verified successfully by server!', 'success');
                                            setClosedOrderIds(prev => [...prev, String(order._id)]);
