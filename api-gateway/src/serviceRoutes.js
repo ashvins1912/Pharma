@@ -153,6 +153,8 @@ export function createServiceRouters(gatewayConfig = config) {
   }, gatewayConfig);
   inventoryRouter.get('/alerts', inventory('inventory.read'));
   inventoryRouter.get('/alerts/summary', inventory('inventory.read'));
+  inventoryRouter.get('/suggest-restock', inventory('inventory.read'));
+  inventoryRouter.get('/admin/suggest-restock', inventory('inventory.read'));
   inventoryRouter.get('/audits', inventory('inventory.read'));
   inventoryRouter.post('/bulk/lookup', inventory('inventory.read'));
   inventoryRouter.post('/check-availability', inventory('inventory.read'));
@@ -160,6 +162,8 @@ export function createServiceRouters(gatewayConfig = config) {
   const inventoryAdmin = (req, res, next) => req.inventoryServiceUnavailable
     ? next()
     : requireAdmin(req, res, next);
+  inventoryRouter.post('/apply-restock', inventoryAdmin, inventory('inventory.write'));
+  inventoryRouter.post('/admin/apply-restock', inventoryAdmin, inventory('inventory.write'));
   const inventoryImportAuth = (req, res, next) => req.inventoryServiceUnavailable
     ? next()
     : requireInventoryImportPermission(req, res, next);

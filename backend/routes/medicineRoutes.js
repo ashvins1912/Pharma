@@ -66,7 +66,7 @@ router.get('/admin/inventory', authenticateUser, async (req, res) => {
     }
 });
 
-router.get('/admin/suggest-restock', authenticateUser, async (req, res) => {
+router.get(['/admin/suggest-restock', '/suggest-restock'], authenticateUser, async (req, res) => {
     try {
         const scope = await getVerifiedInventoryScope(req, 'inventory.read');
         const { tenantId, branchId } = scope;
@@ -179,7 +179,7 @@ router.get('/admin/suggest-restock', authenticateUser, async (req, res) => {
     }
 });
 
-router.post('/admin/apply-restock', authenticateUser, async (req, res) => {
+router.post(['/admin/apply-restock', '/apply-restock'], authenticateUser, async (req, res) => {
     try {
         const scope = await getVerifiedInventoryScope(req, 'inventory.write');
         const { tenantId, branchId } = scope;

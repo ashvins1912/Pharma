@@ -43,9 +43,16 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
     try {
       setRestockLoading(true);
       setShowRestockModal(true);
-      const res = await apiClient.get('/api/medicines/admin/suggest-restock', {
-        params: { tenantId, branchId }
-      });
+      let res;
+      try {
+        res = await apiClient.get('/api/medicines/admin/suggest-restock', {
+          params: { tenantId, branchId }
+        });
+      } catch (firstErr) {
+        res = await apiClient.get('/api/v1/inventory/suggest-restock', {
+          params: { tenantId, branchId }
+        });
+      }
       const data = res.data?.data || res.data || {};
       const items = Array.isArray(data.items) ? data.items : [];
       setRestockSuggestions(items);
@@ -83,11 +90,19 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
         return;
       }
 
-      await apiClient.post('/api/medicines/admin/apply-restock', {
-        tenantId,
-        branchId,
-        restocks: itemsToRestock
-      });
+      try {
+        await apiClient.post('/api/medicines/admin/apply-restock', {
+          tenantId,
+          branchId,
+          restocks: itemsToRestock
+        });
+      } catch (firstErr) {
+        await apiClient.post('/api/v1/inventory/apply-restock', {
+          tenantId,
+          branchId,
+          restocks: itemsToRestock
+        });
+      }
 
       addToast(`📦 Restock approved! Stock updated for ${itemsToRestock.length} items.`, 'success');
       window.dispatchEvent(new Event('pharma:inventory-updated'));
