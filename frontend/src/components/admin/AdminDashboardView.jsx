@@ -238,6 +238,28 @@ export default function AdminDashboardView() {
   const activeCount = processingCount + pendingReviewCount + approvedCount + readyCount + dispatchedCount;
   const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.finalTotal) || 0), 0);
 
+  const renderWorkspaceItem = (tab, label, icon, count = null, tone = 'default') => {
+    const active = adminTab === tab;
+    return (
+      <button
+        key={tab}
+        type="button"
+        onClick={() => setAdminTab(tab)}
+        aria-current={active ? 'page' : undefined}
+        className={`dashboard-nav-item${active ? ' is-active' : ''}${tone === 'governance' ? ' is-governance' : ''}`}
+      >
+        <span className="dashboard-nav-item-icon" aria-hidden="true">{icon}</span>
+        <span className="dashboard-nav-item-label">{label}</span>
+        {count !== null && count !== undefined && (
+          <span className={`dashboard-nav-item-count${tone === 'attention' && count > 0 ? ' is-attention' : ''}`} aria-label={`${count} items`}>
+            {count}
+          </span>
+        )}
+        <span className="dashboard-nav-item-chevron" aria-hidden="true">›</span>
+      </button>
+    );
+  };
+
   if (!authLoading && !canAccessOperations) {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center" role="status">
@@ -404,307 +426,108 @@ export default function AdminDashboardView() {
         </div>
       )}
 
-      {/* Dispensary Command Center & Operations Hub - Wrapped Grid */}
-      <div className="dashboard-workspace bg-white dark:bg-gray-900 rounded-3xl p-3 sm:p-4 shadow-sm border border-slate-200 dark:border-gray-800 space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <div>
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Dispensary Command Center &amp; Operations Hub
-            </h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">Real-time dispensary workflows, logistics routing, and platform governance</p>
+      {/* Operations workspace: task-oriented navigation with the existing permission gates. */}
+      <section className="dashboard-workspace" aria-labelledby="operations-workspace-title">
+        <header className="dashboard-workspace-header">
+          <div className="dashboard-workspace-heading">
+            <span className="dashboard-workspace-eyebrow">PHARMA / OPERATIONS</span>
+            <h3 id="operations-workspace-title">Operations workspace</h3>
+            <p>Manage orders, medicine requests, inventory, deliveries and platform operations from one place.</p>
           </div>
-          <span className="text-[10px] font-extrabold px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-full">
-            Active Workspace
-          </span>
-        </div>
+          <div className="dashboard-workspace-context" aria-label="Workspace context">
+            <span className="dashboard-workspace-context-dot" aria-hidden="true" />
+            <span>Workspace</span>
+          </div>
+        </header>
 
-        <div className="dashboard-workspace-nav flex flex-wrap gap-2 pt-1" role="navigation" aria-label="Admin operations navigation">
-          <section className="dashboard-nav-group" aria-label="Orders & fulfilment">
-            <h4 className="dashboard-nav-group-title">Orders & fulfilment</h4>
-            <div className="dashboard-nav-group-items">
-
-          {canViewFulfillment && <button
-            onClick={() => setAdminTab('fulfillment')}
-            className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-              adminTab === 'fulfillment'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
-            }`}
-          >
-            <span>📦</span>
-            <span>{t('fulfillmentQueue')}</span>
-            <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${adminTab === 'fulfillment' ? 'bg-blue-700 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300'}`}>
-              {orders.length}
-            </span>
-          </button>}
-
-          {canViewCSquare && (
-            <button
-              onClick={() => setAdminTab('csquare')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-                adminTab === 'csquare'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
-              }`}
-            >
-              <span>🔗</span>
-              <span>C-Square</span>
-            </button>
+        <nav className="dashboard-workspace-nav" aria-label="Operations workspace navigation">
+          {(canViewFulfillment || canViewAdminRequests || canViewCSquare) && (
+            <section className="dashboard-nav-group" aria-label="Orders and requests">
+              <div className="dashboard-nav-group-heading">
+                <h4 className="dashboard-nav-group-title">Orders &amp; requests</h4>
+                <p>Review demand and move orders forward</p>
+              </div>
+              <div className="dashboard-nav-group-items">
+                {canViewFulfillment && renderWorkspaceItem('fulfillment', t('fulfillmentQueue'), '📦', orders.length)}
+                {canViewAdminRequests && renderWorkspaceItem('requests', t('medicineRequests'), '📋', pendingMedicineRequestCount, 'attention')}
+                {canViewCSquare && renderWorkspaceItem('csquare', 'C-Square', '🔗')}
+              </div>
+            </section>
           )}
 
-          {canViewAdminRequests && (
-            <button
-              onClick={() => setAdminTab('requests')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-                adminTab === 'requests'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
-              }`}
-            >
-              <span>📋</span>
-              <span>{t('medicineRequests')}</span>
-              <span
-                aria-hidden={pendingMedicineRequestCount === 0}
-                className={`inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[10px] font-black leading-none text-white ${pendingMedicineRequestCount === 0 ? 'invisible' : ''}`}
-              >
-                {pendingMedicineRequestCount || 0}
-              </span>
-            </button>
+          {(canManageRiders || canManageRoutes) && (
+            <section className="dashboard-nav-group" aria-label="Delivery and logistics">
+              <div className="dashboard-nav-group-heading">
+                <h4 className="dashboard-nav-group-title">Delivery &amp; logistics</h4>
+                <p>Coordinate riders, dispatch and routes</p>
+              </div>
+              <div className="dashboard-nav-group-items">
+                {canManageRiders && renderWorkspaceItem('riders', t('riderFleet'), '🛵')}
+                {canManageRoutes && renderWorkspaceItem('routes', t('smartRoute'), '🗺️')}
+              </div>
+            </section>
           )}
 
-          {canManageRiders && (
-            <button
-              onClick={() => setAdminTab('riders')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-                adminTab === 'riders'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
-              }`}
-            >
-              <span>🛵</span>
-              <span>{t('riderFleet')}</span>
-            </button>
+          {(canViewInventory || canViewAudits) && (
+            <section className="dashboard-nav-group" aria-label="Inventory">
+              <div className="dashboard-nav-group-heading">
+                <h4 className="dashboard-nav-group-title">Inventory</h4>
+                <p>Maintain stock accuracy and traceability</p>
+              </div>
+              <div className="dashboard-nav-group-items">
+                {canViewInventory && renderWorkspaceItem('inventory', t('inventoryCatalog'), '📊')}
+                {canViewAudits && renderWorkspaceItem('audits', t('inventoryAudits'), '📜')}
+              </div>
+            </section>
           )}
 
-          
-            </div>
-          </section>
-          <section className="dashboard-nav-group" aria-label="Sales & finance">
-            <h4 className="dashboard-nav-group-title">Sales & finance</h4>
-            <div className="dashboard-nav-group-items">
-{canViewPromotions && (
-            <button
-              onClick={() => setAdminTab('promotions')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-                adminTab === 'promotions'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
-              }`}
-            >
-              <span>🏷️</span>
-              <span>{t('customerOffers')}</span>
-            </button>
+          {(canViewPromotions || canViewSurplusSavings || canViewPayments) && (
+            <section className="dashboard-nav-group" aria-label="Finance and growth">
+              <div className="dashboard-nav-group-heading">
+                <h4 className="dashboard-nav-group-title">Finance &amp; growth</h4>
+                <p>Manage payments, offers and savings</p>
+              </div>
+              <div className="dashboard-nav-group-items">
+                {canViewPromotions && renderWorkspaceItem('promotions', t('customerOffers'), '🏷️')}
+                {canViewSurplusSavings && renderWorkspaceItem('surplusSavings', t('surplusSavings'), '⚡')}
+                {canViewPromotions && renderWorkspaceItem('offerZone', t('offerZone'), '✨')}
+                {canViewPayments && renderWorkspaceItem('payments', t('paymentReminders'), '💳')}
+              </div>
+            </section>
           )}
 
-          {canViewSurplusSavings && (
-            <button
-              onClick={() => setAdminTab('surplusSavings')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${adminTab === 'surplusSavings'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'}`}
-            >
-              <span>⚡</span>
-              <span>{t('surplusSavings')}</span>
-            </button>
+          {(canManageMembers || !isSuperAdmin) && (
+            <section className="dashboard-nav-group" aria-label="People and workspace">
+              <div className="dashboard-nav-group-heading">
+                <h4 className="dashboard-nav-group-title">People &amp; workspace</h4>
+                <p>Manage your team and pharmacy profile</p>
+              </div>
+              <div className="dashboard-nav-group-items">
+                {canManageMembers && renderWorkspaceItem('members', 'Members & Staff', '👥')}
+                {!isSuperAdmin && renderWorkspaceItem('tenantProfile', t('tenantProfileBranches'), '🏢')}
+              </div>
+            </section>
           )}
 
-          {canViewPromotions && (
-            <button
-              onClick={() => setAdminTab('offerZone')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-                adminTab === 'offerZone'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
-              }`}
-            >
-              <span>⚡</span>
-              <span>{t('offerZone')}</span>
-            </button>
+          {(canViewTenants || canManagePlatformAccess || isSuperAdmin) && (
+            <section className="dashboard-nav-group dashboard-nav-group--governance" aria-label="Platform governance">
+              <div className="dashboard-nav-group-heading">
+                <h4 className="dashboard-nav-group-title">Platform governance</h4>
+                <p>Security, tenants and platform oversight</p>
+              </div>
+              <div className="dashboard-nav-group-items">
+                {canViewTenants && renderWorkspaceItem('tenants', t('platformTenants'), '🌐', null, 'governance')}
+                {canManagePlatformAccess && renderWorkspaceItem('access', t('securityAccess'), '🛡️', null, 'governance')}
+                {isSuperAdmin && renderWorkspaceItem('serviceLogs', 'Service logs', '🧾', null, 'governance')}
+                {isSuperAdmin && renderWorkspaceItem('telemetry', t('liveTelemetry'), '📡', null, 'governance')}
+                {isSuperAdmin && renderWorkspaceItem('matrix', t('roleFeatureMatrix'), '📐', null, 'governance')}
+                {isSuperAdmin && renderWorkspaceItem('automation', 'Automation test engine', '🧪', null, 'governance')}
+                {isSuperAdmin && renderWorkspaceItem('featureHealth', 'Feature health & blockers', '🩺', null, 'governance')}
+              </div>
+            </section>
           )}
-
-          {canViewPayments && (
-            <button
-              onClick={() => setAdminTab('payments')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-                adminTab === 'payments'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
-              }`}
-            >
-              <span>💳</span>
-              <span>{t('paymentReminders')}</span>
-            </button>
-          )}
-
-          
-            </div>
-          </section>
-          {canManageMembers && <section className="dashboard-nav-group" aria-label="Team management"><h4 className="dashboard-nav-group-title">Team management</h4><div className="dashboard-nav-group-items"><button onClick={() => setAdminTab('members')} className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${adminTab === 'members' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'}`}><span>👥</span><span>Members &amp; Staff</span></button></div></section>}
-          <section className="dashboard-nav-group" aria-label="Inventory & logistics">
-            <h4 className="dashboard-nav-group-title">Inventory & logistics</h4>
-            <div className="dashboard-nav-group-items">
-{canViewInventory && (
-            <button
-              onClick={() => setAdminTab('inventory')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-                adminTab === 'inventory'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
-              }`}
-            >
-              <span>📊</span>
-              <span>{t('inventoryCatalog')}</span>
-            </button>
-          )}
-
-          {canManageRoutes && (
-            <button
-              onClick={() => setAdminTab('routes')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-                adminTab === 'routes'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
-              }`}
-            >
-              <span>🗺️</span>
-              <span>{t('smartRoute')}</span>
-            </button>
-          )}
-
-          {canViewAudits && (
-            <button
-              onClick={() => setAdminTab('audits')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-                adminTab === 'audits'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 border border-slate-200 dark:border-gray-700'
-              }`}
-            >
-              <span>📜</span>
-              <span>{t('inventoryAudits')}</span>
-            </button>
-          )}
-
-          
-            </div>
-          </section>
-          <section className="dashboard-nav-group" aria-label="Platform administration">
-            <h4 className="dashboard-nav-group-title">Platform administration</h4>
-            <div className="dashboard-nav-group-items">
-{canViewTenants && (
-            <button
-              onClick={() => setAdminTab('tenants')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-                adminTab === 'tenants'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-gray-800 text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-blue-200 dark:border-gray-700'
-              }`}
-            >
-              <span>🌐</span>
-              <span>{t('platformTenants')}</span>
-            </button>
-          )}
-
-          {canManagePlatformAccess && (
-            <button
-              onClick={() => setAdminTab('access')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-                adminTab === 'access'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-gray-800 text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-blue-200 dark:border-gray-700'
-              }`}
-            >
-              <span>🛡️</span>
-              <span>{t('securityAccess')}</span>
-            </button>
-          )}
-
-          {isSuperAdmin && <button onClick={() => setAdminTab('serviceLogs')} className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${adminTab === 'serviceLogs' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-gray-800 text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-blue-200 dark:border-gray-700'}`}><span>🧾</span><span>Service Logs</span></button>}
-
-          {isSuperAdmin && (
-            <button
-              onClick={() => setAdminTab('telemetry')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-                adminTab === 'telemetry'
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-indigo-200 dark:border-gray-700'
-              }`}
-            >
-              <span>📡</span>
-              <span>{t('liveTelemetry')}</span>
-            </button>
-          )}
-
-          {isSuperAdmin && (
-            <button
-              onClick={() => setAdminTab('matrix')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-                adminTab === 'matrix'
-                  ? 'bg-purple-600 text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-gray-800 text-purple-600 dark:text-purple-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-purple-200 dark:border-gray-700'
-              }`}
-            >
-              <span>📐</span>
-              <span>{t('roleFeatureMatrix')}</span>
-            </button>
-          )}
-
-          {isSuperAdmin && (
-            <button
-              onClick={() => setAdminTab('automation')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-                adminTab === 'automation'
-                  ? 'bg-emerald-600 text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-emerald-200 dark:border-gray-700'
-              }`}
-            >
-              <span>🧪</span>
-              <span>Automation Test Engine</span>
-            </button>
-          )}
-
-          {isSuperAdmin && (
-            <button
-              onClick={() => setAdminTab('featureHealth')}
-              className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-                adminTab === 'featureHealth'
-                  ? 'bg-rose-600 text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-gray-800 text-rose-600 dark:text-rose-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-rose-200 dark:border-gray-700'
-              }`}
-            >
-              <span>🛡️</span>
-              <span>Feature Health &amp; Blocker Intelligence</span>
-            </button>
-          )}
-
-          {!isSuperAdmin && (
-          <button
-            onClick={() => setAdminTab('tenantProfile')}
-            className={`dashboard-nav-item px-4 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
-              adminTab === 'tenantProfile'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-slate-50 dark:bg-gray-800 text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-gray-700 border border-blue-200 dark:border-gray-700'
-            }`}
-          >
-            <span>🏢</span>
-            <span>{t('tenantProfileBranches')}</span>
-          </button>
-          )}
-
-            </div>
-          </section>
-        </div>
-      </div>
+        </nav>
+      </section>
 
       {/* Tab Content Display */}
       <main className="dashboard-content" id="admin-workspace-content" tabIndex="-1">
