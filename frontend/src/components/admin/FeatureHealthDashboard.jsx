@@ -76,12 +76,10 @@ export default function FeatureHealthDashboard() {
     try {
       setProbingAllServices(true);
       setError('');
-      const res = await apiClient.post('/api/v1/admin/feature-health/probe-services', { timeoutMs: 60000 });
-      if (res.data?.success && healthData) {
-        setHealthData(prev => ({
-          ...prev,
-          services: res.data.services
-        }));
+      const res = await apiClient.post('/api/v1/admin/feature-health/probe-services', { timeoutMs: 15000 });
+      if (res.data?.success) {
+        // Rebuild score and blocker summaries using the newly cached service results.
+        await fetchHealth(false);
       }
     } catch (err) {
       setError(err.response?.data?.error?.message || err.message || 'Microservice probe failed.');
@@ -271,7 +269,7 @@ export default function FeatureHealthDashboard() {
               className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer"
             >
               <span>{probingAllServices ? '⏳' : '🌐'}</span>
-              <span>{probingAllServices ? 'Probing Services (Wait 60s)…' : 'Probe All Services'}</span>
+              <span>{probingAllServices ? 'Probing Services (up to 15s)…' : 'Probe All Services'}</span>
             </button>
 
             <button
