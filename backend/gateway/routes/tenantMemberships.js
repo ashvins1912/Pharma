@@ -18,8 +18,8 @@ const ROLE_PERMISSION_PRESETS = {
   ORDER_MANAGER: ['orders.read', 'orders.manage', 'medicine_requests.read', 'medicine_requests.manage'],
   INVENTORY_MANAGER: ['inventory.read', 'inventory.write'],
   DISPATCHER: ['orders.read', 'orders.manage', 'delivery.read', 'delivery.manage'],
-  RIDER: ['delivery.read'],
-  TENANT_RIDER: ['delivery.read'],
+  RIDER: ['delivery.read', 'orders.read'],
+  TENANT_RIDER: ['delivery.read', 'orders.read'],
   TENANT_ADMIN: []
 };
 const clean = value => String(value ?? '').trim();
