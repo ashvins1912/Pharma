@@ -1874,90 +1874,60 @@ export const dataStore = {
         };
     },
 
-    async getFulfillmentSnapshot(page = 1, limit = 10, tenantId = null) {
-        const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
-        const deliveredStatuses = [
-            'Delivered', 'delivered', 'DELIVERED',
-            'Completed', 'completed', 'COMPLETED',
-            'Delivered_Order', 'delivered_order', 'DELIVERED_ORDER'
-        ];
-        const deliveredStatusSet = new Set(deliveredStatuses.map(status => status.toLowerCase()));
-        const statusMissing = {
-            $or: [
-                { orderStatus: { $exists: false } },
-                { orderStatus: null },
-                { orderStatus: '' }
-            ]
-        };
-        const deliveredStatusFilter = {
-            $or: [
-                { orderStatus: { $in: deliveredStatuses } },
-                { $and: [statusMissing, { status: { $in: deliveredStatuses } }] }
-            ]
-        };
-        const notDeliveredStatusFilter = {
-            $or: [
-                { $and: [{ orderStatus: { $exists: true, $nin: [...deliveredStatuses, null, ''] } }] },
-                { $and: [statusMissing, { status: { $nin: deliveredStatuses } }] }
-            ]
-        };
-        const pipelineFilter = {
-            ...(tenantId ? { tenantId: String(tenantId) } : {}),
-            $or: [
-                notDeliveredStatusFilter,
-                { $and: [deliveredStatusFilter, { createdAt: { $gte: twoDaysAgo } }] }
-            ]
-        };
-        const tenantFilter = tenantId ? { tenantId: String(tenantId) } : {};
-        const deliveredCountFilter = tenantId
-            ? { $and: [deliveredStatusFilter, tenantFilter] }
-            : deliveredStatusFilter;
-        const parsedLimit = Math.min(50, Math.max(1, Number(limit) || 10));
-        const parsedPage = Math.max(1, Number(page) || 1);
-        if (getIsConnected()) {
-            const [activeTotal, total, deliveredCount, items, recentOrders] = await Promise.all([
-                Order.countDocuments(pipelineFilter),
-                Order.countDocuments(tenantFilter),
-                Order.countDocuments(deliveredCountFilter),
-                Order.find(pipelineFilter).sort({ createdAt: -1, _id: -1 }).skip((parsedPage - 1) * parsedLimit).limit(parsedLimit).lean(),
-                Order.find(tenantFilter).sort({ createdAt: -1, _id: -1 }).limit(6).lean()
-            ]);
-            const totalPages = Math.ceil(activeTotal / parsedLimit) || 1;
-            const currentPage = Math.min(parsedPage, totalPages);
-            return {
-                items, total, activeTotal, deliveredCount, recentOrders,
-                pagination: { page: currentPage, limit: parsedLimit, total: activeTotal, totalPages, hasNextPage: currentPage < totalPages, hasPreviousPage: currentPage > 1 }
-            };
-        }
-        const twoDaysAgoTime = twoDaysAgo.getTime();
-        const allOrders = [...inMemoryOrders]
-            .filter(order => !tenantId || String(order.tenantId) === String(tenantId))
-            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        const pipelineOrders = allOrders.filter(order => {
-            const rawStatus = order.orderStatus == null || String(order.orderStatus).trim() === ''
-                ? order.status
-                : order.orderStatus;
-            const isDelivered = deliveredStatusSet.has(String(rawStatus || '').trim().toLowerCase());
-            if (!isDelivered) return true;
-            const orderDate = new Date(order.createdAt || Date.now()).getTime();
-            return orderDate >= twoDaysAgoTime;
+    async getFulfillmentSnapshot(page = 1, limit = 10, tenantId = null, { startDate = null, endDate = null } = {}) {
+        const activeStatuses = ['Pending_Review', 'pending', 'Pending', 'Approved', 'accepted', 'approved',
+            'Processing Order', 'processing', 'Processing', 'Processing_Order', 'ProcessingOrder',
+            'Ready to Dispatch', 'ready_to_dispatch', 'Ready_To_Dispatch', 'ready', 'Ready',
+            'Dispatched', 'dispatched', 'Out for Delivery', 'out_for_delivery',
+            'VERIFICATION_NEEDED', 'PACKING', 'WAITING_FOR_STOCK', 'PARTIALLY_FULFILLED'];
+        const deliveredStatuses = ['Delivered', 'delivered', 'DELIVERED', 'Delivered_Order', 'delivered_order', 'DELIVEREDORDER', 'DELIVERED_ORDER'];
+        const missingStatus = { $or: [{ orderStatus: { $exists: false } }, { orderStatus: null }, { orderStatus: '' }] };
+        const statusFilter = values => ({
+            $or: [{ orderStatus: { $in: values } }, { $and: [missingStatus, { status: { $in: values } }] }]
         });
-        const activeTotal = pipelineOrders.length;
-        const totalPages = Math.ceil(activeTotal / parsedLimit) || 1;
-        const currentPage = Math.min(parsedPage, totalPages);
-        return {
-            items: pipelineOrders.slice((currentPage - 1) * parsedLimit, currentPage * parsedLimit),
-            total: allOrders.length,
-            activeTotal,
-            deliveredCount: allOrders.filter(order => {
-                const rawStatus = order.orderStatus == null || String(order.orderStatus).trim() === ''
-                    ? order.status
-                    : order.orderStatus;
-                return deliveredStatusSet.has(String(rawStatus || '').trim().toLowerCase());
-            }).length,
+        const start = startDate ? new Date(startDate) : null;
+        const end = endDate ? new Date(endDate) : null;
+        if ((startDate && !Number.isFinite(start?.getTime())) || (endDate && !Number.isFinite(end?.getTime())) || (start && end && start >= end)) {
+            throw Object.assign(new Error('Invalid date range.'), { statusCode: 400 });
+        }
+        const dateFilter = (start || end) ? { createdAt: { ...(start ? { $gte: start } : {}), ...(end ? { $lt: end } : {}) } } : {};
+        const scope = { ...(tenantId ? { tenantId: String(tenantId) } : {}), ...dateFilter };
+        const activeFilter = { $and: [scope, statusFilter(activeStatuses)] };
+        const deliveredFilter = { $and: [scope, statusFilter(deliveredStatuses)] };
+        const safeLimit = Math.min(50, Math.max(1, Number(limit) || 10));
+        const requestedPage = Math.max(1, Number(page) || 1);
+        if (getIsConnected()) {
+            const [activeTotal, total, deliveredCount, recentOrders] = await Promise.all([
+                Order.countDocuments(activeFilter),
+                Order.countDocuments(scope),
+                Order.countDocuments(deliveredFilter),
+                Order.find(scope).sort({ createdAt: -1, _id: -1 }).limit(6).lean()
+            ]);
+            const totalPages = Math.max(1, Math.ceil(activeTotal / safeLimit));
+            const currentPage = Math.min(requestedPage, totalPages);
+            const items = await Order.find(activeFilter).sort({ createdAt: -1, _id: -1 })
+                .skip((currentPage - 1) * safeLimit).limit(safeLimit).lean();
+            return { items, total, activeTotal, deliveredCount, recentOrders,
+                pagination: { page: currentPage, limit: safeLimit, total: activeTotal, totalPages,
+                    hasNextPage: currentPage < totalPages, hasPreviousPage: currentPage > 1 } };
+        }
+        const activeSet = new Set(activeStatuses.map(v => v.toLowerCase()));
+        const deliveredSet = new Set(deliveredStatuses.map(v => v.toLowerCase()));
+        const allOrders = inMemoryOrders.filter(order => {
+            if (tenantId && String(order.tenantId || '') !== String(tenantId)) return false;
+            const timestamp = new Date(order.createdAt).getTime();
+            return (!start || timestamp >= start.getTime()) && (!end || timestamp < end.getTime());
+        }).sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
+        const getStatus = order => String(order.orderStatus || order.status || '').trim().toLowerCase();
+        const active = allOrders.filter(order => activeSet.has(getStatus(order)));
+        const totalPages = Math.max(1, Math.ceil(active.length / safeLimit));
+        const currentPage = Math.min(requestedPage, totalPages);
+        return { items: active.slice((currentPage - 1) * safeLimit, currentPage * safeLimit),
+            total: allOrders.length, activeTotal: active.length,
+            deliveredCount: allOrders.filter(order => deliveredSet.has(getStatus(order))).length,
             recentOrders: allOrders.slice(0, 6),
-            pagination: { page: currentPage, limit: parsedLimit, total: activeTotal, totalPages, hasNextPage: currentPage < totalPages, hasPreviousPage: currentPage > 1 }
-        };
+            pagination: { page: currentPage, limit: safeLimit, total: active.length, totalPages,
+                hasNextPage: currentPage < totalPages, hasPreviousPage: currentPage > 1 } };
     },
 
     async searchOrders({ type, value, page = 1, limit = 5, tenantId = null }) {
@@ -2959,6 +2929,14 @@ export const dataStore = {
                 if (filter.customerId) query.customerId = filter.customerId;
             }
             if (filter.status && filter.status !== 'ALL') query.status = filter.status;
+            if (filter.startDate || filter.endDate) {
+                const start = filter.startDate ? new Date(filter.startDate) : null;
+                const end = filter.endDate ? new Date(filter.endDate) : null;
+                if ((start && !Number.isFinite(start.getTime())) || (end && !Number.isFinite(end.getTime())) || (start && end && start >= end)) {
+                    throw inventoryError('Invalid medicine request date range.', 400);
+                }
+                query.createdAt = { ...(start ? { $gte: start } : {}), ...(end ? { $lt: end } : {}) };
+            }
             if (filter.search?.trim()) {
                 const s = filter.search.trim();
                 query.$or = [
@@ -3919,9 +3897,14 @@ export const dataStore = {
         return this.approveMedicineProposalAndConvertToOrder(id, param2, param3);
     },
 
-    async getMedicineRequestMetrics(user = null) {
+    async getMedicineRequestMetrics(user = null, range = {}) {
         const actor = user || { app_metadata: { role: 'admin' } };
-        const requests = await this.getMedicineRequests({}, actor);
+        const requests = (await this.getMedicineRequests({}, actor)).filter(request => {
+            if (!range.startDate && !range.endDate) return true;
+            const created = new Date(request.createdAt).getTime();
+            return Number.isFinite(created) && (!range.startDate || created >= new Date(range.startDate).getTime())
+                && (!range.endDate || created < new Date(range.endDate).getTime());
+        });
 
         const total = requests.length;
         const requested = requests.filter(r => r.status === 'REQUESTED').length;

@@ -89,7 +89,7 @@ const normalizeOrderStatus = (order) => {
   return s || 'Pending_Review';
 };
 
-export default function AdminFulfillmentKanban({ orders, onRefresh }) {
+export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = {} }) {
   const { t } = useLanguage();
   const getColumnTitle = (id) => t(({ Pending_Review: 'awaitingPharmacist', Approved: 'proposalApprovedTitle', Rejected: 'rejected', 'Processing Order': 'processingOrderStage', 'Ready to Dispatch': 'readyToDispatch', Dispatched: 'outForDelivery', Delivered: 'delivered', Cancelled: 'cancelled' })[id] || id);
   const { addToast } = useToast();
@@ -180,7 +180,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     setDeliveredLoading(true);
     setDeliveredError('');
     apiClient.get('/api/orders/admin/all', {
-      params: { status: 'Delivered', page: deliveredPage, limit: 10, ...getLocalDayRange() }
+      params: { status: 'Delivered', page: deliveredPage, limit: 10, ...dateRange }
     }).then(response => {
       if (!isCurrentRequest) return;
       const data = response.data || {};
@@ -195,7 +195,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       if (isCurrentRequest) setDeliveredLoading(false);
     });
     return () => { isCurrentRequest = false; };
-  }, [deliveredPage, deliveredRetryKey]);
+  }, [deliveredPage, deliveredRetryKey, dateRange.startDate, dateRange.endDate]);
 
   useEffect(() => {
     let isCurrentRequest = true;
@@ -222,7 +222,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
     setSearchLoading(true);
     setSearchError('');
     apiClient.get('/api/orders/admin/all', {
-      params: { search: appliedSearch, page: searchPagination.page, limit: 10 }
+      params: { search: appliedSearch, page: searchPagination.page, limit: 10, ...dateRange }
     }).then(response => {
       if (!isCurrentRequest) return;
       const data = response.data || {};
@@ -237,7 +237,7 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
       if (isCurrentRequest) setSearchLoading(false);
     });
     return () => { isCurrentRequest = false; };
-  }, [appliedSearch, searchPagination.page, searchRetryKey]);
+  }, [appliedSearch, searchPagination.page, searchRetryKey, dateRange.startDate, dateRange.endDate]);
 
   const refreshBoard = () => {
     onRefresh?.();
@@ -685,8 +685,8 @@ export default function AdminFulfillmentKanban({ orders, onRefresh }) {
               ? deliveredOrders
               : col.id === 'Cancelled'
                 ? cancelledOrders
-                : (orders || []).filter(o => normalizeOrderStatus(o) === col.id && isCreatedToday(o));
-          const colOrders = rawColOrders;
+                : (orders || []).filter(o => normalizeOrderStatus(o) === col.id);
+          const colOrders = rawColOrders.filter(order => normalizeOrderStatus(order) === col.id);
 
           return (
             <div key={col.id} className={`min-w-0 bg-slate-100/70 border border-slate-200 rounded-3xl p-3 sm:p-4 flex flex-col min-h-[500px] ${viewMode === 'all' && layoutDirection === 'horizontal' ? 'w-80 shrink-0 snap-start' : 'w-full'}`}>
