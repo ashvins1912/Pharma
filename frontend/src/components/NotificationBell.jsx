@@ -4,8 +4,9 @@ import { useLanguage } from '../context/LanguageContext';
 
 export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
   const { t, language } = useLanguage();
-  const { notifications, unreadNotificationsCount, markNotificationRead, setWhatsappModalOpen, deliveryEvents, realtimeConnectionStatus } = useApp();
+  const { notifications, unreadNotificationsCount, markNotificationRead, markAllNotificationsRead, setWhatsappModalOpen, deliveryEvents, realtimeConnectionStatus } = useApp();
   const [isOpen, setIsOpen] = useState(false);
+  const [clearingAll, setClearingAll] = useState(false);
 
   const localizedStatus = (value) => {
     const normalized = String(value || '').trim().toLowerCase().replace(/[ _-]+/g, ' ');
@@ -94,7 +95,7 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
       >
         <span className="text-sm sm:text-base select-none">🔔</span>
         {unreadNotificationsCount > 0 && (
-          <span aria-live="polite" aria-atomic="true" className="absolute -top-1 -right-1 bg-blue-600 text-white text-[9px] sm:text-[10px] font-black min-w-4 h-4 sm:min-w-5 sm:h-5 px-1 rounded-full flex items-center justify-center shadow">
+          <span aria-live="polite" aria-atomic="true" className="absolute -top-1.5 -right-1.5 z-10 inline-flex min-w-[1.15rem] sm:min-w-[1.3rem] h-[1.15rem] sm:h-[1.3rem] max-w-[2.6rem] items-center justify-center rounded-full border-2 border-white bg-blue-600 px-1 text-[9px] sm:text-[10px] font-black leading-none tabular-nums shadow-md whitespace-nowrap">
             {unreadNotificationsCount}
           </span>
         )}
@@ -107,7 +108,7 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
             className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-xs sm:bg-transparent"
           />
           <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 w-auto sm:w-96 max-w-md bg-white border border-slate-200 rounded-3xl shadow-2xl z-50 p-4 space-y-3 animate-fade-in">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-2.5">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
               <div className="min-w-0">
                 <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                   <span>🔔</span> {t('notifications')} ({unreadNotificationsCount})
@@ -118,7 +119,23 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
               </div>
               <button
                 onClick={() => setIsOpen(false)}
-                className="text-slate-400 hover:text-slate-700 text-xs font-bold p-1 rounded-full hover:bg-slate-100"
+                {notifications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (clearingAll) return;
+                    setClearingAll(true);
+                    try { await markAllNotificationsRead?.(); }
+                    finally { setClearingAll(false); }
+                  }}
+                  disabled={clearingAll}
+                  className="ml-auto min-h-8 shrink-0 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[10px] font-extrabold text-blue-700 transition hover:bg-blue-100 disabled:cursor-wait disabled:opacity-50"
+                  aria-label="Clear all notifications"
+                >
+                  {clearingAll ? 'Clearing…' : 'Clear all'}
+                </button>
+              )}
+              className="text-slate-400 hover:text-slate-700 text-xs font-bold p-1 rounded-full hover:bg-slate-100"
               >
                 ✕
               </button>
