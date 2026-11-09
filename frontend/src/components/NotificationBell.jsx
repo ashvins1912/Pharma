@@ -117,28 +117,32 @@ export default function NotificationBell({ onOpenOrders, onRequireAuth }) {
                   {realtimeConnectionStatus === 'connected' ? `● ${t('liveUpdatesConnected')}` : realtimeConnectionStatus === 'reconnecting' ? `● ${t('reconnectingLive')}` : `● ${t('liveOffline')}`}
                 </p>
               </div>
-              <button
-                onClick={() => setIsOpen(false)}
+              <div className="ml-auto flex items-center gap-2">
                 {notifications.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (clearingAll) return;
+                      setClearingAll(true);
+                      try { await markAllNotificationsRead?.(); }
+                      finally { setClearingAll(false); }
+                    }}
+                    disabled={clearingAll}
+                    className="min-h-8 shrink-0 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[10px] font-extrabold text-blue-700 transition hover:bg-blue-100 disabled:cursor-wait disabled:opacity-50"
+                    aria-label="Clear all notifications"
+                  >
+                    {clearingAll ? 'Clearing…' : 'Clear all'}
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={async () => {
-                    if (clearingAll) return;
-                    setClearingAll(true);
-                    try { await markAllNotificationsRead?.(); }
-                    finally { setClearingAll(false); }
-                  }}
-                  disabled={clearingAll}
-                  className="ml-auto min-h-8 shrink-0 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[10px] font-extrabold text-blue-700 transition hover:bg-blue-100 disabled:cursor-wait disabled:opacity-50"
-                  aria-label="Clear all notifications"
+                  onClick={() => setIsOpen(false)}
+                  className="text-slate-400 hover:text-slate-700 text-xs font-bold p-1 rounded-full hover:bg-slate-100"
+                  aria-label="Close notifications"
                 >
-                  {clearingAll ? 'Clearing…' : 'Clear all'}
+                  ✕
                 </button>
-              )}
-              className="text-slate-400 hover:text-slate-700 text-xs font-bold p-1 rounded-full hover:bg-slate-100"
-              >
-                ✕
-              </button>
+              </div>
             </div>
 
             <div className="space-y-2 max-h-64 sm:max-h-72 overflow-y-auto">
