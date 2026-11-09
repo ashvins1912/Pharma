@@ -78,7 +78,7 @@ class ImageOptimizationService {
           folder,
           public_id: publicId,
           resource_type: 'image',
-          overwrite: false,
+          overwrite: true,
           format: 'webp',
           tags: ['pharma-catalog']
         }, (error, result) => error ? reject(error) : resolve(result));
