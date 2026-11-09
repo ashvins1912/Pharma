@@ -42,6 +42,8 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const [waitlistKey, setWaitlistKey] = useState('');
   const [checkoutKey, setCheckoutKey] = useState('');
   const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
+  const [checkoutFlowBusy, setCheckoutFlowBusy] = useState(false);
+  const checkoutFlowRef = useRef(false);
   useEffect(() => {
     if (!isOpen || !user?.id) return;
     let cancelled = false;
@@ -184,6 +186,10 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     : Number(rewardQuote?.finalTotal ?? finalTotal) + deliveryFee;
 
   const handlePlaceOrder = async () => {
+    if (checkoutFlowRef.current) return null;
+    checkoutFlowRef.current = true;
+    setCheckoutFlowBusy(true);
+    try {
     if (!tenantId) {
       setErrorMsg(t('selectPharmacyFirst'));
       addToast(t('selectPharmacyContinue'), 'warning');
@@ -432,12 +438,37 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         return null;
       }
     });
+    if (result?.skipped) {
+      if (createdWaitlistCaseId) {
+        await apiClient.post(`/api/orders/fulfillment/waitlist/${createdWaitlistCaseId}/cancel`).catch(() => {});
+      }
+      const message = 'Another order action is still running. Please wait a moment and try checkout again.';
+      setErrorMsg(message);
+      addToast(message, 'warning');
+      return null;
+    }
     return result;
+    } catch (unexpectedError) {
+      const message = unexpectedError.response?.data?.message || unexpectedError.message || 'Checkout could not be completed. Please try again.';
+      setErrorMsg(message);
+      addToast(message, 'error');
+      return null;
+    } finally {
+      checkoutFlowRef.current = false;
+      setCheckoutFlowBusy(false);
+    }
   };
 
 
   const handleConfirmFulfillmentChoices = async () => {
-    if (!fulfillmentPlan) return;
+    if (!fulfillmentPlan) {
+      const message = 'Refresh stock availability before confirming fulfilment choices.';
+      setErrorMsg(message);
+      addToast(message, 'warning');
+      return;
+    }
+    setErrorMsg('');
+    setFulfillmentLoading(true);
     const selectedItems = buildFulfillmentQuoteItems(fulfillmentPlan, alternativeChoices);
     // Lock the selected decision while its quote is calculated. The ordinary
     // basket quote effect will preserve this split quote until choices change.
@@ -457,16 +488,21 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         setRewardQuote(response.data);
       } catch (error) {
         const message = error.response?.data?.message || error.message || 'Could not calculate the updated order total. Please try again.';
+        setFulfillmentConfirmed(false);
+        setRewardQuote(null);
         setQuoteError(message);
         setErrorMsg(message);
+        addToast(message, 'error');
         return;
       } finally {
         setQuoteLoading(false);
+        setFulfillmentLoading(false);
       }
     } else {
       // Waiting-only and remove-only selections have no payable basket.
       setRewardQuote(null);
       setQuoteLoading(false);
+      setFulfillmentLoading(false);
     }
   };
 
@@ -696,16 +732,16 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                   </div>
                   <p className="text-[11px] text-slate-600">Requested {line.requestedQuantity} · Available now {line.fulfilNowQuantity}</p>
                   <label className="flex items-center gap-2 text-xs">
-                    <input type="radio" name={`stock-${line.productId}`} checked={!alternativeChoices[line.productId]} disabled={quoteLoading} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: '' })); setFulfillmentConfirmed(false); setCheckoutKey(''); }}/>
+                    <input type="radio" name={`stock-${line.productId}`} checked={!alternativeChoices[line.productId]} disabled={quoteLoading || fulfillmentLoading} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: '' })); setFulfillmentConfirmed(false); setCheckoutKey(''); }}/>
                     Wait for the original medicine
                   </label>
                   <label className="flex items-center gap-2 text-xs">
-                    <input type="radio" name={`stock-${line.productId}`} checked={alternativeChoices[line.productId] === 'REMOVE'} disabled={quoteLoading} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: 'REMOVE' })); setFulfillmentConfirmed(false); }}/>
+                    <input type="radio" name={`stock-${line.productId}`} checked={alternativeChoices[line.productId] === 'REMOVE'} disabled={quoteLoading || fulfillmentLoading} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: 'REMOVE' })); setFulfillmentConfirmed(false); }}/>
                     Remove the unavailable quantity from this order
                   </label>
                   {line.alternatives?.map(alternative => (
                     <label key={alternative.productId} className="flex items-start gap-2 rounded-lg border border-emerald-100 p-2 text-xs">
-                      <input type="radio" name={`stock-${line.productId}`} disabled={quoteLoading || alternative.requiresPharmacistApproval || alternative.availableQuantity < line.waitingQuantity} checked={alternativeChoices[line.productId] === alternative.productId} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: alternative.productId })); setFulfillmentConfirmed(false); setCheckoutKey(''); }}/>
+                      <input type="radio" name={`stock-${line.productId}`} disabled={quoteLoading || fulfillmentLoading || alternative.requiresPharmacistApproval || alternative.availableQuantity < line.waitingQuantity} checked={alternativeChoices[line.productId] === alternative.productId} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: alternative.productId })); setFulfillmentConfirmed(false); setCheckoutKey(''); }}/>
                       <span className="flex-1"><strong>{alternative.name}</strong><br/><span className="text-slate-500">{alternative.brand} · Available {alternative.availableQuantity}</span><br/><span className="font-bold text-emerald-700">₹{alternative.discountedUnitPrice.toFixed(2)} each</span>{alternative.listPrice > alternative.discountedUnitPrice ? <span className="ml-1 text-slate-400 line-through">₹{alternative.listPrice.toFixed(2)}</span> : null}{alternative.discountPercentage > 0 ? <span className="ml-1 text-emerald-700">({alternative.discountPercentage}% savings)</span> : null}{alternative.requiresPharmacistApproval ? <span className="block mt-1 text-amber-700">Pharmacist approval required — cannot substitute at checkout</span> : null}{alternative.availableQuantity < line.waitingQuantity ? <span className="block mt-1 text-amber-700">Not enough stock for the remaining quantity</span> : null}</span>
                     </label>
                   ))}
@@ -713,12 +749,12 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
               ))}
               <div className="flex items-center justify-between gap-3">
                 <label htmlFor="stock-wait-days" className="text-xs font-bold text-amber-950">Wait for original stock</label>
-                <select id="stock-wait-days" value={waitDays} disabled={quoteLoading} onChange={event => { setWaitDays(Number(event.target.value)); setFulfillmentConfirmed(false); }} className="rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs">
+                <select id="stock-wait-days" value={waitDays} disabled={quoteLoading || fulfillmentLoading} onChange={event => { setWaitDays(Number(event.target.value)); setFulfillmentConfirmed(false); }} className="rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs">
                   {[1,2,3,4,5].map(days => <option key={days} value={days}>{days} day{days > 1 ? 's' : ''}</option>)}
                 </select>
               </div>
               <p className="text-[10px] text-amber-900">Alternatives are offered only when composition and strength match. Prescription-related substitutions may require pharmacist approval. No stock is reserved until checkout is confirmed.</p>
-              <button type="button" onClick={handleConfirmFulfillmentChoices} disabled={quoteLoading || fulfillmentLoading} className="w-full rounded-xl bg-amber-700 disabled:opacity-50 px-3 py-2.5 text-xs font-black text-white">{quoteLoading ? 'Updating order total…' : 'Confirm these fulfilment choices'}</button>
+              <button type="button" onClick={handleConfirmFulfillmentChoices} disabled={quoteLoading || fulfillmentLoading} className="w-full rounded-xl bg-amber-700 disabled:opacity-50 px-3 py-2.5 text-xs font-black text-white">{quoteLoading || fulfillmentLoading ? 'Updating order total…' : 'Confirm these fulfilment choices'}</button>
             </section>
           )}
 
@@ -830,11 +866,11 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           </button>
           <button
             onClick={handlePlaceOrder}
-            disabled={loading || !tenantId || !selectedAddress || cart.length === 0 || (fulfillmentPlan?.customerDecisionRequired && fulfillmentConfirmed && quoteLoading)}
+            disabled={loading || checkoutFlowBusy || !tenantId || !selectedAddress || cart.length === 0 || (fulfillmentPlan?.customerDecisionRequired && fulfillmentConfirmed && quoteLoading)}
             className="w-full sm:w-2/3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold py-3 rounded-2xl text-xs shadow-lg shadow-emerald-600/25 transition cursor-pointer flex items-center justify-center gap-2"
           >
-            {(loading || fulfillmentLoading) && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
-            <span>{loading ? t('creatingOrder') : fulfillmentPlan?.customerDecisionRequired && !fulfillmentConfirmed ? 'Review stock options' : fulfillmentPlan?.customerDecisionRequired && quoteLoading ? 'Updating order total…' : t('confirmCodOrder')}</span>
+            {(loading || fulfillmentLoading || checkoutFlowBusy) && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+            <span>{fulfillmentLoading ? 'Checking live stock…' : (loading || checkoutFlowBusy) ? t('creatingOrder') : fulfillmentPlan?.customerDecisionRequired && !fulfillmentConfirmed ? 'Review stock options' : fulfillmentPlan?.customerDecisionRequired && quoteLoading ? 'Updating order total…' : t('confirmCodOrder')}</span>
             <span>✓</span>
           </button>
         </div>
