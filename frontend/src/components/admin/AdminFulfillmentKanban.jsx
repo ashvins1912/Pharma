@@ -1193,9 +1193,16 @@ export default function AdminFulfillmentKanban({ orders, onRefresh, dateRange = 
                                              otp: code,
                                              riderId: order.rider?.riderId || order.riderId || order.assignedRiderId || null
                                            });
+                                           // The server has already marked this order delivered. Do not
+                                           // update the removed closedOrderIds state: it was never declared
+                                           // and caused a ReferenceError after a successful OTP response.
+                                           setDeliveryOtps(prev => {
+                                             const next = { ...prev };
+                                             delete next[order._id];
+                                             return next;
+                                           });
                                            addToast('Delivery verified successfully by server!', 'success');
-                                           setClosedOrderIds(prev => [...prev, String(order._id)]);
-                                           await refreshBoard();
+                                           refreshBoard();
                                          } catch (err) {
                                            addToast(err.response?.data?.message || err.message || 'OTP verification failed.', 'error');
                                          } finally {
