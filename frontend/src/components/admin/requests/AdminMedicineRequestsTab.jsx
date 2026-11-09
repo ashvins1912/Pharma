@@ -83,10 +83,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
     setPagination(initialData.pagination || pagination);
   }, [initialData]);
 
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    loadRequests(1);
-  };
+  const handleSearchSubmit = (e) => {\n    e.preventDefault();\n    loadRequests(1);\n  };
 
   const [prescriptionPreview, setPrescriptionPreview] = useState(null);
   const [prescriptionLoading, setPrescriptionLoading] = useState(false);
@@ -189,475 +186,223 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
     }
   };
 
+  const statusFilters = [
+    { id: 'ALL', label: 'All requests' },
+    { id: 'REQUESTED', label: 'Pending review' },
+    { id: 'UNDER_REVIEW', label: 'Under review' },
+    { id: 'PROPOSAL_SENT', label: 'Proposal sent' },
+    { id: 'CONVERTED_TO_ORDER', label: 'Converted' },
+    { id: 'CUSTOMER_REJECTED', label: 'Customer declined' },
+    { id: 'PHARMACY_REJECTED', label: 'Rejected' },
+    { id: 'EXPIRED', label: 'Expired' }
+  ];
+
   return (
-    <div className="admin-screen admin-screen--requests w-full min-w-0 space-y-5 animate-fade-in">
-      
-      {/* Metrics Banner */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-slate-800">
-        
-        <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-xs">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-            Pending / Under Review
-          </span>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-2xl font-black text-amber-600">
-              {metrics.pendingReviewCount + metrics.underReviewCount}
-            </span>
-            <span className="text-[11px] text-slate-400 font-medium">
-              ({metrics.pendingReviewCount} new)
-            </span>
-          </div>
+    <div className="admin-screen admin-screen--requests admin-request-center w-full min-w-0 space-y-4 animate-fade-in">
+      <section className="request-center-hero">
+        <div className="request-center-hero-copy">
+          <span className="request-center-eyebrow">PROCUREMENT WORKSPACE</span>
+          <h2>Medicine requests</h2>
+          <p>Review customer requirements, verify prescriptions and prepare pharmacy proposals.</p>
         </div>
-
-        <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-xs">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-            Proposals Sent
-          </span>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-2xl font-black text-blue-600">
-              {metrics.proposalsSentCount}
-            </span>
-            <span className="text-[11px] text-slate-400 font-medium">awaiting customer</span>
-          </div>
+        <div className="request-center-hero-status">
+          <span className="request-center-live-dot" />
+          <span>Request operations</span>
         </div>
+      </section>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-xs">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-            Converted to Orders
-          </span>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-2xl font-black text-emerald-600">
-              {metrics.convertedCount}
-            </span>
-            <span className="text-[11px] font-bold text-emerald-600">
-              {metrics.proposalAcceptanceRate}% rate
-            </span>
-          </div>
-        </div>
+      <section className="request-center-metrics" aria-label="Request overview">
+        <article className="request-center-metric request-center-metric--attention">
+          <span className="request-center-metric-label">Needs review</span>
+          <strong>{metrics.pendingReviewCount + metrics.underReviewCount}</strong>
+          <small>{metrics.pendingReviewCount} new · {metrics.underReviewCount} in review</small>
+        </article>
+        <article className="request-center-metric request-center-metric--proposal">
+          <span className="request-center-metric-label">Awaiting customer</span>
+          <strong>{metrics.proposalsSentCount}</strong>
+          <small>Proposals sent</small>
+        </article>
+        <article className="request-center-metric request-center-metric--success">
+          <span className="request-center-metric-label">Converted orders</span>
+          <strong>{metrics.convertedCount}</strong>
+          <small>{metrics.proposalAcceptanceRate}% acceptance rate</small>
+        </article>
+        <article className="request-center-metric">
+          <span className="request-center-metric-label">Total inquiries</span>
+          <strong>{metrics.totalRequests}</strong>
+          <small>{metrics.expiredCount} expired</small>
+        </article>
+      </section>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-xs">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-            Total Inquiries
-          </span>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-2xl font-black text-slate-900">
-              {metrics.totalRequests}
-            </span>
-            <span className="text-[11px] text-slate-400 font-medium">
-              ({metrics.expiredCount} expired)
-            </span>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Control & Search Bar */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-        
-        {/* Status Filters */}
-        <div className="admin-request-status-tabs flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto text-xs">
-          {[
-            { id: 'ALL', label: 'All Requests' },
-            { id: 'REQUESTED', label: 'Pending Review' },
-            { id: 'UNDER_REVIEW', label: 'Under Review' },
-            { id: 'PROPOSAL_SENT', label: 'Proposal Sent' },
-            { id: 'CUSTOMER_APPROVED', label: 'Customer Approved' },
-            { id: 'CUSTOMER_REJECTED', label: 'Customer Rejected' },
-            { id: 'PHARMACY_REJECTED', label: 'Pharmacy Rejected' },
-            { id: 'EXPIRED', label: 'Expired' },
-            { id: 'CONVERTED_TO_ORDER', label: 'Converted to Orders' },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setSelectedStatus(tab.id)}
-              className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer whitespace-nowrap ${
-                selectedStatus === tab.id
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Search input */}
-        <form onSubmit={handleSearchSubmit} className="admin-request-search flex items-center gap-2 w-full sm:w-72">
-          <input
-            type="text"
-            placeholder="Search medicine, customer, #MR..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-3 py-1.5 text-xs bg-slate-100 border border-transparent focus:border-blue-500 focus:bg-white rounded-xl outline-none"
-          />
-          <button
-            type="submit"
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl cursor-pointer"
-          >
-            Search
-          </button>
-        </form>
-
-      </div>
-
-      {/* Request Table / Cards */}
-      <div id="admin-medicine-requests-list" className="admin-medicine-request-list bg-white border border-slate-200 rounded-3xl p-3 sm:p-5 shadow-xs space-y-4 min-w-0">
-        
-        <div className="flex items-center justify-between">
+      <section className="request-center-controls" aria-label="Request filters and search">
+        <div className="request-center-filter-heading">
           <div>
-            <h3 className="text-base font-black text-slate-900">
-              📋 {t('medicineProcurementRequests')}
-            </h3>
-            <p className="text-xs text-slate-500">
-              {t('medicineProcurementDesc')}
-            </p>
+            <h3>Request queue</h3>
+            <p>Filter by status or search a customer, medicine or request ID.</p>
           </div>
-          <button
-            onClick={loadRequests}
-            disabled={loading}
-            className="text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl cursor-pointer transition disabled:opacity-50"
-          >
-            {loading ? t('loading') : `🔄 ${t('refresh')}`}
+          <button type="button" onClick={() => loadRequests(pagination.page || 1)} disabled={loading}
+            className="request-center-refresh">
+            <span aria-hidden="true">↻</span> {loading ? t('loading') : t('refresh')}
           </button>
+        </div>
+        <div className="request-center-filter-layout">
+          <div className="request-center-status-filters" role="group" aria-label="Filter request status">
+            {statusFilters.map(filter => (
+              <button key={filter.id} type="button" aria-pressed={selectedStatus === filter.id}
+                onClick={() => setSelectedStatus(filter.id)}
+                className={selectedStatus === filter.id ? 'is-selected' : ''}>
+                {filter.label}
+                {filter.id === 'REQUESTED' && metrics.pendingReviewCount > 0 && <span>{metrics.pendingReviewCount}</span>}
+              </button>
+            ))}
+          </div>
+          <form onSubmit={handleSearchSubmit} className="request-center-search">
+            <label htmlFor="medicine-request-search">Search requests</label>
+            <div className="request-center-search-field">
+              <span aria-hidden="true">⌕</span>
+              <input id="medicine-request-search" type="search" placeholder="Medicine, customer, request #"
+                value={searchQuery} onChange={event => setSearchQuery(event.target.value)} />
+              <button type="submit">Search</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section id="admin-medicine-requests-list" className="request-center-queue" aria-label="Medicine procurement requests">
+        <div className="request-center-queue-heading">
+          <div>
+            <h3>{t('medicineProcurementRequests')}</h3>
+            <p>{loading ? 'Updating request queue…' : `${pagination.total || requests.length} requests · Page ${pagination.page || 1} of ${pagination.totalPages || 1}`}</p>
+          </div>
+          <span className="request-center-queue-icon" aria-hidden="true">▤</span>
         </div>
 
         {loadError && (
-          <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800">
+          <div role="alert" className="request-center-error">
             <span>{loadError}</span>
-            <button type="button" onClick={() => loadRequests(pagination.page || 1)} className="min-h-10 rounded-lg bg-rose-700 px-4 font-bold text-white">Retry</button>
+            <button type="button" onClick={() => loadRequests(pagination.page || 1)}>Retry</button>
           </div>
         )}
         {loading && requests.length === 0 && (
-          <div role="status" className="space-y-3 py-6" aria-label="Loading medicine requests">
-            {[1, 2, 3].map(row => <div key={row} className="h-16 animate-pulse rounded-xl bg-slate-100" />)}
+          <div role="status" className="request-center-skeletons" aria-label="Loading medicine requests">
+            {[1,2,3].map(row => <div key={row} className="request-center-skeleton" />)}
           </div>
         )}
         {!loading && !loadError && requests.length === 0 ? (
-          <div className="py-16 text-center text-slate-400 space-y-2">
-            <p className="text-3xl">📭</p>
-            <p className="text-xs font-bold text-slate-700">{t('noMedicineRequestsFound')}</p>
-            <p className="text-[11px] text-slate-400">
-              {t('noMedicineRequestsHelp')}
-            </p>
+          <div className="request-center-empty">
+            <span aria-hidden="true">⌕</span>
+            <h4>{t('noMedicineRequestsFound')}</h4>
+            <p>{t('noMedicineRequestsHelp')}</p>
           </div>
         ) : !loadError && requests.length > 0 ? (
-          <>
-            <div className="hidden lg:block overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
-                  <th className="py-3 px-3">Req Number</th>
-                  <th className="py-3 px-3">Customer</th>
-                  <th className="py-3 px-3">Requested Medicine</th>
-                  <th className="py-3 px-3">Attachments</th>
-                  <th className="py-3 px-3">Proposal / Price</th>
-                  <th className="py-3 px-3">Status</th>
-                  <th className="py-3 px-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {requests.map((req) => {
-                  const firstItem = req.requestedItems?.[0] || {};
-                  const proposal = req.pharmacyProposal;
-
-                  return (
-                    <tr key={req._id} className="hover:bg-slate-50 transition">
-                      
-                      <td className="py-3.5 px-3">
-                        <span className="font-extrabold text-slate-900 font-mono block">
-                          #{req.requestNumber}
-                        </span>
-                        <span className="text-[10px] text-slate-400 block">
-                          {new Date(req.createdAt).toLocaleDateString()}
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-3">
-                        <span className="font-bold text-slate-900 block">{req.customerName}</span>
-                        <span className="text-[11px] text-slate-500 block">{req.customerPhone || 'No phone'}</span>
-                        <span className="text-[10px] text-slate-400 truncate max-w-[150px] block" title={req.deliveryAddress}>
-                          📍 {req.deliveryAddress}
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-3">
-                        <ul className="space-y-1">
-                          {(req.requestedItems || []).map((item, index) => (
-                            <li key={`${item.requestedName}-${index}`}>
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-bold text-slate-900">{item.requestedName || 'Medicine'}</span>
-                                {item.originalAvailabilityStatus === 'OUT_OF_STOCK' && (
-                                  <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded">
-                                    Out of Stock
-                                  </span>
-                                )}
-                              </div>
-                              <span className="text-[11px] text-slate-500 block">
-                                {item.strength && `${item.strength} • `}
-                                Qty: {item.quantity || 1}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                        <span className="text-[11px] text-slate-500 block">
-                          {firstItem.dosageForm && `${firstItem.dosageForm} • `}
-                          {firstItem.strength && `${firstItem.strength} • `}
-                          Qty: <strong>{firstItem.quantity || 1}</strong>
-                        </span>
-                        {req.customerNote && (
-                          <span className="text-[10px] text-slate-400 italic block line-clamp-1" title={req.customerNote}>
-                            Note: "{req.customerNote}"
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-3">
-                        <div className="flex items-center gap-1.5">
-                          {req.prescriptionUrl ? (
-                            <button
-                              type="button"
-                              onClick={() => openPrescription(req.prescriptionUrl)}
-                              className="text-[10px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200 cursor-pointer"
-                            >
-                              📄 Rx
-                            </button>
-                          ) : (
-                            <span className="text-[10px] text-slate-300">—</span>
-                          )}
-                          {req.productImageUrl && (
-                            <a
-                              href={req.productImageUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-[10px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200"
-                            >
-                              📷 Photo
-                            </a>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-3">
-                        {proposal ? (
-                          <div>
-                            <span className="font-black text-emerald-600 block">
-                              ₹{proposal.finalPrice ?? proposal.totalPrice ?? proposal.approximatePrice}
-                            </span>
-                            <span className="text-[10px] text-slate-400 block">
-                              {proposal.priceType === 'APPROXIMATE' ? 'Approximate' : 'Guaranteed Final'}
-                            </span>
-                            {proposal.deliverySlot?.label && (
-                              <span className="text-[10px] text-blue-700 block truncate max-w-[130px]" title={proposal.deliverySlot.label}>
-                                🚚 {proposal.deliverySlot.label}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 text-[11px] italic">No proposal yet</span>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-3">
-                        {getStatusBadge(req.status)}
-                        {req.status === 'PROPOSAL_SENT' && (
-                          <span className="mt-1 block text-[10px] font-bold text-blue-700">
-                            Waiting for Customer Approval
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-3 text-right">
-                        <button
-                          onClick={() => {
-                            setActiveRequest(req);
-                            setProposalModalOpen(true);
-                          }}
-                          className={`font-extrabold text-xs px-3.5 py-1.5 rounded-xl cursor-pointer transition shadow-xs ${
-                            ['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(req.status)
-                              ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                              : req.status === 'PROPOSAL_SENT'
-                              ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                              : 'bg-blue-600 hover:bg-blue-700 text-white'
-                          }`}
-                        >
-                          {req.status === 'PROPOSAL_SENT'
-                            ? 'View / Edit Proposal'
-                            : ['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(req.status)
-                            ? 'View Details'
-                            : ['CUSTOMER_REJECTED', 'PHARMACY_REJECTED', 'EXPIRED'].includes(req.status)
-                            ? 'View Details'
-                            : 'Review & Propose'}
-                        </button>
-                      </td>
-
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="admin-medicine-request-mobile-cards lg:hidden space-y-3">
-            {requests.map((req) => {
-              const firstItem = req.requestedItems?.[0] || {};
+          <div className="request-center-card-grid">
+            {requests.map(req => {
+              const items = Array.isArray(req.requestedItems) ? req.requestedItems : [];
+              const visibleItems = items.slice(0, 3);
               const proposal = req.pharmacyProposal;
+              const price = proposal?.finalPrice ?? proposal?.totalPrice ?? proposal?.approximatePrice;
+              const terminal = ['CUSTOMER_APPROVED','CONVERTED_TO_ORDER','CUSTOMER_REJECTED','PHARMACY_REJECTED','EXPIRED'].includes(req.status);
               return (
-                <article key={req._id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-3 min-w-0">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-mono text-xs font-black text-slate-900">#{req.requestNumber}</p>
-                      <p className="text-[10px] text-slate-400">{new Date(req.createdAt).toLocaleDateString()}</p>
+                <article key={req._id} className="request-center-card">
+                  <div className="request-center-card-top">
+                    <div className="request-center-request-id">
+                      <span>REQUEST</span>
+                      <strong>#{req.requestNumber}</strong>
+                      <small>{req.createdAt ? new Date(req.createdAt).toLocaleDateString() : '—'}</small>
                     </div>
-                    <div className="shrink-0">{getStatusBadge(req.status)}</div>
+                    <div className="request-center-card-status">{getStatusBadge(req.status)}</div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Customer</p>
-                      <p className="font-bold text-slate-900 truncate">{req.customerName}</p>
-                      <p className="text-[11px] text-slate-500 truncate">{req.customerPhone || 'No phone'}</p>
+
+                  <div className="request-center-card-customer">
+                    <span className="request-center-avatar" aria-hidden="true">{String(req.customerName || 'C').trim().charAt(0).toUpperCase()}</span>
+                    <div className="request-center-customer-details">
+                      <strong>{req.customerName || 'Customer'}</strong>
+                      <span>{req.customerPhone || 'Phone unavailable'}</span>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Medicine</p>
-                      <p className="font-bold text-slate-900 break-words">{firstItem.requestedName || 'Medicine'}</p>
-                      <p className="text-[11px] text-slate-500">{firstItem.strength ? firstItem.strength + ' • ' : ''}Qty: {firstItem.quantity || 1}</p>
+                    {req.deliveryAddress && <span className="request-center-location" title={req.deliveryAddress}>⌖ {req.deliveryAddress}</span>}
+                  </div>
+
+                  <div className="request-center-medicines">
+                    <div className="request-center-section-label"><span>Requested medicines</span><b>{items.length} {items.length === 1 ? 'item' : 'items'}</b></div>
+                    {visibleItems.map((item,index) => (
+                      <div className="request-center-medicine" key={`${item.requestedName || 'medicine'}-${index}`}>
+                        <div className="request-center-medicine-symbol" aria-hidden="true">✚</div>
+                        <div className="request-center-medicine-details">
+                          <strong>{item.requestedName || 'Medicine'}</strong>
+                          <span>{[item.strength,item.dosageForm].filter(Boolean).join(' · ') || 'Details not provided'}</span>
+                        </div>
+                        <span className="request-center-quantity">Qty {item.quantity || 1}</span>
+                        {item.originalAvailabilityStatus === 'OUT_OF_STOCK' && <span className="request-center-stock-tag">Out of stock</span>}
+                      </div>
+                    ))}
+                    {items.length > 3 && <p className="request-center-more-items">+{items.length - 3} more medicine items</p>}
+                  </div>
+
+                  {(req.customerNote || req.prescriptionUrl || req.productImageUrl || proposal) && (
+                    <div className="request-center-card-details">
+                      {req.customerNote && <p className="request-center-customer-note"><span>Customer note</span>{req.customerNote}</p>}
+                      <div className="request-center-detail-actions">
+                        {req.prescriptionUrl && <button type="button" onClick={() => openPrescription(req.prescriptionUrl)} disabled={prescriptionLoading}>▤ Prescription</button>}
+                        {req.productImageUrl && <a href={req.productImageUrl} target="_blank" rel="noreferrer">▧ Product photo</a>}
+                        {proposal && <div className="request-center-proposal-price"><span>{proposal.priceType === 'APPROXIMATE' ? 'Estimate' : 'Proposed total'}</span><strong>₹{price ?? '—'}</strong></div>}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {req.prescriptionUrl && (
-                      <button type="button" onClick={() => openPrescription(req.prescriptionUrl)}
-                        className="min-h-10 rounded-xl border border-blue-200 bg-blue-50 px-3 text-[11px] font-bold text-blue-700">
-                        📄 Prescription
-                      </button>
-                    )}
-                    {req.productImageUrl && (
-                      <a href={req.productImageUrl} target="_blank" rel="noreferrer"
-                        className="min-h-10 rounded-xl border border-blue-200 bg-blue-50 px-3 flex items-center text-[11px] font-bold text-blue-700">
-                        📷 Product Photo
-                      </a>
-                    )}
-                    {proposal && (
-                      <span className="min-h-10 rounded-xl bg-emerald-50 border border-emerald-100 px-3 flex items-center text-[11px] font-black text-emerald-700">
-                        ₹{proposal.finalPrice ?? proposal.totalPrice ?? proposal.approximatePrice}
-                      </span>
-                    )}
-                  </div>
-                  {req.customerNote && (
-                    <p className="text-[11px] text-slate-500 line-clamp-2 break-words">Note: "{req.customerNote}"</p>
                   )}
-                  {req.status === 'PROPOSAL_SENT' && (
-                    <p className="text-[10px] font-bold text-blue-700">Waiting for Customer Approval</p>
-                  )}
-                  <button
-                    onClick={() => { setActiveRequest(req); setProposalModalOpen(true); }}
-                    className="w-full min-h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold shadow-sm"
-                  >
-                    {req.status === 'PROPOSAL_SENT' ? 'View / Edit Proposal' : ['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER', 'CUSTOMER_REJECTED', 'PHARMACY_REJECTED', 'EXPIRED'].includes(req.status) ? 'View Details' : 'Review & Propose'}
-                  </button>
+
+                  <div className="request-center-card-footer">
+                    <span>{req.status === 'PROPOSAL_SENT' ? 'Waiting for customer approval' : terminal ? 'Request activity' : 'Action required'}</span>
+                    <button type="button" onClick={() => { setActiveRequest(req); setProposalModalOpen(true); }}
+                      className={terminal ? 'request-center-action request-center-action--secondary' : 'request-center-action'}>
+                      {req.status === 'PROPOSAL_SENT' ? 'View proposal' : terminal ? 'View details' : 'Review & propose'}
+                      <span aria-hidden="true">→</span>
+                    </button>
+                  </div>
                 </article>
               );
             })}
           </div>
-          </>
         ) : null}
 
         {pagination.total > 0 && (
-          <Pagination
-            page={pagination.page}
-            totalPages={pagination.totalPages}
-            total={pagination.total}
-            pageSize={15}
-            onPageChange={loadRequests}
-            loading={loading}
-            label="medicine requests"
-          />
+          <div className="request-center-pagination">
+            <Pagination page={pagination.page} totalPages={pagination.totalPages} total={pagination.total}
+              pageSize={15} onPageChange={loadRequests} loading={loading} label="medicine requests" />
+          </div>
         )}
-
-      </div>
+      </section>
 
       {prescriptionLoading && (
         <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-900/70 p-4" role="status" aria-live="polite">
-          <div className="rounded-2xl bg-white px-6 py-5 text-sm font-semibold text-slate-700 shadow-2xl">
-            Loading prescription…
-          </div>
+          <div className="rounded-2xl bg-white px-6 py-5 text-sm font-semibold text-slate-700 shadow-2xl">Loading prescription…</div>
         </div>
       )}
 
       {(prescriptionError || prescriptionPreview) && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/70 p-3 sm:p-5"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) closePrescriptionPreview();
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="medicine-request-prescription-title"
-            className="flex h-[92dvh] w-full max-w-5xl min-h-0 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
-          >
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/70 p-3 sm:p-5"
+          onClick={event => { if (event.target === event.currentTarget) closePrescriptionPreview(); }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="medicine-request-prescription-title"
+            className="flex h-[92dvh] w-full max-w-5xl min-h-0 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-              <h4 id="medicine-request-prescription-title" className="text-sm font-black text-slate-900">
-                Prescription
-              </h4>
+              <h4 id="medicine-request-prescription-title" className="text-sm font-black text-slate-900">Prescription</h4>
               <div className="flex items-center gap-2">
-                {prescriptionPreview?.url && (
-                  <a
-                    href={prescriptionPreview.url}
-                    download="prescription"
-                    className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
-                  >
-                    Download
-                  </a>
-                )}
-                <button
-                  type="button"
-                  onClick={closePrescriptionPreview}
-                  aria-label="Close prescription preview"
-                  className="min-h-10 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200"
-                >
-                  Close
-                </button>
+                {prescriptionPreview?.url && <a href={prescriptionPreview.url} download="prescription" className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">Download</a>}
+                <button type="button" onClick={closePrescriptionPreview} aria-label="Close prescription preview" className="min-h-10 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200">Close</button>
               </div>
             </div>
-
             <div className="min-h-0 flex-1 bg-slate-100 p-2 sm:p-3">
-              {prescriptionError ? (
-                <div role="alert" className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-rose-700">
-                  {prescriptionError}
-                </div>
-              ) : prescriptionPreview?.type?.startsWith('image/') ? (
-                <div className="flex h-full items-center justify-center overflow-auto rounded-xl bg-slate-200 p-3">
-                  <img
-                    src={prescriptionPreview.url}
-                    alt="Uploaded prescription"
-                    className="max-h-full max-w-full rounded-lg object-contain shadow"
-                  />
-                </div>
-              ) : (
-                <iframe
-                  title="Uploaded prescription PDF"
-                  src={prescriptionPreview.url}
-                  className="h-full w-full rounded-xl border border-slate-200 bg-white"
-                />
-              )}
+              {prescriptionError ? <div role="alert" className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-rose-700">{prescriptionError}</div>
+                : prescriptionPreview?.type?.startsWith('image/') ? <div className="flex h-full items-center justify-center overflow-auto rounded-xl bg-slate-200 p-3"><img src={prescriptionPreview.url} alt="Uploaded prescription" className="max-h-full max-w-full rounded-lg object-contain shadow" /></div>
+                : <iframe title="Uploaded prescription PDF" src={prescriptionPreview.url} className="h-full w-full rounded-xl border border-slate-200 bg-white" />}
             </div>
           </div>
         </div>
       )}
 
-      {/* Proposal Builder & Review Modal */}
       {proposalModalOpen && activeRequest && (
-        <AdminProposalModal
-          request={activeRequest}
-          isOpen={proposalModalOpen}
-          onClose={() => {
-            setProposalModalOpen(false);
-            setActiveRequest(null);
-          }}
-          onRefresh={loadRequests}
-        />
+        <AdminProposalModal request={activeRequest} isOpen={proposalModalOpen}
+          onClose={() => { setProposalModalOpen(false); setActiveRequest(null); }}
+          onRefresh={loadRequests} />
       )}
-
     </div>
-  );
+
 }
