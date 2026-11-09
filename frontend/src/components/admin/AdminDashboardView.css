@@ -2380,3 +2380,36 @@ html.dark .dashboard-workspace--command-center .dashboard-nav-item.is-active {
 @media (prefers-reduced-motion:reduce) {
   .dashboard-workspace--command-center .dashboard-nav-item { transition:none !important; }
 }
+
+/* Compact command center overview: let KPI tiles and actions adapt to the actual count/width. */
+.dashboard-shell--command-center { gap:1rem !important; }
+.dashboard-shell--command-center .dashboard-hero { padding:clamp(.85rem,1.2vw,1.25rem) !important; border-radius:1.2rem !important; }
+.dashboard-shell--command-center .dashboard-hero > div:first-child { align-items:center; gap:.85rem; }
+.dashboard-shell--command-center .dashboard-hero > div:first-child > div:first-child { min-width:0; }
+.dashboard-shell--command-center .dashboard-hero h2 { font-size:clamp(1.2rem,1.2vw + .8rem,1.65rem); line-height:1.15; }
+.dashboard-shell--command-center .dashboard-hero .dashboard-metrics {
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));
+  gap:.65rem; width:100%;
+}
+.dashboard-shell--command-center .dashboard-metrics > div { min-width:0; padding:.8rem 1rem !important; border-radius:.9rem; }
+.dashboard-shell--command-center .dashboard-metrics > div > div { flex-wrap:wrap; gap:.35rem .5rem; }
+.dashboard-shell--command-center .dashboard-metrics > div > div > span:first-child { font-size:clamp(1.25rem,1.5vw,1.65rem); overflow-wrap:anywhere; }
+.dashboard-shell--command-center .dashboard-hero button,
+.dashboard-shell--command-center .dashboard-hero > div:first-child > div:last-child > span {
+  min-height:40px; max-width:100%; white-space:normal; text-align:left; line-height:1.25;
+}
+.dashboard-shell--command-center #operations-date-range {
+  min-height:40px; max-width:100%; padding:.5rem .75rem; font-size:.78rem;
+}
+@media (max-width:760px) {
+  .dashboard-shell--command-center .dashboard-hero > div:first-child { align-items:stretch; flex-direction:column; }
+  .dashboard-shell--command-center .dashboard-hero > div:first-child > div:last-child {
+    display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; gap:.5rem;
+  }
+  .dashboard-shell--command-center .dashboard-hero > div:first-child > div:last-child > * { justify-content:center; min-width:0; }
+  .dashboard-shell--command-center .dashboard-metrics > div { padding:.7rem !important; }
+}
+@media (max-width:420px) {
+  .dashboard-shell--command-center .dashboard-hero > div:first-child > div:last-child { grid-template-columns:minmax(0,1fr); }
+  .dashboard-shell--command-center .dashboard-metrics > div > div { align-items:flex-start; flex-direction:column; }
+}
