@@ -10,7 +10,7 @@ export const API_CAPABILITIES = [
   { method: 'POST', pattern: /^\/api\/coupons\/admin\/customer-promotions(?:\/|$)/, permission: 'promotions.manage' },
   { method: 'PATCH', pattern: /^\/api\/coupons\/admin\/customer-promotions\/[^/]+(?:\/|$)/, permission: 'promotions.manage' },
 
-  { method: 'GET', pattern: /^\/api\/medicines\/admin\/inventory$/, permission: 'inventory.read' },
+  { method: 'POST', pattern: /^\/api\/private-images\/?$/, permission: 'inventory.write' },\n  { method: 'GET', pattern: /^\/api\/private-images\/[^/]+\/content$/, permission: 'inventory.read' },\n  { method: 'DELETE', pattern: /^\/api\/private-images\/[^/]+$/, permission: 'inventory.write' },\n  { method: 'GET', pattern: /^\/api\/medicines\/admin\/inventory$/, permission: 'inventory.read' },
   { method: 'GET', pattern: /^\/api\/medicines\/alerts$/, permission: 'inventory.read' },
   { method: 'GET', pattern: /^\/api\/medicines\/audits$/, permission: 'inventory.read' },
   { method: 'GET', pattern: /^\/api\/medicines\/imports\/[^/]+\/(?:status|failed-records)$/, permission: 'inventory.read' },

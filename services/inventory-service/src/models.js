@@ -10,7 +10,7 @@ const productSchema = new mongoose.Schema({
   manufacturer: { type: 'string', default: '' },
   category: { type: 'string', default: 'General Medicine' },
   description: { type: 'string', default: '' },
-  imageUrl: { type: 'string', default: '' },
+  imageUrl: { type: 'string', default: '' },\n  imageAssetId: { type: 'string', default: '' },
   requiresPrescription: { type: 'boolean', default: false },
   version: { type: 'number', default: 1 },
   active: { type: 'boolean', default: true }

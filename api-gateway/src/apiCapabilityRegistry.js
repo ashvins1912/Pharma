@@ -1,4 +1,5 @@
 const CAPABILITIES = [
+  ['POST', /^\/api\/upload\/image$/, 'inventory.write'],\n  ['POST', /^\/api\/private-images\/?$/, 'inventory.write'],\n  ['GET', /^\/api\/private-images\/[^/]+\/content$/, 'inventory.read'],\n  ['DELETE', /^\/api\/private-images\/[^/]+$/, 'inventory.write'],
   ['GET', /^\/api\/orders\/[^/]+\/scan-prescription$/, 'prescription.read'],
   ['GET', /^\/api\/orders\/notifications\/logs$/, 'whatsapp.read'],
   ['GET', /^\/api\/orders\/[^/]+\/notify-whatsapp$/, 'whatsapp.manage'],

@@ -13,11 +13,32 @@ import whatsappRoutes from './whatsappRoutes.js';
 import versionedOrderRoutes from './versionedOrderRoutes.js';
 import adminRoutes from './adminRoutes.js';
 import riderRoutes from '../modules/delivery/routes/riderRoutes.js';
-import assignmentRoutes from '../modules/delivery/routes/assignmentRoutes.js';
+import assignmentRoutes from '../modules/delivery/routes/assignmentRoutes.js';\nimport privateImageAssetRoutes from './privateImageAssetRoutes.js';
+import multer from 'multer';
+import { authenticateUser, requirePermission } from '../middleware/auth.js';
+import { imageOptimizationService } from '../services/ImageOptimizationService.js';
 
 const router = express.Router();
 
-router.use('/auth', authRoutes);
+const imageUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024, files: 1 }
+});
+
+router.post('/upload/image', authenticateUser, requirePermission('inventory.write'), imageUpload.single('image'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No image file uploaded.' });
+        const result = await imageOptimizationService.processAndStore(
+            req.file.buffer, req.file.originalname, req.file.mimetype
+        );
+        return res.json({ status: 'success', data: result });
+    } catch (error) {
+        console.error('[ImageUpload] Image storage provider failed:', error);
+        return res.status(503).json({ error: 'Image upload is temporarily unavailable.' });
+    }
+});
+
+router.use('/private-images', privateImageAssetRoutes);\nrouter.use('/auth', authRoutes);
 router.use('/medicines', medicineRoutes);
 router.use('/orders', orderRoutes);
 router.use('/riders', riderProfileRoutes);
