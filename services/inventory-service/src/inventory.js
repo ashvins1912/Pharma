@@ -65,7 +65,7 @@ export async function lookupInventory({ productIds = [], skus = [], tenantId = n
       form: product.form,
       manufacturer: product.manufacturer,
       category: product.category,
-      requiresPrescription: product.requiresPrescription,
+      requiresPrescription: product.requiresPrescription,\n      imageUrl: product.imageUrl || '',\n      imageAssetId: product.imageAssetId || '',
       price: inventory?.price ?? null,
       stockQuantity: inventory?.stockQuantity ?? 0,
       reservedQuantity: inventory?.reservedQuantity ?? 0,
