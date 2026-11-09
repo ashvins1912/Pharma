@@ -111,7 +111,7 @@ async function probeService(service, timeoutMs = 60000) {
   }
 }
 
-async function probeAllServices(timeoutMs = 15000) {
+async function probeAllServices(timeoutMs = 4000) {
   if (serviceProbeInFlight) return serviceProbeInFlight;
 
   const run = Promise.all(MONITORED_SERVICES.map(service => probeService(service, timeoutMs)))
@@ -132,6 +132,41 @@ let cachedRbacReport = null;
 let lastRbacTimestamp = 0;
 let rbacReportInFlight = null;
 const RBAC_CACHE_TTL_MS = 30000;
+const RBAC_REQUEST_TIMEOUT_MS = 6500;
+
+async function settleWithin(promise, timeoutMs) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise.then(value => ({ value }), error => ({ error })),
+      new Promise(resolve => {
+        timer = setTimeout(() => resolve({ timeout: true }), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function unavailableRbacReport(reason) {
+  return {
+    unavailable: true,
+    totalChecks: 0,
+    passedChecks: 0,
+    failedChecks: 0,
+    blockers: [{
+      id: 'BLK-RBAC-ENGINE-UNAVAILABLE',
+      category: 'RBAC_BLOCKER',
+      severity: 'P1',
+      feature: 'RBAC validation engine',
+      role: 'ALL',
+      tenant: 'GLOBAL',
+      message: reason,
+      recommendedAction: 'Check database connectivity and backend logs, then rerun the RBAC audit.'
+    }],
+    matrixResults: {}
+  };
+}
 
 async function getRbacReport({ fresh = false } = {}) {
   if (rbacReportInFlight) return rbacReportInFlight;
@@ -185,7 +220,7 @@ function buildHealthData(rbacReport, serviceHealth) {
 
   const totalServices = serviceHealth.length;
   const healthyServices = serviceHealth.filter(service => service.healthy).length;
-  const rbacPassRate = rbacReport.totalChecks > 0 ? (rbacReport.passedChecks / rbacReport.totalChecks) * 100 : 100;
+  const rbacPassRate = rbacReport.unavailable ? 0 : (rbacReport.totalChecks > 0 ? (rbacReport.passedChecks / rbacReport.totalChecks) * 100 : 100);
   const servicePassRate = totalServices > 0 ? (healthyServices / totalServices) * 100 : 100;
   const healthScore = Math.round((rbacPassRate * 0.6) + (servicePassRate * 0.4));
 
@@ -196,6 +231,7 @@ function buildHealthData(rbacReport, serviceHealth) {
     summary: {
       totalRolesChecked: MASTER_ROLES.length,
       totalFeaturesTested: CORE_FEATURES.length,
+      rbacStatus: rbacReport.unavailable ? 'UNAVAILABLE' : 'HEALTHY',
       totalRbacChecks: rbacReport.totalChecks,
       passedRbacChecks: rbacReport.passedChecks,
       failedRbacChecks: rbacReport.failedChecks,
@@ -227,12 +263,27 @@ function buildHealthData(rbacReport, serviceHealth) {
 router.get('/', async (req, res, next) => {
   try {
     const fresh = req.query.fresh === 'true';
-    const rbacReport = await getRbacReport({ fresh });
-    const shouldRefreshServices = fresh || !cachedServiceHealth
-      || (Date.now() - new Date(lastProbeTimestamp || 0).getTime() > 120000);
-    const serviceHealth = shouldRefreshServices ? await probeAllServices(8000) : cachedServiceHealth;
+    // Run independent checks concurrently and cap the RBAC wait. A slow database
+    // or a sleeping Render dependency must not leave the admin dashboard request hanging.
+    const [rbacOutcome, serviceHealth] = await Promise.all([
+      settleWithin(getRbacReport({ fresh }), RBAC_REQUEST_TIMEOUT_MS),
+      (fresh || !cachedServiceHealth
+        || (Date.now() - new Date(lastProbeTimestamp || 0).getTime() > 120000))
+        ? probeAllServices(4000)
+        : Promise.resolve(cachedServiceHealth)
+    ]);
 
-    res.json({ success: true, data: buildHealthData(rbacReport, serviceHealth) });
+    const rbacReport = rbacOutcome.value || unavailableRbacReport(
+      rbacOutcome.timeout
+        ? `RBAC validation exceeded ${RBAC_REQUEST_TIMEOUT_MS}ms and was marked unavailable.`
+        : `RBAC validation failed: ${rbacOutcome.error?.message || 'Unknown error'}`
+    );
+
+    res.json({
+      success: true,
+      data: buildHealthData(rbacReport, serviceHealth),
+      warnings: rbacReport.unavailable ? ['RBAC validation is unavailable; the health score is fail-closed.'] : []
+    });
   } catch (err) {
     next(err);
   }
