@@ -1167,3 +1167,30 @@ form select, form textarea) {
     scroll-behavior: auto;
   }
 }
+
+
+/* Narrow-screen refinements for dense, frequently used workflows. */
+@media (max-width: 419px) {
+  .pharma-responsive-scope :where(.admin-screen--riders .grid.grid-cols-2) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pharma-responsive-scope :where(.admin-screen--platform-tenants .grid.grid-cols-2) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 639px) {
+  .pharma-responsive-scope :where(.admin-screen .overflow-x-auto table) {
+    font-size: 0.75rem;
+  }
+
+  .pharma-responsive-scope :where(.admin-screen .overflow-x-auto th,
+    .admin-screen .overflow-x-auto td) {
+    padding: 0.625rem 0.75rem;
+  }
+
+  .pharma-responsive-scope :where(.admin-screen--fulfillment .fulfillment-board-columns) {
+    min-width: 0;
+  }
+}
