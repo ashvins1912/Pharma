@@ -179,9 +179,12 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
     if (!canManage) return;
     setMedicineDraft(medicine ? {
       ...medicine,
-      drug: medicine.drug || medicine.activeSalt || '',
+      drug: medicine.drug || medicine.activeSalt || medicine.composition || '',
+      strength: medicine.strength || medicine.dosage || '',
+      form: medicine.form || medicine.dosageForm || '',
+      manufacturer: medicine.manufacturer || medicine.brand || '',
       hsnSac: medicine.hsnSac || '',
-      imageUrl: medicine.imageUrl || '',
+      imageUrl: medicine.imageUrl || medicine.image_url || medicine.productImageUrl || medicine.photoUrl || medicine.image?.url || (typeof medicine.image === 'string' ? medicine.image : ''),
       stockQuantity: medicine.batchAvailability?.[0]?.stockQuantity ?? medicine.stockQuantity ?? medicine.stock ?? medicine.quantity ?? 0,
       price: medicine.batchAvailability?.[0]?.price ?? medicine.price ?? '',
       batchNumber: medicine.batchAvailability?.[0]?.batchNumber ?? medicine.batchNumber ?? '',
@@ -191,6 +194,9 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       brand: '',
       sku: '',
       drug: '',
+      strength: '',
+      form: '',
+      manufacturer: '',
       batchNumber: '',
       hsnSac: '',
       imageUrl: '',
@@ -420,7 +426,10 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {[
                 ['name', t('medicineName'), 'text'],
-                ['drug', 'Drug / Active salt', 'text'],
+                ['drug', 'Drug / Active salt / Composition', 'text'],
+                ['strength', 'Strength', 'text'],
+                ['form', 'Dosage form', 'text'],
+                ['manufacturer', 'Manufacturer', 'text'],
                 ['batchNumber', t('batchNumber'), 'text'],
                 ['hsnSac', 'HSN/SAC code', 'text'],
                 ['brand', 'Brand', 'text'],
@@ -444,6 +453,47 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
                   />
                 </label>
               ))}
+              <div className="sm:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-3">
+                <div className="flex items-center gap-3">
+                  <img
+                    src={medicineDraft.imageUrl || 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&q=80'}
+                    alt={medicineDraft.name || 'Medicine preview'}
+                    onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = 'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=300&q=80'; }}
+                    className="h-16 w-16 rounded-xl border border-slate-200 bg-white object-contain p-1"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-extrabold text-slate-700">Product image</p>
+                    <p className="text-[10px] text-slate-500">Preview the current image or replace it using a URL or image file.</p>
+                  </div>
+                </div>
+                <label className="block space-y-1 text-xs font-bold text-slate-600">
+                  <span>Upload / replace image</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={event => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      if (!file.type.startsWith('image/')) {
+                        addToast('Please select a valid image file.', 'warning');
+                        event.target.value = '';
+                        return;
+                      }
+                      if (file.size > 5 * 1024 * 1024) {
+                        addToast('Image must be 5 MB or smaller.', 'warning');
+                        event.target.value = '';
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onload = () => setMedicineDraft(prev => ({ ...prev, imageUrl: String(reader.result || '') }));
+                      reader.onerror = () => addToast('Could not read the selected image.', 'error');
+                      reader.readAsDataURL(file);
+                    }}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-normal"
+                  />
+                </label>
+                <p className="text-[10px] text-slate-500">The selected image is sent as the medicine imageUrl field when saving. Use a hosted image URL if your API/storage does not support embedded data URLs.</p>
+              </div>
               <label className="space-y-1 text-xs font-bold text-slate-600 sm:col-span-2">
                 <span>{t('description')}</span>
                 <textarea
