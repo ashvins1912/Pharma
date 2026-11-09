@@ -48,7 +48,9 @@ app.use((req, res, next) => {
   });
   next();
 });
-app.use(express.json({ limit: '1mb' }));
+// Keep the service limit aligned with the API backend: optimized medicine
+// images are sent as base64 JSON (5 MiB binary is about 6.7 MiB encoded).
+app.use(express.json({ limit: '8mb' }));
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'inventory-service' }));
 app.get('/ready', (_req, res) => {
   const ready = mongoose.connection.readyState === 1;
@@ -59,8 +61,9 @@ app.get('/ready', (_req, res) => {
 app.use('/api/v1/inventory', stagedImportRoutes);
 app.use('/api/v1/inventory', routes);
 app.use((error, req, res, _next) => {
+  const isPayloadTooLarge = error.type === 'entity.too.large' || error.status === 413;
   const status = error.statusCode
-    || (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE' ? 413 : 500);
+    || (isPayloadTooLarge || (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') ? 413 : 500);
   if (status >= 500) {
     console.error(JSON.stringify({
       serviceName: 'inventory-service',
@@ -70,7 +73,8 @@ app.use((error, req, res, _next) => {
     }));
   }
   return res.status(status).json({
-    message: status >= 500 ? 'Inventory operation failed.' : error.message,
+    code: isPayloadTooLarge ? 'REQUEST_BODY_TOO_LARGE' : undefined,
+    message: status >= 500 ? 'Inventory operation failed.' : (isPayloadTooLarge ? 'The update payload is too large. Compress the medicine image and try again.' : error.message),
     requestId: req.requestId
   });
 });
