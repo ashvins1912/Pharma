@@ -6,6 +6,7 @@
  * GET /api/medicines is intentionally absent: it is the sanitized public storefront catalog.
  */
 export const API_CAPABILITIES = [
+  { method: 'POST', pattern: /^\/api\/upload\/image$/, permission: 'inventory.write' },
   {
     method: 'GET',
     pattern: /^\/api\/orders\/[^/]+\/scan-prescription$/,
