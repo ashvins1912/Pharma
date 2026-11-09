@@ -43,7 +43,7 @@ export default function ProductCard({ med }) {
     'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80'
   ].filter(Boolean))];
   const [imageIndex, setImageIndex] = useState(0);
-  useEffect(() => { setImageIndex(0); }, [rawImageUrl, categoryImage]);
+  useEffect(() => { setImageIndex(0); setImageError(false); }, [rawImageUrl, categoryImage]);
   const displayImage = imageSources[imageIndex];
 
   const categoryLabels = {
