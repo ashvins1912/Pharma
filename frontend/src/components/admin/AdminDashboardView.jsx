@@ -449,7 +449,7 @@ export default function AdminDashboardView() {
               </div>
               <div className="dashboard-nav-group-items">
                 {canViewFulfillment && renderWorkspaceItem('fulfillment', t('fulfillmentQueue'), '📦', orders.length)}
-                {canViewAdminRequests && renderWorkspaceItem('requests', t('medicineRequests'), '📋', pendingMedicineRequestCount, 'attention')}
+                {canViewAdminRequests && renderWorkspaceItem('requests', t('medicineRequests'), '📋', pendingMedicineRequestCount > 0 ? pendingMedicineRequestCount : null, 'attention')}
                 {canViewCSquare && renderWorkspaceItem('csquare', 'C-Square', '🔗')}
               </div>
             </section>
