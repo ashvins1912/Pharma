@@ -4,6 +4,25 @@ import { authService, inMemoryTokens } from './services/identity-service/AuthSer
 import { verifyPharmaAccessToken } from './security/pharmaToken.js';
 import { authorizationService } from './authorization/AuthorizationService.js';
 
+test('session token creation resolves tenant scope for platform and tenant users', async () => {
+  const platformToken = await authService.createAuthToken({
+    id: 'qa-platform-' + Date.now(),
+    role: 'SUPER_ADMIN',
+    tenantId: 'must-not-leak-to-platform-session'
+  });
+  const { payload: platformPayload } = await verifyPharmaAccessToken(platformToken);
+  assert.equal(platformPayload.tenantId, null);
+
+  const tenantId = 'qa-tenant-' + Date.now();
+  const tenantToken = await authService.createAuthToken({
+    id: 'qa-tenant-admin-' + Date.now(),
+    role: 'pharmacy',
+    tenantId
+  });
+  const { payload: tenantPayload } = await verifyPharmaAccessToken(tenantToken);
+  assert.equal(tenantPayload.tenantId, tenantId);
+});
+
 test('canonical email signup and activation issue only Pharma RS256 sessions', async () => {
   const email = 'qa-' + Date.now() + '@example.com';
   const signup = await authService.registerUser({

@@ -330,9 +330,12 @@ export async function getInventoryAlertSummary({
     stock: { $ifNull: ['$stockQuantity', 0] },
     availableQuantity: { $max: [0, { $subtract: [{ $ifNull: ['$stockQuantity', 0] }, { $ifNull: ['$reservedQuantity', 0] }] }] }
   };
+  // $facet cannot be nested inside the outer alert-summary $facet.
+  // Window count preserves the full total while bounding each branch's payload.
   const countedTop20 = (sortField, sortDirection = 1) => [
     { $sort: { [sortField]: sortDirection, _id: 1 } },
-    { $facet: { metadata: [{ $count: 'count' }], items: [{ $limit: 20 }] } }
+    { $setWindowFields: { output: { totalCount: { $count: {} } } } },
+    { $limit: 20 }
   ];
 
   const [result = {}] = await Inventory.aggregate([
@@ -374,8 +377,10 @@ export async function getInventoryAlertSummary({
   ]).allowDiskUse(true).exec();
 
   const unpack = key => {
-    const facet = result[key]?.[0] || {};
-    return { count: Number(facet.metadata?.[0]?.count || 0), items: facet.items || [] };
+    const rows = Array.isArray(result[key]) ? result[key] : [];
+    const count = Number(rows[0]?.totalCount || 0);
+    const items = rows.map(({ totalCount, ...item }) => item);
+    return { count, items };
   };
   const expired = unpack('expired');
   const expiringSoon = unpack('expiringSoon');

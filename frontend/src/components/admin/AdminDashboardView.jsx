@@ -93,6 +93,12 @@ export default function AdminDashboardView() {
   useEffect(() => {
     if (canViewTenants && adminTab === 'tenantProfile') setAdminTab('tenants');
   }, [canViewTenants, adminTab]);
+
+  useEffect(() => {
+    if (String(role).toLowerCase() !== 'pharmacy' || adminTab !== 'tenantProfile' || canViewTenants) return;
+    if (canViewFulfillment) setAdminTab('fulfillment');
+    else if (canViewAdminRequests) setAdminTab('requests');
+  }, [role, adminTab, canViewTenants, canViewFulfillment, canViewAdminRequests]);
   const canManagePlatformAccess = isSuperAdmin && hasPermission('users.manage');
   const canReadWhatsApp = hasPermission('whatsapp.read');
   const canManageWhatsApp = hasPermission('whatsapp.manage');
@@ -131,7 +137,12 @@ export default function AdminDashboardView() {
   }, [authLoading, canAccessOperations, canViewAdminRequests]);
 
   const loadPendingMedicineRequestCount = async () => {
-    setPendingMedicineRequestCount(0);
+    try {
+      const count = await getAdminPendingMedicineRequestCount();
+      setPendingMedicineRequestCount(count);
+    } catch (error) {
+      console.error('Failed to refresh pending medicine request count:', error);
+    }
   };
 
   const loadAllOrders = async () => {
@@ -229,34 +240,6 @@ export default function AdminDashboardView() {
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center" role="status">
         <div className="text-sm font-black text-amber-900">{t('accessRestricted')}</div>
         <p className="mt-1 text-xs text-amber-700">Your current permissions do not allow access to the operations dashboard.</p>
-      </div>
-    );
-  }
-
-  if (role === 'pharmacy' && canViewAdminRequests && !canManageMembers) {
-    return (
-      <div className="dashboard-shell min-w-0 space-y-5 animate-fade-in">
-        <div className="bg-slate-950 text-white rounded-3xl p-6 shadow-md">
-          <span className="text-[11px] font-black uppercase tracking-wider text-blue-400">
-            {t('pharmacyReview')}
-          </span>
-          <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-            {t('medicineRequests')}
-          </h2>
-          <p className="mt-2 text-sm text-slate-300">
-            Review requests, prepare proposals, and wait for the customer to decide.
-          </p>
-        </div>
-        <PendingMedicineRequestsNotice
-          count={pendingMedicineRequestCount}
-          onOpen={() => document.getElementById('admin-medicine-requests')?.scrollIntoView({ behavior: 'smooth' })}
-        />
-        <div id="admin-medicine-requests" className="admin-screen admin-screen--requests">
-          <AdminMedicineRequestsTab initialData={initialMedicineRequests} initialLoading={medicinePreloadLoading} onPendingCountRefresh={loadPendingMedicineRequestCount} />
-        </div>
-        {canViewSurplusSavings && (
-          <div className="admin-screen admin-screen--surplus-savings"><SurplusSavingsManager canManage={hasPermission('promotions.manage')} /></div>
-        )}
       </div>
     );
   }
