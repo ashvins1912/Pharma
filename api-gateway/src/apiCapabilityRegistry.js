@@ -1,6 +1,9 @@
 import { isPermissionGranted } from '@pharma/service-kernel';
 
 const CAPABILITIES = [
+  ['POST', /^\/api\/private-images\/?$/, 'inventory.write'],
+  ['GET', /^\/api\/private-images\/[^/]+\/content$/, 'inventory.read'],
+  ['DELETE', /^\/api\/private-images\/[^/]+$/, 'inventory.write'],
   ['GET', /^\/api\/orders\/[^/]+\/scan-prescription$/, 'prescription.read'],
   ['GET', /^\/api\/orders\/notifications\/logs$/, 'whatsapp.read'],
   ['GET', /^\/api\/orders\/[^/]+\/notify-whatsapp$/, 'whatsapp.manage'],
