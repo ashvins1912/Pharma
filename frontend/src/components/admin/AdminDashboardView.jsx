@@ -779,7 +779,7 @@ export default function AdminDashboardView() {
                   Margin, discounts and loyalty activity for recent orders.
                 </p>
               </div>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="order-financial-grid">
                 {recentOrders.map(order => (
                   <AdminOrderFinancials key={order._id} order={order} />
                 ))}
