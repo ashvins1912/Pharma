@@ -272,7 +272,7 @@ export default function AdminDashboardView() {
   }
 
   return (
-    <div className="dashboard-shell min-w-0 space-y-6 animate-fade-in">
+    <div className="dashboard-shell dashboard-shell--command-center min-w-0 space-y-4 animate-fade-in">
       
       {/* Top Banner & Metric Cards */}
       <div className="dashboard-hero bg-slate-950 text-white rounded-3xl p-4 sm:p-5 shadow-md space-y-4">
