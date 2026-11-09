@@ -61,7 +61,7 @@ class ImageOptimizationService {
 
     const hash = crypto.createHash('sha256').update(optimizedBuffer).digest('hex').slice(0, 24);
     const safeBaseName = String(originalName || 'image')
-      .replace(/\\.[^.]+$/, '')
+      .replace(/\.[^.]+$/, '')
       .replace(/[^a-zA-Z0-9_-]/g, '-')
       .toLowerCase()
       .slice(0, 48) || 'image';
@@ -116,7 +116,7 @@ class ImageOptimizationService {
     await fs.mkdir(uploadDir, { recursive: true });
     const fileName = `stock-${Date.now()}-${hash}.webp`;
     await fs.writeFile(path.join(uploadDir, fileName), optimizedBuffer);
-    const baseUrl = String(process.env.CDN_BASE_URL || '').replace(/\\/$/, '');
+    const baseUrl = String(process.env.CDN_BASE_URL || '').replace(/\/$/, '');
     return {
       provider: 'local',
       fileName,
