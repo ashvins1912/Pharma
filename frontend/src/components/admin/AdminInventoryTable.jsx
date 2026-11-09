@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import apiClient from '../../api/apiClient';
@@ -412,11 +413,11 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
         className="mt-3"
       />
 
-      {medicineDraft && canManage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
-          <form onSubmit={saveMedicine} className="max-h-[90vh] w-full max-w-xl space-y-4 overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+      {medicineDraft && canManage && createPortal(
+        <div className="fixed inset-0 z-[100] flex min-h-0 items-center justify-center overflow-y-auto overscroll-contain bg-slate-900/60 p-3 sm:p-4" role="presentation">
+          <form onSubmit={saveMedicine} role="dialog" aria-modal="true" aria-labelledby="medicine-editor-title" className="my-auto max-h-[calc(100dvh-1.5rem)] w-full max-w-xl space-y-4 overflow-y-auto overscroll-contain rounded-3xl bg-white p-4 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:p-6">
             <div className="flex items-center justify-between">
-              <h4 className="text-base font-black text-slate-900">
+              <h4 id="medicine-editor-title" className="text-base font-black text-slate-900">
                 {medicineDraft._id ? t('editMedicineProduct') : t('addNewMedicineProduct')}
               </h4>
               <button type="button" onClick={() => setMedicineDraft(null)} className="rounded-lg bg-slate-100 px-3 py-1 text-slate-600 text-xs font-bold">
@@ -524,7 +525,8 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
               </button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Automated Restock & Reorder Suggestions Modal */}
