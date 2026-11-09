@@ -1866,7 +1866,14 @@ export const dataStore = {
             'Dispatched', 'dispatched', 'Out for Delivery', 'out_for_delivery',
             'VERIFICATION_NEEDED', 'PACKING', 'WAITING_FOR_STOCK', 'PARTIALLY_FULFILLED'];
         const deliveredStatuses = ['Delivered', 'delivered', 'DELIVERED', 'Delivered_Order', 'delivered_order', 'DELIVEREDORDER', 'DELIVERED_ORDER'];
+        const cancelledStatuses = ['Cancelled', 'cancelled', 'CANCELLED', 'Cancelled_Order', 'cancelled_order', 'CANCELLED_ORDER'];
         const statusFilter = values => buildOrderStatusFilter(values);
+        const closedStatusExclusion = {
+            $nor: [
+                { orderStatus: { $in: [...deliveredStatuses, ...cancelledStatuses] } },
+                { status: { $in: [...deliveredStatuses, ...cancelledStatuses] } }
+            ]
+        };
         const start = startDate ? new Date(startDate) : null;
         const end = endDate ? new Date(endDate) : null;
         if ((startDate && !Number.isFinite(start?.getTime())) || (endDate && !Number.isFinite(end?.getTime())) || (start && end && start >= end)) {
@@ -1874,7 +1881,7 @@ export const dataStore = {
         }
         const dateFilter = (start || end) ? { createdAt: { ...(start ? { $gte: start } : {}), ...(end ? { $lt: end } : {}) } } : {};
         const scope = { ...(tenantId ? { tenantId: String(tenantId) } : {}), ...dateFilter };
-        const activeFilter = { $and: [scope, statusFilter(activeStatuses)] };
+        const activeFilter = { $and: [scope, statusFilter(activeStatuses), closedStatusExclusion] };
         const deliveredFilter = { $and: [scope, statusFilter(deliveredStatuses)] };
         const safeLimit = Math.min(50, Math.max(1, Number(limit) || 10));
         const requestedPage = Math.max(1, Number(page) || 1);
