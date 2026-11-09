@@ -282,23 +282,20 @@ router.post('/run-audit', async (req, res, next) => {
  */
 async function handleSingleServiceProbe(req, res, next) {
   try {
-    const serviceId = req.query.serviceId || req.body?.serviceId;
-    const customUrl = req.query.url || req.body?.url;
+    const serviceId = String(req.query.serviceId || req.body?.serviceId || '').trim();
     const requestedTimeout = Number(req.query.timeoutMs || req.body?.timeoutMs);
     const timeout = Number.isFinite(requestedTimeout) && requestedTimeout > 0
       ? Math.min(Math.max(requestedTimeout, 1000), 60000)
       : 15000;
 
     const matchedService = MONITORED_SERVICES.find(s => s.id === serviceId);
-    const service = matchedService ? { ...matchedService } : {
-      id: serviceId || 'custom_service',
-      name: serviceId || 'Custom Service',
-      url: customUrl || 'https://pharma-api-gateway.onrender.com/health',
-      category: 'CUSTOM'
-    };
-
-    // Never mutate the shared monitored-service registry from a request override.
-    if (customUrl) service.url = customUrl;
+    if (!matchedService) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'UNKNOWN_SERVICE', message: 'Only registered services can be probed.' }
+      });
+    }
+    const service = matchedService;
 
     const probe = await probeService(service, timeout);
     const payloadStr = probe.details ? (typeof probe.details === 'string' ? probe.details : JSON.stringify(probe.details)) : '';
