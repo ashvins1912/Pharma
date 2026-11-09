@@ -21,7 +21,7 @@ import UserProfile from '../models/UserProfile.js';
 import riderRoutes from '../modules/delivery/routes/riderRoutes.js';
 import assignmentRoutes from '../modules/delivery/routes/assignmentRoutes.js';
 import multer from 'multer';
-import { authenticateUser, requirePermission } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/auth.js';
 import { imageOptimizationService } from '../services/ImageOptimizationService.js';
 import privateImageAssetRoutes from './privateImageAssetRoutes.js';
 import { GoogleGenAI } from '@google/genai';
