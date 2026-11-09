@@ -102,8 +102,12 @@ export async function runRbacValidationSuite() {
     matrixResults: {}
   };
 
-  // Resolve database-backed role permissions once per role per audit, not once per feature-role cell.
-  const rolePermissionsCache = new Map();
+  // Resolve database-backed role permissions concurrently once per role per audit.
+  // Sequential database reads made this admin health endpoint exceed browser/API timeouts.
+  const rolePermissionEntries = await Promise.all(
+    MASTER_ROLES.map(async role => [role, await getRolePermissions(role)])
+  );
+  const rolePermissionsCache = new Map(rolePermissionEntries);
 
   for (const feature of CORE_FEATURES) {
     report.matrixResults[feature.id] = {};
@@ -112,12 +116,7 @@ export async function runRbacValidationSuite() {
       report.totalChecks++;
       const isExpectedAllowed = feature.allowedRoles.includes(role);
       
-      let permissionsPromise = rolePermissionsCache.get(role);
-      if (!permissionsPromise) {
-        permissionsPromise = getRolePermissions(role);
-        rolePermissionsCache.set(role, permissionsPromise);
-      }
-      const permissions = await permissionsPromise;
+      const permissions = rolePermissionsCache.get(role) || [];
       const isSuper = ['SUPER_ADMIN', 'admin'].includes(role);
       const hasPerm = isSuper || permissions.includes(feature.requiredPermission) || permissions.includes('*');
 
