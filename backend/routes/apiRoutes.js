@@ -20,6 +20,7 @@ import tenantService from '../services/tenant-service/TenantService.js';
 import UserProfile from '../models/UserProfile.js';
 import riderRoutes from '../modules/delivery/routes/riderRoutes.js';
 import assignmentRoutes from '../modules/delivery/routes/assignmentRoutes.js';
+import privateImageAssetRoutes from './privateImageAssetRoutes.js';
 import { GoogleGenAI } from '@google/genai';
 
 const ai = new GoogleGenAI({
@@ -33,6 +34,7 @@ const ai = new GoogleGenAI({
 
 const router = express.Router();
 
+router.use('/private-images', privateImageAssetRoutes);
 router.use('/auth', authRoutes);
 router.use('/medicines', medicineRoutes);
 router.use('/orders', orderRoutes);
