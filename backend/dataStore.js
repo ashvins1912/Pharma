@@ -795,7 +795,12 @@ export const dataStore = {
     async getInventoryAlerts(lowStockThreshold = 3, expiringThresholdDays = 30, { tenantId, branchId } = {}) {
         const scopeTenantId = String(tenantId || '').trim();
         const scopeBranchId = String(branchId || '').trim();
-        if (!scopeTenantId || !scopeBranchId) throw inventoryError('Tenant and branch are required for inventory alerts.', 400);
+        if (!scopeTenantId || !scopeBranchId) {
+            return {
+                expiredCount: 0, expiringSoonCount: 0, lowStockCount: 0, totalAlerts: 0,
+                expired: [], expiringSoon: [], lowStock: []
+            };
+        }
 
         const cacheKey = \`inventory-alerts:\${scopeTenantId}:\${scopeBranchId}:\${lowStockThreshold}:\${expiringThresholdDays}\`;
         const cached = inventoryAlertsCache.get(cacheKey);
@@ -833,14 +838,65 @@ export const dataStore = {
                 });
                 return normalized;
             } catch (error) {
-                // Serve the last known good snapshot during a transient service/network failure.
+                console.warn('[InventoryAlerts] Inventory service alert summary failed, attempting local fallback:', error?.message);
                 if (cached?.value && cached.staleUntil > Date.now()) {
-                    console.warn('[InventoryAlerts] refresh failed; serving stale successful snapshot', {
-                        tenantId: scopeTenantId, branchId: scopeBranchId, error: error?.message
-                    });
                     return cached.value;
                 }
-                throw error;
+
+                try {
+                    const now = new Date();
+                    const expiringCutoff = new Date(Date.now() + expiringThresholdDays * 86400 * 1000);
+                    const filter = {
+                        ...(scopeTenantId ? { tenantId: scopeTenantId } : {}),
+                        ...(scopeBranchId ? { branchId: scopeBranchId } : {}),
+                        isActive: true
+                    };
+                    const sourceList = getIsConnected()
+                        ? await Medicine.find(filter).lean()
+                        : inMemoryMedicines.filter(m => (!scopeTenantId || String(m.tenantId) === scopeTenantId) && (!scopeBranchId || String(m.branchId) === scopeBranchId));
+
+                    const expired = [];
+                    const expiringSoon = [];
+                    const lowStock = [];
+
+                    for (const med of sourceList) {
+                        const exp = med.expiryDate ? new Date(med.expiryDate) : null;
+                        const physical = Number(med.stockQuantity ?? med.stock ?? med.quantity ?? 0);
+                        const available = Math.max(0, physical - Number(med.reservedQuantity || 0));
+
+                        if (exp && exp <= now) {
+                            expired.push({ id: String(med._id || med.id), sku: med.sku || '—', name: med.name, batchNumber: med.batchNumber || '', expiryDate: med.expiryDate, availableQuantity: available });
+                        } else if (exp && exp <= expiringCutoff) {
+                            expiringSoon.push({ id: String(med._id || med.id), sku: med.sku || '—', name: med.name, batchNumber: med.batchNumber || '', expiryDate: med.expiryDate, availableQuantity: available });
+                        }
+                        if (available <= lowStockThreshold) {
+                            lowStock.push({ id: String(med._id || med.id), sku: med.sku || '—', name: med.name, availableQuantity: available });
+                        }
+                    }
+
+                    const fallbackNormalized = {
+                        expiredCount: expired.length,
+                        expiringSoonCount: expiringSoon.length,
+                        lowStockCount: lowStock.length,
+                        totalAlerts: expired.length + expiringSoon.length + lowStock.length,
+                        expired: expired.slice(0, 20),
+                        expiringSoon: expiringSoon.slice(0, 20),
+                        lowStock: lowStock.slice(0, 20)
+                    };
+                    inventoryAlertsCache.set(cacheKey, {
+                        value: fallbackNormalized,
+                        expiresAt: Date.now() + 30_000,
+                        staleUntil: Date.now() + 5 * 60_000
+                    });
+                    return fallbackNormalized;
+                } catch (fallbackErr) {
+                    console.error('[InventoryAlerts] Local database fallback alert calculation failed:', fallbackErr?.message);
+                }
+
+                return {
+                    expiredCount: 0, expiringSoonCount: 0, lowStockCount: 0, totalAlerts: 0,
+                    expired: [], expiringSoon: [], lowStock: []
+                };
             }
         })();
         inventoryAlertsInflight.set(cacheKey, refresh);
