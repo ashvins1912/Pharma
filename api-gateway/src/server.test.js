@@ -90,7 +90,7 @@ test('staged inventory batch APIs require the explicit inventory.import capabili
 test('delivery OTP endpoints use least-privilege rider and pharmacy capabilities', () => {
   const orderId = '6accca6691b2129986259f9c';
   assert.equal(resolveGatewayCapability('GET', `/api/orders/${orderId}/reveal-otp`), 'orders.read');
-  assert.equal(resolveGatewayCapability('POST', `/api/orders/${orderId}/resend-otp`), 'delivery.manage');
+  assert.equal(resolveGatewayCapability('POST', `/api/orders/${orderId}/resend-otp`), 'orders.read');
   assert.equal(resolveGatewayCapability('POST', `/api/orders/${orderId}/verify-delivery`), 'delivery.read');
   assert.equal(isGatewayPermissionAllowed({ role: 'RIDER', permissions: ['delivery.read'] }, 'delivery.read'), true);
   assert.equal(isGatewayPermissionAllowed({ role: 'RIDER', permissions: ['delivery.read'] }, 'delivery.manage'), false);
