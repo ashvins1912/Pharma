@@ -301,7 +301,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
       </div>
 
       {/* Request Table / Cards */}
-      <div id="admin-medicine-requests-list" className="bg-white border border-slate-200 rounded-3xl p-3 sm:p-5 shadow-xs space-y-4 min-w-0">
+      <div id="admin-medicine-requests-list" className="admin-medicine-request-list bg-white border border-slate-200 rounded-3xl p-3 sm:p-5 shadow-xs space-y-4 min-w-0">
         
         <div className="flex items-center justify-between">
           <div>
@@ -497,7 +497,7 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
             </table>
           </div>
 
-          <div className="lg:hidden space-y-3">
+          <div className="admin-medicine-request-mobile-cards lg:hidden space-y-3">
             {requests.map((req) => {
               const firstItem = req.requestedItems?.[0] || {};
               const proposal = req.pharmacyProposal;
