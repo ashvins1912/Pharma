@@ -657,11 +657,20 @@ async function processCatalogueImportPreview(req, res) {
   const fileSha256 = hash(req.file.buffer);
   const previousBatch = await CatalogueImport.findOne({ dataset, fileSha256 }).lean();
   if (previousBatch) {
-    if (previousBatch.status === 'STAGING') return res.status(409).json({ message: 'This identical dataset is still being staged. Retry shortly.' });
+    if (previousBatch.status === 'STAGING') {
+      const staleBefore = new Date(Date.now() - 15 * 60 * 1000);
+      if (previousBatch.updatedAt && previousBatch.updatedAt < staleBefore) {
+        await CatalogueImportChunk.deleteMany({ batchId: previousBatch.batchId });
+        await CatalogueImport.deleteOne({ _id: previousBatch._id, status: 'STAGING' });
+      } else {
+        return res.status(409).json({ message: 'This identical dataset is still being staged. Retry shortly.' });
+      }
+    } else {
     const firstChunk = await CatalogueImportChunk.findOne({ batchId: previousBatch.batchId, chunkIndex: 0 }).lean();
     const reportFingerprint = previousBatch.reportFingerprint || hash(JSON.stringify(previousBatch.report || {}));
     if (!previousBatch.reportFingerprint) await CatalogueImport.updateOne({ _id: previousBatch._id }, { $set: { reportFingerprint } });
     return res.status(200).json({ batchId: previousBatch.batchId, dataset, status: previousBatch.status, report: previousBatch.report, reportFingerprint, sample: (firstChunk?.records || previousBatch.records || []).slice(0, 8), reused: true });
+    }
   }
   const ids = records.map(record => record.medicineId);
   const canonicalKeys = records.map(record => record.canonicalKey).filter(Boolean);
