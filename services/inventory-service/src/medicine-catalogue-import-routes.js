@@ -129,7 +129,10 @@ const catalogueImportSchema = new mongoose.Schema({
   records: { type: [mongoose.Schema.Types.Mixed], default: [] },
   report: { type: mongoose.Schema.Types.Mixed, default: {} },
   publishedCount: { type: Number, default: 0 },
-  errorMessage: { type: String, default: '' }
+  errorMessage: { type: String, default: '' },
+  reportFingerprint: { type: String, default: '' },
+  approvedBy: { type: String, default: '' },
+  approvedAt: { type: Date, default: null }
 }, { timestamps: true });
 catalogueImportSchema.index({ dataset: 1, fileSha256: 1 }, { unique: true });
 const MedicineMaster = mongoose.models.MedicineMaster || mongoose.model('MedicineMaster', medicineMasterSchema);
@@ -449,12 +452,13 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     averageQualityScore: records.length ? Math.round(records.reduce((sum, item) => sum + item.qualityScore, 0) / records.length) : 0,
     qualityIssueCounts: records.reduce((counts, item) => { for (const issue of item.qualityIssues) counts[issue] = (counts[issue] || 0) + 1; return counts; }, {})
   };
+  const reportFingerprint = hash(JSON.stringify(report));
   const chunks = [];
   for (let offset = 0; offset < records.length; offset += CATALOGUE_CHUNK_SIZE) chunks.push({ batchId, chunkIndex: chunks.length, records: records.slice(offset, offset + CATALOGUE_CHUNK_SIZE) });
   await CatalogueImport.create({
     batchId, dataset, fileName: String(req.file.originalname || 'medicine-catalogue.json').slice(0, 180),
     fileSha256, uploadedBy: req.service.userId || req.service.name,
-    status: 'STAGING', recordCount: records.length, chunkCount: chunks.length, report
+    status: 'STAGING', recordCount: records.length, chunkCount: chunks.length, report, reportFingerprint
   });
   try {
     if (chunks.length) await CatalogueImportChunk.insertMany(chunks, { ordered: true });
@@ -464,19 +468,31 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     await CatalogueImport.deleteOne({ batchId });
     throw error;
   }
-  return res.status(201).json({ batchId, dataset, status: 'READY', report, sample: records.slice(0, 8) });
+  return res.status(201).json({ batchId, dataset, status: 'READY', report, reportFingerprint, sample: records.slice(0, 8) });
 }));
 
 router.get('/imports/:batchId', asyncHandler(async (req, res) => {
   const batch = await CatalogueImport.findOne({ batchId: req.params.batchId }).lean();
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
-  return res.json({ batchId: batch.batchId, dataset: batch.dataset, fileName: batch.fileName, status: batch.status, report: batch.report, publishedCount: batch.publishedCount, errorMessage: batch.errorMessage });
+  return res.json({ batchId: batch.batchId, dataset: batch.dataset, fileName: batch.fileName, status: batch.status, report: batch.report, reportFingerprint: batch.reportFingerprint, approvedBy: batch.approvedBy, approvedAt: batch.approvedAt, publishedCount: batch.publishedCount, errorMessage: batch.errorMessage });
+}));
+
+router.post('/imports/:batchId/approve', asyncHandler(async (req, res) => {
+  const batch = await CatalogueImport.findOne({ batchId: req.params.batchId });
+  if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
+  if (batch.status !== 'READY') return res.status(409).json({ message: 'Only a ready batch can be approved.' });
+  if (req.body?.confirmReconciliation !== true || req.body?.reportFingerprint !== batch.reportFingerprint) return res.status(400).json({ message: 'Review confirmation does not match this reconciliation report. Refresh the batch and confirm the current report.' });
+  batch.approvedBy = req.service.userId || req.service.name;
+  batch.approvedAt = new Date();
+  await batch.save();
+  return res.json({ batchId: batch.batchId, status: batch.status, approvedBy: batch.approvedBy, approvedAt: batch.approvedAt, reportFingerprint: batch.reportFingerprint });
 }));
 
 router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
   const batch = await CatalogueImport.findOne({ batchId: req.params.batchId });
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
   if (batch.status === 'PUBLISHED') return res.json({ batchId: batch.batchId, status: batch.status, publishedCount: batch.publishedCount, report: batch.report });
+  if (!batch.approvedAt || !batch.reportFingerprint || batch.reportFingerprint !== hash(JSON.stringify(batch.report))) return res.status(409).json({ message: 'This reconciliation report has not been approved or has changed. Review and approve the current report before publishing.' });
   if (!['READY', 'PARTIALLY_PUBLISHED', 'FAILED'].includes(batch.status)) return res.status(409).json({ message: 'This catalogue batch is already being published.' });
   batch.status = 'PUBLISHING';
   batch.errorMessage = '';
