@@ -11,7 +11,19 @@ const MAX_CATALOGUE_UPLOAD_BYTES = 110 * 1024 * 1024;
 const CATALOGUE_CHUNK_SIZE = 500;
 const LARGE_IMPORT_THRESHOLD_BYTES = 10 * 1024 * 1024;
 const yieldToEventLoop = () => new Promise(resolve => setImmediate(resolve));
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_CATALOGUE_UPLOAD_BYTES, files: 1 } });
+const catalogueGridFsStorage = {
+  _handleFile(_req, file, callback) {
+    const stream = getCatalogueImportBucket().openUploadStream(String(file.originalname || 'catalogue.json').slice(0, 180));
+    file.stream.pipe(stream);
+    stream.once('error', callback);
+    stream.once('finish', () => callback(null, { id: stream.id, size: stream.length, filename: stream.filename }));
+  },
+  _removeFile(_req, file, callback) {
+    if (!file.id) return callback(null);
+    getCatalogueImportBucket().delete(file.id).then(() => callback(null), callback);
+  }
+};
+const upload = multer({ storage: catalogueGridFsStorage, limits: { fileSize: MAX_CATALOGUE_UPLOAD_BYTES, files: 1 } });
 const text = value => String(value ?? '').replace(/<[^>]*>/g, ' ').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
 const key = value => text(value).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const hash = value => createHash('sha256').update(Buffer.isBuffer(value) ? value : String(value)).digest('hex');
@@ -774,17 +786,8 @@ async function processCatalogueImportPreview(req, res) {
 router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'Select a JSON file to upload.' });
   const jobId = randomUUID();
-  const bucket = getCatalogueImportBucket();
-  const uploadStream = bucket.openUploadStream(`${jobId}-${String(req.file.originalname || 'catalogue.json').slice(0, 160)}`, {
-    metadata: { jobId, uploadedBy: req.service.userId || req.service.name }
-  });
-  await new Promise((resolve, reject) => {
-    uploadStream.once('finish', resolve);
-    uploadStream.once('error', reject);
-    uploadStream.end(req.file.buffer);
-  });
   await CatalogueImportJob.create({
-    jobId, fileId: uploadStream.id, fileName: String(req.file.originalname || 'medicine-catalogue.json').slice(0, 180),
+    jobId, fileId: req.file.id, fileName: String(req.file.originalname || 'medicine-catalogue.json').slice(0, 180),
     fileSize: req.file.size, uploadedBy: req.service.userId || req.service.name,
     serviceName: req.service.name || '', dataset: req.body?.dataset || '',
     status: 'QUEUED', stage: 'QUEUED', progressPercent: 0, attempts: 0
@@ -930,6 +933,15 @@ router.post('/imports/merge', asyncHandler(async (req, res) => {
   return res.status(201).json({ batchId, dataset: 'MULTI_SOURCE', status: 'READY', report, reportFingerprint, sourceBatchIds });
 }));
 
+router.post('/imports/jobs/:jobId/retry', asyncHandler(async (req, res) => {
+  const job = await CatalogueImportJob.findOneAndUpdate(
+    { jobId: req.params.jobId, status: 'FAILED' },
+    { $set: { status: 'QUEUED', stage: 'QUEUED', progressPercent: 0, processedRecords: 0, totalRecords: 0, errorMessage: '', leaseExpiresAt: null, completedAt: null } },
+    { new: true }
+  ).lean();
+  if (!job) return res.status(409).json({ message: 'Only a failed import job can be retried. Refresh the job status and try again.' });
+  return res.status(202).json({ jobId: job.jobId, status: job.status, message: 'Import job queued for retry.' });
+}));
 router.get('/imports/jobs/:jobId', asyncHandler(async (req, res) => {
   const job = await CatalogueImportJob.findOne({ jobId: req.params.jobId }).lean();
   if (!job) return res.status(404).json({ message: 'Catalogue import job was not found.' });
