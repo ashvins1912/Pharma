@@ -3,17 +3,26 @@ import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 
 const FIELDS = [
-  ['brandName', 'Brand name'], ['productName', 'Product name'], ['genericName', 'Generic name'],
-  ['composition', 'Composition'], ['strength', 'Strength'], ['dosageForm', 'Dosage form'],
-  ['packSize', 'Pack size'], ['manufacturer', 'Manufacturer'], ['medicineType', 'Medicine type'],
+  ['brandName', 'Brand name'], ['productName', 'Product name'], ['genericName', 'Generic name'], ['genericId', 'Generic ID'],
+  ['composition', 'Composition'], ['ingredients', 'Ingredients'], ['ingredientIds', 'Ingredient IDs'], ['ingredientDetails', 'Ingredient details'],
+  ['strength', 'Strength'], ['dosageForm', 'Dosage form'], ['drugFormId', 'Drug form ID'], ['packSize', 'Pack size'], ['medicineType', 'Medicine type'],
+  ['manufacturer', 'Manufacturer'], ['manufacturerId', 'Manufacturer ID'], ['productId', 'Product ID'],
   ['therapeuticClass', 'Therapeutic class'], ['chemicalClass', 'Chemical class'], ['actionClass', 'Action class'],
-  ['routes', 'Routes'], ['indications', 'Indications'], ['uses', 'Uses'],
+  ['routes', 'Routes'], ['routeIds', 'Route IDs'], ['indications', 'Indications'], ['uses', 'Uses'],
   ['contraindications', 'Contraindications'], ['sideEffects', 'Side effects'], ['drugInteractions', 'Drug interactions'],
-  ['habitForming', 'Habit forming'], ['requiresPrescription', 'Prescription required'],
-  ['prescriptionVerification', 'Prescription verification'], ['clinicalDataVerification', 'Clinical verification'],
-  ['dataQualityStatus', 'Data quality status']
+  ['alternatives', 'Alternatives'], ['suggestedAlternatives', 'Suggested alternatives'], ['habitForming', 'Habit forming'],
+  ['requiresPrescription', 'Prescription required'], ['prescriptionVerification', 'Prescription verification'],
+  ['clinicalDataVerification', 'Clinical verification'], ['sourceLicenseStatus', 'Source licence status'],
+  ['sourceLicenseStatusValue', 'Source licence value'], ['casNumbers', 'CAS numbers'], ['uniiCodes', 'UNII codes'],
+  ['substanceDescriptions', 'Substance descriptions'], ['molecularFormulas', 'Molecular formulas'], ['inchiValues', 'InChI values'],
+  ['iupacNames', 'IUPAC names'], ['molecularWeights', 'Molecular weights'], ['smiles', 'SMILES'], ['toxicology', 'Toxicology'],
+  ['sourceImageUrl', 'Source image URL'], ['dataQualityStatus', 'Data quality status'], ['qualityScore', 'Quality score'],
+  ['qualityGrade', 'Quality grade'], ['qualityIssues', 'Quality issues'], ['sourcePriority', 'Source priority'],
+  ['sourceDatasets', 'Source datasets'], ['sourceRecordIds', 'Source record IDs'], ['legacyMedicineIds', 'Legacy medicine IDs'],
+  ['lastVerifiedAt', 'Last verified at']
 ];
-const display = value => Array.isArray(value) ? value.join(', ') : value === true ? 'Yes' : value === false ? 'No' : String(value ?? '—');
+const hasValue = value => Array.isArray(value) ? value.length > 0 : value !== undefined && value !== null && value !== '';
+const display = value => Array.isArray(value) ? value.map(item => typeof item === 'object' ? JSON.stringify(item) : item).join(', ') : value && typeof value === 'object' ? JSON.stringify(value) : value === true ? 'Yes' : value === false ? 'No' : String(value ?? '—');
 
 export default function MedicineMatchReviewQueue() {
   const { addToast } = useToast();
@@ -45,7 +54,7 @@ export default function MedicineMatchReviewQueue() {
     setActiveId(activeId === id ? '' : id);
     if (!drafts[id]) {
       const target = row.candidate || null;
-      const fields = FIELDS.map(([key]) => key).filter(key => target && target[key] !== undefined && target[key] !== null && target[key] !== '');
+      const fields = FIELDS.map(([key]) => key).filter(key => target && hasValue(target[key]));
       updateDraft(id, { medicineId: target?.medicineId || '', target, fields });
     }
   };
@@ -61,7 +70,7 @@ export default function MedicineMatchReviewQueue() {
     }
   };
   const chooseTarget = (id, medicine) => {
-    const fields = FIELDS.map(([key]) => key).filter(key => medicine[key] !== undefined && medicine[key] !== null && medicine[key] !== '');
+    const fields = FIELDS.map(([key]) => key).filter(key => hasValue(medicine[key]));
     updateDraft(id, { medicineId: medicine.medicineId, target: medicine, fields });
     setResults(current => ({ ...current, [id]: [] }));
   };
@@ -115,8 +124,8 @@ export default function MedicineMatchReviewQueue() {
               </div>
               {row.candidates?.length > 0 && <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Algorithm suggestions · verify before mapping</p><div className="flex flex-wrap gap-2">{row.candidates.map(candidate => <button key={candidate.medicineId} type="button" onClick={() => loadSuggestedTarget(row, candidate.medicineId)} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-left text-[10px] hover:bg-amber-50"><strong className="block text-slate-800">{candidate.brandName || candidate.productName || candidate.medicineId}</strong><span className="text-slate-500">{candidate.score ?? row.confidence ?? 0}% · {candidate.matchReason || 'candidate'}</span></button>)}</div></div>}
               {selected && <div className="rounded-lg border border-emerald-200 bg-white p-3"><p className="text-[10px] font-black uppercase text-emerald-700">Selected target</p><strong className="mt-1 block text-sm text-slate-900">{selected.brandName || selected.productName}</strong><p className="mt-1 text-xs text-slate-600">{[selected.genericName, selected.composition, selected.strength, selected.dosageForm].filter(Boolean).join(' · ')}</p><p className="mt-1 font-mono text-[9px] text-slate-400">{selected.medicineId}</p></div>}
-              <div><div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-xs font-black text-slate-800">Fields allowed in Store</h4><p className="mt-1 text-[10px] text-slate-500">Only checked, populated fields are returned by the public product-detail match.</p></div><button type="button" onClick={() => updateDraft(row.identityHash, { fields: selected ? FIELDS.map(([key]) => key).filter(key => selected[key] !== undefined && selected[key] !== null && selected[key] !== '') : [] })} disabled={!selected} className="text-[10px] font-bold text-violet-700 disabled:opacity-40">Select all available</button></div>
-                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">{FIELDS.map(([key, label]) => <label key={key} className={`flex min-w-0 items-start gap-2 rounded-lg border bg-white p-2 text-[10px] ${selected?.[key] !== undefined && selected?.[key] !== null && selected?.[key] !== '' ? 'border-slate-200' : 'border-slate-100 opacity-50'}`}><input type="checkbox" checked={(draft.fields || []).includes(key)} disabled={!selected || selected[key] === undefined || selected[key] === null || selected[key] === ''} onChange={event => updateDraft(row.identityHash, { fields: event.target.checked ? [...(draft.fields || []), key] : (draft.fields || []).filter(field => field !== key) })} className="mt-0.5"/><span className="min-w-0"><strong className="block text-slate-700">{label}</strong><span className="mt-0.5 block break-words text-slate-500">{selected && selected[key] !== undefined ? display(selected[key]) : 'Not available'}</span></span></label>)}</div>
+              <div><div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-xs font-black text-slate-800">Fields allowed in Store</h4><p className="mt-1 text-[10px] text-slate-500">Only checked, populated fields are returned by the public product-detail match.</p></div><button type="button" onClick={() => updateDraft(row.identityHash, { fields: selected ? FIELDS.map(([key]) => key).filter(key => hasValue(selected[key])) : [] })} disabled={!selected} className="text-[10px] font-bold text-violet-700 disabled:opacity-40">Select all available</button></div>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">{FIELDS.map(([key, label]) => <label key={key} className={`flex min-w-0 items-start gap-2 rounded-lg border bg-white p-2 text-[10px] ${hasValue(selected?.[key]) ? 'border-slate-200' : 'border-slate-100 opacity-50'}`}><input type="checkbox" checked={(draft.fields || []).includes(key)} disabled={!selected || !hasValue(selected[key])} onChange={event => updateDraft(row.identityHash, { fields: event.target.checked ? [...(draft.fields || []), key] : (draft.fields || []).filter(field => field !== key) })} className="mt-0.5"/><span className="min-w-0"><strong className="block text-slate-700">{label}</strong><span className="mt-0.5 block break-words text-slate-500">{selected && hasValue(selected[key]) ? display(selected[key]) : 'Not available'}</span></span></label>)}</div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3"><p className="text-[10px] text-slate-500">{draft.fields?.length || 0} fields selected · mapping is audited with admin and timestamp</p><button type="button" onClick={() => approve(row)} disabled={saving || !draft.medicineId || !draft.fields?.length} className="min-h-10 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white disabled:opacity-40">{saving ? 'Approving…' : 'Approve selected mapping'}</button></div>
             </div>}
