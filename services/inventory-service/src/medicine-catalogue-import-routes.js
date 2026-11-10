@@ -455,11 +455,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     : [];
   const fuzzyPrefixes = fuzzyCandidatePrefixes(records);
   const fuzzyCandidates = fuzzyPrefixes.length
-    ? await MedicineMaster.find({ $or: fuzzyPrefixes.map(prefix => ({ brandName: { $regex: '^' + prefix.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\  const nameCandidates = names.length
-    ? await MedicineMaster.find({ brandName: { $in: names } }, candidateProjection).collation({ locale: 'en', strength: 2 }).lean()
-    : [];
-  const existingByMongoId = new Map();
-  for (const candidate of [...exactCandidates, ...nameCandidates]) existingByMongoId.set(String(candidate._id), candidate);'), $options: 'i' } })) },
+    ? await MedicineMaster.find({ $or: fuzzyPrefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } })) },
       { medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1, ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1 })
       .limit(5000).lean()
     : [];
@@ -467,21 +463,26 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   for (const candidate of [...exactCandidates, ...nameCandidates, ...fuzzyCandidates]) existingByMongoId.set(String(candidate._id), candidate);
   const existing = [...existingByMongoId.values()];
   const existingIds = new Set(existing.map(item => item.medicineId));
-  const existingKeyCounts = new Map();
-  for (const item of existing.filter(item => item.canonicalKey)) existingKeyCounts.set(item.canonicalKey, (existingKeyCounts.get(item.canonicalKey) || 0) + 1);
-  const existingKeys = new Set([...existingKeyCounts.entries()].filter(([, count]) => count === 1).map(([canonicalKey]) => canonicalKey));
-  const existingNameCounts = new Map();
-  for (const item of existing) { const nameKey = key(item.brandName); existingNameCounts.set(nameKey, (existingNameCounts.get(nameKey) || 0) + 1); }
-  const updates = records.filter(item => existingIds.has(item.medicineId) || (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeys.has(item.canonicalKey)) || (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1)).length;
+  const existingById = new Map(existing.map(item => [item.medicineId, item]));
+  const existingKeyGroups = new Map();
+  const existingNameGroups = new Map();
   const existingByNamePrefix = new Map();
   for (const candidate of existing) {
-    const prefix = key(candidate.brandName).split(' ')[0];
+    if (candidate.canonicalKey) existingKeyGroups.set(candidate.canonicalKey, [...(existingKeyGroups.get(candidate.canonicalKey) || []), candidate]);
+    const nameKey = key(candidate.brandName);
+    existingNameGroups.set(nameKey, [...(existingNameGroups.get(nameKey) || []), candidate]);
+    const prefix = nameKey.split(' ')[0];
     if (prefix) existingByNamePrefix.set(prefix, [...(existingByNamePrefix.get(prefix) || []), candidate]);
   }
+  const existingKeys = new Set([...existingKeyGroups.entries()].filter(([, group]) => group.length === 1).map(([canonicalKey]) => canonicalKey));
+  const existingNameCounts = new Map([...existingNameGroups.entries()].map(([nameKey, group]) => [nameKey, group.length]));
+  const updates = records.filter(item => existingIds.has(item.medicineId) ||
+    (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeys.has(item.canonicalKey)) ||
+    (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1)).length;
   for (const item of records) {
-    const exact = existing.find(candidate => candidate.medicineId === item.medicineId) ||
-      (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 ? existing.find(candidate => candidate.canonicalKey === item.canonicalKey) : null) ||
-      (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1 ? existing.find(candidate => key(candidate.brandName) === key(item.brandName)) : null);
+    const exact = existingById.get(item.medicineId) ||
+      (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeyGroups.get(item.canonicalKey)?.length === 1 ? existingKeyGroups.get(item.canonicalKey)[0] : null) ||
+      (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1 ? existingNameGroups.get(key(item.brandName))?.[0] : null);
     if (exact) { item.reconciliationMatch = { targetMedicineId: exact.medicineId, method: 'EXACT_OR_CANONICAL', score: 100, decision: 'AUTO_MERGE', warnings: [] }; continue; }
     let best = null;
     const prefix = key(item.brandName).split(' ')[0];
