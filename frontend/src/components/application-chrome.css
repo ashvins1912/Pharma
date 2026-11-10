@@ -78,3 +78,50 @@ html.dark .app-footer__bottom { border-color: #334155; }
 html.dark .app-footer__section button { color: var(--footer-muted); }
 html.dark .app-footer__section button:hover { color: #93c5fd; }
 html.dark .app-footer :where(.bg-slate-50) { background: #162236; border-color: #334155; }
+
+/* Sign-in is a compact, single-line action; never inherit icon-button sizing. */
+.app-header__actions > .app-header__sign-in {
+  display: inline-flex;
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  overflow: visible;
+}
+.app-header__sign-in-label {
+  display: inline-block;
+  min-width: max-content;
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
+  line-height: 1;
+}
+@media (max-width: 639px) {
+  .app-header__actions > .app-header__sign-in {
+    width: auto;
+    min-width: max-content;
+    height: 2.5rem;
+    padding-inline: .55rem;
+    gap: .3rem;
+    border-radius: .75rem;
+    font-size: .6875rem;
+    line-height: 1;
+  }
+}
+@media (max-width: 379px) {
+  .app-header__actions > .app-header__sign-in {
+    width: 2.25rem;
+    min-width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    justify-content: center;
+  }
+  .app-header__sign-in-label {
+    display: none;
+  }
+  .app-header__sign-in-icon {
+    font-size: .95rem;
+  }
+}
