@@ -31,7 +31,7 @@ export function medicineMatchIdentity(product = {}) {
     manufacturer: String(product.manufacturer || '').trim().slice(0, 120),
     packSize: String(product.packSize || '').trim().slice(0, 80)
   };
-  const normalizedIdentity = [input.brand, input.genericName, input.composition, input.strength, input.dosageForm, input.manufacturer, input.packSize].map(normalize).join('|');
+  const normalizedIdentity = [normalize(input.brand), normalize(input.genericName), normalize(input.composition), normalizeStrength(input.strength), normalize(input.dosageForm), normalize(input.manufacturer), normalize(input.packSize)].join('|');
   return { input, normalizedIdentity, identityHash: crypto.createHash('sha256').update(normalizedIdentity).digest('hex') };
 }
 
