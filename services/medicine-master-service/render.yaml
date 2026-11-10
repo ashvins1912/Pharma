@@ -3,7 +3,6 @@ services:
     name: ashvin-pharmacy-medicine-master
     runtime: node
     region: oregon
-    plan: free
     rootDir: services/medicine-master-service
     buildCommand: npm install --omit=dev
     startCommand: npm start
