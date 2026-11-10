@@ -340,6 +340,11 @@ const medicineMasterSchema = new mongoose.Schema({
   lastVerifiedAt: { type: Date, default: null },
   lastManuallyUpdatedBy: { type: String, default: '' },
   lastManuallyUpdatedAt: { type: Date, default: null },
+  storeApproved: { type: Boolean, default: false, index: true },
+  storeMappedAt: { type: Date, default: null },
+  storeMappedBy: { type: String, default: '' },
+  storeMappingSourceBatchId: { type: String, default: '' },
+  storeMappingSourceMedicineId: { type: String, default: '' },
   isArchived: { type: Boolean, default: false, index: true },
   archivedAt: { type: Date, default: null },
   archivedBy: { type: String, default: '' }
@@ -1136,6 +1141,151 @@ router.get('/imports', asyncHandler(async (req, res) => {
     CatalogueImportJob.find({ status: { $in: ['QUEUED', 'PROCESSING', 'FAILED'] } }, { jobId: 1, batchId: 1, dataset: 1, fileName: 1, status: 1, stage: 1, progressPercent: 1, processedRecords: 1, totalRecords: 1, attempts: 1, errorMessage: 1, leaseExpiresAt: 1, createdAt: 1, updatedAt: 1 }).sort({ createdAt: -1 }).limit(8).lean()
   ]);
   return res.json({ items, jobs, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+}));
+
+
+const MAPPING_FIELDS = [
+  'brandName','productName','productId','genericName','genericId','manufacturer','manufacturerId',
+  'composition','ingredients','ingredientIds','strength','packSize','dosageForm','medicineType',
+  'routes','routeIds','indications','uses','sideEffects','contraindications','drugInteractions',
+  'suggestedAlternatives','alternatives','therapeuticClass','chemicalClass','actionClass',
+  'habitForming','sourceImageUrl','casNumbers','uniiCodes','substanceDescriptions',
+  'molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology'
+];
+const mappingProjection = {
+  _id: 0, medicineId: '$record.medicineId', brandName: '$record.brandName',
+  genericName: '$record.genericName', genericId: '$record.genericId',
+  productName: '$record.productName', manufacturer: '$record.manufacturer',
+  manufacturerId: '$record.manufacturerId', composition: '$record.composition',
+  ingredients: '$record.ingredients', ingredientIds: '$record.ingredientIds',
+  strength: '$record.strength', packSize: '$record.packSize', dosageForm: '$record.dosageForm',
+  medicineType: '$record.medicineType', routes: '$record.routes', routeIds: '$record.routeIds',
+  indications: '$record.indications', uses: '$record.uses', sideEffects: '$record.sideEffects',
+  contraindications: '$record.contraindications', drugInteractions: '$record.drugInteractions',
+  suggestedAlternatives: '$record.suggestedAlternatives', alternatives: '$record.alternatives',
+  therapeuticClass: '$record.therapeuticClass', chemicalClass: '$record.chemicalClass',
+  actionClass: '$record.actionClass', habitForming: '$record.habitForming',
+  sourceImageUrl: '$record.sourceImageUrl', casNumbers: '$record.casNumbers',
+  uniiCodes: '$record.uniiCodes', substanceDescriptions: '$record.substanceDescriptions',
+  molecularFormulas: '$record.molecularFormulas', inchiValues: '$record.inchiValues',
+  iupacNames: '$record.iupacNames', molecularWeights: '$record.molecularWeights',
+  smiles: '$record.smiles', toxicology: '$record.toxicology',
+  sourceDataset: '$record.sourceDataset', sourceRecordId: '$record.sourceRecordId',
+  reconciliationMatch: '$record.reconciliationMatch', storeMapping: '$record.storeMapping'
+};
+const getStagedMappingPage = async (batchId, page, limit) => {
+  const skip = (page - 1) * limit;
+  const paginate = async (Model, match, legacy = false) => {
+    const pipeline = [
+      { $match: match },
+      { $unwind: { path: '$records', includeArrayIndex: 'recordIndex' } },
+      { $set: { record: '$records', chunkIndex: legacy ? 0 : '$chunkIndex' } },
+      { $match: { 'record.storeMapping.approvedAt': { $exists: false } } },
+      { $sort: { chunkIndex: 1, recordIndex: 1 } },
+      { $facet: {
+        items: [{ $skip: skip }, { $limit: limit }, { $project: { record: 1 } }],
+        count: [{ $count: 'total' }]
+      } },
+      { $project: { items: 1, total: { $ifNull: [{ $arrayElemAt: ['$count.total', 0] }, 0] } } }
+    ];
+    const [result] = await Model.aggregate(pipeline).allowDiskUse(true);
+    return { records: (result?.items || []).map(item => item.record), total: result?.total || 0 };
+  };
+  const chunkCount = await CatalogueImportChunk.countDocuments({ batchId });
+  return chunkCount
+    ? paginate(CatalogueImportChunk, { batchId })
+    : paginate(CatalogueImport, { batchId, isHidden: { $ne: true }, records: { $exists: true, $ne: [] } }, true);
+};
+
+router.get('/imports/:batchId/mapping-queue', asyncHandler(async (req, res) => {
+  const batchId = String(req.params.batchId || '').trim();
+  const batch = await CatalogueImport.findOne({ batchId, isHidden: { $ne: true } }, { batchId: 1, status: 1 }).lean();
+  if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
+  if (batch.status !== 'PUBLISHED') return res.status(409).json({ message: 'Publish the reconciled batch before mapping its records for Store visibility.' });
+  const page = Math.max(1, Math.min(10000, Number.parseInt(req.query.page || '1', 10) || 1));
+  const limit = Math.max(1, Math.min(100, Number.parseInt(req.query.limit || '100', 10) || 100));
+  const { records, total } = await getStagedMappingPage(batchId, page, limit);
+  const items = await Promise.all(records.map(async record => {
+    const prefix = key(record.brandName).slice(0, 2);
+    const candidates = prefix.length === 2
+      ? await MedicineMaster.find({
+          isArchived: { $ne: true }, medicineId: { $ne: record.medicineId },
+          brandName: { $regex: '^' + prefix.replace(/[.*+?^\${}()|[\]\\]/g, '\\router.get('/imports/:batchId/records', asyncHandler(async (req, res) => {'), $options: 'i' }
+        }, {
+          medicineId: 1, brandName: 1, productName: 1, genericName: 1, composition: 1,
+          strength: 1, dosageForm: 1, manufacturer: 1, storeApproved: 1
+        }).limit(40).lean()
+      : [];
+    const ranked = candidates.map(candidate => ({ ...candidate, evidence: scoreMedicineMatch(record, candidate) }))
+      .sort((left, right) => right.evidence.score - left.evidence.score).slice(0, 5);
+    const availableFields = MAPPING_FIELDS.filter(field => {
+      const value = record[field];
+      return value !== undefined && value !== null && value !== '' && (!Array.isArray(value) || value.length > 0);
+    }).map(field => ({ key: field, value: record[field] }));
+    return {
+      medicineId: record.medicineId, brandName: record.brandName, genericName: record.genericName,
+      composition: record.composition, strength: record.strength, dosageForm: record.dosageForm,
+      manufacturer: record.manufacturer, sourceDataset: record.sourceDataset || batch.dataset,
+      sourceRecordId: record.sourceRecordId || '', reconciliationMatch: record.reconciliationMatch || null,
+      availableFields, candidates: ranked
+    };
+  }));
+  return res.json({ items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }, batchId, batchStatus: batch.status });
+}));
+
+router.post('/imports/:batchId/map', asyncHandler(async (req, res) => {
+  const batchId = String(req.params.batchId || '').trim();
+  const batch = await CatalogueImport.findOne({ batchId, isHidden: { $ne: true } }, { batchId: 1, status: 1, dataset: 1 }).lean();
+  if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
+  if (batch.status !== 'PUBLISHED') return res.status(409).json({ message: 'Only a published batch can be mapped for Store visibility.' });
+  const sourceMedicineId = text(req.body?.sourceMedicineId);
+  const requestedTarget = text(req.body?.targetMedicineId);
+  const selectedFields = [...new Set((Array.isArray(req.body?.selectedFields) ? req.body.selectedFields : []).filter(field => MAPPING_FIELDS.includes(field)))];
+  if (!sourceMedicineId || !selectedFields.length) return res.status(400).json({ message: 'Choose a source medicine and at least one field to approve.' });
+  const chunk = await CatalogueImportChunk.findOne({ batchId, 'records.medicineId': sourceMedicineId }, { records: 1 }).lean();
+  let source = chunk?.records?.find(record => record.medicineId === sourceMedicineId);
+  let legacy = false;
+  if (!source) {
+    const legacyBatch = await CatalogueImport.findOne({ batchId, 'records.medicineId': sourceMedicineId }, { records: 1 }).lean();
+    source = legacyBatch?.records?.find(record => record.medicineId === sourceMedicineId);
+    legacy = Boolean(source);
+  }
+  if (!source) return res.status(404).json({ message: 'The staged source record was not found in this batch.' });
+  if (source.storeMapping?.approvedAt) return res.status(409).json({ message: 'This source record has already been mapped. Refresh the queue.' });
+  const isCreateNew = !requestedTarget || requestedTarget === 'CREATE_NEW';
+  const targetMedicineId = isCreateNew ? sourceMedicineId : requestedTarget;
+  const update = {};
+  for (const field of selectedFields) {
+    const value = source[field];
+    if (value !== undefined && value !== null && value !== '') update[field] = value;
+  }
+  if (isCreateNew && !update.brandName) update.brandName = source.brandName;
+  if (!update.brandName && isCreateNew) return res.status(400).json({ message: 'A brand name is required to create a new mapped medicine.' });
+  const actorId = String(req.service?.userId || req.service?.sub || req.service?.name || '');
+  const mappedAt = new Date();
+  const mapped = await MedicineMaster.findOneAndUpdate(
+    { medicineId: targetMedicineId, isArchived: { $ne: true } },
+    {
+      $set: {
+        ...update, storeApproved: true, storeMappedAt: mappedAt, storeMappedBy: actorId,
+        storeMappingSourceBatchId: batchId, storeMappingSourceMedicineId: sourceMedicineId
+      },
+      $setOnInsert: { medicineId: targetMedicineId, canonicalKey: source.canonicalKey || '' }
+    },
+    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+  ).lean();
+  const mapping = {
+    status: 'APPROVED', targetMedicineId, selectedFields, approvedAt: mappedAt,
+    approvedBy: actorId, createdNew: isCreateNew
+  };
+  const recordFilter = { batchId, 'records.medicineId': sourceMedicineId };
+  if (legacy) {
+    await CatalogueImport.updateOne(recordFilter, { $set: { 'records.$[record].storeMapping': mapping } }, { arrayFilters: [{ 'record.medicineId': sourceMedicineId }] });
+  } else {
+    await CatalogueImportChunk.updateOne(recordFilter, { $set: { 'records.$[record].storeMapping': mapping } }, { arrayFilters: [{ 'record.medicineId': sourceMedicineId }] });
+  }
+  invalidateMedicineMasterVersionCache();
+  return res.json({ success: true, sourceMedicineId, targetMedicineId, selectedFields, medicine: mapped, mapping });
 }));
 
 router.get('/imports/:batchId/records', asyncHandler(async (req, res) => {
