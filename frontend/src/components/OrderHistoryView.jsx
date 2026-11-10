@@ -216,7 +216,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                           </button>
                         </>
                       )}
-                      {!['Delivered', 'Cancelled', 'Rejected'].includes(order.orderStatus) && (
+                      {(!['Delivered', 'Cancelled', 'Rejected'].includes(order.orderStatus) || order.fulfillmentState === 'PARTIAL') && (
                         <button
                           onClick={() => trackOrder(order)}
                           className="qm-mobile-action qm-mobile-action--primary"
