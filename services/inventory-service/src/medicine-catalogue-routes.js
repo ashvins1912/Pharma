@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireServiceScope } from './service-auth.js';
 import mongoose from 'mongoose';
+import { rankMedicineMasterMatches } from './medicine-master-matcher.js';
 
 const router = express.Router();
 const medicineMaster = () => mongoose.models.MedicineMaster;
@@ -26,7 +27,8 @@ router.get('/match', async (req, res, next) => {
     const terms = [...new Set([product.name, product.brand, product.genericName, product.composition].filter(Boolean))];
     if (!terms.length) return res.status(400).json({ code: 'MEDICINE_MATCH_INPUT_REQUIRED', message: 'Provide a medicine name or generic name to find catalogue details.' });
     const clauses = terms.flatMap(term => {
-      const escaped = escapeRegex(term);
+      const firstToken = String(term).split(/\\s+/).filter(Boolean)[0] || term;
+      const escaped = '^' + escapeRegex(firstToken);
       return [
         { brandName: { $regex: escaped, $options: 'i' } },
         { productName: { $regex: escaped, $options: 'i' } },
@@ -45,7 +47,6 @@ router.get('/match', async (req, res, next) => {
         prescriptionVerification: 1, clinicalDataVerification: 1, dataQualityStatus: 1
       }
     ).limit(100).lean();
-    const { rankMedicineMasterMatches } = await import('./medicine-master-matcher.js');
     const result = rankMedicineMasterMatches(product, candidates);
     res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
     return res.json(result);
