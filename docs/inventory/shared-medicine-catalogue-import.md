@@ -14,6 +14,14 @@ All endpoints are routed through API Gateway and require a platform administrato
 
 Uploads are limited to 110 MiB and 60,000 records. Large imports are stored as 500-record staging chunks so a batch never approaches MongoDB's 16 MiB document limit. Preview never writes live medicine master records. Re-uploading the same dataset file is idempotent and returns its existing batch.
 
+## Preview performance and validation
+
+- Source-field aliases are normalized once per source object and cached in a `WeakMap`; repeat field reads do not rebuild the alias index.
+- Duplicate detection and list/alternative cleanup use `Map` and `Set` keyed by normalized identities, avoiding repeated linear scans through already-seen values.
+- The request passes source rows directly to normalization instead of allocating a shallow copy of every row.
+- Exact medicine-ID/canonical-key reconciliation is separated from case-insensitive brand-name matching. Brand-name matching uses a collation-aware index rather than applying `$toLower` to every stored catalogue row.
+- These changes reduce avoidable CPU and database work; they do not make incomplete source data clinically complete. Scores measure field completeness, not factual accuracy or safety.
+
 ## Normalization and matching
 
 - INDIAN_MEDICINE_DATA reads drugDetails and preserves brandIdentifier exactly as medicineId. It maps generic/product/manufacturer identifiers, ingredients, dosage form, routes, alternatives, indications, contraindications and interaction metadata.

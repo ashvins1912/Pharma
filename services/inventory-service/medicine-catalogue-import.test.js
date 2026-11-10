@@ -194,6 +194,17 @@ test('quality scoring is transparent, bounded and never upgrades unverified clin
   assert.equal(sparse.prescriptionVerification, 'UNVERIFIED');
 });
 
+test('consolidation uses the supplied dataset without cloning or annotating source rows', () => {
+  const raw = {
+    brandIdentifier: 'B-NO-CLONE-1', brandName: 'Example Tablet',
+    genericName: 'Example ingredient', substanceName: ['Example ingredient'], doseForm: 'Tablet'
+  };
+  const result = consolidate([raw], 'INDIAN_MEDICINE_DATA');
+  assert.equal(result.records.length, 1);
+  assert.equal(result.records[0].medicineId, 'B-NO-CLONE-1');
+  assert.equal(Object.hasOwn(raw, '__dataset'), false);
+});
+
 test('consolidation attaches quality grades and scores to every accepted record', () => {
   const result = consolidate([{
     brandIdentifier: 'B-QUALITY-2', brandName: 'Example Tablet',
