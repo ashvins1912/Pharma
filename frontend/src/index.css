@@ -1801,3 +1801,60 @@ body.modal-open {
   }
 }
 
+
+
+/* Shared safety net for every semantic modal, including legacy nested overlays. */
+:where(.modal-overlay, .fixed.inset-0:has([role="dialog"][aria-modal="true"]), .fixed.inset-0[role="dialog], .fixed.inset-0[aria-modal="true"]) {
+  z-index: 2147483000 !important;
+  isolation: isolate;
+}
+
+[role="dialog"][aria-modal="true"] {
+  box-sizing: border-box;
+  min-width: 0;
+  max-height: 100dvh;
+  overscroll-behavior: contain;
+  scroll-margin-block: 1rem;
+}
+
+[role="dialog"][aria-modal="true"]:not(:has(:where(.overflow-y-auto, .overflow-auto, [data-modal-scroll]))) {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 767px) {
+  :where(.modal-overlay, .fixed.inset-0:has([role="dialog"][aria-modal="true"]), .fixed.inset-0[role="dialog"], .fixed.inset-0[aria-modal="true"]) {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    max-height: 100dvh !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: none;
+  }
+
+  [role="dialog"][aria-modal="true"] {
+    max-width: 100vw;
+    max-height: 100dvh;
+    min-width: 0;
+  }
+
+  [role="dialog"][aria-modal="true"] :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+    min-width: 0;
+    max-width: 100%;
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [role="dialog"][aria-modal="true"],
+  [role="dialog"][aria-modal="true"] * {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
