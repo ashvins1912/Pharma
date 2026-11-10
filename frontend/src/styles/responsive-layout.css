@@ -308,3 +308,263 @@ html.dark :is(.pharma-responsive-scope, .admin-screen) :where(tbody tr:nth-child
 html.dark :is(.pharma-responsive-scope, .admin-screen) :where(tbody tr:hover td) {
   background: #1e3352;
 }
+
+
+/* --------------------------------------------------------------------------
+   QuickMeds header layout repair.
+   Loaded after legacy/global styles so broad responsive rules cannot collapse
+   the brand copy or split the header when authenticated controls hydrate.
+   -------------------------------------------------------------------------- */
+.quickmeds-header {
+  position: sticky !important;
+  inset-block-start: 0;
+  z-index: 100;
+  display: block;
+  width: 100%;
+  height: auto !important;
+  min-height: 4.25rem;
+  max-height: none !important;
+  overflow: visible;
+}
+.quickmeds-header .quickmeds-header-inner {
+  display: grid !important;
+  grid-template-columns: minmax(13rem, max-content) minmax(0, 1fr) max-content !important;
+  align-items: center !important;
+  justify-content: initial !important;
+  gap: clamp(.5rem, 1vw, 1.1rem);
+  width: 100%;
+  max-width: 1920px;
+  min-height: 4.25rem !important;
+  height: auto !important;
+  margin-inline: auto;
+  padding-block: .5rem;
+  box-sizing: border-box;
+}
+.quickmeds-header .app-header__brand {
+  display: flex !important;
+  align-items: center;
+  justify-self: start;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  flex: 0 0 auto !important;
+  gap: .65rem;
+  overflow: visible;
+}
+.quickmeds-header .app-header__brand-copy {
+  display: flex;
+  flex: 0 0 auto !important;
+  flex-direction: column;
+  justify-content: center;
+  width: max-content;
+  max-width: 100%;
+  min-width: max-content;
+  overflow: visible;
+}
+.quickmeds-header .quickmeds-brand-badge-container {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap !important;
+  gap: .4rem;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: visible;
+}
+.quickmeds-header .quickmeds-brand-name,
+.quickmeds-header .quickmeds-role-chip,
+.quickmeds-header .app-header__tagline {
+  flex: 0 0 auto;
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+}
+.quickmeds-header .app-header__tagline {
+  display: block;
+  width: max-content;
+  max-width: none;
+  margin: .25rem 0 0;
+  line-height: 1.2;
+}
+.quickmeds-header .app-header__desktop-nav {
+  display: flex;
+  min-width: 0;
+  width: max-content;
+  max-width: 100%;
+  justify-self: center;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: clamp(.15rem, .45vw, .55rem);
+  white-space: nowrap;
+}
+.quickmeds-header .app-header__desktop-nav > button {
+  flex: 0 0 auto;
+  min-width: max-content;
+  white-space: nowrap;
+  padding-inline: clamp(.55rem, .8vw, .9rem);
+}
+.quickmeds-header .app-header__actions {
+  display: flex;
+  justify-self: end;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  gap: clamp(.25rem, .45vw, .55rem);
+}
+.quickmeds-header .app-header__actions > * {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.quickmeds-header .app-header__mobile-store,
+.quickmeds-header .app-header__menu-toggle {
+  display: none !important;
+}
+
+/* Selectors share one quiet surface; no nested white outline or focus ring. */
+.quickmeds-header .qm-select-shell {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  height: 2.55rem;
+  min-height: 2.55rem;
+  padding: .25rem .7rem;
+  border: 0 !important;
+  border-radius: .8rem;
+  background: #f1f5f9 !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+}
+.quickmeds-header .qm-select-shell:hover {
+  background: #e8eef7 !important;
+}
+.quickmeds-header .qm-select-control {
+  display: block;
+  height: 100%;
+  min-height: 0 !important;
+  width: auto;
+  min-width: 0;
+  padding: 0 1rem 0 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  color: #1e293b;
+  font-size: .75rem;
+  font-weight: 750;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.quickmeds-header .app-header__language-select { max-width: 5.4rem; }
+.quickmeds-header .app-header__branch-select { max-width: 7rem; }
+.quickmeds-header .qm-select-control:focus,
+.quickmeds-header .qm-select-control:focus-visible {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+.quickmeds-header .qm-select-control option {
+  background: #fff;
+  color: #0f172a;
+}
+
+@media (max-width: 1599px) {
+  .quickmeds-header .quickmeds-header-inner {
+    grid-template-columns: minmax(0, 1fr) max-content !important;
+  }
+  .quickmeds-header .app-header__desktop-nav { display: none !important; }
+  .quickmeds-header .app-header__mobile-store,
+  .quickmeds-header .app-header__menu-toggle { display: inline-flex !important; }
+}
+@media (max-width: 1279px) {
+  .quickmeds-header .app-header__language,
+  .quickmeds-header .app-header__branch { display: none !important; }
+}
+@media (min-width: 640px) and (max-width: 1279px) {
+  .quickmeds-header .app-header__brand-copy { min-width: 0; }
+  .quickmeds-header .app-header__tagline { display: none !important; }
+}
+@media (max-width: 639px) {
+  .quickmeds-header .quickmeds-header-inner {
+    grid-template-columns: minmax(0, 1fr) max-content !important;
+    min-height: 3.75rem !important;
+    gap: .35rem;
+    padding-block: .35rem;
+  }
+  .quickmeds-header .app-header__brand {
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    gap: .4rem;
+  }
+  .quickmeds-header .app-header__brand-copy {
+    min-width: 0;
+    width: auto;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  .quickmeds-header .quickmeds-brand-badge-container {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .quickmeds-header .quickmeds-brand-name {
+    min-width: 0;
+    max-width: clamp(5.5rem, 32vw, 9rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: clamp(.8rem, 3.5vw, 1rem);
+  }
+  .quickmeds-header .app-header__role-chip,
+  .quickmeds-header .quickmeds-role-chip,
+  .quickmeds-header .app-header__tagline { display: none !important; }
+  .quickmeds-header .app-header__actions {
+    width: max-content;
+    max-width: 100%;
+    gap: .2rem;
+  }
+  .quickmeds-header .app-header__actions > button:not(.app-header__sign-in) {
+    width: 2.25rem;
+    min-width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    justify-content: center;
+  }
+  .quickmeds-header .app-header__mobile-store {
+    width: auto !important;
+    min-width: 2.25rem;
+    padding-inline: .55rem !important;
+  }
+  .quickmeds-header .app-header__menu-toggle {
+    width: 2.25rem;
+    min-width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+  }
+  .quickmeds-header .app-header__sign-in {
+    width: auto;
+    min-width: 2.25rem;
+    padding-inline: .5rem;
+  }
+}
+@media (max-width: 379px) {
+  .quickmeds-header .quickmeds-header-inner { gap: .2rem; }
+  .quickmeds-header .app-header__brand > div:first-child {
+    width: 2rem !important;
+    height: 2rem !important;
+    flex-basis: 2rem;
+  }
+  .quickmeds-header .quickmeds-brand-name { max-width: 5rem; }
+  .quickmeds-header .app-header__actions { gap: .12rem; }
+}
+html.dark .quickmeds-header .qm-select-shell { background: #172033 !important; }
+html.dark .quickmeds-header .qm-select-shell:hover { background: #202d43 !important; }
+html.dark .quickmeds-header .qm-select-control { color: #f8fafc; }
+html.dark .quickmeds-header .qm-select-control option { background: #0f172a; color: #f8fafc; }
