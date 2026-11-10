@@ -27,4 +27,4 @@ Uploads are limited to 15 MiB and 25,000 records. Preview never writes live medi
 
 This workflow writes only the shared MedicineMaster collection in the Inventory database. It does not create tenant products or update tenant-specific selling prices, cost prices, discounts, branch stock, batches, MRP, expiry dates or manufacturing dates. It does not infer regulatory approval, clinical safety, missing contraindications or missing drug interactions.
 
-The master record retains source datasets, source record IDs, import batch, data quality state and verification state. Catalogue consumers should continue to treat unverified clinical/regulatory fields as informational until checked against authoritative sources.
+The master record retains source datasets, source record IDs, import batch, data quality state, clinical verification state and source-license verification state. Source licensing/provenance must be cleared before commercial redistribution or customer-facing use. Catalogue consumers should continue to treat unverified clinical/regulatory fields as informational until checked against authoritative sources.
