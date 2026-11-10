@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import express from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
-import { invalidateMedicineMasterVersionCache, MedicineMatchReference, queueMedicineMatch } from './medicine-match-reference.js';
+import { invalidateMedicineMasterVersionCache, MedicineMatchReference, mapMedicineMatchBatch, queueMedicineMatch } from './medicine-match-reference.js';
 import { requireServiceScope } from './service-auth.js';
 import { config } from './config.js';
 import { scoreMedicineMatch } from './medicine-match-scoring.js';
@@ -1162,13 +1162,13 @@ router.post('/matches/discover', async (req, res, next) => {
     const products = await mongoose.connection.collection('inventoryproducts')
       .find(filter, { projection: { _id: 1, name: 1, genericName: 1, strength: 1, form: 1 } })
       .sort({ _id: 1 }).limit(limit).toArray();
-    const queued = await Promise.all(products.map(product => queueMedicineMatch({
+    const queued = await mapMedicineMatchBatch(products, 8, product => queueMedicineMatch({
       name: product.name,
       brand: product.name,
       genericName: product.genericName,
       strength: product.strength,
       form: product.form
-    })));
+    }));
     const lastId = products.length ? String(products[products.length - 1]._id) : afterId;
     return res.json({
       scanned: products.length,
