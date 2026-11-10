@@ -37,6 +37,7 @@ const medicineMasterSchema = new mongoose.Schema({
   productName: { type: String, default: '' },
   manufacturer: { type: String, default: '' },
   manufacturerId: { type: String, default: '' },
+  ingredientIds: { type: [String], default: [] },
   ingredients: { type: [String], default: [] },
   composition: { type: String, default: '' },
   strength: { type: String, default: '' },
@@ -101,7 +102,7 @@ export function normalizeMedicineRecord(raw, dataset) {
       brandName, genericName, genericId: text(pick(raw, 'genericIdentifier')),
       productId: text(pick(raw, 'productIdentifier')), productName: text(pick(raw, 'productName')),
       manufacturer: text(pick(raw, 'supplierName')), manufacturerId: text(pick(raw, 'supplierIdentifier')),
-      ingredients, composition, strength, dosageForm, medicineType: '',
+      ingredientIds: splitList(pick(raw, 'substanceIdentifier')), ingredients, composition, strength, dosageForm, medicineType: '',
       routes: splitList(pick(raw, 'routeOfAdministrationName')),
       alternatives: Array.isArray(raw.alternativeDrugs) ? raw.alternativeDrugs.slice(0, 20) : [],
       indications: splitList(pick(raw, 'indication')),
@@ -130,7 +131,7 @@ export function normalizeMedicineRecord(raw, dataset) {
     medicineId: 'MED-' + sourceRecordId.toUpperCase(),
     canonicalKey: composition ? identity : '',
     brandName, genericName: '', genericId: '', productId: '', productName,
-    manufacturer: '', manufacturerId: '', ingredients: splitList(composition), composition,
+    manufacturer: '', manufacturerId: '', ingredientIds: [], ingredients: splitList(composition), composition,
     strength, packSize, dosageForm, medicineType, routes: [], alternatives: [], indications: [], contraindications: [], drugInteractions: [],
     sourceImageUrl: /^https:\/\//i.test(image) ? image : '',
     requiresPrescription: pick(raw, 'Is Prescription Required?') === undefined ? null : bool(pick(raw, 'Is Prescription Required?')),
@@ -152,7 +153,7 @@ function consolidate(records, dataset) {
       for (const field of ['genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType']) {
         if (!previous[field] && normalized[field]) previous[field] = normalized[field];
       }
-      for (const field of ['ingredients','routes','indications','contraindications','drugInteractions']) {
+      for (const field of ['ingredientIds','ingredients','routes','indications','contraindications','drugInteractions']) {
         previous[field] = [...new Map([...previous[field], ...normalized[field]].map(v => [key(v), v])).values()];
       }
       previous.sourceRecordIds = [...new Set([...(previous.sourceRecordIds || [previous.sourceRecordId]), normalized.sourceRecordId])];
@@ -252,7 +253,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         for (const field of fields) {
           if (item[field] && (!current?.[field] || item.sourcePriority < Number(current.sourcePriority ?? 99))) set[field] = item[field];
         }
-        for (const field of ['ingredients','routes','indications','contraindications','drugInteractions','alternatives']) {
+        for (const field of ['ingredientIds','ingredients','routes','indications','contraindications','drugInteractions','alternatives']) {
           const incoming = item[field] || [];
           if (incoming.length) set[field] = [...new Map([...(current?.[field] || []), ...incoming].map(v => [key(typeof v === 'string' ? v : JSON.stringify(v)), v])).values()];
         }
