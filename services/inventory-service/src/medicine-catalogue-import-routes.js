@@ -206,11 +206,15 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
       plans.push({ decision: old.decision, targetMedicineId: old.targetMedicineId || '' });
       continue;
     }
+    const ambiguousCanonical = item.canonicalKey && (keyGroups.get(item.canonicalKey) || []).length > 1;
+    const ambiguousName = item.safeNameMatch && (nameGroups.get(key(item.brandName)) || []).length > 1;
     const exact = byId.get(item.medicineId) ||
       (item.canonicalKey ? byKey.get(item.canonicalKey) : null) ||
       (item.safeNameMatch ? byName.get(key(item.brandName)) : null);
     let plan;
-    if (exact) {
+    if (ambiguousCanonical || ambiguousName) {
+      plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'AMBIGUOUS_MASTER_IDENTITY', score: 0, warnings: [ ...(ambiguousCanonical ? ['DUPLICATE_CANONICAL_KEY_IN_MASTER'] : []), ...(ambiguousName ? ['DUPLICATE_NORMALIZED_BRAND_NAME_IN_MASTER'] : []) ] };
+    } else if (exact) {
       const evidence = scoreMedicineMatch(item, exact, { nameNgramIdf });
       if (evidence.decision === 'BLOCKED_CONFLICT') {
         plan = { decision: 'BLOCKED_CONFLICT', targetMedicineId: exact.medicineId, method: 'EXACT_IDENTITY_WITH_CLINICAL_CONFLICT', score: evidence.score, warnings: evidence.warnings };
@@ -219,12 +223,16 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
       }
     } else {
       let best = null;
+      let tiedBest = false;
       const prefix = key(item.brandName).slice(0, 2);
       for (const candidate of prefixGroups.get(prefix) || []) {
         const scored = scoreMedicineMatch(item, candidate, { nameNgramIdf });
-        if (!best || scored.score > best.score) best = { candidate, ...scored };
+        if (!best || scored.score > best.score) { best = { candidate, ...scored }; tiedBest = false; }
+        else if (scored.score === best.score) tiedBest = true;
       }
-      if (best && best.decision === 'AUTO_MERGE') {
+      if (best && tiedBest) {
+        plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'AMBIGUOUS_TOP_MATCHES', score: best.score, warnings: ['MULTIPLE_CANDIDATES_SHARE_TOP_SCORE'] };
+      } else if (best && best.decision === 'AUTO_MERGE') {
         plan = { decision: 'AUTO_MERGE', targetMedicineId: best.candidate.medicineId, method: 'FRESH_HYBRID_TFIDF_NGRAM_LINKAGE', score: best.score, warnings: best.warnings };
       } else if (best && ['MANUAL_REVIEW', 'BLOCKED_CONFLICT'].includes(best.decision)) {
         plan = { decision: best.decision, targetMedicineId: best.candidate.medicineId, method: 'FRESH_HYBRID_TFIDF_NGRAM_LINKAGE', score: best.score, warnings: best.warnings };
