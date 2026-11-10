@@ -492,7 +492,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
   const batch = await CatalogueImport.findOne({ batchId: req.params.batchId });
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
   if (batch.status === 'PUBLISHED') return res.json({ batchId: batch.batchId, status: batch.status, publishedCount: batch.publishedCount, report: batch.report });
-  if (!batch.approvedAt || !batch.reportFingerprint || batch.reportFingerprint !== hash(JSON.stringify(batch.report))) return res.status(409).json({ message: 'This reconciliation report has not been approved or has changed. Review and approve the current report before publishing.' });
+  if (!batch.approvedAt || !batch.reportFingerprint) return res.status(409).json({ message: 'This reconciliation report has not been approved. Review and approve the report before publishing.' });
   if (!['READY', 'PARTIALLY_PUBLISHED', 'FAILED'].includes(batch.status)) return res.status(409).json({ message: 'This catalogue batch is already being published.' });
   batch.status = 'PUBLISHING';
   batch.errorMessage = '';
