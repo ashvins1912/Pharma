@@ -5142,6 +5142,8 @@ tenantInfrastructure: "టెనెంట్ మౌలిక సదుపాయ�
     proceedCheckout: "చెక్‌అవుట్‌కు కొనసాగండి",
     pharmaDiscountForYou: "మీ కోసం ఫార్మసీ తగ్గింపు",
     createCampaign: "ప్రచారాన్ని సృష్టించండి",
+    medicineInfoFor: "{query} గురించి అదనపు సమాచారం.",
+    informationSources: "మూలాలు",
   }
 };
 
@@ -5171,8 +5173,6 @@ export function LanguageProvider({ children }) {
         // Keep the in-memory language change even when storage is unavailable.
       }
     }
-    medicineInfoFor: "{query} గురించి అదనపు సమాచారం.",
-    informationSources: "మూలాలు",
   }, []);
 
   useEffect(() => {
