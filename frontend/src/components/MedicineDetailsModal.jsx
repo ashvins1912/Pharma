@@ -109,7 +109,7 @@ export default function MedicineDetailsModal({ product, onClose }) {
             </div>
             <div className="col-span-2 rounded-2xl bg-slate-50 p-3 sm:col-span-1">
               <p className="text-[10px] font-bold uppercase text-slate-500">{t('manufacturer')}</p>
-              <p className="mt-1 break-words text-sm font-extrabold text-slate-900">{medicine?.manufacturer || product.manufacturer || '—'}</p>
+              <p className="mt-1 break-words text-sm font-extrabold text-slate-900">{medicine?.manufacturer || '—'}</p>
             </div>
           </div>
 
