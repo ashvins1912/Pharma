@@ -166,6 +166,7 @@ export function createServiceRouters(gatewayConfig = config) {
   }, gatewayConfig));
   medicineMasterRouter.post('/medicines/match/batch', catalogueImportAuth, medicineMaster('inventory.catalogue.import'));
   medicineMasterRouter.get('/matches/review', catalogueImportAuth, medicineMaster('inventory.catalogue.import'));
+  medicineMasterRouter.post('/matches/discover', catalogueImportAuth, medicineMaster('inventory.catalogue.import'));
   medicineMasterRouter.post('/matches/:identityHash/map', catalogueImportAuth, medicineMaster('inventory.catalogue.import'));
   medicineMasterRouter.get('/medicines', medicineMaster('inventory.catalogue.read'));
   medicineMasterRouter.get('/medicines/:medicineId', medicineMaster('inventory.catalogue.read'));
