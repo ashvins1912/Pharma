@@ -3094,3 +3094,207 @@ html.dark .request-center-empty h4 { color:#e2e8f0; }
     transition: none;
   }
 }
+
+
+/* Command Center usability correction: restore document scrolling and a light
+   operations canvas. Keep horizontal data-table scrolling local to each table. */
+.dashboard-shell--command-center {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+  background: #f5f7fb !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #172033 !important;
+  box-shadow: none !important;
+}
+.dashboard-shell--command-center .dashboard-hero {
+  background: linear-gradient(115deg, #ffffff 0%, #f8fafc 58%, #ecfdf5 100%) !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #172033 !important;
+  box-shadow: 0 5px 18px rgb(15 23 42 / 0.045) !important;
+}
+.dashboard-shell--command-center .dashboard-hero h2,
+.dashboard-workspace--command-center .dashboard-workspace-heading h3 {
+  color: #0f172a !important;
+}
+.dashboard-shell--command-center .dashboard-hero .text-slate-400,
+.dashboard-shell--command-center .dashboard-hero .text-slate-300,
+.dashboard-workspace--command-center .dashboard-workspace-heading p,
+.dashboard-workspace--command-center .dashboard-workspace-tab-hint {
+  color: #64748b !important;
+}
+.dashboard-shell--command-center .dashboard-metrics > div {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #172033 !important;
+  box-shadow: 0 3px 12px rgb(15 23 42 / 0.035) !important;
+}
+.dashboard-shell--command-center .dashboard-metrics > div > span:first-child,
+.dashboard-shell--command-center .dashboard-metrics > div .text-slate-400 {
+  color: #64748b !important;
+}
+.dashboard-shell--command-center .dashboard-metrics > div .text-slate-900 {
+  color: #0f172a !important;
+}
+.dashboard-shell--command-center > .rounded-2xl.border.border-slate-200.bg-white {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #334155 !important;
+}
+.dashboard-shell--command-center > .rounded-2xl.border.border-slate-200.bg-white label {
+  color: #334155 !important;
+}
+.dashboard-shell--command-center > .rounded-2xl.border.border-slate-200.bg-white select {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+.dashboard-workspace--command-center {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 5px 20px rgb(15 23 42 / 0.035) !important;
+}
+.dashboard-workspace--command-center .dashboard-workspace-header {
+  background: linear-gradient(100deg, #ffffff 0%, #f8fafc 72%, #f0fdf4 100%) !important;
+  border-color: #e2e8f0 !important;
+}
+.dashboard-workspace--command-center .dashboard-nav-group,
+.dashboard-workspace--command-center .dashboard-nav-group--governance {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: none !important;
+}
+.dashboard-workspace--command-center .dashboard-nav-group-title {
+  color: #334155 !important;
+}
+.dashboard-workspace--command-center .dashboard-nav-group-heading p {
+  color: #64748b !important;
+}
+.dashboard-workspace--command-center .dashboard-nav-item,
+.dashboard-workspace--command-center .dashboard-nav-item--external {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #334155 !important;
+  box-shadow: none !important;
+}
+.dashboard-workspace--command-center .dashboard-nav-item:hover,
+.dashboard-workspace--command-center .dashboard-nav-item--external:hover {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+.dashboard-workspace--command-center .dashboard-nav-item.is-active {
+  background: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+  color: #047857 !important;
+  box-shadow: inset 3px 0 0 #10b981 !important;
+}
+.dashboard-workspace--command-center .dashboard-nav-item-icon {
+  background: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+.dashboard-workspace--command-center .dashboard-nav-item-count {
+  background: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+  color: #334155 !important;
+}
+.dashboard-workspace--command-center .dashboard-command-toolbar {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+.dashboard-workspace--command-center .dashboard-command-search {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #64748b !important;
+}
+.dashboard-workspace--command-center .dashboard-command-search input {
+  background: transparent !important;
+  color: #0f172a !important;
+}
+.dashboard-workspace--command-center .dashboard-command-search input::placeholder {
+  color: #94a3b8 !important;
+}
+.dashboard-workspace--command-center .dashboard-command-signals button {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #475569 !important;
+}
+.dashboard-workspace--command-center .dashboard-command-signals button strong {
+  color: #0f172a !important;
+}
+.dashboard-workspace--command-center .dashboard-command-signals button.is-warning {
+  background: #fffbeb !important;
+  border-color: #fde68a !important;
+  color: #92400e !important;
+}
+.dashboard-workspace--command-center .dashboard-command-signals button.is-alert {
+  background: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  color: #9f1239 !important;
+}
+
+/* Remove the old clipped tab viewport. Long workspaces must extend the page. */
+.dashboard-shell--command-center .dashboard-content,
+.dashboard-shell--command-center .admin-screen,
+.dashboard-shell--command-center .dashboard-workspace {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+  contain: none !important;
+}
+.dashboard-shell--command-center .dashboard-content {
+  display: block;
+  width: 100%;
+}
+.dashboard-shell--command-center .admin-screen {
+  width: 100%;
+}
+.dashboard-shell--command-center :where(.overflow-x-auto) {
+  max-width: 100%;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-inline: contain;
+}
+.dashboard-shell--command-center :where([role="dialog"]) {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Respect the light operations canvas even when the global app theme is dark. */
+html.dark .dashboard-shell--command-center,
+html.dark .dashboard-shell--command-center .dashboard-hero,
+html.dark .dashboard-workspace--command-center,
+html.dark .dashboard-workspace--command-center .dashboard-workspace-header,
+html.dark .dashboard-workspace--command-center .dashboard-command-toolbar {
+  background: #ffffff !important;
+  color: #172033 !important;
+}
+html.dark .dashboard-workspace--command-center .dashboard-nav-group,
+html.dark .dashboard-workspace--command-center .dashboard-nav-group--governance {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+html.dark .dashboard-workspace--command-center .dashboard-nav-group-title,
+html.dark .dashboard-workspace--command-center .dashboard-nav-item {
+  color: #334155 !important;
+}
+html.dark .dashboard-workspace--command-center .dashboard-nav-item {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+html.dark .dashboard-workspace--command-center .dashboard-nav-item.is-active {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+  border-color: #6ee7b7 !important;
+}
+html.dark .dashboard-workspace--command-center .dashboard-command-search input {
+  color: #0f172a !important;
+}
