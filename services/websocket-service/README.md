@@ -35,7 +35,7 @@ Clients connect using `auth: { token: <Pharma RS256 access token> }`. The servic
 
 Set on the deployed `websockt` service:
 - `NODE_ENV=production`
-- `CORS_ALLOWED_ORIGINS=https://pharma-ui.onrender.com` (exact browser origins only)
+- `CORS_ALLOWED_ORIGINS=https://pharma-1-278k.onrender.com` (exact browser origins only)
 - `CACHE_SERVICE_URL=https://caching-v0et.onrender.com`
 - `CACHE_SERVICE_TOKEN`: the same random secret configured on the cache and API (minimum 32 characters)
 - `PHARMA_JWT_PUBLIC_KEY`: the backend RS256 public key, with PEM newlines preserved or escaped as `\\n`
