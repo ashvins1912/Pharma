@@ -63,7 +63,7 @@ export async function queueMedicineMatch(product) {
   if (!identity.input.name && !identity.input.genericName && !identity.input.composition) return null;
   return MedicineMatchReference.findOneAndUpdate(
     { identityHash: identity.identityHash },
-    { $set: { normalizedIdentity: identity.normalizedIdentity, input: identity.input, status: 'PENDING', medicineId: '', confidence: 0, resolvedAt: null, lastError: '' } },
+    { $setOnInsert: { normalizedIdentity: identity.normalizedIdentity, input: identity.input, status: 'PENDING', medicineId: '', confidence: 0, attempts: 0, lastError: '' } },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   ).lean();
 }
