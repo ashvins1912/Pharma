@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import { randomUUID } from 'node:crypto';
 
 const orderItemSchema = new mongoose.Schema({
   productId: { type: String, required: true },
@@ -27,7 +26,7 @@ const statusHistorySchema = new mongoose.Schema({
 }, { _id: false });
 
 const orderSchema = new mongoose.Schema({
-  orderNumber: { type: String, required: true, default: () => `ORD-${randomUUID()}` },
+  orderNumber: { type: String, required: true, match: /^ORD-\d+$/ },
   userId: { type: String, required: true, index: true },
   customerName: { type: String, default: 'Valued Customer' },
   customerMobile: { type: String, default: '' },
