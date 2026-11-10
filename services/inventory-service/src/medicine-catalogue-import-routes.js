@@ -290,12 +290,21 @@ export function consolidate(records, dataset) {
         if (!previous[field] && normalized[field]) previous[field] = normalized[field];
       }
       for (const field of ['ingredientIds','ingredients','ingredientDetails','routeIds','routes','casNumbers','uniiCodes','substanceDescriptions','molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology','indications','contraindications','drugInteractions']) {
-        previous[field] = [...new Map([...previous[field], ...normalized[field]].map(v => [key(v), v])).values()];
+        const identityOf = value => typeof value === 'object' && value !== null
+          ? (value.ingredientId || key(value.name) || JSON.stringify(value))
+          : key(value);
+        previous[field] = [...new Map([...previous[field], ...normalized[field]].map(value => [identityOf(value), value])).values()];
       }
+      previous.qualityIssues = [...new Set([...(previous.qualityIssues || []), ...(normalized.qualityIssues || [])])];
       previous.sourceRecordIds = [...new Set([...(previous.sourceRecordIds || [previous.sourceRecordId]), normalized.sourceRecordId])];
     }
   }
-  return { records: [...unique.values()], rejected, sourceRecords, duplicatesRemoved: sourceRecords - rejected - unique.size };
+  const consolidatedRecords = [...unique.values()];
+  for (const record of consolidatedRecords) {
+    Object.assign(record, assessMedicineQuality(record));
+    record.dataQualityStatus = record.qualityGrade === 'EXCELLENT' || record.qualityGrade === 'GOOD' ? 'GOOD' : record.qualityGrade === 'NEEDS_REVIEW' ? 'NEEDS_REVIEW' : 'PARTIAL';
+  }
+  return { records: consolidatedRecords, rejected, sourceRecords, duplicatesRemoved: sourceRecords - rejected - unique.size };
 }
 
 router.use(requireServiceScope('inventory.catalogue.import'));
