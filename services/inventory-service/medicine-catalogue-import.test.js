@@ -62,7 +62,7 @@ test('retail-style dataset strips scraped price text and marks prescription meta
   }, 'INDIA_MEDICINES_INFO');
 
   assert.equal(result.brandName, 'Examplecin 500mg');
-  assert.equal(result.productName, 'Examplecin 500mg Tablet -');
+  assert.equal(result.productName, 'Examplecin 500mg Tablet');
   assert.equal(result.dosageForm, 'Tablet');
   assert.equal(result.medicineType, 'Tablets');
   assert.equal(result.requiresPrescription, true);
