@@ -781,7 +781,7 @@ async function processCatalogueImportPreview(req, res) {
   for (const item of records) item.safeNameMatch = dataset === 'MEDICINES_PART_1' && nameCounts.get(key(item.brandName)) === 1;
   const batchId = randomUUID();
   const fileSha256 = hash(req.file.buffer);
-  const previousBatch = await CatalogueImport.findOne({ dataset, fileSha256 }).lean();
+  const previousBatch = await CatalogueImport.findOne({ dataset, fileSha256, isHidden: { $ne: true } }).lean();
   if (previousBatch) {
     if (previousBatch.status === 'STAGING') {
       const staleBefore = new Date(Date.now() - 15 * 60 * 1000);
@@ -984,13 +984,13 @@ export const mergeStagedMedicine = (left, right) => {
 router.post('/imports/merge', asyncHandler(async (req, res) => {
   const batchIds = [...new Set((Array.isArray(req.body?.batchIds) ? req.body.batchIds : []).map(value => text(value)).filter(Boolean))];
   if (batchIds.length < 2 || batchIds.length > 10) return res.status(400).json({ message: 'Select between 2 and 10 staged batches to merge.' });
-  const batches = await CatalogueImport.find({ batchId: { $in: batchIds } }).lean();
+  const batches = await CatalogueImport.find({ batchId: { $in: batchIds }, isHidden: { $ne: true } }).lean();
   if (batches.length !== batchIds.length || batches.some(batch => batch.status !== 'READY' || batch.approvedAt)) {
     return res.status(409).json({ message: 'All selected batches must exist, remain staged and ready, and not already be approved.' });
   }
   const sourceBatchIds = batches.map(batch => batch.batchId).sort();
   const fileSha256 = hash(sourceBatchIds.join('|'));
-  const previous = await CatalogueImport.findOne({ dataset: 'MULTI_SOURCE', fileSha256 }).lean();
+  const previous = await CatalogueImport.findOne({ dataset: 'MULTI_SOURCE', fileSha256, isHidden: { $ne: true } }).lean();
   if (previous) return res.json({ batchId: previous.batchId, dataset: previous.dataset, status: previous.status, report: previous.report, reportFingerprint: previous.reportFingerprint, reused: true });
   const allChunks = await CatalogueImportChunk.find({ batchId: { $in: sourceBatchIds } }).sort({ batchId: 1, chunkIndex: 1 }).lean();
   const rawRecords = allChunks.flatMap(chunk => chunk.records || []);
@@ -1144,7 +1144,7 @@ router.get('/imports/:batchId/records', asyncHandler(async (req, res) => {
   const limit = Math.max(1, Math.min(50, Number.parseInt(req.query.limit || '20', 10) || 20));
   const search = text(req.query.search).slice(0, 100).toLowerCase();
   const chunks = await CatalogueImportChunk.find({ batchId }).sort({ chunkIndex: 1 }).lean();
-  const source = chunks.length ? chunks.flatMap(chunk => chunk.records || []) : (await CatalogueImport.findOne({ batchId }, { records: 1 }).lean())?.records || [];
+  const source = chunks.length ? chunks.flatMap(chunk => chunk.records || []) : (await CatalogueImport.findOne({ batchId, isHidden: { $ne: true } }, { records: 1 }).lean())?.records || [];
   const matches = search ? source.filter(record => [record.brandName, record.genericName, record.composition, record.manufacturer, record.medicineId, record.strength, record.dosageForm].some(value => String(value || '').toLowerCase().includes(search))) : source;
   const total = matches.length;
   const items = matches.slice((page - 1) * limit, page * limit).map(record => ({
