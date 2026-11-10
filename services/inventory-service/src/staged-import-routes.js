@@ -205,6 +205,7 @@ async function publishRows(batch, rows, req) {
         inventoryBaseline.push({ sku: v.sku, batchNumber: v.batchNumber || '', stockQuantity: inventory.stockQuantity, reservedQuantity: inventory.reservedQuantity, price: inventory.price, updatedAt: inventory.updatedAt || null });
         productBaseline = productBaseline.filter(item => item.sku !== v.sku);
         productBaseline.push({ sku: v.sku, version: product.version, updatedAt: product.updatedAt || null });
+        changedProducts.push({ name: product.name, brand: product.brand, genericName: product.genericName, composition: product.composition, strength: product.strength, form: product.form, manufacturer: product.manufacturer, packSize: product.packSize });
         await StagedImportBatch.updateOne({ _id: batch._id }, { $set: { previewInventorySnapshot: inventoryBaseline, previewProductSnapshot: productBaseline } }, { session });
         const sequenceDoc = await StagedImportBatch.findOneAndUpdate({ _id: batch._id }, { $inc: { nextPublicationSequence: 1 } }, { new: true, session });
         const publication = {
@@ -262,9 +263,11 @@ async function unpublishRows(batch, rows, req) {
   await assertTransactionSupport();
   const session = await mongoose.startSession();
   const changed = [];
+  const changedProducts = [];
   try {
     await session.withTransaction(async () => {
       changed.length = 0;
+      changedProducts.length = 0;
       const baselineBatch = await StagedImportBatch.findById(batch._id).session(session).lean();
       const batchRollbackState = ['REVERTING', 'REVERTED'].includes(baselineBatch?.status);
       let inventoryBaseline = [...(baselineBatch?.previewInventorySnapshot || [])];
@@ -334,6 +337,9 @@ async function unpublishRows(batch, rows, req) {
       }], { session });
     });
   } finally { await session.endSession(); }
+  const matchQueueResults = await Promise.allSettled(changedProducts.map(product => queueMedicineMatch(product)));
+  const matchQueueFailures = matchQueueResults.filter(result => result.status === 'rejected').length;
+  if (matchQueueFailures) console.error('Some reverted staged products could not be queued for Medicine Master matching:', matchQueueFailures);
   return changed;
 }
 
