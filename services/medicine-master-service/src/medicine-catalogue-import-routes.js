@@ -1188,7 +1188,6 @@ router.get('/imports/:batchId/mapping-queue', asyncHandler(async (req, res) => {
   const candidateRows = prefixes.length ? await MedicineMaster.find({
     isArchived: { $ne: true },
     lastImportBatchId: { $ne: batchId },
-    medicineId: { $nin: records.map(record => record.medicineId) },
     $or: prefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } }))
   }, {
     medicineId: 1, brandName: 1, productName: 1, genericName: 1, composition: 1,
