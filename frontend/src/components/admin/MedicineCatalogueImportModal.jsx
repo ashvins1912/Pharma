@@ -126,6 +126,9 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                 {metric('With side effects', report.withSideEffects)}
                 {metric('With uses', report.withUses)}
                 {metric('With suggested alternatives', report.withSuggestedAlternatives)}
+                {metric('Records with alternatives', report.withAlternatives)}
+                {metric('Linked alternative IDs', report.withLinkedAlternativeIds)}
+                {metric('Total alternative links', report.totalAlternativeLinks)}
                 {metric('With therapeutic class', report.withTherapeuticClass)}
                 {metric('With chemical class', report.withChemicalClass)}
                 {metric('Habit-forming metadata', report.withHabitFormingMetadata)}
