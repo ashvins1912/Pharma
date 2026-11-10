@@ -6,7 +6,9 @@ import { requireServiceScope } from './service-auth.js';
 
 const router = express.Router();
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 1 } });
+const MAX_CATALOGUE_UPLOAD_BYTES = 110 * 1024 * 1024;
+const CATALOGUE_CHUNK_SIZE = 500;
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_CATALOGUE_UPLOAD_BYTES, files: 1 } });
 const text = value => String(value ?? '').replace(/<[^>]*>/g, ' ').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
 const key = value => text(value).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const hash = value => createHash('sha256').update(String(value)).digest('hex');
@@ -49,6 +51,13 @@ const medicineMasterSchema = new mongoose.Schema({
   indications: { type: [String], default: [] },
   contraindications: { type: [String], default: [] },
   drugInteractions: { type: [String], default: [] },
+  sideEffects: { type: [String], default: [] },
+  uses: { type: [String], default: [] },
+  suggestedAlternatives: { type: [String], default: [] },
+  chemicalClass: { type: String, default: '' },
+  habitForming: { type: String, enum: ['YES', 'NO', 'UNKNOWN'], default: 'UNKNOWN' },
+  therapeuticClass: { type: String, default: '' },
+  actionClass: { type: String, default: '' },
   sourceImageUrl: { type: String, default: '' },
   requiresPrescription: { type: Boolean, default: null },
   prescriptionVerification: { type: String, enum: ['UNVERIFIED', 'VERIFIED'], default: 'UNVERIFIED' },
@@ -64,11 +73,13 @@ const medicineMasterSchema = new mongoose.Schema({
 medicineMasterSchema.index({ brandName: 'text', genericName: 'text', composition: 'text', manufacturer: 'text' });
 const catalogueImportSchema = new mongoose.Schema({
   batchId: { type: String, required: true, unique: true },
-  dataset: { type: String, enum: ['INDIAN_MEDICINE_DATA', 'INDIA_MEDICINES_INFO'], required: true },
+  dataset: { type: String, enum: ['INDIAN_MEDICINE_DATA', 'INDIA_MEDICINES_INFO', 'MEDICINES_PART_1'], required: true },
   fileName: { type: String, required: true },
   fileSha256: { type: String, required: true },
   uploadedBy: { type: String, required: true },
   status: { type: String, enum: ['READY', 'PUBLISHING', 'PUBLISHED', 'PARTIALLY_PUBLISHED', 'FAILED'], default: 'READY', index: true },
+  recordCount: { type: Number, default: 0 },
+  chunkCount: { type: Number, default: 0 },
   records: { type: [mongoose.Schema.Types.Mixed], default: [] },
   report: { type: mongoose.Schema.Types.Mixed, default: {} },
   publishedCount: { type: Number, default: 0 },
@@ -77,9 +88,17 @@ const catalogueImportSchema = new mongoose.Schema({
 catalogueImportSchema.index({ dataset: 1, fileSha256: 1 }, { unique: true });
 const MedicineMaster = mongoose.models.MedicineMaster || mongoose.model('MedicineMaster', medicineMasterSchema);
 const CatalogueImport = mongoose.models.MedicineCatalogueImport || mongoose.model('MedicineCatalogueImport', catalogueImportSchema);
+const catalogueImportChunkSchema = new mongoose.Schema({
+  batchId: { type: String, required: true, index: true },
+  chunkIndex: { type: Number, required: true },
+  records: { type: [mongoose.Schema.Types.Mixed], required: true }
+}, { timestamps: true });
+catalogueImportChunkSchema.index({ batchId: 1, chunkIndex: 1 }, { unique: true });
+const CatalogueImportChunk = mongoose.models.MedicineCatalogueImportChunk || mongoose.model('MedicineCatalogueImportChunk', catalogueImportChunkSchema);
 
 export function detectMedicineDataset(payload) {
   if (payload && !Array.isArray(payload) && Array.isArray(payload.drugDetails)) return 'INDIAN_MEDICINE_DATA';
+  if (Array.isArray(payload) && payload.length && ('id' in (payload[0] || {}) && 'name' in (payload[0] || {}) && ('sideEffect0' in (payload[0] || {}) || 'use0' in (payload[0] || {})))) return 'MEDICINES_PART_1';
   if (Array.isArray(payload) && payload.length && ('Medicine Name' in (payload[0] || {}) || 'Product Name' in (payload[0] || {}))) return 'INDIA_MEDICINES_INFO';
   throw Object.assign(new Error('Unsupported JSON. Upload the drugDetails object or the India Medicines and Drug Info array.'), { statusCode: 400 });
 }
@@ -111,6 +130,28 @@ export function normalizeMedicineRecord(raw, dataset) {
       sourceImageUrl: '', requiresPrescription: null, prescriptionVerification: 'UNVERIFIED',
       sourcePriority: 1, sourceDataset: dataset, sourceRecordId: medicineId,
       dataQualityStatus: composition && dosageForm && genericName ? 'GOOD' : 'PARTIAL'
+    };
+  }
+  if (dataset === 'MEDICINES_PART_1') {
+    const brandName = text(pick(raw, 'name'));
+    const sourceRecordId = text(pick(raw, 'id'));
+    if (!brandName || !sourceRecordId) return null;
+    const strengthMatch = brandName.match(/\\b\\d+(?:\\.\\d+)?\\s?(?:mcg|mg|g|ml|iu|%)(?:\\b|\\/)/i);
+    const strength = strengthMatch ? strengthMatch[0].replace(/\\s+/g, ' ').trim() : '';
+    const dosageForm = cleanDosageForm(brandName);
+    const collect = prefix => Array.from({ length: prefix === 'sideEffect' ? 42 : 5 }, (_, index) => text(raw[`${prefix}${index}`])).filter(Boolean).filter((value, index, all) => all.findIndex(item => key(item) === key(value)) === index);
+    const identity = [key(brandName), key(strength), key(dosageForm)].join('|');
+    return {
+      medicineId: `MEDINFO-${sourceRecordId}`, canonicalKey: '', brandName, genericName: '', genericId: '',
+      productId: '', productName: brandName, manufacturer: '', manufacturerId: '', ingredientIds: [], ingredients: [],
+      composition: '', strength, packSize: '', dosageForm, medicineType: dosageForm, routes: [], alternatives: [],
+      indications: [], contraindications: [], drugInteractions: [], sideEffects: collect('sideEffect'), uses: collect('use'),
+      suggestedAlternatives: collect('substitute'), chemicalClass: text(pick(raw, 'Chemical Class')),
+      habitForming: ['yes', 'no'].includes(text(pick(raw, 'Habit Forming')).toLowerCase()) ? text(pick(raw, 'Habit Forming')).toUpperCase() : 'UNKNOWN',
+      therapeuticClass: text(pick(raw, 'Therapeutic Class')), actionClass: text(pick(raw, 'Action Class')),
+      sourceImageUrl: '', requiresPrescription: null, prescriptionVerification: 'UNVERIFIED',
+      sourcePriority: 3, sourceDataset: dataset, sourceRecordId, dataQualityStatus: 'PARTIAL',
+      sourceFingerprint: hash(JSON.stringify([identity, collect('sideEffect'), collect('use'), collect('substitute'), pick(raw, 'Chemical Class'), pick(raw, 'Therapeutic Class'), pick(raw, 'Action Class')]))
     };
   }
   const brandName = text(pick(raw, 'Medicine Name')) || text(pick(raw, 'Product Name'));
@@ -176,24 +217,32 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   const detected = detectMedicineDataset(payload);
   if (dataset !== detected) return res.status(400).json({ message: 'Selected dataset type does not match the uploaded JSON structure.' });
   const sourceRows = dataset === 'INDIAN_MEDICINE_DATA' ? payload.drugDetails : payload;
-  if (!Array.isArray(sourceRows) || sourceRows.length > 25000) return res.status(413).json({ message: 'Dataset must contain between 1 and 25,000 records.' });
+  if (!Array.isArray(sourceRows) || sourceRows.length < 1 || sourceRows.length > 60000) return res.status(413).json({ message: 'Dataset must contain between 1 and 60,000 records.' });
   const tagged = sourceRows.map(record => ({ ...record, __dataset: dataset }));
   const { records, rejected, duplicatesRemoved } = consolidate(tagged, dataset);
-  if (Buffer.byteLength(JSON.stringify(records), 'utf8') > 12 * 1024 * 1024) return res.status(413).json({ message: 'The cleaned catalogue preview is too large to stage safely. Split the dataset into smaller files.' });
+  const nameCounts = new Map();
+  for (const item of records) { const nameKey = key(item.brandName); nameCounts.set(nameKey, (nameCounts.get(nameKey) || 0) + 1); }
+  for (const item of records) item.safeNameMatch = dataset === 'MEDICINES_PART_1' && nameCounts.get(key(item.brandName)) === 1;
   const batchId = randomUUID();
   const fileSha256 = hash(req.file.buffer);
   const previousBatch = await CatalogueImport.findOne({ dataset, fileSha256 }).lean();
-  if (previousBatch) return res.status(200).json({ batchId: previousBatch.batchId, dataset, status: previousBatch.status, report: previousBatch.report, sample: (previousBatch.records || []).slice(0, 8), reused: true });
+  if (previousBatch) {
+    const firstChunk = await CatalogueImportChunk.findOne({ batchId: previousBatch.batchId, chunkIndex: 0 }).lean();
+    return res.status(200).json({ batchId: previousBatch.batchId, dataset, status: previousBatch.status, report: previousBatch.report, sample: (firstChunk?.records || previousBatch.records || []).slice(0, 8), reused: true });
+  }
   const ids = records.map(record => record.medicineId);
   const canonicalKeys = records.map(record => record.canonicalKey).filter(Boolean);
+  const names = dataset === 'MEDICINES_PART_1' ? [...new Set(records.filter(item => item.safeNameMatch).map(item => item.brandName))] : [];
   const incomingKeyCounts = new Map();
   for (const item of records) if (item.canonicalKey) incomingKeyCounts.set(item.canonicalKey, (incomingKeyCounts.get(item.canonicalKey) || 0) + 1);
-  const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: canonicalKeys } }] }, { medicineId: 1, canonicalKey: 1 }).lean();
+  const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: canonicalKeys } }, ...(names.length ? [{ brandName: { $in: names } }] : [])] }, { medicineId: 1, canonicalKey: 1, brandName: 1 }).lean();
   const existingIds = new Set(existing.map(item => item.medicineId));
   const existingKeyCounts = new Map();
   for (const item of existing.filter(item => item.canonicalKey)) existingKeyCounts.set(item.canonicalKey, (existingKeyCounts.get(item.canonicalKey) || 0) + 1);
   const existingKeys = new Set([...existingKeyCounts.entries()].filter(([, count]) => count === 1).map(([canonicalKey]) => canonicalKey));
-  const updates = records.filter(item => existingIds.has(item.medicineId) || (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeys.has(item.canonicalKey))).length;
+  const existingNameCounts = new Map();
+  for (const item of existing) { const nameKey = key(item.brandName); existingNameCounts.set(nameKey, (existingNameCounts.get(nameKey) || 0) + 1); }
+  const updates = records.filter(item => existingIds.has(item.medicineId) || (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeys.has(item.canonicalKey)) || (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1)).length;
   const report = {
     sourceRecords: sourceRows.length, normalizedRecords: records.length, rejectedRecords: rejected,
     duplicatesRemoved, newRecords: records.length - updates, updateCandidates: updates,
@@ -204,13 +253,22 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     withManufacturer: records.filter(item => item.manufacturer).length,
     withDosageForm: records.filter(item => item.dosageForm).length,
     withAlternatives: records.filter(item => item.alternatives.length).length,
+    withSideEffects: records.filter(item => item.sideEffects?.length).length,
+    withUses: records.filter(item => item.uses?.length).length,
+    withSuggestedAlternatives: records.filter(item => item.suggestedAlternatives?.length).length,
+    withTherapeuticClass: records.filter(item => item.therapeuticClass).length,
+    withChemicalClass: records.filter(item => item.chemicalClass && key(item.chemicalClass) !== 'na').length,
+    withHabitFormingMetadata: records.filter(item => item.habitForming !== 'UNKNOWN').length,
     prescriptionFlagsUnverified: records.filter(item => item.requiresPrescription !== null).length
   };
+  const chunks = [];
+  for (let offset = 0; offset < records.length; offset += CATALOGUE_CHUNK_SIZE) chunks.push({ batchId, chunkIndex: chunks.length, records: records.slice(offset, offset + CATALOGUE_CHUNK_SIZE) });
   await CatalogueImport.create({
     batchId, dataset, fileName: String(req.file.originalname || 'medicine-catalogue.json').slice(0, 180),
     fileSha256, uploadedBy: req.service.userId || req.service.name,
-    status: 'READY', records, report
+    status: 'READY', recordCount: records.length, chunkCount: chunks.length, report
   });
+  if (chunks.length) await CatalogueImportChunk.insertMany(chunks, { ordered: true });
   return res.status(201).json({ batchId, dataset, status: 'READY', report, sample: records.slice(0, 8) });
 }));
 
@@ -230,22 +288,33 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
   await batch.save();
   let publishedCount = 0;
   try {
-    const records = batch.records || [];
+    const stagedChunks = await CatalogueImportChunk.find({ batchId: batch.batchId }).sort({ chunkIndex: 1 }).lean();
+    const recordChunks = stagedChunks.length ? stagedChunks.map(item => item.records) : (batch.records?.length ? [batch.records] : []);
+    const records = recordChunks.flat();
     const incomingKeyCounts = new Map();
-    for (const item of records) if (item.canonicalKey) incomingKeyCounts.set(item.canonicalKey, (incomingKeyCounts.get(item.canonicalKey) || 0) + 1);
-    for (let offset = 0; offset < records.length; offset += 250) {
-      const chunk = records.slice(offset, offset + 250);
+    const incomingNameCounts = new Map();
+    for (const item of records) {
+      if (item.canonicalKey) incomingKeyCounts.set(item.canonicalKey, (incomingKeyCounts.get(item.canonicalKey) || 0) + 1);
+      const nameKey = key(item.brandName); incomingNameCounts.set(nameKey, (incomingNameCounts.get(nameKey) || 0) + 1);
+    }
+    for (const recordChunk of recordChunks) for (let offset = 0; offset < recordChunk.length; offset += 250) {
+      const chunk = recordChunk.slice(offset, offset + 250);
       const ids = chunk.map(item => item.medicineId);
       const keys = chunk.map(item => item.canonicalKey).filter(Boolean);
-      const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: keys } }] }).lean();
+      const names = batch.dataset === 'MEDICINES_PART_1' ? [...new Set(chunk.filter(item => item.safeNameMatch && incomingNameCounts.get(key(item.brandName)) === 1).map(item => item.brandName))] : [];
+      const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: keys } }, ...(names.length ? [{ brandName: { $in: names } }] : [])] }).lean();
       const byId = new Map(existing.map(item => [item.medicineId, item]));
       const keyGroups = new Map();
       for (const item of existing.filter(item => item.canonicalKey)) keyGroups.set(item.canonicalKey, [...(keyGroups.get(item.canonicalKey) || []), item]);
       const byKey = new Map([...keyGroups.entries()].filter(([, matches]) => matches.length === 1).map(([canonicalKey, matches]) => [canonicalKey, matches[0]]));
+      const nameGroups = new Map();
+      for (const item of existing) { const nameKey = key(item.brandName); nameGroups.set(nameKey, [...(nameGroups.get(nameKey) || []), item]); }
+      const byName = new Map([...nameGroups.entries()].filter(([, matches]) => matches.length === 1).map(([nameKey, matches]) => [nameKey, matches[0]]));
       const operations = chunk.map(item => {
         const canonicalMatch = item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 ? byKey.get(item.canonicalKey) : null;
-        const current = byId.get(item.medicineId) || canonicalMatch || null;
-        const targetId = batch.dataset === 'INDIAN_MEDICINE_DATA' ? item.medicineId : (current?.medicineId || item.medicineId);
+        const nameMatch = item.safeNameMatch && incomingNameCounts.get(key(item.brandName)) === 1 ? byName.get(key(item.brandName)) : null;
+        const current = byId.get(item.medicineId) || canonicalMatch || nameMatch || null;
+        const targetId = ['INDIAN_MEDICINE_DATA', 'MEDICINES_PART_1'].includes(batch.dataset) ? (current?.medicineId || item.medicineId) : (current?.medicineId || item.medicineId);
         const fields = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType','sourceImageUrl'];
         const set = {
           medicineId: targetId,
@@ -256,11 +325,13 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         for (const field of fields) {
           if (item[field] && (!current?.[field] || item.sourcePriority < Number(current.sourcePriority ?? 99))) set[field] = item[field];
         }
-        for (const field of ['ingredientIds','ingredients','routes','indications','contraindications','drugInteractions','alternatives']) {
+        for (const field of ['ingredientIds','ingredients','routes','indications','contraindications','drugInteractions','alternatives','sideEffects','uses','suggestedAlternatives']) {
           const incoming = item[field] || [];
           if (incoming.length) set[field] = [...new Map([...(current?.[field] || []), ...incoming].map(v => [key(typeof v === 'string' ? v : JSON.stringify(v)), v])).values()];
         }
         if (current?.requiresPrescription === null || current?.requiresPrescription === undefined) set.requiresPrescription = item.requiresPrescription;
+        for (const field of ['chemicalClass','therapeuticClass','actionClass']) if (item[field] && (!current?.[field] || item.sourcePriority < Number(current.sourcePriority ?? 99))) set[field] = item[field];
+        if (item.habitForming && item.habitForming !== 'UNKNOWN' && (!current?.habitForming || current.habitForming === 'UNKNOWN')) set.habitForming = item.habitForming;
         set.prescriptionVerification = 'UNVERIFIED';
         set.sourceLicenseStatus = current?.sourceLicenseStatus || 'UNVERIFIED';
         const qualityRank = { NEEDS_REVIEW: 1, PARTIAL: 2, GOOD: 3 };
@@ -271,7 +342,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
             filter: current ? { _id: current._id } : { medicineId: targetId },
             update: {
               $set: set,
-              $addToSet: { sourceDatasets: item.sourceDataset, sourceRecordIds: item.sourceRecordId, ...(current && current.medicineId !== targetId ? { legacyMedicineIds: current.medicineId } : {}) }
+              $addToSet: { sourceDatasets: item.sourceDataset, sourceRecordIds: { $each: item.sourceRecordIds?.length ? item.sourceRecordIds : [item.sourceRecordId] }, ...(current && current.medicineId !== targetId ? { legacyMedicineIds: current.medicineId } : {}) }
             },
             upsert: true
           }
@@ -295,6 +366,6 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
 }));
 
 export async function initializeMedicineCatalogueModels() {
-  await Promise.all([MedicineMaster.init(), CatalogueImport.init()]);
+  await Promise.all([MedicineMaster.init(), CatalogueImport.init(), CatalogueImportChunk.init()]);
 }
 export default router;
