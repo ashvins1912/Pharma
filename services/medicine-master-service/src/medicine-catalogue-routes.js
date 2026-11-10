@@ -1,14 +1,14 @@
 import express from 'express';
 import { requireServiceScope } from './service-auth.js';
 import mongoose from 'mongoose';
-import { getOrResolveMedicineMatch, processMedicineMatchBatch } from './medicine-match-reference.js';
+import { getOrResolveMedicineMatch, processMedicineMatchBatch, MedicineMatchReference } from './medicine-match-reference.js';
 
 const router = express.Router();
 const medicineMaster = () => mongoose.models.MedicineMaster;
 const escapeRegex = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 router.use((req, res, next) => requireServiceScope(
-  req.method === 'PATCH' || req.method === 'DELETE' || req.path.endsWith('/audit') || req.path === '/match/batch' ? 'inventory.catalogue.import' : 'inventory.catalogue.read'
+  req.method === 'PATCH' || req.method === 'DELETE' || req.path.endsWith('/audit') || req.path === '/match/batch' || req.path.startsWith('/matches/') ? 'inventory.catalogue.import' : 'inventory.catalogue.read'
 )(req, res, next));
 
 router.get('/match', async (req, res, next) => {
@@ -29,6 +29,47 @@ router.get('/match', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+
+const MAPPED_MEDICINE_FIELDS = new Set(['brandName','productName','genericName','manufacturer','composition','strength','packSize','dosageForm','medicineType','therapeuticClass','chemicalClass','actionClass','routes','indications','uses','contraindications','sideEffects','drugInteractions','habitForming','requiresPrescription','prescriptionVerification','clinicalDataVerification','dataQualityStatus']);
+router.get('/matches/review', async (req, res, next) => {
+  try {
+    if (req.service?.isPlatformUser !== true) return res.status(403).json({ message: 'Only a platform super administrator can review medicine mappings.' });
+    const page = Math.max(1, Number.parseInt(req.query.page || '1', 10) || 1);
+    const limit = Math.max(1, Math.min(100, Number.parseInt(req.query.limit || '100', 10) || 100));
+    const status = String(req.query.status || 'PENDING').toUpperCase();
+    const filter = status === 'ALL' ? { mappingStatus: { $ne: 'APPROVED' } } : { mappingStatus: status };
+    const [rows, total] = await Promise.all([
+      MedicineMatchReference.find(filter).sort({ updatedAt: 1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean(),
+      MedicineMatchReference.countDocuments(filter)
+    ]);
+    const ids = [...new Set(rows.map(row => row.mappedMedicineId || row.medicineId).filter(Boolean))];
+    const candidates = ids.length ? await medicineMaster().find({ medicineId: { $in: ids }, isArchived: { $ne: true } }, {
+      _id: 0, medicineId: 1, brandName: 1, productName: 1, genericName: 1, composition: 1, strength: 1,
+      packSize: 1, dosageForm: 1, manufacturer: 1, medicineType: 1, therapeuticClass: 1, chemicalClass: 1,
+      actionClass: 1, routes: 1, indications: 1, uses: 1, contraindications: 1, sideEffects: 1,
+      drugInteractions: 1, habitForming: 1, requiresPrescription: 1, prescriptionVerification: 1,
+      clinicalDataVerification: 1, dataQualityStatus: 1
+    }).lean() : [];
+    const byId = new Map(candidates.map(item => [item.medicineId, item]));
+    return res.json({ items: rows.map(row => ({ ...row, candidate: byId.get(row.mappedMedicineId || row.medicineId) || null })), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+  } catch (error) { return next(error); }
+});
+router.post('/matches/:identityHash/map', async (req, res, next) => {
+  try {
+    if (req.service?.isPlatformUser !== true) return res.status(403).json({ message: 'Only a platform super administrator can approve medicine mappings.' });
+    const medicineId = String(req.body?.medicineId || '').trim();
+    const fields = [...new Set((Array.isArray(req.body?.fields) ? req.body.fields : []).map(String))];
+    if (!medicineId) return res.status(400).json({ message: 'Select a Medicine Master record before approving this mapping.' });
+    if (!fields.length || fields.some(field => !MAPPED_MEDICINE_FIELDS.has(field))) return res.status(400).json({ message: 'Select at least one supported catalogue field to map.' });
+    const target = await medicineMaster().findOne({ medicineId, isArchived: { $ne: true } }, { _id: 0, medicineId: 1 }).lean();
+    if (!target) return res.status(404).json({ message: 'The selected active Medicine Master record was not found.' });
+    const row = await MedicineMatchReference.findOneAndUpdate({ identityHash: req.params.identityHash }, {
+      $set: { mappingStatus: 'APPROVED', mappedMedicineId: medicineId, mappedFields: fields, mappedBy: String(req.service?.userId || req.service?.name || ''), mappedAt: new Date() }
+    }, { new: true, runValidators: true }).lean();
+    if (!row) return res.status(404).json({ message: 'Medicine match review item was not found.' });
+    return res.json({ success: true, identityHash: row.identityHash, mappingStatus: row.mappingStatus, mappedMedicineId: row.mappedMedicineId, mappedFields: row.mappedFields, mappedAt: row.mappedAt });
+  } catch (error) { return next(error); }
+});
 router.post('/match/batch', async (req, res, next) => {
   try {
     const result = await processMedicineMatchBatch({ limit: req.body?.limit });
