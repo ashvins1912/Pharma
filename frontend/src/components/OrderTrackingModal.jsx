@@ -167,11 +167,11 @@ export default function OrderTrackingModal({ order, onClose }) {
 
           {order.fulfillmentState === 'PARTIAL' && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-950">
-              <strong>Split fulfilment in progress</strong>
+              <strong>{t('splitFulfilmentInProgress')}</strong>
               <p className="mt-1 text-[11px] text-amber-800">
                 {rawStatus === 'delivered'
-                  ? 'The available items in this order have been delivered. The remaining items are still on stock watch, not part of a placed order. We will notify you when stock returns so you can confirm them.'
-                  : 'Your order was successfully created for the available items. The remaining items are only on stock watch—not yet an order. We will notify you when stock returns, and you can confirm those quantities before a separate order is created.'}
+                  ? t('availableItemsDelivered')
+                  : t('availableItemsOrderCreated')}
               </p>
             </div>
           )}
