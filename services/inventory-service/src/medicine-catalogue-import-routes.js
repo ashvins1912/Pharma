@@ -68,7 +68,7 @@ export function scoreMedicineMatch(incoming, candidate) {
     ]
   };
 }
-const fuzzyCandidatePrefixes = records => [...new Set(records.map(item => key(item.brandName).split(' ')[0]).filter(value => value.length >= 3))].slice(0, 120);
+const fuzzyCandidatePrefixes = records => [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))].slice(0, 120);
 const bool = value => typeof value === 'boolean' ? value : ['true', 'yes', '1'].includes(text(value).toLowerCase());
 const cleanRetailProductName = value => text(value).split(/\b(?:mrp|price|inclusive of all taxes|prescription required|prescription only)\b|₹|\bRs\.?\s*\d/i)[0].replace(/[|,;\-–]+\s*$/, '').trim();
 const cleanDosageForm = value => {
@@ -485,7 +485,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
       (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1 ? existingNameGroups.get(key(item.brandName))?.[0] : null);
     if (exact) { item.reconciliationMatch = { targetMedicineId: exact.medicineId, method: 'EXACT_OR_CANONICAL', score: 100, decision: 'AUTO_MERGE', warnings: [] }; continue; }
     let best = null;
-    const prefix = key(item.brandName).split(' ')[0];
+    const prefix = key(item.brandName).slice(0, 2);
     const candidates = existingByNamePrefix.get(prefix) || [];
     for (const candidate of candidates) {
       const scored = scoreMedicineMatch(item, candidate);
