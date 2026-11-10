@@ -186,9 +186,12 @@ export default function AdminDashboardView() {
 
   useEffect(() => {
     if (authLoading || !canAccessOperations || !hasPermission('medicine_requests.pending_count')) return;
-    loadPendingMedicineRequestCount();
-    const timer = window.setInterval(loadPendingMedicineRequestCount, 15000);
-    return () => window.clearInterval(timer);
+    // One initial snapshot, then refresh only when the server publishes a
+    // medicine_request_updated event (including reconnect recovery).
+    void loadPendingMedicineRequestCount();
+    const handleMedicineRequestUpdated = () => { void loadPendingMedicineRequestCount(); };
+    window.addEventListener('pharma:medicine-request-updated', handleMedicineRequestUpdated);
+    return () => window.removeEventListener('pharma:medicine-request-updated', handleMedicineRequestUpdated);
   }, [authLoading, canAccessOperations, hasPermission]);
 
   useEffect(() => {
