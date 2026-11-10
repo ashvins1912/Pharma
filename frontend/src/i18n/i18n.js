@@ -1,6 +1,6 @@
 /**
  * i18n configuration module
- * Reads from central translations.json file to support English, Hindi, Kannada, and Bengali.
+ * Reads from central translations.json file to support English, Hindi, Kannada, Bengali, and Telugu.
  */
 import translationsData from './translations.json';
 
@@ -10,19 +10,20 @@ export const getSupportedLanguages = () => [
   { code: 'en', label: 'English', native: 'English' },
   { code: 'hi', label: 'Hindi', native: 'हिंदी' },
   { code: 'kn', label: 'Kannada', native: 'ಕನ್ನಡ' },
-  { code: 'bn', label: 'Bengali', native: 'বাংলা' }
+  { code: 'bn', label: 'Bengali', native: 'বাংলা' },
+  { code: 'te', label: 'Telugu', native: 'తెలుగు' }
 ];
 
 export const getStoredLanguage = () => {
   if (typeof window === 'undefined') return DEFAULT_LANG;
-  return localStorage.getItem('pharma_lang') || DEFAULT_LANG;
+  return localStorage.getItem('quickmeds-rx-language') || DEFAULT_LANG;
 };
 
 export const setStoredLanguage = (lang) => {
   if (typeof window === 'undefined') return;
-  const supported = ['en', 'hi', 'kn', 'bn'];
+  const supported = ['en', 'hi', 'kn', 'bn', 'te'];
   const target = supported.includes(lang) ? lang : DEFAULT_LANG;
-  localStorage.setItem('pharma_lang', target);
+  localStorage.setItem('quickmeds-rx-language', target);
   window.dispatchEvent(new CustomEvent('pharma:lang-change', { detail: { lang: target } }));
 };
 
