@@ -20,6 +20,7 @@ const MedicineMatchReference = mongoose.models.MedicineMatchReference
 
 const normalize = value => String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
   .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+const normalizeStrength = value => normalize(value).replace(/(\d)\s+(mg|mcg|g|kg|ml|l|iu|units?)\b/g, '$1$2');
 export function medicineMatchIdentity(product = {}) {
   const input = {
     name: String(product.name || '').trim().slice(0, 120),
