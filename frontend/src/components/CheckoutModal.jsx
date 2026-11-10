@@ -730,21 +730,23 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             </section>
           )}
 
+          {fulfillmentPlan?.routing && (
+            <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
+              <div className="font-bold">Smart route selected: {fulfillmentPlan.routing.selectedBranchName}</div>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                <span>{fulfillmentPlan.routing.fulfillmentPercentage}% of requested quantity available</span>
+                {fulfillmentPlan.routing.distanceKm != null && <span>{fulfillmentPlan.routing.distanceKm} km from delivery address</span>}
+                <span>{fulfillmentPlan.routing.evaluatedBranches} eligible branches compared</span>
+              </div>
+            </section>
+          )}
+
           {fulfillmentPlan?.customerDecisionRequired && (
             <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
               <div>
                 <h3 className="text-sm font-black text-amber-950">Smart stock availability</h3>
                 <p className="mt-1 text-xs text-amber-900">We compared live stock across eligible branches and selected the best fulfilment route. You can receive available items now and choose what to do with the remaining quantity.</p>
-                {fulfillmentPlan.routing && (
-                  <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
-                    <div className="font-bold">Recommended branch: {fulfillmentPlan.routing.selectedBranchName}</div>
-                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                      <span>{fulfillmentPlan.routing.fulfillmentPercentage}% of requested quantity available</span>
-                      {fulfillmentPlan.routing.distanceKm != null && <span>{fulfillmentPlan.routing.distanceKm} km away</span>}
-                      <span>{fulfillmentPlan.routing.evaluatedBranches} branches evaluated</span>
-                    </div>
-                  </div>
-                )}
+
               </div>
               {fulfillmentPlan.lines.filter(line => line.waitingQuantity > 0).map(line => (
                 <div key={line.productId} className="rounded-xl border border-amber-200 bg-white p-3 space-y-2">
