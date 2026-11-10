@@ -3,7 +3,7 @@ import test from 'node:test';
 
 process.env.SERVICE_AUTH_SECRET = 'test-service-secret-with-more-than-thirty-two-characters';
 
-const { detectMedicineDataset, normalizeMedicineRecord, consolidate, assessMedicineQuality, parseJsonArrayRecords } = await import('./src/medicine-catalogue-import-routes.js');
+const { detectMedicineDataset, normalizeMedicineRecord, consolidate, assessMedicineQuality, parseJsonArrayRecords, scoreMedicineMatch } = await import('./src/medicine-catalogue-import-routes.js');
 const { requireServiceScope } = await import('./src/service-auth.js');
 const jwt = (await import('jsonwebtoken')).default;
 
@@ -215,6 +215,36 @@ test('consolidation attaches quality grades and scores to every accepted record'
   assert.ok(result.records[0].qualityScore >= 0 && result.records[0].qualityScore <= 100);
   assert.ok(['EXCELLENT', 'GOOD', 'PARTIAL', 'NEEDS_REVIEW'].includes(result.records[0].qualityGrade));
   assert.ok(Array.isArray(result.records[0].qualityIssues));
+});
+
+test('fuzzy medicine matching auto-merges only when composition, strength and form agree', () => {
+  const incoming = { brandName: 'Atorvastatin 10mg Tablets', composition: 'Atorvastatin', strength: '10 mg', dosageForm: 'Tablet', genericName: 'Atorvastatin' };
+  const existing = { medicineId: 'MASTER-1', brandName: 'Atorvastatin 10 mg Tablet', composition: 'Atorvastatin', strength: '10 mg', dosageForm: 'Tablet', genericName: 'Atorvastatin' };
+  const match = scoreMedicineMatch(incoming, existing);
+  assert.equal(match.decision, 'AUTO_MERGE');
+  assert.ok(match.score >= 96);
+});
+
+test('fuzzy medicine matching blocks strength, dosage-form and composition conflicts', () => {
+  const incoming = { brandName: 'Atorvastatin 10mg Tablet', composition: 'Atorvastatin', strength: '10 mg', dosageForm: 'Tablet' };
+  const wrongStrength = scoreMedicineMatch(incoming, { brandName: 'Atorvastatin 10mg Tablet', composition: 'Atorvastatin', strength: '20 mg', dosageForm: 'Tablet' });
+  const wrongForm = scoreMedicineMatch(incoming, { brandName: 'Atorvastatin 10mg Tablet', composition: 'Atorvastatin', strength: '10 mg', dosageForm: 'Capsule' });
+  const wrongComposition = scoreMedicineMatch(incoming, { brandName: 'Atorvastatin 10mg Tablet', composition: 'Clopidogrel', strength: '10 mg', dosageForm: 'Tablet' });
+  assert.equal(wrongStrength.decision, 'BLOCKED_CONFLICT');
+  assert.ok(wrongStrength.warnings.includes('STRENGTH_CONFLICT'));
+  assert.equal(wrongForm.decision, 'BLOCKED_CONFLICT');
+  assert.ok(wrongForm.warnings.includes('DOSAGE_FORM_CONFLICT'));
+  assert.equal(wrongComposition.decision, 'BLOCKED_CONFLICT');
+  assert.ok(wrongComposition.warnings.includes('COMPOSITION_CONFLICT'));
+});
+
+test('fuzzy medicine matching sends name-only matches to manual review', () => {
+  const match = scoreMedicineMatch(
+    { brandName: 'Metformin 500mg Tablet', composition: '', strength: '500 mg', dosageForm: 'Tablet' },
+    { brandName: 'Metformin 500 mg Tablets', composition: '', strength: '500 mg', dosageForm: 'Tablet' }
+  );
+  assert.equal(match.decision, 'MANUAL_REVIEW');
+  assert.ok(match.warnings.includes('COMPOSITION_MISSING_REVIEW_REQUIRED'));
 });
 
 test('catalogue import scope is valid without a tenant or branch identity', async () => {
