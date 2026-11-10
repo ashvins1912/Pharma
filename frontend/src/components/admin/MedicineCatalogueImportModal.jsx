@@ -119,7 +119,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                 {metric('Need review', report.needsReview)}
               </div>
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-950">
-                Prescription flags remain unverified. Third-party image URLs are retained only as source references and are not trusted or served as product images. Missing interactions or contraindications do not imply safety.
+                Prescription flags and source licensing remain unverified. Confirm dataset redistribution rights before commercial use. Third-party image URLs are retained only as source references and are not trusted or served as product images. Missing interactions or contraindications do not imply safety.
               </div>
               {preview?.sample?.length > 0 && (
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
