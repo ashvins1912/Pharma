@@ -197,6 +197,8 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     duplicatesRemoved, newRecords: records.length - updates, updateCandidates: updates,
     needsReview: records.filter(item => item.dataQualityStatus === 'NEEDS_REVIEW').length,
     withComposition: records.filter(item => item.composition).length,
+    withStrength: records.filter(item => item.strength).length,
+    withPackSize: records.filter(item => item.packSize).length,
     withManufacturer: records.filter(item => item.manufacturer).length,
     withDosageForm: records.filter(item => item.dosageForm).length,
     withAlternatives: records.filter(item => item.alternatives.length).length,
