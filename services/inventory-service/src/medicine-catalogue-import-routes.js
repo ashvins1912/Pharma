@@ -552,6 +552,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
       incomingMedicine: item.brandName, matchedMedicineId: item.reconciliationMatch.targetMedicineId,
       score: item.reconciliationMatch.score, decision: item.reconciliationMatch.decision, warnings: item.reconciliationMatch.warnings
     })),
+    fuzzyCandidateStrategy: 'NORMALIZED_TWO_CHARACTER_PREFIX',
     fuzzyCandidateScanTruncated: fuzzyPrefixes.length >= 120 || fuzzyCandidates.length >= 5000
   };
   const reportFingerprint = hash(JSON.stringify(report));
