@@ -217,9 +217,9 @@ export default function AdminMedicineRequestsView() {
           </div>
 
           {/* Mobile Stacked Card View (Section 25 Requirement) */}
-          <div className="lg:hidden space-y-3">
+          <div className="lg:hidden qm-mobile-record-list">
             {requests.map((req) => (
-              <div key={req._id} className="p-4 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-3">
+              <article key={req._id} className="qm-mobile-record-card qm-mobile-request-card">
                 <div className="flex justify-between items-start gap-2">
                   <div>
                     <h4 className="font-black text-sm text-slate-900">{req.medicineName}</h4>
@@ -240,7 +240,7 @@ export default function AdminMedicineRequestsView() {
                 )}
 
                 {req.proposal && (
-                  <div className="bg-white border border-emerald-200 rounded-xl p-3 text-xs space-y-1">
+                  <div className="qm-mobile-record-proposal">
                     <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 block">
                       Active Proposal:
                     </span>
@@ -255,10 +255,10 @@ export default function AdminMedicineRequestsView() {
                   </div>
                 )}
 
-                <div className="pt-2 border-t border-slate-200 flex justify-end">
+                <footer className="qm-mobile-record-footer">
                   <button
                     onClick={() => openProposalModal(req)}
-                    className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 min-h-[44px]"
+                    className="qm-mobile-action qm-mobile-action--primary w-full sm:w-auto"
                   >
                     <span>{req.proposal ? '✏️ Modify Proposal' : '➕ Formulate Delivery Proposal'}</span>
                   </button>
