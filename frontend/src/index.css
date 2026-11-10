@@ -1474,7 +1474,7 @@ html.dark .qm-inventory-record-card { border-color: #334155; background: #162236
    redundant hamburger; tablet/mobile show the drawer toggle followed by the
    language and active-branch selectors, then account actions. */
 .app-header__menu-toggle {
-  display: none;
+  display: inline-flex;
   flex: 0 0 2.5rem;
   width: 2.5rem;
   height: 2.5rem;
@@ -1536,9 +1536,6 @@ html.dark .qm-inventory-record-card { border-color: #334155; background: #162236
   .app-header__language { order: 1; }
   .app-header__branch { order: 2; }
   .quickmeds-actions-group { gap: clamp(.25rem, .8vw, .55rem); }
-}
-@media (min-width: 1024px) {
-  .app-header__menu-toggle { display: none !important; }
 }
 @media (min-width: 640px) and (max-width: 1023px) {
   .app-header__language { max-width: 8.5rem; }
