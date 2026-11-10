@@ -33,6 +33,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
   const [batchActionBusy, setBatchActionBusy] = useState(false);
   const reviewDialogRef = useRef(null);
   const reviewTriggerRef = useRef(null);
+  const reviewIsOpen = Boolean(reviewBatch);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -174,7 +175,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
 
   // Lock the page and make content behind this dialog inert while it is open.
   useEffect(() => {
-    if (!reviewBatch) return undefined;
+    if (!reviewIsOpen) return undefined;
     const dialog = reviewDialogRef.current;
     const overlay = dialog?.parentElement;
     const siblings = overlay?.parentElement
@@ -201,7 +202,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       reviewTriggerRef.current?.focus?.();
       reviewTriggerRef.current = null;
     };
-  }, [Boolean(reviewBatch)]);
+  }, [reviewIsOpen]);
 
   const trapReviewFocus = event => {
     if (event.key === 'Escape') {
