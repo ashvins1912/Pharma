@@ -78,7 +78,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
   const openBatchReview = async batchId => {
     setBatchActionBusy(true);
     try {
-      const response = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(batchId)}`);
+      const response = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(batchId)}`, { timeout: 30000 });
       setReviewBatch(response.data);
       setReviewConfirmed(false);
       setReviewRecordsPage(1);
@@ -92,7 +92,13 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
     if (!batchId) return;
     setReviewRecordsLoading(true);
     try {
-      const response = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(batchId)}/records`, { params: { page: nextPage, limit: 20, search: searchValue } });
+      const normalizedSearch = String(searchValue || '').trim();
+      const response = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(batchId)}/records`, {
+        params: { page: nextPage, limit: 20, ...(normalizedSearch ? { search: normalizedSearch } : {}) },
+        // Staged imports can contain large reconciliation datasets; do not let
+        // the shared 10s API default abort this paginated review request.
+        timeout: 45000
+      });
       setReviewRecords(response.data || { items: [], pagination: { page: nextPage, total: 0, totalPages: 0 } });
       setReviewRecordsPage(nextPage);
     } catch (error) {
