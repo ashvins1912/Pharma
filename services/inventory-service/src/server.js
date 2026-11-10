@@ -8,7 +8,7 @@ import stagedImportRoutes from './staged-import-routes.js';
 import medicineCatalogueImportRoutes, { initializeMedicineCatalogueModels, startMedicineCatalogueImportWorker, stopMedicineCatalogueImportWorker } from './medicine-catalogue-import-routes.js';
 import medicineCatalogueRoutes from './medicine-catalogue-routes.js';
 import { StagedImportBatch, StagedImportRow } from './staged-import-models.js';
-import { startMedicineMatchWorker, stopMedicineMatchWorker } from './medicine-match-reference.js';
+import { initializeMedicineMatchReferenceModel, startMedicineMatchWorker, stopMedicineMatchWorker } from './medicine-match-reference.js';
 import { Audit, ImportBatch, ImportBatchSnapshot, ImportFailure, ImportJob, Inventory, Product, Reservation } from './models.js';
 
 validateConfig();
@@ -100,7 +100,8 @@ await Promise.all([
   ImportBatchSnapshot.init(),
   ImportFailure.init(),
   Audit.init(),
-  initializeMedicineCatalogueModels()
+  initializeMedicineCatalogueModels(),
+  initializeMedicineMatchReferenceModel()
 ]);
 // Match references are persistent and idempotent; process bounded batches after
 // MongoDB is ready so repeated Store views avoid re-running fuzzy matching.
