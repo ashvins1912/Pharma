@@ -116,6 +116,8 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                 {metric('Duplicates removed', report.duplicatesRemoved)}
                 {metric('Rejected rows', report.rejectedRecords)}
                 {metric('With composition', report.withComposition)}
+                {metric('With manufacturer', report.withManufacturer)}
+                {metric('With pack size', report.withPackSize)}
                 {metric('Need review', report.needsReview)}
               </div>
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-950">
