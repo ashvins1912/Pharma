@@ -201,7 +201,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
       reviewTriggerRef.current?.focus?.();
       reviewTriggerRef.current = null;
     };
-  }, [reviewBatch]);
+  }, [Boolean(reviewBatch)]);
 
   const trapReviewFocus = event => {
     if (event.key === 'Escape') {
