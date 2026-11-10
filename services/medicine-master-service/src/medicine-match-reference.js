@@ -9,6 +9,7 @@ const referenceSchema = new mongoose.Schema({
   status: { type: String, enum: ['PENDING', 'PROCESSING', 'EXACT', 'STRONG', 'AMBIGUOUS', 'NO_CONFIDENT_MATCH', 'NO_MATCH', 'STALE'], default: 'PENDING', index: true },
   mappingStatus: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING', index: true },
   mappedMedicineId: { type: String, default: '' }, mappedFields: { type: [String], default: [] }, mappedBy: { type: String, default: '' }, mappedAt: { type: Date, default: null }, candidates: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  mappingHistory: { type: [mongoose.Schema.Types.Mixed], default: [] },
   medicineId: { type: String, default: '' },
   confidence: { type: Number, default: 0 },
   medicineMasterUpdatedAt: { type: Date, default: null },
@@ -113,6 +114,8 @@ export async function getOrResolveMedicineMatch(product) {
     projection._id = 0; projection.medicineId = 1;
     const medicine = await medicineModel().findOne({ medicineId: reference.mappedMedicineId, isArchived: { $ne: true } }, projection).lean();
     if (medicine) return { status: reference.status, confidence: reference.confidence, medicine, mappedFields: reference.mappedFields || [], mappingStatus: 'APPROVED', cached: true };
+    await MedicineMatchReference.updateOne({ identityHash: reference.identityHash }, { $set: { mappingStatus: 'PENDING', mappedMedicineId: '', mappedFields: [], mappedBy: '', mappedAt: null } });
+    reference.mappingStatus = 'PENDING';
   }
   if (reference && reference.status !== 'PENDING' && reference.medicineMasterUpdatedAt
     && (!masterVersion || reference.medicineMasterUpdatedAt >= masterVersion)) {
