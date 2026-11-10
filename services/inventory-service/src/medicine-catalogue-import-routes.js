@@ -182,10 +182,14 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
     ...(names.length ? [{ brandName: { $in: names } }] : []),
     ...prefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } }))
   ];
-  const candidates = clauses.length ? await MedicineMaster.find({ $or: clauses, isArchived: { $ne: true } }, {
-    _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1,
-    ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1
-  }).limit(5001).lean() : [];
+  const [candidates, archivedIdentityRows] = await Promise.all([
+    clauses.length ? MedicineMaster.find({ $or: clauses, isArchived: { $ne: true } }, {
+      _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1,
+      ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1
+    }).limit(5001).lean() : [],
+    ids.length ? MedicineMaster.find({ medicineId: { $in: ids }, isArchived: true }, { medicineId: 1 }).lean() : []
+  ]);
+  const archivedIds = new Set(archivedIdentityRows.map(item => item.medicineId));
   const candidateLimitTruncated = candidates.length > 5000;
   const scanTruncated = candidateLimitTruncated || prefixScanTruncated;
   const activeCandidates = candidates.slice(0, 5000);
@@ -205,6 +209,11 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
   const blockers = [];
   for (const item of records) {
     const old = item.reconciliationMatch || null;
+    if (archivedIds.has(item.medicineId)) {
+      blockers.push({ medicineId: item.medicineId, brandName: item.brandName, reason: 'ARCHIVED_MEDICINE_ID_COLLISION' });
+      plans.push({ decision: 'BLOCKED_CONFLICT', targetMedicineId: '', method: 'ARCHIVED_MEDICINE_ID_COLLISION', warnings: ['MEDICINE_ID_EXISTS_ON_ARCHIVED_MASTER_RECORD'] });
+      continue;
+    }
     if (['MANUAL_REVIEW', 'BLOCKED_CONFLICT'].includes(old?.decision)) {
       blockers.push({ medicineId: item.medicineId, brandName: item.brandName, reason: old.decision, warnings: old.warnings || [] });
       plans.push({ decision: old.decision, targetMedicineId: old.targetMedicineId || '' });
