@@ -310,7 +310,7 @@ test('catalogue import scope is valid without a tenant or branch identity', asyn
     algorithm: 'HS256',
     subject: 'api-gateway',
     issuer: 'ashvin-pharmacy',
-    audience: 'inventory-service',
+    audience: 'medicine-master-service',
     expiresIn: 60
   });
   const result = await new Promise(resolve => {

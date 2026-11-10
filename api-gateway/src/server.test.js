@@ -688,3 +688,39 @@ test('intelligent order and medicine request fulfilment endpoints are registered
   assert.equal(resolveGatewayCapability('GET', '/api/medicine-requests/request-1/fulfillment/preview'), 'medicine_requests.decide');
   assert.equal(resolveGatewayCapability('POST', '/api/medicine-requests/request-1/fulfillment/confirm'), 'medicine_requests.decide');
 });
+
+test('public Medicine Master matching is proxied to its dedicated service with the scoped service audience', async () => {
+  let authorization = '';
+  const medicineMaster = await startMockServer((req, res) => {
+    authorization = req.headers.authorization || '';
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ status: 'EXACT', medicine: { medicineId: 'master-001' } }));
+  });
+  const gatewayConfig = loadConfig({
+    NODE_ENV: 'test',
+    BACKEND_API_URL: 'http://127.0.0.1:8090',
+    MEDICINE_MASTER_SERVICE_URL: medicineMaster.url,
+    SERVICE_AUTH_SECRET: testSecrets.service,
+    GATEWAY_AUTH_SECRET: testSecrets.gateway,
+    CORS_ALLOWED_ORIGINS: 'http://localhost:3000'
+  });
+  const app = createGatewayApp(gatewayConfig, {
+    snapshot: () => ({ overallStatus: 'HEALTHY', services: [] }),
+    checkNow: async () => ({ overallStatus: 'HEALTHY', services: [] })
+  });
+  const gateway = await start(app);
+  try {
+    const response = await fetch(`${gateway.url}/api/v1/inventory/catalogue/medicines/match?name=Dolo%20650`);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).medicine.medicineId, 'master-001');
+    assert.ok(authorization.startsWith('Bearer '));
+    const claims = jwt.verify(authorization.slice(7), testSecrets.service, {
+      algorithms: ['HS256'], issuer: 'ashvin-pharmacy', audience: 'medicine-master-service'
+    });
+    assert.equal(claims.sub, 'api-gateway');
+    assert.equal(claims.scope, 'inventory.catalogue.read');
+  } finally {
+    await gateway.close();
+    await medicineMaster.close();
+  }
+});

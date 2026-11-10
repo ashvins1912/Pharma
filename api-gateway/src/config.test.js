@@ -73,6 +73,7 @@ test('health monitoring uses the configured internal service registry and safe d
     NODE_ENV: 'test',
     BACKEND_API_URL: 'http://backend.example.com',
     INVENTORY_SERVICE_URL: 'http://inventory.example.com',
+    MEDICINE_MASTER_SERVICE_URL: 'http://medicine-master.example.com',
     ORDER_SERVICE_URL: 'http://order.example.com',
     SERVICE_AUTH_SECRET: secrets.service,
     GATEWAY_AUTH_SECRET: secrets.gateway,
@@ -82,6 +83,7 @@ test('health monitoring uses the configured internal service registry and safe d
   assert.deepEqual(config.healthServices.map(service => [service.name, service.healthPath]), [
     ['backend-api', '/api/v1/health'],
     ['inventory-service', '/ready'],
+    ['medicine-master-service', '/ready'],
     ['order-service', '/ready']
   ]);
   assert.equal(config.healthCheckTimeoutMs, 5000);
@@ -116,4 +118,25 @@ test('telemetry service registry includes cache and WebSocket health endpoints w
       ['websocket-service', '/healthz']
     ]
   );
+});
+
+
+test('Medicine Master service URL and audience are validated and registered independently', () => {
+  assert.throws(() => loadConfig({
+    NODE_ENV: 'test',
+    BACKEND_API_URL: 'http://backend.example.com',
+    MEDICINE_MASTER_SERVICE_URL: 'http://medicine-master.example.com/path',
+    CORS_ALLOWED_ORIGINS: 'http://app.example.com'
+  }), /MEDICINE_MASTER_SERVICE_URL/);
+  const config = loadConfig({
+    NODE_ENV: 'test',
+    BACKEND_API_URL: 'http://backend.example.com',
+    MEDICINE_MASTER_SERVICE_URL: 'http://medicine-master.example.com',
+    MEDICINE_MASTER_SERVICE_JWT_AUDIENCE: 'medicine-master-service',
+    SERVICE_AUTH_SECRET: secrets.service,
+    GATEWAY_AUTH_SECRET: secrets.gateway,
+    CORS_ALLOWED_ORIGINS: 'http://app.example.com'
+  });
+  assert.equal(config.medicineMasterJwtAudience, 'medicine-master-service');
+  assert.ok(config.healthServices.some(service => service.name === 'medicine-master-service' && service.healthPath === '/ready'));
 });
