@@ -1145,7 +1145,7 @@ router.get('/matches/review', async (req, res, next) => {
     const ids = [...new Set(rows.map(row => row.mappedMedicineId || row.medicineId).filter(Boolean))];
     const candidateProjection = Object.fromEntries([...MAPPED_MEDICINE_FIELDS].map(field => [field, 1]));
     candidateProjection._id = 0; candidateProjection.medicineId = 1;
-    const candidates = ids.length ? await medicineMaster().find({ medicineId: { $in: ids }, isArchived: { $ne: true } }, candidateProjection).lean() : [];
+    const candidates = ids.length ? await MedicineMaster.find({ medicineId: { $in: ids }, isArchived: { $ne: true } }, candidateProjection).lean() : [];
     const byId = new Map(candidates.map(item => [item.medicineId, item]));
     return res.json({ items: rows.map(row => ({ ...row, candidate: byId.get(row.mappedMedicineId || row.medicineId) || null })), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
   } catch (error) { return next(error); }
@@ -1157,7 +1157,7 @@ router.post('/matches/:identityHash/map', async (req, res, next) => {
     const fields = [...new Set((Array.isArray(req.body?.fields) ? req.body.fields : []).map(String))];
     if (!medicineId) return res.status(400).json({ message: 'Select a Medicine Master record before approving this mapping.' });
     if (!fields.length || fields.length > MAPPED_MEDICINE_FIELDS.size || fields.some(field => !MAPPED_MEDICINE_FIELDS.has(field))) return res.status(400).json({ message: 'Select at least one supported catalogue field to map.' });
-    const target = await medicineMaster().findOne({ medicineId, isArchived: { $ne: true } }, { _id: 0, medicineId: 1 }).lean();
+    const target = await MedicineMaster.findOne({ medicineId, isArchived: { $ne: true } }, { _id: 0, medicineId: 1 }).lean();
     if (!target) return res.status(404).json({ message: 'The selected active Medicine Master record was not found.' });
     const row = await MedicineMatchReference.findOneAndUpdate({ identityHash: req.params.identityHash }, {
       $set: { mappingStatus: 'APPROVED', mappedMedicineId: medicineId, mappedFields: fields, mappedBy: String(req.service?.userId || req.service?.name || ''), mappedAt: new Date() },
