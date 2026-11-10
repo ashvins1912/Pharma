@@ -181,6 +181,7 @@ export function createServiceRouters(gatewayConfig = config) {
   inventoryRouter.post('/catalogue/imports/remove-selected', catalogueImportAuth, catalogueImport);
   inventoryRouter.get('/catalogue/imports/jobs/:jobId', catalogueImportAuth, catalogueImport);
   inventoryRouter.post('/catalogue/imports/jobs/:jobId/retry', catalogueImportAuth, catalogueImport);
+  inventoryRouter.post('/catalogue/imports/jobs/:jobId/restart', catalogueImportAuth, catalogueImport);
   inventoryRouter.get('/catalogue/imports/:batchId/records', catalogueImportAuth, catalogueImport);
   inventoryRouter.get('/catalogue/imports/:batchId', catalogueImportAuth, catalogueImport);
   inventoryRouter.post('/catalogue/imports/:batchId/approve', catalogueImportAuth, catalogueImport);
