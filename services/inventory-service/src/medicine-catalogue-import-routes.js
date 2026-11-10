@@ -79,7 +79,7 @@ const catalogueImportSchema = new mongoose.Schema({
   fileName: { type: String, required: true },
   fileSha256: { type: String, required: true },
   uploadedBy: { type: String, required: true },
-  status: { type: String, enum: ['READY', 'PUBLISHING', 'PUBLISHED', 'PARTIALLY_PUBLISHED', 'FAILED'], default: 'READY', index: true },
+  status: { type: String, enum: ['STAGING', 'READY', 'PUBLISHING', 'PUBLISHED', 'PARTIALLY_PUBLISHED', 'FAILED'], default: 'READY', index: true },
   recordCount: { type: Number, default: 0 },
   chunkCount: { type: Number, default: 0 },
   records: { type: [mongoose.Schema.Types.Mixed], default: [] },
@@ -229,6 +229,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   const fileSha256 = hash(req.file.buffer);
   const previousBatch = await CatalogueImport.findOne({ dataset, fileSha256 }).lean();
   if (previousBatch) {
+    if (previousBatch.status === 'STAGING') return res.status(409).json({ message: 'This identical dataset is still being staged. Retry shortly.' });
     const firstChunk = await CatalogueImportChunk.findOne({ batchId: previousBatch.batchId, chunkIndex: 0 }).lean();
     return res.status(200).json({ batchId: previousBatch.batchId, dataset, status: previousBatch.status, report: previousBatch.report, sample: (firstChunk?.records || previousBatch.records || []).slice(0, 8), reused: true });
   }
@@ -237,7 +238,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   const names = dataset === 'MEDICINES_PART_1' ? [...new Set(records.filter(item => item.safeNameMatch).map(item => item.brandName))] : [];
   const incomingKeyCounts = new Map();
   for (const item of records) if (item.canonicalKey) incomingKeyCounts.set(item.canonicalKey, (incomingKeyCounts.get(item.canonicalKey) || 0) + 1);
-  const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: canonicalKeys } }, ...(names.length ? [{ brandName: { $in: names } }] : [])] }, { medicineId: 1, canonicalKey: 1, brandName: 1 }).lean();
+  const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: canonicalKeys } }, ...(names.length ? [{ $expr: { $in: [{ $toLower: '$brandName' }, names.map(name => name.toLowerCase())] } }] : [])] }, { medicineId: 1, canonicalKey: 1, brandName: 1 }).lean();
   const existingIds = new Set(existing.map(item => item.medicineId));
   const existingKeyCounts = new Map();
   for (const item of existing.filter(item => item.canonicalKey)) existingKeyCounts.set(item.canonicalKey, (existingKeyCounts.get(item.canonicalKey) || 0) + 1);
@@ -268,9 +269,16 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   await CatalogueImport.create({
     batchId, dataset, fileName: String(req.file.originalname || 'medicine-catalogue.json').slice(0, 180),
     fileSha256, uploadedBy: req.service.userId || req.service.name,
-    status: 'READY', recordCount: records.length, chunkCount: chunks.length, report
+    status: 'STAGING', recordCount: records.length, chunkCount: chunks.length, report
   });
-  if (chunks.length) await CatalogueImportChunk.insertMany(chunks, { ordered: true });
+  try {
+    if (chunks.length) await CatalogueImportChunk.insertMany(chunks, { ordered: true });
+    await CatalogueImport.updateOne({ batchId }, { $set: { status: 'READY' } });
+  } catch (error) {
+    await CatalogueImportChunk.deleteMany({ batchId });
+    await CatalogueImport.deleteOne({ batchId });
+    throw error;
+  }
   return res.status(201).json({ batchId, dataset, status: 'READY', report, sample: records.slice(0, 8) });
 }));
 
@@ -304,7 +312,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
       const ids = chunk.map(item => item.medicineId);
       const keys = chunk.map(item => item.canonicalKey).filter(Boolean);
       const names = batch.dataset === 'MEDICINES_PART_1' ? [...new Set(chunk.filter(item => item.safeNameMatch && incomingNameCounts.get(key(item.brandName)) === 1).map(item => item.brandName))] : [];
-      const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: keys } }, ...(names.length ? [{ brandName: { $in: names } }] : [])] }).lean();
+      const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: keys } }, ...(names.length ? [{ $expr: { $in: [{ $toLower: '$brandName' }, names.map(name => name.toLowerCase())] } }] : [])] }).lean();
       const byId = new Map(existing.map(item => [item.medicineId, item]));
       const keyGroups = new Map();
       for (const item of existing.filter(item => item.canonicalKey)) keyGroups.set(item.canonicalKey, [...(keyGroups.get(item.canonicalKey) || []), item]);
