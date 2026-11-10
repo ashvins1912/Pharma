@@ -18,7 +18,7 @@ export const config = {
 
 export function validateConfig() {
   const errors = [];
-  if (!config.mongoUri || !/^mongodb(?:\\+srv)?:\\/\\//.test(config.mongoUri)) {
+  if (!config.mongoUri || !(config.mongoUri.startsWith('mongodb://') || config.mongoUri.startsWith('mongodb+srv://'))) {
     errors.push('MEDICINE_MASTER_MONGO_URI (or INVENTORY_MONGO_URI) must be a MongoDB connection URI.');
   }
   if (!config.serviceAuthSecret || config.serviceAuthSecret.length < 32) {
