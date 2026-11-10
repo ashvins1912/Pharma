@@ -1118,7 +1118,7 @@ router.post('/imports/remove-selected', asyncHandler(async (req, res) => {
   const now = new Date();
   const actor = req.service?.userId || req.service?.name || 'platform-admin';
   const result = await CatalogueImport.updateMany(
-    { batchId: { $in: batchIds }, status: 'READY', approvedAt: null, $or: [{ sourceBatchIds: { $exists: false } }, { sourceBatchIds: { $size: 0 } }], supersededByBatchId: '', isHidden: { $ne: true } },
+    { batchId: { $in: batchIds }, status: 'READY', approvedAt: null, $or: [{ sourceBatchIds: { $exists: false } }, { sourceBatchIds: { $size: 0 } }], supersededByBatchId: { $in: ['', null] }, isHidden: { $ne: true } },
     { $set: { isHidden: true, hiddenAt: now, hiddenBy: actor } }
   );
   if (result.modifiedCount !== batchIds.length) return res.status(409).json({ message: 'Some batches changed while removal was in progress. Refresh the history and retry.' });
