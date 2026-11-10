@@ -62,3 +62,22 @@ test('returns no match for an empty store identity', () => {
   assert.equal(result.status, 'NO_MATCH');
   assert.equal(result.candidatesChecked, 0);
 });
+
+test('manufacturer differences do not affect product matching or confidence', () => {
+  const incoming = storeProduct({ manufacturer: 'Different Manufacturer' });
+  const candidate = master({ manufacturer: 'Original Manufacturer' });
+  const result = rankMedicineMasterMatches(incoming, [candidate]);
+  const sameManufacturerResult = rankMedicineMasterMatches(
+    storeProduct({ manufacturer: 'Original Manufacturer' }),
+    [candidate]
+  );
+  assert.equal(result.status, 'EXACT');
+  assert.equal(result.medicine.medicineId, 'master-001');
+  assert.equal(result.confidence, sameManufacturerResult.confidence);
+});
+
+test('missing manufacturer does not prevent an otherwise safe product match', () => {
+  const result = rankMedicineMasterMatches(storeProduct({ manufacturer: '' }), [master()]);
+  assert.equal(result.status, 'EXACT');
+  assert.equal(result.medicine.medicineId, 'master-001');
+});
