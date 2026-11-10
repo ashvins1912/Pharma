@@ -38,6 +38,12 @@ services:
         value: /var/data/imports
       - key: INVENTORY_CORS_ORIGIN
         value: ""
+      # Publish tenant-scoped inventory_changed events consumed by the
+      # authenticated WebSocket service. Use the same secret as API + WS.
+      - key: CACHE_SERVICE_URL
+        value: https://caching-v0et.onrender.com
+      - key: CACHE_SERVICE_TOKEN
+        sync: false
     disk:
       name: inventory-imports
       mountPath: /var/data
