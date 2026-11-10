@@ -9,7 +9,7 @@ const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next
 const MAX_CATALOGUE_UPLOAD_BYTES = 110 * 1024 * 1024;
 const CATALOGUE_CHUNK_SIZE = 500;
 const LARGE_IMPORT_THRESHOLD_BYTES = 10 * 1024 * 1024;
-const IMPORT_CONCURRENCY_LIMIT = 2;
+const IMPORT_CONCURRENCY_LIMIT = 1;
 let activeCatalogueImports = 0;
 const yieldToEventLoop = () => new Promise(resolve => setImmediate(resolve));
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_CATALOGUE_UPLOAD_BYTES, files: 1 } });
@@ -527,7 +527,7 @@ router.use((req, res, next) => req.service?.isPlatformUser === true
   : res.status(403).json({ code: 'PLATFORM_ADMIN_REQUIRED', message: 'Only a platform administrator can publish the shared medicine master catalogue.' }));
 
 router.post('/imports/preview', (req, res, next) => {
-  if (activeCatalogueImports >= IMPORT_CONCURRENCY_LIMIT) return res.status(429).json({ code: 'CATALOGUE_IMPORT_BUSY', message: 'Two catalogue imports are already processing. Retry after one finishes.' });
+  if (activeCatalogueImports >= IMPORT_CONCURRENCY_LIMIT) return res.status(429).json({ code: 'CATALOGUE_IMPORT_BUSY', message: 'A catalogue import is already processing. Retry after it finishes.' });
   activeCatalogueImports += 1;
   let released = false;
   const release = () => { if (!released) { released = true; activeCatalogueImports = Math.max(0, activeCatalogueImports - 1); } };
@@ -631,7 +631,9 @@ router.post('/imports/preview', (req, res, next) => {
   const recordsByMasterTarget = new Map();
   const deduplicatedRecords = [];
   let fuzzyTargetDuplicatesMerged = 0;
-  for (const item of records) {
+  for (let index = 0; index < records.length; index += 1) {
+    if (req.file.size > LARGE_IMPORT_THRESHOLD_BYTES && index > 0 && index % CATALOGUE_CHUNK_SIZE === 0) await yieldToEventLoop();
+    const item = records[index];
     const targetId = item.reconciliationMatch?.decision === 'AUTO_MERGE' ? item.reconciliationMatch.targetMedicineId : '';
     if (targetId && recordsByMasterTarget.has(targetId)) {
       const index = recordsByMasterTarget.get(targetId);
