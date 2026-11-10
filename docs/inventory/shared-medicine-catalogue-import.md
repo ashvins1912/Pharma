@@ -11,6 +11,8 @@ All endpoints are routed through API Gateway and require a platform administrato
 - POST /api/v1/inventory/catalogue/imports/jobs/:jobId/retry — requeue a failed job using its retained GridFS upload.
 - Optional dataset form field is validated against the detected structure; the service auto-detects supported formats.
 - POST /api/v1/inventory/catalogue/imports/merge — combine 2–10 unapproved READY batches into one new staged MULTI_SOURCE batch.
+- POST /api/v1/inventory/catalogue/imports/remove-selected — permanently delete up to 10 standalone, unapproved READY batches and their staged chunks/source uploads.
+- GET /api/v1/inventory/catalogue/imports/:batchId/records — inspect paginated staged records for Super Admin review.
 - GET /api/v1/inventory/catalogue/imports/:batchId — inspect staged batch status and reconciliation report.
 - POST /api/v1/inventory/catalogue/imports/:batchId/publish — explicitly publish the staged records.
 - POST /api/v1/inventory/catalogue/imports/:batchId/approve — record explicit platform-admin approval against the exact report fingerprint before publishing.
@@ -19,7 +21,7 @@ All endpoints are routed through API Gateway and require a platform administrato
 - GET /api/v1/inventory/catalogue/medicines?search=&page=1&limit=20 — search the shared master catalogue.
 - GET /api/v1/inventory/catalogue/medicines/:medicineId — fetch full medicine master details.
 
-Uploads are limited to 110 MiB and 60,000 records. Multer streams the request body into MongoDB GridFS rather than buffering the upload in the HTTP process. A MongoDB-backed job document is created after upload completion; the API returns immediately with a job ID. The inventory service worker atomically claims queued jobs, renews a processing lease, persists progress and errors, and can recover expired processing leases after a restart. Failed jobs can be retried without uploading the source again. Normalized records are staged in 500-record MongoDB chunks so a batch never approaches MongoDB's 16 MiB document limit. Preview never writes live medicine master records. Re-uploading the same dataset file is idempotent and returns its existing batch.
+Uploads are limited to 110 MiB and 60,000 records. Multer streams the request body into MongoDB GridFS rather than buffering the upload in the HTTP process. A MongoDB-backed job document is created after upload completion; the API returns immediately with a job ID. After MongoDB model initialization, the inventory service starts its durable catalogue-import worker. The worker atomically claims queued jobs, renews a processing lease, persists progress and errors, and can recover expired processing leases after a restart. Failed jobs can be retried without uploading the source again. Normalized records are staged in 500-record MongoDB chunks so a batch never approaches MongoDB's 16 MiB document limit. Preview never writes live medicine master records. Re-uploading the same dataset file is idempotent and returns its existing batch.
 
 ## Preview performance and validation
 
