@@ -9,6 +9,9 @@ All endpoints are routed through API Gateway and require a platform administrato
 - POST /api/v1/inventory/catalogue/imports/preview — multipart upload using field jsonFile; optional dataset is INDIAN_MEDICINE_DATA or INDIA_MEDICINES_INFO. The service can auto-detect either structure.
 - GET /api/v1/inventory/catalogue/imports/:batchId — inspect staged batch status and reconciliation report.
 - POST /api/v1/inventory/catalogue/imports/:batchId/publish — explicitly publish the staged records.
+- POST /api/v1/inventory/catalogue/imports/:batchId/approve — record explicit platform-admin approval against the exact report fingerprint before publishing.
+- PATCH /api/v1/inventory/catalogue/medicines/:medicineId — update allowlisted shared master fields; super-admin only, with before/after audit history.
+- GET /api/v1/inventory/catalogue/medicines/:medicineId/audit — inspect manual update history; super-admin only.
 - GET /api/v1/inventory/catalogue/medicines?search=&page=1&limit=20 — search the shared master catalogue.
 - GET /api/v1/inventory/catalogue/medicines/:medicineId — fetch full medicine master details.
 
@@ -37,3 +40,13 @@ Uploads are limited to 110 MiB and 60,000 records. Large imports are stored as 5
 This workflow writes only the shared MedicineMaster collection in the Inventory database. It does not create tenant products or update tenant-specific selling prices, cost prices, discounts, branch stock, batches, MRP, expiry dates or manufacturing dates. It does not infer regulatory approval, clinical safety, missing contraindications or missing drug interactions.
 
 The master record retains source datasets, all source record IDs (including IDs folded during exact duplicate cleanup), import batch, data quality state, clinical verification state and source-license verification state. The new 50,000-record source does not supply composition or manufacturer, so those fields remain blank unless another trusted source already provides them. Source licensing/provenance must be cleared before commercial redistribution or customer-facing use. Catalogue consumers should continue to treat unverified clinical/regulatory fields as informational until checked against authoritative sources.
+
+## Review, approval and published catalogue management
+
+1. Upload a dataset and inspect the reconciliation report. It is staged and does not change live catalogue records.
+2. Review new-record and update-candidate counts, duplicate removals, rejected rows, quality gaps and source warnings.
+3. Confirm the report in the UI. The approval request includes a server-generated fingerprint; publishing is rejected unless approval matches the exact stored report.
+4. Publish explicitly. The publish operation applies staged records to the shared master catalogue; tenant pricing, branch stock, batches and expiry remain separate.
+5. Use the dedicated **Medicine Master Catalogue** workspace to search and inspect published records. Manual updates are limited to approved metadata fields and record before/after values, actor and timestamp in an audit collection.
+
+Manual editing does not verify clinical facts. Immutable medicine identifiers, source provenance, regulatory verification flags, tenant pricing and branch inventory are not editable from this screen.
