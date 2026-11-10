@@ -7,8 +7,6 @@ import { requireServiceScope } from './service-auth.js';
 import { config } from './config.js';
 import { scoreMedicineMatch } from './medicine-match-scoring.js';
 export { scoreMedicineMatch };
-import { scoreMedicineMatch } from './medicine-match-scoring.js';
-export { scoreMedicineMatch };
 
 const router = express.Router();
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
