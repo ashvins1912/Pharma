@@ -113,6 +113,7 @@ export function rankMedicineMasterMatches(product, candidates) {
       medicine: null,
       candidatesChecked: ranked.length,
       alternatives: eligible.slice(0, 3).map(item => ({
+        medicineId: item.candidate.medicineId,
         brandName: item.candidate.brandName,
         genericName: item.candidate.genericName,
         strength: item.candidate.strength,

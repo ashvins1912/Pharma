@@ -105,6 +105,7 @@ test('surfaces a shared brand stem as a review candidate without auto-linking su
 
   assert.equal(result.status, 'NO_CONFIDENT_MATCH');
   assert.equal(result.medicine, null);
+  assert.equal(result.alternatives[0].medicineId, 'aceflam-p');
   assert.equal(result.alternatives[0].brandName, "ACEFLAM P TABLET 10'S");
   assert.equal(result.alternatives[0].matchReason, 'SHARED_BRAND_STEM_REVIEW_REQUIRED');
 });

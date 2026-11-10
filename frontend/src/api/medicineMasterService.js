@@ -8,6 +8,7 @@ export async function matchStoreMedicineToMaster(product) {
     composition: String(product?.composition || '').trim(),
     strength: String(product?.strength || '').trim(),
     dosageForm: String(product?.dosageForm || product?.form || '').trim(),
+    packSize: String(product?.packSize || '').trim(),
   };
   const response = await apiClient.get('/api/v1/inventory/catalogue/medicines/match', { params });
   return response.data?.data || response.data;

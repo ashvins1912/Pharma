@@ -7,6 +7,9 @@ const referenceSchema = new mongoose.Schema({
   normalizedIdentity: { type: String, required: true },
   input: { type: mongoose.Schema.Types.Mixed, required: true },
   status: { type: String, enum: ['PENDING', 'PROCESSING', 'EXACT', 'STRONG', 'AMBIGUOUS', 'NO_CONFIDENT_MATCH', 'NO_MATCH', 'STALE'], default: 'PENDING', index: true },
+  mappingStatus: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING', index: true },
+  mappedMedicineId: { type: String, default: '' }, mappedFields: { type: [String], default: [] }, mappedBy: { type: String, default: '' }, mappedAt: { type: Date, default: null }, candidates: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  mappingHistory: { type: [mongoose.Schema.Types.Mixed], default: [] },
   medicineId: { type: String, default: '' },
   confidence: { type: Number, default: 0 },
   medicineMasterUpdatedAt: { type: Date, default: null },
@@ -16,7 +19,7 @@ const referenceSchema = new mongoose.Schema({
   lastError: { type: String, default: '' }
 }, { timestamps: true });
 referenceSchema.index({ status: 1, updatedAt: 1 });
-const MedicineMatchReference = mongoose.models.MedicineMatchReference
+export const MedicineMatchReference = mongoose.models.MedicineMatchReference
   || mongoose.model('MedicineMatchReference', referenceSchema);
 
 const normalize = value => String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
@@ -106,18 +109,17 @@ export async function getOrResolveMedicineMatch(product) {
   if (!identity.input.name && !identity.input.genericName && !identity.input.composition) return { status: 'NO_MATCH', confidence: 0, medicine: null };
   const masterVersion = await getMedicineMasterVersion();
   let reference = await MedicineMatchReference.findOne({ identityHash: identity.identityHash }).lean();
+  if (reference && reference.mappingStatus === 'APPROVED' && reference.mappedMedicineId) {
+    const projection = Object.fromEntries((reference.mappedFields || []).map(field => [field, 1]));
+    projection._id = 0; projection.medicineId = 1;
+    const medicine = await medicineModel().findOne({ medicineId: reference.mappedMedicineId, isArchived: { $ne: true } }, projection).lean();
+    if (medicine) return { status: reference.status, confidence: reference.confidence, medicine, mappedFields: reference.mappedFields || [], mappingStatus: 'APPROVED', cached: true };
+    await MedicineMatchReference.updateOne({ identityHash: reference.identityHash }, { $set: { mappingStatus: 'PENDING', mappedMedicineId: '', mappedFields: [], mappedBy: '', mappedAt: null } });
+    reference.mappingStatus = 'PENDING';
+  }
   if (reference && reference.status !== 'PENDING' && reference.medicineMasterUpdatedAt
     && (!masterVersion || reference.medicineMasterUpdatedAt >= masterVersion)) {
-    if (reference.medicineId) {
-      const medicine = await medicineModel().findOne({ medicineId: reference.medicineId, isArchived: { $ne: true } }, {
-        _id: 0, medicineId: 1, brandName: 1, productName: 1, genericName: 1, composition: 1,
-        strength: 1, packSize: 1, dosageForm: 1, medicineType: 1, manufacturer: 1,
-        therapeuticClass: 1, chemicalClass: 1, actionClass: 1, routes: 1, indications: 1,
-        uses: 1, contraindications: 1, sideEffects: 1, drugInteractions: 1, habitForming: 1,
-        requiresPrescription: 1, prescriptionVerification: 1, clinicalDataVerification: 1, dataQualityStatus: 1
-      }).lean();
-      if (medicine) return { status: reference.status, confidence: reference.confidence, medicine, cached: true };
-    } else return { status: reference.status, confidence: reference.confidence, medicine: null, cached: true };
+    return { status: 'NEEDS_ADMIN_MAPPING', confidence: reference.confidence || 0, medicine: null, mappingStatus: reference.mappingStatus || 'PENDING', cached: true };
   }
   if (!reference) reference = await queueMedicineMatch(product);
   const result = await resolveReference(reference);
@@ -125,12 +127,13 @@ export async function getOrResolveMedicineMatch(product) {
   await MedicineMatchReference.updateOne({ identityHash: identity.identityHash }, { $set: {
     status: result.status,
     medicineId: result.medicine?.medicineId || '',
+    candidates: result.medicine ? [result.medicine] : (result.alternatives || []),
     confidence: result.confidence || 0,
     medicineMasterUpdatedAt: latestMaster || new Date(0),
     resolvedAt: new Date(),
     lastError: ''
   }, $inc: { attempts: 1 } });
-  return { ...result, cached: false };
+  return { status: 'NEEDS_ADMIN_MAPPING', confidence: result.confidence || 0, medicine: null, mappingStatus: 'PENDING', cached: false };
 }
 
 export async function processMedicineMatchBatch({ limit = 50 } = {}) {
@@ -152,7 +155,7 @@ export async function processMedicineMatchBatch({ limit = 50 } = {}) {
     try {
       const result = await resolveReference(row);
       return { updateOne: { filter: { _id: row._id, status: 'PROCESSING' }, update: { $set: {
-        status: result.status, medicineId: result.medicine?.medicineId || '', confidence: result.confidence || 0,
+        status: result.status, medicineId: result.medicine?.medicineId || '', candidates: result.medicine ? [result.medicine] : (result.alternatives || []), confidence: result.confidence || 0,
         medicineMasterUpdatedAt: latestMaster?.updatedAt || new Date(0), resolvedAt: new Date(),
         leaseExpiresAt: null, lastError: ''
       }, $inc: { attempts: 1 } } } };

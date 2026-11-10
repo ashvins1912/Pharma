@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
+import MedicineMatchReviewQueue from './MedicineMatchReviewQueue';
 
 const ARRAY_FIELDS = ['uses', 'sideEffects', 'indications', 'contraindications', 'drugInteractions'];
 const TEXT_FIELDS = ['brandName', 'genericName', 'manufacturer', 'composition', 'strength', 'packSize', 'dosageForm', 'medicineType', 'therapeuticClass', 'chemicalClass', 'actionClass'];
@@ -245,6 +246,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
           })}</div>
         </> : <p className="p-5 text-xs text-slate-500">{historyLoading ? "Loading batch history…" : "No enrichment batches have been uploaded yet."}</p>}
       </section>
+      <MedicineMatchReviewQueue />
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3"><strong className="text-xs text-slate-800">Published medicines</strong><span className="text-[11px] text-slate-500">{Number(data.pagination?.total || 0).toLocaleString()} records</span></div>
         {loading ? <p className="p-8 text-center text-sm text-slate-500">Loading catalogue…</p> : data.items?.length ? (

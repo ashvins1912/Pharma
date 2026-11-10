@@ -28,6 +28,8 @@ All paths are API Gateway paths; the gateway preserves these paths while proxyin
 | GET | `/api/v1/inventory/catalogue/medicines` | Authenticated catalogue read |
 | GET | `/api/v1/inventory/catalogue/medicines/:medicineId` | Authenticated catalogue read |
 | GET | `/api/v1/inventory/catalogue/medicines/match` | Public, read-only storefront match |
+| GET | `/api/v1/inventory/catalogue/matches/review?page=1&limit=100` | Platform Super Admin; 100 pending mappings per page |
+| POST | `/api/v1/inventory/catalogue/matches/:identityHash/map` | Platform Super Admin; selected target and field allowlist; mapping audit retained |
 | POST | `/api/v1/inventory/catalogue/medicines/match/batch` | Platform Super Admin |
 | PATCH | `/api/v1/inventory/catalogue/medicines/:medicineId` | Platform Super Admin; audited |
 | DELETE | `/api/v1/inventory/catalogue/medicines/:medicineId` | Platform Super Admin; soft archive with provenance |
@@ -44,7 +46,7 @@ All paths are API Gateway paths; the gateway preserves these paths while proxyin
 | POST | `/api/v1/inventory/catalogue/imports/:batchId/approve` | Platform Super Admin |
 | POST | `/api/v1/inventory/catalogue/imports/:batchId/publish` | Platform Super Admin |
 
-The public match endpoint is read-only. Do not include credentials or customer personal data in catalogue search payloads.
+The public match endpoint is read-only and returns Medicine Master fields only after a Super Admin approves a target record and explicit field allowlist. Unmapped/ambiguous products return no Medicine Master data to the Store. The admin review queue is paginated at up to 100 references per page; approvals retain the selected target, allowed fields, actor and timestamp. Do not include credentials or customer personal data in catalogue search payloads.
 
 ## Application secrets
 

@@ -109,7 +109,7 @@ export default function MedicineDetailsModal({ product, onClose }) {
             </div>
             <div className="col-span-2 rounded-2xl bg-slate-50 p-3 sm:col-span-1">
               <p className="text-[10px] font-bold uppercase text-slate-500">{t('manufacturer')}</p>
-              <p className="mt-1 break-words text-sm font-extrabold text-slate-900">{medicine?.manufacturer || product.manufacturer || '—'}</p>
+              <p className="mt-1 break-words text-sm font-extrabold text-slate-900">{medicine?.manufacturer || '—'}</p>
             </div>
           </div>
 
@@ -118,7 +118,7 @@ export default function MedicineDetailsModal({ product, onClose }) {
 
           {!loading && !error && !medicine && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <h3 className="text-sm font-extrabold text-amber-950">{match?.status === 'AMBIGUOUS' || match?.status === 'NO_CONFIDENT_MATCH' ? t('catalogueMatchNeedsReview') : t('catalogueDetailsNotLinked')}</h3>
+              <h3 className="text-sm font-extrabold text-amber-950">{match?.status === 'AMBIGUOUS' || match?.status === 'NO_CONFIDENT_MATCH' || match?.status === 'NEEDS_ADMIN_MAPPING' ? t('catalogueMatchNeedsReview') : t('catalogueDetailsNotLinked')}</h3>
               <p className="mt-1 text-xs leading-5 text-amber-900">{t('catalogueMatchSafetyNote')}</p>
               {Array.isArray(match?.alternatives) && match.alternatives.length > 0 && (
                 <>
