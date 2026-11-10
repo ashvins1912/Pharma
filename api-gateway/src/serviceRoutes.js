@@ -168,6 +168,7 @@ export function createServiceRouters(gatewayConfig = config) {
   medicineMasterRouter.get('/medicines', medicineMaster('inventory.catalogue.read'));
   medicineMasterRouter.get('/medicines/:medicineId', medicineMaster('inventory.catalogue.read'));
   medicineMasterRouter.patch('/medicines/:medicineId', catalogueImportAuth, medicineMaster('inventory.catalogue.import'));
+  medicineMasterRouter.delete('/medicines/:medicineId', catalogueImportAuth, medicineMaster('inventory.catalogue.import'));
   medicineMasterRouter.get('/medicines/:medicineId/audit', catalogueImportAuth, medicineMaster('inventory.catalogue.import'));
   const catalogueImport = medicineMaster('inventory.catalogue.import');
   medicineMasterRouter.get('/imports', catalogueImportAuth, catalogueImport);
