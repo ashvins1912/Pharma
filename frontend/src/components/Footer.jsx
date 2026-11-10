@@ -10,7 +10,7 @@ export default function Footer({ onNavigate }) {
   return (
     <footer className="app-footer bg-white border-t border-slate-200 mt-16 text-slate-600 text-xs">
       <div className="qm-site-container app-footer__inner py-12">
-        <div className="app-footer__grid grid grid-cols-1 md:grid-cols-4 gap-8">
+        <div className="app-footer__grid grid grid-cols-1 md:grid-cols-3 gap-8">
           
           {/* Pharmacy Info */}
           <div className="app-footer__brand space-y-3">
