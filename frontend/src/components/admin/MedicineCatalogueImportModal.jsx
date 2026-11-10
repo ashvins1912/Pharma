@@ -163,8 +163,8 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
   );
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-2 sm:p-5" role="dialog" aria-modal="true" aria-labelledby="medicine-catalogue-import-title">
-      <section className="w-full max-w-4xl max-h-[94dvh] min-h-0 flex flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[120] flex items-start sm:items-center justify-center overflow-y-auto overscroll-contain bg-slate-950/60 backdrop-blur-sm p-2 sm:p-5" role="dialog" aria-modal="true" aria-labelledby="medicine-catalogue-import-title">
+      <section className="my-auto flex w-full max-w-5xl min-h-0 max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2.5rem)] flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 bg-white shadow-2xl">
         <header className="shrink-0 flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-6">
           <div className="min-w-0">
             <h2 id="medicine-catalogue-import-title" className="text-base sm:text-lg font-black text-slate-900">Medicine Master Catalogue Enrichment</h2>
@@ -172,7 +172,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
           </div>
           <button type="button" onClick={close} disabled={busy} className="shrink-0 rounded-full bg-slate-100 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200" aria-label="Close">✕</button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] p-4 sm:p-6 space-y-5">
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-950">
             Platform-level shared catalogue import. It enriches medicine identity and clinical/product metadata only. Pharmacy selling price, stock, branch, batch, MRP, expiry and manufacturing dates are not imported.
           </div>
@@ -294,7 +294,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
             </div>
           )}
         </div>
-        <footer className="shrink-0 flex flex-col-reverse sm:flex-row sm:justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
+        <footer className="relative z-10 shrink-0 flex flex-col-reverse sm:flex-row sm:justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button type="button" onClick={preview ? () => { setPreview(null); setFile(null); setPublished(null); setBatchStatus(null); } : close} disabled={busy} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 disabled:opacity-50">{preview ? 'Choose another dataset' : 'Close'}</button>
           {!preview ? (
             <button type="button" onClick={createPreview} disabled={busy || !file} className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-50">{busy ? 'Analyzing JSON…' : 'Analyze & Preview'}</button>
