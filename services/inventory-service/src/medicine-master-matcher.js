@@ -35,8 +35,11 @@ export function rankMedicineMasterMatches(product, candidates) {
 
   const ranked = (Array.isArray(candidates) ? candidates : []).map(candidate => {
     const evidence = scoreMedicineMatch(incoming, candidate);
-    const exactBrand = normalizeIdentity(incoming.brandName) !== ''
-      && normalizeIdentity(incoming.brandName) === normalizeIdentity(candidate.brandName || candidate.productName);
+    const incomingNameKey = normalizeIdentity(incoming.brandName);
+    const exactBrand = Boolean(incomingNameKey && (
+      incomingNameKey === normalizeIdentity(candidate.brandName)
+      || incomingNameKey === normalizeIdentity(candidate.productName)
+    ));
     const exactGeneric = normalizeIdentity(incoming.genericName) !== ''
       && normalizeIdentity(incoming.genericName) === normalizeIdentity(candidate.genericName);
     const conflicts = (evidence.warnings || []).filter(warning => CONFLICT_WARNINGS.has(warning));
@@ -71,7 +74,7 @@ export function rankMedicineMasterMatches(product, candidates) {
   const best = eligible[0];
   const runnerUp = eligible[1];
   const margin = runnerUp ? best.score - runnerUp.score : 100;
-  const exactIdentity = best.exactBrand || best.exactGeneric;
+  const exactIdentity = best.exactBrand;
   const completeClinicalIdentity = Boolean(incoming.strength && incoming.dosageForm);
   const safeExact = exactIdentity
     && (!completeClinicalIdentity || (best.strengthExact && best.formExact))
@@ -79,7 +82,7 @@ export function rankMedicineMasterMatches(product, candidates) {
   const safeStrong = best.score >= 92
     && best.nameScore >= 90
     && margin >= 8
-    && (best.exactGeneric || best.exactBrand);
+    && best.exactBrand;
 
   if (!safeExact && !safeStrong) {
     return {
