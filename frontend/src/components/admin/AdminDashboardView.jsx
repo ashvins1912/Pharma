@@ -78,6 +78,12 @@ export default function AdminDashboardView() {
   const [adminTab, setAdminTab] = useState('tenantProfile');
   const [catalogueImportOpen, setCatalogueImportOpen] = useState(false);
   const [dashboardPeriod, setDashboardPeriod] = useState('today');
+  const [commandClock, setCommandClock] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCommandClock(new Date()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
   const dashboardRange = getDashboardDateRange(dashboardPeriod);
 
   // Navigation visibility and component rendering share these exact permission gates.
@@ -286,12 +292,17 @@ export default function AdminDashboardView() {
       <div className="dashboard-hero bg-slate-950 text-white rounded-3xl p-4 sm:p-5 shadow-md space-y-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div>
-            <span className="text-[11px] font-black uppercase tracking-wider text-blue-400">
-              {t('dispensaryControlHub')}
+            <span className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">
+              PHARMA / OPERATIONS
             </span>
-            <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-              {t('operationsDashboard')}
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+              Command overview
             </h2>
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-mono uppercase tracking-wider text-slate-400">
+              <span>Workspace: {activeTenantId ? `TENANT ${String(activeTenantId).slice(-8).toUpperCase()}` : 'PLATFORM'}</span>
+              <span>Role: {String(role || 'operator').replace(/_/g, ' ')}</span>
+              <span>IST {commandClock.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -451,8 +462,8 @@ export default function AdminDashboardView() {
             <p>Real-time dispensary workflows, logistics routing, and platform governance.</p>
           </div>
           <div className="dashboard-workspace-header-actions">
-            <span className="dashboard-workspace-context"><span className="dashboard-workspace-context-dot" aria-hidden="true" /> Operations hub</span>
-            <span className="dashboard-workspace-tab-hint">Choose a workspace below</span>
+            <span className="dashboard-workspace-context"><span className="dashboard-workspace-context-dot" aria-hidden="true" /> Command center</span>
+            <span className="dashboard-workspace-tab-hint">Select a module to open its live workspace</span>
           </div>
         </header>
 
