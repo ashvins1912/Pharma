@@ -530,13 +530,13 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
 
       {/* Automated Restock & Reorder Suggestions Modal */}
       {showRestockModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fade-in">
-          <div className="max-h-[90vh] w-full max-w-4xl space-y-4 overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl border border-slate-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fade-in" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="inventory-restock-suggestions-title" tabIndex={-1} className="max-h-[90vh] w-full max-w-4xl space-y-4 overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl border border-slate-200">
             <div className="flex items-start justify-between border-b border-slate-100 pb-4">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-xl">⚡</span>
-                  <h3 className="text-base font-black text-slate-900">Automated Restock & Reorder Calculator</h3>
+                  <h3 id="inventory-restock-suggestions-title" className="text-base font-black text-slate-900">Automated Restock & Reorder Calculator</h3>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Calculated using 14-day sales velocity trends, current safety thresholds, and expiry dates.
