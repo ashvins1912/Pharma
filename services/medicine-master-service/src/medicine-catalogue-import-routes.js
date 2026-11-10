@@ -1134,10 +1134,13 @@ router.get('/matches/review', async (req, res, next) => {
     const page = Math.max(1, Number.parseInt(req.query.page || '1', 10) || 1);
     const limit = Math.max(1, Math.min(100, Number.parseInt(req.query.limit || '100', 10) || 100));
     const status = String(req.query.status || 'PENDING').toUpperCase();
+    // Keep low-confidence and unresolved records out of the admin suggestion
+    // queue. Apply this before pagination so totals and page boundaries stay accurate.
+    const confidenceFilter = { confidence: { $gt: 80 } };
     const filter = status === 'ALL'
-      ? { mappingStatus: { $ne: 'APPROVED' } }
-      : status === 'PENDING' ? { $or: [{ mappingStatus: 'PENDING' }, { mappingStatus: { $exists: false } }] }
-        : { mappingStatus: status };
+      ? { mappingStatus: { $ne: 'APPROVED' }, ...confidenceFilter }
+      : status === 'PENDING' ? { $or: [{ mappingStatus: 'PENDING' }, { mappingStatus: { $exists: false } }], ...confidenceFilter }
+        : { mappingStatus: status, ...confidenceFilter };
     const [rows, total] = await Promise.all([
       MedicineMatchReference.find(filter).sort({ updatedAt: 1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean(),
       MedicineMatchReference.countDocuments(filter)
