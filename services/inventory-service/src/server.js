@@ -6,7 +6,7 @@ import { config, validateConfig } from './config.js';
 import routes from './routes.js';
 import stagedImportRoutes from './staged-import-routes.js';
 import { StagedImportBatch, StagedImportRow } from './staged-import-models.js';
-import { initializeMedicineMatchReferenceModel } from './medicine-match-reference.js';
+import { initializeMedicineMatchReferenceModel } from './medicine-match-queue.js';
 import { Audit, ImportBatch, ImportBatchSnapshot, ImportFailure, ImportJob, Inventory, Product, Reservation } from './models.js';
 
 validateConfig();
