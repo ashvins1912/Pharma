@@ -121,7 +121,7 @@ body {
 /* Modal overlays remain scrollable when their contents exceed the viewport.
    Safe alignment keeps the top of tall dialogs reachable instead of centering
    their overflow outside the visible screen. */
-.pharma-responsive-scope :where(.fixed.inset-0[role="dialog"], .fixed.inset-0[aria-modal="true"]) {
+:where(.fixed.inset-0[role="dialog"], .fixed.inset-0[aria-modal="true"]) {
   box-sizing: border-box;
   max-width: 100%;
   max-height: 100dvh;
@@ -138,7 +138,7 @@ body {
     max(var(--qm-modal-gutter), env(safe-area-inset-left));
 }
 
-.pharma-responsive-scope :where(.pharma-modal-surface, .pharma-checkout-modal) {
+:where(.pharma-modal-surface, .pharma-checkout-modal) {
   box-sizing: border-box;
   min-width: 0;
   max-height: calc(100dvh - max(1rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));
@@ -151,7 +151,7 @@ body {
   color: var(--qm-ink, #0f172a);
 }
 
-.pharma-responsive-scope :where(.pharma-modal-surface > header,
+:where(.pharma-modal-surface > header,
   .pharma-modal-surface > .modal-header,
   .pharma-checkout-modal > header,
   .pharma-checkout-modal > .modal-header) {
@@ -175,14 +175,14 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
-.pharma-responsive-scope :where([role="dialog"] form,
+:where([role="dialog"] form,
   [role="dialog"] > section,
   [role="dialog"] > article) {
   min-width: 0;
   max-width: 100%;
 }
 
-.pharma-responsive-scope :where(.modal-overlay, [data-modal-backdrop]) {
+:where(.modal-overlay, [data-modal-backdrop]) {
   background-color: var(--qm-overlay);
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
@@ -226,7 +226,7 @@ html.dark .pharma-app-shell {
   color: var(--qm-text, #e2e8f0);
 }
 
-html.dark .pharma-responsive-scope :where(.pharma-modal-surface, .pharma-checkout-modal) {
+html.dark :where(.pharma-modal-surface, .pharma-checkout-modal) {
   background-color: var(--qm-surface, #111c2e);
   color: var(--qm-ink, #f8fafc);
   border-color: var(--qm-border, #334155);
@@ -254,7 +254,7 @@ html.dark .pharma-responsive-scope :where(.border-slate-100, .border-slate-200, 
   border-color: var(--qm-border, #334155) !important;
 }
 
-html.dark .pharma-responsive-scope :where(input, select, textarea) {
+html.dark :where([role="dialog"] input, [role="dialog"] select, [role="dialog"] textarea) {
   background-color: #0f1a2b;
   color: #f8fafc;
   border-color: var(--qm-border-strong, #475569);
