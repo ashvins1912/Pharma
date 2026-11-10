@@ -468,7 +468,6 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   const existingByMongoId = new Map();
   for (const candidate of [...exactCandidates, ...nameCandidates, ...fuzzyCandidates]) existingByMongoId.set(String(candidate._id), candidate);
   const existing = [...existingByMongoId.values()];
-  const existingIds = new Set(existing.map(item => item.medicineId));
   const existingById = new Map(existing.map(item => [item.medicineId, item]));
   const existingKeyGroups = new Map();
   const existingNameGroups = new Map();
@@ -480,11 +479,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     const prefix = nameKey.slice(0, 2);
     if (prefix.length === 2) existingByNamePrefix.set(prefix, [...(existingByNamePrefix.get(prefix) || []), candidate]);
   }
-  const existingKeys = new Set([...existingKeyGroups.entries()].filter(([, group]) => group.length === 1).map(([canonicalKey]) => canonicalKey));
   const existingNameCounts = new Map([...existingNameGroups.entries()].map(([nameKey, group]) => [nameKey, group.length]));
-  let updates = records.filter(item => existingIds.has(item.medicineId) ||
-    (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeys.has(item.canonicalKey)) ||
-    (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1)).length;
   for (const item of records) {
     const exact = existingById.get(item.medicineId) ||
       (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeyGroups.get(item.canonicalKey)?.length === 1 ? existingKeyGroups.get(item.canonicalKey)[0] : null) ||
@@ -517,9 +512,6 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   }
   records = deduplicatedRecords;
   duplicatesRemoved += fuzzyTargetDuplicatesMerged;
-  updates = records.filter(item => existingIds.has(item.medicineId) ||
-    (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeys.has(item.canonicalKey)) ||
-    (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1)).length;
   const fuzzyAutoMerge = records.filter(item => item.reconciliationMatch?.method === 'FUZZY_TOKEN_SORT' && item.reconciliationMatch.decision === 'AUTO_MERGE').length;
   const fuzzyManualReview = records.filter(item => item.reconciliationMatch?.decision === 'MANUAL_REVIEW').length;
   const updateCandidates = records.filter(item => item.reconciliationMatch?.decision === 'AUTO_MERGE').length;
