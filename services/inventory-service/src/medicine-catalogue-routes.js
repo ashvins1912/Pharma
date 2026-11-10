@@ -63,7 +63,8 @@ router.patch('/:medicineId', requireServiceScope('inventory.catalogue.import'), 
       if (!MEDICINE_EDITABLE_FIELDS.has(field)) continue;
       if (['uses', 'sideEffects', 'indications', 'contraindications', 'drugInteractions'].includes(field)) {
         if (!Array.isArray(value)) return res.status(400).json({ message: field + ' must be an array.' });
-        update[field] = [...new Set(value.map(item => String(item ?? '').trim()).filter(Boolean))];
+        if (value.length > 100) return res.status(400).json({ message: field + ' cannot contain more than 100 values.' });
+        update[field] = [...new Set(value.map(item => String(item ?? '').trim().slice(0, 500)).filter(Boolean))];
       } else {
         if (typeof value !== 'string' || !value.trim()) return res.status(400).json({ message: field + ' must be a non-empty string.' });
         update[field] = value.trim().slice(0, 2000);
