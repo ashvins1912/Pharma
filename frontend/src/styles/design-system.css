@@ -439,7 +439,7 @@ button:disabled, [aria-disabled="true"] {
 
 @media (min-width: 1440px) {
   .pharma-main-content {
-    padding-inline: clamp(1.75rem, 2.2vw, 2.75rem);
+    padding-inline: var(--qm-page-gutter);
   }
 
   .admin-screen {
