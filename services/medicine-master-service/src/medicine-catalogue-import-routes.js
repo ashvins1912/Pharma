@@ -1184,23 +1184,27 @@ router.get('/imports/:batchId/mapping-queue', asyncHandler(async (req, res) => {
   const page = Math.max(1, Math.min(10000, Number.parseInt(req.query.page || '1', 10) || 1));
   const limit = Math.max(1, Math.min(100, Number.parseInt(req.query.limit || '100', 10) || 100));
   const { records, total } = await getStagedMappingPage(batchId, page, limit);
-  const prefixes = [...new Set(records.map(record => key(record.brandName).slice(0, 2)).filter(prefix => prefix.length === 2))];
+  const candidateFields = ['brandName', 'productName', 'genericName', 'composition'];
+  const prefixesFor = record => [...new Set(candidateFields.flatMap(field => String(record[field] || '').split(/[\\s,;]+/).map(token => key(token).slice(0, 3)).filter(prefix => prefix.length === 3)))];
+  const prefixes = [...new Set(records.flatMap(prefixesFor))];
   const candidateRows = prefixes.length ? await MedicineMaster.find({
     isArchived: { $ne: true },
     lastImportBatchId: { $ne: batchId },
-    $or: prefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } }))
+    $or: prefixes.flatMap(prefix => candidateFields.map(field => ({ [field]: { $regex: '^' + prefix, $options: 'i' } })))
   }, {
     medicineId: 1, brandName: 1, productName: 1, genericName: 1, composition: 1,
     strength: 1, dosageForm: 1, manufacturer: 1, storeApproved: 1
   }).limit(5000).lean() : [];
   const candidatesByPrefix = new Map();
   for (const candidate of candidateRows) {
-    const prefix = key(candidate.brandName).slice(0, 2);
-    candidatesByPrefix.set(prefix, [...(candidatesByPrefix.get(prefix) || []), candidate]);
+    for (const prefix of prefixesFor(candidate)) {
+      const group = candidatesByPrefix.get(prefix) || [];
+      if (!group.some(item => item.medicineId === candidate.medicineId)) group.push(candidate);
+      candidatesByPrefix.set(prefix, group);
+    }
   }
   const items = records.map(record => {
-    const prefix = key(record.brandName).slice(0, 2);
-    const candidates = candidatesByPrefix.get(prefix) || [];
+    const candidates = [...new Map(prefixesFor(record).flatMap(prefix => candidatesByPrefix.get(prefix) || []).map(candidate => [candidate.medicineId, candidate])).values()];
     const ranked = candidates.map(candidate => ({ ...candidate, evidence: scoreMedicineMatch(record, candidate) }))
       .sort((left, right) => right.evidence.score - left.evidence.score).slice(0, 5);
     const availableFields = MAPPING_FIELDS.filter(field => {
