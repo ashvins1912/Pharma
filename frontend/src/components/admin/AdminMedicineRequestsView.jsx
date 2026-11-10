@@ -262,8 +262,8 @@ export default function AdminMedicineRequestsView() {
                   >
                     <span>{req.proposal ? '✏️ Modify Proposal' : '➕ Formulate Delivery Proposal'}</span>
                   </button>
-                </div>
-              </div>
+                </footer>
+              </article>
             ))}
           </div>
         </>
