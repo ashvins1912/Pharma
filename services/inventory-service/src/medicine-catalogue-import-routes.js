@@ -12,10 +12,17 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX
 const text = value => String(value ?? '').replace(/<[^>]*>/g, ' ').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
 const key = value => text(value).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const hash = value => createHash('sha256').update(Buffer.isBuffer(value) ? value : String(value)).digest('hex');
+const PICK_CACHE = new WeakMap();
 const pick = (record, ...names) => {
-  const normalized = Object.fromEntries(Object.entries(record || {}).map(([k, v]) => [key(k).replace(/ /g, ''), v]));
+  if (!record || typeof record !== 'object') return undefined;
+  let normalized = PICK_CACHE.get(record);
+  if (!normalized) {
+    normalized = new Map();
+    for (const [field, value] of Object.entries(record)) normalized.set(key(field).replace(/ /g, ''), value);
+    PICK_CACHE.set(record, normalized);
+  }
   for (const name of names) {
-    const value = normalized[key(name).replace(/ /g, '')];
+    const value = normalized.get(key(name).replace(/ /g, ''));
     if (value !== undefined && value !== null && String(value).trim() !== '') return value;
   }
   return undefined;
@@ -31,9 +38,30 @@ const cleanDosageForm = value => {
 };
 const isPlaceholder = value => ['na', 'n a', 'n/a', 'not available', 'none', 'null', '-'].includes(key(value));
 const cleanSourceValue = value => isPlaceholder(value) ? '' : text(value);
-const splitList = value => (Array.isArray(value) ? value : [value]).flatMap(item => typeof item === 'string' ? item.split(/[;|]+/) : []).map(cleanSourceValue).filter(Boolean).filter((v, i, a) => a.findIndex(x => key(x) === key(v)) === i);
+const splitList = value => {
+  const seen = new Set(); const result = [];
+  for (const item of (Array.isArray(value) ? value : [value])) {
+    if (typeof item !== 'string') continue;
+    for (const part of item.split(/[;|]+/)) {
+      const cleaned = cleanSourceValue(part); const identity = key(cleaned);
+      if (cleaned && !seen.has(identity)) { seen.add(identity); result.push(cleaned); }
+    }
+  }
+  return result;
+};
 const alignedValues = value => (Array.isArray(value) ? value : [value]).map(cleanSourceValue);
-const normalizeAlternatives = value => (Array.isArray(value) ? value : []).map(item => typeof item === 'string' ? { brandName: text(item), medicineId: '', source: 'SUGGESTED_NAME', verification: 'UNVERIFIED' } : ({ medicineId: text(item?.brandIdentifier), brandName: text(item?.brandName), source: 'SOURCE_LINK', verification: 'UNVERIFIED' })).filter(item => item.brandName).filter((item, index, all) => all.findIndex(other => (item.medicineId && other.medicineId === item.medicineId) || key(other.brandName) === key(item.brandName)) === index);
+const normalizeAlternatives = value => {
+  const seenIds = new Set(); const seenNames = new Set(); const result = [];
+  for (const raw of (Array.isArray(value) ? value : [])) {
+    const item = typeof raw === 'string'
+      ? { brandName: text(raw), medicineId: '', source: 'SUGGESTED_NAME', verification: 'UNVERIFIED' }
+      : { medicineId: text(raw?.brandIdentifier), brandName: text(raw?.brandName), source: 'SOURCE_LINK', verification: 'UNVERIFIED' };
+    const nameKey = key(item.brandName);
+    if (!item.brandName || (item.medicineId && seenIds.has(item.medicineId)) || seenNames.has(nameKey)) continue;
+    if (item.medicineId) seenIds.add(item.medicineId); seenNames.add(nameKey); result.push(item);
+  }
+  return result;
+};
 
 const medicineMasterSchema = new mongoose.Schema({
   medicineId: { type: String, required: true, unique: true, index: true },
@@ -86,6 +114,7 @@ const medicineMasterSchema = new mongoose.Schema({
   lastVerifiedAt: { type: Date, default: null }
 }, { timestamps: true });
 medicineMasterSchema.index({ brandName: 'text', genericName: 'text', composition: 'text', manufacturer: 'text', uses: 'text', sideEffects: 'text', therapeuticClass: 'text', chemicalClass: 'text', actionClass: 'text' });
+medicineMasterSchema.index({ brandName: 1 }, { collation: { locale: 'en', strength: 2 } });
 const catalogueImportSchema = new mongoose.Schema({
   batchId: { type: String, required: true, unique: true },
   dataset: { type: String, enum: ['INDIAN_MEDICINE_DATA', 'INDIA_MEDICINES_INFO', 'MEDICINES_PART_1'], required: true },
@@ -204,7 +233,16 @@ export function normalizeMedicineRecord(raw, dataset) {
     const strengthMatch = brandName.match(/\b\d+(?:\.\d+)?\s?(?:mcg|mg|g|ml|iu|%)(?:\b|\/)/i);
     const strength = strengthMatch ? strengthMatch[0].replace(/\s+/g, ' ').trim() : '';
     const dosageForm = cleanDosageForm(brandName);
-    const collect = prefix => Array.from({ length: prefix === 'sideEffect' ? 42 : 5 }, (_, index) => cleanSourceValue(raw[`${prefix}${index}`])).filter(Boolean).filter((value, index, all) => all.findIndex(item => key(item) === key(value)) === index);
+    const collected = new Map();
+    const collect = prefix => {
+      if (collected.has(prefix)) return collected.get(prefix);
+      const seen = new Set(); const values = [];
+      for (let index = 0, limit = prefix === 'sideEffect' ? 42 : 5; index < limit; index += 1) {
+        const value = cleanSourceValue(raw[`${prefix}${index}`]); const identity = key(value);
+        if (value && !seen.has(identity)) { seen.add(identity); values.push(value); }
+      }
+      collected.set(prefix, values); return values;
+    };
     const identity = [key(brandName), key(strength), key(dosageForm)].join('|');
     return {
       medicineId: `MEDINFO-${sourceRecordId}`, canonicalKey: '', brandName, genericName: '', genericId: '',
@@ -278,7 +316,7 @@ export function consolidate(records, dataset) {
   for (const raw of records) {
     sourceRecords += 1;
     if (sourceRecords > 60000) throw Object.assign(new Error('Dataset exceeds the 60,000-record import limit.'), { statusCode: 413 });
-    const normalized = normalizeMedicineRecord(raw, raw.__dataset);
+    const normalized = normalizeMedicineRecord(raw, dataset || raw.__dataset);
     if (!normalized) { rejected += 1; continue; }
     Object.assign(normalized, assessMedicineQuality(normalized));
     normalized.dataQualityStatus = normalized.qualityGrade === 'EXCELLENT' || normalized.qualityGrade === 'GOOD' ? 'GOOD' : normalized.qualityGrade === 'NEEDS_REVIEW' ? 'NEEDS_REVIEW' : 'PARTIAL';
@@ -339,7 +377,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   if (!Array.isArray(sourceRows) && typeof sourceRows?.[Symbol.iterator] !== 'function') return res.status(400).json({ message: 'The uploaded medicine dataset has an invalid record collection.' });
   let normalized;
   try {
-    normalized = consolidate((function* () { for (const record of sourceRows) yield { ...record, __dataset: dataset }; })(), dataset);
+    normalized = consolidate(sourceRows, dataset);
   } catch (error) {
     return res.status(error.statusCode || 400).json({ message: error.message });
   }
@@ -361,7 +399,14 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   const names = dataset === 'MEDICINES_PART_1' ? [...new Set(records.filter(item => item.safeNameMatch).map(item => item.brandName))] : [];
   const incomingKeyCounts = new Map();
   for (const item of records) if (item.canonicalKey) incomingKeyCounts.set(item.canonicalKey, (incomingKeyCounts.get(item.canonicalKey) || 0) + 1);
-  const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: canonicalKeys } }, ...(names.length ? [{ $expr: { $in: [{ $toLower: '$brandName' }, names.map(name => name.toLowerCase())] } }] : [])] }, { medicineId: 1, canonicalKey: 1, brandName: 1 }).lean();
+  const candidateProjection = { medicineId: 1, canonicalKey: 1, brandName: 1 };
+  const exactCandidates = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: canonicalKeys } }] }, candidateProjection).lean();
+  const nameCandidates = names.length
+    ? await MedicineMaster.find({ brandName: { $in: names } }, candidateProjection).collation({ locale: 'en', strength: 2 }).lean()
+    : [];
+  const existingByMongoId = new Map();
+  for (const candidate of [...exactCandidates, ...nameCandidates]) existingByMongoId.set(String(candidate._id), candidate);
+  const existing = [...existingByMongoId.values()];
   const existingIds = new Set(existing.map(item => item.medicineId));
   const existingKeyCounts = new Map();
   for (const item of existing.filter(item => item.canonicalKey)) existingKeyCounts.set(item.canonicalKey, (existingKeyCounts.get(item.canonicalKey) || 0) + 1);
