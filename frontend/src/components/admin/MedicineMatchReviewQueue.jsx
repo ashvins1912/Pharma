@@ -46,7 +46,7 @@ export default function MedicineMatchReviewQueue() {
     if (!drafts[id]) {
       const target = row.candidate || null;
       const fields = FIELDS.map(([key]) => key).filter(key => target && target[key] !== undefined && target[key] !== null && target[key] !== '');
-      updateDraft(id, { medicineId: target?.medicineId || '', fields });
+      updateDraft(id, { medicineId: target?.medicineId || '', target, fields });
     }
   };
   const searchCatalogue = async row => {
@@ -62,7 +62,7 @@ export default function MedicineMatchReviewQueue() {
   };
   const chooseTarget = (id, medicine) => {
     const fields = FIELDS.map(([key]) => key).filter(key => medicine[key] !== undefined && medicine[key] !== null && medicine[key] !== '');
-    updateDraft(id, { medicineId: medicine.medicineId, fields });
+    updateDraft(id, { medicineId: medicine.medicineId, target: medicine, fields });
     setResults(current => ({ ...current, [id]: [] }));
   };
   const loadSuggestedTarget = async (row, medicineId) => {
@@ -100,7 +100,7 @@ export default function MedicineMatchReviewQueue() {
         {items.map(row => {
           const draft = drafts[row.identityHash] || {};
           const isOpen = activeId === row.identityHash;
-          const selected = (results[row.identityHash] || []).find(item => item.medicineId === draft.medicineId) || row.candidate;
+          const selected = draft.target || (results[row.identityHash] || []).find(item => item.medicineId === draft.medicineId) || row.candidate;
           return <article key={row.identityHash} className="p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-slate-900">{row.input?.brand || row.input?.name || row.input?.genericName || 'Unnamed product'}</strong><span className="rounded-full bg-amber-100 px-2 py-1 text-[9px] font-black uppercase text-amber-800">{row.status || 'PENDING'}</span>{row.confidence > 0 && <span className="text-[10px] font-bold text-slate-500">{row.confidence}% candidate confidence</span>}</div>
