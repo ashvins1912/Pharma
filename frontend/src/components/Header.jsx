@@ -131,12 +131,13 @@ export default function Header({
           {/* Left: Logo & Pharmacy Brand */}
           <div
             onClick={() => setActiveTab('store')}
-            className="quickmeds-brand-anchor app-header__brand"
+              aria-current={activeTab === 'store' ? 'page' : undefined}
+            className="quickmeds-brand-anchor app-header__brand" role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setActiveTab('store'); } }}
           >
             <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl sm:rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-base sm:text-xl shadow-md shadow-blue-500/20 shrink-0">
               ⚕️
             </div>
-            <div className="flex flex-col justify-center min-w-0">
+            <div className="app-header__brand-copy flex flex-col justify-center">
               <div className="quickmeds-brand-badge-container">
                 <span className="quickmeds-brand-name">
                   QuickMeds Rx
@@ -176,18 +177,18 @@ export default function Header({
                   )
                 )}
               </div>
-              <p className="hidden md:block text-[11px] text-slate-400 font-medium tracking-tight leading-normal mt-0.5 whitespace-nowrap">
+              <p className="app-header__tagline hidden md:block text-[11px] text-slate-400 font-medium tracking-tight leading-normal mt-0.5 whitespace-nowrap">
                 {t('trustedTagline')}
               </p>
             </div>
           </div>
 
           {/* Center: Desktop Navigation */}
-          <nav className="app-header__desktop-nav hidden lg:flex items-center gap-1.5 lg:gap-2">
+          <nav className="app-header__desktop-nav hidden items-center gap-1.5 lg:gap-2">
             <button
               type="button"
               onClick={() => setActiveTab('store')}
-              className={`h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              className={`app-header__nav-item h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'store'
                   ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -203,7 +204,8 @@ export default function Header({
                   <button
                     type="button"
                     onClick={() => setActiveTab('orders')}
-                    className={`h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              aria-current={activeTab === 'orders' ? 'page' : undefined}
+                    className={`app-header__nav-item h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                       activeTab === 'orders'
                         ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -217,6 +219,7 @@ export default function Header({
                   <button
                     type="button"
                     onClick={() => setActiveTab('requests')}
+              aria-current={activeTab === 'requests' ? 'page' : undefined}
                     className={`h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 relative ${
                       activeTab === 'requests'
                         ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs'
@@ -236,7 +239,8 @@ export default function Header({
                   <button
                     type="button"
                     onClick={() => setActiveTab('addresses')}
-                    className={`h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              aria-current={activeTab === 'addresses' ? 'page' : undefined}
+                    className={`app-header__nav-item h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                       activeTab === 'addresses'
                         ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -253,7 +257,7 @@ export default function Header({
               <button
                 type="button"
                 onClick={() => setActiveTab('admin')}
-                className={`h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                className={`app-header__nav-item h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                   activeTab === 'admin'
                     ? 'bg-blue-600 text-white shadow-sm font-extrabold'
                     : 'text-blue-700 bg-blue-50 hover:bg-blue-100'
@@ -267,18 +271,6 @@ export default function Header({
 
           {/* Right: Actions Bar */}
           <div className="quickmeds-actions-group app-header__actions">
-
-            {/* Compact store shortcut replaces the full desktop navigation on small screens. */}
-            <button
-              type="button"
-              onClick={() => { setActiveTab('store'); closeMobileMenu(); }}
-              className={`app-header__mobile-store lg:hidden inline-flex h-9 sm:h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 text-xs font-bold shrink-0 transition ${activeTab === 'store' ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-              aria-label={t('store')}
-              aria-current={activeTab === 'store' ? 'page' : undefined}
-            >
-              <span aria-hidden="true">💊</span>
-              <span>{t('store')}</span>
-            </button>
 
             <label className="app-header__language qm-select-shell hidden min-[380px]:flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold text-slate-600" title={t('selectLanguage')}>
               <span aria-hidden="true">🌐</span>
