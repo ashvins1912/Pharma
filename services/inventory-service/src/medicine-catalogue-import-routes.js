@@ -94,7 +94,7 @@ export function normalizeMedicineRecord(raw, dataset) {
     const genericName = text(pick(raw, 'genericName'));
     const medicineId = text(pick(raw, 'brandIdentifier'));
     if (!medicineId) return null;
-    const identity = [key(brandName), key(composition), key(strength), key(dosageForm), key(packSize)].join('|');
+    const identity = [key(brandName), key(composition), key(strength), key(dosageForm)].join('|');
     return {
       medicineId, canonicalKey: composition ? identity : '',
       brandName, genericName, genericId: text(pick(raw, 'genericIdentifier')),
@@ -121,7 +121,7 @@ export function normalizeMedicineRecord(raw, dataset) {
   const dosageForm = cleanDosageForm(medicineType);
   const strengthMatch = (brandName + ' ' + productName + ' ' + composition).match(/\b\d+(?:\.\d+)?\s?(?:mcg|mg|g|ml|iu|%)(?:\b|\/)/i);
   const strength = strengthMatch ? strengthMatch[0].replace(/\s+/g, ' ').trim() : '';
-  const identity = [key(brandName), key(composition), key(strength), key(dosageForm)].join('|');
+  const identity = [key(brandName), key(composition), key(strength), key(dosageForm), key(packSize)].join('|');
   const stableIdentity = composition ? identity : [key(brandName), key(productName), key(dosageForm), key(packSize)].join('|');
   const sourceRecordId = hash(stableIdentity).slice(0, 24);
   const image = text(pick(raw, 'Image URL'));
