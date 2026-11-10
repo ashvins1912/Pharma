@@ -733,6 +733,7 @@ export default function AdminDashboardView() {
                 </tbody>
               </table>
             </div>
+            <>
             <div className="md:hidden qm-mobile-record-list">
               {auditLogs.map((log, idx) => (
                 <article key={log._id || log.id || `${log.importId || 'audit'}-${idx}`} className="qm-mobile-record-card qm-mobile-audit-card">
@@ -742,6 +743,7 @@ export default function AdminDashboardView() {
                 </article>
               ))}
             </div>
+            </>
           )}
           <Pagination
             page={auditPagination.page}
