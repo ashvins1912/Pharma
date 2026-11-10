@@ -54,6 +54,7 @@ const medicineMasterSchema = new mongoose.Schema({
   sourcePriority: { type: Number, default: 99 },
   sourceDatasets: { type: [String], default: [] },
   sourceRecordIds: { type: [String], default: [] },
+  legacyMedicineIds: { type: [String], default: [] },
   lastImportBatchId: { type: String, default: '' },
   lastVerifiedAt: { type: Date, default: null }
 }, { timestamps: true });
@@ -178,11 +179,15 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   const previousBatch = await CatalogueImport.findOne({ dataset, fileSha256 }).lean();
   if (previousBatch) return res.status(200).json({ batchId: previousBatch.batchId, dataset, status: previousBatch.status, report: previousBatch.report, sample: (previousBatch.records || []).slice(0, 8), reused: true });
   const ids = records.map(record => record.medicineId);
-  const canonicalKeys = dataset === 'INDIA_MEDICINES_INFO' ? records.map(record => record.canonicalKey).filter(Boolean) : [];
+  const canonicalKeys = records.map(record => record.canonicalKey).filter(Boolean);
+  const incomingKeyCounts = new Map();
+  for (const item of records) if (item.canonicalKey) incomingKeyCounts.set(item.canonicalKey, (incomingKeyCounts.get(item.canonicalKey) || 0) + 1);
   const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: canonicalKeys } }] }, { medicineId: 1, canonicalKey: 1 }).lean();
   const existingIds = new Set(existing.map(item => item.medicineId));
-  const existingKeys = new Set(existing.map(item => item.canonicalKey).filter(Boolean));
-  const updates = records.filter(item => existingIds.has(item.medicineId) || (dataset === 'INDIA_MEDICINES_INFO' && item.canonicalKey && existingKeys.has(item.canonicalKey))).length;
+  const existingKeyCounts = new Map();
+  for (const item of existing.filter(item => item.canonicalKey)) existingKeyCounts.set(item.canonicalKey, (existingKeyCounts.get(item.canonicalKey) || 0) + 1);
+  const existingKeys = new Set([...existingKeyCounts.entries()].filter(([, count]) => count === 1).map(([canonicalKey]) => canonicalKey));
+  const updates = records.filter(item => existingIds.has(item.medicineId) || (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeys.has(item.canonicalKey))).length;
   const report = {
     sourceRecords: sourceRows.length, normalizedRecords: records.length, rejectedRecords: rejected,
     duplicatesRemoved, newRecords: records.length - updates, updateCandidates: updates,
@@ -218,20 +223,24 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
   let publishedCount = 0;
   try {
     const records = batch.records || [];
+    const incomingKeyCounts = new Map();
+    for (const item of records) if (item.canonicalKey) incomingKeyCounts.set(item.canonicalKey, (incomingKeyCounts.get(item.canonicalKey) || 0) + 1);
     for (let offset = 0; offset < records.length; offset += 250) {
       const chunk = records.slice(offset, offset + 250);
       const ids = chunk.map(item => item.medicineId);
-      const keys = batch.dataset === 'INDIA_MEDICINES_INFO' ? chunk.map(item => item.canonicalKey).filter(Boolean) : [];
+      const keys = chunk.map(item => item.canonicalKey).filter(Boolean);
       const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: keys } }] }).lean();
       const byId = new Map(existing.map(item => [item.medicineId, item]));
       const keyGroups = new Map();
       for (const item of existing.filter(item => item.canonicalKey)) keyGroups.set(item.canonicalKey, [...(keyGroups.get(item.canonicalKey) || []), item]);
       const byKey = new Map([...keyGroups.entries()].filter(([, matches]) => matches.length === 1).map(([canonicalKey, matches]) => [canonicalKey, matches[0]]));
       const operations = chunk.map(item => {
-        const current = byId.get(item.medicineId) || (batch.dataset === 'INDIA_MEDICINES_INFO' && item.canonicalKey ? byKey.get(item.canonicalKey) : null);
-        const targetId = current?.medicineId || item.medicineId;
+        const canonicalMatch = item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 ? byKey.get(item.canonicalKey) : null;
+        const current = byId.get(item.medicineId) || canonicalMatch || null;
+        const targetId = batch.dataset === 'INDIAN_MEDICINE_DATA' ? item.medicineId : (current?.medicineId || item.medicineId);
         const fields = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','dosageForm','medicineType','sourceImageUrl'];
         const set = { lastImportBatchId: batch.batchId, sourcePriority: Math.min(Number(current?.sourcePriority ?? 99), item.sourcePriority) };
+        if (current && current.medicineId !== targetId) set.medicineId = targetId;
         if (item.canonicalKey && !current?.canonicalKey) set.canonicalKey = item.canonicalKey;
         for (const field of fields) {
           if (item[field] && (!current?.[field] || item.sourcePriority < Number(current.sourcePriority ?? 99))) set[field] = item[field];
@@ -247,11 +256,11 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
           ? (current?.dataQualityStatus || item.dataQualityStatus) : item.dataQualityStatus;
         return {
           updateOne: {
-            filter: { medicineId: targetId },
+            filter: current ? { _id: current._id } : { medicineId: targetId },
             update: {
               $set: set,
               $setOnInsert: { medicineId: targetId, canonicalKey: item.canonicalKey || '' },
-              $addToSet: { sourceDatasets: item.sourceDataset, sourceRecordIds: item.sourceRecordId }
+              $addToSet: { sourceDatasets: item.sourceDataset, sourceRecordIds: item.sourceRecordId, ...(current && current.medicineId !== targetId ? { legacyMedicineIds: current.medicineId } : {}) }
             },
             upsert: true
           }
