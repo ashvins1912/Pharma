@@ -68,6 +68,14 @@ button:disabled, [aria-disabled="true"] {
   background: var(--qm-canvas);
 }
 
+.qm-site-container {
+  width: 100%;
+  max-width: var(--qm-content-width);
+  margin-inline: auto;
+  padding-inline: var(--qm-page-gutter);
+  box-sizing: border-box;
+}
+
 .pharma-main-content {
   width: 100%;
   max-width: var(--qm-content-width);
