@@ -46,7 +46,11 @@ router.get('/match', async (req, res, next) => {
         drugInteractions: 1, habitForming: 1, requiresPrescription: 1,
         prescriptionVerification: 1, clinicalDataVerification: 1, dataQualityStatus: 1
       }
-    ).limit(100).lean();
+    ).limit(101).lean();
+    if (candidates.length > 100) {
+      res.set('Cache-Control', 'no-store');
+      return res.json({ status: 'AMBIGUOUS', confidence: 0, medicine: null, candidatesChecked: 101, truncated: true });
+    }
     const result = rankMedicineMasterMatches(product, candidates);
     res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
     return res.json(result);
