@@ -382,11 +382,11 @@ export default function Header({
               <button
                 type="button"
                 onClick={onOpenAuth}
-                className="h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm cursor-pointer transition flex items-center justify-center gap-1.5 shrink-0"
+                className="app-header__sign-in h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm cursor-pointer transition flex items-center justify-center gap-1.5 shrink-0"
                 aria-label={t('signIn')}
               >
-                <span className="text-xs">👤</span>
-                <span>{t('signIn')}</span>
+                <span className="app-header__sign-in-icon text-xs" aria-hidden="true">👤</span>
+                <span className="app-header__sign-in-label">{t('signIn')}</span>
               </button>
             )}
 
