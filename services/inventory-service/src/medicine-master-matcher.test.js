@@ -81,3 +81,30 @@ test('missing manufacturer does not prevent an otherwise safe product match', ()
   assert.equal(result.status, 'EXACT');
   assert.equal(result.medicine.medicineId, 'master-001');
 });
+
+test('surfaces a shared brand stem as a review candidate without auto-linking suffix variants', () => {
+  const result = rankMedicineMasterMatches(
+    storeProduct({
+      name: 'Aceflam S',
+      brand: 'Aceflam',
+      genericName: '',
+      composition: '',
+      strength: '',
+      dosageForm: ''
+    }),
+    [master({
+      medicineId: 'aceflam-p',
+      brandName: "ACEFLAM P TABLET 10'S",
+      productName: "ACEFLAM P TABLET 10'S",
+      genericName: '',
+      composition: '',
+      strength: '',
+      dosageForm: ''
+    })]
+  );
+
+  assert.equal(result.status, 'NO_CONFIDENT_MATCH');
+  assert.equal(result.medicine, null);
+  assert.equal(result.alternatives[0].brandName, "ACEFLAM P TABLET 10'S");
+  assert.equal(result.alternatives[0].matchReason, 'SHARED_BRAND_STEM_REVIEW_REQUIRED');
+});
