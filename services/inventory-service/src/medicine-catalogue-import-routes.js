@@ -43,6 +43,39 @@ const similarityText = value => key(value)
   .replace(/\b(\d+(?:\.\d+)?)\s*(mcg|mg|gm|g|ml|iu|%)\b/g, '$1 $2')
   .replace(/\b(tablets|tabs|capsules|caps|sachets|vials)\b/g, match => ({ tablets: 'tablet', tabs: 'tab', capsules: 'capsule', caps: 'cap', sachets: 'sachet', vials: 'vial' })[match]);
 const tokenSortRatio = (left, right) => levenshteinRatio(similarityText(left).split(' ').filter(Boolean).sort().join(' '), similarityText(right).split(' ').filter(Boolean).sort().join(' '));
+const characterNgrams = value => {
+  const normalized = similarityText(value).replace(/\s+/g, ' ').trim();
+  const padded = '  ' + normalized + '  ';
+  const grams = [];
+  for (let i = 0; i <= padded.length - 3; i += 1) grams.push(padded.slice(i, i + 3));
+  return grams;
+};
+const buildNameNgramIdf = candidates => {
+  const documentFrequency = new Map();
+  let documents = 0;
+  for (const candidate of candidates) {
+    if (!candidate.brandName) continue;
+    documents += 1;
+    for (const gram of new Set(characterNgrams(candidate.brandName))) documentFrequency.set(gram, (documentFrequency.get(gram) || 0) + 1);
+  }
+  return new Map([...documentFrequency].map(([gram, frequency]) => [gram, Math.log((documents + 1) / (frequency + 1)) + 1]));
+};
+const tfIdfNgramCosine = (left, right, idf = null) => {
+  const vector = value => {
+    const counts = new Map();
+    for (const gram of characterNgrams(value)) counts.set(gram, (counts.get(gram) || 0) + 1);
+    const weighted = new Map();
+    for (const [gram, count] of counts) weighted.set(gram, count * (idf?.get(gram) || 1));
+    return weighted;
+  };
+  const a = vector(left), b = vector(right);
+  let dot = 0, normA = 0, normB = 0;
+  for (const value of a.values()) normA += value * value;
+  for (const value of b.values()) normB += value * value;
+  for (const [gram, value] of a) dot += value * (b.get(gram) || 0);
+  if (!normA || !normB) return 0;
+  return Math.round((dot / Math.sqrt(normA * normB)) * 100);
+};
 const charNgramDice = (left, right) => {
   const a = similarityText(left).replace(/\s+/g, ' ');
   const b = similarityText(right).replace(/\s+/g, ' ');
@@ -75,10 +108,11 @@ const normalizeDosageForm = value => key(value)
   .replace(/\bcaplets\b/g, 'caplet').replace(/\bvials\b/g, 'vial')
   .replace(/\bampoules\b/g, 'ampoule').replace(/\bsachets\b/g, 'sachet')
   .replace(/\bdrops\b/g, 'drop').replace(/\bpatches\b/g, 'patch');
-export function scoreMedicineMatch(incoming, candidate) {
+export function scoreMedicineMatch(incoming, candidate, options = {}) {
   const tokenNameScore = tokenSortRatio(incoming.brandName, candidate.brandName);
   const ngramNameScore = charNgramDice(incoming.brandName, candidate.brandName);
-  const nameScore = fieldSimilarity(incoming.brandName, candidate.brandName);
+  const tfIdfNameScore = tfIdfNgramCosine(incoming.brandName, candidate.brandName, options.nameNgramIdf);
+  const nameScore = Math.round(tokenNameScore * 0.55 + tfIdfNameScore * 0.45);
   const aComposition = key(incoming.composition || (incoming.ingredients || []).join(' '));
   const bComposition = key(candidate.composition || (candidate.ingredients || []).join(' '));
   const compositionScore = aComposition && bComposition ? fieldSimilarity(aComposition, bComposition) : null;
@@ -105,7 +139,7 @@ export function scoreMedicineMatch(incoming, candidate) {
     score >= 97 && Boolean(aStrength && bStrength && aForm && bForm);
   const review = !blocked && nameScore >= 78 && (score >= 78 || compositionScore === null);
   return {
-    score, nameScore, tokenNameScore, ngramNameScore, compositionScore, genericScore,
+    score, nameScore, tokenNameScore, ngramNameScore, tfIdfNameScore, compositionScore, genericScore,
     evidence: evidence.filter(item => item.available).map(({ field, score: fieldScore, weight }) => ({ field, score: fieldScore, weight })),
     decision: blocked ? 'BLOCKED_CONFLICT' : autoMerge ? 'AUTO_MERGE' : review ? 'MANUAL_REVIEW' : 'NO_MATCH',
     warnings: [
@@ -526,6 +560,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     if (prefix.length === 2) existingByNamePrefix.set(prefix, [...(existingByNamePrefix.get(prefix) || []), candidate]);
   }
   const existingNameCounts = new Map([...existingNameGroups.entries()].map(([nameKey, group]) => [nameKey, group.length]));
+  const nameNgramIdf = buildNameNgramIdf(existing);
   for (const item of records) {
     const exact = existingById.get(item.medicineId) ||
       (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeyGroups.get(item.canonicalKey)?.length === 1 ? existingKeyGroups.get(item.canonicalKey)[0] : null) ||
@@ -535,11 +570,11 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     const prefix = key(item.brandName).slice(0, 2);
     const candidates = existingByNamePrefix.get(prefix) || [];
     for (const candidate of candidates) {
-      const scored = scoreMedicineMatch(item, candidate);
+      const scored = scoreMedicineMatch(item, candidate, { nameNgramIdf });
       if (!best || scored.score > best.score) best = { candidate, ...scored };
     }
     if (best && ['AUTO_MERGE', 'MANUAL_REVIEW'].includes(best.decision)) {
-      item.reconciliationMatch = { targetMedicineId: best.candidate.medicineId, method: 'FUZZY_TOKEN_SORT', score: best.score, nameScore: best.nameScore, compositionScore: best.compositionScore, decision: best.decision, warnings: best.warnings };
+      item.reconciliationMatch = { targetMedicineId: best.candidate.medicineId, method: 'HYBRID_TFIDF_NGRAM_LINKAGE', score: best.score, nameScore: best.nameScore, compositionScore: best.compositionScore, decision: best.decision, warnings: best.warnings };
     }
   }
   const recordsByMasterTarget = new Map();
@@ -558,7 +593,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   }
   records = deduplicatedRecords;
   duplicatesRemoved += fuzzyTargetDuplicatesMerged;
-  const fuzzyAutoMerge = records.filter(item => item.reconciliationMatch?.method === 'FUZZY_TOKEN_SORT' && item.reconciliationMatch.decision === 'AUTO_MERGE').length;
+  const fuzzyAutoMerge = records.filter(item => item.reconciliationMatch?.method === 'HYBRID_TFIDF_NGRAM_LINKAGE' && item.reconciliationMatch.decision === 'AUTO_MERGE').length;
   const fuzzyManualReview = records.filter(item => item.reconciliationMatch?.decision === 'MANUAL_REVIEW').length;
   const updateCandidates = records.filter(item => item.reconciliationMatch?.decision === 'AUTO_MERGE').length;
   const report = {
@@ -596,7 +631,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     qualityIssueCounts: records.reduce((counts, item) => { for (const issue of item.qualityIssues) counts[issue] = (counts[issue] || 0) + 1; return counts; }, {}),
     fuzzyMatchExamples: records.filter(item => item.reconciliationMatch?.method === 'FUZZY_TOKEN_SORT').slice(0, 25).map(item => ({
       incomingMedicine: item.brandName, matchedMedicineId: item.reconciliationMatch.targetMedicineId,
-      score: item.reconciliationMatch.score, decision: item.reconciliationMatch.decision, warnings: item.reconciliationMatch.warnings
+      score: item.reconciliationMatch.score, nameScore: item.reconciliationMatch.nameScore, tokenNameScore: item.reconciliationMatch.tokenNameScore, ngramNameScore: item.reconciliationMatch.ngramNameScore, tfIdfNameScore: item.reconciliationMatch.tfIdfNameScore, compositionScore: item.reconciliationMatch.compositionScore, evidence: item.reconciliationMatch.evidence, decision: item.reconciliationMatch.decision, warnings: item.reconciliationMatch.warnings
     })),
     fuzzyCandidateStrategy: 'NORMALIZED_TWO_CHARACTER_PREFIX',
     fuzzyCandidateScanTruncated: fuzzyPrefixes.length >= 120 || fuzzyCandidates.length >= 5000
