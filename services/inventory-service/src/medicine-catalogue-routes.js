@@ -6,7 +6,9 @@ const router = express.Router();
 const medicineMaster = () => mongoose.models.MedicineMaster;
 const escapeRegex = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-router.use(requireServiceScope('inventory.catalogue.read'));
+router.use((req, res, next) => requireServiceScope(
+  req.method === 'PATCH' || req.path.endsWith('/audit') ? 'inventory.catalogue.import' : 'inventory.catalogue.read'
+)(req, res, next));
 
 router.get('/', async (req, res, next) => {
   try {
