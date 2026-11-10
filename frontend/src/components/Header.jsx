@@ -7,6 +7,7 @@ import { useLanguage } from '../context/LanguageContext';
 import NotificationBell from './NotificationBell';
 import AdminAlertBell from './admin/AdminAlertBell';
 import apiClient from '../api/apiClient';
+import './application-chrome.css';
 
 export default function Header({
   activeTab,
@@ -123,14 +124,14 @@ export default function Header({
   };
 
   return (
-    <header className="quickmeds-header bg-white/95 backdrop-blur-md border-b border-slate-200">
+    <header className="quickmeds-header app-header bg-white/95 backdrop-blur-md border-b border-slate-200">
       <div className="w-full min-w-0">
-        <div className="quickmeds-header-inner qm-site-container">
+        <div className="quickmeds-header-inner app-header__inner qm-site-container">
           
           {/* Left: Logo & Pharmacy Brand */}
           <div
             onClick={() => setActiveTab('store')}
-            className="quickmeds-brand-anchor"
+            className="quickmeds-brand-anchor app-header__brand"
           >
             <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl sm:rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-base sm:text-xl shadow-md shadow-blue-500/20 shrink-0">
               ⚕️
@@ -182,7 +183,7 @@ export default function Header({
           </div>
 
           {/* Center: Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-1.5 lg:gap-2">
+          <nav className="app-header__desktop-nav hidden lg:flex items-center gap-1.5 lg:gap-2">
             <button
               type="button"
               onClick={() => setActiveTab('store')}
@@ -265,7 +266,7 @@ export default function Header({
           </nav>
 
           {/* Right: Actions Bar */}
-          <div className="quickmeds-actions-group">
+          <div className="quickmeds-actions-group app-header__actions">
 
             {/* Mobile / Small Screen Navigation Hamburger Menu Toggle */}
             <button
@@ -276,7 +277,7 @@ export default function Header({
                 setMobileMenuOpen(nextState);
                 onToggleMobileMenu?.(nextState);
               }}
-              className="md:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center shrink-0"
+              className="lg:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center shrink-0"
               aria-label={t('toggleMenu')}
               aria-expanded={mobileMenuOpen}
               aria-controls="quickmeds-mobile-navigation"
@@ -403,7 +404,7 @@ export default function Header({
             />
 
             {/* Slide-in Panel */}
-            <div id="quickmeds-mobile-navigation" ref={mobileMenuPanelRef} className="pharma-mobile-nav-panel absolute inset-y-0 right-0 max-w-xs w-full bg-white border-l border-slate-200 shadow-2xl flex flex-col justify-between animate-slide-in-right overflow-y-auto" tabIndex="-1">
+            <div id="quickmeds-mobile-navigation" ref={mobileMenuPanelRef} className="pharma-mobile-nav-panel app-header__mobile-panel absolute inset-y-0 right-0 max-w-xs w-full bg-white border-l border-slate-200 shadow-2xl flex flex-col justify-between animate-slide-in-right overflow-y-auto" tabIndex="-1">
               
               {/* Drawer Header */}
               <div className="flex items-center justify-between pb-4 border-b border-slate-100">

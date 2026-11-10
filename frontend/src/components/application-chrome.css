@@ -1,0 +1,59 @@
+/* Shared application chrome: consistent header and footer across all roles and viewports. */
+.app-header { position: sticky; top: 0; z-index: 50; isolation: isolate; }
+.app-header__inner { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; min-height: 4.25rem; gap: clamp(.5rem, 1.25vw, 1.25rem); }
+.app-header__brand { min-width: 0; }
+.app-header__desktop-nav { min-width: 0; justify-content: center; white-space: nowrap; }
+.app-header__actions { min-width: 0; justify-content: flex-end; gap: clamp(.25rem, .55vw, .55rem); }
+.app-header__actions > button, .app-header__actions > [role="button"] { flex: 0 0 auto; }
+.app-header__mobile-panel { width: min(100%, 24rem); padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom)); }
+.app-footer { --footer-text: #475569; --footer-muted: #64748b; margin-top: clamp(2.5rem, 5vw, 5rem); color: var(--footer-text); }
+.app-footer__inner { padding-block: clamp(2rem, 4vw, 3.5rem) 1.5rem; }
+.app-footer__grid { display: grid; grid-template-columns: minmax(0, 1.45fr) repeat(3, minmax(0, 1fr)); gap: clamp(1.25rem, 3vw, 3rem); align-items: start; }
+.app-footer__brand { max-width: 27rem; }
+.app-footer__section { min-width: 0; }
+.app-footer__section h4 { margin-bottom: .9rem; font-size: .7rem; letter-spacing: .09em; }
+.app-footer__section ul { display: grid; gap: .65rem; }
+.app-footer__section button { min-height: 1.5rem; text-align: left; color: var(--footer-muted); font-size: .75rem; line-height: 1.4; }
+.app-footer__section button:hover { color: #2563eb; }
+.app-footer__bottom { align-items: center; gap: 1rem 2rem; padding-top: 1.25rem; margin-top: 2.5rem; }
+.app-footer__bottom > p { max-width: 100%; }
+.app-footer__legal { justify-content: flex-end; gap: .65rem 1.25rem; }
+.app-footer__legal > span { white-space: nowrap; }
+.app-footer__legal label { min-height: 2.25rem; }
+@media (max-width: 1023px) {
+  .app-header__inner { grid-template-columns: minmax(0, 1fr) auto; }
+  .app-header__desktop-nav { display: none; }
+  .app-footer__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-footer__brand { grid-column: 1 / -1; max-width: 42rem; }
+}
+@media (max-width: 639px) {
+  .app-header__inner { min-height: 3.75rem; gap: .4rem; }
+  .app-header__brand { gap: .45rem; }
+  .app-header__actions { gap: .25rem; }
+  .app-header__actions > button { width: 2.5rem; min-width: 2.5rem; height: 2.5rem; padding-inline: .35rem; border-radius: .8rem; }
+  .app-header__actions > button[aria-label="Sign in"] { width: auto; min-width: 0; }
+  .app-header__mobile-panel { width: min(88vw, 24rem); }
+  .app-footer__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.75rem 1rem; }
+  .app-footer__brand { grid-column: 1 / -1; }
+  .app-footer__bottom { align-items: flex-start; margin-top: 1.75rem; }
+  .app-footer__legal { justify-content: flex-start; gap: .5rem 1rem; }
+}
+@media (max-width: 359px) {
+  .app-header__inner { gap: .25rem; }
+  .app-header__brand > div:first-child { width: 2rem; height: 2rem; }
+  .app-header__brand .quickmeds-brand-name { font-size: .9rem; }
+  .app-header__actions { gap: .15rem; }
+  .app-header__actions > button { width: 2.25rem; min-width: 2.25rem; height: 2.25rem; }
+  .app-footer__grid { gap: 1.5rem .75rem; }
+  .app-footer__legal { gap: .5rem .75rem; }
+}
+@media (min-width: 1440px) {
+  .app-header__inner { min-height: 4.75rem; }
+  .app-footer__grid { gap: 3.5rem; }
+}
+html.dark .app-header { background: rgb(15 23 42 / .96); border-color: #334155; }
+html.dark .app-footer { --footer-text: #cbd5e1; --footer-muted: #94a3b8; background: #0f172a; border-color: #334155; color: var(--footer-text); }
+html.dark .app-footer__bottom { border-color: #334155; }
+html.dark .app-footer__section button { color: var(--footer-muted); }
+html.dark .app-footer__section button:hover { color: #93c5fd; }
+html.dark .app-footer :where(.bg-slate-50) { background: #162236; border-color: #334155; }

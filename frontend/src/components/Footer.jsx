@@ -1,15 +1,16 @@
 import React from 'react';
 import { useLanguage } from '../context/LanguageContext';
+import './application-chrome.css';
 
 export default function Footer({ onNavigate }) {
   const { t, language, setLanguage, languages } = useLanguage();
   return (
-    <footer className="bg-white border-t border-slate-200 mt-16 text-slate-600 text-xs">
-      <div className="qm-site-container py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+    <footer className="app-footer bg-white border-t border-slate-200 mt-16 text-slate-600 text-xs">
+      <div className="qm-site-container app-footer__inner py-12">
+        <div className="app-footer__grid grid grid-cols-1 md:grid-cols-4 gap-8">
           
           {/* Pharmacy Info */}
-          <div className="space-y-3">
+          <div className="app-footer__brand space-y-3">
             <div className="flex items-center gap-2">
               <span className="text-2xl">⚕️</span>
               <span className="text-base font-black text-slate-900 tracking-tight">QuickMeds Rx</span>
@@ -25,7 +26,7 @@ export default function Footer({ onNavigate }) {
           </div>
 
           {/* Quick Links */}
-          <div>
+          <div className="app-footer__section">
             <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px] mb-3">{t('footerShop')}</h4>
             <ul className="space-y-2 text-[11px]">
               <li>
@@ -52,7 +53,7 @@ export default function Footer({ onNavigate }) {
           </div>
 
           {/* Customer Support */}
-          <div>
+          <div className="app-footer__section">
             <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px] mb-3">{t('footerCustomer')}</h4>
             <ul className="space-y-2 text-[11px]">
               <li>
@@ -75,7 +76,7 @@ export default function Footer({ onNavigate }) {
           </div>
 
           {/* Regulatory & Safety */}
-          <div>
+          <div className="app-footer__section">
             <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px] mb-3">{t('footerCompliance')}</h4>
             <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2">
               <span className="inline-block bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded">
@@ -89,9 +90,9 @@ export default function Footer({ onNavigate }) {
 
         </div>
 
-        <div className="border-t border-slate-100 mt-10 pt-6 flex flex-col sm:flex-row justify-between items-center gap-3 text-slate-400 text-[11px]">
+        <div className="app-footer__bottom border-t border-slate-100 mt-10 pt-6 flex flex-col sm:flex-row justify-between items-center gap-3 text-slate-400 text-[11px]">
           <p>© {new Date().getFullYear()} QuickMeds Rx Operations. {t('allRightsReserved')}</p>
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="app-footer__legal flex flex-wrap items-center gap-4">
             <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
               <span aria-hidden="true">🌐</span>
               <span>{t("language")}</span>

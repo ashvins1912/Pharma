@@ -2553,3 +2553,73 @@ html.dark .request-center-empty h4 { color:#e2e8f0; }
   .request-center-action { width:100%; }
 }
 @media (prefers-reduced-motion:reduce) { .request-center-card,.request-center-skeleton { transition:none; animation:none; } }
+
+
+/* Final responsive layout contract. Kept at the end to resolve earlier
+   competing declarations without changing dashboard navigation behaviour. */
+.dashboard-workspace-nav {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.dashboard-workspace-nav > * {
+  min-width: 0;
+}
+.dashboard-nav-group-items {
+  grid-template-columns: minmax(0, 1fr);
+}
+.dashboard-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+}
+@media (min-width: 1024px) and (max-width: 1439px) {
+  .dashboard-workspace-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1023px) {
+  .dashboard-workspace-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+}
+@media (max-width: 639px) {
+  .dashboard-shell {
+    padding-inline: 0.625rem;
+  }
+  .dashboard-workspace-nav {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dashboard-nav-group {
+    padding: 0.75rem;
+  }
+  .dashboard-nav-group-title {
+    min-height: 0;
+  }
+  .dashboard-nav-group .dashboard-nav-item {
+    min-height: 48px;
+    font-size: 0.8125rem;
+  }
+  .dashboard-hero {
+    padding: 1rem;
+  }
+  .admin-screen :where(.flex.items-center.justify-between) {
+    align-items: flex-start;
+  }
+}
+@media (max-width: 359px) {
+  .dashboard-shell {
+    padding-inline: 0.5rem;
+  }
+  .dashboard-workspace-nav {
+    gap: 0.5rem;
+  }
+  .dashboard-nav-group {
+    padding: 0.625rem;
+  }
+}
+@media (min-width: 1920px) {
+  .dashboard-shell {
+    max-width: 1920px;
+  }
+  .dashboard-workspace-nav {
+    gap: 1rem;
+  }
+}
