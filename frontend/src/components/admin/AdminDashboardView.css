@@ -2623,3 +2623,75 @@ html.dark .request-center-empty h4 { color:#e2e8f0; }
     gap: 1rem;
   }
 }
+
+
+/* Medicine-request search: keep the query field usable and the submit action visible. */
+.admin-screen--requests .request-center-filter-layout,
+.admin-screen--requests .request-center-search,
+.admin-screen--requests .request-center-search-field {
+  min-width: 0;
+  max-width: 100%;
+}
+.admin-screen--requests .request-center-search-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .5rem;
+  width: 100%;
+  padding: .3rem;
+}
+.admin-screen--requests .request-center-search-field input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 2.5rem;
+  padding: .45rem .25rem;
+  font-size: .8125rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.admin-screen--requests .request-center-search-field button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: 4.75rem;
+  min-height: 2.5rem;
+  padding: .5rem .85rem;
+  white-space: nowrap;
+  word-break: keep-all;
+  border-radius: .65rem;
+  line-height: 1;
+}
+@media (max-width: 639px) {
+  .admin-screen--requests .request-center-filter-layout {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: .85rem;
+  }
+  .admin-screen--requests .request-center-status-filters {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .admin-screen--requests .request-center-search {
+    width: 100%;
+  }
+  .admin-screen--requests .request-center-search-field button {
+    min-width: 4.25rem;
+    padding-inline: .65rem;
+    font-size: .7rem;
+  }
+}
+@media (max-width: 359px) {
+  .admin-screen--requests .request-center-search-field {
+    gap: .3rem;
+    padding: .25rem;
+  }
+  .admin-screen--requests .request-center-search-field button {
+    min-width: 3.75rem;
+    padding-inline: .5rem;
+    font-size: .65rem;
+  }
+}
