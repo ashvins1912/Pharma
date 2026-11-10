@@ -8,6 +8,7 @@ import stagedImportRoutes from './staged-import-routes.js';
 import medicineCatalogueImportRoutes, { initializeMedicineCatalogueModels, startMedicineCatalogueImportWorker, stopMedicineCatalogueImportWorker } from './medicine-catalogue-import-routes.js';
 import medicineCatalogueRoutes from './medicine-catalogue-routes.js';
 import { StagedImportBatch, StagedImportRow } from './staged-import-models.js';
+import { startMedicineMatchWorker, stopMedicineMatchWorker } from './medicine-match-reference.js';
 import { Audit, ImportBatch, ImportBatchSnapshot, ImportFailure, ImportJob, Inventory, Product, Reservation } from './models.js';
 
 validateConfig();
@@ -101,6 +102,9 @@ await Promise.all([
   Audit.init(),
   initializeMedicineCatalogueModels()
 ]);
+// Match references are persistent and idempotent; process bounded batches after
+// MongoDB is ready so repeated Store views avoid re-running fuzzy matching.
+startMedicineMatchWorker();
 // Start the durable catalogue-import worker only after MongoDB and its models are ready.
 // It atomically reclaims expired PROCESSING leases after restarts and resumes QUEUED jobs.
 startMedicineCatalogueImportWorker();
@@ -117,6 +121,7 @@ const server = app.listen(config.port, '0.0.0.0', () => {
 
 const shutdown = async () => {
   stopMedicineCatalogueImportWorker();
+  stopMedicineMatchWorker();
   server.close();
   await mongoose.disconnect();
 };
