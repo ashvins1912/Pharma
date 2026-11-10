@@ -1,7 +1,7 @@
 import express from 'express';
 import { requireServiceScope } from './service-auth.js';
 import mongoose from 'mongoose';
-import { rankMedicineMasterMatches } from './medicine-master-matcher.js';
+import { getOrResolveMedicineMatch, processMedicineMatchBatch } from './medicine-match-reference.js';
 
 const router = express.Router();
 const medicineMaster = () => mongoose.models.MedicineMaster;
@@ -15,44 +15,23 @@ router.get('/match', async (req, res, next) => {
   try {
     const read = field => String(req.query[field] || '').trim().slice(0, 120);
     const product = {
-      name: read('name'),
-      brand: read('brand'),
-      genericName: read('genericName'),
-      composition: read('composition'),
-      strength: read('strength'),
-      dosageForm: read('dosageForm'),
-      form: read('form'),
-      manufacturer: read('manufacturer')
+      name: read('name'), brand: read('brand'), genericName: read('genericName'),
+      composition: read('composition'), strength: read('strength'),
+      dosageForm: read('dosageForm'), form: read('form'),
+      manufacturer: read('manufacturer'), packSize: read('packSize')
     };
-    const terms = [...new Set([product.name, product.brand, product.genericName, product.composition].filter(Boolean))];
-    if (!terms.length) return res.status(400).json({ code: 'MEDICINE_MATCH_INPUT_REQUIRED', message: 'Provide a medicine name or generic name to find catalogue details.' });
-    const clauses = terms.flatMap(term => {
-      const firstToken = String(term).split(/\s+/).filter(Boolean)[0] || term;
-      const escaped = '^' + escapeRegex(firstToken);
-      return [
-        { brandName: { $regex: escaped, $options: 'i' } },
-        { productName: { $regex: escaped, $options: 'i' } },
-        { genericName: { $regex: escaped, $options: 'i' } },
-        { composition: { $regex: escaped, $options: 'i' } }
-      ];
-    });
-    const candidates = await medicineMaster().find(
-      { isArchived: { $ne: true }, $or: clauses },
-      {
-        _id: 0, medicineId: 1, brandName: 1, productName: 1, genericName: 1,
-        composition: 1, strength: 1, packSize: 1, dosageForm: 1, medicineType: 1,
-        manufacturer: 1, therapeuticClass: 1, chemicalClass: 1, actionClass: 1,
-        routes: 1, indications: 1, uses: 1, contraindications: 1, sideEffects: 1,
-        drugInteractions: 1, habitForming: 1, requiresPrescription: 1,
-        prescriptionVerification: 1, clinicalDataVerification: 1, dataQualityStatus: 1
-      }
-    ).limit(101).lean();
-    if (candidates.length > 100) {
-      res.set('Cache-Control', 'no-store');
-      return res.json({ status: 'AMBIGUOUS', confidence: 0, medicine: null, candidatesChecked: 101, truncated: true });
+    if (![product.name, product.brand, product.genericName, product.composition].some(Boolean)) {
+      return res.status(400).json({ code: 'MEDICINE_MATCH_INPUT_REQUIRED', message: 'Provide a medicine name or generic name to find catalogue details.' });
     }
-    const result = rankMedicineMasterMatches(product, candidates);
-    res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
+    const result = await getOrResolveMedicineMatch(product);
+    res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+    return res.json(result);
+  } catch (error) { return next(error); }
+});
+
+router.post('/match/batch', async (req, res, next) => {
+  try {
+    const result = await processMedicineMatchBatch({ limit: req.body?.limit });
     return res.json(result);
   } catch (error) { return next(error); }
 });
