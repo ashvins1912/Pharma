@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import express from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
-import { invalidateMedicineMasterVersionCache, MedicineMatchReference } from './medicine-match-reference.js';
+import { invalidateMedicineMasterVersionCache, MedicineMatchReference, mapMedicineMatchBatch, queueMedicineMatch } from './medicine-match-reference.js';
 import { requireServiceScope } from './service-auth.js';
 import { config } from './config.js';
 import { scoreMedicineMatch } from './medicine-match-scoring.js';
@@ -1148,6 +1148,36 @@ router.get('/matches/review', async (req, res, next) => {
     const candidates = ids.length ? await MedicineMaster.find({ medicineId: { $in: ids }, isArchived: { $ne: true } }, candidateProjection).lean() : [];
     const byId = new Map(candidates.map(item => [item.medicineId, item]));
     return res.json({ items: rows.map(row => ({ ...row, candidate: byId.get(row.mappedMedicineId || row.medicineId) || null })), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+  } catch (error) { return next(error); }
+});
+router.post('/matches/discover', async (req, res, next) => {
+  try {
+    if (req.service?.isPlatformUser !== true) return res.status(403).json({ message: 'Only a platform super administrator can discover existing Store products for shared catalogue mapping.' });
+    const limit = Math.max(1, Math.min(500, Number.parseInt(req.body?.limit || '500', 10) || 500));
+    const afterId = String(req.body?.afterId || '').trim();
+    if (afterId && !mongoose.isValidObjectId(afterId)) return res.status(400).json({ message: 'The discovery cursor is invalid. Restart discovery without a cursor.' });
+    const filter = { active: { $ne: false }, ...(afterId ? { _id: { $gt: new mongoose.Types.ObjectId(afterId) } } : {}) };
+    // InventoryProduct is owned by Inventory Service. Read its existing shared
+    // Mongo collection without coupling this service to the inventory model.
+    const products = await mongoose.connection.collection('inventoryproducts')
+      .find(filter, { projection: { _id: 1, name: 1, genericName: 1, strength: 1, form: 1 } })
+      .sort({ _id: 1 }).limit(limit).toArray();
+    const queued = await mapMedicineMatchBatch(products, 8, product => queueMedicineMatch({
+      name: product.name,
+      brand: product.name,
+      genericName: product.genericName,
+      strength: product.strength,
+      form: product.form
+    }));
+    const lastId = products.length ? String(products[products.length - 1]._id) : afterId;
+    return res.json({
+      scanned: products.length,
+      queued: queued.filter(Boolean).length,
+      skipped: queued.filter(item => !item).length,
+      nextCursor: lastId,
+      hasMore: products.length === limit,
+      message: products.length ? 'Existing Store products were added to the idempotent mapping review queue.' : 'No more existing Store products were found.'
+    });
   } catch (error) { return next(error); }
 });
 router.post('/matches/:identityHash/map', async (req, res, next) => {

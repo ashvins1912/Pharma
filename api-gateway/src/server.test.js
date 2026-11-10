@@ -74,6 +74,9 @@ test('sanitized storefront Medicine Master match is public and read-only', () =>
 test('Medicine Master mapping review is restricted to catalogue import admins', () => {
   const queue = '/api/v1/inventory/catalogue/matches/review?page=1&limit=100';
   const approve = '/api/v1/inventory/catalogue/matches/abc123/map';
+  const discover = '/api/v1/inventory/catalogue/matches/discover';
+  assert.equal(isGatewayPublicPath('POST', discover), false);
+  assert.equal(resolveGatewayCapability('POST', discover), 'inventory.catalogue.import');
   assert.equal(isGatewayPublicPath('GET', queue), false);
   assert.equal(resolveGatewayCapability('GET', queue), 'inventory.catalogue.import');
   assert.equal(isGatewayPublicPath('POST', approve), false);

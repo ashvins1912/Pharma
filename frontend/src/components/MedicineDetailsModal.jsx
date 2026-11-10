@@ -39,19 +39,24 @@ export default function MedicineDetailsModal({ product, onClose }) {
   const [error, setError] = useState('');
   const closeButtonRef = useRef(null);
   const titleId = useMemo(() => `medicine-detail-${String(product?._id || product?.sku || 'selected').replace(/[^a-zA-Z0-9_-]/g, '')}`, [product]);
+  const matchProduct = useMemo(() => product ? ({
+    name: product.name, brand: product.brand, genericName: product.genericName,
+    composition: product.composition, strength: product.strength,
+    dosageForm: product.dosageForm, form: product.form, packSize: product.packSize
+  }) : null, [product?.name, product?.brand, product?.genericName, product?.composition, product?.strength, product?.dosageForm, product?.form, product?.packSize]);
 
   useEffect(() => {
-    if (!product) return undefined;
+    if (!matchProduct) return undefined;
     let active = true;
     setLoading(true);
     setError('');
     setMatch(null);
-    matchStoreMedicineToMaster(product)
+    matchStoreMedicineToMaster(matchProduct)
       .then(result => { if (active) setMatch(result); })
       .catch(() => { if (active) setError('Catalogue details are temporarily unavailable.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [product]);
+  }, [matchProduct]);
 
   useEffect(() => {
     if (!product || typeof document === 'undefined') return undefined;

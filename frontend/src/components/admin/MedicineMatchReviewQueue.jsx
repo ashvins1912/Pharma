@@ -34,6 +34,10 @@ export default function MedicineMatchReviewQueue() {
   const [searches, setSearches] = useState({});
   const [results, setResults] = useState({});
   const [saving, setSaving] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoveryCursor, setDiscoveryCursor] = useState('');
+  const [discoveryComplete, setDiscoveryComplete] = useState(false);
+  const [discoverySummary, setDiscoverySummary] = useState(null);
 
   const load = useCallback(async (page = 1) => {
     setLoading(true);
@@ -48,13 +52,38 @@ export default function MedicineMatchReviewQueue() {
 
   useEffect(() => { void load(1); }, [load]);
 
+  const discoverExistingProducts = async () => {
+    if (discovering || discoveryComplete) return;
+    setDiscovering(true);
+    try {
+      const response = await apiClient.post('/api/v1/inventory/catalogue/matches/discover', {
+        afterId: discoveryCursor || undefined, limit: 500
+      });
+      const result = response.data || {};
+      setDiscoveryCursor(result.nextCursor || discoveryCursor);
+      setDiscoveryComplete(!result.hasMore);
+      setDiscoverySummary(current => ({
+        scanned: Number(current?.scanned || 0) + Number(result.scanned || 0),
+        queued: Number(current?.queued || 0) + Number(result.queued || 0),
+        skipped: Number(current?.skipped || 0) + Number(result.skipped || 0),
+        hasMore: Boolean(result.hasMore)
+      }));
+      addToast(result.hasMore
+        ? `Scanned ${result.scanned || 0} existing products. Continue to discover the next batch.`
+        : `Discovery complete. ${Number(result.scanned || 0)} products scanned in the final batch.`, 'success');
+      await load(1);
+    } catch (error) {
+      addToast(error.response?.data?.message || 'Could not discover existing Store products.', 'error');
+    } finally { setDiscovering(false); }
+  };
+
   const updateDraft = (id, patch) => setDrafts(current => ({ ...current, [id]: { ...(current[id] || {}), ...patch } }));
   const openReview = row => {
     const id = row.identityHash;
     setActiveId(activeId === id ? '' : id);
     if (!drafts[id]) {
       const target = row.candidate || null;
-      const fields = [];
+      const fields = target ? FIELDS.map(([key]) => key).filter(key => hasValue(target[key])) : [];
       updateDraft(id, { medicineId: target?.medicineId || '', target, fields });
     }
   };
@@ -70,7 +99,7 @@ export default function MedicineMatchReviewQueue() {
     }
   };
   const chooseTarget = (id, medicine) => {
-    const fields = [];
+    const fields = FIELDS.map(([key]) => key).filter(key => hasValue(medicine[key]));
     updateDraft(id, { medicineId: medicine.medicineId, target: medicine, fields });
     setResults(current => ({ ...current, [id]: [] }));
   };
@@ -103,9 +132,13 @@ export default function MedicineMatchReviewQueue() {
     <section className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-100 bg-violet-50/70 px-4 py-4">
         <div><h3 className="text-sm font-black text-slate-900">Possible catalogue matches · Admin mapping</h3><p className="mt-1 text-xs text-slate-600">Review up to 100 product identities per page. Select a master record and explicitly approve the fields Store may display.</p></div>
-        <button type="button" onClick={() => load(pagination.page || 1)} disabled={loading} className="min-h-10 rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-bold text-violet-700 disabled:opacity-50">{loading ? "Refreshing…" : "Refresh queue"}</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={discoverExistingProducts} disabled={discovering || discoveryComplete} className="min-h-10 rounded-lg bg-violet-700 px-3 py-2 text-xs font-extrabold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50">{discovering ? 'Scanning products…' : discoveryComplete ? 'Discovery complete' : discoveryCursor ? 'Scan next 500 products' : 'Discover existing Store products'}</button>
+          <button type="button" onClick={() => load(pagination.page || 1)} disabled={loading} className="min-h-10 rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-bold text-violet-700 disabled:opacity-50">{loading ? "Refreshing…" : "Refresh queue"}</button>
+        </div>
         <div className="rounded-xl border border-violet-200 bg-white px-3 py-2 text-right"><strong className="block text-lg tabular-nums text-violet-800">{Number(pagination.total || 0).toLocaleString()}</strong><span className="text-[10px] font-bold uppercase text-slate-500">Awaiting mapping</span></div>
       </header>
+      {discoverySummary && <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-violet-100 bg-violet-50/40 px-4 py-2 text-[11px] text-slate-600"><strong className="text-violet-800">Existing product discovery</strong><span>{discoverySummary.scanned.toLocaleString()} scanned</span><span>{discoverySummary.queued.toLocaleString()} added to queue</span><span>{discoverySummary.skipped.toLocaleString()} skipped (no usable medicine name)</span><span className="font-bold">{discoverySummary.hasMore ? 'More batches available' : 'Scan complete'}</span></div>}
       {loading ? <p className="p-6 text-center text-sm text-slate-500">Loading review queue…</p> : items.length ? <div className="divide-y divide-slate-100">
         {items.map(row => {
           const draft = drafts[row.identityHash] || {};
