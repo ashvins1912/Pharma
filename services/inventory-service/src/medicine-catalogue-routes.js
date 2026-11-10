@@ -125,7 +125,7 @@ router.get('/:medicineId/audit', requireServiceScope('inventory.catalogue.import
 
 router.get('/:medicineId', async (req, res, next) => {
   try {
-    const item = await medicineMaster().findOne({ medicineId: req.params.medicineId }).lean();
+    const item = await medicineMaster().findOne({ medicineId: req.params.medicineId, isArchived: { $ne: true } }).lean();
     if (!item) return res.status(404).json({ message: 'Medicine master record was not found.' });
     return res.json({ medicine: item });
   } catch (error) { return next(error); }
