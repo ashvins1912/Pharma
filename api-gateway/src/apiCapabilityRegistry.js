@@ -142,6 +142,15 @@ const CAPABILITIES = [
   // Explicitly register managed-person deletion; keep the mutation limited to
   // the persons resource and subject to the same profile.write authorization.
   ['DELETE', /^\/api\/v1\/customers\/persons\/[^/]+$/, 'profile.write'],
+  // Shared medicine catalogue imports are platform-admin-only at the service router;
+  // the gateway capability is an additional least-privilege perimeter check.
+  ['GET', /^\/api\/v1\/inventory\/catalogue\/imports$/, 'inventory.catalogue.import'],
+  ['POST', /^\/api\/v1\/inventory\/catalogue\/imports\/(?:preview|merge|remove-selected)$/, 'inventory.catalogue.import'],
+  ['GET', /^\/api\/v1\/inventory\/catalogue\/imports\/jobs\/[^/]+$/, 'inventory.catalogue.import'],
+  ['POST', /^\/api\/v1\/inventory\/catalogue\/imports\/jobs\/[^/]+\/retry$/, 'inventory.catalogue.import'],
+  ['GET', /^\/api\/v1\/inventory\/catalogue\/imports\/[^/]+\/records$/, 'inventory.catalogue.import'],
+  ['GET', /^\/api\/v1\/inventory\/catalogue\/imports\/[^/]+$/, 'inventory.catalogue.import'],
+  ['POST', /^\/api\/v1\/inventory\/catalogue\/imports\/[^/]+\/(?:approve|publish)$/, 'inventory.catalogue.import'],
   ['POST', /^\/api\/v1\/inventory\/imports\/preview$/, 'inventory.import'],
   ['POST', /^\/api\/v1\/inventory\/imports\/?$/, 'inventory.import'],
   ['GET', /^\/api\/v1\/inventory\/imports\/[^/]+(?:\/failures(?:\/download)?)?$/, 'inventory.import'],
