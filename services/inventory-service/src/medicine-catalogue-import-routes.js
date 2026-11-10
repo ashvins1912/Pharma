@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import express from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
+import { invalidateMedicineMasterVersionCache } from './medicine-match-reference.js';
 import { requireServiceScope } from './service-auth.js';
 
 const router = express.Router();
@@ -1311,6 +1312,8 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         };
       });
       await MedicineMaster.bulkWrite(operations, { ordered: false });
+      // A master write invalidates every cached link immediately, including partial publishes.
+      invalidateMedicineMasterVersionCache();
       publishedCount += chunk.length;
       await CatalogueImport.updateOne({ _id: batch._id }, { $set: { publishedCount } });
     }
