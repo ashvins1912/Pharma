@@ -1105,24 +1105,54 @@ router.get('/imports/jobs/:jobId', asyncHandler(async (req, res) => {
 }));
 router.post('/imports/remove-selected', asyncHandler(async (req, res) => {
   const batchIds = [...new Set((Array.isArray(req.body?.batchIds) ? req.body.batchIds : []).map(value => text(value).slice(0, 120)).filter(Boolean))];
-  if (!batchIds.length) return res.status(400).json({ message: 'Select at least one enrichment batch to remove.' });
-  if (batchIds.length > 10) return res.status(400).json({ message: 'You can remove up to 10 enrichment batches at a time.' });
-  const batches = await CatalogueImport.find({ batchId: { $in: batchIds }, isHidden: { $ne: true } });
-  if (batches.length !== batchIds.length) return res.status(404).json({ message: 'One or more selected batches were not found or have already been removed. Refresh the batch history and try again.' });
+  if (!batchIds.length) return res.status(400).json({ message: 'Select at least one enrichment batch to permanently delete.' });
+  if (batchIds.length > 10) return res.status(400).json({ message: 'You can permanently delete up to 10 enrichment batches at a time.' });
+  const batches = await CatalogueImport.find({ batchId: { $in: batchIds } });
+  if (batches.length !== batchIds.length) return res.status(404).json({ message: 'One or more selected batches were not found or have already been deleted. Refresh the batch history and try again.' });
   const protectedBatch = batches.find(batch => batch.status !== 'READY' || batch.approvedAt || (batch.sourceBatchIds || []).length > 0 || batch.supersededByBatchId);
   if (protectedBatch) return res.status(409).json({
-    message: 'Only standalone, unapproved READY enrichment batches can be removed. Approved, merged, superseded, publishing or published batches are retained for audit and recovery.',
+    message: 'Only standalone, unapproved READY enrichment batches can be permanently deleted. Approved, merged, superseded, publishing or published batches are protected.',
     batchId: protectedBatch.batchId,
     status: protectedBatch.status
   });
-  const now = new Date();
-  const actor = req.service?.userId || req.service?.name || 'platform-admin';
-  const result = await CatalogueImport.updateMany(
-    { batchId: { $in: batchIds }, status: 'READY', approvedAt: null, $or: [{ sourceBatchIds: { $exists: false } }, { sourceBatchIds: { $size: 0 } }], supersededByBatchId: { $in: ['', null] }, isHidden: { $ne: true } },
-    { $set: { isHidden: true, hiddenAt: now, hiddenBy: actor } }
-  );
-  if (result.modifiedCount !== batchIds.length) return res.status(409).json({ message: 'Some batches changed while removal was in progress. Refresh the history and retry.' });
-  return res.json({ removedCount: result.modifiedCount, batchIds, message: 'Selected enrichment batches were removed from Recent enrichment batches. Their source data and audit history are retained.' });
+
+  // Atomically claim each READY batch for deletion. A concurrent approval, merge or
+  // publish changes the status first and therefore prevents destructive cleanup.
+  const claimed = [];
+  for (const batchId of batchIds) {
+    const batch = await CatalogueImport.findOneAndDelete({
+      batchId, status: 'READY', approvedAt: null,
+      $or: [{ sourceBatchIds: { $exists: false } }, { sourceBatchIds: { $size: 0 } }],
+      supersededByBatchId: { $in: ['', null] }
+    });
+    if (!batch) {
+      // Restore batches already claimed in this request if the full selection could
+      // not be claimed; no child data has been deleted at this point.
+      for (const claimedBatch of claimed) await CatalogueImport.create(claimedBatch.toObject());
+      return res.status(409).json({ message: 'A selected batch changed while deletion was in progress. No selected batch data was deleted; refresh and retry.' });
+    }
+    claimed.push(batch);
+  }
+
+  let deletedUploads = 0;
+  for (const batch of claimed) {
+    await CatalogueImportChunk.deleteMany({ batchId: batch.batchId });
+    const jobs = await CatalogueImportJob.find({ batchId: batch.batchId }, { fileId: 1, jobId: 1 }).lean();
+    for (const job of jobs) {
+      if (job.fileId) {
+        try { await getCatalogueImportBucket().delete(job.fileId); deletedUploads += 1; }
+        catch (error) {
+          if (error.code !== 'ENOENT' && error.code !== 'FileNotFound') throw error;
+        }
+      }
+      await CatalogueImportJob.deleteOne({ jobId: job.jobId, batchId: batch.batchId });
+    }
+  }
+  return res.json({
+    removedCount: claimed.length, batchIds, deletedUploads,
+    permanent: true,
+    message: 'Selected enrichment batches, staged record chunks, import-job metadata and retained source uploads were permanently deleted.'
+  });
 }));
 
 router.get('/imports', asyncHandler(async (req, res) => {
