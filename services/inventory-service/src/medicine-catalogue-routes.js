@@ -8,7 +8,7 @@ const medicineMaster = () => mongoose.models.MedicineMaster;
 const escapeRegex = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 router.use((req, res, next) => requireServiceScope(
-  req.method === 'PATCH' || req.method === 'DELETE' || req.path.endsWith('/audit') ? 'inventory.catalogue.import' : 'inventory.catalogue.read'
+  req.method === 'PATCH' || req.method === 'DELETE' || req.path.endsWith('/audit') || req.path === '/match/batch' ? 'inventory.catalogue.import' : 'inventory.catalogue.read'
 )(req, res, next));
 
 router.get('/match', async (req, res, next) => {
