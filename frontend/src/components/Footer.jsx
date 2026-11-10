@@ -2,12 +2,15 @@ import React from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import './application-chrome.css';
 
+// Keep certification and regulatory claims hidden until their display is explicitly approved.
+const SHOW_REGULATORY_CREDENTIALS = false;
+
 export default function Footer({ onNavigate }) {
   const { t, language, setLanguage, languages } = useLanguage();
   return (
     <footer className="app-footer bg-white border-t border-slate-200 mt-16 text-slate-600 text-xs">
       <div className="qm-site-container app-footer__inner py-12">
-        <div className="app-footer__grid grid grid-cols-1 md:grid-cols-4 gap-8">
+        <div className="app-footer__grid grid grid-cols-1 md:grid-cols-3 gap-8">
           
           {/* Pharmacy Info */}
           <div className="app-footer__brand space-y-3">
@@ -75,18 +78,19 @@ export default function Footer({ onNavigate }) {
             </ul>
           </div>
 
-          {/* Regulatory & Safety */}
-          <div className="app-footer__section">
-            <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px] mb-3">{t('footerCompliance')}</h4>
-            <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2">
-              <span className="inline-block bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded">
-                {t('cdscoWhoGmp')}
-              </span>
-              <p className="text-[10px] text-slate-500 leading-tight">
-                {t('pharmacistSupervision')}
-              </p>
+          {SHOW_REGULATORY_CREDENTIALS && (
+            <div className="app-footer__section">
+              <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px] mb-3">{t('footerCompliance')}</h4>
+              <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2">
+                <span className="inline-block bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded">
+                  {t('cdscoWhoGmp')}
+                </span>
+                <p className="text-[10px] text-slate-500 leading-tight">
+                  {t('pharmacistSupervision')}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
 

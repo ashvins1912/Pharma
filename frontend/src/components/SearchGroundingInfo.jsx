@@ -26,7 +26,7 @@ export default function SearchGroundingInfo({ searchQuery }) {
         const res = await apiClient.post('/api/med-search-grounding', { query: trimmed });
         if (active) {
           setData(res.data);
-          setExpanded(true);
+          setExpanded(false);
         }
       } catch (err) {
         if (active) {
@@ -55,12 +55,9 @@ export default function SearchGroundingInfo({ searchQuery }) {
           <div>
             <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5">
               <span>{t('realTimeMedicalGrounding')}</span>
-              <span className="text-[9px] font-black uppercase bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full">
-                Google Search AI
-              </span>
             </h4>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Live medical literature, usage guidelines, and pharmacy availability for &ldquo;{searchQuery}&rdquo;
+              {t('medicineInfoFor').replace('{query}', searchQuery)}
             </p>
           </div>
         </div>
@@ -95,7 +92,7 @@ export default function SearchGroundingInfo({ searchQuery }) {
           {Array.isArray(data.sources) && data.sources.length > 0 && (
             <div className="pt-2">
               <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                Verified Grounding Sources:
+                {t('informationSources')}:
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {data.sources.map((src, idx) => (
