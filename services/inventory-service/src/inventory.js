@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import { buildInventoryAlerts } from './alerts.js';
 import { config } from './config.js';
 import { Audit, Inventory, Product, Reservation } from './models.js';
-import { queueMedicineMatch } from './medicine-match-reference.js';
+import { queueMedicineMatch } from './medicine-match-queue.js';
 
 const asPositiveQuantity = value => Number.isSafeInteger(value) && value > 0;
 const normalizeItems = items => {
