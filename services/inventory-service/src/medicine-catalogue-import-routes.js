@@ -181,13 +181,13 @@ export function normalizeMedicineRecord(raw, dataset) {
   };
 }
 
-function consolidate(records, dataset) {
+export function consolidate(records, dataset) {
   const unique = new Map();
   let rejected = 0;
   for (const raw of records) {
     const normalized = normalizeMedicineRecord(raw, raw.__dataset);
     if (!normalized) { rejected += 1; continue; }
-    const identity = dataset === 'INDIAN_MEDICINE_DATA' ? normalized.medicineId : (normalized.canonicalKey || normalized.medicineId);
+    const identity = dataset === 'INDIAN_MEDICINE_DATA' ? normalized.medicineId : dataset === 'MEDICINES_PART_1' ? normalized.sourceFingerprint : (normalized.canonicalKey || normalized.medicineId);
     const previous = unique.get(identity);
     if (!previous) unique.set(identity, normalized);
     else {
