@@ -3,7 +3,7 @@ import MedicineRequest from '../models/MedicineRequest.js';
 
 const nextSequence = async (collection, counterId, prefix, field, floor = 10025) => {
     const [latest] = await collection.aggregate([
-        { $match: { [field]: new RegExp(`^${prefix}-\\[0-9]+$`) } },
+        { $match: { [field]: new RegExp(`^${prefix}-[0-9]+$`) } },
         { $project: { sequence: { $convert: {
             input: { $arrayElemAt: [{ $split: [`$${field}`, '-'] }, 1] },
             to: 'long', onError: 0, onNull: 0
@@ -35,7 +35,7 @@ async function migrateCollection(Model, field, prefix, counterId, batchSize) {
                 { [field]: { $exists: false } },
                 { [field]: null },
                 { [field]: '' },
-                { [field]: { $not: new RegExp(`^${prefix}-\\[0-9]+$`) } }
+                { [field]: { $not: new RegExp(`^${prefix}-[0-9]+$`) } }
             ]
         }).sort({ createdAt: 1, _id: 1 }).limit(batchSize).select('_id').lean();
         if (!records.length) return updated;
@@ -44,7 +44,7 @@ async function migrateCollection(Model, field, prefix, counterId, batchSize) {
             const result = await Model.updateOne(
                 { _id: record._id, $or: [
                     { [field]: { $exists: false } }, { [field]: null }, { [field]: '' },
-                    { [field]: { $not: new RegExp(`^${prefix}-\\[0-9]+$`) } }
+                    { [field]: { $not: new RegExp(`^${prefix}-[0-9]+$`) } }
                 ] },
                 { $set: { [field]: publicId } }
             );
