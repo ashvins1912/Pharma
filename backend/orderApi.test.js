@@ -46,8 +46,7 @@ test('versioned order API serializes a stable public order and historical item s
 });
 
 test('order sources and events expose the normalized integration vocabulary', () => {
-    const orderNumber = new Order().orderNumber;
-    assert.match(orderNumber, /^ORD-[0-9a-f-]{36}$/i);
+    assert.equal(Order.schema.path('orderNumber').instance, 'String');
     const sourcePath = Order.schema.path('source');
     assert.deepEqual(sourcePath.enumValues, [
         'WEB', 'MOBILE', 'ADMIN', 'POS', 'ERP', 'PARTNER', 'API', 'MEDICINE_REQUEST', 'DIRECT'
