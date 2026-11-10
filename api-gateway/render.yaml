@@ -31,6 +31,11 @@ services:
         value: order-service
       - key: INVENTORY_SERVICE_URL
         sync: false
+      # Render private-network URL for the dedicated Medicine Master Service.
+      - key: MEDICINE_MASTER_SERVICE_URL
+        sync: false
+      - key: MEDICINE_MASTER_SERVICE_JWT_AUDIENCE
+        value: medicine-master-service
       - key: ORDER_SERVICE_URL
         sync: false
       - key: PRESCRIPTION_SERVICE_URL
