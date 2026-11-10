@@ -782,7 +782,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
             filter: current ? { _id: current._id } : { medicineId: targetId },
             update: {
               $set: set,
-              $addToSet: { sourceDatasets: item.sourceDataset, sourceRecordIds: { $each: item.sourceRecordIds?.length ? item.sourceRecordIds : [item.sourceRecordId] }, ...(current && current.medicineId !== item.medicineId ? { legacyMedicineIds: item.medicineId } : {}) }
+              $addToSet: { sourceDatasets: { $each: item.sourceDatasets?.length ? item.sourceDatasets : [item.sourceDataset].filter(Boolean) }, sourceRecordIds: { $each: item.sourceRecordIds?.length ? item.sourceRecordIds : [item.sourceRecordId].filter(Boolean) }, legacyMedicineIds: { $each: [...(item.legacyMedicineIds || []), ...(current && current.medicineId !== item.medicineId ? [item.medicineId] : [])] } }
             },
             upsert: true
           }
