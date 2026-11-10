@@ -116,7 +116,14 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
       } catch { /* Publish response remains authoritative if status refresh is temporarily unavailable. */ }
       addToast(response.data.status === 'PUBLISHED' ? 'Medicine catalogue published successfully.' : 'Catalogue import completed with a partial result.', response.data.status === 'PUBLISHED' ? 'success' : 'warning');
     } catch (error) {
-      addToast(error.response?.data?.message || error.response?.data?.error?.message || error.message || 'Catalogue publishing failed.', 'error');
+      const payload = error.response?.data;
+      if (error.response?.status === 409 && payload?.status === 'READY' && payload?.reportFingerprint) {
+        setPreview(current => current ? { ...current, report: payload.report || current.report, reportFingerprint: payload.reportFingerprint } : current);
+        setBatchStatus(current => ({ ...(current || {}), batchId: payload.batchId || preview.batchId, status: 'READY', report: payload.report, reportFingerprint: payload.reportFingerprint, approvedAt: null, approvedBy: '', errorMessage: payload.message || 'Live reconciliation requires a fresh review.' }));
+        setPublished(null);
+        setReviewConfirmed(false);
+      }
+      addToast(payload?.message || payload?.error?.message || error.message || 'Catalogue publishing failed.', 'error');
     } finally {
       setBusy(false);
     }
@@ -223,6 +230,31 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                 {metric('Partial quality', report.partialQualityRecords)}
                 {metric('Quality needs review', report.needsReviewQualityRecords)}
               </div>
+              {report.publishReconciliation && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+                  <h4 className="text-xs font-extrabold text-amber-950">Fresh publish-time reconciliation</h4>
+                  <p className="text-[11px] leading-5 text-amber-900">The live master catalogue changed after preview or contains unresolved candidates. Publishing is blocked until the updated report is reviewed and approved.</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                    <div>Checked: <strong>{Number(report.publishReconciliation.checkedRecords || 0).toLocaleString()}</strong></div>
+                    <div>Updates: <strong>{Number(report.publishReconciliation.matchedUpdates || 0).toLocaleString()}</strong></div>
+                    <div>New inserts: <strong>{Number(report.publishReconciliation.newInserts || 0).toLocaleString()}</strong></div>
+                    <div>Manual review: <strong>{Number(report.publishReconciliation.manualReview || 0).toLocaleString()}</strong></div>
+                    <div>Clinical conflicts: <strong>{Number(report.publishReconciliation.clinicalConflicts || 0).toLocaleString()}</strong></div>
+                    <div>Stale decisions: <strong>{Number(report.publishReconciliation.staleDecisions || 0).toLocaleString()}</strong></div>
+                    <div>Blockers: <strong>{Number(report.publishReconciliation.blockerCount || 0).toLocaleString()}</strong></div>
+                  </div>
+                  {report.publishReconciliation.blockerExamples?.length > 0 && (
+                    <div className="max-h-40 overflow-y-auto space-y-1">
+                      {report.publishReconciliation.blockerExamples.slice(0, 20).map((item, index) => (
+                        <div key={item.medicineId || item.targetMedicineId || item.reason + '-' + index} className="rounded-lg bg-white/80 p-2 text-[10px] text-amber-950">
+                          <strong>{item.brandName || item.targetMedicineId || item.reason}</strong> · {item.reason}
+                          {item.warnings?.length > 0 && <span> · {item.warnings.join(', ')}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-xs text-violet-950">Reconciliation approval</strong><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${batchStatus?.approvedAt ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{batchStatus?.approvedAt ? 'Approved' : 'Review required'}</span></div>
                 <p className="text-[11px] leading-5 text-violet-950">New medicines: {Number(report.newRecords || 0).toLocaleString()} · Existing-record update candidates: {Number(report.updateCandidates || 0).toLocaleString()} · Rejected rows: {Number(report.rejectedRecords || 0).toLocaleString()}. Publishing applies the staged reconciliation to the shared master catalogue; it does not change tenant prices or branch inventory.</p>
