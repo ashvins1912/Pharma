@@ -78,6 +78,7 @@ export default function AdminDashboardView() {
   const [adminTab, setAdminTab] = useState('tenantProfile');
   const [catalogueImportOpen, setCatalogueImportOpen] = useState(false);
   const [dashboardPeriod, setDashboardPeriod] = useState('today');
+  const [workspaceSearch, setWorkspaceSearch] = useState('');
   const [commandClock, setCommandClock] = useState(() => new Date());
 
   useEffect(() => {
@@ -467,6 +468,43 @@ export default function AdminDashboardView() {
           </div>
         </header>
 
+        <div className="dashboard-command-toolbar">
+          <label className="dashboard-command-search" htmlFor="command-workspace-search">
+            <span aria-hidden="true">⌕</span>
+            <input
+              id="command-workspace-search"
+              type="search"
+              value={workspaceSearch}
+              onChange={event => setWorkspaceSearch(event.target.value)}
+              placeholder="Find a workspace…"
+              autoComplete="off"
+            />
+            <kbd>FILTER</kbd>
+          </label>
+          <div className="dashboard-command-signals" aria-label="Operational attention indicators">
+            {canViewAdminRequests && (
+              <button type="button" className={pendingMedicineRequestCount > 0 ? 'is-alert' : ''} onClick={() => setAdminTab('requests')}>
+                <span className="signal-dot" /> Requests <strong>{pendingMedicineRequestCount}</strong>
+              </button>
+            )}
+            {hasPermission('inventory.read') && (
+              <button type="button" className={(inventoryAlerts.lowStockCount || 0) > 0 ? 'is-warning' : ''} onClick={() => setAdminTab('inventory')}>
+                <span className="signal-dot" /> Low stock <strong>{inventoryAlerts.lowStockCount || 0}</strong>
+              </button>
+            )}
+            {hasPermission('inventory.read') && (
+              <button type="button" className={(inventoryAlerts.expiredCount || 0) > 0 ? 'is-alert' : ''} onClick={() => setAdminTab('inventory')}>
+                <span className="signal-dot" /> Expired <strong>{inventoryAlerts.expiredCount || 0}</strong>
+              </button>
+            )}
+            {canViewFulfillment && (
+              <button type="button" onClick={() => setAdminTab('fulfillment')}>
+                <span className="signal-dot" /> Active orders <strong>{activeCount}</strong>
+              </button>
+            )}
+          </div>
+        </div>
+
         <nav className="dashboard-workspace-nav dashboard-workspace-nav--dense" aria-label="Operations command center">
           {[
             {
@@ -534,7 +572,8 @@ export default function AdminDashboardView() {
               ]
             }
           ].map(group => {
-            const items = group.items.filter(Boolean);
+            const query = workspaceSearch.trim().toLocaleLowerCase();
+            const items = group.items.filter(Boolean).filter(item => !query || `${item.label} ${group.title} ${group.description}`.toLocaleLowerCase().includes(query));
             if (!items.length) return null;
             return (
               <section key={group.id} className={`dashboard-nav-group dashboard-nav-group--${group.id}`} aria-label={group.title}>

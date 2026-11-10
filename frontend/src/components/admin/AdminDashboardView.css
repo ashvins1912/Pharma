@@ -2948,3 +2948,149 @@ html.dark .request-center-empty h4 { color:#e2e8f0; }
     transition: none;
   }
 }
+
+
+/* Command-center navigation search and live operational signal strip. */
+.dashboard-workspace--command-center .dashboard-command-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  padding: 0.8rem clamp(0.75rem, 1.4vw, 1.1rem);
+  border-bottom: 1px solid rgb(100 116 139 / 0.22);
+  background: rgb(2 6 23 / 0.28);
+}
+.dashboard-workspace--command-center .dashboard-command-search {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1 1 230px;
+  min-width: min(100%, 220px);
+  max-width: 420px;
+  min-height: 42px;
+  padding: 0 0.75rem;
+  border: 1px solid rgb(100 116 139 / 0.36);
+  border-radius: 0.8rem;
+  background: rgb(15 23 42 / 0.9);
+  color: #94a3b8;
+}
+.dashboard-workspace--command-center .dashboard-command-search > span {
+  color: #6ee7b7;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+.dashboard-workspace--command-center .dashboard-command-search input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f8fafc;
+  font-size: 0.78rem;
+  box-shadow: none;
+}
+.dashboard-workspace--command-center .dashboard-command-search input::placeholder {
+  color: #64748b;
+}
+.dashboard-workspace--command-center .dashboard-command-search input:focus {
+  outline: none;
+  box-shadow: none;
+}
+.dashboard-workspace--command-center .dashboard-command-search:focus-within {
+  border-color: rgb(52 211 153 / 0.7);
+  box-shadow: 0 0 0 3px rgb(16 185 129 / 0.12);
+}
+.dashboard-workspace--command-center .dashboard-command-search kbd {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid rgb(71 85 105 / 0.65);
+  border-radius: 0.35rem;
+  color: #64748b;
+  font: 700 0.55rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em;
+}
+.dashboard-workspace--command-center .dashboard-command-signals {
+  display: flex;
+  flex: 1 1 360px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+.dashboard-workspace--command-center .dashboard-command-signals button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 34px;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid rgb(100 116 139 / 0.28);
+  border-radius: 999px;
+  background: rgb(30 41 59 / 0.62);
+  color: #cbd5e1;
+  font-size: 0.65rem;
+  font-weight: 700;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.dashboard-workspace--command-center .dashboard-command-signals button:hover {
+  border-color: rgb(52 211 153 / 0.4);
+  background: rgb(16 185 129 / 0.1);
+}
+.dashboard-workspace--command-center .dashboard-command-signals button strong {
+  color: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+.dashboard-workspace--command-center .dashboard-command-signals button .signal-dot {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: #34d399;
+}
+.dashboard-workspace--command-center .dashboard-command-signals button.is-warning {
+  border-color: rgb(245 158 11 / 0.3);
+  background: rgb(245 158 11 / 0.09);
+  color: #fcd34d;
+}
+.dashboard-workspace--command-center .dashboard-command-signals button.is-warning .signal-dot {
+  background: #fbbf24;
+}
+.dashboard-workspace--command-center .dashboard-command-signals button.is-alert {
+  border-color: rgb(251 113 133 / 0.32);
+  background: rgb(244 63 94 / 0.1);
+  color: #fda4af;
+}
+.dashboard-workspace--command-center .dashboard-command-signals button.is-alert .signal-dot {
+  background: #fb7185;
+}
+.dashboard-workspace--command-center .dashboard-command-signals button:focus-visible {
+  outline: 3px solid rgb(52 211 153 / 0.5);
+  outline-offset: 2px;
+}
+.dashboard-workspace--command-center .dashboard-nav-group {
+  align-self: stretch;
+}
+.dashboard-workspace--command-center .dashboard-nav-group-heading {
+  min-height: 3.25rem;
+}
+@media (max-width: 767px) {
+  .dashboard-workspace--command-center .dashboard-command-toolbar {
+    align-items: stretch;
+  }
+  .dashboard-workspace--command-center .dashboard-command-search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .dashboard-workspace--command-center .dashboard-command-signals {
+    justify-content: flex-start;
+    flex-basis: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-workspace--command-center .dashboard-command-signals button {
+    transition: none;
+  }
+}
