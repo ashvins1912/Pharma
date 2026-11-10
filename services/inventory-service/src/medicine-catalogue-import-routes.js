@@ -813,7 +813,7 @@ router.get('/imports/:batchId/records', asyncHandler(async (req, res) => {
   const page = Math.max(1, Math.min(10000, Number.parseInt(req.query.page || '1', 10) || 1));
   const limit = Math.max(1, Math.min(50, Number.parseInt(req.query.limit || '20', 10) || 20));
   const search = text(req.query.search).slice(0, 100).toLowerCase();
-  const chunks = await CatalogueImportChunk.find({ batchId }).sort({ chunkIndex: 1 }, { records: 1 }).lean();
+  const chunks = await CatalogueImportChunk.find({ batchId }).sort({ chunkIndex: 1 }).lean();
   const source = chunks.length ? chunks.flatMap(chunk => chunk.records || []) : (await CatalogueImport.findOne({ batchId }, { records: 1 }).lean())?.records || [];
   const matches = search ? source.filter(record => [record.brandName, record.genericName, record.composition, record.manufacturer, record.medicineId, record.strength, record.dosageForm].some(value => String(value || '').toLowerCase().includes(search))) : source;
   const total = matches.length;
