@@ -51,6 +51,7 @@ const medicineMasterSchema = new mongoose.Schema({
   sourceImageUrl: { type: String, default: '' },
   requiresPrescription: { type: Boolean, default: null },
   prescriptionVerification: { type: String, enum: ['UNVERIFIED', 'VERIFIED'], default: 'UNVERIFIED' },
+  sourceLicenseStatus: { type: String, enum: ['UNVERIFIED', 'CLEARED', 'RESTRICTED'], default: 'UNVERIFIED' },
   dataQualityStatus: { type: String, enum: ['GOOD', 'PARTIAL', 'NEEDS_REVIEW'], default: 'PARTIAL' },
   sourcePriority: { type: Number, default: 99 },
   sourceDatasets: { type: [String], default: [] },
@@ -254,6 +255,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         }
         if (current?.requiresPrescription === null || current?.requiresPrescription === undefined) set.requiresPrescription = item.requiresPrescription;
         set.prescriptionVerification = 'UNVERIFIED';
+        set.sourceLicenseStatus = current?.sourceLicenseStatus || 'UNVERIFIED';
         const qualityRank = { NEEDS_REVIEW: 1, PARTIAL: 2, GOOD: 3 };
         set.dataQualityStatus = (qualityRank[current?.dataQualityStatus] || 0) >= (qualityRank[item.dataQualityStatus] || 0)
           ? (current?.dataQualityStatus || item.dataQualityStatus) : item.dataQualityStatus;
