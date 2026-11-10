@@ -298,7 +298,7 @@ export default function Header({
                 aria-label={t('language')}
                 value={language}
                 onChange={(event) => setLanguage(event.target.value)}
-                className="max-w-[94px] bg-transparent text-[11px] font-bold text-slate-700 outline-none"
+                className="app-header__language-select max-w-[94px] bg-transparent text-[11px] font-bold text-slate-700 outline-none"
               >
                 {languages.map((item) => <option key={item.code} value={item.code}>{item.nativeLabel}</option>)}
               </select>
@@ -311,7 +311,7 @@ export default function Header({
                 <select
                   value={branchId}
                   onChange={(e) => setBranchId(e.target.value)}
-                  className="bg-transparent text-[11px] font-black text-slate-800 outline-none cursor-pointer max-w-[130px] truncate"
+                  className="app-header__branch-select bg-transparent text-[11px] font-black text-slate-800 outline-none cursor-pointer max-w-[130px] truncate"
                 >
                   {branchOptions.filter(Boolean).map(b => (
                     <option key={b.id} value={b.id}>{b.name}</option>

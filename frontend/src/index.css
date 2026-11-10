@@ -1468,3 +1468,92 @@ html.dark .qm-mobile-record-grid > div { border-color: #334155; background: #1e2
 html.dark .qm-mobile-record-grid dd { color: #e2e8f0; }
 html.dark .qm-mobile-record-proposal { border-color: #065f46; background: #052e2b; color: #a7f3d0; }
 html.dark .qm-inventory-record-card { border-color: #334155; background: #162236; }
+
+
+/* Header control alignment: keep the hamburger shortcut available and
+   place language and active-branch selectors immediately after it, before
+   notifications, cart, alerts and the profile/sign-in action. */
+.app-header__menu-toggle {
+  display: inline-flex;
+  flex: 0 0 2.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.app-header__menu-toggle svg {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+.app-header__language,
+.app-header__branch {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+  height: 2.75rem;
+  min-height: 2.75rem;
+  min-width: 0;
+  padding: .35rem .65rem;
+  border: 1px solid #dbe3ef;
+  border-radius: .85rem;
+  white-space: nowrap;
+}
+.app-header__language-select,
+.app-header__branch-select {
+  display: block;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #172033;
+  font: inherit;
+  line-height: 1.2;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+.app-header__language-select { width: auto; max-width: 7.25rem; }
+.app-header__branch-select { width: auto; max-width: 8.25rem; }
+.quickmeds-actions-group {
+  align-items: center;
+  justify-content: flex-end;
+}
+.quickmeds-actions-group > * { flex: 0 0 auto; }
+.app-header__sign-in,
+.quickmeds-actions-group > button[aria-label] {
+  min-height: 2.5rem;
+}
+@media (max-width: 1023px) {
+  .app-header__menu-toggle {
+    display: inline-flex !important;
+    order: 0;
+  }
+  .app-header__language { order: 1; }
+  .app-header__branch { order: 2; }
+  .quickmeds-actions-group { gap: clamp(.25rem, .8vw, .55rem); }
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  .app-header__language { max-width: 8.5rem; }
+  .app-header__branch { max-width: 10rem; }
+  .app-header__language-select { max-width: 6rem; }
+  .app-header__branch-select { max-width: 7rem; }
+  .quickmeds-brand-anchor { flex-shrink: 1; }
+  .quickmeds-brand-badge-container { min-width: 0; }
+  .quickmeds-brand-name { overflow: hidden; text-overflow: ellipsis; }
+}
+@media (max-width: 639px) {
+  .app-header__language,
+  .app-header__branch { display: none !important; }
+}
+html.dark .app-header__language,
+html.dark .app-header__branch {
+  border-color: #475569;
+  background: #172033;
+}
+html.dark .app-header__language-select,
+html.dark .app-header__branch-select { color: #f8fafc; }
