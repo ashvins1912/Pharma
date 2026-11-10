@@ -1146,7 +1146,6 @@ router.get('/imports/:batchId/records', asyncHandler(async (req, res) => {
   const limit = Math.max(1, Math.min(50, Number.parseInt(req.query.limit || '20', 10) || 20));
   const search = text(req.query.search).slice(0, 100);
   const escapedSearch = search.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
-  const skip = (page - 1) * limit;');
   const skip = (page - 1) * limit;
   const searchMatch = search ? {
     $or: ['brandName', 'genericName', 'composition', 'manufacturer', 'medicineId', 'strength', 'dosageForm']
