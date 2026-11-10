@@ -1725,3 +1725,8 @@ body.modal-open {
 [aria-labelledby="quickmeds-mobile-navigation-title"] { z-index: 11000 !important; }
 [aria-modal="true"] .modal-backdrop,
 [aria-modal="true"] [aria-hidden="true"].absolute.inset-0 { touch-action: none; }
+
+/* Also lift wrappers whose semantic dialog is nested one level below the backdrop. */
+.fixed.inset-0:has([aria-modal="true"]) { z-index: 12000 !important; }
+.fixed.inset-0:has([aria-modal="true"]) [aria-modal="true"] { z-index: auto !important; }
+.fixed.inset-0:has(> [role="dialog"]) { isolation: isolate; }
