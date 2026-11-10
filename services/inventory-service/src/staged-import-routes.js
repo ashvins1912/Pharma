@@ -10,6 +10,7 @@ import { Product, Inventory, Audit } from './models.js';
 import { StagedImportBatch, StagedImportRow } from './staged-import-models.js';
 import { previewImportFile } from './imports.js';
 import { requireServiceScope } from './service-auth.js';
+import { queueMedicineMatch } from './medicine-match-reference.js';
 
 const router = express.Router();
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -130,9 +131,11 @@ async function publishRows(batch, rows, req) {
   await assertTransactionSupport();
   const session = await mongoose.startSession();
   const published = [];
+  const matchProducts = [];
   try {
     await session.withTransaction(async () => {
       published.length = 0;
+      matchProducts.length = 0;
       const baselineBatch = await StagedImportBatch.findById(batch._id).session(session).lean();
       if (!baselineBatch || !['READY', 'PARTIALLY_PUBLISHED', 'PUBLISHED'].includes(baselineBatch.status)) throw Object.assign(new Error('This batch is not in a publishable state. Refresh the batch before publishing.'), { statusCode: 409 });
       let inventoryBaseline = [...(baselineBatch?.previewInventorySnapshot || [])];
@@ -163,6 +166,11 @@ async function publishRows(batch, rows, req) {
         });
         await product.save({ session });
         const productAfter = snapshot(asPlain(product), productFields);
+        matchProducts.push({
+          name: product.name, genericName: product.genericName, strength: product.strength,
+          form: product.form, manufacturer: product.manufacturer, brand: product.brand,
+          composition: product.composition, packSize: product.packSize
+        });
         let inventory = await Inventory.findOne({
           tenantId: batch.tenantId, branchId: batch.branchId,
           productId: product._id, batchNumber: v.batchNumber || ''
@@ -241,6 +249,11 @@ async function publishRows(batch, rows, req) {
     }
     throw error;
   } finally { await session.endSession(); }
+  // Queue only after the transaction commits: failed/retried transactions must
+  // never leave a reference for a product that was not actually published.
+  const matchQueueResults = await Promise.allSettled(matchProducts.map(product => queueMedicineMatch(product)));
+  const matchQueueFailures = matchQueueResults.filter(result => result.status === 'rejected').length;
+  if (matchQueueFailures) console.error('Some staged products could not be queued for Medicine Master matching:', matchQueueFailures);
   return published;
 }
 async function unpublishRows(batch, rows, req) {
