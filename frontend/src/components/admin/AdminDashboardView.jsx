@@ -733,6 +733,20 @@ export default function AdminDashboardView() {
                 </tbody>
               </table>
             </div>
+            <div className="md:hidden space-y-3">
+              {auditLogs.map((log, idx) => (
+                <article key={log._id || log.id || `${log.importId || 'audit'}-${idx}`} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm space-y-3">
+                  <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-extrabold text-slate-900">{log.name || 'Inventory event'}</p><p className="text-[10px] font-mono text-slate-500 break-all">{log.sku || '—'}</p></div><span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${log.eventType === 'DELIVERY' ? 'bg-rose-100 text-rose-800' : 'bg-blue-100 text-blue-800'}`}>{log.eventType === 'DELIVERY' ? 'Delivery' : 'Bulk import'}</span></div>
+                  <dl className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-lg bg-slate-50 p-2"><dt className="text-[10px] text-slate-500">Date & time</dt><dd className="font-semibold text-slate-800">{log.timestamp ? new Date(log.timestamp).toLocaleString() : '—'}</dd></div>
+                    <div className="rounded-lg bg-slate-50 p-2"><dt className="text-[10px] text-slate-500">Reference</dt><dd className="font-mono text-[10px] text-slate-700 break-all">{log.importId || '—'}</dd></div>
+                    <div className="rounded-lg bg-slate-50 p-2"><dt className="text-[10px] text-slate-500">Stock change</dt><dd className="font-bold text-slate-900">{log.eventType === 'DELIVERY' ? `−${log.quantity} delivered` : `${log.previousStock ?? '—'} → ${log.newStock ?? '—'}`}</dd></div>
+                    <div className="rounded-lg bg-slate-50 p-2"><dt className="text-[10px] text-slate-500">Price change</dt><dd className="font-bold text-slate-900">{log.eventType === 'DELIVERY' ? `₹${log.newPrice ?? '—'} / unit` : `₹${log.previousPrice ?? '—'} → ₹${log.newPrice ?? '—'}`}</dd></div>
+                  </dl>
+                  <p className="text-[10px] text-slate-500 break-all">Authorized by: <strong className="text-slate-700">{log.adminId || '—'}</strong></p>
+                </article>
+              ))}
+            </div>
           )}
           <Pagination
             page={auditPagination.page}
