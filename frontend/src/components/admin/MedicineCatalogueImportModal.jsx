@@ -2,78 +2,9 @@ import React, { useState } from 'react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 
-const DATASETS = [
-  { value: '', label: 'Auto-detect', description: 'Detect the structure from your JSON file.' },
-  { value: 'INDIAN_MEDICINE_DATA', label: 'Indian Medicine Dataset', description: 'Object containing a drugDetails array.' },
-  { value: 'INDIA_MEDICINES_INFO', label: 'India Medicines Info', description: 'Retail product array with Medicine Name and Composition.' },
-  { value: 'MEDICINES_PART_1', label: 'Medicines Part 1', description: 'Clinical detail array with id, name, use0 and sideEffect0 fields.' }
-];
-
-const DATASET_SAMPLES = {
-  '': `{
-  "drugDetails": [
-    {
-      "brandIdentifier": "BRAND-001",
-      "brandName": "Example 500 Tablet",
-      "genericName": "Example ingredient",
-      "substanceName": "Example ingredient",
-      "doseForm": "Tablet",
-      "indication": "Example source-provided indication"
-    }
-  ],
-  "count": 1
-}`,
-  INDIAN_MEDICINE_DATA: `{
-  "drugDetails": [
-    {
-      "brandIdentifier": "BRAND-001",
-      "brandName": "Example 500 Tablet",
-      "genericIdentifier": "GEN-001",
-      "genericName": "Example ingredient",
-      "supplierIdentifier": "SUP-001",
-      "supplierName": "Example manufacturer",
-      "substanceIdentifier": "SUB-001",
-      "substanceName": "Example ingredient",
-      "doseForm": "Tablet",
-      "routeOfAdministrationName": "Oral",
-      "indication": "Example source-provided indication",
-      "contraIndication": "",
-      "interactionWithDrugs": "",
-      "alternativeDrugs": []
-    }
-  ],
-  "count": 1
-}`,
-  INDIA_MEDICINES_INFO: `[
-  {
-    "Medicine Name": "Example 500 Tablet",
-    "Product Name": "Example 500 Tablet - Pack of 10",
-    "Composition": "Example ingredient 500 mg",
-    "Type of Medicine": "Tablet",
-    "Image URL": "",
-    "Is Prescription Required?": "Yes",
-    "Price": "₹100"
-  }
-]`,
-  MEDICINES_PART_1: `[
-  {
-    "id": "CLINICAL-001",
-    "name": "Example 500 Tablet",
-    "use0": "Example source-provided use",
-    "sideEffect0": "Example source-provided side effect",
-    "substitute0": "Example suggested alternative",
-    "Chemical Class": "Example chemical class",
-    "Habit Forming": "No",
-    "Therapeutic Class": "Example therapeutic class",
-    "Action Class": "Example action class"
-  }
-]`
-};
-
 export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
   const { addToast } = useToast();
   const [file, setFile] = useState(null);
-  const [dataset, setDataset] = useState('');
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [published, setPublished] = useState(null);
@@ -87,7 +18,6 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     setPreview(null);
     setPublished(null);
     setBatchStatus(null);
-    setDataset('');
     setBusy(false);
   };
 
@@ -101,7 +31,6 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     try {
       const body = new FormData();
       body.append('jsonFile', file);
-      if (dataset) body.append('dataset', dataset);
       const response = await apiClient.post('/api/v1/inventory/catalogue/imports/preview', body, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 600000
@@ -163,8 +92,8 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
   );
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-start sm:items-center justify-center overflow-y-auto overscroll-contain bg-slate-950/60 backdrop-blur-sm p-2 sm:p-5" role="dialog" aria-modal="true" aria-labelledby="medicine-catalogue-import-title">
-      <section className="my-auto flex w-full max-w-5xl min-h-0 max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2.5rem)] flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[120] overflow-y-auto overscroll-y-contain bg-slate-950/60 backdrop-blur-sm px-2 py-3 sm:px-5 sm:py-6" role="dialog" aria-modal="true" aria-labelledby="medicine-catalogue-import-title">
+      <section className="mx-auto w-full max-w-5xl rounded-2xl sm:rounded-3xl border border-slate-200 bg-white shadow-2xl">
         <header className="shrink-0 flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-6">
           <div className="min-w-0">
             <h2 id="medicine-catalogue-import-title" className="text-base sm:text-lg font-black text-slate-900">Medicine Master Catalogue Enrichment</h2>
@@ -172,39 +101,13 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
           </div>
           <button type="button" onClick={close} disabled={busy} className="shrink-0 rounded-full bg-slate-100 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200" aria-label="Close">✕</button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] p-4 sm:p-6 space-y-5">
+        <div className="p-4 sm:p-6 space-y-5">
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-950">
             Platform-level shared catalogue import. It enriches medicine identity and clinical/product metadata only. Pharmacy selling price, stock, branch, batch, MRP, expiry and manufacturing dates are not imported.
           </div>
           {!published && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="sm:col-span-2 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-slate-700">Dataset format</span>
-                  <span className="text-[10px] font-medium text-slate-500">Choose the structure matching your file</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="radiogroup" aria-label="Dataset format">
-                  {DATASETS.map(item => (
-                    <button key={item.value} type="button" role="radio" aria-checked={dataset === item.value}
-                      onClick={() => { setDataset(item.value); setPreview(null); }}
-                      disabled={busy || Boolean(preview)}
-                      className={`rounded-xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${dataset === item.value ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100' : 'border-slate-200 bg-white hover:border-blue-300'}`}>
-                      <span className="flex items-center gap-2 text-xs font-extrabold text-slate-800">
-                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${dataset === item.value ? 'border-blue-600' : 'border-slate-400'}`}>{dataset === item.value && <span className="h-2 w-2 rounded-full bg-blue-600" />}</span>
-                        {item.label}
-                      </span>
-                      <span className="mt-1 block pl-6 text-[11px] leading-4 text-slate-500">{item.description}</span>
-                    </button>
-                  ))}
-                </div>
-                <details className="rounded-xl border border-slate-200 bg-slate-50">
-                  <summary className="cursor-pointer px-3 py-2.5 text-xs font-bold text-slate-700">View sample dataset format</summary>
-                  <div className="border-t border-slate-200 p-3">
-                    <p className="mb-2 text-[11px] leading-4 text-slate-500">Illustrative structure only. Replace the example values with your source records. The importer validates the actual JSON structure and required identifiers.</p>
-                    <pre className="max-h-64 overflow-auto rounded-lg bg-slate-950 p-3 text-[10px] leading-4 text-slate-100"><code>{DATASET_SAMPLES[dataset]}</code></pre>
-                  </div>
-                </details>
-              </div>
+              <div className="sm:col-span-2 text-xs text-slate-500">Dataset type is detected automatically from the uploaded JSON structure.</div>
               <label className="block text-xs font-bold text-slate-700">
                 JSON file (max 110 MB)
                 <input type="file" accept=".json,application/json" disabled={busy || Boolean(preview)} onChange={event => setFile(event.target.files?.[0] || null)} className="mt-1.5 block w-full rounded-xl border border-slate-300 bg-white p-2 text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-bold file:text-blue-700" />
@@ -294,7 +197,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
             </div>
           )}
         </div>
-        <footer className="relative z-10 shrink-0 flex flex-col-reverse sm:flex-row sm:justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <footer className="flex flex-col-reverse sm:flex-row sm:justify-between gap-2 rounded-b-2xl sm:rounded-b-3xl border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button type="button" onClick={preview ? () => { setPreview(null); setFile(null); setPublished(null); setBatchStatus(null); } : close} disabled={busy} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 disabled:opacity-50">{preview ? 'Choose another dataset' : 'Close'}</button>
           {!preview ? (
             <button type="button" onClick={createPreview} disabled={busy || !file} className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-50">{busy ? 'Analyzing JSON…' : 'Analyze & Preview'}</button>
