@@ -68,7 +68,7 @@ for (const language of requiredLanguages) {
   for (const [key, englishValue] of reference) {
     const translatedValue = dictionary.get(key);
     if (typeof englishValue !== 'string' || typeof translatedValue !== 'string') continue;
-    const placeholders = (value) => [...value.matchAll(/\\{([A-Za-z0-9_]+)\\}/g)].map((match) => match[1]).sort().join('|');
+    const placeholders = (value) => [...value.matchAll(/\{([A-Za-z0-9_]+)\}/g)].map((match) => match[1]).sort().join('|');
     if (placeholders(englishValue) !== placeholders(translatedValue)) placeholderMismatches.push(key);
   }
   console.log(`${language}: ${dictionary.size}/${reference.size} keys`);
