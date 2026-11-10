@@ -141,7 +141,6 @@ body {
 .pharma-responsive-scope :where(.pharma-modal-surface, .pharma-checkout-modal) {
   box-sizing: border-box;
   min-width: 0;
-  max-width: min(100%, 56rem);
   max-height: calc(100dvh - max(1rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));
   min-height: 0;
   overflow-x: hidden;
