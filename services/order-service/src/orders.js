@@ -13,6 +13,28 @@ const allowedStatuses = new Set([
   'Dispatched', 'Delivered', 'Cancelled'
 ]);
 
+const allocateOrderNumber = async () => {
+  const counters = Order.db.collection('applicationCounters');
+  const [latest] = await Order.aggregate([
+    { $match: { orderNumber: /^ORD-\\d+$/ } },
+    { $project: { sequence: { $convert: { input: { $arrayElemAt: [{ $split: ['$orderNumber', '-'] }, 1] }, to: 'long', onError: 0, onNull: 0 } } } },
+    { $group: { _id: null, sequence: { $max: '$sequence' } } }
+  ]);
+  const highestExisting = Number(latest?.sequence) || 10025;
+  try {
+    await counters.updateOne({ _id: 'order' }, { $max: { sequence: highestExisting } }, { upsert: true });
+  } catch (error) {
+    if (error.code !== 11000) throw error;
+    await counters.updateOne({ _id: 'order' }, { $max: { sequence: highestExisting } });
+  }
+  const result = await counters.findOneAndUpdate(
+    { _id: 'order' }, { $inc: { sequence: 1 } }, { returnDocument: 'after' }
+  );
+  const counter = result?.value || result;
+  if (!Number.isSafeInteger(Number(counter?.sequence))) throw new Error('Unable to allocate an order number.');
+  return `ORD-${counter.sequence}`;
+};
+
 const ERROR_CODES = {
   400: 'VALIDATION_ERROR',
   403: 'FORBIDDEN',
@@ -359,7 +381,7 @@ export async function createOrder(body, user) {
     .digest('hex')
     .slice(0, 32)
     .toUpperCase();
-  const orderNumber = `ORD-${stableOrderId}`;
+  const orderNumber = await allocateOrderNumber();
   const reservation = await inventoryRequest('/reservations', {
     orderId: orderNumber,
     items: items.map(item => ({ productId: item.productId, quantity: item.quantity })),
