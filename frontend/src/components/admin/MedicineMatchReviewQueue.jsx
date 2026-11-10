@@ -54,7 +54,7 @@ export default function MedicineMatchReviewQueue() {
     setActiveId(activeId === id ? '' : id);
     if (!drafts[id]) {
       const target = row.candidate || null;
-      const fields = FIELDS.map(([key]) => key).filter(key => target && hasValue(target[key]));
+      const fields = [];
       updateDraft(id, { medicineId: target?.medicineId || '', target, fields });
     }
   };
@@ -70,7 +70,7 @@ export default function MedicineMatchReviewQueue() {
     }
   };
   const chooseTarget = (id, medicine) => {
-    const fields = FIELDS.map(([key]) => key).filter(key => hasValue(medicine[key]));
+    const fields = [];
     updateDraft(id, { medicineId: medicine.medicineId, target: medicine, fields });
     setResults(current => ({ ...current, [id]: [] }));
   };
