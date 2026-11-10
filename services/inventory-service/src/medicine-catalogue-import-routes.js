@@ -762,7 +762,7 @@ router.post('/imports/merge', asyncHandler(async (req, res) => {
     unmatchedRecords: Math.max(0, records.length - records.filter(item => ['AUTO_MERGE','MANUAL_REVIEW'].includes(item.reconciliationMatch?.decision)).length - reviewCandidates.length),
     blockingConflicts,
     sourceBatchCount: batches.length, sourceBatchIds,
-    fuzzyMatchExamples: reviewCandidates.slice(0, 25).map(item => ({ incomingMedicine: item.incomingMedicine, matchedMedicineId: item.candidateMedicineId, score: item.score, decision: 'MANUAL_REVIEW', warnings: item.warnings })),
+    fuzzyMatchExamples: reviewCandidates.slice(0, 25).map(item => ({ incomingMedicine: item.incomingMedicine, candidateMedicine: item.candidateMedicine, matchedMedicineId: item.candidateMedicineId, score: item.score, nameScore: item.nameScore, tokenNameScore: item.tokenNameScore, ngramNameScore: item.ngramNameScore, tfIdfNameScore: item.tfIdfNameScore, compositionScore: item.compositionScore, evidence: item.evidence, decision: 'MANUAL_REVIEW', warnings: item.warnings })),
     fuzzyCandidateScanTruncated: fuzzyScanTruncated,
     averageQualityScore: records.length ? Math.round(records.reduce((sum, item) => sum + Number(item.qualityScore || 0), 0) / records.length) : 0
   };
