@@ -4977,7 +4977,7 @@ const messages = {
     closeTrackingPanel: "ట్రాకింగ్ ప్యానెల్ మూసివేయండి",
     placedOn: "ఆర్డర్ చేసిన తేదీ",
 
-tenantInfrastructure: "టెనెంట్ మౌలిక సదుపాయాలు",
+    tenantInfrastructure: "టెనెంట్ మౌలిక సదుపాయాలు",
     dispensaryBranchesRegistry: "ఫార్మసీ బ్రాంచ్‌ల రిజిస్ట్రీ",
     loadingBranchRegistry: "బ్రాంచ్ రిజిస్ట్రీ లోడ్ అవుతోంది…",
     locationAddress: "ప్రాంతం / చిరునామా",
