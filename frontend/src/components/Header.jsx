@@ -268,37 +268,26 @@ export default function Header({
           {/* Right: Actions Bar */}
           <div className="quickmeds-actions-group app-header__actions">
 
-            {/* Mobile / Small Screen Navigation Hamburger Menu Toggle */}
+            {/* Compact store shortcut replaces the full desktop navigation on small screens. */}
             <button
               type="button"
-              ref={mobileMenuToggleRef}
-              onClick={() => {
-                const nextState = !mobileMenuOpen;
-                setMobileMenuOpen(nextState);
-                onToggleMobileMenu?.(nextState);
-              }}
-              className="app-header__menu-toggle h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer items-center justify-center shrink-0"
-              aria-label={t('toggleMenu')}
-              aria-expanded={mobileMenuOpen}
-              aria-controls="quickmeds-mobile-navigation"
+              onClick={() => { setActiveTab('store'); closeMobileMenu(); }}
+              className={`app-header__mobile-store lg:hidden inline-flex h-9 sm:h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 text-xs font-bold shrink-0 transition ${activeTab === 'store' ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+              aria-label={t('store')}
+              aria-current={activeTab === 'store' ? 'page' : undefined}
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                {mobileMenuOpen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
+              <span aria-hidden="true">💊</span>
+              <span>{t('store')}</span>
             </button>
-            
-            <label className="app-header__language hidden min-[380px]:flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-600" title={t('selectLanguage')}>
+
+            <label className="app-header__language qm-select-shell hidden min-[380px]:flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold text-slate-600" title={t('selectLanguage')}>
               <span aria-hidden="true">🌐</span>
               <span className="sr-only">{t('language')}</span>
               <select
                 aria-label={t('language')}
                 value={language}
                 onChange={(event) => setLanguage(event.target.value)}
-                className="app-header__language-select max-w-[94px] bg-transparent text-[11px] font-bold text-slate-700 outline-none"
+                className="app-header__language-select qm-select-control max-w-[82px] bg-transparent text-[11px] font-bold text-slate-700"
               >
                 {languages.map((item) => <option key={item.code} value={item.code}>{item.nativeLabel}</option>)}
               </select>
@@ -306,12 +295,12 @@ export default function Header({
 
             {/* Branch Quick-Switcher Dropdown */}
             {Array.isArray(branchOptions) && branchOptions.length > 0 && (
-              <div className="app-header__branch hidden sm:flex items-center gap-1 bg-slate-100 hover:bg-slate-200/70 px-2.5 py-1.5 rounded-xl border border-slate-200 transition shrink-0" title="Toggle active branch context (X-Branch-Id)">
+              <div className="app-header__branch qm-select-shell hidden sm:flex items-center gap-1 px-2.5 py-1.5 transition shrink-0" title="Toggle active branch context (X-Branch-Id)">
                 <span className="text-xs">🏢</span>
                 <select
                   value={branchId}
                   onChange={(e) => setBranchId(e.target.value)}
-                  className="app-header__branch-select bg-transparent text-[11px] font-black text-slate-800 outline-none cursor-pointer max-w-[130px] truncate"
+                  className="app-header__branch-select qm-select-control bg-transparent text-[11px] font-bold text-slate-800 cursor-pointer max-w-[112px] truncate"
                 >
                   {branchOptions.filter(Boolean).map(b => (
                     <option key={b.id} value={b.id}>{b.name}</option>
@@ -389,6 +378,29 @@ export default function Header({
                 <span className="app-header__sign-in-label">{t('signIn')}</span>
               </button>
             )}
+
+            {/* Mobile / Small Screen Navigation Hamburger Menu Toggle */}
+            <button
+              type="button"
+              ref={mobileMenuToggleRef}
+              onClick={() => {
+                const nextState = !mobileMenuOpen;
+                setMobileMenuOpen(nextState);
+                onToggleMobileMenu?.(nextState);
+              }}
+              className="app-header__menu-toggle lg:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer items-center justify-center shrink-0"
+              aria-label={t('toggleMenu')}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="quickmeds-mobile-navigation"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {mobileMenuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
 
           </div>
         </div>
