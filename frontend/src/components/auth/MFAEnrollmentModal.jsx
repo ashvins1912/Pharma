@@ -78,8 +78,8 @@ export default function MFAEnrollmentModal({ isOpen, onClose }) {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 relative overflow-hidden max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in" role="presentation">
+            <div role="dialog" aria-modal="true" aria-labelledby="mfa-enrollment-title" tabIndex={-1} className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 relative overflow-hidden max-h-[90vh] overflow-y-auto">
                 {/* Header */}
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                     <div className="flex items-center gap-3">
@@ -87,7 +87,7 @@ export default function MFAEnrollmentModal({ isOpen, onClose }) {
                             🛡️
                         </div>
                         <div>
-                            <h3 className="text-base font-black text-slate-900">{t('setupTwoFactor')}</h3>
+                            <h3 id="mfa-enrollment-title" className="text-base font-black text-slate-900">{t('setupTwoFactor')}</h3>
                             <p className="text-xs text-slate-500">{t('totpDescription')}</p>
                         </div>
                     </div>
