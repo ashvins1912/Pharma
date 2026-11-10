@@ -123,7 +123,7 @@ export function scoreMedicineMatch(incoming, candidate, options = {}) {
   const compositionConflict = compositionScore !== null && compositionScore < 90;
   const genericScore = incoming.genericName && candidate.genericName ? fieldSimilarity(incoming.genericName, candidate.genericName) : null;
   const genericConflict = genericScore !== null && genericScore < 80;
-  const blocked = strengthConflict || formConflict || compositionConflict || genericConflict;
+  const blocked = strengthConflict || formConflict || compositionConflict;
   // Fellegi-Sunter-inspired evidence weighting. These are conservative initial weights,
   // not trained m/u probabilities; calibrate them against adjudicated medicine pairs.
   const evidence = [
@@ -135,9 +135,9 @@ export function scoreMedicineMatch(incoming, candidate, options = {}) {
   ];
   const evidenceWeight = evidence.filter(item => item.available).reduce((sum, item) => sum + item.weight, 0);
   const score = evidenceWeight ? Math.round(evidence.reduce((sum, item) => sum + (item.available ? item.score * item.weight : 0), 0) / evidenceWeight) : 0;
-  const autoMerge = !blocked && compositionScore !== null && compositionScore >= 96 && nameScore >= 94 &&
+  const autoMerge = !blocked && !genericConflict && compositionScore !== null && compositionScore >= 96 && nameScore >= 94 &&
     score >= 97 && Boolean(aStrength && bStrength && aForm && bForm);
-  const review = !blocked && nameScore >= 78 && (score >= 78 || compositionScore === null);
+  const review = !blocked && (genericConflict || (nameScore >= 78 && (score >= 78 || compositionScore === null)));
   return {
     score, nameScore, tokenNameScore, ngramNameScore, tfIdfNameScore, compositionScore, genericScore,
     evidence: evidence.filter(item => item.available).map(({ field, score: fieldScore, weight }) => ({ field, score: fieldScore, weight })),
