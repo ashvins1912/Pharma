@@ -178,6 +178,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   if (!Array.isArray(sourceRows) || sourceRows.length > 25000) return res.status(413).json({ message: 'Dataset must contain between 1 and 25,000 records.' });
   const tagged = sourceRows.map(record => ({ ...record, __dataset: dataset }));
   const { records, rejected, duplicatesRemoved } = consolidate(tagged, dataset);
+  if (Buffer.byteLength(JSON.stringify(records), 'utf8') > 12 * 1024 * 1024) return res.status(413).json({ message: 'The cleaned catalogue preview is too large to stage safely. Split the dataset into smaller files.' });
   const batchId = randomUUID();
   const fileSha256 = hash(req.file.buffer);
   const previousBatch = await CatalogueImport.findOne({ dataset, fileSha256 }).lean();
