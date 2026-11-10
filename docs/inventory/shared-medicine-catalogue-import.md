@@ -41,6 +41,20 @@ This workflow writes only the shared MedicineMaster collection in the Inventory 
 
 The master record retains source datasets, all source record IDs (including IDs folded during exact duplicate cleanup), import batch, data quality state, clinical verification state and source-license verification state. The new 50,000-record source does not supply composition or manufacturer, so those fields remain blank unless another trusted source already provides them. Source licensing/provenance must be cleared before commercial redistribution or customer-facing use. Catalogue consumers should continue to treat unverified clinical/regulatory fields as informational until checked against authoritative sources.
 
+### Combining already-staged uploads
+
+The Medicine Master Catalogue batch history supports selecting 2–10 unapproved batches in READY state and creating one combined staged batch. The source batches are marked SUPERSEDED only after the combined batch and its chunks have been stored successfully; superseded source batches cannot be published independently. The combined batch receives a new report fingerprint and must be reviewed, approved and published separately.
+
+The combine operation:
+- Deduplicates exact canonical identities and exact medicine identifiers.
+- Uses the confidence-gated fuzzy matcher to combine high-confidence records across selected batches.
+- Enriches missing descriptive and clinical metadata, deduplicates arrays, and retains all source dataset names, source record IDs and legacy medicine IDs.
+- Preserves the highest-priority source for conflicting scalar fields.
+- Lists ambiguous fuzzy matches for review and blocks approval if the same source medicine identifier carries conflicting composition, strength or dosage form.
+- Does not alter tenant or branch inventory data.
+
+Only batches in READY state that have not yet been approved can be combined. Select the combined batch's **Review** action in the batch history to inspect its analytics, approve the exact report and publish it.
+
 ## Intelligent multi-batch reconciliation
 
 Every later upload is reconciled against the already-published shared Medicine Master catalogue, so independently uploaded source datasets can enrich the same canonical medicine record instead of creating a second record when the identity is sufficiently clear.
