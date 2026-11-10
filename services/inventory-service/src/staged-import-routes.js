@@ -10,7 +10,7 @@ import { Product, Inventory, Audit } from './models.js';
 import { StagedImportBatch, StagedImportRow } from './staged-import-models.js';
 import { previewImportFile } from './imports.js';
 import { requireServiceScope } from './service-auth.js';
-import { queueMedicineMatch } from './medicine-match-reference.js';
+import { queueMedicineMatch } from './medicine-match-queue.js';
 
 const router = express.Router();
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
