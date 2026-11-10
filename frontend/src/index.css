@@ -1602,3 +1602,110 @@ html.dark .admin-screen :where(select) {
 html.dark .pharma-app-shell select:not(.qm-select-control):hover:not(:disabled),
 html.dark .pharma-responsive-scope :where(select):hover:not(:disabled),
 html.dark .admin-screen :where(select):hover:not(:disabled) { background-color:#20314a; }
+
+
+/* --------------------------------------------------------------------------
+   Application-wide modal viewport repair
+   On mobile the overlay itself scrolls, while long dialog content remains
+   independently scrollable. Safe-area insets keep controls clear of notches
+   and home indicators. Desktop modal sizing is left unchanged.
+   -------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+  :where(.fixed.inset-0[role="dialog"],
+         .fixed.inset-0[aria-modal="true"],
+         .modal-overlay) {
+    box-sizing: border-box;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    padding:
+      max(.65rem, env(safe-area-inset-top, 0px))
+      max(.65rem, env(safe-area-inset-right, 0px))
+      max(.65rem, env(safe-area-inset-bottom, 0px))
+      max(.65rem, env(safe-area-inset-left, 0px)) !important;
+  }
+
+  /* Dialogs that are the overlay's direct child (including custom surfaces). */
+  :where(.fixed.inset-0[role="dialog"],
+         .fixed.inset-0[aria-modal="true"],
+         .modal-overlay) > :where(
+           .pharma-modal-surface,
+           .pharma-checkout-modal,
+           .bg-white.rounded-2xl,
+           .bg-white.rounded-3xl,
+           .bg-white.border,
+           form[role="dialog"]
+         ) {
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: min(100%, 42rem);
+    min-width: 0;
+    max-height: calc(100dvh - 1.3rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    margin-block: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Dialogs that carry role=dialog themselves, e.g. checkout and forms. */
+  :where([role="dialog"]) {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    max-height: calc(100dvh - 1.3rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    overscroll-behavior: contain;
+  }
+
+  :where([role="dialog"] > .pharma-modal-surface) {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    max-height: calc(100dvh - 1.3rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Keep modal form controls usable at narrow widths. */
+  :where([role="dialog"] input,
+         [role="dialog"] select,
+         [role="dialog"] textarea,
+         [role="dialog"] button) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  :where([role="dialog"] input:not([type="checkbox"]):not([type="radio"]),
+         [role="dialog"] select,
+         [role="dialog"] textarea) {
+    font-size: 16px; /* prevents iOS Safari focus zoom */
+  }
+
+  :where([role="dialog"] button,
+         [aria-modal="true"] button) {
+    min-height: 2.65rem;
+    touch-action: manipulation;
+  }
+
+  :where([role="dialog"] :focus-visible,
+         [aria-modal="true"] :focus-visible) {
+    scroll-margin-block: 5rem;
+  }
+}
+
+@media (max-width: 380px) {
+  :where(.fixed.inset-0[role="dialog"],
+         .fixed.inset-0[aria-modal="true"],
+         .modal-overlay) {
+    padding-inline: .5rem !important;
+  }
+}
