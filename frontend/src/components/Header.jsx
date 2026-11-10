@@ -183,7 +183,7 @@ export default function Header({
           </div>
 
           {/* Center: Desktop Navigation */}
-          <nav className="app-header__desktop-nav hidden md:flex items-center gap-1.5 lg:gap-2">
+          <nav className="app-header__desktop-nav hidden lg:flex items-center gap-1.5 lg:gap-2">
             <button
               type="button"
               onClick={() => setActiveTab('store')}
@@ -277,7 +277,7 @@ export default function Header({
                 setMobileMenuOpen(nextState);
                 onToggleMobileMenu?.(nextState);
               }}
-              className="md:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center shrink-0"
+              className="lg:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center shrink-0"
               aria-label={t('toggleMenu')}
               aria-expanded={mobileMenuOpen}
               aria-controls="quickmeds-mobile-navigation"
