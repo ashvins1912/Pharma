@@ -65,6 +65,7 @@ const medicineMasterSchema = new mongoose.Schema({
   sourceImageUrl: { type: String, default: '' },
   requiresPrescription: { type: Boolean, default: null },
   prescriptionVerification: { type: String, enum: ['UNVERIFIED', 'VERIFIED'], default: 'UNVERIFIED' },
+  clinicalDataVerification: { type: String, enum: ['UNVERIFIED', 'VERIFIED'], default: 'UNVERIFIED' },
   sourceLicenseStatus: { type: String, enum: ['UNVERIFIED', 'CLEARED', 'RESTRICTED'], default: 'UNVERIFIED' },
   dataQualityStatus: { type: String, enum: ['GOOD', 'PARTIAL', 'NEEDS_REVIEW'], default: 'PARTIAL' },
   sourcePriority: { type: Number, default: 99 },
@@ -415,7 +416,8 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         if (current?.requiresPrescription === null || current?.requiresPrescription === undefined) set.requiresPrescription = item.requiresPrescription;
         for (const field of ['chemicalClass','therapeuticClass','actionClass']) if (item[field] && (!current?.[field] || item.sourcePriority < Number(current.sourcePriority ?? 99))) set[field] = item[field];
         if (item.habitForming && item.habitForming !== 'UNKNOWN' && (!current?.habitForming || current.habitForming === 'UNKNOWN')) set.habitForming = item.habitForming;
-        set.prescriptionVerification = 'UNVERIFIED';
+        set.prescriptionVerification = current?.prescriptionVerification || 'UNVERIFIED';
+        set.clinicalDataVerification = current?.clinicalDataVerification || 'UNVERIFIED';
         set.sourceLicenseStatus = current?.sourceLicenseStatus || 'UNVERIFIED';
         const qualityRank = { NEEDS_REVIEW: 1, PARTIAL: 2, GOOD: 3 };
         set.dataQualityStatus = (qualityRank[current?.dataQualityStatus] || 0) >= (qualityRank[item.dataQualityStatus] || 0)
