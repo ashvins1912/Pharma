@@ -165,11 +165,11 @@ medicineMasterSchema.index({ brandName: 'text', genericName: 'text', composition
 medicineMasterSchema.index({ brandName: 1 }, { collation: { locale: 'en', strength: 2 } });
 const catalogueImportSchema = new mongoose.Schema({
   batchId: { type: String, required: true, unique: true },
-  dataset: { type: String, enum: ['INDIAN_MEDICINE_DATA', 'INDIA_MEDICINES_INFO', 'MEDICINES_PART_1'], required: true },
+  dataset: { type: String, enum: ['INDIAN_MEDICINE_DATA', 'INDIA_MEDICINES_INFO', 'MEDICINES_PART_1', 'MULTI_SOURCE'], required: true },
   fileName: { type: String, required: true },
   fileSha256: { type: String, required: true },
   uploadedBy: { type: String, required: true },
-  status: { type: String, enum: ['STAGING', 'READY', 'PUBLISHING', 'PUBLISHED', 'PARTIALLY_PUBLISHED', 'FAILED'], default: 'READY', index: true },
+  status: { type: String, enum: ['STAGING', 'READY', 'PUBLISHING', 'PUBLISHED', 'PARTIALLY_PUBLISHED', 'FAILED', 'SUPERSEDED'], default: 'READY', index: true },
   recordCount: { type: Number, default: 0 },
   chunkCount: { type: Number, default: 0 },
   records: { type: [mongoose.Schema.Types.Mixed], default: [] },
@@ -177,6 +177,8 @@ const catalogueImportSchema = new mongoose.Schema({
   publishedCount: { type: Number, default: 0 },
   errorMessage: { type: String, default: '' },
   reportFingerprint: { type: String, default: '' },
+  sourceBatchIds: { type: [String], default: [] },
+  supersededByBatchId: { type: String, default: '' },
   approvedBy: { type: String, default: '' },
   approvedAt: { type: Date, default: null }
 }, { timestamps: true });
@@ -559,11 +561,120 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   return res.status(201).json({ batchId, dataset, status: 'READY', report, reportFingerprint, sample: records.slice(0, 8) });
 }));
 
+const MERGE_ARRAY_FIELDS = ['ingredientIds','ingredients','ingredientDetails','routes','indications','contraindications','drugInteractions','alternatives','sideEffects','uses','suggestedAlternatives','routeIds','casNumbers','uniiCodes','substanceDescriptions','molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology'];
+const MERGE_TEXT_FIELDS = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType','chemicalClass','therapeuticClass','actionClass'];
+const mergeStagedMedicine = (left, right) => {
+  const primary = Number(left.sourcePriority ?? 99) <= Number(right.sourcePriority ?? 99) ? left : right;
+  const secondary = primary === left ? right : left;
+  const merged = { ...secondary, ...primary };
+  for (const field of MERGE_TEXT_FIELDS) merged[field] = primary[field] || secondary[field] || '';
+  for (const field of MERGE_ARRAY_FIELDS) {
+    const values = [...(left[field] || []), ...(right[field] || [])];
+    const identity = value => value && typeof value === 'object'
+      ? (value.ingredientId || key(value.name || value.brandName) || JSON.stringify(value))
+      : key(value);
+    merged[field] = [...new Map(values.map(value => [identity(value), value])).values()];
+  }
+  merged.sourceDatasets = [...new Set([...(left.sourceDatasets || []), ...(right.sourceDatasets || []), left.sourceDataset, right.sourceDataset].filter(Boolean))];
+  merged.sourceRecordIds = [...new Set([...(left.sourceRecordIds || [left.sourceRecordId]), ...(right.sourceRecordIds || [right.sourceRecordId])].filter(Boolean))];
+  merged.legacyMedicineIds = [...new Set([...(left.legacyMedicineIds || []), ...(right.legacyMedicineIds || []), ...(left.medicineId !== merged.medicineId ? [left.medicineId] : []), ...(right.medicineId !== merged.medicineId ? [right.medicineId] : [])].filter(Boolean))];
+  merged.sourcePriority = Math.min(Number(left.sourcePriority ?? 99), Number(right.sourcePriority ?? 99));
+  if (!merged.canonicalKey) merged.canonicalKey = left.canonicalKey || right.canonicalKey || '';
+  if (merged.requiresPrescription === null || merged.requiresPrescription === undefined) merged.requiresPrescription = secondary.requiresPrescription ?? null;
+  if (!merged.habitForming || merged.habitForming === 'UNKNOWN') merged.habitForming = secondary.habitForming || 'UNKNOWN';
+  const quality = assessMedicineQuality({ ...merged, sourceDataset: merged.sourceDataset || primary.sourceDataset, sourceRecordId: merged.sourceRecordId || primary.sourceRecordId });
+  Object.assign(merged, quality);
+  merged.dataQualityStatus = quality.qualityGrade === 'EXCELLENT' || quality.qualityGrade === 'GOOD' ? 'GOOD' : quality.qualityGrade === 'NEEDS_REVIEW' ? 'NEEDS_REVIEW' : 'PARTIAL';
+  return merged;
+};
+
+router.post('/imports/merge', asyncHandler(async (req, res) => {
+  const batchIds = [...new Set((Array.isArray(req.body?.batchIds) ? req.body.batchIds : []).map(value => text(value)).filter(Boolean))];
+  if (batchIds.length < 2 || batchIds.length > 10) return res.status(400).json({ message: 'Select between 2 and 10 staged batches to merge.' });
+  const batches = await CatalogueImport.find({ batchId: { $in: batchIds } }).lean();
+  if (batches.length !== batchIds.length || batches.some(batch => batch.status !== 'READY' || batch.approvedAt)) {
+    return res.status(409).json({ message: 'All selected batches must exist, remain staged and ready, and not already be approved.' });
+  }
+  const sourceBatchIds = batches.map(batch => batch.batchId).sort();
+  const fileSha256 = hash(sourceBatchIds.join('|'));
+  const previous = await CatalogueImport.findOne({ dataset: 'MULTI_SOURCE', fileSha256 }).lean();
+  if (previous && previous.status !== 'SUPERSEDED') return res.json({ batchId: previous.batchId, dataset: previous.dataset, status: previous.status, report: previous.report, reportFingerprint: previous.reportFingerprint, reused: true });
+  const allChunks = await CatalogueImportChunk.find({ batchId: { $in: sourceBatchIds } }).sort({ batchId: 1, chunkIndex: 1 }).lean();
+  const rawRecords = allChunks.flatMap(chunk => chunk.records || []);
+  if (!rawRecords.length) return res.status(409).json({ message: 'Selected batches contain no staged medicine records.' });
+  const mergedByIdentity = new Map();
+  const pending = [];
+  let exactMerged = 0, fuzzyMerged = 0;
+  const reviewCandidates = [];
+  for (const record of rawRecords) {
+    const identity = record.canonicalKey ? 'KEY:' + record.canonicalKey : 'ID:' + record.medicineId;
+    const existing = mergedByIdentity.get(identity);
+    if (existing) { mergedByIdentity.set(identity, mergeStagedMedicine(existing, record)); exactMerged += 1; continue; }
+    const prefix = key(record.brandName).slice(0, 2);
+    let best = null;
+    if (prefix.length === 2) {
+      for (const candidate of pending) {
+        if (key(candidate.brandName).slice(0, 2) !== prefix) continue;
+        const score = scoreMedicineMatch(record, candidate);
+        if (!best || score.score > best.score) best = { candidate, ...score };
+      }
+    }
+    if (best?.decision === 'AUTO_MERGE') {
+      const previousIdentity = best.candidate.canonicalKey ? 'KEY:' + best.candidate.canonicalKey : 'ID:' + best.candidate.medicineId;
+      const combined = mergeStagedMedicine(best.candidate, record);
+      const index = pending.indexOf(best.candidate);
+      pending[index] = combined;
+      mergedByIdentity.set(previousIdentity, combined);
+      if (combined.canonicalKey) mergedByIdentity.set('KEY:' + combined.canonicalKey, combined);
+      fuzzyMerged += 1;
+    } else {
+      if (best?.decision === 'MANUAL_REVIEW') reviewCandidates.push({ incomingMedicine: record.brandName, candidateMedicine: best.candidate.brandName, candidateMedicineId: best.candidate.medicineId, score: best.score, warnings: best.warnings });
+      pending.push(record);
+      mergedByIdentity.set(identity, record);
+    }
+  }
+  const records = pending;
+  const batchId = randomUUID();
+  const report = {
+    sourceRecords: rawRecords.length, normalizedRecords: records.length, rejectedRecords: 0,
+    duplicatesRemoved: exactMerged + fuzzyMerged, newRecords: records.length,
+    updateCandidates: records.filter(item => item.reconciliationMatch?.decision === 'AUTO_MERGE').length,
+    exactBatchMerges: exactMerged, fuzzyBatchMerges: fuzzyMerged, fuzzyManualReview: reviewCandidates.length,
+    unmatchedRecords: Math.max(0, records.length - reviewCandidates.length),
+    sourceBatchCount: batches.length, sourceBatchIds,
+    fuzzyMatchExamples: reviewCandidates.slice(0, 25).map(item => ({ incomingMedicine: item.incomingMedicine, matchedMedicineId: item.candidateMedicineId, score: item.score, decision: 'MANUAL_REVIEW', warnings: item.warnings })),
+    averageQualityScore: records.length ? Math.round(records.reduce((sum, item) => sum + Number(item.qualityScore || 0), 0) / records.length) : 0
+  };
+  const reportFingerprint = hash(JSON.stringify(report));
+  const chunks = [];
+  for (let offset = 0; offset < records.length; offset += CATALOGUE_CHUNK_SIZE) chunks.push({ batchId, chunkIndex: chunks.length, records: records.slice(offset, offset + CATALOGUE_CHUNK_SIZE) });
+  await CatalogueImport.create({
+    batchId, dataset: 'MULTI_SOURCE', fileName: 'Merged ' + batches.length + ' medicine batches',
+    fileSha256, uploadedBy: req.service.userId || req.service.name,
+    status: 'STAGING', recordCount: records.length, chunkCount: chunks.length, report, reportFingerprint, sourceBatchIds
+  });
+  try {
+    if (chunks.length) await CatalogueImportChunk.insertMany(chunks, { ordered: true });
+    const superseded = await CatalogueImport.updateMany(
+      { batchId: { $in: sourceBatchIds }, status: 'READY', approvedAt: null },
+      { $set: { status: 'SUPERSEDED', supersededByBatchId: batchId } }
+    );
+    if ((superseded.modifiedCount ?? superseded.nModified ?? 0) !== sourceBatchIds.length) throw Object.assign(new Error('One or more source batches changed state during merge. Refresh history and retry.'), { statusCode: 409 });
+    await CatalogueImport.updateOne({ batchId }, { $set: { status: 'READY' } });
+  } catch (error) {
+    await CatalogueImportChunk.deleteMany({ batchId });
+    await CatalogueImport.deleteOne({ batchId });
+    await CatalogueImport.updateMany({ batchId: { $in: sourceBatchIds }, status: 'SUPERSEDED', supersededByBatchId: batchId }, { $set: { status: 'READY', supersededByBatchId: '' } });
+    throw error;
+  }
+  return res.status(201).json({ batchId, dataset: 'MULTI_SOURCE', status: 'READY', report, reportFingerprint, sourceBatchIds });
+}));
+
 router.get('/imports', asyncHandler(async (req, res) => {
   const page = Math.max(1, Math.min(1000, Number.parseInt(req.query.page || '1', 10) || 1));
   const limit = Math.max(1, Math.min(50, Number.parseInt(req.query.limit || '10', 10) || 10));
   const [items, total] = await Promise.all([
-    CatalogueImport.find({}, { batchId: 1, dataset: 1, fileName: 1, status: 1, recordCount: 1, report: 1, publishedCount: 1, approvedAt: 1, approvedBy: 1, errorMessage: 1, createdAt: 1 }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+    CatalogueImport.find({}, { batchId: 1, dataset: 1, fileName: 1, status: 1, recordCount: 1, report: 1, publishedCount: 1, approvedAt: 1, approvedBy: 1, errorMessage: 1, sourceBatchIds: 1, supersededByBatchId: 1, createdAt: 1 }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
     CatalogueImport.countDocuments({})
   ]);
   return res.json({ items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
@@ -589,6 +700,7 @@ router.post('/imports/:batchId/approve', asyncHandler(async (req, res) => {
 router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
   const batch = await CatalogueImport.findOne({ batchId: req.params.batchId });
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
+  if (batch.status === 'SUPERSEDED') return res.status(409).json({ message: 'This batch was superseded by a combined batch. Publish the merged batch instead.', supersededByBatchId: batch.supersededByBatchId });
   if (batch.status === 'PUBLISHED') return res.json({ batchId: batch.batchId, status: batch.status, publishedCount: batch.publishedCount, report: batch.report });
   if (!batch.approvedAt || !batch.reportFingerprint) return res.status(409).json({ message: 'This reconciliation report has not been approved. Review and approve the report before publishing.' });
   if (!['READY', 'PARTIALLY_PUBLISHED', 'FAILED'].includes(batch.status)) return res.status(409).json({ message: 'This catalogue batch is already being published.' });
