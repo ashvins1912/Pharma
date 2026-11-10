@@ -14,9 +14,11 @@ const yieldToEventLoop = () => new Promise(resolve => setImmediate(resolve));
 const catalogueGridFsStorage = {
   _handleFile(_req, file, callback) {
     const stream = getCatalogueImportBucket().openUploadStream(String(file.originalname || 'catalogue.json').slice(0, 180));
+    let size = 0;
+    file.stream.on('data', chunk => { size += chunk.length; });
     file.stream.pipe(stream);
     stream.once('error', callback);
-    stream.once('finish', () => callback(null, { id: stream.id, size: stream.length, filename: stream.filename }));
+    stream.once('finish', () => callback(null, { id: stream.id, size, filename: stream.filename }));
   },
   _removeFile(_req, file, callback) {
     if (!file.id) return callback(null);
@@ -310,11 +312,14 @@ async function processNextCatalogueImportJob() {
   if (catalogueImportWorkerBusy || mongoose.connection.readyState !== 1) return;
   catalogueImportWorkerBusy = true;
   let job;
+  let heartbeat;
   try {
     job = await CatalogueImportJob.findOneAndUpdate({
       $or: [{ status: 'QUEUED' }, { status: 'PROCESSING', leaseExpiresAt: { $lt: new Date() } }]
     }, { $set: { status: 'PROCESSING', stage: 'ANALYZING', leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000), startedAt: new Date(), errorMessage: '' }, $inc: { attempts: 1 } }, { sort: { createdAt: 1 }, new: true });
     if (!job) return;
+    heartbeat = setInterval(() => { void CatalogueImportJob.updateOne({ jobId: job.jobId, status: 'PROCESSING' }, { $set: { leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000) } }); }, 60000);
+    heartbeat.unref?.();
     const buffer = await streamToBuffer(getCatalogueImportBucket().openDownloadStream(job.fileId));
     const fakeResponse = {
       statusCode: 200, payload: null,
@@ -338,7 +343,7 @@ async function processNextCatalogueImportJob() {
     if (job) await CatalogueImportJob.updateOne({ jobId: job.jobId }, { $set: {
       status: 'FAILED', stage: 'FAILED', leaseExpiresAt: null, errorMessage: String(error.message || 'Import processing failed.').slice(0, 1000), completedAt: new Date()
     } });
-  } finally { catalogueImportWorkerBusy = false; }
+  } finally { if (heartbeat) clearInterval(heartbeat); catalogueImportWorkerBusy = false; }
 }
 export function startMedicineCatalogueImportWorker() {
   if (catalogueImportWorkerTimer) return;
