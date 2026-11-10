@@ -27,6 +27,7 @@ const nextSequence = async (collection, counterId, prefix, field, floor = 10025)
 };
 
 async function migrateCollection(Model, field, prefix, counterId, batchSize) {
+    const sequenceFloor = prefix === 'MR' ? 10024 : 10025;
     const collection = Model.collection;
     let updated = 0;
     for (;;) {
@@ -40,7 +41,7 @@ async function migrateCollection(Model, field, prefix, counterId, batchSize) {
         }).sort({ createdAt: 1, _id: 1 }).limit(batchSize).select('_id').lean();
         if (!records.length) return updated;
         for (const record of records) {
-            const publicId = await nextSequence(collection, counterId, prefix, field);
+            const publicId = await nextSequence(collection, counterId, prefix, field, sequenceFloor);
             const result = await Model.updateOne(
                 { _id: record._id, $or: [
                     { [field]: { $exists: false } }, { [field]: null }, { [field]: '' },
