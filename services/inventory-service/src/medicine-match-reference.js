@@ -38,6 +38,22 @@ export function medicineMatchIdentity(product = {}) {
 
 function medicineModel() { return mongoose.models.MedicineMaster; }
 
+// Bound concurrent candidate scans so one large queue does not flood MongoDB.
+export async function mapMedicineMatchBatch(items, concurrency, mapper) {
+  const values = Array.isArray(items) ? items : [];
+  const workerCount = Math.max(1, Math.min(values.length || 1, Number(concurrency) || 1));
+  const results = new Array(values.length);
+  let cursor = 0;
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const index = cursor++;
+      if (index >= values.length) return;
+      results[index] = await mapper(values[index], index);
+    }
+  }));
+  return results;
+}
+
 let masterVersionCache = { checkedAt: 0, updatedAt: null };
 export function invalidateMedicineMasterVersionCache() {
   masterVersionCache = { checkedAt: 0, updatedAt: null };
@@ -132,21 +148,20 @@ export async function processMedicineMatchBatch({ limit = 50 } = {}) {
   }
   if (!claimed.length) return { processed: 0, remaining: await MedicineMatchReference.countDocuments({ status: 'PENDING' }) };
   const latestMaster = await medicineModel().findOne({ isArchived: { $ne: true } }, { updatedAt: 1 }).sort({ updatedAt: -1 }).lean();
-  const operations = [];
-  for (const row of claimed) {
+  const operations = await mapMedicineMatchBatch(claimed, 8, async row => {
     try {
       const result = await resolveReference(row);
-      operations.push({ updateOne: { filter: { _id: row._id, status: 'PROCESSING' }, update: { $set: {
+      return { updateOne: { filter: { _id: row._id, status: 'PROCESSING' }, update: { $set: {
         status: result.status, medicineId: result.medicine?.medicineId || '', confidence: result.confidence || 0,
         medicineMasterUpdatedAt: latestMaster?.updatedAt || new Date(0), resolvedAt: new Date(),
         leaseExpiresAt: null, lastError: ''
-      }, $inc: { attempts: 1 } } } });
+      }, $inc: { attempts: 1 } } } };
     } catch (error) {
-      operations.push({ updateOne: { filter: { _id: row._id, status: 'PROCESSING' }, update: { $set: {
+      return { updateOne: { filter: { _id: row._id, status: 'PROCESSING' }, update: { $set: {
         status: 'PENDING', leaseExpiresAt: null, lastError: String(error.message || 'Match failed').slice(0, 300)
-      }, $inc: { attempts: 1 } } } });
+      }, $inc: { attempts: 1 } } } };
     }
-  }
+  });
   if (operations.length) await MedicineMatchReference.bulkWrite(operations, { ordered: false });
   return { processed: operations.length, remaining: await MedicineMatchReference.countDocuments({ status: 'PENDING' }) };
 }
