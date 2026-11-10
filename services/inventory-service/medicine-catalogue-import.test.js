@@ -70,6 +70,24 @@ test('Indian Medicine Dataset preserves brandIdentifier and structured master fi
   assert.equal('manufacturingDate' in result, false);
 });
 
+test('structured alternative medicines retain source identifiers and remove self references', () => {
+  const result = normalizeMedicineRecord({
+    brandIdentifier: 'B-100', brandName: 'Medicine A 10mg tablet',
+    genericIdentifier: 'G-1', genericName: 'Ingredient A 10mg tablet',
+    substanceIdentifier: ['I-1'], substanceName: ['Ingredient A'],
+    doseForm: 'Tablet', routeOfAdministrationName: ['Oral route'],
+    alternativeDrugs: [
+      { brandIdentifier: 'B-100', brandName: 'Medicine A 10mg tablet' },
+      { brandIdentifier: 'B-200', brandName: 'Medicine B 10mg tablet' },
+      { brandIdentifier: 'B-200', brandName: 'Medicine B 10mg tablet' }
+    ]
+  }, 'INDIAN_MEDICINE_DATA');
+  assert.deepEqual(result.alternatives, [{
+    medicineId: 'B-200', brandName: 'Medicine B 10mg tablet',
+    source: 'SOURCE_LINK', verification: 'UNVERIFIED'
+  }]);
+});
+
 test('retail-style dataset strips scraped price text and marks prescription metadata unverified', () => {
   const result = normalizeMedicineRecord({
     'Medicine Name': 'Examplecin 500mg',
