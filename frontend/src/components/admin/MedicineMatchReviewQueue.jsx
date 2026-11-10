@@ -93,7 +93,7 @@ export default function MedicineMatchReviewQueue() {
       addToast('Catalogue mapping approved. Store details will now use only the selected mapped fields.', 'success');
       setActiveId('');
       setDrafts(current => { const next = { ...current }; delete next[row.identityHash]; return next; });
-      await load(pagination.page || 1);
+      await load(items.length === 1 && pagination.page > 1 ? pagination.page - 1 : (pagination.page || 1));
     } catch (error) {
       addToast(error.response?.data?.message || 'Could not approve this catalogue mapping.', 'error');
     } finally { setSaving(false); }
@@ -103,6 +103,7 @@ export default function MedicineMatchReviewQueue() {
     <section className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-100 bg-violet-50/70 px-4 py-4">
         <div><h3 className="text-sm font-black text-slate-900">Possible catalogue matches · Admin mapping</h3><p className="mt-1 text-xs text-slate-600">Review up to 100 product identities per page. Select a master record and explicitly approve the fields Store may display.</p></div>
+        <button type="button" onClick={() => load(pagination.page || 1)} disabled={loading} className="min-h-10 rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-bold text-violet-700 disabled:opacity-50">{loading ? "Refreshing…" : "Refresh queue"}</button>
         <div className="rounded-xl border border-violet-200 bg-white px-3 py-2 text-right"><strong className="block text-lg tabular-nums text-violet-800">{Number(pagination.total || 0).toLocaleString()}</strong><span className="text-[10px] font-bold uppercase text-slate-500">Awaiting mapping</span></div>
       </header>
       {loading ? <p className="p-6 text-center text-sm text-slate-500">Loading review queue…</p> : items.length ? <div className="divide-y divide-slate-100">
