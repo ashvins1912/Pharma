@@ -125,3 +125,142 @@ html.dark .app-footer :where(.bg-slate-50) { background: #162236; border-color: 
     font-size: .95rem;
   }
 }
+
+
+/* Store catalogue search: input and controls remain legible at phone widths. */
+.pharma-search-panel,
+.pharma-search-panel .pharma-search-query,
+.pharma-search-panel .pharma-search-controls {
+  min-width: 0;
+  max-width: 100%;
+}
+.pharma-search-panel .pharma-search-query__input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 2.5rem;
+  font-size: .8125rem;
+}
+.pharma-search-panel .pharma-search-controls {
+  width: auto;
+  flex: 0 0 auto;
+}
+.pharma-search-panel .pharma-search-sort,
+.pharma-search-panel .pharma-search-clear {
+  min-height: 2.5rem;
+  white-space: nowrap;
+  word-break: keep-all;
+}
+@media (max-width: 639px) {
+  .pharma-search-panel .pharma-search-controls {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .pharma-search-panel .pharma-search-sort {
+    width: 100%;
+    min-width: 0;
+  }
+}
+@media (max-width: 359px) {
+  .pharma-search-panel {
+    padding: .65rem;
+  }
+  .pharma-search-panel .pharma-search-controls {
+    gap: .4rem;
+  }
+  .pharma-search-panel .pharma-search-clear {
+    padding-inline: .6rem;
+    font-size: .68rem;
+  }
+}
+
+/* Mobile header: reserve a real column for the action cluster so it cannot
+   overlap the brand; truncate the brand and hide only its secondary badge. */
+@media (max-width: 639px) {
+  .app-header__inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .4rem;
+    width: 100%;
+  }
+  .app-header__brand {
+    display: flex;
+    min-width: 0;
+    max-width: 100%;
+    gap: .4rem;
+    overflow: hidden;
+  }
+  .app-header__brand > div:first-child {
+    width: 2.125rem;
+    height: 2.125rem;
+    flex: 0 0 2.125rem;
+  }
+  .app-header__brand > div:nth-child(2) {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  .app-header__brand .quickmeds-brand-badge-container {
+    display: flex;
+    min-width: 0;
+    max-width: 100%;
+    align-items: center;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .app-header__brand .quickmeds-brand-name {
+    display: block;
+    min-width: 0;
+    max-width: clamp(5.25rem, 31vw, 8.25rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: clamp(.78rem, 3.4vw, .98rem);
+    line-height: 1.1;
+  }
+  .app-header__brand .quickmeds-role-chip,
+  .app-header__brand .quickmeds-brand-badge-container > button,
+  .app-header__brand .quickmeds-brand-badge-container > span:not(.quickmeds-brand-name) {
+    display: none !important;
+  }
+  .app-header__actions {
+    display: flex;
+    width: max-content;
+    max-width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: flex-end;
+    gap: .2rem;
+  }
+  .app-header__actions > button,
+  .app-header__actions > button.app-header__menu-toggle {
+    width: 2.125rem;
+    min-width: 2.125rem;
+    height: 2.125rem;
+    flex: 0 0 2.125rem;
+    padding: 0;
+    border-radius: .7rem;
+  }
+  .app-header__actions > button.app-header__sign-in {
+    width: auto;
+    min-width: max-content;
+    flex: 0 0 auto;
+    padding-inline: .55rem;
+  }
+}
+@media (max-width: 359px) {
+  .app-header__brand .quickmeds-brand-name {
+    max-width: 5.25rem;
+    font-size: .76rem;
+  }
+  .app-header__actions { gap: .12rem; }
+  .app-header__actions > button,
+  .app-header__actions > button.app-header__menu-toggle {
+    width: 1.95rem;
+    min-width: 1.95rem;
+    height: 1.95rem;
+    flex-basis: 1.95rem;
+  }
+}
