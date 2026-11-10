@@ -1034,7 +1034,13 @@ export const dataStore = {
             const quantity = requested.quantity;
             const product = productsById.get(medicineId);
             if (!product) throw inventoryError('The selected pharmacy does not have this medicine in its branch catalogue.', 404);
-            if (Number(product.availableQuantity || 0) < quantity) {
+            // Inventory Service reservation is the atomic stock authority.
+            // Do not reject a replay from this advisory lookup: the first request
+            // may already have reserved the same stock before its order commit or
+            // response was interrupted. The stable reservation idempotency key
+            // below safely replays that reservation; reserve() still rejects a
+            // genuinely unavailable quantity.
+            if (!idempotencyKey && Number(product.availableQuantity || 0) < quantity) {
                 throw inventoryError(`Insufficient available stock for ${product.name}.`, 409);
             }
             const requiresPrescription = Boolean(product.requiresPrescription);
