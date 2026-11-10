@@ -80,7 +80,7 @@ html.dark .app-footer__section button:hover { color: #93c5fd; }
 html.dark .app-footer :where(.bg-slate-50) { background: #162236; border-color: #334155; }
 
 /* Sign-in is a compact, single-line action; never inherit icon-button sizing. */
-.app-header__actions > .app-header__sign-in {
+.app-header__actions > button.app-header__sign-in {
   display: inline-flex;
   width: max-content;
   min-width: max-content;
@@ -99,7 +99,7 @@ html.dark .app-footer :where(.bg-slate-50) { background: #162236; border-color: 
   line-height: 1;
 }
 @media (max-width: 639px) {
-  .app-header__actions > .app-header__sign-in {
+  .app-header__actions > button.app-header__sign-in {
     width: auto;
     min-width: max-content;
     height: 2.5rem;
@@ -111,7 +111,7 @@ html.dark .app-footer :where(.bg-slate-50) { background: #162236; border-color: 
   }
 }
 @media (max-width: 379px) {
-  .app-header__actions > .app-header__sign-in {
+  .app-header__actions > button.app-header__sign-in {
     width: 2.25rem;
     min-width: 2.25rem;
     height: 2.25rem;
