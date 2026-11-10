@@ -397,7 +397,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   if (previousBatch) {
     if (previousBatch.status === 'STAGING') return res.status(409).json({ message: 'This identical dataset is still being staged. Retry shortly.' });
     const firstChunk = await CatalogueImportChunk.findOne({ batchId: previousBatch.batchId, chunkIndex: 0 }).lean();
-    return res.status(200).json({ batchId: previousBatch.batchId, dataset, status: previousBatch.status, report: previousBatch.report, sample: (firstChunk?.records || previousBatch.records || []).slice(0, 8), reused: true });
+    return res.status(200).json({ batchId: previousBatch.batchId, dataset, status: previousBatch.status, report: previousBatch.report, reportFingerprint: previousBatch.reportFingerprint, sample: (firstChunk?.records || previousBatch.records || []).slice(0, 8), reused: true });
   }
   const ids = records.map(record => record.medicineId);
   const canonicalKeys = records.map(record => record.canonicalKey).filter(Boolean);
