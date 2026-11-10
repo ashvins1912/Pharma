@@ -184,7 +184,7 @@ export function normalizeMedicineRecord(raw, dataset) {
     const brandName = text(pick(raw, 'name'));
     const sourceRecordId = text(pick(raw, 'id'));
     if (!brandName || !sourceRecordId) return null;
-    const strengthMatch = brandName.match(/\\b\\d+(?:\\.\\d+)?\\s?(?:mcg|mg|g|ml|iu|%)(?:\\b|\\/)/i);
+    const strengthMatch = brandName.match(/\b\d+(?:\.\d+)?\s?(?:mcg|mg|g|ml|iu|%)(?:\b|\/)/i);
     const strength = strengthMatch ? strengthMatch[0].replace(/\\s+/g, ' ').trim() : '';
     const dosageForm = cleanDosageForm(brandName);
     const collect = prefix => Array.from({ length: prefix === 'sideEffect' ? 42 : 5 }, (_, index) => cleanSourceValue(raw[`${prefix}${index}`])).filter(Boolean).filter((value, index, all) => all.findIndex(item => key(item) === key(value)) === index);
@@ -206,7 +206,7 @@ export function normalizeMedicineRecord(raw, dataset) {
   if (!brandName) return null;
   const productName = cleanRetailProductName(pick(raw, 'Product Name'));
   const composition = text(pick(raw, 'Composition'));
-  const packMatch = productName.match(/\\b(?:pack of\\s*)?\\d+(?:\\.\\d+)?\\s?(?:tablets?|tabs?|capsules?|caps?|ml|g|gm|strips?|sachets?|vials?)\\b/i);
+  const packMatch = productName.match(/\b(?:pack of\s*)?\d+(?:\.\d+)?\s?(?:tablets?|tabs?|capsules?|caps?|ml|g|gm|strips?|sachets?|vials?)\b/i);
   const packSize = packMatch ? packMatch[0].replace(/\\s+/g, ' ').trim() : '';
   const medicineType = text(pick(raw, 'Type of Medicine'));
   const dosageForm = cleanDosageForm(medicineType);
