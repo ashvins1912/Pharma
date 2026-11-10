@@ -61,7 +61,7 @@ export function invalidateMedicineMasterVersionCache() {
 
 async function getMedicineMasterVersion() {
   if (Date.now() - masterVersionCache.checkedAt < 30_000) return masterVersionCache.updatedAt;
-  const latest = await medicineModel().findOne({ isArchived: { $ne: true } }, { updatedAt: 1 }).sort({ updatedAt: -1 }).lean();
+  const latest = await medicineModel().findOne({ isArchived: { $ne: true }, storeApproved: true }, { updatedAt: 1 }).sort({ updatedAt: -1 }).lean();
   masterVersionCache = { checkedAt: Date.now(), updatedAt: latest?.updatedAt || null };
   return masterVersionCache.updatedAt;
 }
@@ -80,7 +80,7 @@ async function resolveReference(reference) {
     const prefix = '^' + escapeRegex(firstToken);
     return ['brandName', 'productName', 'genericName', 'composition'].map(field => ({ [field]: { $regex: prefix, $options: 'i' } }));
   });
-  const candidates = await medicineModel().find({ isArchived: { $ne: true }, $or: clauses }, {
+  const candidates = await medicineModel().find({ isArchived: { $ne: true }, storeApproved: true, $or: clauses }, {
     _id: 0, medicineId: 1, brandName: 1, productName: 1, genericName: 1, composition: 1,
     strength: 1, packSize: 1, dosageForm: 1, medicineType: 1, manufacturer: 1,
     therapeuticClass: 1, chemicalClass: 1, actionClass: 1, routes: 1, indications: 1,
@@ -109,7 +109,7 @@ export async function getOrResolveMedicineMatch(product) {
   if (reference && reference.status !== 'PENDING' && reference.medicineMasterUpdatedAt
     && (!masterVersion || reference.medicineMasterUpdatedAt >= masterVersion)) {
     if (reference.medicineId) {
-      const medicine = await medicineModel().findOne({ medicineId: reference.medicineId, isArchived: { $ne: true } }, {
+      const medicine = await medicineModel().findOne({ medicineId: reference.medicineId, isArchived: { $ne: true }, storeApproved: true }, {
         _id: 0, medicineId: 1, brandName: 1, productName: 1, genericName: 1, composition: 1,
         strength: 1, packSize: 1, dosageForm: 1, medicineType: 1, manufacturer: 1,
         therapeuticClass: 1, chemicalClass: 1, actionClass: 1, routes: 1, indications: 1,
@@ -147,7 +147,7 @@ export async function processMedicineMatchBatch({ limit = 50 } = {}) {
     claimed.push(row);
   }
   if (!claimed.length) return { processed: 0, remaining: await MedicineMatchReference.countDocuments({ status: 'PENDING' }) };
-  const latestMaster = await medicineModel().findOne({ isArchived: { $ne: true } }, { updatedAt: 1 }).sort({ updatedAt: -1 }).lean();
+  const latestMaster = await medicineModel().findOne({ isArchived: { $ne: true }, storeApproved: true }, { updatedAt: 1 }).sort({ updatedAt: -1 }).lean();
   const operations = await mapMedicineMatchBatch(claimed, 8, async row => {
     try {
       const result = await resolveReference(row);
