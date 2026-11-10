@@ -744,7 +744,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           {fulfillmentPlan?.customerDecisionRequired && (
             <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
               <div>
-                <h3 className="text-sm font-black text-amber-950">Smart stock availability</h3>
+                <h3 className="text-sm font-black text-amber-950">{t('stockAvailability')}</h3>
                 <p className="mt-1 text-xs text-amber-900">{t('stockAvailabilityDesc')}</p>
 
               </div>
@@ -766,7 +766,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                   {line.alternatives?.map(alternative => (
                     <label key={alternative.productId} className="flex items-start gap-2 rounded-lg border border-emerald-100 p-2 text-xs">
                       <input type="radio" name={`stock-${line.productId}`} disabled={quoteLoading || fulfillmentLoading || alternative.requiresPharmacistApproval || alternative.availableQuantity < line.waitingQuantity} checked={alternativeChoices[line.productId] === alternative.productId} onChange={() => { setAlternativeChoices(current => ({ ...current, [line.productId]: alternative.productId })); setFulfillmentConfirmed(false); setCheckoutKey(''); }}/>
-                      <span className="flex-1"><strong>{alternative.name}</strong><br/><span className="text-slate-500">{alternative.brand} · Available {alternative.availableQuantity}</span><br/><span className="font-bold text-emerald-700">₹{alternative.discountedUnitPrice.toFixed(2)} each</span>{alternative.listPrice > alternative.discountedUnitPrice ? <span className="ml-1 text-slate-400 line-through">₹{alternative.listPrice.toFixed(2)}</span> : null}{alternative.discountPercentage > 0 ? <span className="ml-1 text-emerald-700">({alternative.discountPercentage}% savings)</span> : null}{alternative.requiresPharmacistApproval ? <span className="block mt-1 text-amber-700">{t('pharmacistApprovalRequired')}</span> : null}{alternative.availableQuantity < line.waitingQuantity ? <span className="block mt-1 text-amber-700">{t('notEnoughStockRemaining')}</span> : null}</span>
+                      <span className="flex-1"><strong>{alternative.name}</strong><br/><span className="text-slate-500">{alternative.brand} · {t('available')} {alternative.availableQuantity}</span><br/><span className="font-bold text-emerald-700">₹{alternative.discountedUnitPrice.toFixed(2)} {t('each')}</span>{alternative.listPrice > alternative.discountedUnitPrice ? <span className="ml-1 text-slate-400 line-through">₹{alternative.listPrice.toFixed(2)}</span> : null}{alternative.discountPercentage > 0 ? <span className="ml-1 text-emerald-700">({alternative.discountPercentage}% savings)</span> : null}{alternative.requiresPharmacistApproval ? <span className="block mt-1 text-amber-700">{t('pharmacistApprovalRequired')}</span> : null}{alternative.availableQuantity < line.waitingQuantity ? <span className="block mt-1 text-amber-700">{t('notEnoughStockRemaining')}</span> : null}</span>
                     </label>
                   ))}
                 </div>
@@ -774,7 +774,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
               <div className="flex items-center justify-between gap-3">
                 <label htmlFor="stock-wait-days" className="text-xs font-bold text-amber-950">{t('waitOriginalStock')}</label>
                 <select id="stock-wait-days" value={waitDays} disabled={quoteLoading || fulfillmentLoading} onChange={event => { setWaitDays(Number(event.target.value)); setFulfillmentConfirmed(false); }} className="rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs">
-                  {[1,2,3,4,5].map(days => <option key={days} value={days}>{days} day{days > 1 ? 's' : ''}</option>)}
+                  {[1,2,3,4,5].map(days => <option key={days} value={days}>{days} {days > 1 ? t('days') : t('day')}</option>)}
                 </select>
               </div>
               <p className="text-[10px] text-amber-900">{t('matchingAlternativesNotice')}</p>
