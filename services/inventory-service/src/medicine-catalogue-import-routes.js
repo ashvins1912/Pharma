@@ -27,6 +27,48 @@ const pick = (record, ...names) => {
   }
   return undefined;
 };
+const levenshteinRatio = (left, right) => {
+  const a = key(left), b = key(right);
+  if (!a && !b) return 100;
+  if (!a || !b) return 0;
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1) current[j] = Math.min(current[j - 1] + 1, previous[j] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    previous = current;
+  }
+  return Math.round((1 - previous[b.length] / Math.max(a.length, b.length)) * 100);
+};
+const tokenSortRatio = (left, right) => levenshteinRatio(key(left).split(' ').filter(Boolean).sort().join(' '), key(right).split(' ').filter(Boolean).sort().join(' '));
+export function scoreMedicineMatch(incoming, candidate) {
+  const nameScore = tokenSortRatio(incoming.brandName, candidate.brandName);
+  const aComposition = key(incoming.composition || (incoming.ingredients || []).join(' '));
+  const bComposition = key(candidate.composition || (candidate.ingredients || []).join(' '));
+  const compositionScore = aComposition && bComposition ? tokenSortRatio(aComposition, bComposition) : null;
+  const aStrength = key(incoming.strength), bStrength = key(candidate.strength);
+  const aForm = key(incoming.dosageForm), bForm = key(candidate.dosageForm);
+  const strengthConflict = Boolean(aStrength && bStrength && aStrength !== bStrength);
+  const formConflict = Boolean(aForm && bForm && aForm !== bForm);
+  const compositionConflict = compositionScore !== null && compositionScore < 90;
+  const blocked = strengthConflict || formConflict || compositionConflict;
+  const genericScore = incoming.genericName && candidate.genericName ? tokenSortRatio(incoming.genericName, candidate.genericName) : null;
+  const score = Math.round(nameScore * 0.65 + (compositionScore === null ? 0 : compositionScore * 0.20) +
+    (aStrength && bStrength && !strengthConflict ? 10 : 0) + (aForm && bForm && !formConflict ? 5 : 0));
+  const autoMerge = !blocked && compositionScore !== null && compositionScore >= 94 && nameScore >= 92 && score >= 96 && (!genericScore || genericScore >= 80);
+  const review = !blocked && nameScore >= 82 && score >= 82;
+  return {
+    score: Math.min(100, score), nameScore, compositionScore, genericScore,
+    decision: blocked ? 'BLOCKED_CONFLICT' : autoMerge ? 'AUTO_MERGE' : review ? 'MANUAL_REVIEW' : 'NO_MATCH',
+    warnings: [
+      ...(strengthConflict ? ['STRENGTH_CONFLICT'] : []),
+      ...(formConflict ? ['DOSAGE_FORM_CONFLICT'] : []),
+      ...(compositionConflict ? ['COMPOSITION_CONFLICT'] : []),
+      ...(compositionScore === null ? ['COMPOSITION_MISSING_REVIEW_REQUIRED'] : []),
+      ...(!incoming.manufacturer || !candidate.manufacturer ? ['MANUFACTURER_NOT_COMPARABLE'] : [])
+    ]
+  };
+}
+const fuzzyCandidatePrefixes = records => [...new Set(records.map(item => key(item.brandName).split(' ')[0]).filter(value => value.length >= 3))].slice(0, 120);
 const bool = value => typeof value === 'boolean' ? value : ['true', 'yes', '1'].includes(text(value).toLowerCase());
 const cleanRetailProductName = value => text(value).split(/\b(?:mrp|price|inclusive of all taxes|prescription required|prescription only)\b|₹|\bRs\.?\s*\d/i)[0].replace(/[|,;\-–]+\s*$/, '').trim();
 const cleanDosageForm = value => {
@@ -411,8 +453,18 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   const nameCandidates = names.length
     ? await MedicineMaster.find({ brandName: { $in: names } }, candidateProjection).collation({ locale: 'en', strength: 2 }).lean()
     : [];
+  const fuzzyPrefixes = fuzzyCandidatePrefixes(records);
+  const fuzzyCandidates = fuzzyPrefixes.length
+    ? await MedicineMaster.find({ $or: fuzzyPrefixes.map(prefix => ({ brandName: { $regex: '^' + prefix.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\  const nameCandidates = names.length
+    ? await MedicineMaster.find({ brandName: { $in: names } }, candidateProjection).collation({ locale: 'en', strength: 2 }).lean()
+    : [];
   const existingByMongoId = new Map();
-  for (const candidate of [...exactCandidates, ...nameCandidates]) existingByMongoId.set(String(candidate._id), candidate);
+  for (const candidate of [...exactCandidates, ...nameCandidates]) existingByMongoId.set(String(candidate._id), candidate);'), $options: 'i' } })) },
+      { medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1, ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1 })
+      .limit(5000).lean()
+    : [];
+  const existingByMongoId = new Map();
+  for (const candidate of [...exactCandidates, ...nameCandidates, ...fuzzyCandidates]) existingByMongoId.set(String(candidate._id), candidate);
   const existing = [...existingByMongoId.values()];
   const existingIds = new Set(existing.map(item => item.medicineId));
   const existingKeyCounts = new Map();
@@ -421,9 +473,26 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   const existingNameCounts = new Map();
   for (const item of existing) { const nameKey = key(item.brandName); existingNameCounts.set(nameKey, (existingNameCounts.get(nameKey) || 0) + 1); }
   const updates = records.filter(item => existingIds.has(item.medicineId) || (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeys.has(item.canonicalKey)) || (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1)).length;
+  for (const item of records) {
+    const exact = existing.find(candidate => candidate.medicineId === item.medicineId) ||
+      (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 ? existing.find(candidate => candidate.canonicalKey === item.canonicalKey) : null) ||
+      (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1 ? existing.find(candidate => key(candidate.brandName) === key(item.brandName)) : null);
+    if (exact) { item.reconciliationMatch = { targetMedicineId: exact.medicineId, method: 'EXACT_OR_CANONICAL', score: 100, decision: 'AUTO_MERGE', warnings: [] }; continue; }
+    let best = null;
+    for (const candidate of existing) {
+      const scored = scoreMedicineMatch(item, candidate);
+      if (!best || scored.score > best.score) best = { candidate, ...scored };
+    }
+    if (best && ['AUTO_MERGE', 'MANUAL_REVIEW'].includes(best.decision)) {
+      item.reconciliationMatch = { targetMedicineId: best.candidate.medicineId, method: 'FUZZY_TOKEN_SORT', score: best.score, nameScore: best.nameScore, compositionScore: best.compositionScore, decision: best.decision, warnings: best.warnings };
+    }
+  }
+  const fuzzyAutoMerge = records.filter(item => item.reconciliationMatch?.method === 'FUZZY_TOKEN_SORT' && item.reconciliationMatch.decision === 'AUTO_MERGE').length;
+  const fuzzyManualReview = records.filter(item => item.reconciliationMatch?.decision === 'MANUAL_REVIEW').length;
   const report = {
     sourceRecords, normalizedRecords: records.length, rejectedRecords: rejected,
-    duplicatesRemoved, newRecords: records.length - updates, updateCandidates: updates,
+    duplicatesRemoved, newRecords: Math.max(0, records.length - updates - fuzzyAutoMerge - fuzzyManualReview), updateCandidates: updates + fuzzyAutoMerge,
+    fuzzyAutoMerge, fuzzyManualReview, unmatchedRecords: records.length - updates - fuzzyAutoMerge - fuzzyManualReview,
     needsReview: records.filter(item => item.dataQualityStatus === 'NEEDS_REVIEW').length,
     partialRecords: records.filter(item => item.dataQualityStatus === 'PARTIAL').length,
     missingComposition: records.filter(item => !item.composition).length,
@@ -452,7 +521,12 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     partialQualityRecords: records.filter(item => item.qualityGrade === 'PARTIAL').length,
     needsReviewQualityRecords: records.filter(item => item.qualityGrade === 'NEEDS_REVIEW').length,
     averageQualityScore: records.length ? Math.round(records.reduce((sum, item) => sum + item.qualityScore, 0) / records.length) : 0,
-    qualityIssueCounts: records.reduce((counts, item) => { for (const issue of item.qualityIssues) counts[issue] = (counts[issue] || 0) + 1; return counts; }, {})
+    qualityIssueCounts: records.reduce((counts, item) => { for (const issue of item.qualityIssues) counts[issue] = (counts[issue] || 0) + 1; return counts; }, {}),
+    fuzzyMatchExamples: records.filter(item => item.reconciliationMatch?.method === 'FUZZY_TOKEN_SORT').slice(0, 25).map(item => ({
+      incomingMedicine: item.brandName, matchedMedicineId: item.reconciliationMatch.targetMedicineId,
+      score: item.reconciliationMatch.score, decision: item.reconciliationMatch.decision, warnings: item.reconciliationMatch.warnings
+    })),
+    fuzzyCandidateScanTruncated: fuzzyPrefixes.length >= 120 || fuzzyCandidates.length >= 5000
   };
   const reportFingerprint = hash(JSON.stringify(report));
   const chunks = [];
@@ -522,7 +596,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
     }
     for (const recordChunk of recordChunks) for (let offset = 0; offset < recordChunk.length; offset += 250) {
       const chunk = recordChunk.slice(offset, offset + 250);
-      const ids = chunk.map(item => item.medicineId);
+      const ids = [...new Set(chunk.flatMap(item => [item.medicineId, item.reconciliationMatch?.targetMedicineId].filter(Boolean)))];
       const keys = chunk.map(item => item.canonicalKey).filter(Boolean);
       const names = batch.dataset === 'MEDICINES_PART_1' ? [...new Set(chunk.filter(item => item.safeNameMatch && incomingNameCounts.get(key(item.brandName)) === 1).map(item => item.brandName))] : [];
       const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: keys } }, ...(names.length ? [{ $expr: { $in: [{ $toLower: '$brandName' }, names.map(name => name.toLowerCase())] } }] : [])] }).lean();
@@ -536,8 +610,10 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
       const operations = chunk.map(item => {
         const canonicalMatch = item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 ? byKey.get(item.canonicalKey) : null;
         const nameMatch = item.safeNameMatch && incomingNameCounts.get(key(item.brandName)) === 1 ? byName.get(key(item.brandName)) : null;
-        const current = byId.get(item.medicineId) || canonicalMatch || nameMatch || null;
-        const targetId = batch.dataset === 'INDIAN_MEDICINE_DATA' ? item.medicineId : (current?.medicineId || item.medicineId);
+        const fuzzyTarget = item.reconciliationMatch?.method === 'FUZZY_TOKEN_SORT' && item.reconciliationMatch.decision === 'AUTO_MERGE'
+          ? byId.get(item.reconciliationMatch.targetMedicineId) : null;
+        const current = byId.get(item.medicineId) || fuzzyTarget || canonicalMatch || nameMatch || null;
+        const targetId = current?.medicineId || item.medicineId;
         const fields = ['brandName','genericName','genericId','sourceLicenseStatusValue','drugFormId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType','sourceImageUrl'];
         const set = {
           medicineId: targetId,
@@ -573,7 +649,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
             filter: current ? { _id: current._id } : { medicineId: targetId },
             update: {
               $set: set,
-              $addToSet: { sourceDatasets: item.sourceDataset, sourceRecordIds: { $each: item.sourceRecordIds?.length ? item.sourceRecordIds : [item.sourceRecordId] }, ...(current && current.medicineId !== targetId ? { legacyMedicineIds: current.medicineId } : {}) }
+              $addToSet: { sourceDatasets: item.sourceDataset, sourceRecordIds: { $each: item.sourceRecordIds?.length ? item.sourceRecordIds : [item.sourceRecordId] }, ...(current && current.medicineId !== item.medicineId ? { legacyMedicineIds: item.medicineId } : {}) }
             },
             upsert: true
           }
