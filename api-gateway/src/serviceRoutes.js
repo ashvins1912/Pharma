@@ -178,6 +178,8 @@ export function createServiceRouters(gatewayConfig = config) {
   medicineMasterRouter.get('/imports/jobs/:jobId', catalogueImportAuth, catalogueImport);
   medicineMasterRouter.post('/imports/jobs/:jobId/retry', catalogueImportAuth, catalogueImport);
   medicineMasterRouter.post('/imports/jobs/:jobId/restart', catalogueImportAuth, catalogueImport);
+  medicineMasterRouter.get('/imports/:batchId/mapping-queue', catalogueImportAuth, catalogueImport);
+  medicineMasterRouter.post('/imports/:batchId/map', catalogueImportAuth, catalogueImport);
   medicineMasterRouter.get('/imports/:batchId/records', catalogueImportAuth, catalogueImport);
   medicineMasterRouter.get('/imports/:batchId', catalogueImportAuth, catalogueImport);
   medicineMasterRouter.post('/imports/:batchId/approve', catalogueImportAuth, catalogueImport);
