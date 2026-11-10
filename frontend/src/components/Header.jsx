@@ -131,6 +131,7 @@ export default function Header({
           {/* Left: Logo & Pharmacy Brand */}
           <div
             onClick={() => setActiveTab('store')}
+              aria-current={activeTab === 'store' ? 'page' : undefined}
             className="quickmeds-brand-anchor app-header__brand" role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setActiveTab('store'); } }}
           >
             <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl sm:rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-base sm:text-xl shadow-md shadow-blue-500/20 shrink-0">
@@ -203,6 +204,7 @@ export default function Header({
                   <button
                     type="button"
                     onClick={() => setActiveTab('orders')}
+              aria-current={activeTab === 'orders' ? 'page' : undefined}
                     className={`app-header__nav-item h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                       activeTab === 'orders'
                         ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs'
@@ -217,6 +219,7 @@ export default function Header({
                   <button
                     type="button"
                     onClick={() => setActiveTab('requests')}
+              aria-current={activeTab === 'requests' ? 'page' : undefined}
                     className={`h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 relative ${
                       activeTab === 'requests'
                         ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs'
@@ -236,6 +239,7 @@ export default function Header({
                   <button
                     type="button"
                     onClick={() => setActiveTab('addresses')}
+              aria-current={activeTab === 'addresses' ? 'page' : undefined}
                     className={`app-header__nav-item h-9 sm:h-10 px-3.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                       activeTab === 'addresses'
                         ? 'bg-blue-50 text-blue-700 font-extrabold shadow-xs'
