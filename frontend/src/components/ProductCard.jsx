@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
-export default function ProductCard({ med }) {
+export default function ProductCard({ med, onSelectMedicine }) {
   const { t, language } = useLanguage();
   const { cart, addToCart, updateQuantity, openRequestModal } = useApp();
   const { user } = useAuth();
@@ -59,13 +59,19 @@ export default function ProductCard({ med }) {
 
   return (
     <div
-      className={`pharma-product-card bg-white border rounded-xl sm:rounded-2xl p-2.5 sm:p-4 flex flex-col justify-between transition-all duration-200 h-full ${
+      className={`pharma-product-card group bg-white border rounded-xl sm:rounded-2xl p-2.5 sm:p-4 flex flex-col justify-between transition-all duration-200 h-full focus-within:ring-2 focus-within:ring-blue-500/30 ${
         isOut
           ? 'border-slate-200 opacity-60 bg-slate-50/50'
           : 'border-slate-200 hover:border-blue-300 hover:shadow-md hover:-translate-y-0.5'
       }`}
     >
-      <div>
+      <button
+        type="button"
+        onClick={() => onSelectMedicine?.(med)}
+        aria-label={`View details for ${med.name || med.brand || 'medicine'}`}
+        aria-haspopup="dialog"
+        className="w-full min-w-0 flex-1 bg-transparent p-0 text-left cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+      >
         {/* Compact Product Image Container */}
         <div className="relative w-full h-28 sm:h-36 md:h-40 bg-gradient-to-tr from-slate-100 to-blue-50/40 rounded-lg sm:rounded-xl overflow-hidden mb-2 sm:mb-3 flex items-center justify-center">
           {displayImage && !imageError ? (
@@ -146,7 +152,7 @@ export default function ProductCard({ med }) {
             {t('expires')} {new Date(med.expiryDate).toLocaleDateString(language)}
           </p>
         )}
-      </div>
+      </button>
 
       {/* Card Footer: Always aligned at bottom */}
       <div className="pt-2 sm:pt-3 border-t border-slate-100 flex items-center justify-between gap-1.5 mt-auto">
