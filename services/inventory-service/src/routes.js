@@ -28,6 +28,7 @@ import {
   transitionReservation
 } from './inventory.js';
 import { requireServiceScope } from './service-auth.js';
+import { publishInventoryChanged } from './realtimeEvents.js';
 
 const router = express.Router();
 const asyncHandler = handler => (req, res, next) => {
@@ -60,36 +61,42 @@ const upload = multer({
 });
 
 router.post('/products', requireServiceScope('inventory.write'), asyncHandler(async (req, res) => {
+  const scope = getInventoryScope(req, req.body || {});
   const result = await createProduct({
     product: req.body?.product || req.body || {},
-    ...getInventoryScope(req, req.body || {}),
+    ...scope,
     actor: req.service.userId || req.service.name,
     requestId: req.requestId,
     correlationId: req.correlationId
   });
+  await publishInventoryChanged({ ...scope, reason: 'product.created' });
   return res.status(201).json(result);
 }));
 
 router.patch('/products/:productId', requireServiceScope('inventory.write'), asyncHandler(async (req, res) => {
+  const scope = getInventoryScope(req, req.body || {});
   const result = await updateProduct({
     productId: req.params.productId,
     product: req.body || {},
-    ...getInventoryScope(req, req.body || {}),
+    ...scope,
     actor: req.service.userId || req.service.name,
     requestId: req.requestId,
     correlationId: req.correlationId
   });
+  await publishInventoryChanged({ ...scope, reason: 'product.updated', entityId: req.params.productId });
   return res.json(result);
 }));
 
 router.delete('/products/:productId', requireServiceScope('inventory.write'), asyncHandler(async (req, res) => {
+  const scope = getInventoryScope(req, req.query || {});
   const result = await archiveProduct({
     productId: req.params.productId,
-    ...getInventoryScope(req, req.query || {}),
+    ...scope,
     actor: req.service.userId || req.service.name,
     requestId: req.requestId,
     correlationId: req.correlationId
   });
+  await publishInventoryChanged({ ...scope, reason: 'product.archived', entityId: req.params.productId });
   return res.json(result);
 }));
 
@@ -203,46 +210,54 @@ router.post('/bulk/route-lookup', requireServiceScope('inventory.read'), asyncHa
 
 router.post('/reservations', requireServiceScope('inventory.reserve'), asyncHandler(async (req, res) => {
   const idempotencyKey = req.get('idempotency-key') || req.body?.idempotencyKey;
+  const scope = getInventoryScope(req, req.body || {});
   const result = await reserveInventory({
     ...req.body,
-    ...getInventoryScope(req, req.body || {}),
+    ...scope,
     idempotencyKey,
     actor: req.service.name,
     requestId: req.requestId,
     correlationId: req.correlationId
   });
+  await publishInventoryChanged({ ...scope, reason: 'inventory.reserved', entityId: result.reservationId || null });
   return res.status(201).json({ success: true, ...result });
 }));
 
 router.post('/reservations/:reservationId/release', requireServiceScope('inventory.release'), asyncHandler(async (req, res) => {
+  const scope = getInventoryScope(req, req.body || {});
   const result = await transitionReservation(req.params.reservationId, 'RELEASED', {
-    ...getInventoryScope(req, req.body || {}),
+    ...scope,
     actor: req.service.name,
     requestId: req.requestId,
     correlationId: req.correlationId
   });
+  await publishInventoryChanged({ ...scope, reason: 'inventory.reservation_released', entityId: req.params.reservationId });
   return res.json(result);
 }));
 
 router.post('/reservations/:reservationId/deduct', requireServiceScope('inventory.deduct'), asyncHandler(async (req, res) => {
+  const scope = getInventoryScope(req, req.body || {});
   const result = await transitionReservation(req.params.reservationId, 'DEDUCTED', {
-    ...getInventoryScope(req, req.body || {}),
+    ...scope,
     actor: req.service.name,
     requestId: req.requestId,
     correlationId: req.correlationId
   });
+  await publishInventoryChanged({ ...scope, reason: 'inventory.reservation_deducted', entityId: req.params.reservationId });
   return res.json(result);
 }));
 
 router.post('/adjust', requireServiceScope('inventory.adjust'), asyncHandler(async (req, res) => {
+  const scope = getInventoryScope(req, req.body || {});
   const result = await adjustInventory({
     ...req.body,
-    ...getInventoryScope(req, req.body || {}),
+    ...scope,
     operationKey: req.get('idempotency-key') || req.body?.operationKey,
     actor: req.service.userId || req.service.name,
     requestId: req.requestId,
     correlationId: req.correlationId
   });
+  await publishInventoryChanged({ ...scope, reason: 'inventory.adjusted', entityId: result.productId || result.sku || null });
   return res.json(result);
 }));
 
@@ -415,6 +430,7 @@ router.post('/imports/batches/:batchId/rollback', requireServiceScope('inventory
     actor: req.service.userId || req.service.name
   });
   if (!batch) return res.status(404).json({ message: 'Import batch was not found.' });
+  await publishInventoryChanged({ tenantId, branchId, reason: 'inventory.import_rolled_back', entityId: batch.batchId });
   return res.json({ success: true, batchId: batch.batchId, status: batch.status, revertedAt: batch.revertedAt || null });
 }));
 
