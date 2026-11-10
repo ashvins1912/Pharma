@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import { randomUUID } from 'node:crypto';
 
 const medicineItemSchema = new mongoose.Schema({
     medicineId: { type: mongoose.Schema.Types.Mixed, required: false },
@@ -27,7 +26,7 @@ const orderItemSchema = new mongoose.Schema({
 }, { _id: false, strict: false });
 
 const orderSchema = new mongoose.Schema({
-    orderNumber: { type: String, unique: true, sparse: true, default: () => `ORD-${randomUUID()}` },
+    orderNumber: { type: String, unique: true, sparse: true },
     customerId: { type: String, index: true },
     tenantId: { type: String, default: null, index: true },
     branchId: { type: String, default: null, index: true },
