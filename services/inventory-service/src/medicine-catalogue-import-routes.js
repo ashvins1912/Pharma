@@ -402,6 +402,9 @@ const catalogueImportSchema = new mongoose.Schema({
   reportFingerprint: { type: String, default: '' },
   sourceBatchIds: { type: [String], default: [] },
   supersededByBatchId: { type: String, default: '' },
+  isHidden: { type: Boolean, default: false, index: true },
+  hiddenAt: { type: Date, default: null },
+  hiddenBy: { type: String, default: '' },
   approvedBy: { type: String, default: '' },
   approvedAt: { type: Date, default: null }
 }, { timestamps: true });
@@ -1100,12 +1103,34 @@ router.get('/imports/jobs/:jobId', asyncHandler(async (req, res) => {
     errorMessage: job.errorMessage, createdAt: job.createdAt, updatedAt: job.updatedAt, completedAt: job.completedAt
   });
 }));
+router.post('/imports/remove-selected', asyncHandler(async (req, res) => {
+  const batchIds = [...new Set((Array.isArray(req.body?.batchIds) ? req.body.batchIds : []).map(value => text(value).slice(0, 120)).filter(Boolean))];
+  if (!batchIds.length) return res.status(400).json({ message: 'Select at least one enrichment batch to remove.' });
+  if (batchIds.length > 10) return res.status(400).json({ message: 'You can remove up to 10 enrichment batches at a time.' });
+  const batches = await CatalogueImport.find({ batchId: { $in: batchIds }, isHidden: { $ne: true } });
+  if (batches.length !== batchIds.length) return res.status(404).json({ message: 'One or more selected batches were not found or have already been removed. Refresh the batch history and try again.' });
+  const protectedBatch = batches.find(batch => batch.status !== 'READY' || batch.approvedAt || (batch.sourceBatchIds || []).length > 0 || batch.supersededByBatchId);
+  if (protectedBatch) return res.status(409).json({
+    message: 'Only standalone, unapproved READY enrichment batches can be removed. Approved, merged, superseded, publishing or published batches are retained for audit and recovery.',
+    batchId: protectedBatch.batchId,
+    status: protectedBatch.status
+  });
+  const now = new Date();
+  const actor = req.service?.userId || req.service?.name || 'platform-admin';
+  const result = await CatalogueImport.updateMany(
+    { batchId: { $in: batchIds }, status: 'READY', approvedAt: null, sourceBatchIds: { $in: [[], null] }, supersededByBatchId: '', isHidden: { $ne: true } },
+    { $set: { isHidden: true, hiddenAt: now, hiddenBy: actor } }
+  );
+  if (result.modifiedCount !== batchIds.length) return res.status(409).json({ message: 'Some batches changed while removal was in progress. Refresh the history and retry.' });
+  return res.json({ removedCount: result.modifiedCount, batchIds, message: 'Selected enrichment batches were removed from Recent enrichment batches. Their source data and audit history are retained.' });
+}));
+
 router.get('/imports', asyncHandler(async (req, res) => {
   const page = Math.max(1, Math.min(1000, Number.parseInt(req.query.page || '1', 10) || 1));
   const limit = Math.max(1, Math.min(50, Number.parseInt(req.query.limit || '10', 10) || 10));
   const [items, total, jobs] = await Promise.all([
-    CatalogueImport.find({}, { batchId: 1, dataset: 1, fileName: 1, status: 1, recordCount: 1, report: 1, publishedCount: 1, approvedAt: 1, approvedBy: 1, errorMessage: 1, sourceBatchIds: 1, supersededByBatchId: 1, createdAt: 1 }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
-    CatalogueImport.countDocuments({}),
+    CatalogueImport.find({ isHidden: { $ne: true } }, { batchId: 1, dataset: 1, fileName: 1, status: 1, recordCount: 1, report: 1, publishedCount: 1, approvedAt: 1, approvedBy: 1, errorMessage: 1, sourceBatchIds: 1, supersededByBatchId: 1, createdAt: 1 }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+    CatalogueImport.countDocuments({ isHidden: { $ne: true } }),
     CatalogueImportJob.find({ status: { $in: ['QUEUED', 'PROCESSING', 'FAILED'] } }, { jobId: 1, batchId: 1, dataset: 1, fileName: 1, status: 1, stage: 1, progressPercent: 1, processedRecords: 1, totalRecords: 1, attempts: 1, errorMessage: 1, createdAt: 1 }).sort({ createdAt: -1 }).limit(8).lean()
   ]);
   return res.json({ items, jobs, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
@@ -1134,7 +1159,7 @@ router.get('/imports/:batchId/records', asyncHandler(async (req, res) => {
 }));
 
 router.get('/imports/:batchId', asyncHandler(async (req, res) => {
-  const batch = await CatalogueImport.findOne({ batchId: req.params.batchId }).lean();
+  const batch = await CatalogueImport.findOne({ batchId: req.params.batchId, isHidden: { $ne: true } }).lean();
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
   return res.json({ batchId: batch.batchId, dataset: batch.dataset, fileName: batch.fileName, status: batch.status, report: batch.report, reportFingerprint: batch.reportFingerprint, approvedBy: batch.approvedBy, approvedAt: batch.approvedAt, publishedCount: batch.publishedCount, errorMessage: batch.errorMessage });
 }));
