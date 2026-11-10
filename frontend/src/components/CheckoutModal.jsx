@@ -7,7 +7,7 @@ import apiClient from '../api/apiClient';
 import AddressManager from './AddressManager';
 import { useTenant } from '../context/TenantContext';
 import { useLanguage } from '../context/LanguageContext';
-import { buildCheckoutWaitlistRequest, buildFulfillmentQuoteItems, getCheckoutQuoteEffectAction } from '../utils/checkoutFulfillment.js';
+import { buildCheckoutWaitlistRequest, buildFulfillmentQuoteItems, getCheckoutQuoteEffectAction, isCheckoutOutcomeAmbiguous } from '../utils/checkoutFulfillment.js';
 
 export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const { t } = useLanguage();
@@ -379,7 +379,10 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       const checkoutIdempotencyKey = checkoutKey || (window.crypto?.randomUUID?.() || `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`);
       if (!checkoutKey) setCheckoutKey(checkoutIdempotencyKey);
       const res = await apiClient.post('/api/orders/checkout', formData, {
-        headers: { 'Idempotency-Key': checkoutIdempotencyKey }
+        headers: { 'Idempotency-Key': checkoutIdempotencyKey },
+        // Checkout includes an Inventory Service reservation and a MongoDB
+        // transaction; the shared apiClient default (10s) is too short.
+        timeout: 90_000
       });
       setRestockError('');
       if (createdWaitlistCaseId) {
@@ -392,7 +395,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             prescriptionUrl: res.data.order?.prescriptionUrl || null,
             prescriptionId: res.data.order?.prescriptionId || null,
             patientPuid: patientPuid || null
-          });
+          }, { timeout: 30_000 });
           waitlistLinkedToOrder = true;
         } catch (linkError) {
           waitlistLinkedToOrder = false;
@@ -425,16 +428,24 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       onClose();
       if (onOrderPlaced) onOrderPlaced(res.data.order || { _id: res.data.orderId, finalTotal });
       } catch (err) {
-        if (createdWaitlistCaseId) {
-          await apiClient.post(`/api/orders/fulfillment/waitlist/${createdWaitlistCaseId}/cancel`).catch(() => {});
+        const outcomeAmbiguous = isCheckoutOutcomeAmbiguous(err);
+        if (createdWaitlistCaseId && !outcomeAmbiguous) {
+          // A definite rejection means no order was created; clean up the
+          // pre-created waitlist. Never cancel it after a timeout/network loss:
+          // the server may have committed the order before the response was lost.
+          await apiClient.post(`/api/orders/fulfillment/waitlist/${createdWaitlistCaseId}/cancel`, {}, { timeout: 30_000 }).catch(() => {});
           setWaitlistKey('');
         }
-        setErrorMsg(err.response?.data?.message || err.message || "Checkout failed. Please verify cart items.");
-      if (err.response?.status === 409) {
-        setFulfillmentConfirmed(false);
-        setFulfillmentPlan(null);
-      }
-        addToast(err.message || "Checkout failed", "error");
+        if (!outcomeAmbiguous) setCheckoutKey('');
+        const message = outcomeAmbiguous
+          ? 'The checkout response was interrupted or timed out. Your checkout reference and stock watch are preserved. Retry checkout to safely recover the result; do not create a new order.'
+          : (err.response?.data?.message || err.message || "Checkout failed. Please verify cart items.");
+        setErrorMsg(message);
+        if (err.response?.status === 409) {
+          setFulfillmentConfirmed(false);
+          setFulfillmentPlan(null);
+        }
+        addToast(message, outcomeAmbiguous ? "warning" : "error");
         return null;
       }
     });
