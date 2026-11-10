@@ -150,8 +150,8 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
   );
 
   return (
-    <div className="fixed inset-0 z-[120] overflow-y-auto overscroll-y-contain bg-slate-950/60 px-2 py-3 backdrop-blur-sm sm:px-5 sm:py-6" role="dialog" aria-modal="true" aria-labelledby="medicine-catalogue-import-title">
-      <section className="mx-auto my-0 flex max-h-[calc(100vh-1.5rem)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:my-0 sm:max-h-[calc(100vh-3rem)] sm:rounded-3xl">
+    <div className="fixed inset-0 z-[120] h-[100dvh] w-screen overflow-y-auto overscroll-y-contain bg-slate-950/60 p-0 backdrop-blur-sm sm:h-auto sm:w-auto sm:px-5 sm:py-6" role="dialog" aria-modal="true" aria-labelledby="medicine-catalogue-import-title">
+      <section className="mx-auto flex h-full max-h-[100dvh] min-h-0 w-full max-w-5xl flex-col overflow-hidden border-0 bg-white shadow-2xl sm:my-0 sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-3xl sm:border">
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-6">
           <div className="min-w-0">
             <h2 id="medicine-catalogue-import-title" className="text-base sm:text-lg font-black text-slate-900">Medicine Master Catalogue Enrichment</h2>
