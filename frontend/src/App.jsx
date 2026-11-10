@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ModalAccessibilityManager from './components/ModalAccessibilityManager';
 import './styles/responsive-guardrails.css';
 import { useAuth } from './context/AuthContext';
 import { useToast } from './context/ToastContext';
@@ -735,6 +736,8 @@ function MainApp() {
         isOpen={adminBulkImportModalOpen}
         onClose={() => setAdminBulkImportModalOpen(false)}
       />
+
+      <ModalAccessibilityManager />
 
       {/* Mobile Quick Actions Floating Action Button */}
       <QuickActionsFAB

@@ -973,14 +973,14 @@ export default function PlatformTenantsView() {
       {/* MODAL 1: Onboard New Pharmacy Tenant                          */}
       {/* ============================================================== */}
       {onboardModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-scale-up border border-slate-100">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="platform-tenant-onboard-title" tabIndex={-1} className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-scale-up border border-slate-100">
             <div className="flex justify-between items-start">
               <div>
                 <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 block">
                   Platform Provisioning
                 </span>
-                <h3 className="text-lg font-black text-slate-900">
+                <h3 id="platform-tenant-onboard-title" className="text-lg font-black text-slate-900">
                   Onboard Regional Pharmacy Tenant
                 </h3>
               </div>

@@ -271,12 +271,12 @@ export default function AdminMedicineRequestsView() {
 
       {/* Proposal Creation / Edit Modal Dialog */}
       {proposalModalRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-          <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-lg w-full p-4 sm:p-6 md:p-8 my-6 relative max-h-[92vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="admin-proposal-editor-title" tabIndex={-1} className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-lg w-full p-4 sm:p-6 md:p-8 my-6 relative max-h-[92vh] overflow-y-auto">
             
             <div className="flex justify-between items-start pb-3 border-b border-slate-100">
               <div>
-                <h3 className="text-base sm:text-lg font-black text-slate-900">
+                <h3 id="admin-proposal-editor-title" className="text-base sm:text-lg font-black text-slate-900">
                   {proposalModalRequest.proposal ? 'Edit Pharmacy Proposal' : 'Create Pharmacy Proposal'}
                 </h3>
                 <p className="text-xs text-slate-500">

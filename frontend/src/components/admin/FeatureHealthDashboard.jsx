@@ -641,14 +641,14 @@ export default function FeatureHealthDashboard() {
 
       {/* Inspect Cell Modal */}
       {inspectCell && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-gray-800 space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="feature-inspection-title" tabIndex={-1} className="bg-white dark:bg-gray-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-gray-800 space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-[10px] font-black uppercase tracking-wider text-blue-600">
                   Feature Security Inspection
                 </span>
-                <h3 className="text-base font-black text-slate-900 dark:text-white">
+                <h3 id="feature-inspection-title" className="text-base font-black text-slate-900 dark:text-white">
                   {inspectCell.feature.name}
                 </h3>
               </div>

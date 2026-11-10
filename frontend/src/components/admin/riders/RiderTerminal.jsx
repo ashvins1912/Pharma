@@ -366,11 +366,11 @@ export default function RiderTerminal({ riderId, onClose }) {
 
       {/* Floating Incoming Order Modal Alert (Zepto/Blinkit style) */}
       {currentAlert && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-slate-900 border border-amber-500/50 w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="rider-incoming-order-title" tabIndex={-1} className="bg-slate-900 border border-amber-500/50 w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <span className="bg-amber-500/20 text-amber-400 font-black px-3 py-1 rounded-full text-xs">
-                🚨 ASSIGNED DELIVERY ALERT
+                <span id="rider-incoming-order-title">🚨 ASSIGNED DELIVERY ALERT</span>
               </span>
               <span className="text-red-400 font-black text-lg bg-red-950/50 border border-red-800 px-3 py-1 rounded-xl">
                 {countdown}s
