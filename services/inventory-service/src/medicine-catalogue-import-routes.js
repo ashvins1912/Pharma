@@ -473,13 +473,20 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   const existingNameCounts = new Map();
   for (const item of existing) { const nameKey = key(item.brandName); existingNameCounts.set(nameKey, (existingNameCounts.get(nameKey) || 0) + 1); }
   const updates = records.filter(item => existingIds.has(item.medicineId) || (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeys.has(item.canonicalKey)) || (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1)).length;
+  const existingByNamePrefix = new Map();
+  for (const candidate of existing) {
+    const prefix = key(candidate.brandName).split(' ')[0];
+    if (prefix) existingByNamePrefix.set(prefix, [...(existingByNamePrefix.get(prefix) || []), candidate]);
+  }
   for (const item of records) {
     const exact = existing.find(candidate => candidate.medicineId === item.medicineId) ||
       (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 ? existing.find(candidate => candidate.canonicalKey === item.canonicalKey) : null) ||
       (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1 ? existing.find(candidate => key(candidate.brandName) === key(item.brandName)) : null);
     if (exact) { item.reconciliationMatch = { targetMedicineId: exact.medicineId, method: 'EXACT_OR_CANONICAL', score: 100, decision: 'AUTO_MERGE', warnings: [] }; continue; }
     let best = null;
-    for (const candidate of existing) {
+    const prefix = key(item.brandName).split(' ')[0];
+    const candidates = existingByNamePrefix.get(prefix) || [];
+    for (const candidate of candidates) {
       const scored = scoreMedicineMatch(item, candidate);
       if (!best || scored.score > best.score) best = { candidate, ...scored };
     }
