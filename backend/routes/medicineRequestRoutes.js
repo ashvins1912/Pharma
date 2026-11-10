@@ -15,10 +15,31 @@ import TenantBranch from '../models/TenantBranch.js';
 import FulfillmentCase from '../models/FulfillmentCase.js';
 import { validateWaitWindow } from '../services/intelligentFulfillment/fulfillmentPlanner.js';
 import { recoverStaleMedicineRequestConfirmations } from '../services/intelligentFulfillment/waitlistMonitor.js';
+import { cacheService } from '../services/cache/CacheService.js';
 import { customerService } from '../services/customer-service/CustomerService.js';
 import prescriptionClient from '../services/prescription-service-client/PrescriptionClient.js';
 
 const router = express.Router();
+
+const publishMedicineRequestUpdated = (request, reason) => {
+    const tenantId = String(request?.tenantId || '').trim();
+    if (!tenantId) return;
+    const customerId = String(request?.customerId || request?.userId || '').trim();
+    const payload = {
+        eventId: randomUUID(),
+        tenantId,
+        branchId: request?.branchId ? String(request.branchId) : null,
+        ...(customerId ? { userId: customerId } : {}),
+        medicineRequestId: String(request?._id || request?.id || ''),
+        eventType: 'MEDICINE_REQUEST_UPDATED',
+        reason: String(reason || 'request.updated').slice(0, 80),
+        occurredAt: new Date().toISOString()
+    };
+    void cacheService.publishEvent('medicine_request_updated', payload, {
+        userId: customerId || null,
+        tenantId
+    }).catch(error => console.warn('[MedicineRequestRealtime] Event publish failed:', error?.message || error));
+};
 
 const resolveRequestBranchId = async (tenantId, requestedBranchId, user = {}) => {
     const branchId = String(requestedBranchId || user?.branchId || user?.app_metadata?.branchId || '').trim();
@@ -344,6 +365,7 @@ router.put('/:id/prescription', authenticateUser, requirePermission('medicine_re
             if (oldUrl && oldUrl !== newUrl) {
                 try { await (await import('../config/prescriptionStorage.js')).removePrescription(oldUrl); } catch {}
             }
+            if (updated) publishMedicineRequestUpdated(updated, 'prescription.updated');
             return res.json({
                 success: true,
                 request: updated,
@@ -916,6 +938,7 @@ router.post('/:id/waitlist', authenticateUser, requirePermission('medicine_reque
             await FulfillmentCase.deleteOne({ _id: created._id, customerId: String(req.user.sub) });
             return res.status(409).json({ message: 'Medicine request changed. Refresh and try again.' });
         }
+        publishMedicineRequestUpdated(updatedRequest, 'request.waitlisted');
         return res.status(201).json({ case: created.toObject(), request: updatedRequest, message: 'We will monitor availability for the selected wait period.' });
     } catch (error) {
         if (error.code === 11000) {
@@ -975,6 +998,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
                     { $set: { status: 'CONVERTED_TO_ORDER', convertedOrderId: String(existingOrder._id), fulfillmentProcessingAt: null } },
                     { new: true }
                 ).lean();
+                if (recovered) publishMedicineRequestUpdated(recovered, 'fulfillment.reconciled');
                 return res.status(200).json({ success: true, order: existingOrder, request: recovered || request, alreadyProcessed: true, recoveryRequired: !recovered, message: 'Your order was already created and has been reconciled.' });
             }
             const processingAge = request.fulfillmentProcessingAt ? Date.now() - new Date(request.fulfillmentProcessingAt).getTime() : Number.POSITIVE_INFINITY;
@@ -1163,6 +1187,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
             },
             { new: true }
         ).lean();
+        if (updatedRequest) publishMedicineRequestUpdated(updatedRequest, 'fulfillment.confirmed');
         return res.status(201).json({
             success: true, order: createdOrder, request: updatedRequest, waitlist: waitlistCase,
             planSummary: plan.summary,
@@ -1184,6 +1209,7 @@ router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('med
                 { new: true }
             ).lean().catch(() => null);
             const linkRecoveryRequired = linkResults.some(result => result.status === 'rejected');
+            if (recovered) publishMedicineRequestUpdated(recovered, 'fulfillment.reconciled');
             return res.status(202).json({
                 success: true, order: createdOrder, request: recovered,
                 waitlist: waitlistCase, recoveryRequired: !recovered || linkRecoveryRequired,
@@ -1289,6 +1315,7 @@ router.put('/:id/review', authenticateUser, requirePermission('medicine_requests
         const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
         const actorRole = req.user.app_metadata?.role || req.user.role || 'Pharmacist';
         const request = await dataStore.reviewMedicineRequest(req.params.id, actorName, actorRole);
+        publishMedicineRequestUpdated(request, 'request.reviewed');
         res.json({ message: 'Medicine request is now under review.', request });
     } catch (err) {
         res.status(err.statusCode || 400).json({ message: err.message || 'Failed to update review status.' });
@@ -1335,6 +1362,7 @@ router.post('/:id/reject-request', authenticateUser, requirePermission('medicine
             actorName,
             actorRole
         );
+        publishMedicineRequestUpdated(request, 'request.rejected_by_pharmacy');
         res.json({ message: 'Medicine request declined by pharmacy.', request });
     } catch (err) {
         console.error('Pharmacy rejection failed:', err);
