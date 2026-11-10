@@ -54,7 +54,7 @@ export function scoreMedicineMatch(incoming, candidate) {
   const genericScore = incoming.genericName && candidate.genericName ? tokenSortRatio(incoming.genericName, candidate.genericName) : null;
   const score = Math.round(nameScore * 0.65 + (compositionScore === null ? 0 : compositionScore * 0.20) +
     (aStrength && bStrength && !strengthConflict ? 10 : 0) + (aForm && bForm && !formConflict ? 5 : 0));
-  const autoMerge = !blocked && compositionScore !== null && compositionScore >= 94 && nameScore >= 92 && score >= 96 && (!genericScore || genericScore >= 80);
+  const autoMerge = !blocked && compositionScore !== null && compositionScore >= 94 && nameScore >= 92 && score >= 96 && (genericScore === null || genericScore >= 80);
   const review = !blocked && nameScore >= 82 && score >= 82;
   return {
     score: Math.min(100, score), nameScore, compositionScore, genericScore,
@@ -499,7 +499,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   const fuzzyManualReview = records.filter(item => item.reconciliationMatch?.decision === 'MANUAL_REVIEW').length;
   const report = {
     sourceRecords, normalizedRecords: records.length, rejectedRecords: rejected,
-    duplicatesRemoved, newRecords: Math.max(0, records.length - updates - fuzzyAutoMerge - fuzzyManualReview), updateCandidates: updates + fuzzyAutoMerge,
+    duplicatesRemoved, newRecords: Math.max(0, records.length - updates - fuzzyAutoMerge), updateCandidates: updates + fuzzyAutoMerge,
     fuzzyAutoMerge, fuzzyManualReview, unmatchedRecords: records.length - updates - fuzzyAutoMerge - fuzzyManualReview,
     needsReview: records.filter(item => item.dataQualityStatus === 'NEEDS_REVIEW').length,
     partialRecords: records.filter(item => item.dataQualityStatus === 'PARTIAL').length,
