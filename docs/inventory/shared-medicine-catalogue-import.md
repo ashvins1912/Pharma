@@ -113,3 +113,8 @@ Permanent deletion removes the batch document, staged record chunks, associated 
 
 Approved, published, partially published, failed, actively processing, merged and superseded batches cannot be deleted through this action. Published MedicineMaster records are never deleted by this endpoint.
 
+
+
+## Admin mapping and Store visibility
+
+After a batch is published, platform administrators can open **Review possible matches** in Medicine Master Catalogue. The mapping queue returns up to 100 staged records per request, ranks existing Medicine Master candidates, and lets an administrator choose an existing target or create a new record. Administrators explicitly select the source fields to apply. Only records with `storeApproved: true` are considered by the public storefront match resolver; unreviewed imported records remain unavailable to Store search. Mapping approval is not clinical or regulatory verification.
