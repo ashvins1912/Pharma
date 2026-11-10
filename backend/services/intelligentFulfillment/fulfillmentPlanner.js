@@ -161,3 +161,106 @@ export function validateWaitWindow(days) {
   const waitUntil = new Date(Date.now() + value * 24 * 60 * 60 * 1000);
   return { waitDays: value, waitUntil };
 }
+
+
+const validCoordinates = point => {
+  const lat = Number(point?.latitude ?? point?.lat);
+  const lng = Number(point?.longitude ?? point?.lng ?? point?.long);
+  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+};
+
+export function calculateRouteDistanceKm(origin, destination) {
+  if (!validCoordinates(origin) || !validCoordinates(destination)) return null;
+  const toRadians = degrees => degrees * Math.PI / 180;
+  const lat1 = Number(origin.latitude ?? origin.lat);
+  const lon1 = Number(origin.longitude ?? origin.lng ?? origin.long);
+  const lat2 = Number(destination.latitude ?? destination.lat);
+  const lon2 = Number(destination.longitude ?? destination.lng ?? destination.long);
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
+  return Math.round(6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 100) / 100;
+}
+
+/**
+ * Select one active branch for a single-order checkout. The allocator maximizes
+ * fulfillable quantity first, then fully-filled lines, then proximity and fee.
+ * It deliberately does not split one order across branches: the current order
+ * and reservation contracts are branch-scoped. Partial quantities remain on
+ * the existing customer-consent waitlist path.
+ */
+export function buildDynamicFulfillmentRoute({
+  requestedItems, branchCandidates, destination, preferredBranchId = null, now = new Date()
+}) {
+  const candidates = (Array.isArray(branchCandidates) ? branchCandidates : [])
+    .filter(branch => branch?.branchId && Array.isArray(branch.inventory));
+  if (!candidates.length) {
+    throw Object.assign(new Error('No active branch has a verifiable inventory snapshot.'), { statusCode: 409 });
+  }
+  const hasDestination = validCoordinates(destination);
+  const scored = candidates.map(branch => {
+    const distanceKm = calculateRouteDistanceKm(branch.geolocation, destination);
+    const radiusKm = Math.max(0, Number(branch.serviceRadiusKm ?? 10));
+    const hasBranchCoordinates = validCoordinates(branch.geolocation);
+    const withinServiceRadius = hasDestination && hasBranchCoordinates
+      ? distanceKm <= radiusKm
+      : String(branch.branchId) === String(preferredBranchId || '');
+    const plan = buildIntelligentFulfillmentPlan({
+      requestedItems, inventory: branch.inventory, catalog: branch.catalog || [], now
+    });
+    const requested = Number(plan.summary.quantityRequested || 0);
+    const allocated = Number(plan.summary.quantityAvailableNow || 0);
+    const fulfillmentRatio = requested > 0 ? allocated / requested : 0;
+    const fullyFilledLines = plan.lines.filter(line => line.waitingQuantity === 0).length;
+    return {
+      branch, plan, distanceKm, radiusKm, withinServiceRadius,
+      fulfillmentRatio, fullyFilledLines,
+      deliveryFee: Math.max(0, Number(branch.deliveryFee || 0))
+    };
+  }).filter(item => item.withinServiceRadius);
+
+  if (!scored.length) {
+    throw Object.assign(new Error('No active pharmacy branch serves the selected delivery location.'), {
+      statusCode: 409, code: 'NO_BRANCH_WITHIN_DELIVERY_RADIUS'
+    });
+  }
+  scored.sort((a, b) =>
+    b.fulfillmentRatio - a.fulfillmentRatio
+    || b.fullyFilledLines - a.fullyFilledLines
+    || (a.distanceKm ?? Number.MAX_SAFE_INTEGER) - (b.distanceKm ?? Number.MAX_SAFE_INTEGER)
+    || a.deliveryFee - b.deliveryFee
+    || (String(a.branch.branchId) === String(preferredBranchId) ? -1 : 0)
+    || String(a.branch.branchId).localeCompare(String(b.branch.branchId))
+  );
+  const selected = scored[0];
+  return {
+    ...selected.plan,
+    branchId: String(selected.branch.branchId),
+    routing: {
+      strategy: 'MAXIMUM_FILL_THEN_NEAREST_BRANCH',
+      selectedBranchId: String(selected.branch.branchId),
+      selectedBranchName: String(selected.branch.name || 'Pharmacy branch'),
+      distanceKm: selected.distanceKm,
+      serviceRadiusKm: selected.radiusKm,
+      deliveryFee: selected.deliveryFee,
+      fulfillmentPercentage: Math.round(selected.fulfillmentRatio * 10000) / 100,
+      evaluatedBranches: scored.length,
+      alternatives: scored.map(item => ({
+        branchId: String(item.branch.branchId),
+        branchName: String(item.branch.name || 'Pharmacy branch'),
+        distanceKm: item.distanceKm,
+        fulfillmentPercentage: Math.round(item.fulfillmentRatio * 10000) / 100,
+        quantityAvailableNow: item.plan.summary.quantityAvailableNow,
+        quantityWaiting: item.plan.summary.quantityWaiting,
+        selected: item === selected
+      }))
+    },
+    safety: {
+      ...selected.plan.safety,
+      inventoryIsReadOnlyDuringRouting: true,
+      reservationOccursOnlyAtCheckout: true,
+      oneOrderUsesOneBranch: true
+    }
+  };
+}
