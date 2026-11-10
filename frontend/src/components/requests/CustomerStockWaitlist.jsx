@@ -117,7 +117,7 @@ export default function CustomerStockWaitlist() {
         return (
           <article key={entry._id} className="rounded-xl border border-slate-200 p-3 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <strong className="text-xs text-slate-900">{entry.caseNumber}</strong>
+              <div className="min-w-0"><strong className="text-xs text-slate-900">Stock Watch #{entry.stockWatchId || entry.caseNumber}</strong>{entry.caseNumber && entry.stockWatchId && <p className="mt-0.5 text-[10px] text-slate-400">Legacy fulfilment ref: {entry.caseNumber}</p>}</div>
               <span className={`rounded-full px-2 py-1 text-[10px] font-black ${ready || entry.status === 'FULFILLED' ? 'bg-emerald-100 text-emerald-800' : entry.status === 'EXPIRED' || entry.status === 'CANCELLED' ? 'bg-slate-100 text-slate-600' : 'bg-amber-100 text-amber-900'}`}>
                 {statusLabel}
               </span>
@@ -148,7 +148,7 @@ export default function CustomerStockWaitlist() {
                 </div>
               );
             })}
-            {entry.parentOrderId && <p className="text-[10px] text-indigo-700">{t('linkedToOrder')} #{String(entry.parentOrderId).slice(-6).toUpperCase()}</p>}
+            {(entry.parentOrderNumber || entry.parentOrder?.orderNumber || entry.orderNumber) && <p className="text-[10px] text-indigo-700">{t('linkedToOrder')} #{entry.parentOrderNumber || entry.parentOrder?.orderNumber || entry.orderNumber}</p>}
             <p className="text-[10px] text-slate-500">{t('waitWindowEnds')}: {until || t('notSpecified')}</p>
             {confirming && <p role="status" className="text-[11px] text-amber-800">{t('reconcilingOrder')}</p>}
             <div className="flex flex-wrap gap-2">
