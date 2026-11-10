@@ -111,7 +111,9 @@ const medicineMasterSchema = new mongoose.Schema({
   sourceRecordIds: { type: [String], default: [] },
   legacyMedicineIds: { type: [String], default: [] },
   lastImportBatchId: { type: String, default: '' },
-  lastVerifiedAt: { type: Date, default: null }
+  lastVerifiedAt: { type: Date, default: null },
+  lastManuallyUpdatedBy: { type: String, default: '' },
+  lastManuallyUpdatedAt: { type: Date, default: null }
 }, { timestamps: true });
 medicineMasterSchema.index({ brandName: 'text', genericName: 'text', composition: 'text', manufacturer: 'text', uses: 'text', sideEffects: 'text', therapeuticClass: 'text', chemicalClass: 'text', actionClass: 'text' });
 medicineMasterSchema.index({ brandName: 1 }, { collation: { locale: 'en', strength: 2 } });
