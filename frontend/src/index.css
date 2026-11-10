@@ -1685,3 +1685,36 @@ html.dark .admin-screen :where(select):hover:not(:disabled) { background-color:#
     -webkit-overflow-scrolling: touch;
   }
 }
+
+
+/* Overlay interaction safety: scroll lock must not disable touch scrolling inside dialogs. */
+html.modal-open,
+body.modal-open {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+  touch-action: auto !important;
+}
+
+[aria-modal="true"] {
+  isolation: isolate;
+  overscroll-behavior: contain;
+}
+
+[aria-modal="true"] :where(.overflow-y-auto, .overflow-auto, [data-modal-scroll]) {
+  min-height: 0;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+[aria-modal="true"] :where(button, [role="button"]) {
+  touch-action: manipulation;
+}
+
+@media (max-width: 639px) {
+  [aria-modal="true"] { max-width: 100vw; max-height: 100dvh; }
+  [aria-modal="true"] :where(.pharma-modal-surface, .pharma-checkout-modal) {
+    max-width: 100%;
+    min-width: 0;
+  }
+}
