@@ -258,8 +258,8 @@ test('record linkage normalizes equivalent mass units before medicine identity s
 
 test('record linkage blocks a conflicting generic ingredient despite a similar brand name', () => {
   const match = scoreMedicineMatch(
-    { brandName: 'Example 10mg Tablet', composition: 'Example ingredient', strength: '10 mg', dosageForm: 'Tablet', genericName: 'Ingredient A' },
-    { brandName: 'Example 10mg Tablet', composition: 'Example ingredient', strength: '10 mg', dosageForm: 'Tablet', genericName: 'Ingredient B' }
+    { brandName: 'Example 10mg Tablet', composition: 'Example ingredient', strength: '10 mg', dosageForm: 'Tablet', genericName: 'Atorvastatin' },
+    { brandName: 'Example 10mg Tablet', composition: 'Example ingredient', strength: '10 mg', dosageForm: 'Tablet', genericName: 'Clopidogrel' }
   );
   assert.equal(match.decision, 'BLOCKED_CONFLICT');
   assert.ok(match.warnings.includes('GENERIC_INGREDIENT_CONFLICT'));
