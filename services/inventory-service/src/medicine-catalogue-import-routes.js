@@ -40,6 +40,7 @@ const medicineMasterSchema = new mongoose.Schema({
   ingredients: { type: [String], default: [] },
   composition: { type: String, default: '' },
   strength: { type: String, default: '' },
+  packSize: { type: String, default: '' },
   dosageForm: { type: String, default: '' },
   medicineType: { type: String, default: '' },
   routes: { type: [String], default: [] },
@@ -93,7 +94,7 @@ export function normalizeMedicineRecord(raw, dataset) {
     const genericName = text(pick(raw, 'genericName'));
     const medicineId = text(pick(raw, 'brandIdentifier'));
     if (!medicineId) return null;
-    const identity = [key(brandName), key(composition), key(strength), key(dosageForm)].join('|');
+    const identity = [key(brandName), key(composition), key(strength), key(dosageForm), key(packSize)].join('|');
     return {
       medicineId, canonicalKey: composition ? identity : '',
       brandName, genericName, genericId: text(pick(raw, 'genericIdentifier')),
@@ -114,12 +115,14 @@ export function normalizeMedicineRecord(raw, dataset) {
   if (!brandName) return null;
   const productName = cleanRetailProductName(pick(raw, 'Product Name'));
   const composition = text(pick(raw, 'Composition'));
+  const packMatch = productName.match(/\\b(?:pack of\\s*)?\\d+(?:\\.\\d+)?\\s?(?:tablets?|tabs?|capsules?|caps?|ml|g|gm|strips?|sachets?|vials?)\\b/i);
+  const packSize = packMatch ? packMatch[0].replace(/\\s+/g, ' ').trim() : '';
   const medicineType = text(pick(raw, 'Type of Medicine'));
   const dosageForm = cleanDosageForm(medicineType);
   const strengthMatch = (brandName + ' ' + productName + ' ' + composition).match(/\b\d+(?:\.\d+)?\s?(?:mcg|mg|g|ml|iu|%)(?:\b|\/)/i);
   const strength = strengthMatch ? strengthMatch[0].replace(/\s+/g, ' ').trim() : '';
   const identity = [key(brandName), key(composition), key(strength), key(dosageForm)].join('|');
-  const stableIdentity = composition ? identity : [key(brandName), key(productName), key(dosageForm)].join('|');
+  const stableIdentity = composition ? identity : [key(brandName), key(productName), key(dosageForm), key(packSize)].join('|');
   const sourceRecordId = hash(stableIdentity).slice(0, 24);
   const image = text(pick(raw, 'Image URL'));
   return {
@@ -127,7 +130,7 @@ export function normalizeMedicineRecord(raw, dataset) {
     canonicalKey: composition ? identity : '',
     brandName, genericName: '', genericId: '', productId: '', productName,
     manufacturer: '', manufacturerId: '', ingredients: splitList(composition), composition,
-    strength, dosageForm, medicineType, routes: [], alternatives: [], indications: [], contraindications: [], drugInteractions: [],
+    strength, packSize, dosageForm, medicineType, routes: [], alternatives: [], indications: [], contraindications: [], drugInteractions: [],
     sourceImageUrl: /^https:\/\//i.test(image) ? image : '',
     requiresPrescription: pick(raw, 'Is Prescription Required?') === undefined ? null : bool(pick(raw, 'Is Prescription Required?')),
     prescriptionVerification: 'UNVERIFIED', sourcePriority: 2, sourceDataset: dataset,
@@ -145,7 +148,7 @@ function consolidate(records, dataset) {
     const previous = unique.get(identity);
     if (!previous) unique.set(identity, normalized);
     else {
-      for (const field of ['genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','dosageForm','medicineType']) {
+      for (const field of ['genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType']) {
         if (!previous[field] && normalized[field]) previous[field] = normalized[field];
       }
       for (const field of ['ingredients','routes','indications','contraindications','drugInteractions']) {
@@ -238,7 +241,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         const canonicalMatch = item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 ? byKey.get(item.canonicalKey) : null;
         const current = byId.get(item.medicineId) || canonicalMatch || null;
         const targetId = batch.dataset === 'INDIAN_MEDICINE_DATA' ? item.medicineId : (current?.medicineId || item.medicineId);
-        const fields = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','dosageForm','medicineType','sourceImageUrl'];
+        const fields = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType','sourceImageUrl'];
         const set = { lastImportBatchId: batch.batchId, sourcePriority: Math.min(Number(current?.sourcePriority ?? 99), item.sourcePriority) };
         if (current && current.medicineId !== targetId) set.medicineId = targetId;
         if (item.canonicalKey && !current?.canonicalKey) set.canonicalKey = item.canonicalKey;
