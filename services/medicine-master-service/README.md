@@ -28,6 +28,8 @@ All paths are API Gateway paths; the gateway preserves these paths while proxyin
 | GET | `/api/v1/inventory/catalogue/medicines` | Authenticated catalogue read |
 | GET | `/api/v1/inventory/catalogue/medicines/:medicineId` | Authenticated catalogue read |
 | GET | `/api/v1/inventory/catalogue/medicines/match` | Public, read-only storefront match |
+| GET | `/api/v1/inventory/catalogue/imports/:batchId/mapping-queue` | Platform Super Admin; 100-row candidate review queue |
+| POST | `/api/v1/inventory/catalogue/imports/:batchId/map` | Platform Super Admin; selected-field mapping and Store approval |
 | POST | `/api/v1/inventory/catalogue/medicines/match/batch` | Platform Super Admin |
 | PATCH | `/api/v1/inventory/catalogue/medicines/:medicineId` | Platform Super Admin; audited |
 | DELETE | `/api/v1/inventory/catalogue/medicines/:medicineId` | Platform Super Admin; soft archive with provenance |
@@ -84,3 +86,8 @@ Use at least 32 random bytes for service signing secrets; never reuse database p
 ## Validation
 
 Before deployment run `npm --workspace services/medicine-master-service test`, API Gateway tests, and root workspace test/build commands. A readiness probe alone is not an authorization or API acceptance test.
+
+
+### Store catalogue approval boundary
+
+Imported Medicine Master records are not eligible for storefront matching until `storeApproved` is set by the platform-admin mapping workflow. The mapping queue reviews published import batches in windows of up to 100 records, presents ranked candidate evidence, and records the selected target and approved field list. Mapping approval controls Store visibility; it does not certify clinical, prescription, licensing or regulatory claims.
