@@ -40,6 +40,10 @@ export function medicineMatchIdentity(product = {}) {
 function medicineModel() { return mongoose.models.MedicineMaster; }
 
 let masterVersionCache = { checkedAt: 0, updatedAt: null };
+export function invalidateMedicineMasterVersionCache() {
+  masterVersionCache = { checkedAt: 0, updatedAt: null };
+}
+
 async function getMedicineMasterVersion() {
   if (Date.now() - masterVersionCache.checkedAt < 30_000) return masterVersionCache.updatedAt;
   const latest = await medicineModel().findOne({ isArchived: { $ne: true } }, { updatedAt: 1 }).sort({ updatedAt: -1 }).lean();
