@@ -872,3 +872,28 @@ export async function adjustInventory({ sku, stockQuantity, price, batchNumber, 
 }
 
 export { normalizeItems };
+
+
+/**
+ * Tenant-scoped stock snapshot for dynamic branch routing. Branch IDs are
+ * supplied only by the trusted platform backend after it verifies active
+ * TenantBranch records; this service remains the sole stock authority.
+ */
+export async function lookupInventoryAcrossBranches({ productIds = [], tenantId = null, branchIds = [] } = {}) {
+  if (!Array.isArray(branchIds) || branchIds.length < 1 || branchIds.length > 50) {
+    const error = new Error('Route lookup requires between 1 and 50 verified branch IDs.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const uniqueBranchIds = [...new Set(branchIds.map(value => String(value || '').trim()).filter(Boolean))];
+  if (uniqueBranchIds.length !== branchIds.length) {
+    const error = new Error('Branch IDs must be unique, non-empty strings.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const snapshots = await Promise.all(uniqueBranchIds.map(async branchId => ({
+    branchId,
+    items: await lookupInventory({ productIds, tenantId, branchId })
+  })));
+  return { tenantId: String(tenantId || '').trim(), branches: snapshots };
+}
