@@ -599,7 +599,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
 
                 {/* Reorder Table */}
                 <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
-                  <div className="max-h-80 overflow-x-auto overflow-y-auto">
+                  <div className="hidden md:block max-h-80 overflow-x-auto overflow-y-auto">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-100/90 text-[10px] font-black uppercase text-slate-500 sticky top-0 z-10 border-b border-slate-200">
                         <tr>
@@ -666,6 +666,28 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
                         })}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="md:hidden max-h-[32rem] overflow-y-auto p-3 space-y-3 bg-slate-50/70">
+                    {restockSuggestions.map((item) => {
+                      const qty = restockQuantities[item.productId] ?? item.suggestedReorderQuantity;
+                      return (
+                        <article key={item.productId} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm space-y-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0"><h4 className="text-sm font-extrabold text-slate-900 break-words">{item.name}</h4><p className="text-[10px] text-slate-500 font-mono break-all">SKU: {item.sku || '—'}</p></div>
+                            <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black ${item.urgency === 'CRITICAL' ? 'bg-rose-100 text-rose-800' : item.urgency === 'HIGH' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>{item.urgency}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="rounded-lg bg-slate-50 p-2"><span className="block text-[10px] text-slate-500">Current stock</span><strong className={item.currentStock <= 3 ? 'text-rose-700' : 'text-slate-900'}>{item.currentStock} units</strong></div>
+                            <div className="rounded-lg bg-slate-50 p-2"><span className="block text-[10px] text-slate-500">Daily velocity</span><strong className="text-slate-900">{item.dailyVelocity} / day</strong><span className="block text-[10px] text-slate-500">{item.totalUnitsSold30d} in 30d</span></div>
+                          </div>
+                          {item.reason && <p className="text-xs text-slate-600">{item.reason}</p>}
+                          <div className="flex items-end gap-2">
+                            <label className="flex-1 min-w-0 text-[10px] font-bold text-slate-600">Reorder quantity<input type="number" min="1" value={qty} onChange={(e) => setRestockQuantities(prev => ({ ...prev, [item.productId]: Math.max(1, parseInt(e.target.value, 10) || 1) }))} className="mt-1 block w-full min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-900" /></label>
+                            <button type="button" onClick={() => handleApplyRestock(item.productId)} disabled={applyingRestock} className="min-h-10 shrink-0 rounded-lg bg-indigo-600 px-4 text-xs font-extrabold text-white disabled:opacity-50">Restock</button>
+                          </div>
+                        </article>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
