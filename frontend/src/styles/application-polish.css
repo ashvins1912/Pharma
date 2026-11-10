@@ -121,7 +121,8 @@ body {
 /* Modal overlays remain scrollable when their contents exceed the viewport.
    Safe alignment keeps the top of tall dialogs reachable instead of centering
    their overflow outside the visible screen. */
-.fixed.inset-0[role="dialog"],\n.fixed.inset-0[aria-modal="true"] {
+.fixed.inset-0[role="dialog"],
+.fixed.inset-0[aria-modal="true"] {
   box-sizing: border-box;
   max-width: 100%;
   max-height: 100dvh;
@@ -138,7 +139,8 @@ body {
     max(var(--qm-modal-gutter), env(safe-area-inset-left));
 }
 
-.pharma-modal-surface,\n.pharma-checkout-modal {
+.pharma-modal-surface,
+.pharma-checkout-modal {
   box-sizing: border-box;
   min-width: 0;
   max-height: calc(100dvh - max(1rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));
