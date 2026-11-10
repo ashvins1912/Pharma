@@ -10,6 +10,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
   const [published, setPublished] = useState(null);
   const [batchStatus, setBatchStatus] = useState(null);
   const [statusBusy, setStatusBusy] = useState(false);
+  const [reviewConfirmed, setReviewConfirmed] = useState(false);
 
   if (!isOpen) return null;
 
@@ -18,6 +19,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     setPreview(null);
     setPublished(null);
     setBatchStatus(null);
+    setReviewConfirmed(false);
     setBusy(false);
   };
 
@@ -28,6 +30,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     setBusy(true);
     setPreview(null);
     setPublished(null);
+    setReviewConfirmed(false);
     try {
       const body = new FormData();
       body.append('jsonFile', file);
@@ -52,8 +55,20 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     }
   };
 
+  const approveReconciliation = async () => {
+    if (!preview?.batchId || !reviewConfirmed || !preview?.reportFingerprint) return;
+    setBusy(true);
+    try {
+      await apiClient.post(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(preview.batchId)}/approve`, { confirmReconciliation: true, reportFingerprint: preview.reportFingerprint });
+      const statusResponse = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(preview.batchId)}`);
+      setBatchStatus(statusResponse.data);
+      addToast('Reconciliation approved. You can now publish this batch.', 'success');
+    } catch (error) {
+      addToast(error.response?.data?.message || error.response?.data?.error?.message || 'Could not approve this reconciliation report.', 'error');
+    } finally { setBusy(false); }
+  };
   const publish = async () => {
-    if (!preview?.batchId) return;
+    if (!preview?.batchId || !batchStatus?.approvedAt) return;
     if (!window.confirm('Publish these cleaned records to the shared medicine master catalogue? This will not update tenant prices, branch stock, batches or expiry data.')) return;
     setBusy(true);
     try {
@@ -167,6 +182,12 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                 {metric('Partial quality', report.partialQualityRecords)}
                 {metric('Quality needs review', report.needsReviewQualityRecords)}
               </div>
+              <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-xs text-violet-950">Reconciliation approval</strong><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${batchStatus?.approvedAt ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{batchStatus?.approvedAt ? 'Approved' : 'Review required'}</span></div>
+                <p className="text-[11px] leading-5 text-violet-950">New medicines: {Number(report.newRecords || 0).toLocaleString()} · Existing-record update candidates: {Number(report.updateCandidates || 0).toLocaleString()} · Rejected rows: {Number(report.rejectedRecords || 0).toLocaleString()}. Publishing applies the staged reconciliation to the shared master catalogue; it does not change tenant prices or branch inventory.</p>
+                {!batchStatus?.approvedAt && <label className="flex items-start gap-2 text-[11px] font-semibold text-violet-950"><input type="checkbox" checked={reviewConfirmed} onChange={event => setReviewConfirmed(event.target.checked)} className="mt-0.5" />I have reviewed the reconciliation totals, duplicate handling, rejected records and clinical-data warnings, and approve this exact report for publication.</label>}
+                {batchStatus?.approvedAt && <p className="text-[11px] text-emerald-800">Approved by {batchStatus.approvedBy || 'platform administrator'} at {batchStatus.approvedAt ? new Date(batchStatus.approvedAt).toLocaleString() : '—'}.</p>}
+              </div>
               {report.qualityIssueCounts && Object.keys(report.qualityIssueCounts).length > 0 && (
                 <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
                   <h4 className="text-xs font-extrabold text-slate-800">Most common quality gaps</h4>
@@ -198,9 +219,11 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
           )}
         </div>
         <footer className="flex flex-col-reverse sm:flex-row sm:justify-between gap-2 rounded-b-2xl sm:rounded-b-3xl border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <button type="button" onClick={preview ? () => { setPreview(null); setFile(null); setPublished(null); setBatchStatus(null); } : close} disabled={busy} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 disabled:opacity-50">{preview ? 'Choose another dataset' : 'Close'}</button>
+          <button type="button" onClick={preview ? () => { setPreview(null); setFile(null); setPublished(null); setBatchStatus(null); setReviewConfirmed(false); } : close} disabled={busy} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 disabled:opacity-50">{preview ? 'Choose another dataset' : 'Close'}</button>
           {!preview ? (
             <button type="button" onClick={createPreview} disabled={busy || !file} className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-50">{busy ? 'Analyzing JSON…' : 'Analyze & Preview'}</button>
+          ) : !published && !batchStatus?.approvedAt ? (
+            <button type="button" onClick={approveReconciliation} disabled={busy || !reviewConfirmed || !preview?.reportFingerprint} className="rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-violet-700 disabled:opacity-50">{busy ? 'Approving…' : 'Approve reconciliation'}</button>
           ) : !published ? (
             <button type="button" onClick={publish} disabled={busy || report?.normalizedRecords === 0} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-emerald-700 disabled:opacity-50">{busy ? 'Publishing…' : 'Publish to Shared Catalogue'}</button>
           ) : (
