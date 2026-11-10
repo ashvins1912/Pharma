@@ -245,16 +245,16 @@ test('gateway proxies public catalog and csrf routes without authentication', as
   const app = createGatewayApp(loadConfig({
     NODE_ENV: 'test',
     BACKEND_API_URL: backend.url,
-    CORS_ALLOWED_ORIGINS: 'http://localhost:3000,https://pharma-ui.onrender.com'
+    CORS_ALLOWED_ORIGINS: 'http://localhost:3000,https://pharma-1-278k.onrender.com'
   }));
   const gateway = await start(app);
 
   try {
     const catalog = await fetch(gateway.url + '/api/medicines?page=1&limit=16', {
-      headers: { Origin: 'https://pharma-ui.onrender.com' }
+      headers: { Origin: 'https://pharma-1-278k.onrender.com' }
     });
     assert.equal(catalog.status, 200);
-    assert.equal(catalog.headers.get('access-control-allow-origin'), 'https://pharma-ui.onrender.com');
+    assert.equal(catalog.headers.get('access-control-allow-origin'), 'https://pharma-1-278k.onrender.com');
     assert.equal((await catalog.json()).medicines[0].name, 'Test Medicine');
 
     const csrf = await fetch(gateway.url + '/api/v1/auth/csrf');
@@ -656,14 +656,14 @@ test('gateway CORS preflight allows selected tenant and branch headers', async (
   const app = createGatewayApp(loadConfig({
     NODE_ENV: 'test',
     BACKEND_API_URL: 'http://127.0.0.1:8090',
-    CORS_ALLOWED_ORIGINS: 'https://pharma-ui.onrender.com'
+    CORS_ALLOWED_ORIGINS: 'https://pharma-1-278k.onrender.com'
   }));
   const server = await start(app);
   try {
     const response = await fetch(`${server.url}/api/tenant/branches`, {
       method: 'OPTIONS',
       headers: {
-        Origin: 'https://pharma-ui.onrender.com',
+        Origin: 'https://pharma-1-278k.onrender.com',
         'Access-Control-Request-Method': 'GET',
         'Access-Control-Request-Headers': 'x-tenant-id,x-branch-id,x-pharma-client'
       }
