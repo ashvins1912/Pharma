@@ -1107,8 +1107,14 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             }
         }
 
-        // Automated messaging trigger
-        await sendCustomWhatsAppAlert(order, 'Placed');
+        // Notifications must never hold the checkout response open. The order
+        // and stock reservation are already committed; dispatch messaging in
+        // the background and avoid duplicate alerts on idempotent replays.
+        if (!order.replayed) {
+            sendCustomWhatsAppAlert(order, 'Placed').catch(alertError => {
+                console.warn('[WhatsApp] Order placed alert warning:', alertError?.message);
+            });
+        }
 
         res.status(201).json({
             message: "🎉 Cash-on-Delivery order registered into dispensary queue!",
