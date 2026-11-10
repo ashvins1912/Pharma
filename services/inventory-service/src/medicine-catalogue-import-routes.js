@@ -27,6 +27,132 @@ const pick = (record, ...names) => {
   }
   return undefined;
 };
+const levenshteinRatio = (left, right) => {
+  const a = key(left), b = key(right);
+  if (!a && !b) return 100;
+  if (!a || !b) return 0;
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1) current[j] = Math.min(current[j - 1] + 1, previous[j] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    previous = current;
+  }
+  return Math.round((1 - previous[b.length] / Math.max(a.length, b.length)) * 100);
+};
+const similarityText = value => key(value)
+  .replace(/\b(\d+(?:\.\d+)?)\s*(mcg|mg|gm|g|ml|iu|%)\b/g, '$1 $2')
+  .replace(/\b(tablets|tabs|capsules|caps|sachets|vials)\b/g, match => ({ tablets: 'tablet', tabs: 'tab', capsules: 'capsule', caps: 'cap', sachets: 'sachet', vials: 'vial' })[match]);
+const tokenSortRatio = (left, right) => levenshteinRatio(similarityText(left).split(' ').filter(Boolean).sort().join(' '), similarityText(right).split(' ').filter(Boolean).sort().join(' '));
+const characterNgrams = value => {
+  const normalized = similarityText(value).replace(/\s+/g, ' ').trim();
+  const padded = '  ' + normalized + '  ';
+  const grams = [];
+  for (let i = 0; i <= padded.length - 3; i += 1) grams.push(padded.slice(i, i + 3));
+  return grams;
+};
+const buildNameNgramIdf = candidates => {
+  const documentFrequency = new Map();
+  let documents = 0;
+  for (const candidate of candidates) {
+    if (!candidate.brandName) continue;
+    documents += 1;
+    for (const gram of new Set(characterNgrams(candidate.brandName))) documentFrequency.set(gram, (documentFrequency.get(gram) || 0) + 1);
+  }
+  return new Map([...documentFrequency].map(([gram, frequency]) => [gram, Math.log((documents + 1) / (frequency + 1)) + 1]));
+};
+const tfIdfNgramCosine = (left, right, idf = null) => {
+  const vector = value => {
+    const counts = new Map();
+    for (const gram of characterNgrams(value)) counts.set(gram, (counts.get(gram) || 0) + 1);
+    const weighted = new Map();
+    for (const [gram, count] of counts) weighted.set(gram, count * (idf?.get(gram) || 1));
+    return weighted;
+  };
+  const a = vector(left), b = vector(right);
+  let dot = 0, normA = 0, normB = 0;
+  for (const value of a.values()) normA += value * value;
+  for (const value of b.values()) normB += value * value;
+  for (const [gram, value] of a) dot += value * (b.get(gram) || 0);
+  if (!normA || !normB) return 0;
+  return Math.round((dot / Math.sqrt(normA * normB)) * 100);
+};
+const charNgramDice = (left, right) => {
+  const a = similarityText(left).replace(/\s+/g, ' ');
+  const b = similarityText(right).replace(/\s+/g, ' ');
+  if (!a || !b) return a === b ? 100 : 0;
+  const n = Math.min(3, Math.max(2, Math.min(a.length, b.length)));
+  const grams = value => {
+    const result = new Map();
+    for (let i = 0; i <= value.length - n; i += 1) {
+      const gram = value.slice(i, i + n);
+      result.set(gram, (result.get(gram) || 0) + 1);
+    }
+    return result;
+  };
+  const leftGrams = grams(a), rightGrams = grams(b);
+  let overlap = 0, leftTotal = 0, rightTotal = 0;
+  for (const count of leftGrams.values()) leftTotal += count;
+  for (const count of rightGrams.values()) rightTotal += count;
+  for (const [gram, count] of leftGrams) overlap += Math.min(count, rightGrams.get(gram) || 0);
+  return Math.round((2 * overlap / Math.max(1, leftTotal + rightTotal)) * 100);
+};
+const fieldSimilarity = (left, right) => Math.round(tokenSortRatio(left, right) * 0.65 + charNgramDice(left, right) * 0.35);
+const normalizeStrength = value => key(value).replace(/(\d+(?:\.\d+)?)\s*(mcg|mg|gm|g|ml|iu|%)\b/g, (_, amount, unit) => {
+  const numeric = Number(amount);
+  if (unit === 'mcg') return String(Number((numeric / 1000).toFixed(6))) + 'mg';
+  if (unit === 'g' || unit === 'gm') return String(Number((numeric * 1000).toFixed(6))) + 'mg';
+  return String(numeric) + unit;
+});
+const normalizeDosageForm = value => key(value)
+  .replace(/\btablets\b/g, 'tablet').replace(/\bcapsules\b/g, 'capsule')
+  .replace(/\bcaplets\b/g, 'caplet').replace(/\bvials\b/g, 'vial')
+  .replace(/\bampoules\b/g, 'ampoule').replace(/\bsachets\b/g, 'sachet')
+  .replace(/\bdrops\b/g, 'drop').replace(/\bpatches\b/g, 'patch');
+export function scoreMedicineMatch(incoming, candidate, options = {}) {
+  const tokenNameScore = tokenSortRatio(incoming.brandName, candidate.brandName);
+  const ngramNameScore = charNgramDice(incoming.brandName, candidate.brandName);
+  const tfIdfNameScore = tfIdfNgramCosine(incoming.brandName, candidate.brandName, options.nameNgramIdf);
+  const nameScore = Math.round(tokenNameScore * 0.55 + tfIdfNameScore * 0.45);
+  const aComposition = key(incoming.composition || (incoming.ingredients || []).join(' '));
+  const bComposition = key(candidate.composition || (candidate.ingredients || []).join(' '));
+  const compositionScore = aComposition && bComposition ? fieldSimilarity(aComposition, bComposition) : null;
+  const aStrength = normalizeStrength(incoming.strength), bStrength = normalizeStrength(candidate.strength);
+  const aForm = normalizeDosageForm(incoming.dosageForm), bForm = normalizeDosageForm(candidate.dosageForm);
+  const strengthConflict = Boolean(aStrength && bStrength && aStrength !== bStrength);
+  const formConflict = Boolean(aForm && bForm && aForm !== bForm);
+  const compositionConflict = compositionScore !== null && compositionScore < 90;
+  const genericScore = incoming.genericName && candidate.genericName ? fieldSimilarity(incoming.genericName, candidate.genericName) : null;
+  const genericConflict = genericScore !== null && genericScore < 80;
+  const blocked = strengthConflict || formConflict || compositionConflict;
+  // Fellegi-Sunter-inspired evidence weighting. These are conservative initial weights,
+  // not trained m/u probabilities; calibrate them against adjudicated medicine pairs.
+  const evidence = [
+    { field: 'brandName', score: nameScore, weight: 0.35, available: Boolean(incoming.brandName && candidate.brandName) },
+    { field: 'composition', score: compositionScore, weight: 0.40, available: compositionScore !== null },
+    { field: 'genericName', score: genericScore, weight: 0.15, available: genericScore !== null },
+    { field: 'strength', score: aStrength && bStrength ? (strengthConflict ? 0 : 100) : null, weight: 0.07, available: Boolean(aStrength && bStrength) },
+    { field: 'dosageForm', score: aForm && bForm ? (formConflict ? 0 : 100) : null, weight: 0.03, available: Boolean(aForm && bForm) }
+  ];
+  const evidenceWeight = evidence.filter(item => item.available).reduce((sum, item) => sum + item.weight, 0);
+  const score = evidenceWeight ? Math.round(evidence.reduce((sum, item) => sum + (item.available ? item.score * item.weight : 0), 0) / evidenceWeight) : 0;
+  const autoMerge = !blocked && !genericConflict && compositionScore !== null && compositionScore >= 96 && nameScore >= 94 &&
+    score >= 97 && Boolean(aStrength && bStrength && aForm && bForm);
+  const review = !blocked && (genericConflict || (nameScore >= 78 && (score >= 78 || compositionScore === null)));
+  return {
+    score, nameScore, tokenNameScore, ngramNameScore, tfIdfNameScore, compositionScore, genericScore,
+    evidence: evidence.filter(item => item.available).map(({ field, score: fieldScore, weight }) => ({ field, score: fieldScore, weight })),
+    decision: blocked ? 'BLOCKED_CONFLICT' : autoMerge ? 'AUTO_MERGE' : review ? 'MANUAL_REVIEW' : 'NO_MATCH',
+    warnings: [
+      ...(strengthConflict ? ['STRENGTH_CONFLICT'] : []),
+      ...(formConflict ? ['DOSAGE_FORM_CONFLICT'] : []),
+      ...(compositionConflict ? ['COMPOSITION_CONFLICT'] : []),
+      ...(genericConflict ? ['GENERIC_INGREDIENT_CONFLICT'] : []),
+      ...(compositionScore === null ? ['COMPOSITION_MISSING_REVIEW_REQUIRED'] : []),
+      ...(!incoming.manufacturer || !candidate.manufacturer ? ['MANUFACTURER_NOT_COMPARABLE'] : [])
+    ]
+  };
+}
+const fuzzyCandidatePrefixes = records => [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))].slice(0, 120);
 const bool = value => typeof value === 'boolean' ? value : ['true', 'yes', '1'].includes(text(value).toLowerCase());
 const cleanRetailProductName = value => text(value).split(/\b(?:mrp|price|inclusive of all taxes|prescription required|prescription only)\b|₹|\bRs\.?\s*\d/i)[0].replace(/[|,;\-–]+\s*$/, '').trim();
 const cleanDosageForm = value => {
@@ -111,23 +237,30 @@ const medicineMasterSchema = new mongoose.Schema({
   sourceRecordIds: { type: [String], default: [] },
   legacyMedicineIds: { type: [String], default: [] },
   lastImportBatchId: { type: String, default: '' },
-  lastVerifiedAt: { type: Date, default: null }
+  lastVerifiedAt: { type: Date, default: null },
+  lastManuallyUpdatedBy: { type: String, default: '' },
+  lastManuallyUpdatedAt: { type: Date, default: null }
 }, { timestamps: true });
 medicineMasterSchema.index({ brandName: 'text', genericName: 'text', composition: 'text', manufacturer: 'text', uses: 'text', sideEffects: 'text', therapeuticClass: 'text', chemicalClass: 'text', actionClass: 'text' });
 medicineMasterSchema.index({ brandName: 1 }, { collation: { locale: 'en', strength: 2 } });
 const catalogueImportSchema = new mongoose.Schema({
   batchId: { type: String, required: true, unique: true },
-  dataset: { type: String, enum: ['INDIAN_MEDICINE_DATA', 'INDIA_MEDICINES_INFO', 'MEDICINES_PART_1'], required: true },
+  dataset: { type: String, enum: ['INDIAN_MEDICINE_DATA', 'INDIA_MEDICINES_INFO', 'MEDICINES_PART_1', 'MULTI_SOURCE'], required: true },
   fileName: { type: String, required: true },
   fileSha256: { type: String, required: true },
   uploadedBy: { type: String, required: true },
-  status: { type: String, enum: ['STAGING', 'READY', 'PUBLISHING', 'PUBLISHED', 'PARTIALLY_PUBLISHED', 'FAILED'], default: 'READY', index: true },
+  status: { type: String, enum: ['STAGING', 'READY', 'PUBLISHING', 'PUBLISHED', 'PARTIALLY_PUBLISHED', 'FAILED', 'SUPERSEDED'], default: 'READY', index: true },
   recordCount: { type: Number, default: 0 },
   chunkCount: { type: Number, default: 0 },
   records: { type: [mongoose.Schema.Types.Mixed], default: [] },
   report: { type: mongoose.Schema.Types.Mixed, default: {} },
   publishedCount: { type: Number, default: 0 },
-  errorMessage: { type: String, default: '' }
+  errorMessage: { type: String, default: '' },
+  reportFingerprint: { type: String, default: '' },
+  sourceBatchIds: { type: [String], default: [] },
+  supersededByBatchId: { type: String, default: '' },
+  approvedBy: { type: String, default: '' },
+  approvedAt: { type: Date, default: null }
 }, { timestamps: true });
 catalogueImportSchema.index({ dataset: 1, fileSha256: 1 }, { unique: true });
 const MedicineMaster = mongoose.models.MedicineMaster || mongoose.model('MedicineMaster', medicineMasterSchema);
@@ -381,7 +514,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   } catch (error) {
     return res.status(error.statusCode || 400).json({ message: error.message });
   }
-  const { records, rejected, sourceRecords, duplicatesRemoved } = normalized;
+  let { records, rejected, sourceRecords, duplicatesRemoved } = normalized;
   if (!sourceRecords) return res.status(400).json({ message: 'The uploaded medicine dataset contains no records.' });
   const nameCounts = new Map();
   for (const item of records) { const nameKey = key(item.brandName); nameCounts.set(nameKey, (nameCounts.get(nameKey) || 0) + 1); }
@@ -392,7 +525,9 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   if (previousBatch) {
     if (previousBatch.status === 'STAGING') return res.status(409).json({ message: 'This identical dataset is still being staged. Retry shortly.' });
     const firstChunk = await CatalogueImportChunk.findOne({ batchId: previousBatch.batchId, chunkIndex: 0 }).lean();
-    return res.status(200).json({ batchId: previousBatch.batchId, dataset, status: previousBatch.status, report: previousBatch.report, sample: (firstChunk?.records || previousBatch.records || []).slice(0, 8), reused: true });
+    const reportFingerprint = previousBatch.reportFingerprint || hash(JSON.stringify(previousBatch.report || {}));
+    if (!previousBatch.reportFingerprint) await CatalogueImport.updateOne({ _id: previousBatch._id }, { $set: { reportFingerprint } });
+    return res.status(200).json({ batchId: previousBatch.batchId, dataset, status: previousBatch.status, report: previousBatch.report, reportFingerprint, sample: (firstChunk?.records || previousBatch.records || []).slice(0, 8), reused: true });
   }
   const ids = records.map(record => record.medicineId);
   const canonicalKeys = records.map(record => record.canonicalKey).filter(Boolean);
@@ -404,19 +539,67 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   const nameCandidates = names.length
     ? await MedicineMaster.find({ brandName: { $in: names } }, candidateProjection).collation({ locale: 'en', strength: 2 }).lean()
     : [];
+  const fuzzyPrefixes = fuzzyCandidatePrefixes(records);
+  const fuzzyCandidates = fuzzyPrefixes.length
+    ? await MedicineMaster.find({ $or: fuzzyPrefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } })) },
+      { medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1, ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1 })
+      .limit(5000).lean()
+    : [];
   const existingByMongoId = new Map();
-  for (const candidate of [...exactCandidates, ...nameCandidates]) existingByMongoId.set(String(candidate._id), candidate);
+  for (const candidate of [...exactCandidates, ...nameCandidates, ...fuzzyCandidates]) existingByMongoId.set(String(candidate._id), candidate);
   const existing = [...existingByMongoId.values()];
-  const existingIds = new Set(existing.map(item => item.medicineId));
-  const existingKeyCounts = new Map();
-  for (const item of existing.filter(item => item.canonicalKey)) existingKeyCounts.set(item.canonicalKey, (existingKeyCounts.get(item.canonicalKey) || 0) + 1);
-  const existingKeys = new Set([...existingKeyCounts.entries()].filter(([, count]) => count === 1).map(([canonicalKey]) => canonicalKey));
-  const existingNameCounts = new Map();
-  for (const item of existing) { const nameKey = key(item.brandName); existingNameCounts.set(nameKey, (existingNameCounts.get(nameKey) || 0) + 1); }
-  const updates = records.filter(item => existingIds.has(item.medicineId) || (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeys.has(item.canonicalKey)) || (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1)).length;
+  const existingById = new Map(existing.map(item => [item.medicineId, item]));
+  const existingKeyGroups = new Map();
+  const existingNameGroups = new Map();
+  const existingByNamePrefix = new Map();
+  for (const candidate of existing) {
+    if (candidate.canonicalKey) existingKeyGroups.set(candidate.canonicalKey, [...(existingKeyGroups.get(candidate.canonicalKey) || []), candidate]);
+    const nameKey = key(candidate.brandName);
+    existingNameGroups.set(nameKey, [...(existingNameGroups.get(nameKey) || []), candidate]);
+    const prefix = nameKey.slice(0, 2);
+    if (prefix.length === 2) existingByNamePrefix.set(prefix, [...(existingByNamePrefix.get(prefix) || []), candidate]);
+  }
+  const existingNameCounts = new Map([...existingNameGroups.entries()].map(([nameKey, group]) => [nameKey, group.length]));
+  const nameNgramIdf = buildNameNgramIdf(existing);
+  for (const item of records) {
+    const exact = existingById.get(item.medicineId) ||
+      (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeyGroups.get(item.canonicalKey)?.length === 1 ? existingKeyGroups.get(item.canonicalKey)[0] : null) ||
+      (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1 ? existingNameGroups.get(key(item.brandName))?.[0] : null);
+    if (exact) { item.reconciliationMatch = { targetMedicineId: exact.medicineId, method: 'EXACT_OR_CANONICAL', score: 100, decision: 'AUTO_MERGE', warnings: [] }; continue; }
+    let best = null;
+    const prefix = key(item.brandName).slice(0, 2);
+    const candidates = existingByNamePrefix.get(prefix) || [];
+    for (const candidate of candidates) {
+      const scored = scoreMedicineMatch(item, candidate, { nameNgramIdf });
+      if (!best || scored.score > best.score) best = { candidate, ...scored };
+    }
+    if (best && ['AUTO_MERGE', 'MANUAL_REVIEW'].includes(best.decision)) {
+      item.reconciliationMatch = { targetMedicineId: best.candidate.medicineId, method: 'HYBRID_TFIDF_NGRAM_LINKAGE', score: best.score, nameScore: best.nameScore, compositionScore: best.compositionScore, decision: best.decision, warnings: best.warnings };
+    }
+  }
+  const recordsByMasterTarget = new Map();
+  const deduplicatedRecords = [];
+  let fuzzyTargetDuplicatesMerged = 0;
+  for (const item of records) {
+    const targetId = item.reconciliationMatch?.decision === 'AUTO_MERGE' ? item.reconciliationMatch.targetMedicineId : '';
+    if (targetId && recordsByMasterTarget.has(targetId)) {
+      const index = recordsByMasterTarget.get(targetId);
+      deduplicatedRecords[index] = mergeStagedMedicine(deduplicatedRecords[index], item);
+      fuzzyTargetDuplicatesMerged += 1;
+    } else {
+      if (targetId) recordsByMasterTarget.set(targetId, deduplicatedRecords.length);
+      deduplicatedRecords.push(item);
+    }
+  }
+  records = deduplicatedRecords;
+  duplicatesRemoved += fuzzyTargetDuplicatesMerged;
+  const fuzzyAutoMerge = records.filter(item => item.reconciliationMatch?.method === 'HYBRID_TFIDF_NGRAM_LINKAGE' && item.reconciliationMatch.decision === 'AUTO_MERGE').length;
+  const fuzzyManualReview = records.filter(item => item.reconciliationMatch?.decision === 'MANUAL_REVIEW').length;
+  const updateCandidates = records.filter(item => item.reconciliationMatch?.decision === 'AUTO_MERGE').length;
   const report = {
     sourceRecords, normalizedRecords: records.length, rejectedRecords: rejected,
-    duplicatesRemoved, newRecords: records.length - updates, updateCandidates: updates,
+    duplicatesRemoved, newRecords: Math.max(0, records.length - updateCandidates), updateCandidates, fuzzyTargetDuplicatesMerged,
+    fuzzyAutoMerge, fuzzyManualReview, unmatchedRecords: Math.max(0, records.length - updateCandidates - fuzzyManualReview),
     needsReview: records.filter(item => item.dataQualityStatus === 'NEEDS_REVIEW').length,
     partialRecords: records.filter(item => item.dataQualityStatus === 'PARTIAL').length,
     missingComposition: records.filter(item => !item.composition).length,
@@ -445,14 +628,21 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     partialQualityRecords: records.filter(item => item.qualityGrade === 'PARTIAL').length,
     needsReviewQualityRecords: records.filter(item => item.qualityGrade === 'NEEDS_REVIEW').length,
     averageQualityScore: records.length ? Math.round(records.reduce((sum, item) => sum + item.qualityScore, 0) / records.length) : 0,
-    qualityIssueCounts: records.reduce((counts, item) => { for (const issue of item.qualityIssues) counts[issue] = (counts[issue] || 0) + 1; return counts; }, {})
+    qualityIssueCounts: records.reduce((counts, item) => { for (const issue of item.qualityIssues) counts[issue] = (counts[issue] || 0) + 1; return counts; }, {}),
+    fuzzyMatchExamples: records.filter(item => item.reconciliationMatch?.method === 'HYBRID_TFIDF_NGRAM_LINKAGE').slice(0, 25).map(item => ({
+      incomingMedicine: item.brandName, matchedMedicineId: item.reconciliationMatch.targetMedicineId,
+      score: item.reconciliationMatch.score, nameScore: item.reconciliationMatch.nameScore, tokenNameScore: item.reconciliationMatch.tokenNameScore, ngramNameScore: item.reconciliationMatch.ngramNameScore, tfIdfNameScore: item.reconciliationMatch.tfIdfNameScore, compositionScore: item.reconciliationMatch.compositionScore, evidence: item.reconciliationMatch.evidence, decision: item.reconciliationMatch.decision, warnings: item.reconciliationMatch.warnings
+    })),
+    fuzzyCandidateStrategy: 'NORMALIZED_TWO_CHARACTER_PREFIX',
+    fuzzyCandidateScanTruncated: fuzzyPrefixes.length >= 120 || fuzzyCandidates.length >= 5000
   };
+  const reportFingerprint = hash(JSON.stringify(report));
   const chunks = [];
   for (let offset = 0; offset < records.length; offset += CATALOGUE_CHUNK_SIZE) chunks.push({ batchId, chunkIndex: chunks.length, records: records.slice(offset, offset + CATALOGUE_CHUNK_SIZE) });
   await CatalogueImport.create({
     batchId, dataset, fileName: String(req.file.originalname || 'medicine-catalogue.json').slice(0, 180),
     fileSha256, uploadedBy: req.service.userId || req.service.name,
-    status: 'STAGING', recordCount: records.length, chunkCount: chunks.length, report
+    status: 'STAGING', recordCount: records.length, chunkCount: chunks.length, report, reportFingerprint
   });
   try {
     if (chunks.length) await CatalogueImportChunk.insertMany(chunks, { ordered: true });
@@ -462,19 +652,181 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     await CatalogueImport.deleteOne({ batchId });
     throw error;
   }
-  return res.status(201).json({ batchId, dataset, status: 'READY', report, sample: records.slice(0, 8) });
+  return res.status(201).json({ batchId, dataset, status: 'READY', report, reportFingerprint, sample: records.slice(0, 8) });
+}));
+
+const MERGE_ARRAY_FIELDS = ['ingredientIds','ingredients','ingredientDetails','routes','indications','contraindications','drugInteractions','alternatives','sideEffects','uses','suggestedAlternatives','routeIds','casNumbers','uniiCodes','substanceDescriptions','molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology'];
+const MERGE_TEXT_FIELDS = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType','chemicalClass','therapeuticClass','actionClass','sourceLicenseStatusValue','drugFormId','sourceImageUrl'];
+export const mergeStagedMedicine = (left, right) => {
+  const primary = Number(left.sourcePriority ?? 99) <= Number(right.sourcePriority ?? 99) ? left : right;
+  const secondary = primary === left ? right : left;
+  const merged = { ...secondary, ...primary };
+  for (const field of MERGE_TEXT_FIELDS) merged[field] = primary[field] || secondary[field] || '';
+  for (const field of MERGE_ARRAY_FIELDS) {
+    const values = [...(left[field] || []), ...(right[field] || [])];
+    const identity = value => value && typeof value === 'object'
+      ? (value.ingredientId || key(value.name || value.brandName) || JSON.stringify(value))
+      : key(value);
+    merged[field] = [...new Map(values.map(value => [identity(value), value])).values()];
+  }
+  merged.sourceDatasets = [...new Set([...(left.sourceDatasets || []), ...(right.sourceDatasets || []), left.sourceDataset, right.sourceDataset].filter(Boolean))];
+  merged.sourceRecordIds = [...new Set([...(left.sourceRecordIds || [left.sourceRecordId]), ...(right.sourceRecordIds || [right.sourceRecordId])].filter(Boolean))];
+  merged.legacyMedicineIds = [...new Set([...(left.legacyMedicineIds || []), ...(right.legacyMedicineIds || []), ...(left.medicineId !== merged.medicineId ? [left.medicineId] : []), ...(right.medicineId !== merged.medicineId ? [right.medicineId] : [])].filter(Boolean))];
+  const matchCandidates = [left.reconciliationMatch, right.reconciliationMatch].filter(Boolean);
+  const autoTargets = [...new Set(matchCandidates.filter(match => match.decision === 'AUTO_MERGE' && match.targetMedicineId).map(match => match.targetMedicineId))];
+  if (autoTargets.length > 1) {
+    merged.reconciliationMatch = { decision: 'MANUAL_REVIEW', method: 'CONFLICTING_MASTER_TARGETS', score: Math.max(...matchCandidates.map(match => Number(match.score || 0))), warnings: ['CONFLICTING_EXISTING_MASTER_MATCHES'] };
+  } else if (autoTargets.length === 1) {
+    merged.reconciliationMatch = matchCandidates.find(match => match.decision === 'AUTO_MERGE' && match.targetMedicineId === autoTargets[0]);
+  } else if (matchCandidates.length) {
+    merged.reconciliationMatch = matchCandidates.sort((a, b) => Number(b.score || 0) - Number(a.score || 0))[0];
+  }
+  merged.sourcePriority = Math.min(Number(left.sourcePriority ?? 99), Number(right.sourcePriority ?? 99));
+  if (!merged.canonicalKey) merged.canonicalKey = left.canonicalKey || right.canonicalKey || '';
+  if (merged.requiresPrescription === null || merged.requiresPrescription === undefined) merged.requiresPrescription = secondary.requiresPrescription ?? null;
+  if (!merged.habitForming || merged.habitForming === 'UNKNOWN') merged.habitForming = secondary.habitForming || 'UNKNOWN';
+  const quality = assessMedicineQuality({ ...merged, sourceDataset: merged.sourceDataset || primary.sourceDataset, sourceRecordId: merged.sourceRecordId || primary.sourceRecordId });
+  Object.assign(merged, quality);
+  merged.dataQualityStatus = quality.qualityGrade === 'EXCELLENT' || quality.qualityGrade === 'GOOD' ? 'GOOD' : quality.qualityGrade === 'NEEDS_REVIEW' ? 'NEEDS_REVIEW' : 'PARTIAL';
+  return merged;
+};
+
+router.post('/imports/merge', asyncHandler(async (req, res) => {
+  const batchIds = [...new Set((Array.isArray(req.body?.batchIds) ? req.body.batchIds : []).map(value => text(value)).filter(Boolean))];
+  if (batchIds.length < 2 || batchIds.length > 10) return res.status(400).json({ message: 'Select between 2 and 10 staged batches to merge.' });
+  const batches = await CatalogueImport.find({ batchId: { $in: batchIds } }).lean();
+  if (batches.length !== batchIds.length || batches.some(batch => batch.status !== 'READY' || batch.approvedAt)) {
+    return res.status(409).json({ message: 'All selected batches must exist, remain staged and ready, and not already be approved.' });
+  }
+  const sourceBatchIds = batches.map(batch => batch.batchId).sort();
+  const fileSha256 = hash(sourceBatchIds.join('|'));
+  const previous = await CatalogueImport.findOne({ dataset: 'MULTI_SOURCE', fileSha256 }).lean();
+  if (previous) return res.json({ batchId: previous.batchId, dataset: previous.dataset, status: previous.status, report: previous.report, reportFingerprint: previous.reportFingerprint, reused: true });
+  const allChunks = await CatalogueImportChunk.find({ batchId: { $in: sourceBatchIds } }).sort({ batchId: 1, chunkIndex: 1 }).lean();
+  const rawRecords = allChunks.flatMap(chunk => chunk.records || []);
+  if (!rawRecords.length) return res.status(409).json({ message: 'Selected batches contain no staged medicine records.' });
+  if (rawRecords.length > 60000) return res.status(413).json({ message: 'The selected batches contain more than 60,000 records combined. Merge fewer batches at a time.' });
+  const identifierGroups = new Map();
+  for (const record of rawRecords) identifierGroups.set(record.medicineId, [...(identifierGroups.get(record.medicineId) || []), record]);
+  const identifierConflicts = [...identifierGroups.entries()].filter(([, group]) => group.length > 1 && group.some((record, index) => group.slice(index + 1).some(other => {
+    const score = scoreMedicineMatch(record, other);
+    return score.decision === 'BLOCKED_CONFLICT';
+  })));
+  const blockingConflicts = identifierConflicts.length;
+  const exactGroups = new Map();
+  let exactMerged = 0, fuzzyMerged = 0;
+  const reviewCandidates = [];
+  for (const record of rawRecords) {
+    const identity = record.canonicalKey ? 'KEY:' + record.canonicalKey : 'ID:' + record.medicineId;
+    const existing = exactGroups.get(identity);
+    if (existing) { exactGroups.set(identity, mergeStagedMedicine(existing, record)); exactMerged += 1; }
+    else exactGroups.set(identity, record);
+  }
+  const pending = [];
+  const pendingIndexByRecord = new Map();
+  const pendingByPrefix = new Map();
+  let fuzzyScanTruncated = false;
+  for (const record of exactGroups.values()) {
+    const prefix = key(record.brandName).slice(0, 2);
+    let best = null;
+    if (prefix.length === 2) {
+      const candidates = pendingByPrefix.get(prefix) || [];
+      if (candidates.length > 200) fuzzyScanTruncated = true;
+      for (const candidate of candidates.slice(0, 200)) {
+        const score = scoreMedicineMatch(record, candidate);
+        if (!best || score.score > best.score) best = { candidate, ...score };
+      }
+    }
+    if (best?.decision === 'AUTO_MERGE') {
+      const index = pendingIndexByRecord.get(best.candidate);
+      const combined = mergeStagedMedicine(best.candidate, record);
+      if (index !== undefined) { pending[index] = combined; pendingIndexByRecord.delete(best.candidate); pendingIndexByRecord.set(combined, index); }
+      const candidates = pendingByPrefix.get(prefix) || [];
+      const candidateIndex = candidates.indexOf(best.candidate);
+      if (candidateIndex >= 0) candidates[candidateIndex] = combined;
+      fuzzyMerged += 1;
+    } else {
+      if (best?.decision === 'MANUAL_REVIEW') reviewCandidates.push({ incomingMedicine: record.brandName, candidateMedicine: best.candidate.brandName, candidateMedicineId: best.candidate.medicineId, score: best.score, nameScore: best.nameScore, tokenNameScore: best.tokenNameScore, ngramNameScore: best.ngramNameScore, tfIdfNameScore: best.tfIdfNameScore, compositionScore: best.compositionScore, evidence: best.evidence, warnings: best.warnings });
+      pendingIndexByRecord.set(record, pending.length);
+      pending.push(record);
+      if (prefix.length === 2) pendingByPrefix.set(prefix, [...(pendingByPrefix.get(prefix) || []), record]);
+    }
+  }
+  const records = pending;
+  const batchId = randomUUID();
+  const report = {
+    sourceRecords: rawRecords.length, normalizedRecords: records.length, rejectedRecords: 0,
+    duplicatesRemoved: exactMerged + fuzzyMerged, newRecords: Math.max(0, records.length - records.filter(item => item.reconciliationMatch?.decision === 'AUTO_MERGE').length),
+    updateCandidates: records.filter(item => item.reconciliationMatch?.decision === 'AUTO_MERGE').length,
+    exactBatchMerges: exactMerged, fuzzyBatchMerges: fuzzyMerged, fuzzyManualReview: reviewCandidates.length + records.filter(item => item.reconciliationMatch?.decision === 'MANUAL_REVIEW').length,
+    unmatchedRecords: Math.max(0, records.length - records.filter(item => ['AUTO_MERGE','MANUAL_REVIEW'].includes(item.reconciliationMatch?.decision)).length - reviewCandidates.length),
+    blockingConflicts,
+    sourceBatchCount: batches.length, sourceBatchIds,
+    fuzzyMatchExamples: reviewCandidates.slice(0, 25).map(item => ({ incomingMedicine: item.incomingMedicine, candidateMedicine: item.candidateMedicine, matchedMedicineId: item.candidateMedicineId, score: item.score, nameScore: item.nameScore, tokenNameScore: item.tokenNameScore, ngramNameScore: item.ngramNameScore, tfIdfNameScore: item.tfIdfNameScore, compositionScore: item.compositionScore, evidence: item.evidence, decision: 'MANUAL_REVIEW', warnings: item.warnings })),
+    fuzzyCandidateScanTruncated: fuzzyScanTruncated,
+    averageQualityScore: records.length ? Math.round(records.reduce((sum, item) => sum + Number(item.qualityScore || 0), 0) / records.length) : 0
+  };
+  const reportFingerprint = hash(JSON.stringify(report));
+  const chunks = [];
+  for (let offset = 0; offset < records.length; offset += CATALOGUE_CHUNK_SIZE) chunks.push({ batchId, chunkIndex: chunks.length, records: records.slice(offset, offset + CATALOGUE_CHUNK_SIZE) });
+  await CatalogueImport.create({
+    batchId, dataset: 'MULTI_SOURCE', fileName: 'Merged ' + batches.length + ' medicine batches',
+    fileSha256, uploadedBy: req.service.userId || req.service.name,
+    status: 'STAGING', recordCount: records.length, chunkCount: chunks.length, report, reportFingerprint, sourceBatchIds
+  });
+  try {
+    if (chunks.length) await CatalogueImportChunk.insertMany(chunks, { ordered: true });
+    if (blockingConflicts === 0) {
+      const superseded = await CatalogueImport.updateMany(
+        { batchId: { $in: sourceBatchIds }, status: 'READY', approvedAt: null },
+        { $set: { status: 'SUPERSEDED', supersededByBatchId: batchId } }
+      );
+      if ((superseded.modifiedCount ?? superseded.nModified ?? 0) !== sourceBatchIds.length) throw Object.assign(new Error('One or more source batches changed state during merge. Refresh history and retry.'), { statusCode: 409 });
+    }
+    await CatalogueImport.updateOne({ batchId }, { $set: { status: 'READY' } });
+  } catch (error) {
+    await CatalogueImportChunk.deleteMany({ batchId });
+    await CatalogueImport.deleteOne({ batchId });
+    await CatalogueImport.updateMany({ batchId: { $in: sourceBatchIds }, status: 'SUPERSEDED', supersededByBatchId: batchId }, { $set: { status: 'READY', supersededByBatchId: '' } });
+    throw error;
+  }
+  return res.status(201).json({ batchId, dataset: 'MULTI_SOURCE', status: 'READY', report, reportFingerprint, sourceBatchIds });
+}));
+
+router.get('/imports', asyncHandler(async (req, res) => {
+  const page = Math.max(1, Math.min(1000, Number.parseInt(req.query.page || '1', 10) || 1));
+  const limit = Math.max(1, Math.min(50, Number.parseInt(req.query.limit || '10', 10) || 10));
+  const [items, total] = await Promise.all([
+    CatalogueImport.find({}, { batchId: 1, dataset: 1, fileName: 1, status: 1, recordCount: 1, report: 1, publishedCount: 1, approvedAt: 1, approvedBy: 1, errorMessage: 1, sourceBatchIds: 1, supersededByBatchId: 1, createdAt: 1 }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+    CatalogueImport.countDocuments({})
+  ]);
+  return res.json({ items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
 }));
 
 router.get('/imports/:batchId', asyncHandler(async (req, res) => {
   const batch = await CatalogueImport.findOne({ batchId: req.params.batchId }).lean();
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
-  return res.json({ batchId: batch.batchId, dataset: batch.dataset, fileName: batch.fileName, status: batch.status, report: batch.report, publishedCount: batch.publishedCount, errorMessage: batch.errorMessage });
+  return res.json({ batchId: batch.batchId, dataset: batch.dataset, fileName: batch.fileName, status: batch.status, report: batch.report, reportFingerprint: batch.reportFingerprint, approvedBy: batch.approvedBy, approvedAt: batch.approvedAt, publishedCount: batch.publishedCount, errorMessage: batch.errorMessage });
+}));
+
+router.post('/imports/:batchId/approve', asyncHandler(async (req, res) => {
+  const batch = await CatalogueImport.findOne({ batchId: req.params.batchId });
+  if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
+  if (batch.status !== 'READY') return res.status(409).json({ message: 'Only a ready batch can be approved.' });
+  if (Number(batch.report?.blockingConflicts || 0) > 0) return res.status(409).json({ message: 'This combined batch contains conflicting source identifiers with different strength, form or composition. Separate the conflicting source batches before approval.' });
+  if (req.body?.confirmReconciliation !== true || req.body?.reportFingerprint !== batch.reportFingerprint) return res.status(400).json({ message: 'Review confirmation does not match this reconciliation report. Refresh the batch and confirm the current report.' });
+  batch.approvedBy = req.service.userId || req.service.name;
+  batch.approvedAt = new Date();
+  await batch.save();
+  return res.json({ batchId: batch.batchId, status: batch.status, approvedBy: batch.approvedBy, approvedAt: batch.approvedAt, reportFingerprint: batch.reportFingerprint });
 }));
 
 router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
   const batch = await CatalogueImport.findOne({ batchId: req.params.batchId });
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
+  if (batch.status === 'SUPERSEDED') return res.status(409).json({ message: 'This batch was superseded by a combined batch. Publish the merged batch instead.', supersededByBatchId: batch.supersededByBatchId });
   if (batch.status === 'PUBLISHED') return res.json({ batchId: batch.batchId, status: batch.status, publishedCount: batch.publishedCount, report: batch.report });
+  if (!batch.approvedAt || !batch.reportFingerprint) return res.status(409).json({ message: 'This reconciliation report has not been approved. Review and approve the report before publishing.' });
   if (!['READY', 'PARTIALLY_PUBLISHED', 'FAILED'].includes(batch.status)) return res.status(409).json({ message: 'This catalogue batch is already being published.' });
   batch.status = 'PUBLISHING';
   batch.errorMessage = '';
@@ -492,7 +844,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
     }
     for (const recordChunk of recordChunks) for (let offset = 0; offset < recordChunk.length; offset += 250) {
       const chunk = recordChunk.slice(offset, offset + 250);
-      const ids = chunk.map(item => item.medicineId);
+      const ids = [...new Set(chunk.flatMap(item => [item.medicineId, item.reconciliationMatch?.targetMedicineId].filter(Boolean)))];
       const keys = chunk.map(item => item.canonicalKey).filter(Boolean);
       const names = batch.dataset === 'MEDICINES_PART_1' ? [...new Set(chunk.filter(item => item.safeNameMatch && incomingNameCounts.get(key(item.brandName)) === 1).map(item => item.brandName))] : [];
       const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: keys } }, ...(names.length ? [{ $expr: { $in: [{ $toLower: '$brandName' }, names.map(name => name.toLowerCase())] } }] : [])] }).lean();
@@ -506,8 +858,10 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
       const operations = chunk.map(item => {
         const canonicalMatch = item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 ? byKey.get(item.canonicalKey) : null;
         const nameMatch = item.safeNameMatch && incomingNameCounts.get(key(item.brandName)) === 1 ? byName.get(key(item.brandName)) : null;
-        const current = byId.get(item.medicineId) || canonicalMatch || nameMatch || null;
-        const targetId = batch.dataset === 'INDIAN_MEDICINE_DATA' ? item.medicineId : (current?.medicineId || item.medicineId);
+        const plannedTarget = item.reconciliationMatch?.decision === 'AUTO_MERGE'
+          ? byId.get(item.reconciliationMatch.targetMedicineId) : null;
+        const current = byId.get(item.medicineId) || plannedTarget || canonicalMatch || nameMatch || null;
+        const targetId = current?.medicineId || item.medicineId;
         const fields = ['brandName','genericName','genericId','sourceLicenseStatusValue','drugFormId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType','sourceImageUrl'];
         const set = {
           medicineId: targetId,
@@ -543,7 +897,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
             filter: current ? { _id: current._id } : { medicineId: targetId },
             update: {
               $set: set,
-              $addToSet: { sourceDatasets: item.sourceDataset, sourceRecordIds: { $each: item.sourceRecordIds?.length ? item.sourceRecordIds : [item.sourceRecordId] }, ...(current && current.medicineId !== targetId ? { legacyMedicineIds: current.medicineId } : {}) }
+              $addToSet: { sourceDatasets: { $each: item.sourceDatasets?.length ? item.sourceDatasets : [item.sourceDataset].filter(Boolean) }, sourceRecordIds: { $each: item.sourceRecordIds?.length ? item.sourceRecordIds : [item.sourceRecordId].filter(Boolean) }, legacyMedicineIds: { $each: [...(item.legacyMedicineIds || []), ...(current && current.medicineId !== item.medicineId ? [item.medicineId] : [])] } }
             },
             upsert: true
           }

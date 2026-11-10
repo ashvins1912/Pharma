@@ -3,7 +3,7 @@ import test from 'node:test';
 
 process.env.SERVICE_AUTH_SECRET = 'test-service-secret-with-more-than-thirty-two-characters';
 
-const { detectMedicineDataset, normalizeMedicineRecord, consolidate, assessMedicineQuality, parseJsonArrayRecords } = await import('./src/medicine-catalogue-import-routes.js');
+const { detectMedicineDataset, normalizeMedicineRecord, consolidate, assessMedicineQuality, parseJsonArrayRecords, scoreMedicineMatch, mergeStagedMedicine } = await import('./src/medicine-catalogue-import-routes.js');
 const { requireServiceScope } = await import('./src/service-auth.js');
 const jwt = (await import('jsonwebtoken')).default;
 
@@ -215,6 +215,89 @@ test('consolidation attaches quality grades and scores to every accepted record'
   assert.ok(result.records[0].qualityScore >= 0 && result.records[0].qualityScore <= 100);
   assert.ok(['EXCELLENT', 'GOOD', 'PARTIAL', 'NEEDS_REVIEW'].includes(result.records[0].qualityGrade));
   assert.ok(Array.isArray(result.records[0].qualityIssues));
+});
+
+test('fuzzy medicine matching auto-merges only when composition, strength and form agree', () => {
+  const incoming = { brandName: 'Atorvastatin 10mg Tablets', composition: 'Atorvastatin', strength: '10 mg', dosageForm: 'Tablet', genericName: 'Atorvastatin' };
+  const existing = { medicineId: 'MASTER-1', brandName: 'Atorvastatin 10 mg Tablet', composition: 'Atorvastatin', strength: '10 mg', dosageForm: 'Tablet', genericName: 'Atorvastatin' };
+  const match = scoreMedicineMatch(incoming, existing);
+  assert.equal(match.decision, 'AUTO_MERGE');
+  assert.ok(match.score >= 96);
+});
+
+test('fuzzy medicine matching blocks strength, dosage-form and composition conflicts', () => {
+  const incoming = { brandName: 'Atorvastatin 10mg Tablet', composition: 'Atorvastatin', strength: '10 mg', dosageForm: 'Tablet' };
+  const wrongStrength = scoreMedicineMatch(incoming, { brandName: 'Atorvastatin 10mg Tablet', composition: 'Atorvastatin', strength: '20 mg', dosageForm: 'Tablet' });
+  const wrongForm = scoreMedicineMatch(incoming, { brandName: 'Atorvastatin 10mg Tablet', composition: 'Atorvastatin', strength: '10 mg', dosageForm: 'Capsule' });
+  const wrongComposition = scoreMedicineMatch(incoming, { brandName: 'Atorvastatin 10mg Tablet', composition: 'Clopidogrel', strength: '10 mg', dosageForm: 'Tablet' });
+  assert.equal(wrongStrength.decision, 'BLOCKED_CONFLICT');
+  assert.ok(wrongStrength.warnings.includes('STRENGTH_CONFLICT'));
+  assert.equal(wrongForm.decision, 'BLOCKED_CONFLICT');
+  assert.ok(wrongForm.warnings.includes('DOSAGE_FORM_CONFLICT'));
+  assert.equal(wrongComposition.decision, 'BLOCKED_CONFLICT');
+  assert.ok(wrongComposition.warnings.includes('COMPOSITION_CONFLICT'));
+});
+
+test('fuzzy medicine matching sends name-only matches to manual review', () => {
+  const match = scoreMedicineMatch(
+    { brandName: 'Metformin 500mg Tablet', composition: '', strength: '500 mg', dosageForm: 'Tablet' },
+    { brandName: 'Metformin 500 mg Tablets', composition: '', strength: '500 mg', dosageForm: 'Tablet' }
+  );
+  assert.equal(match.decision, 'MANUAL_REVIEW');
+  assert.ok(match.warnings.includes('COMPOSITION_MISSING_REVIEW_REQUIRED'));
+});
+
+test('record linkage normalizes equivalent mass units before medicine identity scoring', () => {
+  const match = scoreMedicineMatch(
+    { brandName: 'Example Tablet', composition: 'Example ingredient', strength: '1 g', dosageForm: 'Tablets', genericName: 'Example ingredient' },
+    { brandName: 'Example Tablet', composition: 'Example ingredient', strength: '1000 mg', dosageForm: 'Tablet', genericName: 'Example ingredient' }
+  );
+  assert.equal(match.decision, 'AUTO_MERGE');
+  assert.equal(match.score, 100);
+});
+
+test('record linkage sends a conflicting generic ingredient to manual review despite a similar brand name', () => {
+  const match = scoreMedicineMatch(
+    { brandName: 'Example 10mg Tablet', composition: 'Example ingredient', strength: '10 mg', dosageForm: 'Tablet', genericName: 'Atorvastatin' },
+    { brandName: 'Example 10mg Tablet', composition: 'Example ingredient', strength: '10 mg', dosageForm: 'Tablet', genericName: 'Clopidogrel' }
+  );
+  assert.equal(match.decision, 'MANUAL_REVIEW');
+  assert.ok(match.warnings.includes('GENERIC_INGREDIENT_CONFLICT'));
+});
+
+test('character n-gram linkage retains typo candidates for review but does not auto-merge weak evidence', () => {
+  const match = scoreMedicineMatch(
+    { brandName: 'Atorvastatin 10mg Tablet', composition: 'Atorvastatin', strength: '10 mg', dosageForm: 'Tablet' },
+    { brandName: 'Atorvastatin 10mg Tablett', composition: 'Atorvastatin', strength: '10 mg', dosageForm: 'Tablet' }
+  );
+  assert.ok(match.ngramNameScore > 0);
+  assert.ok(Number.isFinite(match.tfIdfNameScore));
+  assert.ok(['AUTO_MERGE', 'MANUAL_REVIEW', 'NO_MATCH'].includes(match.decision));
+  assert.notEqual(match.decision, 'BLOCKED_CONFLICT');
+});
+
+test('multi-batch record merge preserves source provenance and enriches missing fields', () => {
+  const left = {
+    medicineId: 'BRAND-1', brandName: 'Example 10mg Tablet', composition: 'Example ingredient',
+    strength: '10 mg', dosageForm: 'Tablet', genericName: 'Example ingredient', manufacturer: '',
+    sourcePriority: 1, sourceDataset: 'INDIAN_MEDICINE_DATA', sourceRecordId: 'BRAND-1',
+    sourceRecordIds: ['BRAND-1'], sourceDatasets: ['INDIAN_MEDICINE_DATA'],
+    ingredients: ['Example ingredient'], uses: [], sideEffects: [], qualityScore: 50
+  };
+  const right = {
+    medicineId: 'MED-2', brandName: 'Example 10 mg Tablets', composition: 'Example ingredient',
+    strength: '10mg', dosageForm: 'Tablet', genericName: 'Example ingredient', manufacturer: 'Example Pharma',
+    sourcePriority: 3, sourceDataset: 'INDIA_MEDICINES_INFO', sourceRecordId: 'MED-2',
+    sourceRecordIds: ['MED-2'], sourceDatasets: ['INDIA_MEDICINES_INFO'],
+    ingredients: ['Example ingredient'], uses: ['Source supplied use'], sideEffects: ['Source supplied side effect'], qualityScore: 40
+  };
+  const merged = mergeStagedMedicine(left, right);
+  assert.equal(merged.medicineId, 'BRAND-1');
+  assert.equal(merged.manufacturer, 'Example Pharma');
+  assert.deepEqual(merged.uses, ['Source supplied use']);
+  assert.deepEqual(merged.sourceDatasets.sort(), ['INDIAN_MEDICINE_DATA', 'INDIA_MEDICINES_INFO'].sort());
+  assert.deepEqual(merged.sourceRecordIds.sort(), ['BRAND-1', 'MED-2']);
+  assert.deepEqual(merged.legacyMedicineIds, ['MED-2']);
 });
 
 test('catalogue import scope is valid without a tenant or branch identity', async () => {

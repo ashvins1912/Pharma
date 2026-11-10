@@ -172,9 +172,14 @@ export function createServiceRouters(gatewayConfig = config) {
   const catalogueImportAuth = (req, res, next) => req.inventoryServiceUnavailable ? next() : requireSuperAdmin(req, res, next);
   inventoryRouter.get('/catalogue/medicines', inventory('inventory.catalogue.read'));
   inventoryRouter.get('/catalogue/medicines/:medicineId', inventory('inventory.catalogue.read'));
+  inventoryRouter.patch('/catalogue/medicines/:medicineId', catalogueImportAuth, inventory('inventory.catalogue.import'));
+  inventoryRouter.get('/catalogue/medicines/:medicineId/audit', catalogueImportAuth, inventory('inventory.catalogue.import'));
   const catalogueImport = inventory('inventory.catalogue.import');
+  inventoryRouter.get('/catalogue/imports', catalogueImportAuth, catalogueImport);
+  inventoryRouter.post('/catalogue/imports/merge', catalogueImportAuth, catalogueImport);
   inventoryRouter.post('/catalogue/imports/preview', catalogueImportAuth, catalogueImport);
   inventoryRouter.get('/catalogue/imports/:batchId', catalogueImportAuth, catalogueImport);
+  inventoryRouter.post('/catalogue/imports/:batchId/approve', catalogueImportAuth, catalogueImport);
   inventoryRouter.post('/catalogue/imports/:batchId/publish', catalogueImportAuth, catalogueImport);
   inventoryRouter.post('/imports/preview', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.post('/imports', inventoryImportAuth, inventory('inventory.import'));
