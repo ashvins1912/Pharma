@@ -55,7 +55,7 @@ export default function OrderConfirmation({ order, onTrackOrder, onContinueShopp
       {order && (
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left text-xs space-y-2">
           <div className="flex justify-between text-slate-500">
-            <span>{t('orderReference')}:</span>
+            <span>Order ID:</span>
             <span className="font-extrabold text-slate-900">#{orderId}</span>
           </div>
           <div className="flex justify-between text-slate-500">
