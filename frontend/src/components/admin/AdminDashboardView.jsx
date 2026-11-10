@@ -73,6 +73,7 @@ export default function AdminDashboardView() {
   const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen, setAdminBulkImportModalOpen, setAdminNewStockModalOpen } = useApp();
   const { tenantId: contextTenantId } = useTenant();
   const activeTenantId = contextTenantId || user?.tenantId || user?.app_metadata?.tenantId || '';
+  const canImportMedicineMaster = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(String(user?.app_metadata?.role || user?.role || role || '').toUpperCase());
   const [adminTab, setAdminTab] = useState('tenantProfile');
   const [catalogueImportOpen, setCatalogueImportOpen] = useState(false);
   const [dashboardPeriod, setDashboardPeriod] = useState('today');
