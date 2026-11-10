@@ -1152,27 +1152,6 @@ const MAPPING_FIELDS = [
   'habitForming','sourceImageUrl','casNumbers','uniiCodes','substanceDescriptions',
   'molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology'
 ];
-const mappingProjection = {
-  _id: 0, medicineId: '$record.medicineId', brandName: '$record.brandName',
-  genericName: '$record.genericName', genericId: '$record.genericId',
-  productName: '$record.productName', manufacturer: '$record.manufacturer',
-  manufacturerId: '$record.manufacturerId', composition: '$record.composition',
-  ingredients: '$record.ingredients', ingredientIds: '$record.ingredientIds',
-  strength: '$record.strength', packSize: '$record.packSize', dosageForm: '$record.dosageForm',
-  medicineType: '$record.medicineType', routes: '$record.routes', routeIds: '$record.routeIds',
-  indications: '$record.indications', uses: '$record.uses', sideEffects: '$record.sideEffects',
-  contraindications: '$record.contraindications', drugInteractions: '$record.drugInteractions',
-  suggestedAlternatives: '$record.suggestedAlternatives', alternatives: '$record.alternatives',
-  therapeuticClass: '$record.therapeuticClass', chemicalClass: '$record.chemicalClass',
-  actionClass: '$record.actionClass', habitForming: '$record.habitForming',
-  sourceImageUrl: '$record.sourceImageUrl', casNumbers: '$record.casNumbers',
-  uniiCodes: '$record.uniiCodes', substanceDescriptions: '$record.substanceDescriptions',
-  molecularFormulas: '$record.molecularFormulas', inchiValues: '$record.inchiValues',
-  iupacNames: '$record.iupacNames', molecularWeights: '$record.molecularWeights',
-  smiles: '$record.smiles', toxicology: '$record.toxicology',
-  sourceDataset: '$record.sourceDataset', sourceRecordId: '$record.sourceRecordId',
-  reconciliationMatch: '$record.reconciliationMatch', storeMapping: '$record.storeMapping'
-};
 const getStagedMappingPage = async (batchId, page, limit) => {
   const skip = (page - 1) * limit;
   const paginate = async (Model, match, legacy = false) => {
