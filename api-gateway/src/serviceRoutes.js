@@ -144,12 +144,44 @@ export function createServiceRouters(gatewayConfig = config) {
       req.inventoryServiceUnavailable = true;
       return next();
     }
-    // This single GET returns only whitelisted Medicine Master details and is
-    // intentionally usable by anonymous Store visitors. All other inventory
-    // routes still require a verified user session.
-    if (req.method === 'GET' && req.path === '/catalogue/medicines/match') return next();
     return authenticateUser(req, res, next, gatewayConfig);
   });
+  const medicineMasterRouter = express.Router();
+  medicineMasterRouter.use((req, res, next) => {
+    req.matchedServiceRouter = 'medicine-master';
+    if (req.method === 'GET' && req.path === '/medicines/match') return next();
+    return authenticateUser(req, res, next, gatewayConfig);
+  });
+  const medicineMaster = scope => createServiceHandler({
+    audience: gatewayConfig.medicineMasterJwtAudience,
+    getScope: () => scope,
+    target: gatewayConfig.medicineMasterServiceUrl
+  }, gatewayConfig);
+  const catalogueImportAuth = (req, res, next) => requireSuperAdmin(req, res, next);
+  medicineMasterRouter.get('/medicines/match', createServiceHandler({
+    audience: gatewayConfig.medicineMasterJwtAudience,
+    getScope: () => 'inventory.catalogue.read',
+    target: gatewayConfig.medicineMasterServiceUrl,
+    allowPublic: true
+  }, gatewayConfig));
+  medicineMasterRouter.post('/medicines/match/batch', catalogueImportAuth, medicineMaster('inventory.catalogue.import'));
+  medicineMasterRouter.get('/medicines', medicineMaster('inventory.catalogue.read'));
+  medicineMasterRouter.get('/medicines/:medicineId', medicineMaster('inventory.catalogue.read'));
+  medicineMasterRouter.patch('/medicines/:medicineId', catalogueImportAuth, medicineMaster('inventory.catalogue.import'));
+  medicineMasterRouter.get('/medicines/:medicineId/audit', catalogueImportAuth, medicineMaster('inventory.catalogue.import'));
+  const catalogueImport = medicineMaster('inventory.catalogue.import');
+  medicineMasterRouter.get('/imports', catalogueImportAuth, catalogueImport);
+  medicineMasterRouter.post('/imports/merge', catalogueImportAuth, catalogueImport);
+  medicineMasterRouter.post('/imports/preview', catalogueImportAuth, catalogueImport);
+  medicineMasterRouter.post('/imports/remove-selected', catalogueImportAuth, catalogueImport);
+  medicineMasterRouter.get('/imports/jobs/:jobId', catalogueImportAuth, catalogueImport);
+  medicineMasterRouter.post('/imports/jobs/:jobId/retry', catalogueImportAuth, catalogueImport);
+  medicineMasterRouter.post('/imports/jobs/:jobId/restart', catalogueImportAuth, catalogueImport);
+  medicineMasterRouter.get('/imports/:batchId/records', catalogueImportAuth, catalogueImport);
+  medicineMasterRouter.get('/imports/:batchId', catalogueImportAuth, catalogueImport);
+  medicineMasterRouter.post('/imports/:batchId/approve', catalogueImportAuth, catalogueImport);
+  medicineMasterRouter.post('/imports/:batchId/publish', catalogueImportAuth, catalogueImport);
+
   const inventory = scope => createServiceHandler({
     audience: gatewayConfig.inventoryJwtAudience,
     getScope: () => scope,
@@ -174,29 +206,6 @@ export function createServiceRouters(gatewayConfig = config) {
     : requireInventoryImportPermission(req, res, next);
   inventoryRouter.post('/adjust', inventoryAdmin, inventory('inventory.adjust'));
   const catalogueImportAuth = (req, res, next) => req.inventoryServiceUnavailable ? next() : requireSuperAdmin(req, res, next);
-  inventoryRouter.get('/catalogue/medicines/match', createServiceHandler({
-    audience: gatewayConfig.inventoryJwtAudience,
-    getScope: () => 'inventory.catalogue.read',
-    target: gatewayConfig.inventoryServiceUrl,
-    allowPublic: true
-  }, gatewayConfig));
-  inventoryRouter.post('/catalogue/medicines/match/batch', catalogueImportAuth, inventory('inventory.catalogue.import'));
-  inventoryRouter.get('/catalogue/medicines', inventory('inventory.catalogue.read'));
-  inventoryRouter.get('/catalogue/medicines/:medicineId', inventory('inventory.catalogue.read'));
-  inventoryRouter.patch('/catalogue/medicines/:medicineId', catalogueImportAuth, inventory('inventory.catalogue.import'));
-  inventoryRouter.get('/catalogue/medicines/:medicineId/audit', catalogueImportAuth, inventory('inventory.catalogue.import'));
-  const catalogueImport = inventory('inventory.catalogue.import');
-  inventoryRouter.get('/catalogue/imports', catalogueImportAuth, catalogueImport);
-  inventoryRouter.post('/catalogue/imports/merge', catalogueImportAuth, catalogueImport);
-  inventoryRouter.post('/catalogue/imports/preview', catalogueImportAuth, catalogueImport);
-  inventoryRouter.post('/catalogue/imports/remove-selected', catalogueImportAuth, catalogueImport);
-  inventoryRouter.get('/catalogue/imports/jobs/:jobId', catalogueImportAuth, catalogueImport);
-  inventoryRouter.post('/catalogue/imports/jobs/:jobId/retry', catalogueImportAuth, catalogueImport);
-  inventoryRouter.post('/catalogue/imports/jobs/:jobId/restart', catalogueImportAuth, catalogueImport);
-  inventoryRouter.get('/catalogue/imports/:batchId/records', catalogueImportAuth, catalogueImport);
-  inventoryRouter.get('/catalogue/imports/:batchId', catalogueImportAuth, catalogueImport);
-  inventoryRouter.post('/catalogue/imports/:batchId/approve', catalogueImportAuth, catalogueImport);
-  inventoryRouter.post('/catalogue/imports/:batchId/publish', catalogueImportAuth, catalogueImport);
   inventoryRouter.post('/imports/preview', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.post('/imports', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.get('/imports/batches', inventoryImportAuth, inventory('inventory.import'));
@@ -286,5 +295,5 @@ export function createServiceRouters(gatewayConfig = config) {
   prescriptionRouter.get('/:prescriptionId/document-url', prescription('prescription.review'));
   prescriptionRouter.post('/hospitals', prescription('prescription.write'));
 
-  return { customerRouter, inventoryRouter, orderRouter, prescriptionRouter, legacyPrescriptionRouter };
+  return { customerRouter, inventoryRouter, medicineMasterRouter, orderRouter, prescriptionRouter, legacyPrescriptionRouter };
 }
