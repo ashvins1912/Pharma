@@ -94,6 +94,7 @@ export function AppProvider({ children }) {
   const [notifications, setNotifications] = useState([]);
   const [deliveryEvents, setDeliveryEvents] = useState([]);
   const [realtimeConnectionStatus, setRealtimeConnectionStatus] = useState('offline');
+  const realtimeConnectedUserRef = useRef(null);
   const notificationLoadSequence = useRef(0);
   const notificationReadOverrides = useRef(new Set());
   const deliveryEventsLoadSequence = useRef(0);
@@ -694,16 +695,19 @@ export function AppProvider({ children }) {
     };
 
     const onSocketConnect = () => {
+      const isReconnect = realtimeConnectedUserRef.current === user.id;
+      realtimeConnectedUserRef.current = user.id;
       setRealtimeConnectionStatus('connected');
       socket.emit('join_bell_room', { userId: user.id, ...(tenantId ? { tenantId } : {}) });
-      // The cache consumer persists/acks its own Redis Stream cursor. Reload the
-      // authenticated snapshots on connect/reconnect to fill gaps while this browser
-      // was offline, then let future Socket.IO events update the UI immediately.
+      // Recover missed state only after an actual reconnect. Initial snapshots
+      // are already fetched by their owning views/context effects.
       void loadNotifications();
       void loadDeliveryEvents();
-      window.dispatchEvent(new CustomEvent('pharma:order-status-changed', { detail: { source: 'realtime-recovery' } }));
-      window.dispatchEvent(new CustomEvent('pharma:medicine-request-updated', { detail: { source: 'realtime-recovery' } }));
-      window.dispatchEvent(new CustomEvent('pharma:inventory-updated', { detail: { source: 'realtime-recovery', tenantId, branchId } }));
+      if (isReconnect) {
+        window.dispatchEvent(new CustomEvent('pharma:order-status-changed', { detail: { source: 'realtime-recovery' } }));
+        window.dispatchEvent(new CustomEvent('pharma:medicine-request-updated', { detail: { source: 'realtime-recovery' } }));
+        window.dispatchEvent(new CustomEvent('pharma:inventory-updated', { detail: { source: 'realtime-recovery', tenantId, branchId } }));
+      }
     };
     const onSocketDisconnect = () => setRealtimeConnectionStatus('reconnecting');
     const onSocketConnectError = error => {
