@@ -1118,7 +1118,7 @@ router.post('/imports/remove-selected', asyncHandler(async (req, res) => {
   const now = new Date();
   const actor = req.service?.userId || req.service?.name || 'platform-admin';
   const result = await CatalogueImport.updateMany(
-    { batchId: { $in: batchIds }, status: 'READY', approvedAt: null, sourceBatchIds: { $in: [[], null] }, supersededByBatchId: '', isHidden: { $ne: true } },
+    { batchId: { $in: batchIds }, status: 'READY', approvedAt: null, $or: [{ sourceBatchIds: { $exists: false } }, { sourceBatchIds: { $size: 0 } }], supersededByBatchId: '', isHidden: { $ne: true } },
     { $set: { isHidden: true, hiddenAt: now, hiddenBy: actor } }
   );
   if (result.modifiedCount !== batchIds.length) return res.status(409).json({ message: 'Some batches changed while removal was in progress. Refresh the history and retry.' });
@@ -1138,7 +1138,7 @@ router.get('/imports', asyncHandler(async (req, res) => {
 
 router.get('/imports/:batchId/records', asyncHandler(async (req, res) => {
   const batchId = String(req.params.batchId || '').trim();
-  const batch = await CatalogueImport.findOne({ batchId }, { batchId: 1, status: 1, recordCount: 1 }).lean();
+  const batch = await CatalogueImport.findOne({ batchId, isHidden: { $ne: true } }, { batchId: 1, status: 1, recordCount: 1 }).lean();
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
   const page = Math.max(1, Math.min(10000, Number.parseInt(req.query.page || '1', 10) || 1));
   const limit = Math.max(1, Math.min(50, Number.parseInt(req.query.limit || '20', 10) || 20));
@@ -1165,7 +1165,7 @@ router.get('/imports/:batchId', asyncHandler(async (req, res) => {
 }));
 
 router.post('/imports/:batchId/approve', asyncHandler(async (req, res) => {
-  const batch = await CatalogueImport.findOne({ batchId: req.params.batchId });
+  const batch = await CatalogueImport.findOne({ batchId: req.params.batchId, isHidden: { $ne: true } });
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
   if (batch.status !== 'READY') return res.status(409).json({ message: 'Only a ready batch can be approved.' });
   if (Number(batch.report?.blockingConflicts || 0) > 0) return res.status(409).json({ message: 'This combined batch contains conflicting source identifiers with different strength, form or composition. Separate the conflicting source batches before approval.' });
@@ -1177,7 +1177,7 @@ router.post('/imports/:batchId/approve', asyncHandler(async (req, res) => {
 }));
 
 router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
-  const batch = await CatalogueImport.findOne({ batchId: req.params.batchId });
+  const batch = await CatalogueImport.findOne({ batchId: req.params.batchId, isHidden: { $ne: true } });
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
   if (batch.status === 'SUPERSEDED') return res.status(409).json({ message: 'This batch was superseded by a combined batch. Publish the merged batch instead.', supersededByBatchId: batch.supersededByBatchId });
   if (batch.status === 'PUBLISHED') return res.json({ batchId: batch.batchId, status: batch.status, publishedCount: batch.publishedCount, report: batch.report });
