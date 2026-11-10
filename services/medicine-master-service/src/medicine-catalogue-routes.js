@@ -37,7 +37,10 @@ router.get('/matches/review', async (req, res, next) => {
     const page = Math.max(1, Number.parseInt(req.query.page || '1', 10) || 1);
     const limit = Math.max(1, Math.min(100, Number.parseInt(req.query.limit || '100', 10) || 100));
     const status = String(req.query.status || 'PENDING').toUpperCase();
-    const filter = status === 'ALL' ? { mappingStatus: { $ne: 'APPROVED' } } : { mappingStatus: status };
+    const filter = status === 'ALL'
+      ? { mappingStatus: { $ne: 'APPROVED' } }
+      : status === 'PENDING' ? { $or: [{ mappingStatus: 'PENDING' }, { mappingStatus: { $exists: false } }] }
+        : { mappingStatus: status };
     const [rows, total] = await Promise.all([
       MedicineMatchReference.find(filter).sort({ updatedAt: 1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean(),
       MedicineMatchReference.countDocuments(filter)
