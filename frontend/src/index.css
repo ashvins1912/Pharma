@@ -1804,7 +1804,7 @@ body.modal-open {
 
 
 /* Shared safety net for every semantic modal, including legacy nested overlays. */
-:where(.modal-overlay, .fixed.inset-0:has([role="dialog"][aria-modal="true"]), .fixed.inset-0[role="dialog], .fixed.inset-0[aria-modal="true"]) {
+:where(.modal-overlay, .fixed.inset-0:has([role="dialog"][aria-modal="true"]), .fixed.inset-0[role="dialog"], .fixed.inset-0[aria-modal="true"]) {
   z-index: 2147483000 !important;
   isolation: isolate;
 }
