@@ -1470,90 +1470,130 @@ html.dark .qm-mobile-record-proposal { border-color: #065f46; background: #052e2
 html.dark .qm-inventory-record-card { border-color: #334155; background: #162236; }
 
 
-/* Header control alignment: keep the hamburger shortcut available and
-   place language and active-branch selectors immediately after it, before
-   notifications, cart, alerts and the profile/sign-in action. */
+/* Header controls: compact, borderless selectors and responsive navigation order.
+   Desktop uses the full primary nav without a hamburger. On tablet/mobile, keep
+   Store visible and put the drawer toggle after the profile/sign-in control. */
 .app-header__menu-toggle {
-  display: inline-flex;
-  flex: 0 0 2.5rem;
-  width: 2.5rem;
-  height: 2.5rem;
+  display: none;
+  flex: 0 0 2.4rem;
+  width: 2.4rem;
+  height: 2.4rem;
   padding: 0;
   align-items: center;
   justify-content: center;
   line-height: 1;
+  border: 0;
+  border-radius: .75rem;
+  background: #f1f5f9;
+  color: #334155;
+  box-shadow: none;
 }
-.app-header__menu-toggle svg {
-  display: block;
-  width: 1.25rem;
-  height: 1.25rem;
-}
-.app-header__language,
-.app-header__branch {
+.app-header__menu-toggle svg { display:block; width:1.15rem; height:1.15rem; }
+.app-header__mobile-store { display:none; }
+.qm-select-shell {
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: .45rem;
-  height: 2.75rem;
-  min-height: 2.75rem;
+  gap: .4rem;
   min-width: 0;
-  padding: .35rem .65rem;
-  border: 1px solid #dbe3ef;
-  border-radius: .85rem;
-  white-space: nowrap;
+  height: 2.4rem;
+  min-height: 2.4rem;
+  padding: .25rem .55rem;
+  border: 0 !important;
+  border-radius: .75rem;
+  background: #f1f5f9;
+  box-shadow: none !important;
+  transition: background-color 140ms ease;
 }
-.app-header__language-select,
-.app-header__branch-select {
-  display: block;
-  min-width: 0;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #172033;
-  font: inherit;
-  line-height: 1.2;
-  cursor: pointer;
-  text-overflow: ellipsis;
+.qm-select-shell:hover { background:#e9eff7; }
+.qm-select-control {
+  display:block;
+  min-width:0;
+  width:auto;
+  height:100%;
+  min-height:0;
+  padding:0 1.05rem 0 0;
+  border:0 !important;
+  border-radius:0;
+  outline:none !important;
+  background-color:transparent !important;
+  color:#334155;
+  box-shadow:none !important;
+  font:inherit;
+  font-size:.72rem;
+  font-weight:750;
+  line-height:1.2;
+  cursor:pointer;
+  text-overflow:ellipsis;
 }
-.app-header__language-select { width: auto; max-width: 7.25rem; }
-.app-header__branch-select { width: auto; max-width: 8.25rem; }
-.quickmeds-actions-group {
-  align-items: center;
-  justify-content: flex-end;
+.qm-select-control:focus,
+.qm-select-control:focus-visible {
+  outline:none !important;
+  border:0 !important;
+  box-shadow:none !important;
 }
-.quickmeds-actions-group > * { flex: 0 0 auto; }
+.app-header__language-select { max-width:5.15rem; }
+.app-header__branch-select { max-width:7rem; }
+.quickmeds-actions-group { align-items:center; justify-content:flex-end; }
+.quickmeds-actions-group > * { flex:0 0 auto; }
 .app-header__sign-in,
-.quickmeds-actions-group > button[aria-label] {
-  min-height: 2.5rem;
+.quickmeds-actions-group > button[aria-label] { min-height:2.4rem; }
+@media (max-width:1023px) {
+  .quickmeds-header-inner > nav { display:none !important; }
+  .app-header__mobile-store { display:inline-flex !important; }
+  .app-header__menu-toggle { display:inline-flex !important; }
+  .quickmeds-actions-group { gap:clamp(.2rem, .7vw, .45rem); }
 }
-@media (max-width: 1023px) {
-  .app-header__menu-toggle {
-    display: inline-flex !important;
-    order: 0;
-  }
-  .app-header__language { order: 1; }
-  .app-header__branch { order: 2; }
-  .quickmeds-actions-group { gap: clamp(.25rem, .8vw, .55rem); }
+@media (min-width:640px) and (max-width:1023px) {
+  .app-header__language { max-width:8rem; }
+  .app-header__branch { max-width:9rem; }
+  .app-header__language-select { max-width:5.5rem; }
+  .app-header__branch-select { max-width:6.25rem; }
+  .quickmeds-brand-anchor { flex-shrink:1; }
+  .quickmeds-brand-badge-container { min-width:0; }
+  .quickmeds-brand-name { overflow:hidden; text-overflow:ellipsis; }
 }
-@media (min-width: 640px) and (max-width: 1023px) {
-  .app-header__language { max-width: 8.5rem; }
-  .app-header__branch { max-width: 10rem; }
-  .app-header__language-select { max-width: 6rem; }
-  .app-header__branch-select { max-width: 7rem; }
-  .quickmeds-brand-anchor { flex-shrink: 1; }
-  .quickmeds-brand-badge-container { min-width: 0; }
-  .quickmeds-brand-name { overflow: hidden; text-overflow: ellipsis; }
-}
-@media (max-width: 639px) {
+@media (max-width:639px) {
   .app-header__language,
-  .app-header__branch { display: none !important; }
+  .app-header__branch { display:none !important; }
 }
-html.dark .app-header__language,
-html.dark .app-header__branch {
-  border-color: #475569;
-  background: #172033;
+@media (max-width:479px) {
+  .app-header__mobile-store { padding-inline:.55rem; }
+  .quickmeds-actions-group { gap:.2rem; }
 }
-html.dark .app-header__language-select,
-html.dark .app-header__branch-select { color: #f8fafc; }
+html.dark .qm-select-shell { background:#172033; }
+html.dark .qm-select-shell:hover { background:#202d43; }
+html.dark .qm-select-control { color:#f8fafc; }
+html.dark .app-header__menu-toggle { background:#1e293b; color:#e2e8f0; }
+
+/* One restrained dropdown treatment across customer and admin screens. */
+.pharma-responsive-scope :where(select),
+.admin-screen :where(select) {
+  min-height:2.5rem;
+  border:1px solid transparent;
+  border-radius:.75rem;
+  background-color:var(--qm-surface-muted);
+  color:var(--qm-ink);
+  box-shadow:none;
+  transition:background-color 140ms ease, border-color 140ms ease;
+}
+.pharma-responsive-scope :where(select):hover:not(:disabled),
+.admin-screen :where(select):hover:not(:disabled) {
+  border-color:transparent;
+  background-color:#eef2f7;
+}
+.pharma-responsive-scope :where(select):focus-visible,
+.admin-screen :where(select):focus-visible {
+  outline:none;
+  border-color:var(--qm-brand);
+  box-shadow:0 0 0 2px rgb(37 99 235 / .12);
+}
+html.dark .pharma-responsive-scope :where(select),
+html.dark .admin-screen :where(select) {
+  border-color:transparent !important;
+  background-color:#172338;
+  color:#e2e8f0;
+}
+html.dark .pharma-responsive-scope :where(select):hover:not(:disabled),
+html.dark .admin-screen :where(select):hover:not(:disabled) { background-color:#20314a; }
