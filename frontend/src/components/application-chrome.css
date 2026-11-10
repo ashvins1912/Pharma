@@ -1,9 +1,17 @@
 /* Shared application chrome: consistent header and footer across all roles and viewports. */
 .app-header { position: sticky; top: 0; z-index: 50; isolation: isolate; }
-.app-header__inner { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; min-height: 4.25rem; gap: clamp(.5rem, 1.25vw, 1.25rem); }
-.app-header__brand { min-width: 0; }
+.app-header__inner { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; min-height: 4.25rem; gap: clamp(.5rem, 1.25vw, 1.25rem); }
+.app-header__brand { min-width: max-content; flex: 0 0 auto; }
+.app-header__brand-badge-container { flex-wrap: nowrap; white-space: nowrap; }
+.app-header__desktop-nav { display: flex; flex: 0 0 max-content; justify-self: center; align-items: center; flex-wrap: nowrap; gap: clamp(.25rem, .55vw, .65rem); }
+.app-header__desktop-nav > button { flex: 0 0 auto; min-width: max-content; white-space: nowrap; overflow-wrap: normal; }
+.app-header__desktop-nav > button > span { white-space: nowrap; overflow-wrap: normal; word-break: keep-all; }
+.app-header__menu-toggle { display: none; }
 .app-header__desktop-nav { min-width: 0; justify-content: center; white-space: nowrap; }
-.app-header__actions { min-width: 0; justify-content: flex-end; gap: clamp(.25rem, .55vw, .55rem); }
+.app-header__actions { min-width: max-content; width: max-content; flex: 0 0 auto; flex-wrap: nowrap; justify-content: flex-end; gap: clamp(.25rem, .55vw, .55rem); }
+.app-header__language, .app-header__branch { flex: 0 0 auto; white-space: nowrap; }
+.app-header :where(button, select, label) { overflow-wrap: normal; word-break: normal; }
+.app-header :where(button > span) { min-width: max-content; }
 .app-header__actions > button, .app-header__actions > [role="button"] { flex: 0 0 auto; }
 .app-header__mobile-panel { width: min(100%, 24rem); padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom)); }
 .app-footer { --footer-text: #475569; --footer-muted: #64748b; margin-top: clamp(2.5rem, 5vw, 5rem); color: var(--footer-text); }
@@ -20,11 +28,24 @@
 .app-footer__legal { justify-content: flex-end; gap: .65rem 1.25rem; }
 .app-footer__legal > span { white-space: nowrap; }
 .app-footer__legal label { min-height: 2.25rem; }
-@media (max-width: 1023px) {
+@media (max-width: 1599px) {
   .app-header__inner { grid-template-columns: minmax(0, 1fr) auto; }
   .app-header__desktop-nav { display: none; }
+  .app-header__menu-toggle { display: inline-flex; }
+  .app-header__brand { min-width: 0; }
+  .app-header__brand-badge-container { flex-wrap: nowrap; }
+}
+@media (max-width: 1279px) {
+  .app-header__language, .app-header__branch { display: none !important; }
+}
+@media (max-width: 1023px) {
   .app-footer__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .app-footer__brand { grid-column: 1 / -1; max-width: 42rem; }
+}
+@media (min-width: 1600px) {
+  .app-header__inner { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .app-header__desktop-nav { display: flex; }
+  .app-header__menu-toggle { display: none; }
 }
 @media (max-width: 639px) {
   .app-header__inner { min-height: 3.75rem; gap: .4rem; }
