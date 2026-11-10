@@ -30,7 +30,7 @@ router.get('/match', async (req, res, next) => {
 });
 
 
-const MAPPED_MEDICINE_FIELDS = new Set(['brandName','productName','genericName','manufacturer','composition','strength','packSize','dosageForm','medicineType','therapeuticClass','chemicalClass','actionClass','routes','indications','uses','contraindications','sideEffects','drugInteractions','habitForming','requiresPrescription','prescriptionVerification','clinicalDataVerification','dataQualityStatus']);
+const MAPPED_MEDICINE_FIELDS = new Set(['brandName','productName','genericName','genericId','manufacturer','manufacturerId','productId','composition','ingredients','ingredientIds','ingredientDetails','strength','packSize','dosageForm','drugFormId','medicineType','therapeuticClass','chemicalClass','actionClass','routes','routeIds','indications','uses','contraindications','sideEffects','drugInteractions','alternatives','suggestedAlternatives','habitForming','requiresPrescription','prescriptionVerification','clinicalDataVerification','sourceLicenseStatus','sourceLicenseStatusValue','casNumbers','uniiCodes','substanceDescriptions','molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology','sourceImageUrl','dataQualityStatus','qualityScore','qualityGrade','qualityIssues','sourcePriority','sourceDatasets','sourceRecordIds','legacyMedicineIds','lastVerifiedAt']);
 router.get('/matches/review', async (req, res, next) => {
   try {
     if (req.service?.isPlatformUser !== true) return res.status(403).json({ message: 'Only a platform super administrator can review medicine mappings.' });
@@ -46,13 +46,9 @@ router.get('/matches/review', async (req, res, next) => {
       MedicineMatchReference.countDocuments(filter)
     ]);
     const ids = [...new Set(rows.map(row => row.mappedMedicineId || row.medicineId).filter(Boolean))];
-    const candidates = ids.length ? await medicineMaster().find({ medicineId: { $in: ids }, isArchived: { $ne: true } }, {
-      _id: 0, medicineId: 1, brandName: 1, productName: 1, genericName: 1, composition: 1, strength: 1,
-      packSize: 1, dosageForm: 1, manufacturer: 1, medicineType: 1, therapeuticClass: 1, chemicalClass: 1,
-      actionClass: 1, routes: 1, indications: 1, uses: 1, contraindications: 1, sideEffects: 1,
-      drugInteractions: 1, habitForming: 1, requiresPrescription: 1, prescriptionVerification: 1,
-      clinicalDataVerification: 1, dataQualityStatus: 1
-    }).lean() : [];
+    const candidateProjection = Object.fromEntries([...MAPPED_MEDICINE_FIELDS].map(field => [field, 1]));
+    candidateProjection._id = 0; candidateProjection.medicineId = 1;
+    const candidates = ids.length ? await medicineMaster().find({ medicineId: { $in: ids }, isArchived: { $ne: true } }, candidateProjection).lean() : [];
     const byId = new Map(candidates.map(item => [item.medicineId, item]));
     return res.json({ items: rows.map(row => ({ ...row, candidate: byId.get(row.mappedMedicineId || row.medicineId) || null })), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
   } catch (error) { return next(error); }
