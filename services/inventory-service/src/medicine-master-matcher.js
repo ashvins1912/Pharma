@@ -42,7 +42,12 @@ export function rankMedicineMasterMatches(product, candidates) {
     ));
     const exactGeneric = normalizeIdentity(incoming.genericName) !== ''
       && normalizeIdentity(incoming.genericName) === normalizeIdentity(candidate.genericName);
-    const conflicts = (evidence.warnings || []).filter(warning => CONFLICT_WARNINGS.has(warning));
+    const packSizeConflict = Boolean(product?.packSize && candidate.packSize
+      && normalizeIdentity(product.packSize) !== normalizeIdentity(candidate.packSize));
+    const conflicts = [
+      ...(evidence.warnings || []).filter(warning => CONFLICT_WARNINGS.has(warning)),
+      ...(packSizeConflict ? ['PACK_SIZE_CONFLICT'] : [])
+    ];
     const strengthComparable = Boolean(incoming.strength && candidate.strength);
     const formComparable = Boolean(incoming.dosageForm && candidate.dosageForm);
     const strengthExact = !strengthComparable || evidence.warnings.includes('STRENGTH_CONFLICT') === false;
@@ -51,7 +56,8 @@ export function rankMedicineMasterMatches(product, candidates) {
       evidence.score * 0.72
       + (exactBrand ? 18 : exactGeneric ? 10 : 0)
       + (incoming.manufacturer && candidate.manufacturer
-        && normalizeIdentity(incoming.manufacturer) === normalizeIdentity(candidate.manufacturer) ? 4 : 0)
+        ? (normalizeIdentity(incoming.manufacturer) === normalizeIdentity(candidate.manufacturer) ? 4 : -4)
+        : 0)
     );
     return {
       candidate,
