@@ -61,7 +61,7 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
 
     return createPortal(
         <div className="fixed inset-0 z-[1000] flex items-start sm:items-center justify-center overflow-y-auto overscroll-contain p-3 sm:p-4 modal-overlay animate-fade-in">
-            <div className="pharma-modal-surface relative max-w-lg w-full p-4 sm:p-8 max-h-[calc(100dvh-1.5rem)] sm:max-h-[90dvh] overflow-y-auto overscroll-contain">
+            <div role="dialog" aria-modal="true" aria-labelledby="rider-onboarding-title" tabIndex={-1} className="pharma-modal-surface relative max-w-lg w-full p-4 sm:p-8 max-h-[calc(100dvh-1.5rem)] sm:max-h-[90dvh] overflow-y-auto overscroll-contain">
                 {/* Header */}
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100 pr-10">
                     <div className="flex items-center gap-3">
@@ -69,7 +69,7 @@ export default function RiderOnboardingModal({ isOpen, onClose, onRiderAdded }) 
                             🛵
                         </div>
                         <div>
-                            <h3 className="text-lg font-black text-slate-900">Onboard Courier Rider</h3>
+                            <h3 id="rider-onboarding-title" className="text-lg font-black text-slate-900">Onboard Courier Rider</h3>
                             <p className="text-xs text-slate-500">Add a new delivery partner to the automated dispatch fleet</p>
                         </div>
                     </div>
