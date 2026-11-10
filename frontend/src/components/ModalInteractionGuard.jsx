@@ -26,10 +26,10 @@ export default function ModalInteractionGuard() {
     const canScrollWithin = (target, modal) => {
       let current = target instanceof Element ? target : null;
       while (current && current !== modal.parentElement) {
-        if (current === modal) return false;
         const style = window.getComputedStyle(current);
         if (/(auto|scroll)/.test(style.overflowY) &&
             current.scrollHeight > current.clientHeight + 1) return true;
+        if (current === modal) break;
         current = current.parentElement;
       }
       return false;
