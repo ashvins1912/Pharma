@@ -1787,7 +1787,7 @@ html.dark .admin-screen :where(select):hover:not(:disabled) { background-color:#
 
   /* Keep headers/actions in the full-screen dialog reachable while scrolling. */
   :where([role="dialog"], [data-modal-content]) :where(
-    input:not([type="checkbox"]):not([type="radio]),
+    input:not([type="checkbox"]):not([type="radio"]),
     select,
     textarea
   ) {
