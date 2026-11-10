@@ -1568,6 +1568,7 @@ html.dark .qm-select-control { color:#f8fafc; }
 html.dark .app-header__menu-toggle { background:#1e293b; color:#e2e8f0; }
 
 /* One restrained dropdown treatment across customer and admin screens. */
+.pharma-app-shell select:not(.qm-select-control),
 .pharma-responsive-scope :where(select),
 .admin-screen :where(select) {
   min-height:2.5rem;
@@ -1578,22 +1579,26 @@ html.dark .app-header__menu-toggle { background:#1e293b; color:#e2e8f0; }
   box-shadow:none;
   transition:background-color 140ms ease, border-color 140ms ease;
 }
+.pharma-app-shell select:not(.qm-select-control):hover:not(:disabled),
 .pharma-responsive-scope :where(select):hover:not(:disabled),
 .admin-screen :where(select):hover:not(:disabled) {
   border-color:transparent;
   background-color:#eef2f7;
 }
+.pharma-app-shell select:not(.qm-select-control):focus-visible,
 .pharma-responsive-scope :where(select):focus-visible,
 .admin-screen :where(select):focus-visible {
   outline:none;
   border-color:var(--qm-brand);
   box-shadow:0 0 0 2px rgb(37 99 235 / .12);
 }
+html.dark .pharma-app-shell select:not(.qm-select-control),
 html.dark .pharma-responsive-scope :where(select),
 html.dark .admin-screen :where(select) {
   border-color:transparent !important;
   background-color:#172338;
   color:#e2e8f0;
 }
+html.dark .pharma-app-shell select:not(.qm-select-control):hover:not(:disabled),
 html.dark .pharma-responsive-scope :where(select):hover:not(:disabled),
 html.dark .admin-screen :where(select):hover:not(:disabled) { background-color:#20314a; }
