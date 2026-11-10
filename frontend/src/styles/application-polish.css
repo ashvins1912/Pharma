@@ -1,0 +1,318 @@
+/*
+ * QuickMeds Rx — application-wide polish and layout safety layer.
+ * Loaded after legacy and responsive styles so nested screens inherit the
+ * same accessible surface rules without changing component behaviour.
+ */
+
+:root {
+  color-scheme: light;
+  --qm-focus-ring: 0 0 0 3px rgb(37 99 235 / 0.22);
+  --qm-control-height: 2.75rem;
+  --qm-motion-fast: 140ms;
+  --qm-motion-standard: 200ms;
+  --qm-modal-gutter: clamp(0.5rem, 2vw, 1.25rem);
+  --qm-overlay: rgb(15 23 42 / 0.52);
+}
+
+html {
+  min-width: 320px;
+  scroll-behavior: smooth;
+  scroll-padding-top: 6rem;
+  text-size-adjust: 100%;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--qm-canvas, #f5f7fb);
+  color: var(--qm-text, #334155);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root,
+.pharma-app-shell,
+.pharma-responsive-scope {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pharma-app-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.pharma-responsive-scope,
+.pharma-responsive-scope *,
+.admin-screen,
+.admin-screen * {
+  min-width: 0;
+}
+
+.pharma-responsive-scope :where(img, video, canvas, iframe, svg) {
+  max-width: 100%;
+}
+
+.pharma-responsive-scope :where(p, li, dd, dt, td, th, label, a, button) {
+  overflow-wrap: anywhere;
+}
+
+.pharma-responsive-scope :where(input, select, textarea, button) {
+  max-width: 100%;
+  font: inherit;
+}
+
+.pharma-responsive-scope :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select, textarea) {
+  min-height: var(--qm-control-height);
+  min-width: 0;
+  border-radius: var(--qm-radius-md, 0.875rem);
+  color: var(--qm-ink, #0f172a);
+}
+
+.pharma-responsive-scope :where(input, select, textarea)::placeholder {
+  color: var(--qm-subtle, #94a3b8);
+  opacity: 1;
+}
+
+.pharma-responsive-scope :where(button, [role="button"]) {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pharma-responsive-scope :where(button:not(:disabled), [role="button"]:not([aria-disabled="true"]), a) {
+  touch-action: manipulation;
+}
+
+.pharma-responsive-scope :where(button:disabled, [aria-disabled="true"]) {
+  cursor: not-allowed;
+}
+
+.pharma-responsive-scope :where(a, button, input, select, textarea, [tabindex]):focus-visible,
+.pharma-responsive-scope :where([role="dialog"]):focus-visible {
+  outline: 2px solid var(--qm-brand, #2563eb);
+  outline-offset: 3px;
+  box-shadow: var(--qm-focus-ring);
+}
+
+.pharma-responsive-scope :where(.grid, .flex, .inline-flex) > *,
+.admin-screen :where(.grid, .flex, .inline-flex) > * {
+  min-width: 0;
+}
+
+.pharma-responsive-scope :where(.overflow-x-auto, [data-table-scroll="true"], .pharma-table-container) {
+  max-width: 100%;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.pharma-responsive-scope :where(table) {
+  max-width: 100%;
+}
+
+.pharma-responsive-scope :where(pre, code) {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* Modal overlays remain scrollable when their contents exceed the viewport.
+   Safe alignment keeps the top of tall dialogs reachable instead of centering
+   their overflow outside the visible screen. */
+.fixed.inset-0[role="dialog"],
+.fixed.inset-0[aria-modal="true"] {
+  box-sizing: border-box;
+  max-width: 100%;
+  max-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  align-items: safe center;
+  justify-content: safe center;
+  padding:
+    max(var(--qm-modal-gutter), env(safe-area-inset-top))
+    max(var(--qm-modal-gutter), env(safe-area-inset-right))
+    max(var(--qm-modal-gutter), env(safe-area-inset-bottom))
+    max(var(--qm-modal-gutter), env(safe-area-inset-left));
+}
+
+.pharma-modal-surface,
+.pharma-checkout-modal {
+  box-sizing: border-box;
+  min-width: 0;
+  max-height: calc(100dvh - max(1rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  background-color: var(--qm-surface, #fff);
+  color: var(--qm-ink, #0f172a);
+}
+
+:where(.pharma-modal-surface > header,
+  .pharma-modal-surface > .modal-header,
+  .pharma-checkout-modal > header,
+  .pharma-checkout-modal > .modal-header) {
+  flex: 0 0 auto;
+}
+
+:where(.pharma-modal-surface > .modal-body,
+  .pharma-modal-surface > .content-area,
+  .pharma-modal-surface > [data-modal-scroll],
+  .pharma-modal-surface > .overflow-y-auto,
+  .pharma-checkout-modal > .modal-body,
+  .pharma-checkout-modal > .content-area,
+  .pharma-checkout-modal > [data-modal-scroll],
+  .pharma-checkout-modal > .overflow-y-auto) {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+:where([role="dialog"] form,
+  [role="dialog"] > section,
+  [role="dialog"] > article) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:where(.modal-overlay, [data-modal-backdrop]) {
+  background-color: var(--qm-overlay);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+/* Keep long labels, identifiers and nested admin panels from widening a page. */
+.pharma-responsive-scope :where(.font-mono, [data-long-value]) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.pharma-responsive-scope :where(.whitespace-nowrap) {
+  max-width: 100%;
+}
+
+.admin-screen :where(.overflow-x-auto, [data-table-scroll="true"]) {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-screen :where(.flex.items-center.justify-between, .flex.justify-between.items-center) {
+  min-width: 0;
+}
+
+.admin-screen :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Neutral surfaces use shared theme tokens; semantic status colours stay intact. */
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body,
+html.dark .pharma-app-shell {
+  background-color: var(--qm-canvas, #0b1220);
+  color: var(--qm-text, #e2e8f0);
+}
+
+html.dark :where(.pharma-modal-surface, .pharma-checkout-modal) {
+  background-color: var(--qm-surface, #111c2e);
+  color: var(--qm-ink, #f8fafc);
+  border-color: var(--qm-border, #334155);
+}
+
+html.dark .pharma-responsive-scope :where(.text-slate-950, .text-slate-900, .text-slate-800, .text-slate-700,
+  .text-gray-950, .text-gray-900, .text-gray-800, .text-gray-700) {
+  color: #eaf0f8 !important;
+}
+
+html.dark .pharma-responsive-scope :where(.text-slate-600, .text-gray-600) {
+  color: #c0ccdc !important;
+}
+
+html.dark .pharma-responsive-scope :where(.text-slate-500, .text-gray-500, .text-slate-400, .text-gray-400) {
+  color: #9aabc0 !important;
+}
+
+html.dark .pharma-responsive-scope :where(.bg-slate-50, .bg-slate-100, .bg-gray-50, .bg-gray-100) {
+  background-color: #162236 !important;
+  color: #e2e8f0;
+}
+
+html.dark .pharma-responsive-scope :where(.border-slate-100, .border-slate-200, .border-gray-100, .border-gray-200) {
+  border-color: var(--qm-border, #334155) !important;
+}
+
+html.dark :where([role="dialog"] input, [role="dialog"] select, [role="dialog"] textarea) {
+  background-color: #0f1a2b;
+  color: #f8fafc;
+  border-color: var(--qm-border-strong, #475569);
+}
+
+@media (max-width: 767px) {
+  :where(.pharma-modal-surface, .pharma-checkout-modal) {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100dvh - env(safe-area-inset-top));
+    border-radius: 1.25rem 1.25rem 0 0;
+  }
+
+  :where(.fixed.inset-0[role="dialog"], .fixed.inset-0[aria-modal="true"]) {
+    align-items: safe flex-end;
+    padding-inline: 0;
+    padding-bottom: 0;
+  }
+
+  :where(.pharma-modal-surface > .modal-body,
+    .pharma-modal-surface > .content-area,
+    .pharma-modal-surface > [data-modal-scroll],
+    .pharma-checkout-modal > .modal-body,
+    .pharma-checkout-modal > .content-area,
+    .pharma-checkout-modal > [data-modal-scroll]) {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 380px) {
+  .pharma-responsive-scope {
+    --qm-page-gutter: 0.625rem;
+  }
+
+  :where(.pharma-modal-surface, .pharma-checkout-modal) {
+    border-radius: 1rem 1rem 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .pharma-responsive-scope *,
+  .pharma-responsive-scope *::before,
+  .pharma-responsive-scope *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .pharma-responsive-scope :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid CanvasText;
+  }
+}
