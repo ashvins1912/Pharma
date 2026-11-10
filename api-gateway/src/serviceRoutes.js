@@ -8,6 +8,7 @@ import { createBackendAuthToken, createServiceToken } from './serviceAuth.js';
 function hasScopePermission(user, scope) {
   const aliases = {
     'inventory.read': ['inventory.view'],
+    'inventory.catalogue.read': ['inventory.read'],
     'inventory.write': ['inventory.update'],
     'inventory.adjust': ['inventory.write'],
     'orders.read': ['orders.view'],
@@ -169,6 +170,8 @@ export function createServiceRouters(gatewayConfig = config) {
     : requireInventoryImportPermission(req, res, next);
   inventoryRouter.post('/adjust', inventoryAdmin, inventory('inventory.adjust'));
   const catalogueImportAuth = (req, res, next) => req.inventoryServiceUnavailable ? next() : requireSuperAdmin(req, res, next);
+  inventoryRouter.get('/catalogue/medicines', inventory('inventory.catalogue.read'));
+  inventoryRouter.get('/catalogue/medicines/:medicineId', inventory('inventory.catalogue.read'));
   const catalogueImport = inventory('inventory.catalogue.import');
   inventoryRouter.post('/catalogue/imports/preview', catalogueImportAuth, catalogueImport);
   inventoryRouter.get('/catalogue/imports/:batchId', catalogueImportAuth, catalogueImport);
