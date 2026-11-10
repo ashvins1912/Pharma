@@ -59,7 +59,7 @@ export function scoreMedicineMatch(incoming, candidate) {
   const score = Math.round(nameScore * 0.65 + (compositionScore === null ? 0 : compositionScore * 0.20) +
     (aStrength && bStrength && !strengthConflict ? 10 : 0) + (aForm && bForm && !formConflict ? 5 : 0));
   const autoMerge = !blocked && compositionScore !== null && compositionScore >= 94 && nameScore >= 92 && score >= 96 && (genericScore === null || genericScore >= 80);
-  const review = !blocked && nameScore >= 82 && score >= 82;
+  const review = !blocked && nameScore >= 82 && (score >= 82 || compositionScore === null);
   return {
     score: Math.min(100, score), nameScore, compositionScore, genericScore,
     decision: blocked ? 'BLOCKED_CONFLICT' : autoMerge ? 'AUTO_MERGE' : review ? 'MANUAL_REVIEW' : 'NO_MATCH',
