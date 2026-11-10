@@ -106,7 +106,6 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       }
 
       addToast(`📦 Restock approved! Stock updated for ${itemsToRestock.length} items.`, 'success');
-      window.dispatchEvent(new Event('pharma:inventory-updated'));
       void loadAdminInventory(adminPage, searchTerm);
       refreshStorefrontInventory();
 
