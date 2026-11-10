@@ -19,7 +19,13 @@ const pick = (record, ...names) => {
   return undefined;
 };
 const bool = value => typeof value === 'boolean' ? value : ['true', 'yes', '1'].includes(text(value).toLowerCase());
-const splitList = value => text(value).split(/[,;|]+/).map(text).filter(Boolean).filter((v, i, a) => a.findIndex(x => key(x) === key(v)) === i);
+const cleanRetailProductName = value => text(value).split(/\b(?:mrp|inclusive of all taxes|prescription required|prescription only)\b|₹|\bRs\.?\s*\d/i)[0].replace(/[|,;\-–]+\s*$/, '').trim();
+const cleanDosageForm = value => {
+  const source = key(value);
+  const forms = ['tablet','capsule','syrup','suspension','injection','cream','ointment','gel','drops','spray','inhaler','powder','solution','lotion','suppository','sachet','granules','patch','vial','ampoule','lozenge','mouthwash'];
+  return forms.filter(form => source.includes(form)).map(form => form.charAt(0).toUpperCase() + form.slice(1)).join(', ');
+};
+const splitList = value => text(value).split(/[,;|+]+/).map(text).filter(Boolean).filter((v, i, a) => a.findIndex(x => key(x) === key(v)) === i);
 
 const medicineMasterSchema = new mongoose.Schema({
   medicineId: { type: String, required: true, unique: true, index: true },
@@ -35,6 +41,7 @@ const medicineMasterSchema = new mongoose.Schema({
   composition: { type: String, default: '' },
   strength: { type: String, default: '' },
   dosageForm: { type: String, default: '' },
+  medicineType: { type: String, default: '' },
   routes: { type: [String], default: [] },
   alternatives: { type: [mongoose.Schema.Types.Mixed], default: [] },
   indications: { type: [String], default: [] },
@@ -91,7 +98,7 @@ export function normalizeMedicineRecord(raw, dataset) {
       brandName, genericName, genericId: text(pick(raw, 'genericIdentifier')),
       productId: text(pick(raw, 'productIdentifier')), productName: text(pick(raw, 'productName')),
       manufacturer: text(pick(raw, 'supplierName')), manufacturerId: text(pick(raw, 'supplierIdentifier')),
-      ingredients, composition, strength, dosageForm,
+      ingredients, composition, strength, dosageForm, medicineType: '',
       routes: splitList(pick(raw, 'routeOfAdministrationName')),
       alternatives: Array.isArray(raw.alternativeDrugs) ? raw.alternativeDrugs.slice(0, 20) : [],
       indications: splitList(pick(raw, 'indication')),
@@ -104,9 +111,10 @@ export function normalizeMedicineRecord(raw, dataset) {
   }
   const brandName = text(pick(raw, 'Medicine Name')) || text(pick(raw, 'Product Name'));
   if (!brandName) return null;
-  const productName = text(pick(raw, 'Product Name'));
+  const productName = cleanRetailProductName(pick(raw, 'Product Name'));
   const composition = text(pick(raw, 'Composition'));
-  const dosageForm = text(pick(raw, 'Type of Medicine'));
+  const medicineType = text(pick(raw, 'Type of Medicine'));
+  const dosageForm = cleanDosageForm(medicineType);
   const strengthMatch = (brandName + ' ' + productName + ' ' + composition).match(/\b\d+(?:\.\d+)?\s?(?:mcg|mg|g|ml|iu|%)(?:\b|\/)/i);
   const strength = strengthMatch ? strengthMatch[0].replace(/\s+/g, ' ').trim() : '';
   const identity = [key(brandName), key(composition), key(strength), key(dosageForm)].join('|');
@@ -118,7 +126,7 @@ export function normalizeMedicineRecord(raw, dataset) {
     canonicalKey: composition ? identity : '',
     brandName, genericName: '', genericId: '', productId: '', productName,
     manufacturer: '', manufacturerId: '', ingredients: splitList(composition), composition,
-    strength, dosageForm, routes: [], alternatives: [], indications: [], contraindications: [], drugInteractions: [],
+    strength, dosageForm, medicineType, routes: [], alternatives: [], indications: [], contraindications: [], drugInteractions: [],
     sourceImageUrl: /^https:\/\//i.test(image) ? image : '',
     requiresPrescription: pick(raw, 'Is Prescription Required?') === undefined ? null : bool(pick(raw, 'Is Prescription Required?')),
     prescriptionVerification: 'UNVERIFIED', sourcePriority: 2, sourceDataset: dataset,
@@ -136,7 +144,7 @@ function consolidate(records, dataset) {
     const previous = unique.get(identity);
     if (!previous) unique.set(identity, normalized);
     else {
-      for (const field of ['genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','dosageForm']) {
+      for (const field of ['genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','dosageForm','medicineType']) {
         if (!previous[field] && normalized[field]) previous[field] = normalized[field];
       }
       for (const field of ['ingredients','routes','indications','contraindications','drugInteractions']) {
@@ -179,6 +187,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     needsReview: records.filter(item => item.dataQualityStatus === 'NEEDS_REVIEW').length,
     withComposition: records.filter(item => item.composition).length,
     withManufacturer: records.filter(item => item.manufacturer).length,
+    withDosageForm: records.filter(item => item.dosageForm).length,
     withAlternatives: records.filter(item => item.alternatives.length).length,
     prescriptionFlagsUnverified: records.filter(item => item.requiresPrescription !== null).length
   };
@@ -219,7 +228,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
       const operations = chunk.map(item => {
         const current = byId.get(item.medicineId) || (batch.dataset === 'INDIA_MEDICINES_INFO' && item.canonicalKey ? byKey.get(item.canonicalKey) : null);
         const targetId = current?.medicineId || item.medicineId;
-        const fields = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','dosageForm','sourceImageUrl'];
+        const fields = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','dosageForm','medicineType','sourceImageUrl'];
         const set = { lastImportBatchId: batch.batchId, sourcePriority: Math.min(Number(current?.sourcePriority ?? 99), item.sourcePriority) };
         for (const field of fields) {
           if (item[field] && (!current?.[field] || item.sourcePriority < Number(current.sourcePriority ?? 99))) set[field] = item[field];
