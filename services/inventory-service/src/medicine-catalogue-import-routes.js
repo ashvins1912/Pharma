@@ -2,7 +2,6 @@ import { createHash, randomUUID } from 'node:crypto';
 import express from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
-import { GridFSBucket } from 'mongodb';
 import { requireServiceScope } from './service-auth.js';
 
 const router = express.Router();
@@ -301,7 +300,7 @@ const CatalogueImportJob = mongoose.models.MedicineCatalogueImportJob || mongoos
 let catalogueImportBucket;
 let catalogueImportWorkerTimer;
 let catalogueImportWorkerBusy = false;
-const getCatalogueImportBucket = () => catalogueImportBucket || (catalogueImportBucket = new GridFSBucket(mongoose.connection.db, { bucketName: 'medicineCatalogueUploads' }));
+const getCatalogueImportBucket = () => catalogueImportBucket || (catalogueImportBucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: 'medicineCatalogueUploads' }));
 const updateCatalogueImportJob = (jobId, values) => CatalogueImportJob.updateOne({ jobId }, { $set: values });
 const streamToBuffer = async stream => {
   const chunks = [];
