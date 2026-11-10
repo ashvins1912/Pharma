@@ -23,6 +23,7 @@ test('Indian Medicine Dataset preserves brandIdentifier and structured master fi
     productName: 'Paracetamol 500 mg Tablet',
     supplierIdentifier: 'SUP-1',
     supplierName: 'Example Pharma',
+    substanceIdentifier: 'ING-1',
     substanceName: 'Paracetamol',
     doseForm: 'Tablet',
     routeOfAdministrationName: 'Oral',
@@ -39,6 +40,7 @@ test('Indian Medicine Dataset preserves brandIdentifier and structured master fi
   assert.equal(result.medicineId, 'BRAND-EXACT-001');
   assert.equal(result.genericName, 'Paracetamol');
   assert.equal(result.manufacturer, 'Example Pharma');
+  assert.deepEqual(result.ingredientIds, ['ING-1']);
   assert.deepEqual(result.ingredients, ['Paracetamol']);
   assert.deepEqual(result.routes, ['Oral']);
   assert.deepEqual(result.alternatives, ['Brand B']);
