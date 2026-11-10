@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { buildInventoryAlerts } from './alerts.js';
 import { config } from './config.js';
 import { Audit, Inventory, Product, Reservation } from './models.js';
+import { queueMedicineMatch } from './medicine-match-reference.js';
 
 const asPositiveQuantity = value => Number.isSafeInteger(value) && value > 0;
 const normalizeItems = items => {
@@ -470,6 +471,10 @@ export async function createProduct({ product: input = {}, tenantId, branchId, a
     }
     throw error;
   } finally { await session.endSession(); }
+  // Queue matching only after the inventory transaction commits. The unique
+  // normalized identity makes retries idempotent and never blocks stock writes.
+  try { await queueMedicineMatch(result); }
+  catch (error) { console.error('Could not queue Medicine Master match:', error.message); }
   return result;
 }
 
@@ -583,6 +588,9 @@ export async function updateProduct({ productId, product: input = {}, tenantId, 
       }], { session });
     });
   } finally { await session.endSession(); }
+  // Re-queue the updated identity; an unchanged identity reuses its reference.
+  try { await queueMedicineMatch(result); }
+  catch (error) { console.error('Could not queue updated Medicine Master match:', error.message); }
   return result;
 }
 
