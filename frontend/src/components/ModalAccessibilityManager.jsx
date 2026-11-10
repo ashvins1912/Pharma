@@ -34,8 +34,8 @@ function getFocusable(dialog) {
 }
 
 /**
- * Shared accessibility and interaction guard for legacy and new application
- * dialogs: focus containment, background inerting, scroll lock and focus return.
+ * Shared accessibility and interaction guard for application dialogs:
+ * focus containment, background inerting, document scroll lock and focus return.
  */
 export default function ModalAccessibilityManager() {
   useEffect(() => {
@@ -43,6 +43,7 @@ export default function ModalAccessibilityManager() {
     let returnFocusTo = null;
     let bodyOverflow = '';
     let htmlOverflow = '';
+    let bodyPaddingRight = '';
     let restoreNodes = new Map();
     let queued = false;
 
@@ -82,6 +83,13 @@ export default function ModalAccessibilityManager() {
       target.focus?.({ preventScroll: true });
     };
 
+    const unlockDocument = () => {
+      restoreBackground();
+      document.body.style.overflow = bodyOverflow;
+      document.documentElement.style.overflow = htmlOverflow;
+      document.body.style.paddingRight = bodyPaddingRight;
+    };
+
     const sync = () => {
       queued = false;
       const nextDialog = getTopmostDialog();
@@ -89,9 +97,7 @@ export default function ModalAccessibilityManager() {
       const originalReturnFocus = returnFocusTo;
 
       if (activeDialog) {
-        restoreBackground();
-        document.body.style.overflow = bodyOverflow;
-        document.documentElement.style.overflow = htmlOverflow;
+        unlockDocument();
         activeDialog = null;
         returnFocusTo = null;
         if (!nextDialog && originalReturnFocus?.isConnected && !originalReturnFocus.closest('[inert]')) {
@@ -107,8 +113,13 @@ export default function ModalAccessibilityManager() {
         : (document.activeElement instanceof HTMLElement ? document.activeElement : null);
       bodyOverflow = document.body.style.overflow;
       htmlOverflow = document.documentElement.style.overflow;
+      bodyPaddingRight = document.body.style.paddingRight;
+      const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
       document.body.style.overflow = 'hidden';
       document.documentElement.style.overflow = 'hidden';
+      if (scrollbarWidth > 0) {
+        document.body.style.paddingRight = `${scrollbarWidth}px`;
+      }
       isolateBackground(nextDialog);
       window.requestAnimationFrame(() => {
         if (activeDialog === nextDialog && !nextDialog.contains(document.activeElement)) focusInside(nextDialog);
@@ -172,11 +183,7 @@ export default function ModalAccessibilityManager() {
       observer.disconnect();
       document.removeEventListener('keydown', onKeyDown, true);
       document.removeEventListener('focusin', onFocusIn, true);
-      restoreBackground();
-      if (activeDialog) {
-        document.body.style.overflow = bodyOverflow;
-        document.documentElement.style.overflow = htmlOverflow;
-      }
+      if (activeDialog) unlockDocument();
       if (returnFocusTo?.isConnected) returnFocusTo.focus?.({ preventScroll: true });
     };
   }, []);
