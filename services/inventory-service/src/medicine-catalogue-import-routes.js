@@ -974,11 +974,12 @@ router.get('/imports/jobs/:jobId', asyncHandler(async (req, res) => {
 router.get('/imports', asyncHandler(async (req, res) => {
   const page = Math.max(1, Math.min(1000, Number.parseInt(req.query.page || '1', 10) || 1));
   const limit = Math.max(1, Math.min(50, Number.parseInt(req.query.limit || '10', 10) || 10));
-  const [items, total] = await Promise.all([
+  const [items, total, jobs] = await Promise.all([
     CatalogueImport.find({}, { batchId: 1, dataset: 1, fileName: 1, status: 1, recordCount: 1, report: 1, publishedCount: 1, approvedAt: 1, approvedBy: 1, errorMessage: 1, sourceBatchIds: 1, supersededByBatchId: 1, createdAt: 1 }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
-    CatalogueImport.countDocuments({})
+    CatalogueImport.countDocuments({}),
+    CatalogueImportJob.find({ status: { $in: ['QUEUED', 'PROCESSING', 'FAILED'] } }, { jobId: 1, batchId: 1, dataset: 1, fileName: 1, status: 1, stage: 1, progressPercent: 1, processedRecords: 1, totalRecords: 1, attempts: 1, errorMessage: 1, createdAt: 1 }).sort({ createdAt: -1 }).limit(8).lean()
   ]);
-  return res.json({ items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+  return res.json({ items, jobs, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
 }));
 
 router.get('/imports/:batchId/records', asyncHandler(async (req, res) => {
