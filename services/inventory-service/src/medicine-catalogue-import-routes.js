@@ -247,9 +247,12 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         const current = byId.get(item.medicineId) || canonicalMatch || null;
         const targetId = batch.dataset === 'INDIAN_MEDICINE_DATA' ? item.medicineId : (current?.medicineId || item.medicineId);
         const fields = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType','sourceImageUrl'];
-        const set = { lastImportBatchId: batch.batchId, sourcePriority: Math.min(Number(current?.sourcePriority ?? 99), item.sourcePriority) };
-        if (current && current.medicineId !== targetId) set.medicineId = targetId;
-        if (item.canonicalKey && !current?.canonicalKey) set.canonicalKey = item.canonicalKey;
+        const set = {
+          medicineId: targetId,
+          canonicalKey: item.canonicalKey || current?.canonicalKey || '',
+          lastImportBatchId: batch.batchId,
+          sourcePriority: Math.min(Number(current?.sourcePriority ?? 99), item.sourcePriority)
+        };
         for (const field of fields) {
           if (item[field] && (!current?.[field] || item.sourcePriority < Number(current.sourcePriority ?? 99))) set[field] = item[field];
         }
@@ -268,7 +271,6 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
             filter: current ? { _id: current._id } : { medicineId: targetId },
             update: {
               $set: set,
-              $setOnInsert: { medicineId: targetId, canonicalKey: item.canonicalKey || '' },
               $addToSet: { sourceDatasets: item.sourceDataset, sourceRecordIds: item.sourceRecordId, ...(current && current.medicineId !== targetId ? { legacyMedicineIds: current.medicineId } : {}) }
             },
             upsert: true
