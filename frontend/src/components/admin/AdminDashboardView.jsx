@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import apiClient from '../../api/apiClient';
 import AdminFulfillmentKanban from './AdminFulfillmentKanban';
 import AdminInventoryTable from './AdminInventoryTable';
+import MedicineCatalogueImportModal from './MedicineCatalogueImportModal';
 import AdminRouteOptimizer from './AdminRouteOptimizer';
 import TenantActivityFeed from './TenantActivityFeed';
 import TenantStaffManager from './TenantStaffManager';
@@ -72,7 +73,9 @@ export default function AdminDashboardView() {
   const { inventoryAlerts, loadInventoryAlerts, whatsappStatus, setWhatsappModalOpen, setAdminBulkImportModalOpen, setAdminNewStockModalOpen } = useApp();
   const { tenantId: contextTenantId } = useTenant();
   const activeTenantId = contextTenantId || user?.tenantId || user?.app_metadata?.tenantId || '';
+  const canImportMedicineMaster = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(String(user?.app_metadata?.role || user?.role || role || '').toUpperCase());
   const [adminTab, setAdminTab] = useState('tenantProfile');
+  const [catalogueImportOpen, setCatalogueImportOpen] = useState(false);
   const [dashboardPeriod, setDashboardPeriod] = useState('today');
   const dashboardRange = getDashboardDateRange(dashboardPeriod);
 
@@ -306,6 +309,12 @@ export default function AdminDashboardView() {
                 WhatsApp: {whatsappStatus.isConnected ? 'Connected' : 'Offline'}
               </span>
             ))}
+
+            {isSuperAdmin && (
+              <button type="button" onClick={() => setCatalogueImportOpen(true)} className="rounded-xl border border-violet-300 bg-violet-50 px-3.5 py-2.5 text-xs font-extrabold text-violet-800 transition hover:bg-violet-100">
+                <span aria-hidden="true">🧬</span> <span>Medicine Master Import</span>
+              </button>
+            )}
 
             {canImportInventory && (
               <button
@@ -731,6 +740,7 @@ export default function AdminDashboardView() {
 
 
       </main>
+      <MedicineCatalogueImportModal isOpen={catalogueImportOpen} onClose={() => setCatalogueImportOpen(false)} />
     </div>
   );
 }

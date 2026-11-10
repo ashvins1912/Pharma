@@ -5,6 +5,8 @@ import mongoose from 'mongoose';
 import { config, validateConfig } from './config.js';
 import routes from './routes.js';
 import stagedImportRoutes from './staged-import-routes.js';
+import medicineCatalogueImportRoutes, { initializeMedicineCatalogueModels } from './medicine-catalogue-import-routes.js';
+import medicineCatalogueRoutes from './medicine-catalogue-routes.js';
 import { StagedImportBatch, StagedImportRow } from './staged-import-models.js';
 import { Audit, ImportBatch, ImportBatchSnapshot, ImportFailure, ImportJob, Inventory, Product, Reservation } from './models.js';
 
@@ -58,6 +60,8 @@ app.get('/ready', (_req, res) => {
 });
 // Staged import routes are mounted first so uploads are stored for review only.
 // Live catalogue and stock writes happen exclusively through explicit publish actions.
+app.use('/api/v1/inventory/catalogue/medicines', medicineCatalogueRoutes);
+app.use('/api/v1/inventory/catalogue', medicineCatalogueImportRoutes);
 app.use('/api/v1/inventory', stagedImportRoutes);
 app.use('/api/v1/inventory', routes);
 app.use((error, req, res, _next) => {
@@ -94,7 +98,8 @@ await Promise.all([
   StagedImportRow.init(),
   ImportBatchSnapshot.init(),
   ImportFailure.init(),
-  Audit.init()
+  Audit.init(),
+  initializeMedicineCatalogueModels()
 ]);
 // Mark abandoned staging requests as failed after a restart; rows remain available for inspection.
 await StagedImportBatch.updateMany({ status: 'STAGING', updatedAt: { $lt: new Date(Date.now() - 10 * 60 * 1000) } }, {

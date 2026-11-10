@@ -11,7 +11,7 @@ export function createServiceToken(
     throw new Error('SERVICE_AUTH_SECRET is not configured.');
   }
   const role = user.app_metadata?.role || user.role || 'customer';
-  const isPlatformUser = ['admin', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+  const isPlatformUser = ['SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
   const claims = {
     scope,
     userId,

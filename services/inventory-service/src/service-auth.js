@@ -5,7 +5,7 @@ const callerScopes = {
   'order-service': new Set(['inventory.read', 'inventory.reserve', 'inventory.release', 'inventory.deduct']),
   'medicine-request-service': new Set(['inventory.read']),
   'backend-platform': new Set(['inventory.read', 'inventory.adjust', 'inventory.write', 'inventory.reserve', 'inventory.release', 'inventory.deduct']),
-  'api-gateway': new Set(['inventory.read', 'inventory.import', 'inventory.adjust'])
+  'api-gateway': new Set(['inventory.read', 'inventory.import', 'inventory.adjust', 'inventory.catalogue.import', 'inventory.catalogue.read'])
 };
 
 export function createServiceToken({ caller, scopes, expiresInSeconds = 60, userId }) {
@@ -42,7 +42,7 @@ export function requireServiceScope(scope) {
       }
       const tenantId = typeof payload.tenantId === 'string' ? payload.tenantId.trim() : '';
       const branchId = typeof payload.branchId === 'string' ? payload.branchId.trim() : '';
-      if (caller === 'api-gateway' && scope.startsWith('inventory.') && (!tenantId || !branchId)) {
+      if (caller === 'api-gateway' && scope.startsWith('inventory.') && !['inventory.catalogue.import', 'inventory.catalogue.read'].includes(scope) && (!tenantId || !branchId)) {
         return res.status(403).json({ message: 'Signed tenant and branch identity is required for inventory access.' });
       }
       req.service = { name: caller, scopes: grantedScopes, userId: payload.userId, userRole: payload.userRole || 'customer', roles: payload.roles || [], tenantId: tenantId || null, branchId: branchId || null, isPlatformUser: payload.isPlatformUser === true };

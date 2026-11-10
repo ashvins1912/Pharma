@@ -86,7 +86,9 @@ export function proxyRequest(
     upstreamResponse.pipe(res);
   });
 
-  upstream.setTimeout(proxyConfig.proxyTimeoutMs, () => {
+  const isLargeMedicineCatalogueUpload = req.method === 'POST' && /\/api\/v1\/inventory\/catalogue\/imports\/preview$/.test(req.originalUrl || '');
+  const requestTimeoutMs = isLargeMedicineCatalogueUpload ? Math.max(proxyConfig.proxyTimeoutMs, 600_000) : proxyConfig.proxyTimeoutMs;
+  upstream.setTimeout(requestTimeoutMs, () => {
     const error = new Error('Upstream request timed out.');
     error.code = 'ETIMEDOUT';
     upstream.destroy(error);
