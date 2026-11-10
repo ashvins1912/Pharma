@@ -3,6 +3,7 @@ import apiClient from '../../api/apiClient';
 import AdminFulfillmentKanban from './AdminFulfillmentKanban';
 import AdminInventoryTable from './AdminInventoryTable';
 import MedicineCatalogueImportModal from './MedicineCatalogueImportModal';
+import MedicineMasterCatalogueView from './MedicineMasterCatalogueView';
 import AdminRouteOptimizer from './AdminRouteOptimizer';
 import TenantActivityFeed from './TenantActivityFeed';
 import TenantStaffManager from './TenantStaffManager';
@@ -311,7 +312,7 @@ export default function AdminDashboardView() {
             ))}
 
             {isSuperAdmin && (
-              <button type="button" onClick={() => setCatalogueImportOpen(true)} className="rounded-xl border border-violet-300 bg-violet-50 px-3.5 py-2.5 text-xs font-extrabold text-violet-800 transition hover:bg-violet-100">
+              <button type="button" onClick={() => { setAdminTab('medicineCatalogue'); document.getElementById('admin-workspace-content')?.scrollIntoView({ behavior: 'smooth' }); }} className="rounded-xl border border-violet-300 bg-violet-50 px-3.5 py-2.5 text-xs font-extrabold text-violet-800 transition hover:bg-violet-100">
                 <span aria-hidden="true">🧬</span> <span>Medicine Master Import</span>
               </button>
             )}
@@ -478,6 +479,7 @@ export default function AdminDashboardView() {
               description: 'Stock and traceability',
               items: [
                 canViewInventory && { tab: 'inventory', label: t('inventoryCatalog'), icon: '📊' },
+                canImportMedicineMaster && { tab: 'medicineCatalogue', label: 'Medicine Master Catalogue', icon: '🧬', tone: 'governance' },
                 canViewAudits && { tab: 'audits', label: t('inventoryAudits'), icon: '📜' }
               ]
             },
@@ -635,6 +637,10 @@ export default function AdminDashboardView() {
 
       {adminTab === 'payments' && canViewPayments && (
         <div className="admin-screen admin-screen--payments"><AdminPaymentReminders canManage={canManagePayments} /></div>
+      )}
+
+      {adminTab === 'medicineCatalogue' && canImportMedicineMaster && (
+        <div className="admin-screen admin-screen--medicine-catalogue"><MedicineMasterCatalogueView onOpenImport={() => setCatalogueImportOpen(true)} /></div>
       )}
 
       {adminTab === 'inventory' && canViewInventory && (
