@@ -1718,3 +1718,10 @@ body.modal-open {
     min-width: 0;
   }
 }
+
+
+/* One predictable overlay stack: dialogs above the sticky header and menus. */
+[aria-modal="true"] { z-index: 12000 !important; }
+[aria-labelledby="quickmeds-mobile-navigation-title"] { z-index: 11000 !important; }
+[aria-modal="true"] .modal-backdrop,
+[aria-modal="true"] [aria-hidden="true"].absolute.inset-0 { touch-action: none; }
