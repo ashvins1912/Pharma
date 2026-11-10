@@ -681,6 +681,7 @@ export default function AdminDashboardView() {
               {t('noInventoryChangesRecorded')}
             </div>
           ) : (
+            <div className="audit-responsive-layout">
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
@@ -733,7 +734,6 @@ export default function AdminDashboardView() {
                 </tbody>
               </table>
             </div>
-            <>
             <div className="md:hidden qm-mobile-record-list">
               {auditLogs.map((log, idx) => (
                 <article key={log._id || log.id || `${log.importId || 'audit'}-${idx}`} className="qm-mobile-record-card qm-mobile-audit-card">
@@ -743,7 +743,7 @@ export default function AdminDashboardView() {
                 </article>
               ))}
             </div>
-            </>
+            </div>
           )}
           <Pagination
             page={auditPagination.page}
