@@ -264,3 +264,71 @@ html.dark .app-footer :where(.bg-slate-50) { background: #162236; border-color: 
     flex-basis: 1.95rem;
   }
 }
+
+
+/* Desktop header regression guard:
+   keep the brand's secondary line intrinsic so it cannot collapse into a
+   one-character column and inflate the header row (which vertically displaces
+   navigation and actions). The tagline is intentionally omitted on compact
+   tablet widths where the action cluster needs the space. */
+@media (min-width: 1024px) {
+  .app-header__brand {
+    flex: 0 0 auto;
+    width: max-content;
+    min-width: max-content;
+    max-width: none;
+    overflow: visible;
+  }
+
+  .app-header__brand > div:nth-child(2) {
+    flex: 0 0 auto;
+    width: max-content;
+    min-width: max-content;
+    max-width: none;
+    overflow: visible;
+  }
+
+  .app-header__brand .quickmeds-brand-badge-container,
+  .app-header__brand .quickmeds-brand-name {
+    width: max-content;
+    min-width: max-content;
+    max-width: none;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .app-header__brand > div:nth-child(2) > p {
+    display: block;
+    width: max-content;
+    min-width: max-content;
+    max-width: none;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: keep-all;
+  }
+}
+
+@media (min-width: 1600px) {
+  .app-header__inner {
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    align-items: center;
+  }
+
+  .app-header__desktop-nav {
+    min-width: max-content;
+    justify-self: center;
+    align-self: center;
+  }
+
+  .app-header__actions {
+    align-self: center;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .app-header__brand > div:nth-child(2) > p {
+    display: none;
+  }
+}
