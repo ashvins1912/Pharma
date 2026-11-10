@@ -43,6 +43,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
         try {
           const statusResponse = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(response.data.batchId)}`);
           setBatchStatus(statusResponse.data);
+          if (statusResponse.data?.status === 'PUBLISHED') setPublished({ status: statusResponse.data.status, publishedCount: statusResponse.data.publishedCount, report: statusResponse.data.report });
         } catch (statusError) {
           addToast(statusError.response?.data?.message || 'Preview is ready, but batch status could not be loaded. Use Refresh status before publishing.', 'warning');
         }
