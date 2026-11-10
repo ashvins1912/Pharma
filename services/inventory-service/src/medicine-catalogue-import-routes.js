@@ -1092,6 +1092,17 @@ router.post('/imports/jobs/:jobId/retry', asyncHandler(async (req, res) => {
   if (!job) return res.status(409).json({ message: 'Only a failed import job can be retried. Refresh the job status and try again.' });
   return res.status(202).json({ jobId: job.jobId, status: job.status, message: 'Import job queued for retry.' });
 }));
+router.post('/imports/jobs/:jobId/restart', asyncHandler(async (req, res) => {
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - 15 * 60 * 1000);
+  const job = await CatalogueImportJob.findOneAndUpdate(
+    { jobId: req.params.jobId, status: 'PROCESSING', $or: [{ leaseExpiresAt: { $lte: now } }, { leaseExpiresAt: null, updatedAt: { $lte: staleBefore } }] },
+    { $set: { status: 'QUEUED', stage: 'QUEUED', progressPercent: 0, processedRecords: 0, totalRecords: 0, errorMessage: '', leaseExpiresAt: null, completedAt: null, batchId: '', report: null, reportFingerprint: '', sample: [] } },
+    { new: true }
+  ).lean();
+  if (!job) return res.status(409).json({ message: 'This import is not stuck: only PROCESSING jobs with an expired worker lease can be restarted. Refresh history and try again.' });
+  return res.status(202).json({ jobId: job.jobId, status: job.status, message: 'Stale import re-queued from its retained source upload.' });
+}));
 router.get('/imports/jobs/:jobId', asyncHandler(async (req, res) => {
   const job = await CatalogueImportJob.findOne({ jobId: req.params.jobId }).lean();
   if (!job) return res.status(404).json({ message: 'Catalogue import job was not found.' });
@@ -1100,7 +1111,7 @@ router.get('/imports/jobs/:jobId', asyncHandler(async (req, res) => {
     processedRecords: job.processedRecords, totalRecords: job.totalRecords, attempts: job.attempts,
     fileName: job.fileName, fileSize: job.fileSize, batchId: job.batchId, dataset: job.dataset,
     report: job.report, reportFingerprint: job.reportFingerprint, sample: job.sample,
-    errorMessage: job.errorMessage, createdAt: job.createdAt, updatedAt: job.updatedAt, completedAt: job.completedAt
+    errorMessage: job.errorMessage, leaseExpiresAt: job.leaseExpiresAt, createdAt: job.createdAt, updatedAt: job.updatedAt, completedAt: job.completedAt
   });
 }));
 router.post('/imports/remove-selected', asyncHandler(async (req, res) => {
@@ -1161,7 +1172,7 @@ router.get('/imports', asyncHandler(async (req, res) => {
   const [items, total, jobs] = await Promise.all([
     CatalogueImport.find({ isHidden: { $ne: true } }, { batchId: 1, dataset: 1, fileName: 1, status: 1, recordCount: 1, report: 1, publishedCount: 1, approvedAt: 1, approvedBy: 1, errorMessage: 1, sourceBatchIds: 1, supersededByBatchId: 1, createdAt: 1 }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
     CatalogueImport.countDocuments({ isHidden: { $ne: true } }),
-    CatalogueImportJob.find({ status: { $in: ['QUEUED', 'PROCESSING', 'FAILED'] } }, { jobId: 1, batchId: 1, dataset: 1, fileName: 1, status: 1, stage: 1, progressPercent: 1, processedRecords: 1, totalRecords: 1, attempts: 1, errorMessage: 1, createdAt: 1 }).sort({ createdAt: -1 }).limit(8).lean()
+    CatalogueImportJob.find({ status: { $in: ['QUEUED', 'PROCESSING', 'FAILED'] } }, { jobId: 1, batchId: 1, dataset: 1, fileName: 1, status: 1, stage: 1, progressPercent: 1, processedRecords: 1, totalRecords: 1, attempts: 1, errorMessage: 1, leaseExpiresAt: 1, createdAt: 1, updatedAt: 1 }).sort({ createdAt: -1 }).limit(8).lean()
   ]);
   return res.json({ items, jobs, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
 }));
