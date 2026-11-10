@@ -3,7 +3,7 @@ import test from 'node:test';
 
 process.env.SERVICE_AUTH_SECRET = 'test-service-secret-with-more-than-thirty-two-characters';
 
-const { detectMedicineDataset, normalizeMedicineRecord, consolidate, assessMedicineQuality, parseJsonArrayRecords, scoreMedicineMatch } = await import('./src/medicine-catalogue-import-routes.js');
+const { detectMedicineDataset, normalizeMedicineRecord, consolidate, assessMedicineQuality, parseJsonArrayRecords, scoreMedicineMatch, mergeStagedMedicine } = await import('./src/medicine-catalogue-import-routes.js');
 const { requireServiceScope } = await import('./src/service-auth.js');
 const jwt = (await import('jsonwebtoken')).default;
 
@@ -245,6 +245,30 @@ test('fuzzy medicine matching sends name-only matches to manual review', () => {
   );
   assert.equal(match.decision, 'MANUAL_REVIEW');
   assert.ok(match.warnings.includes('COMPOSITION_MISSING_REVIEW_REQUIRED'));
+});
+
+test('multi-batch record merge preserves source provenance and enriches missing fields', () => {
+  const left = {
+    medicineId: 'BRAND-1', brandName: 'Example 10mg Tablet', composition: 'Example ingredient',
+    strength: '10 mg', dosageForm: 'Tablet', genericName: 'Example ingredient', manufacturer: '',
+    sourcePriority: 1, sourceDataset: 'INDIAN_MEDICINE_DATA', sourceRecordId: 'BRAND-1',
+    sourceRecordIds: ['BRAND-1'], sourceDatasets: ['INDIAN_MEDICINE_DATA'],
+    ingredients: ['Example ingredient'], uses: [], sideEffects: [], qualityScore: 50
+  };
+  const right = {
+    medicineId: 'MED-2', brandName: 'Example 10 mg Tablets', composition: 'Example ingredient',
+    strength: '10mg', dosageForm: 'Tablet', genericName: 'Example ingredient', manufacturer: 'Example Pharma',
+    sourcePriority: 3, sourceDataset: 'INDIA_MEDICINES_INFO', sourceRecordId: 'MED-2',
+    sourceRecordIds: ['MED-2'], sourceDatasets: ['INDIA_MEDICINES_INFO'],
+    ingredients: ['Example ingredient'], uses: ['Source supplied use'], sideEffects: ['Source supplied side effect'], qualityScore: 40
+  };
+  const merged = mergeStagedMedicine(left, right);
+  assert.equal(merged.medicineId, 'BRAND-1');
+  assert.equal(merged.manufacturer, 'Example Pharma');
+  assert.deepEqual(merged.uses, ['Source supplied use']);
+  assert.deepEqual(merged.sourceDatasets.sort(), ['INDIAN_MEDICINE_DATA', 'INDIA_MEDICINES_INFO'].sort());
+  assert.deepEqual(merged.sourceRecordIds.sort(), ['BRAND-1', 'MED-2']);
+  assert.deepEqual(merged.legacyMedicineIds, ['MED-2']);
 });
 
 test('catalogue import scope is valid without a tenant or branch identity', async () => {
