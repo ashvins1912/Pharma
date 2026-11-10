@@ -11,6 +11,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
   const [batchStatus, setBatchStatus] = useState(null);
   const [statusBusy, setStatusBusy] = useState(false);
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
+  const [jobStatus, setJobStatus] = useState(null);
 
   if (!isOpen) return null;
 
@@ -20,6 +21,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     setPublished(null);
     setBatchStatus(null);
     setReviewConfirmed(false);
+    setJobStatus(null);
     setBusy(false);
   };
 
@@ -30,6 +32,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     setBusy(true);
     setPreview(null);
     setPublished(null);
+    setJobStatus(null);
     setReviewConfirmed(false);
     try {
       const body = new FormData();
@@ -38,17 +41,25 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 600000
       });
-      setPreview(response.data);
-      if (response.data?.batchId) {
-        try {
-          const statusResponse = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(response.data.batchId)}`);
-          setBatchStatus(statusResponse.data);
-          if (statusResponse.data?.status === 'PUBLISHED') setPublished({ status: statusResponse.data.status, publishedCount: statusResponse.data.publishedCount, report: statusResponse.data.report });
-        } catch (statusError) {
-          addToast(statusError.response?.data?.message || 'Preview is ready, but batch status could not be loaded. Use Refresh status before publishing.', 'warning');
-        }
+      const jobId = response.data?.jobId;
+      if (!jobId) throw new Error('The server did not return an import job ID.');
+      let job;
+      while (true) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const statusResponse = await apiClient.get(`/api/v1/inventory/catalogue/imports/jobs/${encodeURIComponent(jobId)}`);
+        job = statusResponse.data;
+        setJobStatus(job);
+        if (job.status === 'READY' || job.status === 'FAILED') break;
       }
-      addToast('Catalogue dataset analyzed. Review the reconciliation report and batch status before publishing.', 'success');
+      if (job.status === 'FAILED') throw new Error(job.errorMessage || 'Catalogue processing failed. The uploaded file remains available for an administrator to retry.');
+      const completedPreview = {
+        batchId: job.batchId, dataset: job.dataset, status: 'READY',
+        report: job.report, reportFingerprint: job.reportFingerprint, sample: job.sample
+      };
+      setPreview(completedPreview);
+      const statusResponse = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(job.batchId)}`);
+      setBatchStatus(statusResponse.data);
+      addToast('Background catalogue processing completed. Review the reconciliation report before publishing.', 'success');
     } catch (error) {
       addToast(error.response?.data?.message || error.response?.data?.error?.message || error.message || 'Could not analyze this JSON dataset.', 'error');
     } finally {
@@ -121,7 +132,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-950">
             Platform-level shared catalogue import. It enriches medicine identity and clinical/product metadata only. Pharmacy selling price, stock, branch, batch, MRP, expiry and manufacturing dates are not imported.
           </div>
-          {!published && (
+          {!published && !preview && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="sm:col-span-2 text-xs text-slate-500">Dataset type is detected automatically from the uploaded JSON structure.</div>
               <label className="block text-xs font-bold text-slate-700">
@@ -130,6 +141,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
               </label>
             </div>
           )}
+          {jobStatus && busy && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2"><div className="flex items-center justify-between gap-3 text-xs"><strong className="text-blue-950">Background import: {jobStatus.stage || jobStatus.status}</strong><span className="font-bold tabular-nums text-blue-800">{Number(jobStatus.progressPercent || 0)}%</span></div><div className="h-2 overflow-hidden rounded-full bg-blue-100"><div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${Math.max(0, Math.min(100, Number(jobStatus.progressPercent || 0)))}%` }} /></div><p className="text-[11px] text-blue-900">{jobStatus.fileName} · {jobStatus.processedRecords ? Number(jobStatus.processedRecords).toLocaleString() : 'Preparing'} / {jobStatus.totalRecords ? Number(jobStatus.totalRecords).toLocaleString() : '—'} records · Job {jobStatus.jobId}</p></div>}
           {file && !preview && <p className="text-xs text-slate-500 break-all">Selected: <strong>{file.name}</strong> · {(file.size / 1024 / 1024).toFixed(2)} MB</p>}
           {report && (
             <div className="space-y-3">
@@ -233,7 +245,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
         <footer className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-between sm:px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button type="button" onClick={preview ? () => { setPreview(null); setFile(null); setPublished(null); setBatchStatus(null); setReviewConfirmed(false); } : close} disabled={busy} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 disabled:opacity-50">{preview ? 'Choose another dataset' : 'Close'}</button>
           {!preview ? (
-            <button type="button" onClick={createPreview} disabled={busy || !file} className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-50">{busy ? 'Analyzing JSON…' : 'Analyze & Preview'}</button>
+            <button type="button" onClick={createPreview} disabled={busy || !file} className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-50">{busy ? (jobStatus ? `Processing… ${jobStatus.progressPercent || 0}%` : 'Uploading securely…') : 'Upload & Analyze'}</button>
           ) : !published && !batchStatus?.approvedAt ? (
             <button type="button" onClick={approveReconciliation} disabled={busy || !reviewConfirmed || !preview?.reportFingerprint} className="rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-violet-700 disabled:opacity-50">{busy ? 'Approving…' : 'Approve reconciliation'}</button>
           ) : !published ? (
