@@ -158,7 +158,7 @@ body {
   flex: 0 0 auto;
 }
 
-.pharma-responsive-scope :where(.pharma-modal-surface > .modal-body,
+:where(.pharma-modal-surface > .modal-body,
   .pharma-modal-surface > .content-area,
   .pharma-modal-surface > [data-modal-scroll],
   .pharma-modal-surface > .overflow-y-auto,
@@ -261,20 +261,20 @@ html.dark :where([role="dialog"] input, [role="dialog"] select, [role="dialog"] 
 }
 
 @media (max-width: 767px) {
-  .pharma-responsive-scope :where(.pharma-modal-surface, .pharma-checkout-modal) {
+  :where(.pharma-modal-surface, .pharma-checkout-modal) {
     width: 100%;
     max-width: 100%;
     max-height: calc(100dvh - env(safe-area-inset-top));
     border-radius: 1.25rem 1.25rem 0 0;
   }
 
-  .pharma-responsive-scope :where(.fixed.inset-0[role="dialog"], .fixed.inset-0[aria-modal="true"]) {
+  :where(.fixed.inset-0[role="dialog"], .fixed.inset-0[aria-modal="true"]) {
     align-items: safe flex-end;
     padding-inline: 0;
     padding-bottom: 0;
   }
 
-  .pharma-responsive-scope :where(.pharma-modal-surface > .modal-body,
+  :where(.pharma-modal-surface > .modal-body,
     .pharma-modal-surface > .content-area,
     .pharma-modal-surface > [data-modal-scroll],
     .pharma-checkout-modal > .modal-body,
@@ -289,7 +289,7 @@ html.dark :where([role="dialog"] input, [role="dialog"] select, [role="dialog"] 
     --qm-page-gutter: 0.625rem;
   }
 
-  .pharma-responsive-scope :where(.pharma-modal-surface, .pharma-checkout-modal) {
+  :where(.pharma-modal-surface, .pharma-checkout-modal) {
     border-radius: 1rem 1rem 0 0;
   }
 }
