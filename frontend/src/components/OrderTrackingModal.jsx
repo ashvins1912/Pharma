@@ -37,7 +37,8 @@ export default function OrderTrackingModal({ order, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 modal-overlay animate-fade-in overscroll-none"
+      className="fixed inset-0 z-[1100] flex items-center justify-center p-3 sm:p-5 modal-overlay animate-fade-in overscroll-none"
+      onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); onClose?.(); } }}
       aria-modal="true"
       role="dialog"
       aria-labelledby="order-tracking-title"
