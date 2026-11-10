@@ -67,7 +67,7 @@ The matcher uses a FuzzyWuzzy-style token-sort similarity score implemented in t
 - **Blocked conflict:** differing known composition, strength or dosage form prevents fuzzy auto-merge.
 - **New record:** no sufficiently similar existing record is found.
 
-The report includes fuzzy auto-merge count, manual-review count, unmatched count, candidate medicine ID, score and warnings. Candidate search is bounded (120 two-character prefixes and 5,000 existing candidates); when that bound is reached the report marks the scan as truncated, so absence of a match is not proof that no duplicate exists.
+The report includes fuzzy auto-merge count, manual-review count, unmatched count, candidate medicine ID, score and warnings. Candidate search uses a normalized two-character brand-name prefix to shortlist candidates before token-sort scoring; it is bounded to 120 prefixes and 5,000 existing candidates. It is not exhaustive for typos in the first two characters, and the report marks when either cap is reached. A truncated or prefix-limited scan is not proof that no duplicate exists.
 
 For an automatic merge, existing master medicine ID is preserved; the incoming medicine ID is retained as a legacy ID and source provenance is accumulated. Empty descriptive fields are enriched and list metadata is deduplicated. Source priority remains in force for conflicting scalar values. Clinical verification, prescription verification and licence status are never promoted by matching or merging. Tenant prices, stock, branch batches, MRP and expiry are outside this workflow.
 
