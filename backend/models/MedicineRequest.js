@@ -131,7 +131,7 @@ const auditTrailSchema = new mongoose.Schema({
 }, { _id: false });
 
 const medicineRequestSchema = new mongoose.Schema({
-    requestNumber: { type: String, required: true, unique: true, index: true, match: /^MR-\\d+$/ },
+    requestNumber: { type: String, required: true, unique: true, index: true, match: /^MR-[0-9]+$/ },
     customerId: { type: String, required: true, index: true },
     tenantId: { type: String, default: null, index: true },
     branchId: { type: String, default: null, index: true },
