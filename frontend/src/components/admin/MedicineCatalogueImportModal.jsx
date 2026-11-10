@@ -126,7 +126,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                   <table className="w-full min-w-[620px] text-left text-xs">
                     <thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Medicine</th><th className="p-3">Composition</th><th className="p-3">Strength / Form</th><th className="p-3">Manufacturer</th><th className="p-3">Quality</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
-                      {preview.sample.map(item => <tr key={item.medicineId}><td className="p-3 font-bold text-slate-800">{item.brandName}</td><td className="p-3 text-slate-600">{item.composition || '—'}</td><td className="p-3 text-slate-600">{[item.strength, item.dosageForm].filter(Boolean).join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.manufacturer || '—'}</td><td className="p-3">{item.dataQualityStatus}</td></tr>)}
+                      {preview.sample.map(item => <tr key={item.medicineId}><td className="p-3 font-bold text-slate-800">{item.brandName}</td><td className="p-3 text-slate-600">{item.composition || '—'}</td><td className="p-3 text-slate-600">{[item.strength, item.dosageForm, item.packSize].filter(Boolean).join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.manufacturer || '—'}</td><td className="p-3">{item.dataQualityStatus}</td></tr>)}
                     </tbody>
                   </table>
                 </div>
