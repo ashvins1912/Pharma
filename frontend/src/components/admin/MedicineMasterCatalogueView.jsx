@@ -19,6 +19,8 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [audit, setAudit] = useState([]);
+  const [imports, setImports] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -30,7 +32,17 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
     } finally { setLoading(false); }
   }, [query, page, addToast]);
 
+  const loadImportHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const response = await apiClient.get('/api/v1/inventory/catalogue/imports', { params: { page: 1, limit: 8 } });
+      setImports(response.data?.items || []);
+    } catch (error) {
+      addToast(error.response?.data?.message || 'Could not load catalogue import history.', 'warning');
+    } finally { setHistoryLoading(false); }
+  }, [addToast]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void loadImportHistory(); }, [loadImportHistory]);
 
   const openRecord = async item => {
     setSelected(item);
@@ -81,6 +93,10 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
         <button type="button" onClick={() => { setPage(1); setQuery(search.trim()); }} className="rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white">Search</button>
         <button type="button" onClick={() => { setSearch(''); setQuery(''); setPage(1); }} className="rounded-xl border border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-700">Clear</button>
       </div>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3"><div><strong className="text-xs text-slate-800">Recent enrichment batches</strong><p className="mt-1 text-[10px] text-slate-500">Staged, approved and published upload history</p></div><button type="button" onClick={loadImportHistory} disabled={historyLoading} className="rounded-lg border px-3 py-2 text-[11px] font-bold disabled:opacity-50">{historyLoading ? "Refreshing…" : "Refresh history"}</button></div>
+        {imports.length ? <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-xs"><thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Uploaded file</th><th className="p-3">Dataset</th><th className="p-3">Status</th><th className="p-3">Records</th><th className="p-3">Published</th><th className="p-3">Approval</th><th className="p-3">Uploaded</th></tr></thead><tbody className="divide-y divide-slate-100">{imports.map(batch => <tr key={batch.batchId}><td className="p-3"><strong className="block text-slate-800">{batch.fileName}</strong><span className="font-mono text-[10px] text-slate-400">{batch.batchId}</span></td><td className="p-3 text-slate-600">{batch.dataset}</td><td className="p-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold">{batch.status}</span></td><td className="p-3 tabular-nums">{Number(batch.recordCount || batch.report?.normalizedRecords || 0).toLocaleString()}</td><td className="p-3 tabular-nums">{Number(batch.publishedCount || 0).toLocaleString()}</td><td className="p-3">{batch.approvedAt ? <span className="font-bold text-emerald-700">Approved</span> : <span className="text-amber-700">Pending</span>}</td><td className="p-3 text-slate-500">{batch.createdAt ? new Date(batch.createdAt).toLocaleString() : "—"}</td></tr>)}</tbody></table></div> : <p className="p-5 text-xs text-slate-500">{historyLoading ? "Loading batch history…" : "No enrichment batches have been uploaded yet."}</p>}
+      </section>
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3"><strong className="text-xs text-slate-800">Published medicines</strong><span className="text-[11px] text-slate-500">{Number(data.pagination?.total || 0).toLocaleString()} records</span></div>
         {loading ? <p className="p-8 text-center text-sm text-slate-500">Loading catalogue…</p> : data.items?.length ? (
