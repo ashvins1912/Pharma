@@ -16,7 +16,7 @@ const allowedStatuses = new Set([
 const allocateOrderNumber = async () => {
   const counters = Order.db.collection('applicationCounters');
   const [latest] = await Order.aggregate([
-    { $match: { orderNumber: /^ORD-\\d+$/ } },
+    { $match: { orderNumber: /^ORD-[0-9]+$/ } },
     { $project: { sequence: { $convert: { input: { $arrayElemAt: [{ $split: ['$orderNumber', '-'] }, 1] }, to: 'long', onError: 0, onNull: 0 } } } },
     { $group: { _id: null, sequence: { $max: '$sequence' } } }
   ]);
@@ -387,8 +387,8 @@ export async function createOrder(body, user) {
     items: items.map(item => ({ productId: item.productId, quantity: item.quantity })),
     tenantId: request.tenantId,
     branchId: request.branchId,
-    idempotencyKey: `order-reservation:${orderNumber}`
-  }, `order-reservation:${orderNumber}`);
+    idempotencyKey: `order-reservation:${stableOrderId}`
+  }, `order-reservation:${stableOrderId}`);
   if (reservation.status !== 'RESERVED') {
     throw fail(409, `Inventory reservation is ${String(reservation.status || 'unavailable').toLowerCase()}.`);
   }
