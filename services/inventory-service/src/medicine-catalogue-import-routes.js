@@ -231,10 +231,12 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
       const prefix = key(item.brandName).slice(0, 2);
       if (!scannedPrefixes.has(prefix)) {
         plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'FUZZY_CANDIDATE_PREFIX_NOT_SCANNED', score: 0, warnings: ['CANDIDATE_SCAN_PREFIX_LIMIT_REACHED'] };
-      } else for (const candidate of prefixGroups.get(prefix) || []) {
-        const scored = scoreMedicineMatch(item, candidate, { nameNgramIdf });
-        if (!best || scored.score > best.score) { best = { candidate, ...scored }; tiedBest = false; }
-        else if (scored.score === best.score) tiedBest = true;
+      } else {
+        for (const candidate of prefixGroups.get(prefix) || []) {
+          const scored = scoreMedicineMatch(item, candidate, { nameNgramIdf });
+          if (!best || scored.score > best.score) { best = { candidate, ...scored }; tiedBest = false; }
+          else if (scored.score === best.score) tiedBest = true;
+        }
       }
       if (plan) {
         // Candidate prefix was not scanned; keep this row out of automatic insert/update.
