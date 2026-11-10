@@ -103,3 +103,9 @@ Only a fresh high-confidence match is updated. A fresh no-match record is insert
 
 **Manual-review limitation:** the current API does not provide per-record adjudication controls. Records marked MANUAL_REVIEW or BLOCKED_CONFLICT therefore keep the batch in READY with publishing blocked; they must be corrected in the source data and re-imported rather than being forced into an insert by batch approval.
 
+### Removing recent enrichment batches
+
+Super Admins can select up to 10 standalone, unapproved READY batches in Recent enrichment batches and remove them from that list. Removal is a soft-hide operation: the batch record, staged chunks, original upload and provenance/audit data are retained. Hidden batches are excluded from history pagination, detail/record inspection, approval, publishing, deduplication reuse and future merge selection.
+
+Approved, published, partially published, failed, actively processing, merged and superseded batches cannot be removed through this action. This protects published catalogue state, merge lineage and recovery evidence. A hidden batch can be re-imported from its original source file; the hidden historical record remains retained.
+
