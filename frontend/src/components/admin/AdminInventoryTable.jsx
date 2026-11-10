@@ -395,7 +395,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
                     </button>
                   )}
                 </div>
-              </div>
+              </article>
             );
           })
         )}
