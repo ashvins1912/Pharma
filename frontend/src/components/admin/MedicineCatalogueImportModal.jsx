@@ -134,7 +134,20 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-black text-slate-900">Reconciliation report</h3>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-extrabold text-slate-600">{published?.status || preview?.status}</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-extrabold text-slate-600">{batchStatus?.status || published?.status || preview?.status}</span>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Import batch inspection</p><p className="mt-1 break-all font-mono text-[11px] text-slate-700">{preview.batchId}</p></div>
+                  <button type="button" onClick={refreshBatchStatus} disabled={statusBusy || busy} className="rounded-lg border border-slate-300 px-3 py-2 text-[11px] font-bold text-slate-700 disabled:opacity-50">{statusBusy ? 'Refreshing…' : 'Refresh status'}</button>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div><span className="block text-[10px] text-slate-500">Batch status</span><strong>{batchStatus?.status || 'Not loaded'}</strong></div>
+                  <div><span className="block text-[10px] text-slate-500">Dataset</span><strong>{batchStatus?.dataset || preview.dataset || 'Auto-detected'}</strong></div>
+                  <div><span className="block text-[10px] text-slate-500">File</span><strong className="break-all">{batchStatus?.fileName || file?.name || '—'}</strong></div>
+                  <div><span className="block text-[10px] text-slate-500">Published</span><strong>{Number(batchStatus?.publishedCount ?? published?.publishedCount ?? 0).toLocaleString()}</strong></div>
+                </div>
+                {batchStatus?.errorMessage && <p className="rounded-lg bg-rose-50 p-2 text-xs text-rose-800">{batchStatus.errorMessage}</p>}
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {metric('Source records', report.sourceRecords)}
