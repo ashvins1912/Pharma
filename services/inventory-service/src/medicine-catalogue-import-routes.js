@@ -31,7 +31,9 @@ const cleanDosageForm = value => {
 };
 const isPlaceholder = value => ['na', 'n a', 'n/a', 'not available', 'none', 'null', '-'].includes(key(value));
 const cleanSourceValue = value => isPlaceholder(value) ? '' : text(value);
-const splitList = value => text(value).split(/[,;|+]+/).map(text).filter(Boolean).filter((v, i, a) => a.findIndex(x => key(x) === key(v)) === i);
+const splitList = value => (Array.isArray(value) ? value : [value]).flatMap(item => typeof item === 'string' ? item.split(/[;|]+/) : []).map(cleanSourceValue).filter(Boolean).filter((v, i, a) => a.findIndex(x => key(x) === key(v)) === i);
+const alignedValues = value => (Array.isArray(value) ? value : [value]).map(cleanSourceValue);
+const normalizeAlternatives = value => (Array.isArray(value) ? value : []).map(item => typeof item === 'string' ? { brandName: text(item), medicineId: '', source: 'SUGGESTED_NAME', verification: 'UNVERIFIED' } : ({ medicineId: text(item?.brandIdentifier), brandName: text(item?.brandName), source: 'SOURCE_LINK', verification: 'UNVERIFIED' })).filter(item => item.brandName).filter((item, index, all) => all.findIndex(other => (item.medicineId && other.medicineId === item.medicineId) || key(other.brandName) === key(item.brandName)) === index);
 
 const medicineMasterSchema = new mongoose.Schema({
   medicineId: { type: String, required: true, unique: true, index: true },
@@ -39,6 +41,11 @@ const medicineMasterSchema = new mongoose.Schema({
   brandName: { type: String, required: true, trim: true },
   genericName: { type: String, default: '' },
   genericId: { type: String, default: '' },
+  sourceLicenseStatusValue: { type: String, default: '' }, drugFormId: { type: String, default: '' }, routeIds: { type: [String], default: [] },
+  casNumbers: { type: [String], default: [] }, uniiCodes: { type: [String], default: [] }, substanceDescriptions: { type: [String], default: [] },
+  molecularFormulas: { type: [String], default: [] }, inchiValues: { type: [String], default: [] }, iupacNames: { type: [String], default: [] },
+  molecularWeights: { type: [String], default: [] }, smiles: { type: [String], default: [] }, toxicology: { type: [String], default: [] },
+  ingredientDetails: { type: [mongoose.Schema.Types.Mixed], default: [] },
   productId: { type: String, default: '' },
   productName: { type: String, default: '' },
   manufacturer: { type: String, default: '' },
@@ -168,14 +175,20 @@ export function normalizeMedicineRecord(raw, dataset) {
     return {
       medicineId, canonicalKey: composition ? identity : '',
       brandName, genericName, genericId: text(pick(raw, 'genericIdentifier')),
+      sourceLicenseStatusValue: text(pick(raw, 'licenseStatus')), drugFormId: text(pick(raw, 'drugFormIdentifier')),
+      routeIds: splitList(pick(raw, 'routeOfAdministrationIdentifier')), casNumbers: alignedValues(pick(raw, 'casNumber')), uniiCodes: alignedValues(pick(raw, 'unii')),
+      substanceDescriptions: alignedValues(pick(raw, 'substanceDescription')), molecularFormulas: alignedValues(pick(raw, 'molecularFormula')),
+      inchiValues: alignedValues(pick(raw, 'inChl')), iupacNames: alignedValues(pick(raw, 'iupacName')), molecularWeights: alignedValues(pick(raw, 'molecularWeight')),
+      smiles: alignedValues(pick(raw, 'smile')), toxicology: alignedValues(pick(raw, 'toxity', 'toxicity')),
+      ingredientDetails: ingredients.map((name, index) => ({ ingredientId: splitList(pick(raw, 'substanceIdentifier'))[index] || '', name, casNumber: alignedValues(pick(raw, 'casNumber'))[index] || '', unii: alignedValues(pick(raw, 'unii'))[index] || '', description: alignedValues(pick(raw, 'substanceDescription'))[index] || '', molecularFormula: alignedValues(pick(raw, 'molecularFormula'))[index] || '', inchi: alignedValues(pick(raw, 'inChl'))[index] || '', iupacName: alignedValues(pick(raw, 'iupacName'))[index] || '', molecularWeight: alignedValues(pick(raw, 'molecularWeight'))[index] || '', smiles: alignedValues(pick(raw, 'smile'))[index] || '' })),
       productId: text(pick(raw, 'productIdentifier')), productName: text(pick(raw, 'productName')),
       manufacturer: text(pick(raw, 'supplierName')), manufacturerId: text(pick(raw, 'supplierIdentifier')),
       ingredientIds: splitList(pick(raw, 'substanceIdentifier')), ingredients, composition, strength, dosageForm, medicineType: '',
       routes: splitList(pick(raw, 'routeOfAdministrationName')),
-      alternatives: Array.isArray(raw.alternativeDrugs) ? raw.alternativeDrugs.slice(0, 20) : [],
-      indications: splitList(pick(raw, 'indication')),
-      contraindications: splitList(pick(raw, 'contraIndication')),
-      drugInteractions: splitList(pick(raw, 'interactionWithDrugs')),
+      alternatives: normalizeAlternatives(raw.alternativeDrugs),
+      indications: [cleanSourceValue(pick(raw, 'indication'))].filter(Boolean),
+      contraindications: [cleanSourceValue(pick(raw, 'contraIndication'))].filter(Boolean),
+      drugInteractions: [cleanSourceValue(pick(raw, 'interactionWithDrugs'))].filter(Boolean),
       sourceImageUrl: '', requiresPrescription: null, prescriptionVerification: 'UNVERIFIED',
       sourcePriority: 1, sourceDataset: dataset, sourceRecordId: medicineId,
       dataQualityStatus: composition && dosageForm && genericName ? 'GOOD' : 'PARTIAL'
@@ -192,10 +205,10 @@ export function normalizeMedicineRecord(raw, dataset) {
     const identity = [key(brandName), key(strength), key(dosageForm)].join('|');
     return {
       medicineId: `MEDINFO-${sourceRecordId}`, canonicalKey: '', brandName, genericName: '', genericId: '',
-      productId: '', productName: brandName, manufacturer: '', manufacturerId: '', ingredientIds: [], ingredients: [],
+      productId: '', productName: brandName, manufacturer: '', manufacturerId: '', sourceLicenseStatusValue: '', drugFormId: '', routeIds: [], casNumbers: [], uniiCodes: [], substanceDescriptions: [], molecularFormulas: [], inchiValues: [], iupacNames: [], molecularWeights: [], smiles: [], toxicology: [], ingredientDetails: [], ingredientIds: [], ingredients: [],
       composition: '', strength, packSize: '', dosageForm, medicineType: dosageForm, routes: [], alternatives: [],
       indications: [], contraindications: [], drugInteractions: [], sideEffects: collect('sideEffect'), uses: collect('use'),
-      suggestedAlternatives: collect('substitute'), chemicalClass: cleanSourceValue(pick(raw, 'Chemical Class')),
+      suggestedAlternatives: collect('substitute'), alternatives: normalizeAlternatives(collect('substitute')), chemicalClass: cleanSourceValue(pick(raw, 'Chemical Class')),
       habitForming: ['yes', 'no'].includes(text(pick(raw, 'Habit Forming')).toLowerCase()) ? text(pick(raw, 'Habit Forming')).toUpperCase() : 'UNKNOWN',
       therapeuticClass: cleanSourceValue(pick(raw, 'Therapeutic Class')), actionClass: cleanSourceValue(pick(raw, 'Action Class')),
       sourceImageUrl: '', requiresPrescription: null, prescriptionVerification: 'UNVERIFIED',
@@ -221,7 +234,7 @@ export function normalizeMedicineRecord(raw, dataset) {
     medicineId: 'MED-' + sourceRecordId.toUpperCase(),
     canonicalKey: composition ? identity : '',
     brandName, genericName: '', genericId: '', productId: '', productName,
-    manufacturer: '', manufacturerId: '', ingredientIds: [], ingredients: splitList(composition), composition,
+    manufacturer: '', manufacturerId: '', sourceLicenseStatusValue: '', drugFormId: '', routeIds: [], casNumbers: [], uniiCodes: [], substanceDescriptions: [], molecularFormulas: [], inchiValues: [], iupacNames: [], molecularWeights: [], smiles: [], toxicology: [], ingredientDetails: [], ingredientIds: [], ingredients: splitList(composition), composition,
     strength, packSize, dosageForm, medicineType, routes: [], alternatives: [], indications: [], contraindications: [], drugInteractions: [],
     sourceImageUrl: /^https:\/\//i.test(image) ? image : '',
     requiresPrescription: pick(raw, 'Is Prescription Required?') === undefined ? null : bool(pick(raw, 'Is Prescription Required?')),
@@ -246,7 +259,7 @@ export function consolidate(records, dataset) {
       for (const field of ['genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType']) {
         if (!previous[field] && normalized[field]) previous[field] = normalized[field];
       }
-      for (const field of ['ingredientIds','ingredients','routes','indications','contraindications','drugInteractions']) {
+      for (const field of ['ingredientIds','ingredients','ingredientDetails','routeIds','routes','casNumbers','uniiCodes','substanceDescriptions','molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology','indications','contraindications','drugInteractions']) {
         previous[field] = [...new Map([...previous[field], ...normalized[field]].map(v => [key(v), v])).values()];
       }
       previous.sourceRecordIds = [...new Set([...(previous.sourceRecordIds || [previous.sourceRecordId]), normalized.sourceRecordId])];
@@ -325,6 +338,10 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     missingComposition: records.filter(item => !item.composition).length,
     missingManufacturer: records.filter(item => !item.manufacturer).length,
     withComposition: records.filter(item => item.composition).length,
+    withIngredientDetails: records.filter(item => item.ingredientDetails?.some(x => Object.values(x).some(Boolean))).length,
+    withChemicalIdentifiers: records.filter(item => item.casNumbers.length || item.uniiCodes.length).length,
+    withToxicology: records.filter(item => item.toxicology.length).length,
+    withRoutes: records.filter(item => item.routes.length).length,
     withStrength: records.filter(item => item.strength).length,
     withPackSize: records.filter(item => item.packSize).length,
     withManufacturer: records.filter(item => item.manufacturer).length,
@@ -399,7 +416,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         const nameMatch = item.safeNameMatch && incomingNameCounts.get(key(item.brandName)) === 1 ? byName.get(key(item.brandName)) : null;
         const current = byId.get(item.medicineId) || canonicalMatch || nameMatch || null;
         const targetId = batch.dataset === 'INDIAN_MEDICINE_DATA' ? item.medicineId : (current?.medicineId || item.medicineId);
-        const fields = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType','sourceImageUrl'];
+        const fields = ['brandName','genericName','genericId','sourceLicenseStatusValue','drugFormId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType','sourceImageUrl'];
         const set = {
           medicineId: targetId,
           canonicalKey: item.canonicalKey || current?.canonicalKey || '',
