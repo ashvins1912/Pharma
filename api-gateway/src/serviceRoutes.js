@@ -176,6 +176,7 @@ export function createServiceRouters(gatewayConfig = config) {
   inventoryRouter.get('/catalogue/medicines/:medicineId/audit', catalogueImportAuth, inventory('inventory.catalogue.import'));
   const catalogueImport = inventory('inventory.catalogue.import');
   inventoryRouter.get('/catalogue/imports', catalogueImportAuth, catalogueImport);
+  inventoryRouter.post('/catalogue/imports/merge', catalogueImportAuth, catalogueImport);
   inventoryRouter.post('/catalogue/imports/preview', catalogueImportAuth, catalogueImport);
   inventoryRouter.get('/catalogue/imports/:batchId', catalogueImportAuth, catalogueImport);
   inventoryRouter.post('/catalogue/imports/:batchId/approve', catalogueImportAuth, catalogueImport);
