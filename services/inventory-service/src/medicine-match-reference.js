@@ -38,6 +38,18 @@ export function medicineMatchIdentity(product = {}) {
 }
 
 function medicineModel() { return mongoose.models.MedicineMaster; }
+
+let masterVersionCache = { checkedAt: 0, updatedAt: null };
+async function getMedicineMasterVersion() {
+  if (Date.now() - masterVersionCache.checkedAt < 30_000) return masterVersionCache.updatedAt;
+  const latest = await medicineModel().findOne({ isArchived: { $ne: true } }, { updatedAt: 1 }).sort({ updatedAt: -1 }).lean();
+  masterVersionCache = { checkedAt: Date.now(), updatedAt: latest?.updatedAt || null };
+  return masterVersionCache.updatedAt;
+}
+
+export async function initializeMedicineMatchReferenceModel() {
+  await MedicineMatchReference.init();
+}
 function escapeRegex(value) { return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 async function resolveReference(reference) {
@@ -73,10 +85,10 @@ export async function queueMedicineMatch(product) {
 export async function getOrResolveMedicineMatch(product) {
   const identity = medicineMatchIdentity(product);
   if (!identity.input.name && !identity.input.genericName && !identity.input.composition) return { status: 'NO_MATCH', confidence: 0, medicine: null };
-  const masterVersion = await medicineModel().findOne({ isArchived: { $ne: true } }, { updatedAt: 1 }).sort({ updatedAt: -1 }).lean();
+  const masterVersion = await getMedicineMasterVersion();
   let reference = await MedicineMatchReference.findOne({ identityHash: identity.identityHash }).lean();
   if (reference && reference.status !== 'PENDING' && reference.medicineMasterUpdatedAt
-    && masterVersion && reference.medicineMasterUpdatedAt >= masterVersion.updatedAt) {
+    && (!masterVersion || reference.medicineMasterUpdatedAt >= masterVersion)) {
     if (reference.medicineId) {
       const medicine = await medicineModel().findOne({ medicineId: reference.medicineId, isArchived: { $ne: true } }, {
         _id: 0, medicineId: 1, brandName: 1, productName: 1, genericName: 1, composition: 1,
@@ -90,12 +102,12 @@ export async function getOrResolveMedicineMatch(product) {
   }
   if (!reference) reference = await queueMedicineMatch(product);
   const result = await resolveReference(reference);
-  const latestMaster = await medicineModel().findOne({ isArchived: { $ne: true } }, { updatedAt: 1 }).sort({ updatedAt: -1 }).lean();
+  const latestMaster = await getMedicineMasterVersion();
   await MedicineMatchReference.updateOne({ identityHash: identity.identityHash }, { $set: {
     status: result.status,
     medicineId: result.medicine?.medicineId || '',
     confidence: result.confidence || 0,
-    medicineMasterUpdatedAt: latestMaster?.updatedAt || new Date(0),
+    medicineMasterUpdatedAt: latestMaster || new Date(0),
     resolvedAt: new Date(),
     lastError: ''
   }, $inc: { attempts: 1 } });
