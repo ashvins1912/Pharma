@@ -1468,3 +1468,36 @@ html.dark .qm-mobile-record-grid > div { border-color: #334155; background: #1e2
 html.dark .qm-mobile-record-grid dd { color: #e2e8f0; }
 html.dark .qm-mobile-record-proposal { border-color: #065f46; background: #052e2b; color: #a7f3d0; }
 html.dark .qm-inventory-record-card { border-color: #334155; background: #162236; }
+
+
+/* Small-screen operational records: structured alternatives to dense tables.
+   Desktop table markup and breakpoints remain unchanged. */
+.qm-mobile-record-list { display:grid; grid-template-columns:minmax(0,1fr); gap:.75rem; width:100%; min-width:0; }
+.qm-mobile-record-card { display:grid; gap:.8rem; min-width:0; padding:.9rem; border:1px solid #e2e8f0; border-radius:1rem; background:#fff; box-shadow:0 1px 2px rgb(15 23 42 / .045); }
+.qm-mobile-record-header { display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; min-width:0; padding-bottom:.7rem; border-bottom:1px solid #edf2f7; }
+.qm-mobile-record-header > :first-child { min-width:0; }
+.qm-mobile-record-items { margin:0; color:#475569; font-size:.7rem; line-height:1.5; overflow-wrap:anywhere; }
+.qm-mobile-record-footer { display:flex; align-items:center; justify-content:space-between; gap:.75rem; min-width:0; padding-top:.7rem; border-top:1px solid #edf2f7; }
+.qm-mobile-record-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:.45rem; }
+.qm-mobile-action { display:inline-flex; min-height:2.5rem; align-items:center; justify-content:center; padding:.55rem .8rem; border:1px solid transparent; border-radius:.7rem; font-size:.7rem; font-weight:800; line-height:1.2; white-space:nowrap; }
+.qm-mobile-action:disabled { cursor:wait; opacity:.55; }
+.qm-mobile-action--primary { background:#2563eb; color:#fff; }
+.qm-mobile-action--danger { border-color:#fecdd3; background:#fff1f2; color:#be123c; }
+.qm-mobile-record-proposal { display:grid; gap:.35rem; padding:.75rem; border:1px solid #a7f3d0; border-radius:.8rem; background:#f0fdf4; color:#14532d; font-size:.72rem; }
+.qm-inventory-record-card { min-width:0; }
+.qm-inventory-record-title { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:2; white-space:normal; overflow-wrap:anywhere; }
+@media (max-width:639px) {
+  .qm-mobile-record-card { padding:.8rem; border-radius:.9rem; gap:.7rem; }
+  .qm-mobile-record-footer { align-items:stretch; flex-direction:column; }
+  .qm-mobile-record-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .qm-mobile-action { width:100%; min-height:2.65rem; white-space:normal; text-align:center; }
+  .qm-mobile-request-card .qm-mobile-record-footer { align-items:stretch; }
+  .qm-inventory-record-grid { grid-template-columns:minmax(0,1fr) !important; }
+  .qm-inventory-record-card { padding:.85rem; }
+}
+@media (max-width:359px) { .qm-mobile-record-actions { grid-template-columns:minmax(0,1fr); } }
+html.dark .qm-mobile-record-card { border-color:#334155; background:#0f172a; }
+html.dark .qm-mobile-record-header, html.dark .qm-mobile-record-footer { border-color:#334155; }
+html.dark .qm-mobile-record-items { color:#cbd5e1; }
+html.dark .qm-mobile-record-proposal { border-color:#065f46; background:#052e2b; color:#a7f3d0; }
+html.dark .qm-inventory-record-card { border-color:#334155; background:#162236; }
