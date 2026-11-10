@@ -21,7 +21,7 @@ const CONFLICT_WARNINGS = new Set([
  */
 export function rankMedicineMasterMatches(product, candidates) {
   const incoming = {
-    brandName: String(product?.name || product?.brand || '').trim(),
+    brandName: String(product?.brand || product?.name || '').trim(),
     genericName: String(product?.genericName || '').trim(),
     composition: String(product?.composition || '').trim(),
     strength: String(product?.strength || '').trim(),
@@ -35,11 +35,11 @@ export function rankMedicineMasterMatches(product, candidates) {
 
   const ranked = (Array.isArray(candidates) ? candidates : []).map(candidate => {
     const evidence = scoreMedicineMatch(incoming, candidate);
-    const incomingNameKey = normalizeIdentity(incoming.brandName);
-    const exactBrand = Boolean(incomingNameKey && (
-      incomingNameKey === normalizeIdentity(candidate.brandName)
-      || incomingNameKey === normalizeIdentity(candidate.productName)
-    ));
+    const incomingNameKeys = [incoming.brandName, product?.name]
+      .map(normalizeIdentity).filter(Boolean);
+    const candidateNameKeys = [candidate.brandName, candidate.productName]
+      .map(normalizeIdentity).filter(Boolean);
+    const exactBrand = incomingNameKeys.some(name => candidateNameKeys.includes(name));
     const exactGeneric = normalizeIdentity(incoming.genericName) !== ''
       && normalizeIdentity(incoming.genericName) === normalizeIdentity(candidate.genericName);
     const packSizeConflict = Boolean(product?.packSize && candidate.packSize
