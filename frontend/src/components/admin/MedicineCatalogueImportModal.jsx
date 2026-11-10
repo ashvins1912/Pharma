@@ -117,6 +117,10 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                 {metric('Duplicates removed', report.duplicatesRemoved)}
                 {metric('Rejected rows', report.rejectedRecords)}
                 {metric('With composition', report.withComposition)}
+                {metric('Ingredient chemistry details', report.withIngredientDetails)}
+                {metric('CAS / UNII identifiers', report.withChemicalIdentifiers)}
+                {metric('With toxicology metadata', report.withToxicology)}
+                {metric('With administration routes', report.withRoutes)}
                 {metric('With manufacturer', report.withManufacturer)}
                 {metric('With pack size', report.withPackSize)}
                 {metric('With side effects', report.withSideEffects)}
