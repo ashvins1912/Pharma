@@ -277,7 +277,7 @@ export default function Header({
                 setMobileMenuOpen(nextState);
                 onToggleMobileMenu?.(nextState);
               }}
-              className="app-header__menu-toggle h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer items-center justify-center shrink-0"
+              className="app-header__menu-toggle hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer items-center justify-center shrink-0"
               aria-label={t('toggleMenu')}
               aria-expanded={mobileMenuOpen}
               aria-controls="quickmeds-mobile-navigation"
@@ -298,7 +298,7 @@ export default function Header({
                 aria-label={t('language')}
                 value={language}
                 onChange={(event) => setLanguage(event.target.value)}
-                className="max-w-[94px] bg-transparent text-[11px] font-bold text-slate-700 outline-none"
+                className="app-header__language-select max-w-[94px] bg-transparent text-[11px] font-bold text-slate-700 outline-none"
               >
                 {languages.map((item) => <option key={item.code} value={item.code}>{item.nativeLabel}</option>)}
               </select>
@@ -311,7 +311,7 @@ export default function Header({
                 <select
                   value={branchId}
                   onChange={(e) => setBranchId(e.target.value)}
-                  className="bg-transparent text-[11px] font-black text-slate-800 outline-none cursor-pointer max-w-[130px] truncate"
+                  className="app-header__branch-select bg-transparent text-[11px] font-black text-slate-800 outline-none cursor-pointer max-w-[130px] truncate"
                 >
                   {branchOptions.filter(Boolean).map(b => (
                     <option key={b.id} value={b.id}>{b.name}</option>
