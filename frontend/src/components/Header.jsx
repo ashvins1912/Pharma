@@ -136,7 +136,7 @@ export default function Header({
             <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl sm:rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-base sm:text-xl shadow-md shadow-blue-500/20 shrink-0">
               ⚕️
             </div>
-            <div className="flex flex-col justify-center min-w-0">
+            <div className="app-header__brand-copy flex flex-col justify-center">
               <div className="quickmeds-brand-badge-container">
                 <span className="quickmeds-brand-name">
                   QuickMeds Rx
@@ -176,7 +176,7 @@ export default function Header({
                   )
                 )}
               </div>
-              <p className="hidden md:block text-[11px] text-slate-400 font-medium tracking-tight leading-normal mt-0.5 whitespace-nowrap">
+              <p className="app-header__tagline hidden md:block text-[11px] text-slate-400 font-medium tracking-tight leading-normal mt-0.5 whitespace-nowrap">
                 {t('trustedTagline')}
               </p>
             </div>
