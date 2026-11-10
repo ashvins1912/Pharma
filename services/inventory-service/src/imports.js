@@ -5,6 +5,7 @@ import xlsx from 'xlsx';
 import mongoose from 'mongoose';
 import { config } from './config.js';
 import { Audit, ImportBatch, ImportBatchSnapshot, ImportFailure, ImportJob, Inventory, Product } from './models.js';
+import { publishInventoryChanged } from './realtimeEvents.js';
 
 const pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
@@ -618,7 +619,7 @@ async function saveBatch(job, batch, batchId, seenSkus) {
     }
   });
 
-  return { failedInBatch };
+  return { failedInBatch, successfulInBatch };
 }
 
 async function processJob(job) {
@@ -642,6 +643,14 @@ async function processJob(job) {
     }));
     const result = await saveBatch(job, batch, job.batchId, seenSkus);
     failedRecords += result.failedInBatch;
+    if (result.successfulInBatch > 0) {
+      await publishInventoryChanged({
+        tenantId: job.tenantId,
+        branchId: job.branchId,
+        reason: 'inventory.import_batch_applied',
+        entityId: job.batchId
+      });
+    }
   }
 
   const remainingFailures = await ImportFailure.countDocuments({ batchId: job.batchId, tenantId: job.tenantId, branchId: job.branchId });
