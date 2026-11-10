@@ -97,6 +97,7 @@ test('shared medicine catalogue import jobs and batch actions are registered wit
     ['POST', '/api/v1/inventory/catalogue/imports/remove-selected'],
     ['GET', `/api/v1/inventory/catalogue/imports/jobs/${jobId}`],
     ['POST', `/api/v1/inventory/catalogue/imports/jobs/${jobId}/retry`],
+    ['POST', `/api/v1/inventory/catalogue/imports/jobs/${jobId}/restart`],
     ['GET', `/api/v1/inventory/catalogue/imports/${batchId}`],
     ['GET', `/api/v1/inventory/catalogue/imports/${batchId}/records`],
     ['POST', `/api/v1/inventory/catalogue/imports/${batchId}/approve`],
