@@ -40,14 +40,14 @@ export default function SearchFilter() {
     <div className="pharma-search-panel bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-3 sm:p-4 shadow-sm space-y-2.5 sm:space-y-3">
       {/* Top Bar: Search Input & Sort & Clear */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-        <div className="relative flex-1">
+        <div className="pharma-search-query relative flex-1 min-w-0">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
           <input
             type="text"
             placeholder={t("searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-7 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl outline-none transition min-h-[38px]"
+            className="pharma-search-query__input w-full min-w-0 pl-8 pr-7 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl outline-none transition min-h-[40px]"
           />
           {searchQuery && (
             <button
@@ -60,12 +60,12 @@ export default function SearchFilter() {
           )}
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="pharma-search-controls flex items-center gap-2 shrink-0">
           {/* Sort Select */}
           <select
             value={sortOption}
             onChange={(e) => setSortOption(e.target.value)}
-            className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-2.5 sm:px-3 py-2 font-bold text-slate-700 outline-none focus:border-blue-500 cursor-pointer min-h-[38px] flex-1 sm:flex-none"
+            className="pharma-search-sort text-xs bg-slate-50 border border-slate-200 rounded-xl px-2.5 sm:px-3 py-2 font-bold text-slate-700 outline-none focus:border-blue-500 cursor-pointer min-h-[40px] flex-1 sm:flex-none"
           >
             <option value="default">{t("sortDefault")}</option>
             <option value="price-asc">{t("priceLowHigh")}</option>
@@ -76,7 +76,7 @@ export default function SearchFilter() {
           {isFilterActive && (
             <button
               onClick={clearAllFilters}
-              className="text-xs text-rose-600 hover:bg-rose-50 font-extrabold px-3 py-2 rounded-xl border border-rose-200 transition cursor-pointer whitespace-nowrap min-h-[38px]"
+              className="pharma-search-clear text-xs text-rose-600 hover:bg-rose-50 font-extrabold px-3 py-2 rounded-xl border border-rose-200 transition cursor-pointer whitespace-nowrap min-h-[40px]"
             >
               {t('clear')}
             </button>

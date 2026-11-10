@@ -277,7 +277,7 @@ export default function Header({
                 setMobileMenuOpen(nextState);
                 onToggleMobileMenu?.(nextState);
               }}
-              className="lg:hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center justify-center shrink-0"
+              className="app-header__menu-toggle h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer items-center justify-center shrink-0"
               aria-label={t('toggleMenu')}
               aria-expanded={mobileMenuOpen}
               aria-controls="quickmeds-mobile-navigation"
@@ -291,7 +291,7 @@ export default function Header({
               </svg>
             </button>
             
-            <label className="hidden min-[380px]:flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-600" title={t('selectLanguage')}>
+            <label className="app-header__language hidden min-[380px]:flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-600" title={t('selectLanguage')}>
               <span aria-hidden="true">🌐</span>
               <span className="sr-only">{t('language')}</span>
               <select
@@ -306,7 +306,7 @@ export default function Header({
 
             {/* Branch Quick-Switcher Dropdown */}
             {Array.isArray(branchOptions) && branchOptions.length > 0 && (
-              <div className="hidden sm:flex items-center gap-1 bg-slate-100 hover:bg-slate-200/70 px-2.5 py-1.5 rounded-xl border border-slate-200 transition shrink-0" title="Toggle active branch context (X-Branch-Id)">
+              <div className="app-header__branch hidden sm:flex items-center gap-1 bg-slate-100 hover:bg-slate-200/70 px-2.5 py-1.5 rounded-xl border border-slate-200 transition shrink-0" title="Toggle active branch context (X-Branch-Id)">
                 <span className="text-xs">🏢</span>
                 <select
                   value={branchId}
@@ -382,11 +382,11 @@ export default function Header({
               <button
                 type="button"
                 onClick={onOpenAuth}
-                className="h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm cursor-pointer transition flex items-center justify-center gap-1.5 shrink-0"
+                className="app-header__sign-in h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm cursor-pointer transition flex items-center justify-center gap-1.5 shrink-0"
                 aria-label={t('signIn')}
               >
-                <span className="text-xs">👤</span>
-                <span>{t('signIn')}</span>
+                <span className="app-header__sign-in-icon text-xs" aria-hidden="true">👤</span>
+                <span className="app-header__sign-in-label">{t('signIn')}</span>
               </button>
             )}
 

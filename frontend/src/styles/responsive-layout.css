@@ -172,3 +172,139 @@ html, body, #root {
 html.dark .pharma-modal-surface {
   color: var(--qm-ink, #f8fafc);
 }
+
+
+/* --------------------------------------------------------------------------
+   Consistent data-table presentation across customer and admin workspaces.
+   Keep semantic table markup and all row/action behaviour unchanged.
+   -------------------------------------------------------------------------- */
+:is(.pharma-responsive-scope, .admin-screen) :where(.overflow-x-auto, [data-table-scroll="true"], .pharma-table-container) {
+  position: relative;
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--qm-border, #e2e8f0);
+  border-radius: 0.875rem;
+  background: var(--qm-surface, #fff);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.035);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+}
+:is(.pharma-responsive-scope, .admin-screen) :where(table) {
+  width: max-content;
+  min-width: 100%;
+  border: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--qm-ink, #0f172a);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+:is(.pharma-responsive-scope, .admin-screen) :where(thead) {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+:is(.pharma-responsive-scope, .admin-screen) :where(thead th) {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 0.8rem 0.9rem;
+  border-bottom: 1px solid var(--qm-border, #e2e8f0);
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.6875rem;
+  font-weight: 750;
+  letter-spacing: 0.045em;
+  line-height: 1.35;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+:is(.pharma-responsive-scope, .admin-screen) :where(tbody td) {
+  padding: 0.8rem 0.9rem;
+  border-bottom: 1px solid #edf1f6;
+  background: var(--qm-surface, #fff);
+  color: var(--qm-ink, #0f172a);
+  vertical-align: middle;
+}
+:is(.pharma-responsive-scope, .admin-screen) :where(tbody tr:last-child td) {
+  border-bottom: 0;
+}
+:is(.pharma-responsive-scope, .admin-screen) :where(tbody tr:nth-child(even) td) {
+  background: #fbfcfe;
+}
+:is(.pharma-responsive-scope, .admin-screen) :where(tbody tr:hover td) {
+  background: #f1f6ff;
+}
+:is(.pharma-responsive-scope, .admin-screen) :where(tbody td button, tbody td a) {
+  white-space: nowrap;
+}
+:is(.pharma-responsive-scope, .admin-screen) :where(tbody td :is(input, select)) {
+  min-width: 5rem;
+  max-width: 14rem;
+}
+:is(.pharma-responsive-scope, .admin-screen) :where(tbody td :is(.badge, [data-status], [role="status"])) {
+  white-space: nowrap;
+}
+:is(.pharma-responsive-scope, .admin-screen) :where(tfoot td, tfoot th) {
+  padding: 0.75rem 0.9rem;
+  border-top: 1px solid var(--qm-border, #e2e8f0);
+  background: #f8fafc;
+  font-weight: 650;
+}
+:is(.pharma-responsive-scope, .admin-screen) :where(.overflow-x-auto)::after,
+:is(.pharma-responsive-scope, .admin-screen) :where([data-table-scroll="true"])::after,
+:is(.pharma-responsive-scope, .admin-screen) :where(.pharma-table-container)::after {
+  content: "";
+  position: sticky;
+  right: 0;
+  display: block;
+  width: 0.35rem;
+  height: 0;
+  pointer-events: none;
+}
+@media (max-width: 767px) {
+  :is(.pharma-responsive-scope, .admin-screen) :where(.overflow-x-auto, [data-table-scroll="true"], .pharma-table-container) {
+    border-radius: 0.75rem;
+    scrollbar-width: thin;
+  }
+  :is(.pharma-responsive-scope, .admin-screen) :where(table) {
+    font-size: 0.75rem;
+  }
+  :is(.pharma-responsive-scope, .admin-screen) :where(thead th) {
+    padding: 0.7rem 0.75rem;
+    font-size: 0.625rem;
+  }
+  :is(.pharma-responsive-scope, .admin-screen) :where(tbody td) {
+    padding: 0.7rem 0.75rem;
+  }
+}
+@media (max-width: 380px) {
+  :is(.pharma-responsive-scope, .admin-screen) :where(thead th, tbody td) {
+    padding-inline: 0.625rem;
+  }
+}
+html.dark :is(.pharma-responsive-scope, .admin-screen) :where(.overflow-x-auto, [data-table-scroll="true"], .pharma-table-container) {
+  border-color: var(--qm-border, #334155);
+  background: var(--qm-surface, #0f172a);
+  scrollbar-color: #475569 #1e293b;
+}
+html.dark :is(.pharma-responsive-scope, .admin-screen) :where(thead th, tfoot td, tfoot th) {
+  border-color: var(--qm-border, #334155);
+  background: #1e293b;
+  color: #cbd5e1;
+}
+html.dark :is(.pharma-responsive-scope, .admin-screen) :where(tbody td) {
+  border-color: #263449;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+html.dark :is(.pharma-responsive-scope, .admin-screen) :where(tbody tr:nth-child(even) td) {
+  background: #111e31;
+}
+html.dark :is(.pharma-responsive-scope, .admin-screen) :where(tbody tr:hover td) {
+  background: #1e3352;
+}
