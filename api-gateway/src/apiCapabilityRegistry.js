@@ -202,6 +202,8 @@ const PUBLIC_PATHS = [
   // deliberately unauthenticated, sanitized catalog endpoint. Keep admin
   // inventory (/admin/inventory) and all mutations protected by capabilities.
   ['GET', /^\/api\/medicines$/],
+  // Sanitized read-only Medicine Master match used by Store product detail views.
+  ['GET', /^\\/api\\/v1\\/inventory\\/catalogue\\/medicines\\/match$/],
   // Public storefront branch discovery powers the pharmacy selector before sign-in.
   // The endpoint returns active branch directory data only; mutations remain protected.
   ['GET', /^\/api\/v1\/branches\/all$/],
