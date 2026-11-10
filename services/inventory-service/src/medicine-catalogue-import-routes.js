@@ -8,6 +8,10 @@ const router = express.Router();
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const MAX_CATALOGUE_UPLOAD_BYTES = 110 * 1024 * 1024;
 const CATALOGUE_CHUNK_SIZE = 500;
+const LARGE_IMPORT_THRESHOLD_BYTES = 10 * 1024 * 1024;
+const IMPORT_CONCURRENCY_LIMIT = 2;
+let activeCatalogueImports = 0;
+const yieldToEventLoop = () => new Promise(resolve => setImmediate(resolve));
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_CATALOGUE_UPLOAD_BYTES, files: 1 } });
 const text = value => String(value ?? '').replace(/<[^>]*>/g, ' ').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
 const key = value => text(value).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -445,6 +449,42 @@ export function assessMedicineQuality(record) {
   return { qualityScore, qualityGrade, qualityIssues: [...new Set(qualityIssues)] };
 }
 
+export async function consolidateInBatches(records, dataset) {
+  const unique = new Map(); let rejected = 0; let sourceRecords = 0;
+  for (const raw of records) {
+    sourceRecords += 1;
+    if (sourceRecords > 60000) throw Object.assign(new Error('Dataset exceeds the 60,000-record import limit.'), { statusCode: 413 });
+    const normalized = normalizeMedicineRecord(raw, dataset || raw.__dataset);
+    if (!normalized) rejected += 1;
+    else {
+      Object.assign(normalized, assessMedicineQuality(normalized));
+      normalized.dataQualityStatus = normalized.qualityGrade === 'EXCELLENT' || normalized.qualityGrade === 'GOOD' ? 'GOOD' : normalized.qualityGrade === 'NEEDS_REVIEW' ? 'NEEDS_REVIEW' : 'PARTIAL';
+      const identity = dataset === 'INDIAN_MEDICINE_DATA' ? normalized.medicineId : dataset === 'MEDICINES_PART_1' ? normalized.sourceFingerprint : (normalized.canonicalKey || normalized.medicineId);
+      const previous = unique.get(identity);
+      if (!previous) unique.set(identity, normalized);
+      else {
+        for (const field of ['genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType']) if (!previous[field] && normalized[field]) previous[field] = normalized[field];
+        for (const field of ['ingredientIds','ingredients','ingredientDetails','routeIds','routes','casNumbers','uniiCodes','substanceDescriptions','molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology','indications','contraindications','drugInteractions']) {
+          const identityOf = value => typeof value === 'object' && value !== null ? (value.ingredientId || key(value.name) || JSON.stringify(value)) : key(value);
+          previous[field] = [...new Map([...previous[field], ...normalized[field]].map(value => [identityOf(value), value])).values()];
+        }
+        previous.qualityIssues = [...new Set([...(previous.qualityIssues || []), ...(normalized.qualityIssues || [])])];
+        previous.sourceRecordIds = [...new Set([...(previous.sourceRecordIds || [previous.sourceRecordId]), normalized.sourceRecordId])];
+      }
+    }
+    if (sourceRecords % CATALOGUE_CHUNK_SIZE === 0) await yieldToEventLoop();
+  }
+  const consolidatedRecords = [...unique.values()];
+  for (let offset = 0; offset < consolidatedRecords.length; offset += CATALOGUE_CHUNK_SIZE) {
+    for (const record of consolidatedRecords.slice(offset, offset + CATALOGUE_CHUNK_SIZE)) {
+      Object.assign(record, assessMedicineQuality(record));
+      record.dataQualityStatus = record.qualityGrade === 'EXCELLENT' || record.qualityGrade === 'GOOD' ? 'GOOD' : record.qualityGrade === 'NEEDS_REVIEW' ? 'NEEDS_REVIEW' : 'PARTIAL';
+    }
+    await yieldToEventLoop();
+  }
+  return { records: consolidatedRecords, rejected, sourceRecords, duplicatesRemoved: sourceRecords - rejected - unique.size };
+}
+
 export function consolidate(records, dataset) {
   const unique = new Map();
   let rejected = 0;
@@ -486,7 +526,13 @@ router.use((req, res, next) => req.service?.isPlatformUser === true
   ? next()
   : res.status(403).json({ code: 'PLATFORM_ADMIN_REQUIRED', message: 'Only a platform administrator can publish the shared medicine master catalogue.' }));
 
-router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (req, res) => {
+router.post('/imports/preview', (req, res, next) => {
+  if (activeCatalogueImports >= IMPORT_CONCURRENCY_LIMIT) return res.status(429).json({ code: 'CATALOGUE_IMPORT_BUSY', message: 'Two catalogue imports are already processing. Retry after one finishes.' });
+  activeCatalogueImports += 1;
+  let released = false;
+  const release = () => { if (!released) { released = true; activeCatalogueImports = Math.max(0, activeCatalogueImports - 1); } };
+  res.on('finish', release); res.on('close', release); next();
+}, upload.single('jsonFile'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'Select a JSON file to upload.' });
   let payload;
   let dataset;
@@ -513,14 +559,14 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   if (!Array.isArray(sourceRows) && typeof sourceRows?.[Symbol.iterator] !== 'function') return res.status(400).json({ message: 'The uploaded medicine dataset has an invalid record collection.' });
   let normalized;
   try {
-    normalized = consolidate(sourceRows, dataset);
+    normalized = req.file.size > LARGE_IMPORT_THRESHOLD_BYTES ? await consolidateInBatches(sourceRows, dataset) : consolidate(sourceRows, dataset);
   } catch (error) {
     return res.status(error.statusCode || 400).json({ message: error.message });
   }
   let { records, rejected, sourceRecords, duplicatesRemoved } = normalized;
   if (!sourceRecords) return res.status(400).json({ message: 'The uploaded medicine dataset contains no records.' });
   const nameCounts = new Map();
-  for (const item of records) { const nameKey = key(item.brandName); nameCounts.set(nameKey, (nameCounts.get(nameKey) || 0) + 1); }
+  for (let offset = 0; offset < records.length; offset += CATALOGUE_CHUNK_SIZE) { for (const item of records.slice(offset, offset + CATALOGUE_CHUNK_SIZE)) { const nameKey = key(item.brandName); nameCounts.set(nameKey, (nameCounts.get(nameKey) || 0) + 1); } if (req.file.size > LARGE_IMPORT_THRESHOLD_BYTES) await yieldToEventLoop(); }
   for (const item of records) item.safeNameMatch = dataset === 'MEDICINES_PART_1' && nameCounts.get(key(item.brandName)) === 1;
   const batchId = randomUUID();
   const fileSha256 = hash(req.file.buffer);
@@ -536,7 +582,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   const canonicalKeys = records.map(record => record.canonicalKey).filter(Boolean);
   const names = dataset === 'MEDICINES_PART_1' ? [...new Set(records.filter(item => item.safeNameMatch).map(item => item.brandName))] : [];
   const incomingKeyCounts = new Map();
-  for (const item of records) if (item.canonicalKey) incomingKeyCounts.set(item.canonicalKey, (incomingKeyCounts.get(item.canonicalKey) || 0) + 1);
+  for (let offset = 0; offset < records.length; offset += CATALOGUE_CHUNK_SIZE) { for (const item of records.slice(offset, offset + CATALOGUE_CHUNK_SIZE)) if (item.canonicalKey) incomingKeyCounts.set(item.canonicalKey, (incomingKeyCounts.get(item.canonicalKey) || 0) + 1); if (req.file.size > LARGE_IMPORT_THRESHOLD_BYTES) await yieldToEventLoop(); }
   const candidateProjection = { medicineId: 1, canonicalKey: 1, brandName: 1 };
   const exactCandidates = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: canonicalKeys } }] }, candidateProjection).lean();
   const nameCandidates = names.length
@@ -564,7 +610,9 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   }
   const existingNameCounts = new Map([...existingNameGroups.entries()].map(([nameKey, group]) => [nameKey, group.length]));
   const nameNgramIdf = buildNameNgramIdf(existing);
-  for (const item of records) {
+  for (let recordIndex = 0; recordIndex < records.length; recordIndex += 1) {
+    if (req.file.size > LARGE_IMPORT_THRESHOLD_BYTES && recordIndex > 0 && recordIndex % 100 === 0) await yieldToEventLoop();
+    const item = records[recordIndex];
     const exact = existingById.get(item.medicineId) ||
       (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeyGroups.get(item.canonicalKey)?.length === 1 ? existingKeyGroups.get(item.canonicalKey)[0] : null) ||
       (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1 ? existingNameGroups.get(key(item.brandName))?.[0] : null);
@@ -648,7 +696,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     status: 'STAGING', recordCount: records.length, chunkCount: chunks.length, report, reportFingerprint
   });
   try {
-    if (chunks.length) await CatalogueImportChunk.insertMany(chunks, { ordered: true });
+    for (const stagedChunk of chunks) { await CatalogueImportChunk.insertMany([stagedChunk], { ordered: true }); if (req.file.size > LARGE_IMPORT_THRESHOLD_BYTES) await yieldToEventLoop(); }
     await CatalogueImport.updateOne({ batchId }, { $set: { status: 'READY' } });
   } catch (error) {
     await CatalogueImportChunk.deleteMany({ batchId });
