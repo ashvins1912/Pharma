@@ -1034,6 +1034,8 @@ const messages = {
     proceedCheckout: "Proceed to Checkout",
     pharmaDiscountForYou: "Pharma discount for you",
     createCampaign: "Create a campaign",
+    medicineInfoFor: "Additional information for {query}.",
+    informationSources: "Sources",
   },
   hi: {
     rxOnly: "केवल प्रिस्क्रिप्शन",
@@ -2059,6 +2061,8 @@ const messages = {
     proceedCheckout: "चेकआउट पर जाएँ",
     pharmaDiscountForYou: "आपके लिए फ़ार्मेसी छूट",
     createCampaign: "अभियान बनाएँ",
+    medicineInfoFor: "{query} के लिए अतिरिक्त जानकारी।",
+    informationSources: "स्रोत",
   },
   kn: {
     rxOnly: "ಪ್ರಿಸ್ಕ್ರಿಪ್ಷನ್ ಮಾತ್ರ",
@@ -3084,6 +3088,8 @@ const messages = {
     proceedCheckout: "ಚೆಕ್‌ಔಟ್‌ಗೆ ಮುಂದುವರಿಯಿರಿ",
     pharmaDiscountForYou: "ನಿಮಗಾಗಿ ಫಾರ್ಮಸಿ ರಿಯಾಯಿತಿ",
     createCampaign: "ಅಭಿಯಾನ ರಚಿಸಿ",
+    medicineInfoFor: "{query} ಕುರಿತು ಹೆಚ್ಚುವರಿ ಮಾಹಿತಿ.",
+    informationSources: "ಮೂಲಗಳು",
   },
   bn: {
     rxOnly: "কেবলমাত্র প্রেসক্রিপশন",
@@ -4109,6 +4115,8 @@ const messages = {
     proceedCheckout: "চেকআউটে এগিয়ে যান",
     pharmaDiscountForYou: "আপনার জন্য ফার্মেসি ছাড়",
     createCampaign: "প্রচার তৈরি করুন",
+    medicineInfoFor: "{query} সম্পর্কে অতিরিক্ত তথ্য।",
+    informationSources: "সূত্র",
   },
   te: {
     rxOnly: "ప్రిస్క్రిప్షన్ మాత్రమే",
@@ -5163,6 +5171,8 @@ export function LanguageProvider({ children }) {
         // Keep the in-memory language change even when storage is unavailable.
       }
     }
+    medicineInfoFor: "{query} గురించి అదనపు సమాచారం.",
+    informationSources: "మూలాలు",
   }, []);
 
   useEffect(() => {
