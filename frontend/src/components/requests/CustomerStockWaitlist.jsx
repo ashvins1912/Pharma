@@ -95,7 +95,7 @@ export default function CustomerStockWaitlist() {
         const ready = ['READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'].includes(entry.status);
         const confirming = entry.status === 'CONFIRMING';
         const terminal = ['FULFILLED', 'EXPIRED', 'CANCELLED'].includes(entry.status);
-        const statusLabel = confirming ? 'Creating your order…' : ready ? t('stockAvailableToConfirm') : entry.status === 'FULFILLED' ? 'Fulfilled' : entry.status === 'EXPIRED' ? t('waitPeriodExpired') : entry.status === 'CANCELLED' ? 'Cancelled' : t('waitingForStock');
+        const statusLabel = confirming ? t('creatingOrder') : ready ? t('stockAvailableToConfirm') : entry.status === 'FULFILLED' ? t('fulfilled') : entry.status === 'EXPIRED' ? t('waitPeriodExpired') : entry.status === 'CANCELLED' ? t('cancelled') : t('waitingForStock');
         const until = entry.waitUntil ? new Date(entry.waitUntil).toLocaleString() : '';
         return (
           <article key={entry._id} className="rounded-xl border border-slate-200 p-3 space-y-2">
@@ -131,11 +131,11 @@ export default function CustomerStockWaitlist() {
                 </div>
               );
             })}
-            {entry.parentOrderId && <p className="text-[10px] text-indigo-700">Linked to order #{String(entry.parentOrderId).slice(-6).toUpperCase()}</p>}
-            <p className="text-[10px] text-slate-500">Wait window ends: {until || 'Not specified'}</p>
-            {confirming && <p role="status" className="text-[11px] text-amber-800">We are reconciling your order confirmation. This panel checks again automatically; you can refresh the status below.</p>}
+            {entry.parentOrderId && <p className="text-[10px] text-indigo-700">{t('linkedToOrder')} #{String(entry.parentOrderId).slice(-6).toUpperCase()}</p>}
+            <p className="text-[10px] text-slate-500">{t('waitWindowEnds')}: {until || t('notSpecified')}</p>
+            {confirming && <p role="status" className="text-[11px] text-amber-800">{t('reconcilingOrder')}</p>}
             <div className="flex flex-wrap gap-2">
-              {ready && <button type="button" disabled={busyId === String(entry._id)} onClick={() => confirm(entry)} className="flex-1 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50">{busyId === String(entry._id) ? 'Processing…' : t('confirmAvailableStock')}</button>}
+              {ready && <button type="button" disabled={busyId === String(entry._id)} onClick={() => confirm(entry)} className="flex-1 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50">{busyId === String(entry._id) ? t('processing') : t('confirmAvailableStock')}</button>}
               {confirming && <button type="button" onClick={() => void load()} className="flex-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">{t('refreshStatus')}</button>}
               {!confirming && !terminal && <button type="button" disabled={busyId === String(entry._id)} onClick={() => cancel(entry)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 disabled:opacity-50">{t('cancelWait')}</button>}
             </div>
