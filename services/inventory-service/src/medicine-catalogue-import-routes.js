@@ -168,6 +168,101 @@ export function scoreMedicineMatch(incoming, candidate, options = {}) {
     ]
   };
 }
+async function reconcileCatalogueRecordsAgainstMaster(records) {
+  const ids = [...new Set(records.flatMap(item => [item.medicineId, item.reconciliationMatch?.targetMedicineId].filter(Boolean)))];
+  const canonicalKeys = [...new Set(records.map(item => item.canonicalKey).filter(Boolean))];
+  const names = [...new Set(records.filter(item => item.safeNameMatch).map(item => item.brandName).filter(Boolean))];
+  const prefixes = fuzzyCandidatePrefixes(records);
+  const clauses = [
+    ...(ids.length ? [{ medicineId: { $in: ids } }] : []),
+    ...(canonicalKeys.length ? [{ canonicalKey: { $in: canonicalKeys } }] : []),
+    ...(names.length ? [{ brandName: { $in: names } }] : []),
+    ...prefixes.map(prefix => ({ brandName: { $regex: '^' + prefix.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\
+const fuzzyCandidatePrefixes = records =>'), $options: 'i' } }))
+  ];
+  const candidates = clauses.length ? await MedicineMaster.find({ $or: clauses, isArchived: { $ne: true } }, {
+    _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1,
+    ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1
+  }).limit(5001).lean() : [];
+  const scanTruncated = candidates.length > 5000;
+  const activeCandidates = candidates.slice(0, 5000);
+  const byId = new Map(activeCandidates.map(item => [item.medicineId, item]));
+  const keyGroups = new Map(), nameGroups = new Map(), prefixGroups = new Map();
+  for (const candidate of activeCandidates) {
+    if (candidate.canonicalKey) keyGroups.set(candidate.canonicalKey, [...(keyGroups.get(candidate.canonicalKey) || []), candidate]);
+    const nameKey = key(candidate.brandName);
+    nameGroups.set(nameKey, [...(nameGroups.get(nameKey) || []), candidate]);
+    const prefix = nameKey.slice(0, 2);
+    if (prefix.length === 2) prefixGroups.set(prefix, [...(prefixGroups.get(prefix) || []), candidate]);
+  }
+  const unique = groups => new Map([...groups.entries()].filter(([, group]) => group.length === 1).map(([identity, group]) => [identity, group[0]]));
+  const byKey = unique(keyGroups), byName = unique(nameGroups);
+  const nameNgramIdf = buildNameNgramIdf(activeCandidates);
+  const plans = [];
+  const blockers = [];
+  for (const item of records) {
+    const old = item.reconciliationMatch || null;
+    if (['MANUAL_REVIEW', 'BLOCKED_CONFLICT'].includes(old?.decision)) {
+      blockers.push({ medicineId: item.medicineId, brandName: item.brandName, reason: old.decision, warnings: old.warnings || [] });
+      plans.push({ decision: old.decision, targetMedicineId: old.targetMedicineId || '' });
+      continue;
+    }
+    const exact = byId.get(item.medicineId) ||
+      (item.canonicalKey ? byKey.get(item.canonicalKey) : null) ||
+      (item.safeNameMatch ? byName.get(key(item.brandName)) : null);
+    let plan;
+    if (exact) {
+      const evidence = scoreMedicineMatch(item, exact, { nameNgramIdf });
+      if (evidence.decision === 'BLOCKED_CONFLICT') {
+        plan = { decision: 'BLOCKED_CONFLICT', targetMedicineId: exact.medicineId, method: 'EXACT_IDENTITY_WITH_CLINICAL_CONFLICT', score: evidence.score, warnings: evidence.warnings };
+      } else {
+        plan = { decision: 'AUTO_MERGE', targetMedicineId: exact.medicineId, method: 'FRESH_EXACT_OR_CANONICAL', score: 100, warnings: [] };
+      }
+    } else {
+      let best = null;
+      const prefix = key(item.brandName).slice(0, 2);
+      for (const candidate of prefixGroups.get(prefix) || []) {
+        const scored = scoreMedicineMatch(item, candidate, { nameNgramIdf });
+        if (!best || scored.score > best.score) best = { candidate, ...scored };
+      }
+      if (best && best.decision === 'AUTO_MERGE') {
+        plan = { decision: 'AUTO_MERGE', targetMedicineId: best.candidate.medicineId, method: 'FRESH_HYBRID_TFIDF_NGRAM_LINKAGE', score: best.score, warnings: best.warnings };
+      } else if (best && ['MANUAL_REVIEW', 'BLOCKED_CONFLICT'].includes(best.decision)) {
+        plan = { decision: best.decision, targetMedicineId: best.candidate.medicineId, method: 'FRESH_HYBRID_TFIDF_NGRAM_LINKAGE', score: best.score, warnings: best.warnings };
+      } else {
+        plan = { decision: 'NO_MATCH', targetMedicineId: '', method: 'FRESH_NO_MATCH', score: 0, warnings: [] };
+      }
+    }
+    const oldTarget = old?.decision === 'AUTO_MERGE' ? old.targetMedicineId : '';
+    const newTarget = plan.decision === 'AUTO_MERGE' ? plan.targetMedicineId : '';
+    if (oldTarget !== newTarget || (!oldTarget && newTarget) || (oldTarget && !newTarget)) {
+      blockers.push({ medicineId: item.medicineId, brandName: item.brandName, reason: 'STALE_RECONCILIATION', previousTargetMedicineId: oldTarget, currentTargetMedicineId: newTarget, currentDecision: plan.decision });
+    }
+    if (['MANUAL_REVIEW', 'BLOCKED_CONFLICT'].includes(plan.decision)) {
+      blockers.push({ medicineId: item.medicineId, brandName: item.brandName, reason: plan.decision, targetMedicineId: plan.targetMedicineId, score: plan.score, warnings: plan.warnings });
+    }
+    plans.push(plan);
+  }
+  const targetCounts = new Map();
+  for (const plan of plans) if (plan.decision === 'AUTO_MERGE' && plan.targetMedicineId) targetCounts.set(plan.targetMedicineId, (targetCounts.get(plan.targetMedicineId) || 0) + 1);
+  for (const [targetMedicineId, count] of targetCounts) if (count > 1) blockers.push({ reason: 'MULTIPLE_INCOMING_RECORDS_TARGET_SAME_MEDICINE', targetMedicineId, count });
+  if (scanTruncated && plans.some(plan => plan.decision === 'NO_MATCH')) blockers.push({ reason: 'FUZZY_CANDIDATE_SCAN_TRUNCATED', message: 'The live candidate scan exceeded its safety limit; unmatched records cannot safely be inserted.' });
+  return {
+    plans, blockers, scanTruncated,
+    summary: {
+      checkedRecords: records.length,
+      matchedUpdates: plans.filter(plan => plan.decision === 'AUTO_MERGE').length,
+      newInserts: plans.filter(plan => plan.decision === 'NO_MATCH').length,
+      manualReview: plans.filter(plan => plan.decision === 'MANUAL_REVIEW').length,
+      clinicalConflicts: plans.filter(plan => plan.decision === 'BLOCKED_CONFLICT').length,
+      staleDecisions: blockers.filter(item => item.reason === 'STALE_RECONCILIATION').length,
+      blockerCount: blockers.length,
+      candidateScanTruncated: scanTruncated,
+      blockerExamples: blockers.slice(0, 50)
+    }
+  };
+}
+
 const fuzzyCandidatePrefixes = records => [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))].slice(0, 120);
 const bool = value => typeof value === 'boolean' ? value : ['true', 'yes', '1'].includes(text(value).toLowerCase());
 const cleanRetailProductName = value => text(value).split(/\b(?:mrp|price|inclusive of all taxes|prescription required|prescription only)\b|₹|\bRs\.?\s*\d/i)[0].replace(/[|,;\-–]+\s*$/, '').trim();
@@ -1043,31 +1138,42 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
     const stagedChunks = await CatalogueImportChunk.find({ batchId: batch.batchId }).sort({ chunkIndex: 1 }).lean();
     const recordChunks = stagedChunks.length ? stagedChunks.map(item => item.records) : (batch.records?.length ? [batch.records] : []);
     const records = recordChunks.flat();
-    const incomingKeyCounts = new Map();
-    const incomingNameCounts = new Map();
-    for (const item of records) {
-      if (item.canonicalKey) incomingKeyCounts.set(item.canonicalKey, (incomingKeyCounts.get(item.canonicalKey) || 0) + 1);
-      const nameKey = key(item.brandName); incomingNameCounts.set(nameKey, (incomingNameCounts.get(nameKey) || 0) + 1);
+    const freshReconciliation = await reconcileCatalogueRecordsAgainstMaster(records);
+    if (freshReconciliation.blockers.length) {
+      const refreshedReport = {
+        ...(batch.report || {}),
+        publishReconciliation: freshReconciliation.summary,
+        publishBlockedAt: new Date().toISOString()
+      };
+      batch.report = refreshedReport;
+      batch.reportFingerprint = hash(JSON.stringify(refreshedReport));
+      batch.approvedAt = null;
+      batch.approvedBy = '';
+      batch.status = 'READY';
+      batch.errorMessage = 'Publishing blocked: live catalogue reconciliation found stale, ambiguous or conflicting records. Review the updated report and approve again after resolving them.';
+      await batch.save();
+      return res.status(409).json({
+        message: batch.errorMessage,
+        batchId: batch.batchId,
+        status: batch.status,
+        report: refreshedReport,
+        reportFingerprint: batch.reportFingerprint,
+        reconciliation: freshReconciliation.summary
+      });
     }
+    const planByIndex = freshReconciliation.plans;
+    let recordOffset = 0;
     for (const recordChunk of recordChunks) for (let offset = 0; offset < recordChunk.length; offset += 250) {
       const chunk = recordChunk.slice(offset, offset + 250);
-      const ids = [...new Set(chunk.flatMap(item => [item.medicineId, item.reconciliationMatch?.targetMedicineId].filter(Boolean)))];
-      const keys = chunk.map(item => item.canonicalKey).filter(Boolean);
-      const names = batch.dataset === 'MEDICINES_PART_1' ? [...new Set(chunk.filter(item => item.safeNameMatch && incomingNameCounts.get(key(item.brandName)) === 1).map(item => item.brandName))] : [];
-      const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: keys } }, ...(names.length ? [{ $expr: { $in: [{ $toLower: '$brandName' }, names.map(name => name.toLowerCase())] } }] : [])] }).lean();
+      const chunkPlans = planByIndex.slice(recordOffset, recordOffset + chunk.length);
+      recordOffset += chunk.length;
+      const ids = [...new Set(chunkPlans.map(plan => plan.targetMedicineId).filter(Boolean))];
+      const existing = ids.length ? await MedicineMaster.find({ medicineId: { $in: ids }, isArchived: { $ne: true } }).lean() : [];
       const byId = new Map(existing.map(item => [item.medicineId, item]));
-      const keyGroups = new Map();
-      for (const item of existing.filter(item => item.canonicalKey)) keyGroups.set(item.canonicalKey, [...(keyGroups.get(item.canonicalKey) || []), item]);
-      const byKey = new Map([...keyGroups.entries()].filter(([, matches]) => matches.length === 1).map(([canonicalKey, matches]) => [canonicalKey, matches[0]]));
-      const nameGroups = new Map();
-      for (const item of existing) { const nameKey = key(item.brandName); nameGroups.set(nameKey, [...(nameGroups.get(nameKey) || []), item]); }
-      const byName = new Map([...nameGroups.entries()].filter(([, matches]) => matches.length === 1).map(([nameKey, matches]) => [nameKey, matches[0]]));
-      const operations = chunk.map(item => {
-        const canonicalMatch = item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 ? byKey.get(item.canonicalKey) : null;
-        const nameMatch = item.safeNameMatch && incomingNameCounts.get(key(item.brandName)) === 1 ? byName.get(key(item.brandName)) : null;
-        const plannedTarget = item.reconciliationMatch?.decision === 'AUTO_MERGE'
-          ? byId.get(item.reconciliationMatch.targetMedicineId) : null;
-        const current = byId.get(item.medicineId) || plannedTarget || canonicalMatch || nameMatch || null;
+      const operations = chunk.map((item, itemIndex) => {
+        const plan = chunkPlans[itemIndex];
+        const current = plan.decision === 'AUTO_MERGE' ? byId.get(plan.targetMedicineId) : null;
+        if (plan.decision === 'AUTO_MERGE' && !current) throw Object.assign(new Error('A reconciled target disappeared before its write. Re-run review and approval.'), { statusCode: 409 });
         const targetId = current?.medicineId || item.medicineId;
         const fields = ['brandName','genericName','genericId','sourceLicenseStatusValue','drugFormId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType','sourceImageUrl'];
         const set = {
