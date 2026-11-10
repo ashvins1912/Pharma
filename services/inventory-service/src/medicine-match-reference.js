@@ -6,11 +6,12 @@ const referenceSchema = new mongoose.Schema({
   identityHash: { type: String, required: true, unique: true },
   normalizedIdentity: { type: String, required: true },
   input: { type: mongoose.Schema.Types.Mixed, required: true },
-  status: { type: String, enum: ['PENDING', 'EXACT', 'STRONG', 'AMBIGUOUS', 'NO_CONFIDENT_MATCH', 'NO_MATCH', 'STALE'], default: 'PENDING', index: true },
+  status: { type: String, enum: ['PENDING', 'PROCESSING', 'EXACT', 'STRONG', 'AMBIGUOUS', 'NO_CONFIDENT_MATCH', 'NO_MATCH', 'STALE'], default: 'PENDING', index: true },
   medicineId: { type: String, default: '' },
   confidence: { type: Number, default: 0 },
   medicineMasterUpdatedAt: { type: Date, default: null },
   resolvedAt: { type: Date, default: null },
+  leaseExpiresAt: { type: Date, default: null, index: true },
   attempts: { type: Number, default: 0 },
   lastError: { type: String, default: '' }
 }, { timestamps: true });
@@ -103,21 +104,52 @@ export async function getOrResolveMedicineMatch(product) {
 
 export async function processMedicineMatchBatch({ limit = 50 } = {}) {
   const batchSize = Math.max(1, Math.min(100, Number(limit) || 50));
-  const rows = await MedicineMatchReference.find({ status: 'PENDING' }).sort({ updatedAt: 1 }).limit(batchSize).lean();
-  if (!rows.length) return { processed: 0, remaining: await MedicineMatchReference.countDocuments({ status: 'PENDING' }) };
+  const claimed = [];
+  const now = new Date();
+  for (let index = 0; index < batchSize; index += 1) {
+    const row = await MedicineMatchReference.findOneAndUpdate(
+      { $or: [{ status: 'PENDING' }, { status: 'PROCESSING', leaseExpiresAt: { $lte: now } }] },
+      { $set: { status: 'PROCESSING', leaseExpiresAt: new Date(now.getTime() + 2 * 60 * 1000) } },
+      { sort: { updatedAt: 1 }, new: true }
+    ).lean();
+    if (!row) break;
+    claimed.push(row);
+  }
+  if (!claimed.length) return { processed: 0, remaining: await MedicineMatchReference.countDocuments({ status: 'PENDING' }) };
   const latestMaster = await medicineModel().findOne({ isArchived: { $ne: true } }, { updatedAt: 1 }).sort({ updatedAt: -1 }).lean();
   const operations = [];
-  for (const row of rows) {
+  for (const row of claimed) {
     try {
       const result = await resolveReference(row);
-      operations.push({ updateOne: { filter: { _id: row._id, status: 'PENDING' }, update: { $set: {
+      operations.push({ updateOne: { filter: { _id: row._id, status: 'PROCESSING' }, update: { $set: {
         status: result.status, medicineId: result.medicine?.medicineId || '', confidence: result.confidence || 0,
-        medicineMasterUpdatedAt: latestMaster?.updatedAt || new Date(0), resolvedAt: new Date(), lastError: ''
+        medicineMasterUpdatedAt: latestMaster?.updatedAt || new Date(0), resolvedAt: new Date(),
+        leaseExpiresAt: null, lastError: ''
       }, $inc: { attempts: 1 } } } });
     } catch (error) {
-      operations.push({ updateOne: { filter: { _id: row._id }, update: { $set: { lastError: String(error.message || 'Match failed').slice(0, 300) }, $inc: { attempts: 1 } } } });
+      operations.push({ updateOne: { filter: { _id: row._id, status: 'PROCESSING' }, update: { $set: {
+        status: 'PENDING', leaseExpiresAt: null, lastError: String(error.message || 'Match failed').slice(0, 300)
+      }, $inc: { attempts: 1 } } } });
     }
   }
   if (operations.length) await MedicineMatchReference.bulkWrite(operations, { ordered: false });
   return { processed: operations.length, remaining: await MedicineMatchReference.countDocuments({ status: 'PENDING' }) };
+}
+
+let matchWorkerTimer = null;
+let matchWorkerBusy = false;
+export function startMedicineMatchWorker() {
+  if (matchWorkerTimer) return;
+  matchWorkerTimer = setInterval(async () => {
+    if (matchWorkerBusy || mongoose.connection.readyState !== 1) return;
+    matchWorkerBusy = true;
+    try { await processMedicineMatchBatch({ limit: 50 }); }
+    catch (error) { console.error('Medicine match batch worker failed:', error.message); }
+    finally { matchWorkerBusy = false; }
+  }, 2000);
+  matchWorkerTimer.unref?.();
+}
+export function stopMedicineMatchWorker() {
+  if (matchWorkerTimer) clearInterval(matchWorkerTimer);
+  matchWorkerTimer = null;
 }
