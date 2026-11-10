@@ -24,8 +24,10 @@ const bool = value => typeof value === 'boolean' ? value : ['true', 'yes', '1'].
 const cleanRetailProductName = value => text(value).split(/\b(?:mrp|price|inclusive of all taxes|prescription required|prescription only)\b|₹|\bRs\.?\s*\d/i)[0].replace(/[|,;\-–]+\s*$/, '').trim();
 const cleanDosageForm = value => {
   const source = key(value);
-  const forms = ['tablet','capsule','syrup','suspension','injection','cream','ointment','gel','drops','spray','inhaler','powder','solution','lotion','suppository','sachet','granules','patch','vial','ampoule','lozenge','mouthwash'];
-  return forms.filter(form => source.includes(form)).map(form => form.charAt(0).toUpperCase() + form.slice(1)).join(', ');
+  const forms = ['softgel capsule','softgel','oral suspension','dry syrup','tablet','capsule','syrup','suspension','injection','cream','ointment','gel','drops','spray','inhaler','powder','solution','lotion','suppository','sachet','granules','patch','vial','ampoule','lozenge','mouthwash'];
+  const matches = forms.filter(form => source.includes(form));
+  const normalized = matches.filter(form => !(form === 'gel' && source.includes('softgel')));
+  return normalized.map(form => form.split(' ').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')).join(', ');
 };
 const isPlaceholder = value => ['na', 'n a', 'n/a', 'not available', 'none', 'null', '-'].includes(key(value));
 const cleanSourceValue = value => isPlaceholder(value) ? '' : text(value);
@@ -98,7 +100,7 @@ const catalogueImportChunkSchema = new mongoose.Schema({
 catalogueImportChunkSchema.index({ batchId: 1, chunkIndex: 1 }, { unique: true });
 const CatalogueImportChunk = mongoose.models.MedicineCatalogueImportChunk || mongoose.model('MedicineCatalogueImportChunk', catalogueImportChunkSchema);
 
-function* parseJsonArrayRecords(buffer) {
+export function* parseJsonArrayRecords(buffer) {
   let index = buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf ? 3 : 0;
   const whitespace = byte => byte === 0x20 || byte === 0x09 || byte === 0x0a || byte === 0x0d;
   while (index < buffer.length && whitespace(buffer[index])) index += 1;
@@ -289,6 +291,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     return res.status(error.statusCode || 400).json({ message: error.message });
   }
   const { records, rejected, sourceRecords, duplicatesRemoved } = normalized;
+  if (!sourceRecords) return res.status(400).json({ message: 'The uploaded medicine dataset contains no records.' });
   const nameCounts = new Map();
   for (const item of records) { const nameKey = key(item.brandName); nameCounts.set(nameKey, (nameCounts.get(nameKey) || 0) + 1); }
   for (const item of records) item.safeNameMatch = dataset === 'MEDICINES_PART_1' && nameCounts.get(key(item.brandName)) === 1;
@@ -317,6 +320,9 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     sourceRecords, normalizedRecords: records.length, rejectedRecords: rejected,
     duplicatesRemoved, newRecords: records.length - updates, updateCandidates: updates,
     needsReview: records.filter(item => item.dataQualityStatus === 'NEEDS_REVIEW').length,
+    partialRecords: records.filter(item => item.dataQualityStatus === 'PARTIAL').length,
+    missingComposition: records.filter(item => !item.composition).length,
+    missingManufacturer: records.filter(item => !item.manufacturer).length,
     withComposition: records.filter(item => item.composition).length,
     withStrength: records.filter(item => item.strength).length,
     withPackSize: records.filter(item => item.packSize).length,
