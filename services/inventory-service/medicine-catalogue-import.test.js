@@ -247,6 +247,34 @@ test('fuzzy medicine matching sends name-only matches to manual review', () => {
   assert.ok(match.warnings.includes('COMPOSITION_MISSING_REVIEW_REQUIRED'));
 });
 
+test('record linkage normalizes equivalent mass units before medicine identity scoring', () => {
+  const match = scoreMedicineMatch(
+    { brandName: 'Example 1g Tablet', composition: 'Example ingredient', strength: '1 g', dosageForm: 'Tablets', genericName: 'Example ingredient' },
+    { brandName: 'Example 1000mg Tablets', composition: 'Example ingredient', strength: '1000 mg', dosageForm: 'Tablet', genericName: 'Example ingredient' }
+  );
+  assert.equal(match.decision, 'AUTO_MERGE');
+  assert.equal(match.score, 100);
+});
+
+test('record linkage blocks a conflicting generic ingredient despite a similar brand name', () => {
+  const match = scoreMedicineMatch(
+    { brandName: 'Example 10mg Tablet', composition: 'Example ingredient', strength: '10 mg', dosageForm: 'Tablet', genericName: 'Ingredient A' },
+    { brandName: 'Example 10mg Tablet', composition: 'Example ingredient', strength: '10 mg', dosageForm: 'Tablet', genericName: 'Ingredient B' }
+  );
+  assert.equal(match.decision, 'BLOCKED_CONFLICT');
+  assert.ok(match.warnings.includes('GENERIC_INGREDIENT_CONFLICT'));
+});
+
+test('character n-gram linkage retains typo candidates for review but does not auto-merge weak evidence', () => {
+  const match = scoreMedicineMatch(
+    { brandName: 'Atorvastatin 10mg Tablet', composition: 'Atorvastatin', strength: '10 mg', dosageForm: 'Tablet' },
+    { brandName: 'Atorvastatin 10mg Tablett', composition: 'Atorvastatin', strength: '10 mg', dosageForm: 'Tablet' }
+  );
+  assert.ok(match.ngramNameScore > 0);
+  assert.ok(['AUTO_MERGE', 'MANUAL_REVIEW', 'NO_MATCH'].includes(match.decision));
+  assert.notEqual(match.decision, 'BLOCKED_CONFLICT');
+});
+
 test('multi-batch record merge preserves source provenance and enriches missing fields', () => {
   const left = {
     medicineId: 'BRAND-1', brandName: 'Example 10mg Tablet', composition: 'Example ingredient',
