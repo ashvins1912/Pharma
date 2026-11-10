@@ -99,13 +99,17 @@ export default function MedicineCatalogueMappingReview({ batches = [], onClose, 
                 </div>
                 {!item._mapped && <>
                   <div className="mt-3">
-                    <label className="block text-[10px] font-black uppercase tracking-wide text-slate-500">Choose canonical catalogue record</label>
-                    <select value={chosen} onChange={event => setChoices(value => ({ ...value, [item.medicineId]: event.target.value }))} className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs">
-                      <option value="">Select a match or create new</option>
-                      {item.candidates?.map(candidate => <option key={candidate.medicineId} value={candidate.medicineId}>{candidate.brandName} · {candidate.composition || 'composition n/a'} · {candidate.evidence?.score ?? 0}% match</option>)}
-                      <option value="CREATE_NEW">＋ Create new medicine record</option>
-                    </select>
-                    {chosen && chosen !== 'CREATE_NEW' && <p className="mt-1 text-[10px] text-slate-500">Selected match: {item.candidates?.find(candidate => candidate.medicineId === chosen)?.medicineId}</p>}
+                    <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-500">Choose canonical catalogue record</p>
+                    <div className="grid gap-2 lg:grid-cols-2">
+                      {item.candidates?.map(candidate => <label key={candidate.medicineId} className={chosen === candidate.medicineId ? 'flex cursor-pointer items-start gap-2 rounded-lg border border-indigo-400 bg-indigo-50 p-3' : 'flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 p-3 hover:bg-slate-50'}>
+                        <input type="radio" name={'mapping-' + item.medicineId} checked={chosen === candidate.medicineId} onChange={() => setChoices(value => ({ ...value, [item.medicineId]: candidate.medicineId }))} className="mt-1"/>
+                        <span className="min-w-0 flex-1"><span className="flex flex-wrap items-center justify-between gap-2"><strong className="break-words text-xs text-slate-800">{candidate.brandName || candidate.medicineId}</strong><span className="rounded bg-white px-2 py-0.5 text-[10px] font-black text-indigo-700">{candidate.evidence?.score ?? 0}% match</span></span><span className="mt-1 block break-words text-[10px] text-slate-600">{candidate.composition || 'Composition unavailable'} · {[candidate.strength, candidate.dosageForm].filter(Boolean).join(' / ') || 'Strength/form unavailable'}</span><span className="mt-1 block text-[10px] text-slate-500">{candidate.manufacturer || 'Manufacturer unavailable'} · {candidate.storeApproved ? 'Already Store-approved' : 'Not yet Store-approved'}</span>{Boolean(candidate.evidence?.warnings?.length) && <span className="mt-1 block break-words text-[10px] text-amber-700">Warnings: {candidate.evidence.warnings.join(', ')}</span>}<span className="mt-1 block break-all font-mono text-[9px] text-slate-400">{candidate.medicineId}</span></span>
+                      </label>)}
+                      <label className={chosen === 'CREATE_NEW' ? 'flex cursor-pointer items-center gap-2 rounded-lg border border-indigo-400 bg-indigo-50 p-3' : 'flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 p-3 hover:bg-slate-50'}>
+                        <input type="radio" name={'mapping-' + item.medicineId} checked={chosen === 'CREATE_NEW'} onChange={() => setChoices(value => ({ ...value, [item.medicineId]: 'CREATE_NEW' }))}/>
+                        <span><strong className="block text-xs text-slate-800">Create new medicine record</strong><span className="text-[10px] text-slate-500">Use this only when none of the candidate records is the same medicine.</span></span>
+                      </label>
+                    </div>
                   </div>
                   <div className="mt-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-wide text-slate-500">Fields to approve ({selected.length})</p><div className="flex gap-2"><button type="button" onClick={() => setSelectedFields(value => ({ ...value, [item.medicineId]: (item.availableFields || []).map(field => field.key) }))} className="text-[10px] font-bold text-indigo-700">Select all</button><button type="button" onClick={() => setSelectedFields(value => ({ ...value, [item.medicineId]: [] }))} className="text-[10px] font-bold text-slate-500">Clear</button></div></div>
