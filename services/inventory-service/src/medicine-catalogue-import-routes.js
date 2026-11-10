@@ -11,7 +11,7 @@ const CATALOGUE_CHUNK_SIZE = 500;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_CATALOGUE_UPLOAD_BYTES, files: 1 } });
 const text = value => String(value ?? '').replace(/<[^>]*>/g, ' ').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
 const key = value => text(value).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-const hash = value => createHash('sha256').update(String(value)).digest('hex');
+const hash = value => createHash('sha256').update(Buffer.isBuffer(value) ? value : String(value)).digest('hex');
 const pick = (record, ...names) => {
   const normalized = Object.fromEntries(Object.entries(record || {}).map(([k, v]) => [key(k).replace(/ /g, ''), v]));
   for (const name of names) {
@@ -97,6 +97,50 @@ const catalogueImportChunkSchema = new mongoose.Schema({
 }, { timestamps: true });
 catalogueImportChunkSchema.index({ batchId: 1, chunkIndex: 1 }, { unique: true });
 const CatalogueImportChunk = mongoose.models.MedicineCatalogueImportChunk || mongoose.model('MedicineCatalogueImportChunk', catalogueImportChunkSchema);
+
+function* parseJsonArrayRecords(buffer) {
+  let index = buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf ? 3 : 0;
+  const whitespace = byte => byte === 0x20 || byte === 0x09 || byte === 0x0a || byte === 0x0d;
+  while (index < buffer.length && whitespace(buffer[index])) index += 1;
+  if (buffer[index++] !== 0x5b) throw Object.assign(new Error('The uploaded JSON array is malformed.'), { statusCode: 400 });
+  while (index < buffer.length) {
+    while (index < buffer.length && whitespace(buffer[index])) index += 1;
+    if (buffer[index] === 0x5d) {
+      index += 1;
+      while (index < buffer.length && whitespace(buffer[index])) index += 1;
+      if (index !== buffer.length) throw Object.assign(new Error('Unexpected content after the JSON array.'), { statusCode: 400 });
+      return;
+    }
+    if (buffer[index] !== 0x7b) throw Object.assign(new Error('The medicine JSON must be an array of objects.'), { statusCode: 400 });
+    const start = index;
+    let depth = 0, inString = false, escaped = false, complete = false;
+    for (; index < buffer.length; index += 1) {
+      const byte = buffer[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (byte === 0x5c) escaped = true;
+        else if (byte === 0x22) inString = false;
+        continue;
+      }
+      if (byte === 0x22) inString = true;
+      else if (byte === 0x7b || byte === 0x5b) depth += 1;
+      else if (byte === 0x7d || byte === 0x5d) {
+        depth -= 1;
+        if (depth === 0) { index += 1; complete = true; break; }
+      }
+    }
+    if (!complete || inString || depth !== 0) throw Object.assign(new Error('The uploaded JSON contains an incomplete record.'), { statusCode: 400 });
+    let record;
+    try { record = JSON.parse(buffer.toString('utf8', start, index)); }
+    catch { throw Object.assign(new Error('The uploaded JSON contains an invalid record.'), { statusCode: 400 }); }
+    if (!record || typeof record !== 'object' || Array.isArray(record)) throw Object.assign(new Error('The medicine JSON must be an array of objects.'), { statusCode: 400 });
+    yield record;
+    while (index < buffer.length && whitespace(buffer[index])) index += 1;
+    if (buffer[index] === 0x2c) index += 1;
+    else if (buffer[index] !== 0x5d) throw Object.assign(new Error('The uploaded JSON array has an invalid separator.'), { statusCode: 400 });
+  }
+  throw Object.assign(new Error('The uploaded JSON array is incomplete.'), { statusCode: 400 });
+}
 
 export function detectMedicineDataset(payload) {
   if (payload && !Array.isArray(payload) && Array.isArray(payload.drugDetails)) return 'INDIAN_MEDICINE_DATA';
@@ -186,7 +230,10 @@ export function normalizeMedicineRecord(raw, dataset) {
 export function consolidate(records, dataset) {
   const unique = new Map();
   let rejected = 0;
+  let sourceRecords = 0;
   for (const raw of records) {
+    sourceRecords += 1;
+    if (sourceRecords > 60000) throw Object.assign(new Error('Dataset exceeds the 60,000-record import limit.'), { statusCode: 413 });
     const normalized = normalizeMedicineRecord(raw, raw.__dataset);
     if (!normalized) { rejected += 1; continue; }
     const identity = dataset === 'INDIAN_MEDICINE_DATA' ? normalized.medicineId : dataset === 'MEDICINES_PART_1' ? normalized.sourceFingerprint : (normalized.canonicalKey || normalized.medicineId);
@@ -202,7 +249,7 @@ export function consolidate(records, dataset) {
       previous.sourceRecordIds = [...new Set([...(previous.sourceRecordIds || [previous.sourceRecordId]), normalized.sourceRecordId])];
     }
   }
-  return { records: [...unique.values()], rejected, duplicatesRemoved: records.length - rejected - unique.size };
+  return { records: [...unique.values()], rejected, sourceRecords, duplicatesRemoved: sourceRecords - rejected - unique.size };
 }
 
 router.use(requireServiceScope('inventory.catalogue.import'));
@@ -213,15 +260,35 @@ router.use((req, res, next) => req.service?.isPlatformUser === true
 router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'Select a JSON file to upload.' });
   let payload;
-  try { payload = JSON.parse(req.file.buffer.toString('utf8').replace(/^\uFEFF/, '')); }
-  catch { return res.status(400).json({ message: 'The uploaded file is not valid JSON.' }); }
-  const dataset = req.body?.dataset || detectMedicineDataset(payload);
-  const detected = detectMedicineDataset(payload);
-  if (dataset !== detected) return res.status(400).json({ message: 'Selected dataset type does not match the uploaded JSON structure.' });
-  const sourceRows = dataset === 'INDIAN_MEDICINE_DATA' ? payload.drugDetails : payload;
-  if (!Array.isArray(sourceRows) || sourceRows.length < 1 || sourceRows.length > 60000) return res.status(413).json({ message: 'Dataset must contain between 1 and 60,000 records.' });
-  const tagged = sourceRows.map(record => ({ ...record, __dataset: dataset }));
-  const { records, rejected, duplicatesRemoved } = consolidate(tagged, dataset);
+  let dataset;
+  let sourceRows;
+  const buffer = req.file.buffer;
+  let firstNonWhitespace = 0;
+  if (buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) firstNonWhitespace = 3;
+  while (firstNonWhitespace < buffer.length && [0x20, 0x09, 0x0a, 0x0d].includes(buffer[firstNonWhitespace])) firstNonWhitespace += 1;
+  if (buffer[firstNonWhitespace] === 0x5b) {
+    const iterator = parseJsonArrayRecords(buffer);
+    const first = iterator.next();
+    if (first.done) return res.status(400).json({ message: 'The uploaded JSON array is empty.' });
+    try { dataset = detectMedicineDataset([first.value]); }
+    catch (error) { return res.status(error.statusCode || 400).json({ message: error.message }); }
+    sourceRows = (function* () { yield first.value; yield* iterator; })();
+  } else {
+    try { payload = JSON.parse(buffer.toString('utf8').replace(/^\\uFEFF/, '')); }
+    catch { return res.status(400).json({ message: 'The uploaded file is not valid JSON.' }); }
+    try { dataset = detectMedicineDataset(payload); }
+    catch (error) { return res.status(error.statusCode || 400).json({ message: error.message }); }
+    sourceRows = dataset === 'INDIAN_MEDICINE_DATA' ? payload.drugDetails : payload;
+  }
+  if (req.body?.dataset && req.body.dataset !== dataset) return res.status(400).json({ message: 'Selected dataset type does not match the uploaded JSON structure.' });
+  if (!Array.isArray(sourceRows) && typeof sourceRows?.[Symbol.iterator] !== 'function') return res.status(400).json({ message: 'The uploaded medicine dataset has an invalid record collection.' });
+  let normalized;
+  try {
+    normalized = consolidate((function* () { for (const record of sourceRows) yield { ...record, __dataset: dataset }; })(), dataset);
+  } catch (error) {
+    return res.status(error.statusCode || 400).json({ message: error.message });
+  }
+  const { records, rejected, sourceRecords, duplicatesRemoved } = normalized;
   const nameCounts = new Map();
   for (const item of records) { const nameKey = key(item.brandName); nameCounts.set(nameKey, (nameCounts.get(nameKey) || 0) + 1); }
   for (const item of records) item.safeNameMatch = dataset === 'MEDICINES_PART_1' && nameCounts.get(key(item.brandName)) === 1;
@@ -247,7 +314,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   for (const item of existing) { const nameKey = key(item.brandName); existingNameCounts.set(nameKey, (existingNameCounts.get(nameKey) || 0) + 1); }
   const updates = records.filter(item => existingIds.has(item.medicineId) || (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeys.has(item.canonicalKey)) || (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1)).length;
   const report = {
-    sourceRecords: sourceRows.length, normalizedRecords: records.length, rejectedRecords: rejected,
+    sourceRecords, normalizedRecords: records.length, rejectedRecords: rejected,
     duplicatesRemoved, newRecords: records.length - updates, updateCandidates: updates,
     needsReview: records.filter(item => item.dataQualityStatus === 'NEEDS_REVIEW').length,
     withComposition: records.filter(item => item.composition).length,
