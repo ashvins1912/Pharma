@@ -518,7 +518,8 @@ export default function AdminDashboardView() {
                 isSuperAdmin && { tab: 'telemetry', label: t('liveTelemetry'), icon: '📡', tone: 'governance' },
                 isSuperAdmin && { tab: 'matrix', label: t('roleFeatureMatrix'), icon: '📐', tone: 'governance' },
                 isSuperAdmin && { tab: 'automation', label: 'Automation test engine', icon: '🧪', tone: 'governance' },
-                isSuperAdmin && { tab: 'featureHealth', label: 'Feature health & blockers', icon: '🩺', tone: 'governance' }
+                isSuperAdmin && { tab: 'featureHealth', label: 'Feature health & blockers', icon: '🩺', tone: 'governance' },
+                isSuperAdmin && { tab: 'renderHealthMonitor', label: 'Production Render Microservices Health Monitor', icon: '🖥️', tone: 'governance', externalUrl: 'https://pharma-1-278k.onrender.com' }
               ]
             }
           ].map(group => {
@@ -531,7 +532,20 @@ export default function AdminDashboardView() {
                   <p>{group.description}</p>
                 </div>
                 <div className="dashboard-nav-group-items">
-                  {items.map(item => renderWorkspaceItem(item.tab, item.label, item.icon, item.count === 0 && item.tone === 'attention' ? null : item.count, item.tone || 'default'))}
+                  {items.map(item => item.externalUrl ? (
+                    <a
+                      key={item.tab}
+                      href={item.externalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="dashboard-nav-item dashboard-nav-item--external"
+                      aria-label={`Open ${item.label} in a new tab`}
+                    >
+                      <span className="dashboard-nav-item-icon" aria-hidden="true">{item.icon}</span>
+                      <span className="dashboard-nav-item-label">{item.label}</span>
+                      <span className="dashboard-nav-item-chevron" aria-hidden="true">↗</span>
+                    </a>
+                  ) : renderWorkspaceItem(item.tab, item.label, item.icon, item.count === 0 && item.tone === 'attention' ? null : item.count, item.tone || 'default'))}
                 </div>
               </section>
             );
