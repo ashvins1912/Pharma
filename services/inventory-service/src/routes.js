@@ -20,6 +20,7 @@ import {
   updateProduct,
   archiveProduct,
   lookupInventory,
+  lookupInventoryAcrossBranches,
   searchInventoryProducts,
   getInventoryAlerts,
   getInventoryAlertSummary,
