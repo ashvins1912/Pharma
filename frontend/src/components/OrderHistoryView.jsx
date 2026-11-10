@@ -174,13 +174,13 @@ export default function OrderHistoryView({ onTrackOrder }) {
           </div>
 
           {/* Mobile Stacked Cards */}
-          <div className="md:hidden space-y-3">
+          <div className="md:hidden qm-mobile-record-list">
             {activeOrders.map((order) => {
               const rawId = String(order._id || order.id || order.orderId || order.orderNumber || '').trim();
               const orderId = rawId ? (rawId.length > 6 ? rawId.slice(-6).toUpperCase() : rawId.toUpperCase()) : '3E5F02';
               return (
-                <div key={order._id || order.id || orderId} className="p-4 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-2.5">
-                  <div className="flex justify-between items-center">
+                <div key={order._id || order.id || orderId} className="qm-mobile-record-card qm-mobile-order-card">
+                  <header className="qm-mobile-record-header">
                     <div>
                       <span className="font-black text-slate-900 text-xs">#{orderId}</span>
                       <span className="text-[10px] text-slate-400 block">
@@ -196,21 +196,21 @@ export default function OrderHistoryView({ onTrackOrder }) {
                   {order.parentOrderId && <p className="text-[10px] font-semibold text-indigo-700">Part of order #{String(order.parentOrderId).slice(-6).toUpperCase()}</p>}
                   {Array.isArray(order.childOrderIds) && order.childOrderIds.length > 0 && <p className="text-[10px] font-semibold text-indigo-700">Split fulfilments: {order.childOrderIds.length} linked order(s)</p>}
 
-                  <p className="text-[11px] text-slate-600 line-clamp-2">
+                  <p className="qm-mobile-record-items">
                     {(order.items || []).map(i => `${i.name} (x${i.quantity})`).join(', ')}
                   </p>
 
-                  <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+                  <footer className="qm-mobile-record-footer">
                     <div>
                       <span className="text-[10px] text-slate-400 block font-bold">TOTAL</span>
                       <span className="font-extrabold text-emerald-600 text-sm">₹{order.finalTotal}</span>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="qm-mobile-record-actions">
                       {editableStatuses.includes(getNormalizedStatus(order)) && (
                         <>
                           <button
                             onClick={() => cancelOrder(order)}
-                            className="bg-rose-100 text-rose-700 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer"
+                            className="qm-mobile-action qm-mobile-action--danger"
                           >
                             Cancel
                           </button>
@@ -219,7 +219,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                       {!['Delivered', 'Cancelled', 'Rejected'].includes(order.orderStatus) && (
                         <button
                           onClick={() => trackOrder(order)}
-                          className="bg-blue-600 text-white font-extrabold text-xs px-4 py-1.5 rounded-xl cursor-pointer"
+                          className="qm-mobile-action qm-mobile-action--primary"
                         >
                           Track
                         </button>
