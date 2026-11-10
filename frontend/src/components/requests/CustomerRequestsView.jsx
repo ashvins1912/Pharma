@@ -35,17 +35,9 @@ export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
   }, [loadUserMedicineRequests]);
 
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const hasProcessingRequest = medicineRequests.some(request => request.status === 'FULFILLMENT_PROCESSING');
 
-  useEffect(() => {
-    if (!hasProcessingRequest) return undefined;
-    const refresh = () => {
-      void loadUserMedicineRequests({ page: pagination.page || 1, statusGroup: statusFilter });
-    };
-    const timer = window.setInterval(refresh, 15 * 1000);
-    return () => window.clearInterval(timer);
-  }, [hasProcessingRequest, loadUserMedicineRequests, pagination.page, statusFilter]);
-
+  // AppContext refreshes this list on authenticated medicine_request_updated
+  // events; avoid a second polling loop while fulfilment is processing.
   const filteredRequests = medicineRequests.filter(r => {
     if (statusFilter === 'ALL') return true;
     if (statusFilter === 'ACTIVE') {

@@ -9,6 +9,7 @@ import SearchMetricIngestionService from '../services/SearchMetricIngestionServi
 import { inventoryClient } from '../services/inventory-client/InventoryClient.js';
 import { tenantService } from '../services/tenant-service/TenantService.js';
 import { authorizationService } from '../authorization/AuthorizationService.js';
+import { cacheService } from '../services/cache/CacheService.js';
 import Medicine from '../models/Medicine.js';
 import Order from '../models/Order.js';
 
@@ -205,6 +206,18 @@ router.post(['/admin/apply-restock', '/apply-restock'], authenticateUser, async 
             } catch (err) {
                 console.warn('[ApplyRestock] Failed to adjust product:', productId, err?.message);
             }
+        }
+
+        if (updatedCount > 0) {
+            const eventPayload = {
+                eventId: crypto.randomUUID(),
+                tenantId: String(tenantId),
+                branchId: String(branchId),
+                reason: 'inventory.restocked',
+                occurredAt: new Date().toISOString()
+            };
+            void cacheService.publishEvent('inventory_changed', eventPayload, { tenantId: String(tenantId) })
+                .catch(error => console.warn('[InventoryRealtime] Restock event publish failed:', error?.message || error));
         }
 
         return res.json({

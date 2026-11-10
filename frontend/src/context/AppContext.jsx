@@ -94,6 +94,7 @@ export function AppProvider({ children }) {
   const [notifications, setNotifications] = useState([]);
   const [deliveryEvents, setDeliveryEvents] = useState([]);
   const [realtimeConnectionStatus, setRealtimeConnectionStatus] = useState('offline');
+  const realtimeConnectedUserRef = useRef(null);
   const notificationLoadSequence = useRef(0);
   const notificationReadOverrides = useRef(new Set());
   const deliveryEventsLoadSequence = useRef(0);
@@ -666,6 +667,14 @@ export function AppProvider({ children }) {
       window.dispatchEvent(new CustomEvent('pharma:medicine-request-updated', { detail: payload }));
       void loadUserMedicineRequests({ silent: true });
     };
+    const onInventoryChanged = payload => {
+      const effectiveTenantId = tenantId || user?.tenantId || user?.app_metadata?.tenantId || null;
+      const effectiveBranchId = branchId || user?.branchId || user?.app_metadata?.branchId || null;
+      if (!payload) return;
+      if (effectiveTenantId && String(payload.tenantId || '') !== String(effectiveTenantId)) return;
+      if (effectiveBranchId && payload.branchId && String(payload.branchId) !== String(effectiveBranchId)) return;
+      window.dispatchEvent(new CustomEvent('pharma:inventory-updated', { detail: payload }));
+    };
     const onOrderStatusChanged = payload => {
       // The dedicated order stream is also a notification fallback. This keeps
       // customer-facing order updates visible if the separate notification
@@ -687,15 +696,19 @@ export function AppProvider({ children }) {
     };
 
     const onSocketConnect = () => {
+      const isReconnect = realtimeConnectedUserRef.current === user.id;
+      realtimeConnectedUserRef.current = user.id;
       setRealtimeConnectionStatus('connected');
       socket.emit('join_bell_room', { userId: user.id, ...(tenantId ? { tenantId } : {}) });
-      // The cache consumer persists/acks its own Redis Stream cursor. Reload the
-      // authenticated snapshots on connect/reconnect to fill gaps while this browser
-      // was offline, then let future Socket.IO events update the UI immediately.
+      // Recover missed state only after an actual reconnect. Initial snapshots
+      // are already fetched by their owning views/context effects.
       void loadNotifications();
       void loadDeliveryEvents();
-      window.dispatchEvent(new CustomEvent('pharma:order-status-changed', { detail: { source: 'realtime-recovery' } }));
-      window.dispatchEvent(new CustomEvent('pharma:medicine-request-updated', { detail: { source: 'realtime-recovery' } }));
+      if (isReconnect) {
+        window.dispatchEvent(new CustomEvent('pharma:order-status-changed', { detail: { source: 'realtime-recovery' } }));
+        window.dispatchEvent(new CustomEvent('pharma:medicine-request-updated', { detail: { source: 'realtime-recovery' } }));
+        window.dispatchEvent(new CustomEvent('pharma:inventory-updated', { detail: { source: 'realtime-recovery', tenantId, branchId } }));
+      }
     };
     const onSocketDisconnect = () => setRealtimeConnectionStatus('reconnecting');
     const onSocketConnectError = error => {
@@ -717,6 +730,7 @@ export function AppProvider({ children }) {
     socket.on('notification', onNotification);
     socket.on('whatsapp_notification', onWhatsAppNotification);
     socket.on('medicine_request_updated', onMedicineRequestUpdated);
+    socket.on('inventory_changed', onInventoryChanged);
     socket.on('order_status_changed', onOrderStatusChanged);
     return () => {
       if (typeof window !== 'undefined') {
@@ -725,13 +739,14 @@ export function AppProvider({ children }) {
       socket.off('notification', onNotification);
       socket.off('whatsapp_notification', onWhatsAppNotification);
       socket.off('medicine_request_updated', onMedicineRequestUpdated);
+      socket.off('inventory_changed', onInventoryChanged);
       socket.off('order_status_changed', onOrderStatusChanged);
       socket.off('connect', onSocketConnect);
       socket.off('disconnect', onSocketDisconnect);
       socket.off('connect_error', onSocketConnectError);
       socket.disconnect();
     };
-  }, [isFullyAuthenticated, user?.id, user?.tenantId, user?.app_metadata?.tenantId, user?.user_metadata?.tenantId, realtimeTokenVersion, loadUserOrders, loadUserMedicineRequests, loadNotifications, loadDeliveryEvents]);
+  }, [isFullyAuthenticated, user?.id, user?.tenantId, user?.app_metadata?.tenantId, user?.user_metadata?.tenantId, tenantId, branchId, realtimeTokenVersion, loadUserOrders, loadUserMedicineRequests, loadNotifications, loadDeliveryEvents]);
 
   // Hydrate user read notification overrides from localStorage
   useEffect(() => {
@@ -908,14 +923,18 @@ export function AppProvider({ children }) {
     }
 
     void loadInventoryAlerts();
-    // Refresh after stock/import operations and periodically while the dashboard is open.
-    const handleInventoryUpdated = () => { void loadInventoryAlerts(); };
+    // Initial snapshot plus server-originated inventory_changed events only.
+    // Reconnect recovery is dispatched by the authenticated Socket.IO client.
+    const handleInventoryUpdated = event => {
+      const payload = event?.detail;
+      if (effectiveTenantId && payload?.tenantId && String(payload.tenantId) !== String(effectiveTenantId)) return;
+      if (effectiveBranchId && payload?.branchId && String(payload.branchId) !== String(effectiveBranchId)) return;
+      void loadInventoryAlerts();
+    };
     window.addEventListener('pharma:inventory-updated', handleInventoryUpdated);
-    const refreshTimer = window.setInterval(() => { void loadInventoryAlerts(); }, 60_000);
     return () => {
       inventoryAlertsRequestRef.current += 1;
       window.removeEventListener('pharma:inventory-updated', handleInventoryUpdated);
-      window.clearInterval(refreshTimer);
     };
   }, [authLoading, isFullyAuthenticated, user, isPharmacyOrAdmin, isSuperAdmin, hasPermission, tenantId, branchId, loadInventoryAlerts]);
 

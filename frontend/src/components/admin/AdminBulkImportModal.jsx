@@ -16,9 +16,6 @@ export default function AdminBulkImportModal({ isOpen, onClose }) {
   const refreshInventoryCatalogue = useCallback(() => {
     invalidatePublicCatalogCache();
     fetchMedicines();
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('pharma:inventory-updated'));
-    }
   }, [fetchMedicines]);
   const { isSuperAdmin, user } = useAuth();
   const { tenantId: activeTenantId, branchId: activeBranchId, setTenantId, setBranchId } = useTenant();
