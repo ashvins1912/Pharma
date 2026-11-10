@@ -43,30 +43,66 @@ const similarityText = value => key(value)
   .replace(/\b(\d+(?:\.\d+)?)\s*(mcg|mg|gm|g|ml|iu|%)\b/g, '$1 $2')
   .replace(/\b(tablets|tabs|capsules|caps|sachets|vials)\b/g, match => ({ tablets: 'tablet', tabs: 'tab', capsules: 'capsule', caps: 'cap', sachets: 'sachet', vials: 'vial' })[match]);
 const tokenSortRatio = (left, right) => levenshteinRatio(similarityText(left).split(' ').filter(Boolean).sort().join(' '), similarityText(right).split(' ').filter(Boolean).sort().join(' '));
+const charNgramDice = (left, right) => {
+  const a = similarityText(left).replace(/\s+/g, ' ');
+  const b = similarityText(right).replace(/\s+/g, ' ');
+  if (!a || !b) return a === b ? 100 : 0;
+  const n = Math.min(3, Math.max(2, Math.min(a.length, b.length)));
+  const grams = value => {
+    const result = new Map();
+    for (let i = 0; i <= value.length - n; i += 1) {
+      const gram = value.slice(i, i + n);
+      result.set(gram, (result.get(gram) || 0) + 1);
+    }
+    return result;
+  };
+  const leftGrams = grams(a), rightGrams = grams(b);
+  let overlap = 0, leftTotal = 0, rightTotal = 0;
+  for (const count of leftGrams.values()) leftTotal += count;
+  for (const count of rightGrams.values()) rightTotal += count;
+  for (const [gram, count] of leftGrams) overlap += Math.min(count, rightGrams.get(gram) || 0);
+  return Math.round((2 * overlap / Math.max(1, leftTotal + rightTotal)) * 100);
+};
+const fieldSimilarity = (left, right) => Math.round(tokenSortRatio(left, right) * 0.65 + charNgramDice(left, right) * 0.35);
 const normalizeStrength = value => key(value).replace(/(\d)\s+(mcg|mg|gm|g|ml|iu)\b/g, '$1$2');
 export function scoreMedicineMatch(incoming, candidate) {
-  const nameScore = tokenSortRatio(incoming.brandName, candidate.brandName);
+  const tokenNameScore = tokenSortRatio(incoming.brandName, candidate.brandName);
+  const ngramNameScore = charNgramDice(incoming.brandName, candidate.brandName);
+  const nameScore = fieldSimilarity(incoming.brandName, candidate.brandName);
   const aComposition = key(incoming.composition || (incoming.ingredients || []).join(' '));
   const bComposition = key(candidate.composition || (candidate.ingredients || []).join(' '));
-  const compositionScore = aComposition && bComposition ? tokenSortRatio(aComposition, bComposition) : null;
+  const compositionScore = aComposition && bComposition ? fieldSimilarity(aComposition, bComposition) : null;
   const aStrength = normalizeStrength(incoming.strength), bStrength = normalizeStrength(candidate.strength);
   const aForm = key(incoming.dosageForm), bForm = key(candidate.dosageForm);
   const strengthConflict = Boolean(aStrength && bStrength && aStrength !== bStrength);
   const formConflict = Boolean(aForm && bForm && aForm !== bForm);
   const compositionConflict = compositionScore !== null && compositionScore < 90;
-  const blocked = strengthConflict || formConflict || compositionConflict;
-  const genericScore = incoming.genericName && candidate.genericName ? tokenSortRatio(incoming.genericName, candidate.genericName) : null;
-  const score = Math.round(nameScore * 0.65 + (compositionScore === null ? 0 : compositionScore * 0.20) +
-    (aStrength && bStrength && !strengthConflict ? 10 : 0) + (aForm && bForm && !formConflict ? 5 : 0));
-  const autoMerge = !blocked && compositionScore !== null && compositionScore >= 94 && nameScore >= 92 && score >= 96 && (genericScore === null || genericScore >= 80);
-  const review = !blocked && nameScore >= 82 && (score >= 82 || compositionScore === null);
+  const genericScore = incoming.genericName && candidate.genericName ? fieldSimilarity(incoming.genericName, candidate.genericName) : null;
+  const genericConflict = genericScore !== null && genericScore < 80;
+  const blocked = strengthConflict || formConflict || compositionConflict || genericConflict;
+  // Fellegi-Sunter-inspired evidence weighting. These are conservative initial weights,
+  // not trained m/u probabilities; calibrate them against adjudicated medicine pairs.
+  const evidence = [
+    { field: 'brandName', score: nameScore, weight: 0.35, available: Boolean(incoming.brandName && candidate.brandName) },
+    { field: 'composition', score: compositionScore, weight: 0.40, available: compositionScore !== null },
+    { field: 'genericName', score: genericScore, weight: 0.15, available: genericScore !== null },
+    { field: 'strength', score: aStrength && bStrength ? (strengthConflict ? 0 : 100) : null, weight: 0.07, available: Boolean(aStrength && bStrength) },
+    { field: 'dosageForm', score: aForm && bForm ? (formConflict ? 0 : 100) : null, weight: 0.03, available: Boolean(aForm && bForm) }
+  ];
+  const evidenceWeight = evidence.filter(item => item.available).reduce((sum, item) => sum + item.weight, 0);
+  const score = evidenceWeight ? Math.round(evidence.reduce((sum, item) => sum + (item.available ? item.score * item.weight : 0), 0) / evidenceWeight) : 0;
+  const autoMerge = !blocked && compositionScore !== null && compositionScore >= 96 && nameScore >= 94 &&
+    score >= 97 && Boolean(aStrength && bStrength && aForm && bForm);
+  const review = !blocked && nameScore >= 78 && (score >= 78 || compositionScore === null);
   return {
-    score: Math.min(100, score), nameScore, compositionScore, genericScore,
+    score, nameScore, tokenNameScore, ngramNameScore, compositionScore, genericScore,
+    evidence: evidence.filter(item => item.available).map(({ field, score: fieldScore, weight }) => ({ field, score: fieldScore, weight })),
     decision: blocked ? 'BLOCKED_CONFLICT' : autoMerge ? 'AUTO_MERGE' : review ? 'MANUAL_REVIEW' : 'NO_MATCH',
     warnings: [
       ...(strengthConflict ? ['STRENGTH_CONFLICT'] : []),
       ...(formConflict ? ['DOSAGE_FORM_CONFLICT'] : []),
       ...(compositionConflict ? ['COMPOSITION_CONFLICT'] : []),
+      ...(genericConflict ? ['GENERIC_INGREDIENT_CONFLICT'] : []),
       ...(compositionScore === null ? ['COMPOSITION_MISSING_REVIEW_REQUIRED'] : []),
       ...(!incoming.manufacturer || !candidate.manufacturer ? ['MANUFACTURER_NOT_COMPARABLE'] : [])
     ]
