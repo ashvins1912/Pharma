@@ -1,0 +1,511 @@
+/*
+ * QuickMeds Rx — application-wide responsive design system.
+ * Layered after the existing component styles so legacy screens inherit a
+ * consistent visual language without changing business logic or permissions.
+ */
+
+:root {
+  --qm-brand: #2563eb;
+  --qm-brand-strong: #1d4ed8;
+  --qm-brand-soft: #eff6ff;
+  --qm-ink: #0f172a;
+  --qm-text: #334155;
+  --qm-muted: #64748b;
+  --qm-subtle: #94a3b8;
+  --qm-border: #e2e8f0;
+  --qm-border-strong: #cbd5e1;
+  --qm-canvas: #f5f7fb;
+  --qm-surface: #ffffff;
+  --qm-surface-muted: #f8fafc;
+  --qm-success: #047857;
+  --qm-warning: #b45309;
+  --qm-danger: #be123c;
+  --qm-radius-sm: 0.625rem;
+  --qm-radius-md: 0.875rem;
+  --qm-radius-lg: 1.125rem;
+  --qm-radius-xl: 1.5rem;
+  --qm-shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px rgb(15 23 42 / 0.035);
+  --qm-shadow-raised: 0 12px 32px rgb(15 23 42 / 0.09);
+  --qm-content-width: 1920px;
+  --qm-page-gutter: clamp(0.75rem, 2.1vw, 2rem);
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5.5rem;
+}
+
+body {
+  background: var(--qm-canvas);
+  color: var(--qm-text);
+  font-feature-settings: "ss01" on, "cv11" on;
+}
+
+button, input, select, textarea {
+  font: inherit;
+}
+
+button, [role="button"], a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled), [role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+button:disabled, [aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid rgb(37 99 235 / 0.28);
+  outline-offset: 2px;
+}
+
+.pharma-app-shell {
+  isolation: isolate;
+  min-height: 100dvh;
+  background: var(--qm-canvas);
+}
+
+.pharma-main-content {
+  width: 100%;
+  max-width: var(--qm-content-width);
+  padding-inline: var(--qm-page-gutter);
+  margin-inline: auto;
+}
+
+.pharma-storefront {
+  width: 100%;
+  max-width: 1760px;
+  margin-inline: auto;
+  gap: clamp(1rem, 1.8vw, 1.75rem);
+}
+
+.pharma-responsive-scope :where(h1, h2, h3, h4) {
+  color: var(--qm-ink);
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.pharma-responsive-scope :where(p) {
+  text-wrap: pretty;
+}
+
+.pharma-responsive-scope :where(.bg-white.rounded-xl, .bg-white.rounded-2xl, .bg-white.rounded-3xl) {
+  border-color: var(--qm-border);
+  box-shadow: var(--qm-shadow-card);
+}
+
+.pharma-responsive-scope :where(.border-slate-100, .border-slate-200) {
+  border-color: var(--qm-border);
+}
+
+.pharma-responsive-scope :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
+  min-height: 2.75rem;
+  width: 100%;
+  max-width: 100%;
+  border: 1px solid var(--qm-border-strong);
+  border-radius: var(--qm-radius-md);
+  background-color: var(--qm-surface);
+  color: var(--qm-ink);
+  padding: 0.625rem 0.8rem;
+  line-height: 1.4;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.pharma-responsive-scope :where(input, select, textarea)::placeholder {
+  color: var(--qm-subtle);
+}
+
+.pharma-responsive-scope :where(input, select, textarea):hover:not(:disabled) {
+  border-color: #94a3b8;
+}
+
+.pharma-responsive-scope :where(input, select, textarea):focus {
+  border-color: var(--qm-brand);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 0.12);
+}
+
+.pharma-responsive-scope :where(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--qm-brand);
+}
+
+.pharma-responsive-scope :where(button) {
+  max-width: 100%;
+  line-height: 1.35;
+  text-wrap: pretty;
+}
+
+.pharma-responsive-scope :where(.bg-blue-600, .bg-indigo-600, .bg-violet-600) {
+  box-shadow: 0 1px 2px rgb(37 99 235 / 0.12);
+}
+
+.pharma-responsive-scope :where(.transition, .transition-all, .transition-colors, .transition-shadow) {
+  transition-duration: 160ms;
+}
+
+.pharma-responsive-scope :where(.overflow-x-auto, [data-table-scroll="true"]) {
+  border-radius: var(--qm-radius-lg);
+  scrollbar-gutter: stable;
+}
+
+.pharma-responsive-scope :where(table) {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.pharma-responsive-scope :where(thead th) {
+  color: var(--qm-muted);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.pharma-responsive-scope :where(tbody tr) {
+  transition: background-color 120ms ease;
+}
+
+.pharma-responsive-scope :where(tbody tr:hover) {
+  background-color: #f8fafc;
+}
+
+.pharma-responsive-scope :where(td, th) {
+  vertical-align: middle;
+}
+
+.pharma-responsive-scope :where(.pharma-product-grid) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(0.625rem, 1.15vw, 1.125rem);
+  align-items: stretch;
+}
+
+.pharma-responsive-scope :where(.pharma-product-grid > *) {
+  min-width: 0;
+  height: 100%;
+}
+
+.pharma-responsive-scope :where(.pharma-product-grid > *:hover) {
+  transform: translateY(-2px);
+}
+
+.pharma-responsive-scope :where(.pharma-modal-surface) {
+  border-radius: var(--qm-radius-xl);
+  box-shadow: var(--qm-shadow-raised);
+}
+
+.pharma-responsive-scope :where(.shadow-xs, .shadow-sm) {
+  box-shadow: var(--qm-shadow-card);
+}
+
+.pharma-responsive-scope :where(.rounded-2xl) {
+  border-radius: var(--qm-radius-lg);
+}
+
+.pharma-responsive-scope :where(.rounded-3xl) {
+  border-radius: var(--qm-radius-xl);
+}
+
+.quickmeds-header {
+  background: rgb(255 255 255 / 0.94);
+  border-color: var(--qm-border);
+  box-shadow: 0 1px 0 rgb(15 23 42 / 0.025);
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+}
+
+.quickmeds-header-inner {
+  max-width: var(--qm-content-width);
+  margin-inline: auto;
+}
+
+.admin-screen {
+  --admin-surface: var(--qm-surface);
+  --admin-surface-muted: var(--qm-surface-muted);
+  --admin-border: var(--qm-border);
+  --admin-ink: var(--qm-ink);
+  --admin-muted: var(--qm-muted);
+  gap: clamp(1rem, 1.65vw, 1.5rem);
+}
+
+.admin-screen :where(.bg-white) {
+  border-color: var(--qm-border);
+  box-shadow: var(--qm-shadow-card);
+}
+
+.admin-screen :where(.rounded-2xl, .rounded-3xl) {
+  border-radius: var(--qm-radius-lg);
+}
+
+.admin-screen :where(button) {
+  min-height: 2.5rem;
+  border-radius: var(--qm-radius-sm);
+  font-weight: 650;
+  transition: transform 140ms ease, box-shadow 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+
+.admin-screen :where(button:not(:disabled):active) {
+  transform: translateY(1px);
+}
+
+.admin-screen :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-height: 2.75rem;
+  border-radius: var(--qm-radius-sm);
+}
+
+.admin-screen :where(.overflow-x-auto) {
+  border: 1px solid var(--qm-border);
+  border-radius: var(--qm-radius-lg);
+  background: var(--qm-surface);
+}
+
+.admin-screen :where(table) {
+  min-width: 620px;
+}
+
+.admin-screen :where(thead) {
+  background: #f8fafc;
+}
+
+.admin-screen :where(th) {
+  padding-block: 0.85rem;
+}
+
+.admin-screen :where(td) {
+  padding-block: 0.75rem;
+}
+
+.admin-screen :where(.grid) {
+  align-items: stretch;
+}
+
+.admin-screen :where(.grid > *) {
+  min-width: 0;
+}
+
+.dashboard-shell {
+  max-width: var(--qm-content-width);
+  padding-inline: clamp(0px, 0.8vw, 1rem);
+}
+
+.dashboard-hero {
+  border-radius: var(--qm-radius-xl);
+}
+
+.dashboard-workspace {
+  border-color: var(--qm-border);
+  border-radius: var(--qm-radius-xl);
+  box-shadow: var(--qm-shadow-card);
+}
+
+.dashboard-nav-group {
+  border-color: var(--qm-border);
+  border-radius: var(--qm-radius-lg);
+  background: #fbfcfe;
+}
+
+.dashboard-nav-item {
+  min-height: 2.75rem;
+  border-radius: var(--qm-radius-sm) !important;
+  font-size: 0.78rem;
+}
+
+.pharma-responsive-scope :where(.fixed.inset-0[role="dialog"], .fixed.inset-0[aria-modal="true"]) {
+  padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+}
+
+.pharma-responsive-scope :where(.pharma-modal-surface) {
+  max-width: min(94vw, 760px);
+  max-height: min(92dvh, 900px);
+  overflow: hidden;
+}
+
+.pharma-responsive-scope :where(.pharma-modal-surface > .modal-body, .pharma-modal-surface > .content-area, .pharma-modal-surface > main) {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pharma-responsive-scope :where(.no-scrollbar) {
+  scrollbar-width: none;
+}
+
+@media (min-width: 640px) {
+  .pharma-responsive-scope :where(.pharma-product-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .pharma-responsive-scope :where(.pharma-product-grid) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .pharma-responsive-scope :where(.pharma-product-grid) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1600px) {
+  .pharma-responsive-scope :where(.pharma-product-grid) {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1920px) {
+  .pharma-responsive-scope :where(.pharma-product-grid) {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
+    --qm-page-gutter: 0.75rem;
+  }
+
+  .pharma-main-content {
+    padding-top: 0.875rem;
+    padding-bottom: 1.25rem;
+  }
+
+  .pharma-storefront {
+    gap: 1rem;
+  }
+
+  .pharma-responsive-scope :where(.pharma-product-grid) {
+    gap: 0.625rem;
+  }
+
+  .pharma-responsive-scope :where(.pharma-product-grid > *) {
+    border-radius: 0.9rem;
+  }
+
+  .pharma-responsive-scope :where(.pharma-modal-surface) {
+    width: 100%;
+    max-width: 100%;
+    max-height: 92dvh;
+    height: auto;
+    min-height: min(58dvh, 560px);
+    margin: auto 0 0;
+    border-radius: 1.25rem 1.25rem 0 0;
+  }
+
+  .admin-screen :where(.overflow-x-auto) {
+    border-radius: 0.85rem;
+  }
+
+  .admin-screen :where(.flex.items-center.justify-between) {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .admin-screen :where(.p-5, .p-6, .p-8) {
+    padding: 1rem;
+  }
+
+  .dashboard-shell {
+    padding-inline: 0;
+  }
+}
+
+@media (max-width: 380px) {
+  :root {
+    --qm-page-gutter: 0.625rem;
+  }
+
+  .quickmeds-brand-name {
+    font-size: 0.95rem;
+  }
+
+  .pharma-responsive-scope :where(.pharma-product-grid) {
+    gap: 0.5rem;
+  }
+}
+
+@media (min-width: 1440px) {
+  .pharma-main-content {
+    padding-inline: clamp(1.75rem, 2.2vw, 2.75rem);
+  }
+
+  .admin-screen {
+    gap: 1.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .pharma-responsive-scope *,
+  .admin-screen * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+html.dark {
+  --qm-ink: #f8fafc;
+  --qm-text: #e2e8f0;
+  --qm-muted: #94a3b8;
+  --qm-subtle: #64748b;
+  --qm-border: #334155;
+  --qm-border-strong: #475569;
+  --qm-canvas: #0b1220;
+  --qm-surface: #111c2e;
+  --qm-surface-muted: #162236;
+  color-scheme: dark;
+}
+
+html.dark body,
+html.dark .pharma-app-shell {
+  background: var(--qm-canvas);
+  color: var(--qm-text);
+}
+
+html.dark .quickmeds-header {
+  background: rgb(15 23 42 / 0.94);
+  border-color: var(--qm-border);
+}
+
+html.dark .pharma-responsive-scope :where(.bg-white.rounded-xl, .bg-white.rounded-2xl, .bg-white.rounded-3xl),
+html.dark .admin-screen :where(.bg-white) {
+  background-color: var(--qm-surface) !important;
+  border-color: var(--qm-border) !important;
+}
+
+html.dark .pharma-responsive-scope :where(input, select, textarea),
+html.dark .admin-screen :where(input, select, textarea) {
+  background-color: #0f1a2b;
+  color: var(--qm-ink);
+  border-color: var(--qm-border-strong);
+}
+
+html.dark .pharma-responsive-scope :where(tbody tr:hover) {
+  background: #17263b;
+}
+
+html.dark .admin-screen :where(thead),
+html.dark .dashboard-nav-group {
+  background: #142136;
+  border-color: var(--qm-border);
+}
+
+html.dark .dashboard-workspace,
+html.dark .dashboard-nav-group {
+  border-color: var(--qm-border);
+}
+
+@media (forced-colors: active) {
+  :where(button, a, input, select, textarea):focus-visible {
+    outline: 2px solid CanvasText;
+  }
+}

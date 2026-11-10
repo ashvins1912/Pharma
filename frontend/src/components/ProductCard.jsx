@@ -59,7 +59,7 @@ export default function ProductCard({ med }) {
 
   return (
     <div
-      className={`bg-white border rounded-xl sm:rounded-2xl p-2.5 sm:p-4 flex flex-col justify-between transition-all duration-200 h-full ${
+      className={`pharma-product-card bg-white border rounded-xl sm:rounded-2xl p-2.5 sm:p-4 flex flex-col justify-between transition-all duration-200 h-full ${
         isOut
           ? 'border-slate-200 opacity-60 bg-slate-50/50'
           : 'border-slate-200 hover:border-blue-300 hover:shadow-md hover:-translate-y-0.5'

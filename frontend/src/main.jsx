@@ -29,6 +29,7 @@ const SpeedInsights = () => null;
 import './config/env.ts';
 import App from './App.jsx';
 import './index.css';
+import './styles/design-system.css';
 import { AuthProvider } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { ToastProvider } from './context/ToastContext';

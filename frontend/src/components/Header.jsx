@@ -182,7 +182,7 @@ export default function Header({
           </div>
 
           {/* Center: Desktop Navigation */}
-          <nav className="hidden sm:flex items-center gap-1.5 lg:gap-2">
+          <nav className="hidden md:flex items-center gap-1.5 lg:gap-2">
             <button
               type="button"
               onClick={() => setActiveTab('store')}

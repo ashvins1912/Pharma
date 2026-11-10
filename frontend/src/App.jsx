@@ -365,7 +365,7 @@ function MainApp() {
   }
 
   return (
-    <div className="pharma-responsive-scope min-h-screen min-h-dvh w-full min-w-0 bg-slate-50 flex flex-col font-sans text-slate-800 antialiased selection:bg-blue-100 selection:text-blue-900 overflow-x-clip">
+    <div className="pharma-app-shell pharma-responsive-scope min-h-screen min-h-dvh w-full min-w-0 flex flex-col font-sans antialiased selection:bg-blue-100 selection:text-blue-900 overflow-x-clip">
       
       {/* Responsive Header */}
       <Header
@@ -390,7 +390,7 @@ function MainApp() {
       />
 
       {/* Main Content Area - Full width layout */}
-      <main className="pharma-main-content min-w-0 min-h-0 flex-[1_0_auto] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-visible">
+      <main className="pharma-main-content min-w-0 min-h-0 flex-[1_0_auto] w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-visible">
         
         {/* TAB 1: MEDICINE STORE & CATALOG */}
         {activeTab === 'store' && (
