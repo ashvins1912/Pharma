@@ -492,7 +492,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       try {
         const response = await apiClient.post('/api/orders/checkout/quote', {
           tenantId: String(tenantId),
-          branchId: String(branchId || activeTenant?.branchId || ''),
+          branchId: String(fulfillmentPlan?.branchId || branchId || activeTenant?.branchId || ''),
           items: selectedItems,
           pointsToRedeem: usePoints ? Number(pointsRequested) || 0 : 0,
           couponCode: appliedCoupon?.code || ''
