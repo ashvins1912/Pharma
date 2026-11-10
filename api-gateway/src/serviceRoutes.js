@@ -28,7 +28,7 @@ function hasScopePermission(user, scope) {
   });
 }
 
-function createServiceHandler({ audience, getScope, target, includeCustomerProfile = false, validateTenantBranch = false }, gatewayConfig) {
+function createServiceHandler({ audience, getScope, target, includeCustomerProfile = false, validateTenantBranch = false, allowPublic = false }, gatewayConfig) {
   return async (req, res) => {
     if (!target) {
       return res.status(503).json({
@@ -38,7 +38,7 @@ function createServiceHandler({ audience, getScope, target, includeCustomerProfi
       });
     }
     const scope = getScope(req);
-    if (!hasScopePermission(req.user, scope)) {
+    if (!allowPublic && !hasScopePermission(req.user, scope)) {
       return res.status(403).json({
         success: false,
         error: { code: 'FORBIDDEN', message: `Permission required: ${scope}` },
@@ -89,7 +89,7 @@ function createServiceHandler({ audience, getScope, target, includeCustomerProfi
       token = createServiceToken({
         audience,
         scope,
-        user: req.user,
+        user: req.user || (allowPublic ? { sub: 'public-storefront', role: 'customer', roles: ['customer'], permissions: [] } : null),
         targetTenantId: req.get('x-tenant-id'),
         targetBranchId: req.get('x-branch-id'),
         // Only import routes set this after Backend API has verified the
@@ -144,6 +144,10 @@ export function createServiceRouters(gatewayConfig = config) {
       req.inventoryServiceUnavailable = true;
       return next();
     }
+    // This single GET returns only whitelisted Medicine Master details and is
+    // intentionally usable by anonymous Store visitors. All other inventory
+    // routes still require a verified user session.
+    if (req.method === 'GET' && req.path === '/catalogue/medicines/match') return next();
     return authenticateUser(req, res, next, gatewayConfig);
   });
   const inventory = scope => createServiceHandler({
@@ -170,6 +174,12 @@ export function createServiceRouters(gatewayConfig = config) {
     : requireInventoryImportPermission(req, res, next);
   inventoryRouter.post('/adjust', inventoryAdmin, inventory('inventory.adjust'));
   const catalogueImportAuth = (req, res, next) => req.inventoryServiceUnavailable ? next() : requireSuperAdmin(req, res, next);
+  inventoryRouter.get('/catalogue/medicines/match', createServiceHandler({
+    audience: gatewayConfig.inventoryJwtAudience,
+    getScope: () => 'inventory.catalogue.read',
+    target: gatewayConfig.inventoryServiceUrl,
+    allowPublic: true
+  }, gatewayConfig));
   inventoryRouter.get('/catalogue/medicines', inventory('inventory.catalogue.read'));
   inventoryRouter.get('/catalogue/medicines/:medicineId', inventory('inventory.catalogue.read'));
   inventoryRouter.patch('/catalogue/medicines/:medicineId', catalogueImportAuth, inventory('inventory.catalogue.import'));
