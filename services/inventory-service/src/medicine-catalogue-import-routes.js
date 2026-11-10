@@ -172,7 +172,10 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
   const ids = [...new Set(records.flatMap(item => [item.medicineId, item.reconciliationMatch?.targetMedicineId].filter(Boolean)))];
   const canonicalKeys = [...new Set(records.map(item => item.canonicalKey).filter(Boolean))];
   const names = [...new Set(records.filter(item => item.safeNameMatch).map(item => item.brandName).filter(Boolean))];
-  const prefixes = fuzzyCandidatePrefixes(records);
+  const allPrefixes = [...new Set(records.map(item => key(item.brandName).slice(0, 2)).filter(value => value.length === 2))];
+  const prefixes = allPrefixes.slice(0, 120);
+  const scannedPrefixes = new Set(prefixes);
+  const prefixScanTruncated = allPrefixes.length > prefixes.length;
   const clauses = [
     ...(ids.length ? [{ medicineId: { $in: ids } }] : []),
     ...(canonicalKeys.length ? [{ canonicalKey: { $in: canonicalKeys } }] : []),
@@ -183,7 +186,8 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
     _id: 1, medicineId: 1, canonicalKey: 1, brandName: 1, genericName: 1, composition: 1,
     ingredients: 1, strength: 1, dosageForm: 1, manufacturer: 1
   }).limit(5001).lean() : [];
-  const scanTruncated = candidates.length > 5000;
+  const candidateLimitTruncated = candidates.length > 5000;
+  const scanTruncated = candidateLimitTruncated || prefixScanTruncated;
   const activeCandidates = candidates.slice(0, 5000);
   const byId = new Map(activeCandidates.map(item => [item.medicineId, item]));
   const keyGroups = new Map(), nameGroups = new Map(), prefixGroups = new Map();
@@ -225,12 +229,16 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
       let best = null;
       let tiedBest = false;
       const prefix = key(item.brandName).slice(0, 2);
-      for (const candidate of prefixGroups.get(prefix) || []) {
+      if (!scannedPrefixes.has(prefix)) {
+        plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'FUZZY_CANDIDATE_PREFIX_NOT_SCANNED', score: 0, warnings: ['CANDIDATE_SCAN_PREFIX_LIMIT_REACHED'] };
+      } else for (const candidate of prefixGroups.get(prefix) || []) {
         const scored = scoreMedicineMatch(item, candidate, { nameNgramIdf });
         if (!best || scored.score > best.score) { best = { candidate, ...scored }; tiedBest = false; }
         else if (scored.score === best.score) tiedBest = true;
       }
-      if (best && tiedBest) {
+      if (plan) {
+        // Candidate prefix was not scanned; keep this row out of automatic insert/update.
+      } else if (best && tiedBest) {
         plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'AMBIGUOUS_TOP_MATCHES', score: best.score, warnings: ['MULTIPLE_CANDIDATES_SHARE_TOP_SCORE'] };
       } else if (best && best.decision === 'AUTO_MERGE') {
         plan = { decision: 'AUTO_MERGE', targetMedicineId: best.candidate.medicineId, method: 'FRESH_HYBRID_TFIDF_NGRAM_LINKAGE', score: best.score, warnings: best.warnings };
