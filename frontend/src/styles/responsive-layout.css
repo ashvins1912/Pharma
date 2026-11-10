@@ -311,84 +311,103 @@ html.dark :is(.pharma-responsive-scope, .admin-screen) :where(tbody tr:hover td)
 
 
 /* --------------------------------------------------------------------------
-   QuickMeds header layout repair.
-   Loaded after legacy/global styles so broad responsive rules cannot collapse
-   the brand copy or split the header when authenticated controls hydrate.
+   QuickMeds Rx — unified navigation header
+   Brand owns a fixed lane; navigation and actions never compete for its space.
    -------------------------------------------------------------------------- */
 .quickmeds-header {
   position: sticky !important;
-  inset-block-start: 0;
+  top: 0;
   z-index: 100;
-  display: block;
   width: 100%;
   height: auto !important;
-  min-height: 4.25rem;
+  min-height: 4.5rem;
   max-height: none !important;
   overflow: visible;
+  background: rgb(255 255 255 / 0.97);
+  border-bottom: 1px solid #e8edf4;
+  box-shadow: 0 2px 12px rgb(15 23 42 / 0.035);
 }
 .quickmeds-header .quickmeds-header-inner {
   display: grid !important;
-  grid-template-columns: minmax(13rem, max-content) minmax(0, 1fr) max-content !important;
+  grid-template-columns: 14.5rem minmax(0, 1fr) max-content !important;
   align-items: center !important;
-  justify-content: initial !important;
-  gap: clamp(.5rem, 1vw, 1.1rem);
+  gap: clamp(.65rem, 1.2vw, 1.25rem);
   width: 100%;
   max-width: 1920px;
-  min-height: 4.25rem !important;
+  min-height: 4.5rem !important;
   height: auto !important;
   margin-inline: auto;
-  padding-block: .5rem;
+  padding: .5rem clamp(.75rem, 1.8vw, 2rem);
   box-sizing: border-box;
 }
 .quickmeds-header .app-header__brand {
   display: flex !important;
   align-items: center;
   justify-self: start;
-  width: max-content;
-  max-width: 100%;
+  width: 14.5rem;
   min-width: 0;
-  flex: 0 0 auto !important;
+  max-width: 100%;
+  flex: 0 0 14.5rem !important;
   gap: .65rem;
   overflow: visible;
+  cursor: pointer;
+  text-decoration: none;
+}
+.quickmeds-header .app-header__brand:focus-visible {
+  outline: 3px solid rgb(37 99 235 / .35);
+  outline-offset: 4px;
+  border-radius: .75rem;
 }
 .quickmeds-header .app-header__brand-copy {
   display: flex;
-  flex: 0 0 auto !important;
+  flex: 1 1 auto !important;
   flex-direction: column;
   justify-content: center;
-  width: max-content;
+  width: auto;
+  min-width: 0;
   max-width: 100%;
-  min-width: max-content;
-  overflow: visible;
+  overflow: hidden;
 }
 .quickmeds-header .quickmeds-brand-badge-container {
   display: flex;
   align-items: center;
   flex-wrap: nowrap !important;
   gap: .4rem;
-  width: max-content;
-  max-width: 100%;
+  width: 100%;
   min-width: 0;
   white-space: nowrap;
-  overflow: visible;
+  overflow: hidden;
 }
-.quickmeds-header .quickmeds-brand-name,
-.quickmeds-header .quickmeds-role-chip,
-.quickmeds-header .app-header__tagline {
+.quickmeds-header .quickmeds-brand-name {
   flex: 0 0 auto;
   white-space: nowrap !important;
   word-break: keep-all !important;
   overflow-wrap: normal !important;
+  font-size: 1.08rem;
+  letter-spacing: -.035em;
+  line-height: 1.15;
+}
+.quickmeds-header .quickmeds-role-chip {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: .58rem;
+  letter-spacing: .075em;
+  border-radius: 999px;
+  padding: .22rem .48rem;
 }
 .quickmeds-header .app-header__tagline {
   display: block;
-  width: max-content;
-  max-width: none;
-  margin: .25rem 0 0;
+  width: 100%;
+  margin: .2rem 0 0;
+  color: #94a3b8;
+  font-size: .65rem;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .quickmeds-header .app-header__desktop-nav {
-  display: flex;
+  display: flex !important;
   min-width: 0;
   width: max-content;
   max-width: 100%;
@@ -396,17 +415,46 @@ html.dark :is(.pharma-responsive-scope, .admin-screen) :where(tbody tr:hover td)
   align-items: center;
   justify-content: center;
   flex-wrap: nowrap;
-  gap: clamp(.15rem, .45vw, .55rem);
+  gap: .25rem;
   white-space: nowrap;
 }
-.quickmeds-header .app-header__desktop-nav > button {
+.quickmeds-header .app-header__desktop-nav > .app-header__nav-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
   min-width: max-content;
+  min-height: 2.55rem;
+  padding: 0 .8rem;
+  border: 1px solid transparent;
+  border-radius: .75rem;
+  background: transparent;
+  color: #526176;
+  font-size: .76rem;
+  font-weight: 650;
+  line-height: 1;
+  box-shadow: none;
   white-space: nowrap;
-  padding-inline: clamp(.55rem, .8vw, .9rem);
+  transition: color .16s ease, background .16s ease, border-color .16s ease;
+}
+.quickmeds-header .app-header__desktop-nav > .app-header__nav-item:hover {
+  color: #1749a8;
+  background: #f3f7fd;
+}
+.quickmeds-header .app-header__desktop-nav > .app-header__nav-item[aria-current="page"],
+.quickmeds-header .app-header__desktop-nav > .app-header__nav-item:focus-visible {
+  color: #1d4ed8;
+  background: #edf4ff;
+  border-color: #dbeafe;
+  outline: none;
+}
+.quickmeds-header .app-header__desktop-nav > .app-header__nav-item > span {
+  white-space: nowrap;
+  word-break: keep-all;
 }
 .quickmeds-header .app-header__actions {
-  display: flex;
+  display: flex !important;
   justify-self: end;
   align-items: center;
   justify-content: flex-end;
@@ -420,29 +468,25 @@ html.dark :is(.pharma-responsive-scope, .admin-screen) :where(tbody tr:hover td)
   flex: 0 0 auto;
   min-width: 0;
 }
-.quickmeds-header .app-header__mobile-store,
-.quickmeds-header .app-header__menu-toggle {
-  display: none !important;
-}
+.quickmeds-header .app-header__mobile-store { display: none !important; }
+.quickmeds-header .app-header__menu-toggle { display: none !important; }
 
-/* Selectors share one quiet surface; no nested white outline or focus ring. */
+/* Quiet, consistent selectors: one soft surface, no nested outlines. */
 .quickmeds-header .qm-select-shell {
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  gap: .4rem;
-  height: 2.55rem;
-  min-height: 2.55rem;
-  padding: .25rem .7rem;
-  border: 0 !important;
+  gap: .35rem;
+  height: 2.45rem;
+  min-height: 2.45rem;
+  padding: .2rem .65rem;
+  border: 1px solid #e8edf4 !important;
   border-radius: .8rem;
-  background: #f1f5f9 !important;
+  background: #f7f9fc !important;
   box-shadow: none !important;
   outline: 0 !important;
 }
-.quickmeds-header .qm-select-shell:hover {
-  background: #e8eef7 !important;
-}
+.quickmeds-header .qm-select-shell:hover { background: #eef3fa !important; }
 .quickmeds-header .qm-select-control {
   display: block;
   height: 100%;
@@ -455,54 +499,58 @@ html.dark :is(.pharma-responsive-scope, .admin-screen) :where(tbody tr:hover td)
   background: transparent !important;
   box-shadow: none !important;
   outline: 0 !important;
-  color: #1e293b;
-  font-size: .75rem;
-  font-weight: 750;
+  color: #253247;
+  font-size: .72rem;
+  font-weight: 700;
   line-height: 1.2;
   cursor: pointer;
 }
-.quickmeds-header .app-header__language-select { max-width: 5.4rem; }
-.quickmeds-header .app-header__branch-select { max-width: 7rem; }
+.quickmeds-header .app-header__language-select { max-width: 5.2rem; }
+.quickmeds-header .app-header__branch-select { max-width: 6.6rem; }
 .quickmeds-header .qm-select-control:focus,
 .quickmeds-header .qm-select-control:focus-visible {
   border: 0 !important;
   outline: 0 !important;
   box-shadow: none !important;
 }
-.quickmeds-header .qm-select-control option {
-  background: #fff;
-  color: #0f172a;
-}
+.quickmeds-header .qm-select-control option { background: #fff; color: #0f172a; }
 
-@media (max-width: 1599px) {
+@media (max-width: 1439px) {
   .quickmeds-header .quickmeds-header-inner {
     grid-template-columns: minmax(0, 1fr) max-content !important;
+    min-height: 4.15rem !important;
   }
+  .quickmeds-header .app-header__brand {
+    width: max-content;
+    max-width: 100%;
+    flex-basis: auto !important;
+  }
+  .quickmeds-header .app-header__tagline { display: none !important; }
   .quickmeds-header .app-header__desktop-nav { display: none !important; }
-  .quickmeds-header .app-header__mobile-store,
   .quickmeds-header .app-header__menu-toggle { display: inline-flex !important; }
 }
-@media (max-width: 1279px) {
+@media (max-width: 1100px) {
   .quickmeds-header .app-header__language,
   .quickmeds-header .app-header__branch { display: none !important; }
-}
-@media (min-width: 640px) and (max-width: 1279px) {
-  .quickmeds-header .app-header__brand-copy { min-width: 0; }
-  .quickmeds-header .app-header__tagline { display: none !important; }
 }
 @media (max-width: 639px) {
   .quickmeds-header .quickmeds-header-inner {
     grid-template-columns: minmax(0, 1fr) max-content !important;
     min-height: 3.75rem !important;
-    gap: .35rem;
-    padding-block: .35rem;
+    gap: .45rem;
+    padding: .35rem .65rem;
   }
   .quickmeds-header .app-header__brand {
     width: auto;
     min-width: 0;
     max-width: 100%;
     overflow: hidden;
-    gap: .4rem;
+    gap: .45rem;
+  }
+  .quickmeds-header .app-header__brand > div:first-child {
+    width: 2.15rem !important;
+    height: 2.15rem !important;
+    flex: 0 0 2.15rem;
   }
   .quickmeds-header .app-header__brand-copy {
     min-width: 0;
@@ -510,21 +558,18 @@ html.dark :is(.pharma-responsive-scope, .admin-screen) :where(tbody tr:hover td)
     max-width: 100%;
     overflow: hidden;
   }
-  .quickmeds-header .quickmeds-brand-badge-container {
-    width: 100%;
-    min-width: 0;
-    overflow: hidden;
-  }
+  .quickmeds-header .quickmeds-brand-badge-container { min-width: 0; overflow: hidden; }
   .quickmeds-header .quickmeds-brand-name {
-    min-width: 0;
-    max-width: clamp(5.5rem, 32vw, 9rem);
+    max-width: clamp(6rem, 42vw, 10rem);
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: clamp(.8rem, 3.5vw, 1rem);
+    font-size: .94rem;
   }
-  .quickmeds-header .app-header__role-chip,
   .quickmeds-header .quickmeds-role-chip,
-  .quickmeds-header .app-header__tagline { display: none !important; }
+  .quickmeds-header .quickmeds-brand-badge-container > button,
+  .quickmeds-header .quickmeds-brand-badge-container > span:not(.quickmeds-brand-name) {
+    display: none !important;
+  }
   .quickmeds-header .app-header__actions {
     width: max-content;
     max-width: 100%;
@@ -537,16 +582,10 @@ html.dark :is(.pharma-responsive-scope, .admin-screen) :where(tbody tr:hover td)
     padding: 0;
     justify-content: center;
   }
-  .quickmeds-header .app-header__mobile-store {
-    width: auto !important;
-    min-width: 2.25rem;
-    padding-inline: .55rem !important;
-  }
   .quickmeds-header .app-header__menu-toggle {
     width: 2.25rem;
     min-width: 2.25rem;
     height: 2.25rem;
-    padding: 0;
   }
   .quickmeds-header .app-header__sign-in {
     width: auto;
@@ -555,16 +594,27 @@ html.dark :is(.pharma-responsive-scope, .admin-screen) :where(tbody tr:hover td)
   }
 }
 @media (max-width: 379px) {
-  .quickmeds-header .quickmeds-header-inner { gap: .2rem; }
+  .quickmeds-header .quickmeds-header-inner { gap: .25rem; }
   .quickmeds-header .app-header__brand > div:first-child {
-    width: 2rem !important;
-    height: 2rem !important;
-    flex-basis: 2rem;
+    width: 1.95rem !important;
+    height: 1.95rem !important;
+    flex-basis: 1.95rem;
   }
-  .quickmeds-header .quickmeds-brand-name { max-width: 5rem; }
+  .quickmeds-header .quickmeds-brand-name { max-width: 5.5rem; }
   .quickmeds-header .app-header__actions { gap: .12rem; }
 }
-html.dark .quickmeds-header .qm-select-shell { background: #172033 !important; }
+html.dark .quickmeds-header {
+  background: rgb(15 23 42 / .97);
+  border-color: #334155;
+}
+html.dark .quickmeds-header .app-header__desktop-nav > .app-header__nav-item { color: #cbd5e1; }
+html.dark .quickmeds-header .app-header__desktop-nav > .app-header__nav-item:hover { color: #bfdbfe; background: #1e293b; }
+html.dark .quickmeds-header .app-header__desktop-nav > .app-header__nav-item[aria-current="page"] {
+  color: #bfdbfe;
+  background: #172b49;
+  border-color: #25446e;
+}
+html.dark .quickmeds-header .qm-select-shell { background: #172033 !important; border-color: #334155 !important; }
 html.dark .quickmeds-header .qm-select-shell:hover { background: #202d43 !important; }
 html.dark .quickmeds-header .qm-select-control { color: #f8fafc; }
 html.dark .quickmeds-header .qm-select-control option { background: #0f172a; color: #f8fafc; }
