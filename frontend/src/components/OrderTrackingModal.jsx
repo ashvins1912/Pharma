@@ -177,20 +177,20 @@ export default function OrderTrackingModal({ order, onClose }) {
           )}
           {order.fulfillmentState === 'CANCELLED_REMAINDER' && (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-800">
-              <strong>Remaining items cancelled</strong>
-              <p className="mt-1 text-[11px] text-slate-600">The available items in this order were fulfilled. You cancelled the remaining out-of-stock items.</p>
+              <strong>{t('remainingItemsCancelledTitle')}</strong>
+              <p className="mt-1 text-[11px] text-slate-600">{t('remainingItemsCancelledDesc')}</p>
             </div>
           )}
           {order.fulfillmentState === 'EXPIRED_REMAINDER' && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-950">
-              <strong>Stock wait period expired</strong>
-              <p className="mt-1 text-[11px] text-amber-800">The available items were fulfilled, but the remaining items were not available before your selected wait window ended.</p>
+              <strong>{t('stockWaitExpiredTitle')}</strong>
+              <p className="mt-1 text-[11px] text-amber-800">{t('stockWaitExpiredDesc')}</p>
             </div>
           )}
           {order.fulfillmentState === 'COMPLETE' && (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs text-emerald-950">
-              <strong>All split items fulfilled</strong>
-              <p className="mt-1 text-[11px] text-emerald-800">Every item from this split order has been confirmed and fulfilled.</p>
+              <strong>{t('allSplitItemsFulfilled')}</strong>
+              <p className="mt-1 text-[11px] text-emerald-800">{t('allSplitItemsFulfilled')}</p>
             </div>
           )}
 
