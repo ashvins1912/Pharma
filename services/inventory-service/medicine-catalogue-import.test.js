@@ -51,7 +51,7 @@ test('Indian Medicine Dataset preserves brandIdentifier and structured master fi
 test('retail-style dataset strips scraped price text and marks prescription metadata unverified', () => {
   const result = normalizeMedicineRecord({
     'Medicine Name': 'Examplecin 500mg',
-    'Product Name': 'Examplecin 500mg Tablet - MRP ₹45.00',
+    'Product Name': 'Examplecin 500mg Tablet (10 tablets) - MRP ₹45.00',
     'Image URL': 'https://images.example.test/product.png',
     'Price': '₹45',
     'Is Prescription Required?': true,
@@ -62,7 +62,8 @@ test('retail-style dataset strips scraped price text and marks prescription meta
   }, 'INDIA_MEDICINES_INFO');
 
   assert.equal(result.brandName, 'Examplecin 500mg');
-  assert.equal(result.productName, 'Examplecin 500mg Tablet');
+  assert.equal(result.productName, 'Examplecin 500mg Tablet (10 tablets)');
+  assert.equal(result.packSize, '10 tablets');
   assert.equal(result.dosageForm, 'Tablet');
   assert.equal(result.medicineType, 'Tablets');
   assert.equal(result.requiresPrescription, true);
