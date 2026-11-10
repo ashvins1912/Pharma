@@ -62,9 +62,9 @@ Every later upload is reconciled against the already-published shared Medicine M
 
 The matcher uses a hybrid record-linkage score implemented in the Node inventory service (no runtime Python dependency): token-sort edit similarity, character 3-gram Dice similarity, corpus-weighted TF-IDF character n-gram cosine similarity for brand names, and weighted field-agreement evidence for composition, generic name, strength and dosage form. Exact medicine IDs and exact canonical keys take precedence. The field weights are conservative Fellegi-Sunter-inspired heuristics, not trained Fellegi-Sunter m/u probabilities; they must be calibrated on adjudicated match/non-match pairs before being described as a trained probabilistic model.
 
-- **Automatic fuzzy merge:** only when both records provide comparable composition, composition similarity is at least 94, brand-name similarity is at least 92, the weighted score is at least 96, and any available generic names agree sufficiently.
+- **Automatic fuzzy merge:** only when both records provide comparable composition, composition similarity is at least 96, hybrid brand-name similarity is at least 94, the weighted evidence score is at least 97, and both strength and dosage form are present and compatible, and any available generic names agree sufficiently.
 - **Manual review candidate:** plausible name match but insufficient evidence for a safe automatic merge. These records are not automatically merged.
-- **Blocked conflict:** differing known composition, strength or dosage form prevents fuzzy auto-merge.
+- **Blocked conflict:** differing known composition, generic ingredient, strength or dosage form prevents fuzzy auto-merge.
 - **New record:** no sufficiently similar existing record is found.
 
 The report includes fuzzy auto-merge count, manual-review count, unmatched count, candidate medicine ID, score and warnings. Candidate search currently uses normalized two-character brand-name prefixes to shortlist up to 5,000 existing candidates before TF-IDF/n-gram scoring; it is bounded to 120 prefixes. It remains non-exhaustive for typos in the first two characters, and the report marks when either cap is reached. A truncated or prefix-limited scan is not proof that no duplicate exists.
