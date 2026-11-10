@@ -36,6 +36,7 @@ export default function MedicineCatalogueMappingReview({ batches = [], onClose, 
     } finally { setLoading(false); }
   }, [batchId, addToast]);
 
+  useEffect(() => { if (!batchId && options[0]?.batchId) setBatchId(options[0].batchId); }, [batchId, options]);
   useEffect(() => { if (batchId) void loadQueue(batchId); }, [batchId, loadQueue]);
 
   const approve = async item => {
