@@ -19,7 +19,13 @@ router.get('/', async (req, res, next) => {
         { genericName: { $regex: escapeRegex(search), $options: 'i' } },
         { productName: { $regex: escapeRegex(search), $options: 'i' } },
         { manufacturer: { $regex: escapeRegex(search), $options: 'i' } },
-        { composition: { $regex: escapeRegex(search), $options: 'i' } }
+        { composition: { $regex: escapeRegex(search), $options: 'i' } },
+        { uses: { $regex: escapeRegex(search), $options: 'i' } },
+        { sideEffects: { $regex: escapeRegex(search), $options: 'i' } },
+        { therapeuticClass: { $regex: escapeRegex(search), $options: 'i' } },
+        { chemicalClass: { $regex: escapeRegex(search), $options: 'i' } },
+        { actionClass: { $regex: escapeRegex(search), $options: 'i' } },
+        { suggestedAlternatives: { $regex: escapeRegex(search), $options: 'i' } }
       ]
     } : {};
     const Model = medicineMaster();
