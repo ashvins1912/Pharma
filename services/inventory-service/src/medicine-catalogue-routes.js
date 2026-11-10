@@ -27,7 +27,7 @@ router.get('/match', async (req, res, next) => {
     const terms = [...new Set([product.name, product.brand, product.genericName, product.composition].filter(Boolean))];
     if (!terms.length) return res.status(400).json({ code: 'MEDICINE_MATCH_INPUT_REQUIRED', message: 'Provide a medicine name or generic name to find catalogue details.' });
     const clauses = terms.flatMap(term => {
-      const firstToken = String(term).split(/\\s+/).filter(Boolean)[0] || term;
+      const firstToken = String(term).split(/\s+/).filter(Boolean)[0] || term;
       const escaped = '^' + escapeRegex(firstToken);
       return [
         { brandName: { $regex: escaped, $options: 'i' } },
