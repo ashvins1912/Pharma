@@ -49,7 +49,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
     try {
       const response = await apiClient.get('/api/v1/inventory/catalogue/imports', { params: { page: 1, limit: 50 } });
       const jobs = (response.data?.jobs || []).map(job => ({ ...job, isImportJob: true, batchId: job.batchId || job.jobId, recordCount: job.totalRecords || job.processedRecords || 0 }));
-      setImports([...jobs, ...(response.data?.items || [])].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).slice(0, 12));
+      setImports([...jobs, ...(response.data?.items || [])].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).slice(0, 50));
     } catch (error) {
       addToast(error.response?.data?.message || 'Could not load catalogue import history.', 'warning');
     } finally { setHistoryLoading(false); }
