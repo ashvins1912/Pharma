@@ -160,7 +160,7 @@ export default function MedicineMasterCatalogueView({ onOpenImport }) {
   return (
     <section className="space-y-4">
       <header className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div><h2 className="text-lg font-black text-slate-900">Medicine Master Catalogue</h2><p className="mt-1 text-xs text-slate-500">Browse published shared records, inspect provenance and make audited platform-level updates.</p></div>
+        <div><h2 className="text-lg font-black text-slate-900">Medicine Master Catalogue</h2><p className="mt-1 text-xs text-slate-500">Browse published shared records, inspect provenance, make audited platform-level updates and remove records from the active catalogue.</p></div>
         <button type="button" onClick={onOpenImport} className="rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-violet-700">🧬 Enrich catalogue</button>
       </header>
       <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 sm:flex-row">
