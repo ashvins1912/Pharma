@@ -168,11 +168,11 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   const batchId = randomUUID();
   const fileSha256 = hash(req.file.buffer);
   const ids = records.map(record => record.medicineId);
-  const canonicalKeys = records.map(record => record.canonicalKey).filter(Boolean);
+  const canonicalKeys = dataset === 'INDIA_MEDICINES_INFO' ? records.map(record => record.canonicalKey).filter(Boolean) : [];
   const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: canonicalKeys } }] }, { medicineId: 1, canonicalKey: 1 }).lean();
   const existingIds = new Set(existing.map(item => item.medicineId));
   const existingKeys = new Set(existing.map(item => item.canonicalKey).filter(Boolean));
-  const updates = records.filter(item => existingIds.has(item.medicineId) || (item.canonicalKey && existingKeys.has(item.canonicalKey))).length;
+  const updates = records.filter(item => existingIds.has(item.medicineId) || (dataset === 'INDIA_MEDICINES_INFO' && item.canonicalKey && existingKeys.has(item.canonicalKey))).length;
   const report = {
     sourceRecords: sourceRows.length, normalizedRecords: records.length, rejectedRecords: rejected,
     duplicatesRemoved, newRecords: records.length - updates, updateCandidates: updates,
@@ -210,12 +210,14 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
     for (let offset = 0; offset < records.length; offset += 250) {
       const chunk = records.slice(offset, offset + 250);
       const ids = chunk.map(item => item.medicineId);
-      const keys = chunk.map(item => item.canonicalKey).filter(Boolean);
+      const keys = batch.dataset === 'INDIA_MEDICINES_INFO' ? chunk.map(item => item.canonicalKey).filter(Boolean) : [];
       const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: keys } }] }).lean();
       const byId = new Map(existing.map(item => [item.medicineId, item]));
-      const byKey = new Map(existing.filter(item => item.canonicalKey).map(item => [item.canonicalKey, item]));
+      const keyGroups = new Map();
+      for (const item of existing.filter(item => item.canonicalKey)) keyGroups.set(item.canonicalKey, [...(keyGroups.get(item.canonicalKey) || []), item]);
+      const byKey = new Map([...keyGroups.entries()].filter(([, matches]) => matches.length === 1).map(([canonicalKey, matches]) => [canonicalKey, matches[0]]));
       const operations = chunk.map(item => {
-        const current = byId.get(item.medicineId) || (item.canonicalKey ? byKey.get(item.canonicalKey) : null);
+        const current = byId.get(item.medicineId) || (batch.dataset === 'INDIA_MEDICINES_INFO' && item.canonicalKey ? byKey.get(item.canonicalKey) : null);
         const targetId = current?.medicineId || item.medicineId;
         const fields = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','dosageForm','sourceImageUrl'];
         const set = { lastImportBatchId: batch.batchId, sourcePriority: Math.min(Number(current?.sourcePriority ?? 99), item.sourcePriority) };
