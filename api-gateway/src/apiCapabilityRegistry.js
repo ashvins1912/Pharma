@@ -144,6 +144,8 @@ const CAPABILITIES = [
   ['DELETE', /^\/api\/v1\/customers\/persons\/[^/]+$/, 'profile.write'],
   // Shared medicine catalogue imports are platform-admin-only at the service router;
   // the gateway capability is an additional least-privilege perimeter check.
+  ['GET', /^\/api\/v1\/inventory\/catalogue\/matches\/review$/, 'inventory.catalogue.import'],
+  ['POST', /^\/api\/v1\/inventory\/catalogue\/matches\/[^/]+\/map$/, 'inventory.catalogue.import'],
   ['GET', /^\/api\/v1\/inventory\/catalogue\/imports$/, 'inventory.catalogue.import'],
   ['POST', /^\/api\/v1\/inventory\/catalogue\/imports\/(?:preview|merge|remove-selected)$/, 'inventory.catalogue.import'],
   ['GET', /^\/api\/v1\/inventory\/catalogue\/imports\/jobs\/[^/]+$/, 'inventory.catalogue.import'],
