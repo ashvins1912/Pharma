@@ -13,7 +13,7 @@ const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
   .filter(Boolean);
 const allowedOrigins = Array.from(new Set([
   ...configuredOrigins,
-  'https://pharma-ui.onrender.com'
+  'https://pharma-1-278k.onrender.com'
 ]));
 const pharmaJwtPublicKey = String(process.env.PHARMA_JWT_PUBLIC_KEY || '').replace(/\\n/g, '\n').trim();
 const pharmaJwtIssuer = process.env.PHARMA_JWT_ISSUER || 'pharma-auth';
