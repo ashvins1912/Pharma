@@ -562,7 +562,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
 }));
 
 const MERGE_ARRAY_FIELDS = ['ingredientIds','ingredients','ingredientDetails','routes','indications','contraindications','drugInteractions','alternatives','sideEffects','uses','suggestedAlternatives','routeIds','casNumbers','uniiCodes','substanceDescriptions','molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology'];
-const MERGE_TEXT_FIELDS = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType','chemicalClass','therapeuticClass','actionClass'];
+const MERGE_TEXT_FIELDS = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType','chemicalClass','therapeuticClass','actionClass','sourceLicenseStatusValue','drugFormId','sourceImageUrl'];
 export const mergeStagedMedicine = (left, right) => {
   const primary = Number(left.sourcePriority ?? 99) <= Number(right.sourcePriority ?? 99) ? left : right;
   const secondary = primary === left ? right : left;
