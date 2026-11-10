@@ -67,6 +67,30 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     }
   };
 
+  const retryFailedJob = async () => {
+    if (!jobStatus?.jobId || jobStatus.status !== 'FAILED') return;
+    setBusy(true);
+    try {
+      await apiClient.post(`/api/v1/inventory/catalogue/imports/jobs/${encodeURIComponent(jobStatus.jobId)}/retry`, {});
+      let job;
+      while (true) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const response = await apiClient.get(`/api/v1/inventory/catalogue/imports/jobs/${encodeURIComponent(jobStatus.jobId)}`);
+        job = response.data;
+        setJobStatus(job);
+        if (job.status === 'READY' || job.status === 'FAILED') break;
+      }
+      if (job.status === 'FAILED') throw new Error(job.errorMessage || 'The retry failed. Check the import job details.');
+      const completedPreview = { batchId: job.batchId, dataset: job.dataset, status: 'READY', report: job.report, reportFingerprint: job.reportFingerprint, sample: job.sample };
+      setPreview(completedPreview);
+      const batch = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(job.batchId)}`);
+      setBatchStatus(batch.data);
+      addToast('Catalogue import retry completed. Review the reconciliation report.', 'success');
+    } catch (error) {
+      addToast(error.response?.data?.message || error.message || 'Could not retry this import job.', 'error');
+    } finally { setBusy(false); }
+  };
+
   const approveReconciliation = async () => {
     if (!preview?.batchId || !reviewConfirmed || !preview?.reportFingerprint) return;
     setBusy(true);
@@ -142,6 +166,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
             </div>
           )}
           {jobStatus && busy && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2"><div className="flex items-center justify-between gap-3 text-xs"><strong className="text-blue-950">Background import: {jobStatus.stage || jobStatus.status}</strong><span className="font-bold tabular-nums text-blue-800">{Number(jobStatus.progressPercent || 0)}%</span></div><div className="h-2 overflow-hidden rounded-full bg-blue-100"><div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${Math.max(0, Math.min(100, Number(jobStatus.progressPercent || 0)))}%` }} /></div><p className="text-[11px] text-blue-900">{jobStatus.fileName} · {jobStatus.processedRecords ? Number(jobStatus.processedRecords).toLocaleString() : 'Preparing'} / {jobStatus.totalRecords ? Number(jobStatus.totalRecords).toLocaleString() : '—'} records · Job {jobStatus.jobId}</p></div>}
+          {jobStatus?.status === 'FAILED' && <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">Processing failed: {jobStatus.errorMessage || 'Unknown processing error'} · Attempt {jobStatus.attempts || 1}</p>}
           {file && !preview && <p className="text-xs text-slate-500 break-all">Selected: <strong>{file.name}</strong> · {(file.size / 1024 / 1024).toFixed(2)} MB</p>}
           {report && (
             <div className="space-y-3">
@@ -245,7 +270,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
         <footer className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-between sm:px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button type="button" onClick={preview ? () => { setPreview(null); setFile(null); setPublished(null); setBatchStatus(null); setReviewConfirmed(false); } : close} disabled={busy} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 disabled:opacity-50">{preview ? 'Choose another dataset' : 'Close'}</button>
           {!preview ? (
-            <button type="button" onClick={createPreview} disabled={busy || !file} className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-50">{busy ? (jobStatus ? `Processing… ${jobStatus.progressPercent || 0}%` : 'Uploading securely…') : 'Upload & Analyze'}</button>
+            <div className="flex flex-col gap-2 sm:flex-row"><button type="button" onClick={createPreview} disabled={busy || !file || jobStatus?.status === 'FAILED'} className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-50">{busy ? (jobStatus ? `Processing… ${jobStatus.progressPercent || 0}%` : 'Uploading securely…') : 'Upload & Analyze'}</button>{jobStatus?.status === 'FAILED' && <button type="button" onClick={retryFailedJob} disabled={busy} className="rounded-xl bg-amber-600 px-5 py-2.5 text-xs font-extrabold text-white disabled:opacity-50">{busy ? 'Retrying…' : 'Retry failed job'}</button>}</div>
           ) : !published && !batchStatus?.approvedAt ? (
             <button type="button" onClick={approveReconciliation} disabled={busy || !reviewConfirmed || !preview?.reportFingerprint} className="rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-violet-700 disabled:opacity-50">{busy ? 'Approving…' : 'Approve reconciliation'}</button>
           ) : !published ? (
