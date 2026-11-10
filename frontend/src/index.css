@@ -1470,9 +1470,9 @@ html.dark .qm-mobile-record-proposal { border-color: #065f46; background: #052e2
 html.dark .qm-inventory-record-card { border-color: #334155; background: #162236; }
 
 
-/* Header control alignment: desktop keeps primary navigation without a
-   redundant hamburger; tablet/mobile show the drawer toggle followed by the
-   language and active-branch selectors, then account actions. */
+/* Header control alignment: keep the hamburger shortcut available and
+   place language and active-branch selectors immediately after it, before
+   notifications, cart, alerts and the profile/sign-in action. */
 .app-header__menu-toggle {
   display: inline-flex;
   flex: 0 0 2.5rem;
