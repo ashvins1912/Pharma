@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import express from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
+import { GridFSBucket } from 'mongodb';
 import { requireServiceScope } from './service-auth.js';
 
 const router = express.Router();
@@ -9,8 +10,6 @@ const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next
 const MAX_CATALOGUE_UPLOAD_BYTES = 110 * 1024 * 1024;
 const CATALOGUE_CHUNK_SIZE = 500;
 const LARGE_IMPORT_THRESHOLD_BYTES = 10 * 1024 * 1024;
-const IMPORT_CONCURRENCY_LIMIT = 1;
-let activeCatalogueImports = 0;
 const yieldToEventLoop = () => new Promise(resolve => setImmediate(resolve));
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_CATALOGUE_UPLOAD_BYTES, files: 1 } });
 const text = value => String(value ?? '').replace(/<[^>]*>/g, ' ').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -270,6 +269,75 @@ const catalogueImportSchema = new mongoose.Schema({
   approvedAt: { type: Date, default: null }
 }, { timestamps: true });
 catalogueImportSchema.index({ dataset: 1, fileSha256: 1 }, { unique: true });
+const catalogueImportJobSchema = new mongoose.Schema({
+  jobId: { type: String, required: true, unique: true, index: true },
+  fileId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  fileName: { type: String, required: true }, fileSize: { type: Number, default: 0 },
+  uploadedBy: { type: String, required: true }, serviceName: { type: String, default: '' },
+  dataset: { type: String, default: '' }, status: { type: String, enum: ['QUEUED','PROCESSING','READY','FAILED'], default: 'QUEUED', index: true },
+  stage: { type: String, default: 'QUEUED' }, progressPercent: { type: Number, default: 0 },
+  processedRecords: { type: Number, default: 0 }, totalRecords: { type: Number, default: 0 },
+  attempts: { type: Number, default: 0 }, leaseExpiresAt: { type: Date, default: null },
+  batchId: { type: String, default: '' }, report: { type: mongoose.Schema.Types.Mixed, default: null },
+  reportFingerprint: { type: String, default: '' }, sample: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  errorMessage: { type: String, default: '' }, startedAt: { type: Date, default: null }, completedAt: { type: Date, default: null }
+}, { timestamps: true });
+catalogueImportJobSchema.index({ status: 1, leaseExpiresAt: 1, createdAt: 1 });
+const CatalogueImportJob = mongoose.models.MedicineCatalogueImportJob || mongoose.model('MedicineCatalogueImportJob', catalogueImportJobSchema);
+let catalogueImportBucket;
+let catalogueImportWorkerTimer;
+let catalogueImportWorkerBusy = false;
+const getCatalogueImportBucket = () => catalogueImportBucket || (catalogueImportBucket = new GridFSBucket(mongoose.connection.db, { bucketName: 'medicineCatalogueUploads' }));
+const updateCatalogueImportJob = (jobId, values) => CatalogueImportJob.updateOne({ jobId }, { $set: values });
+const streamToBuffer = async stream => {
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
+};
+async function processNextCatalogueImportJob() {
+  if (catalogueImportWorkerBusy || mongoose.connection.readyState !== 1) return;
+  catalogueImportWorkerBusy = true;
+  let job;
+  try {
+    job = await CatalogueImportJob.findOneAndUpdate({
+      $or: [{ status: 'QUEUED' }, { status: 'PROCESSING', leaseExpiresAt: { $lt: new Date() } }]
+    }, { $set: { status: 'PROCESSING', stage: 'ANALYZING', leaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000), startedAt: new Date(), errorMessage: '' }, $inc: { attempts: 1 } }, { sort: { createdAt: 1 }, new: true });
+    if (!job) return;
+    const buffer = await streamToBuffer(getCatalogueImportBucket().openDownloadStream(job.fileId));
+    const fakeResponse = {
+      statusCode: 200, payload: null,
+      status(code) { this.statusCode = code; return this; },
+      json(value) { this.payload = value; return this; }
+    };
+    await processCatalogueImportPreview({
+      file: { buffer, size: job.fileSize, originalname: job.fileName },
+      body: { dataset: job.dataset }, service: { userId: job.uploadedBy, name: job.serviceName, isPlatformUser: true },
+      importJob: job.jobId
+    }, fakeResponse);
+    if (fakeResponse.statusCode >= 400 || !fakeResponse.payload?.batchId) throw new Error(fakeResponse.payload?.message || 'Catalogue import processing failed.');
+    await CatalogueImportJob.updateOne({ jobId: job.jobId }, { $set: {
+      status: 'READY', stage: 'READY', progressPercent: 100, batchId: fakeResponse.payload.batchId,
+      dataset: fakeResponse.payload.dataset || job.dataset, report: fakeResponse.payload.report || {},
+      reportFingerprint: fakeResponse.payload.reportFingerprint || '', sample: fakeResponse.payload.sample || [],
+      processedRecords: fakeResponse.payload.report?.sourceRecords || 0, totalRecords: fakeResponse.payload.report?.sourceRecords || 0,
+      leaseExpiresAt: null, completedAt: new Date()
+    } });
+  } catch (error) {
+    if (job) await CatalogueImportJob.updateOne({ jobId: job.jobId }, { $set: {
+      status: 'FAILED', stage: 'FAILED', leaseExpiresAt: null, errorMessage: String(error.message || 'Import processing failed.').slice(0, 1000), completedAt: new Date()
+    } });
+  } finally { catalogueImportWorkerBusy = false; }
+}
+export function startMedicineCatalogueImportWorker() {
+  if (catalogueImportWorkerTimer) return;
+  catalogueImportWorkerTimer = setInterval(() => { void processNextCatalogueImportJob(); }, 1500);
+  catalogueImportWorkerTimer.unref?.();
+}
+export function stopMedicineCatalogueImportWorker() {
+  if (catalogueImportWorkerTimer) clearInterval(catalogueImportWorkerTimer);
+  catalogueImportWorkerTimer = null;
+}
+
 const MedicineMaster = mongoose.models.MedicineMaster || mongoose.model('MedicineMaster', medicineMasterSchema);
 const CatalogueImport = mongoose.models.MedicineCatalogueImport || mongoose.model('MedicineCatalogueImport', catalogueImportSchema);
 const catalogueImportChunkSchema = new mongoose.Schema({
@@ -526,13 +594,7 @@ router.use((req, res, next) => req.service?.isPlatformUser === true
   ? next()
   : res.status(403).json({ code: 'PLATFORM_ADMIN_REQUIRED', message: 'Only a platform administrator can publish the shared medicine master catalogue.' }));
 
-router.post('/imports/preview', (req, res, next) => {
-  if (activeCatalogueImports >= IMPORT_CONCURRENCY_LIMIT) return res.status(429).json({ code: 'CATALOGUE_IMPORT_BUSY', message: 'A catalogue import is already processing. Retry after it finishes.' });
-  activeCatalogueImports += 1;
-  let released = false;
-  const release = () => { if (!released) { released = true; activeCatalogueImports = Math.max(0, activeCatalogueImports - 1); } };
-  res.on('finish', release); res.on('close', release); next();
-}, upload.single('jsonFile'), asyncHandler(async (req, res) => {
+async function processCatalogueImportPreview(req, res) {
   if (!req.file) return res.status(400).json({ message: 'Select a JSON file to upload.' });
   let payload;
   let dataset;
@@ -564,6 +626,7 @@ router.post('/imports/preview', (req, res, next) => {
     return res.status(error.statusCode || 400).json({ message: error.message });
   }
   let { records, rejected, sourceRecords, duplicatesRemoved } = normalized;
+  if (req.importJob) await updateCatalogueImportJob(req.importJob, { stage: 'RECONCILING', progressPercent: 35, processedRecords: sourceRecords, totalRecords: sourceRecords });
   if (!sourceRecords) return res.status(400).json({ message: 'The uploaded medicine dataset contains no records.' });
   const nameCounts = new Map();
   for (let offset = 0; offset < records.length; offset += CATALOGUE_CHUNK_SIZE) { for (const item of records.slice(offset, offset + CATALOGUE_CHUNK_SIZE)) { const nameKey = key(item.brandName); nameCounts.set(nameKey, (nameCounts.get(nameKey) || 0) + 1); } if (req.file.size > LARGE_IMPORT_THRESHOLD_BYTES) await yieldToEventLoop(); }
@@ -649,6 +712,7 @@ router.post('/imports/preview', (req, res, next) => {
   const fuzzyAutoMerge = records.filter(item => item.reconciliationMatch?.method === 'HYBRID_TFIDF_NGRAM_LINKAGE' && item.reconciliationMatch.decision === 'AUTO_MERGE').length;
   const fuzzyManualReview = records.filter(item => item.reconciliationMatch?.decision === 'MANUAL_REVIEW').length;
   const updateCandidates = records.filter(item => item.reconciliationMatch?.decision === 'AUTO_MERGE').length;
+  if (req.importJob) await updateCatalogueImportJob(req.importJob, { stage: 'STAGING', progressPercent: 75, processedRecords: sourceRecords, totalRecords: sourceRecords });
   const report = {
     sourceRecords, normalizedRecords: records.length, rejectedRecords: rejected,
     duplicatesRemoved, newRecords: Math.max(0, records.length - updateCandidates), updateCandidates, fuzzyTargetDuplicatesMerged,
@@ -705,7 +769,27 @@ router.post('/imports/preview', (req, res, next) => {
     await CatalogueImport.deleteOne({ batchId });
     throw error;
   }
-  return res.status(201).json({ batchId, dataset, status: 'READY', report, reportFingerprint, sample: records.slice(0, 8) });
+
+}
+router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'Select a JSON file to upload.' });
+  const jobId = randomUUID();
+  const bucket = getCatalogueImportBucket();
+  const uploadStream = bucket.openUploadStream(`${jobId}-${String(req.file.originalname || 'catalogue.json').slice(0, 160)}`, {
+    metadata: { jobId, uploadedBy: req.service.userId || req.service.name }
+  });
+  await new Promise((resolve, reject) => {
+    uploadStream.once('finish', resolve);
+    uploadStream.once('error', reject);
+    uploadStream.end(req.file.buffer);
+  });
+  await CatalogueImportJob.create({
+    jobId, fileId: uploadStream.id, fileName: String(req.file.originalname || 'medicine-catalogue.json').slice(0, 180),
+    fileSize: req.file.size, uploadedBy: req.service.userId || req.service.name,
+    serviceName: req.service.name || '', dataset: req.body?.dataset || '',
+    status: 'QUEUED', stage: 'QUEUED', progressPercent: 0, attempts: 0
+  });
+  return res.status(202).json({ jobId, status: 'QUEUED', progressPercent: 0, message: 'Upload stored. Catalogue processing has been queued.' });
 }));
 
 const MERGE_ARRAY_FIELDS = ['ingredientIds','ingredients','ingredientDetails','routes','indications','contraindications','drugInteractions','alternatives','sideEffects','uses','suggestedAlternatives','routeIds','casNumbers','uniiCodes','substanceDescriptions','molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology'];
@@ -846,6 +930,17 @@ router.post('/imports/merge', asyncHandler(async (req, res) => {
   return res.status(201).json({ batchId, dataset: 'MULTI_SOURCE', status: 'READY', report, reportFingerprint, sourceBatchIds });
 }));
 
+router.get('/imports/jobs/:jobId', asyncHandler(async (req, res) => {
+  const job = await CatalogueImportJob.findOne({ jobId: req.params.jobId }).lean();
+  if (!job) return res.status(404).json({ message: 'Catalogue import job was not found.' });
+  return res.json({
+    jobId: job.jobId, status: job.status, stage: job.stage, progressPercent: job.progressPercent,
+    processedRecords: job.processedRecords, totalRecords: job.totalRecords, attempts: job.attempts,
+    fileName: job.fileName, fileSize: job.fileSize, batchId: job.batchId, dataset: job.dataset,
+    report: job.report, reportFingerprint: job.reportFingerprint, sample: job.sample,
+    errorMessage: job.errorMessage, createdAt: job.createdAt, updatedAt: job.updatedAt, completedAt: job.completedAt
+  });
+}));
 router.get('/imports', asyncHandler(async (req, res) => {
   const page = Math.max(1, Math.min(1000, Number.parseInt(req.query.page || '1', 10) || 1));
   const limit = Math.max(1, Math.min(50, Number.parseInt(req.query.limit || '10', 10) || 10));
@@ -996,6 +1091,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
 }));
 
 export async function initializeMedicineCatalogueModels() {
-  await Promise.all([MedicineMaster.init(), CatalogueImport.init(), CatalogueImportChunk.init()]);
+  await Promise.all([MedicineMaster.init(), CatalogueImport.init(), CatalogueImportChunk.init(), CatalogueImportJob.init()]);
+  startMedicineCatalogueImportWorker();
 }
 export default router;
