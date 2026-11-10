@@ -434,7 +434,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   } catch (error) {
     return res.status(error.statusCode || 400).json({ message: error.message });
   }
-  const { records, rejected, sourceRecords, duplicatesRemoved } = normalized;
+  let { records, rejected, sourceRecords, duplicatesRemoved } = normalized;
   if (!sourceRecords) return res.status(400).json({ message: 'The uploaded medicine dataset contains no records.' });
   const nameCounts = new Map();
   for (const item of records) { const nameKey = key(item.brandName); nameCounts.set(nameKey, (nameCounts.get(nameKey) || 0) + 1); }
@@ -477,12 +477,12 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     if (candidate.canonicalKey) existingKeyGroups.set(candidate.canonicalKey, [...(existingKeyGroups.get(candidate.canonicalKey) || []), candidate]);
     const nameKey = key(candidate.brandName);
     existingNameGroups.set(nameKey, [...(existingNameGroups.get(nameKey) || []), candidate]);
-    const prefix = nameKey.split(' ')[0];
-    if (prefix) existingByNamePrefix.set(prefix, [...(existingByNamePrefix.get(prefix) || []), candidate]);
+    const prefix = nameKey.slice(0, 2);
+    if (prefix.length === 2) existingByNamePrefix.set(prefix, [...(existingByNamePrefix.get(prefix) || []), candidate]);
   }
   const existingKeys = new Set([...existingKeyGroups.entries()].filter(([, group]) => group.length === 1).map(([canonicalKey]) => canonicalKey));
   const existingNameCounts = new Map([...existingNameGroups.entries()].map(([nameKey, group]) => [nameKey, group.length]));
-  const updates = records.filter(item => existingIds.has(item.medicineId) ||
+  let updates = records.filter(item => existingIds.has(item.medicineId) ||
     (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeys.has(item.canonicalKey)) ||
     (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1)).length;
   for (const item of records) {
@@ -501,11 +501,31 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
       item.reconciliationMatch = { targetMedicineId: best.candidate.medicineId, method: 'FUZZY_TOKEN_SORT', score: best.score, nameScore: best.nameScore, compositionScore: best.compositionScore, decision: best.decision, warnings: best.warnings };
     }
   }
+  const recordsByMasterTarget = new Map();
+  const deduplicatedRecords = [];
+  let fuzzyTargetDuplicatesMerged = 0;
+  for (const item of records) {
+    const targetId = item.reconciliationMatch?.decision === 'AUTO_MERGE' ? item.reconciliationMatch.targetMedicineId : '';
+    if (targetId && recordsByMasterTarget.has(targetId)) {
+      const index = recordsByMasterTarget.get(targetId);
+      deduplicatedRecords[index] = mergeStagedMedicine(deduplicatedRecords[index], item);
+      fuzzyTargetDuplicatesMerged += 1;
+    } else {
+      if (targetId) recordsByMasterTarget.set(targetId, deduplicatedRecords.length);
+      deduplicatedRecords.push(item);
+    }
+  }
+  records = deduplicatedRecords;
+  duplicatesRemoved += fuzzyTargetDuplicatesMerged;
+  updates = records.filter(item => existingIds.has(item.medicineId) ||
+    (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeys.has(item.canonicalKey)) ||
+    (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1)).length;
+  const finalUpdates = records.filter(item => item.reconciliationMatch?.decision === 'AUTO_MERGE').length;
   const fuzzyAutoMerge = records.filter(item => item.reconciliationMatch?.method === 'FUZZY_TOKEN_SORT' && item.reconciliationMatch.decision === 'AUTO_MERGE').length;
   const fuzzyManualReview = records.filter(item => item.reconciliationMatch?.decision === 'MANUAL_REVIEW').length;
   const report = {
     sourceRecords, normalizedRecords: records.length, rejectedRecords: rejected,
-    duplicatesRemoved, newRecords: Math.max(0, records.length - updates - fuzzyAutoMerge), updateCandidates: updates + fuzzyAutoMerge,
+    duplicatesRemoved, newRecords: Math.max(0, records.length - updates - fuzzyAutoMerge), updateCandidates: updates + fuzzyAutoMerge, fuzzyTargetDuplicatesMerged,
     fuzzyAutoMerge, fuzzyManualReview, unmatchedRecords: records.length - updates - fuzzyAutoMerge - fuzzyManualReview,
     needsReview: records.filter(item => item.dataQualityStatus === 'NEEDS_REVIEW').length,
     partialRecords: records.filter(item => item.dataQualityStatus === 'PARTIAL').length,
