@@ -22,4 +22,4 @@ Only this service starts the catalogue-import and medicine-match workers after i
 - `GET /health`: process liveness.
 - `GET /ready`: MongoDB readiness.
 
-Deploy this service and configure `MEDICINE_MASTER_SERVICE_URL` in API Gateway before removing the old catalogue routes from Inventory Service. This branch keeps the public API paths unchanged.
+Deploy the private service first. Set `MEDICINE_MASTER_SERVICE_URL` in API Gateway to its Render private-network URL (for example `http://ashvin-pharmacy-medicine-master:10000`) and keep the configured JWT audience as `medicine-master-service`. Set `MEDICINE_MASTER_MONGO_URI` to the exact same MongoDB URI currently configured as Inventory Service's `INVENTORY_MONGO_URI`. Do not use a different database. Then deploy API Gateway and Inventory Service from this branch. This branch keeps the public API paths unchanged.
