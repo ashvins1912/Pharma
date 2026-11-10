@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { randomUUID } from 'node:crypto';
 
 const fulfillmentLineSchema = new mongoose.Schema({
   productId: { type: String, default: null },
@@ -23,6 +24,7 @@ const fulfillmentLineSchema = new mongoose.Schema({
 
 const fulfillmentCaseSchema = new mongoose.Schema({
   caseNumber: { type: String, required: true, unique: true, index: true },
+  stockWatchId: { type: String, unique: true, sparse: true, default: () => 'SW-' + randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase() },
   customerId: { type: String, required: true, index: true },
   tenantId: { type: String, required: true, index: true },
   branchId: { type: String, default: null, index: true },
