@@ -4,10 +4,11 @@ import multer from 'multer';
 import mongoose from 'mongoose';
 import { invalidateMedicineMasterVersionCache } from './medicine-match-reference.js';
 import { requireServiceScope } from './service-auth.js';
+import { config } from './config.js';
 
 const router = express.Router();
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
-const MAX_CATALOGUE_UPLOAD_BYTES = 110 * 1024 * 1024;
+const MAX_CATALOGUE_UPLOAD_BYTES = config.maxUploadBytes;
 const CATALOGUE_CHUNK_SIZE = 500;
 const LARGE_IMPORT_THRESHOLD_BYTES = 10 * 1024 * 1024;
 const yieldToEventLoop = () => new Promise(resolve => setImmediate(resolve));
