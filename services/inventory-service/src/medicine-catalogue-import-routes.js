@@ -234,7 +234,8 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
     }
     const oldTarget = old?.decision === 'AUTO_MERGE' ? old.targetMedicineId : '';
     const newTarget = plan.decision === 'AUTO_MERGE' ? plan.targetMedicineId : '';
-    if (oldTarget !== newTarget || (!oldTarget && newTarget) || (oldTarget && !newTarget)) {
+    const idempotentPreviouslyInsertedRecord = !oldTarget && newTarget === item.medicineId;
+    if (oldTarget !== newTarget && !idempotentPreviouslyInsertedRecord) {
       blockers.push({ medicineId: item.medicineId, brandName: item.brandName, reason: 'STALE_RECONCILIATION', previousTargetMedicineId: oldTarget, currentTargetMedicineId: newTarget, currentDecision: plan.decision });
     }
     if (['MANUAL_REVIEW', 'BLOCKED_CONFLICT'].includes(plan.decision)) {
