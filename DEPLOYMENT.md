@@ -25,7 +25,7 @@ There is no current root Render blueprint for the complete platform. Do not recr
 
 ## 2. Known environment URLs
 ~~~text
-Frontend:    https://pharma-ui.onrender.com
+Frontend:    https://pharma-1-278k.onrender.com
 API Gateway: https://pharma-api-gateway.onrender.com
 ~~~
 Treat these as deployment values, not source-code constants. Verify live availability before claiming a service is healthy.
@@ -241,7 +241,7 @@ CORS is controlled at the public Gateway.
 
 Production example:
 ~~~text
-CORS_ALLOWED_ORIGINS=https://pharma-ui.onrender.com
+CORS_ALLOWED_ORIGINS=https://pharma-1-278k.onrender.com
 ~~~
 For a custom domain, use that exact origin.
 
@@ -252,7 +252,7 @@ Do not include paths in allowed origins. Preflight OPTIONS must work.
 ## 11A. Browser authentication security contract
 The browser talks to the API Gateway through the frontend's same-origin `/api/*` rewrite for session-bound and protected APIs. The sanitized public storefront catalog is the exception: the frontend calls `VITE_API_GATEWAY_URL` directly so a static-site rewrite failure cannot break landing-page medicine loading. This endpoint does not require a session cookie or an inventory permission. The Gateway is the browser trust boundary.
 
-Set `CORS_ALLOWED_ORIGINS` on the Gateway to the exact storefront origin (for example, `https://pharma-ui.onrender.com`).
+Set `CORS_ALLOWED_ORIGINS` on the Gateway to the exact storefront origin (for example, `https://pharma-1-278k.onrender.com`).
 
 Anonymous startup:
 ~~~text

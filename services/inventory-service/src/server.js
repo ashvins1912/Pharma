@@ -24,7 +24,7 @@ app.use((req, res, next) => {
   const origin = req.get('origin');
   const allowedOrigins = new Set([
     config.corsOrigin,
-    'https://pharma-ui.onrender.com'
+    'https://pharma-1-278k.onrender.com'
   ].filter(Boolean));
   if (origin && allowedOrigins.has(origin)) {
     res.set('Access-Control-Allow-Origin', origin);

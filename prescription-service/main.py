@@ -8,7 +8,7 @@ app = FastAPI(title="Prescription Service", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://pharma-ui.onrender.com",
+        "https://pharma-1-278k.onrender.com",
         "http://localhost:3000",
         "http://localhost:5173"
     ],

@@ -5,7 +5,7 @@ export const corsOriginErrorCode = 'CORS_ORIGIN_NOT_ALLOWED';
 export function createCorsMiddleware(allowedOrigins) {
     const allowed = new Set([
         ...allowedOrigins,
-        'https://pharma-ui.onrender.com'
+        'https://pharma-1-278k.onrender.com'
     ]);
     return cors({
         origin(origin, callback) {
