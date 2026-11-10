@@ -70,7 +70,7 @@ const catalogueImportSchema = new mongoose.Schema({
   publishedCount: { type: Number, default: 0 },
   errorMessage: { type: String, default: '' }
 }, { timestamps: true });
-catalogueImportSchema.index({ dataset: 1, fileSha256: 1, createdAt: -1 });
+catalogueImportSchema.index({ dataset: 1, fileSha256: 1 }, { unique: true });
 const MedicineMaster = mongoose.models.MedicineMaster || mongoose.model('MedicineMaster', medicineMasterSchema);
 const CatalogueImport = mongoose.models.MedicineCatalogueImport || mongoose.model('MedicineCatalogueImport', catalogueImportSchema);
 
@@ -175,6 +175,8 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   const { records, rejected, duplicatesRemoved } = consolidate(tagged, dataset);
   const batchId = randomUUID();
   const fileSha256 = hash(req.file.buffer);
+  const previousBatch = await CatalogueImport.findOne({ dataset, fileSha256 }).lean();
+  if (previousBatch) return res.status(200).json({ batchId: previousBatch.batchId, dataset, status: previousBatch.status, report: previousBatch.report, sample: (previousBatch.records || []).slice(0, 8), reused: true });
   const ids = records.map(record => record.medicineId);
   const canonicalKeys = dataset === 'INDIA_MEDICINES_INFO' ? records.map(record => record.canonicalKey).filter(Boolean) : [];
   const existing = await MedicineMaster.find({ $or: [{ medicineId: { $in: ids } }, { canonicalKey: { $in: canonicalKeys } }] }, { medicineId: 1, canonicalKey: 1 }).lean();
@@ -230,6 +232,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         const targetId = current?.medicineId || item.medicineId;
         const fields = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','dosageForm','medicineType','sourceImageUrl'];
         const set = { lastImportBatchId: batch.batchId, sourcePriority: Math.min(Number(current?.sourcePriority ?? 99), item.sourcePriority) };
+        if (item.canonicalKey && !current?.canonicalKey) set.canonicalKey = item.canonicalKey;
         for (const field of fields) {
           if (item[field] && (!current?.[field] || item.sourcePriority < Number(current.sourcePriority ?? 99))) set[field] = item[field];
         }
@@ -239,13 +242,15 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         }
         if (current?.requiresPrescription === null || current?.requiresPrescription === undefined) set.requiresPrescription = item.requiresPrescription;
         set.prescriptionVerification = 'UNVERIFIED';
-        set.dataQualityStatus = current?.dataQualityStatus === 'GOOD' ? 'GOOD' : item.dataQualityStatus;
+        const qualityRank = { NEEDS_REVIEW: 1, PARTIAL: 2, GOOD: 3 };
+        set.dataQualityStatus = (qualityRank[current?.dataQualityStatus] || 0) >= (qualityRank[item.dataQualityStatus] || 0)
+          ? (current?.dataQualityStatus || item.dataQualityStatus) : item.dataQualityStatus;
         return {
           updateOne: {
             filter: { medicineId: targetId },
             update: {
               $set: set,
-              $setOnInsert: { medicineId: targetId, canonicalKey: item.canonicalKey || '', brandName: item.brandName },
+              $setOnInsert: { medicineId: targetId, canonicalKey: item.canonicalKey || '' },
               $addToSet: { sourceDatasets: item.sourceDataset, sourceRecordIds: item.sourceRecordId }
             },
             upsert: true
