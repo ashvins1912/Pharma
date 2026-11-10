@@ -16,6 +16,8 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [published, setPublished] = useState(null);
+  const [batchStatus, setBatchStatus] = useState(null);
+  const [statusBusy, setStatusBusy] = useState(false);
 
   if (!isOpen) return null;
 
@@ -23,6 +25,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     setFile(null);
     setPreview(null);
     setPublished(null);
+    setBatchStatus(null);
     setDataset('');
     setBusy(false);
   };
@@ -43,7 +46,15 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
         timeout: 600000
       });
       setPreview(response.data);
-      addToast('Catalogue dataset analyzed. Review the reconciliation report before publishing.', 'success');
+      if (response.data?.batchId) {
+        try {
+          const statusResponse = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(response.data.batchId)}`);
+          setBatchStatus(statusResponse.data);
+        } catch (statusError) {
+          addToast(statusError.response?.data?.message || 'Preview is ready, but batch status could not be loaded. Use Refresh status before publishing.', 'warning');
+        }
+      }
+      addToast('Catalogue dataset analyzed. Review the reconciliation report and batch status before publishing.', 'success');
     } catch (error) {
       addToast(error.response?.data?.message || error.response?.data?.error?.message || error.message || 'Could not analyze this JSON dataset.', 'error');
     } finally {
@@ -58,12 +69,28 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     try {
       const response = await apiClient.post(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(preview.batchId)}/publish`, {});
       setPublished(response.data);
+      try {
+        const statusResponse = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(preview.batchId)}`);
+        setBatchStatus(statusResponse.data);
+      } catch { /* Publish response remains authoritative if status refresh is temporarily unavailable. */ }
       addToast(response.data.status === 'PUBLISHED' ? 'Medicine catalogue published successfully.' : 'Catalogue import completed with a partial result.', response.data.status === 'PUBLISHED' ? 'success' : 'warning');
     } catch (error) {
       addToast(error.response?.data?.message || error.response?.data?.error?.message || error.message || 'Catalogue publishing failed.', 'error');
     } finally {
       setBusy(false);
     }
+  };
+
+  const refreshBatchStatus = async () => {
+    if (!preview?.batchId) return;
+    setStatusBusy(true);
+    try {
+      const response = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(preview.batchId)}`);
+      setBatchStatus(response.data);
+      addToast('Import batch status refreshed.', 'success');
+    } catch (error) {
+      addToast(error.response?.data?.message || error.response?.data?.error?.message || 'Could not refresh import batch status.', 'error');
+    } finally { setStatusBusy(false); }
   };
 
   const report = published?.report || preview?.report;
@@ -155,7 +182,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
           )}
         </div>
         <footer className="shrink-0 flex flex-col-reverse sm:flex-row sm:justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
-          <button type="button" onClick={preview ? () => { setPreview(null); setFile(null); setPublished(null); } : close} disabled={busy} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 disabled:opacity-50">{preview ? 'Choose another dataset' : 'Close'}</button>
+          <button type="button" onClick={preview ? () => { setPreview(null); setFile(null); setPublished(null); setBatchStatus(null); } : close} disabled={busy} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 disabled:opacity-50">{preview ? 'Choose another dataset' : 'Close'}</button>
           {!preview ? (
             <button type="button" onClick={createPreview} disabled={busy || !file} className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-50">{busy ? 'Analyzing JSON…' : 'Analyze & Preview'}</button>
           ) : !published ? (
