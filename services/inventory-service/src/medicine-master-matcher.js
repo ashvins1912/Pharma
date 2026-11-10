@@ -79,13 +79,20 @@ export function rankMedicineMasterMatches(product, candidates) {
 
   const best = eligible[0];
   const runnerUp = eligible[1];
+  const hasUnresolvedStrengthVariants = !incoming.strength
+    && new Set(eligible.map(item => normalizeIdentity(item.candidate.strength)).filter(Boolean)).size > 1;
+  const hasUnresolvedFormVariants = !incoming.dosageForm
+    && new Set(eligible.map(item => normalizeIdentity(item.candidate.dosageForm)).filter(Boolean)).size > 1;
+  const unresolvedVariant = hasUnresolvedStrengthVariants || hasUnresolvedFormVariants;
   const margin = runnerUp ? best.score - runnerUp.score : 100;
   const exactIdentity = best.exactBrand;
   const completeClinicalIdentity = Boolean(incoming.strength && incoming.dosageForm);
   const safeExact = exactIdentity
+    && !unresolvedVariant
     && (!completeClinicalIdentity || (best.strengthExact && best.formExact))
     && (!runnerUp || margin >= 8);
-  const safeStrong = best.score >= 92
+  const safeStrong = !unresolvedVariant
+    && best.score >= 92
     && best.nameScore >= 90
     && margin >= 8
     && best.exactBrand;
