@@ -29,7 +29,7 @@ import {
 } from './inventory.js';
 import { requireServiceScope } from './service-auth.js';
 import { publishInventoryChanged } from './realtimeEvents.js';
-import { queueMedicineMatch } from './medicine-match-reference.js';
+import { queueMedicineMatch } from './medicine-match-queue.js';
 
 const router = express.Router();
 const asyncHandler = handler => (req, res, next) => {
