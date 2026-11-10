@@ -29,6 +29,7 @@ import {
 } from './inventory.js';
 import { requireServiceScope } from './service-auth.js';
 import { publishInventoryChanged } from './realtimeEvents.js';
+import { queueMedicineMatch } from './medicine-match-reference.js';
 
 const router = express.Router();
 const asyncHandler = handler => (req, res, next) => {
@@ -69,6 +70,7 @@ router.post('/products', requireServiceScope('inventory.write'), asyncHandler(as
     requestId: req.requestId,
     correlationId: req.correlationId
   });
+  await queueMedicineMatch(result).catch(error => console.warn('Medicine match reference enqueue failed:', error.message));
   await publishInventoryChanged({ ...scope, reason: 'product.created' });
   return res.status(201).json(result);
 }));
@@ -83,6 +85,7 @@ router.patch('/products/:productId', requireServiceScope('inventory.write'), asy
     requestId: req.requestId,
     correlationId: req.correlationId
   });
+  await queueMedicineMatch(result).catch(error => console.warn('Medicine match reference enqueue failed:', error.message));
   await publishInventoryChanged({ ...scope, reason: 'product.updated', entityId: req.params.productId });
   return res.json(result);
 }));
