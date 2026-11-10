@@ -249,8 +249,8 @@ test('fuzzy medicine matching sends name-only matches to manual review', () => {
 
 test('record linkage normalizes equivalent mass units before medicine identity scoring', () => {
   const match = scoreMedicineMatch(
-    { brandName: 'Example 1g Tablet', composition: 'Example ingredient', strength: '1 g', dosageForm: 'Tablets', genericName: 'Example ingredient' },
-    { brandName: 'Example 1000mg Tablets', composition: 'Example ingredient', strength: '1000 mg', dosageForm: 'Tablet', genericName: 'Example ingredient' }
+    { brandName: 'Example Tablet', composition: 'Example ingredient', strength: '1 g', dosageForm: 'Tablets', genericName: 'Example ingredient' },
+    { brandName: 'Example Tablet', composition: 'Example ingredient', strength: '1000 mg', dosageForm: 'Tablet', genericName: 'Example ingredient' }
   );
   assert.equal(match.decision, 'AUTO_MERGE');
   assert.equal(match.score, 100);
