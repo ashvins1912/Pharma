@@ -3,13 +3,14 @@ import test from 'node:test';
 
 process.env.SERVICE_AUTH_SECRET = 'test-service-secret-with-more-than-thirty-two-characters';
 
-const { detectMedicineDataset, normalizeMedicineRecord } = await import('./src/medicine-catalogue-import-routes.js');
+const { detectMedicineDataset, normalizeMedicineRecord, consolidate } = await import('./src/medicine-catalogue-import-routes.js');
 const { requireServiceScope } = await import('./src/service-auth.js');
 const jwt = (await import('jsonwebtoken')).default;
 
-test('detects the two supported medicine dataset structures', () => {
+test('detects all three supported medicine dataset structures', () => {
   assert.equal(detectMedicineDataset({ count: 1, drugDetails: [{ brandIdentifier: 'B-1' }] }), 'INDIAN_MEDICINE_DATA');
   assert.equal(detectMedicineDataset([{ 'Medicine Name': 'Test', 'Product Name': 'Test Tablet' }]), 'INDIA_MEDICINES_INFO');
+  assert.equal(detectMedicineDataset([{ id: '1', name: 'Example 10mg Tablet', sideEffect0: 'Nausea', use0: 'Example use' }]), 'MEDICINES_PART_1');
   assert.throws(() => detectMedicineDataset({ records: [] }), /unsupported json/i);
 });
 
@@ -75,6 +76,62 @@ test('retail-style dataset strips scraped price text and marks prescription meta
   assert.equal('price' in result, false);
   assert.equal('expiryDate' in result, false);
   assert.equal('manufacturingDate' in result, false);
+});
+
+
+test('Medicines Part 1 preserves clinical detail, source identity and avoids invented composition', () => {
+  const result = normalizeMedicineRecord({
+    id: '682',
+    name: 'a-ret 0.025% gel',
+    substitute0: 'Tronin 0.025% Gel',
+    substitute1: 'Renol 0.025% Gel',
+    sideEffect0: 'Erythema (skin redness)',
+    sideEffect1: 'Skin irritation',
+    sideEffect2: '',
+    use0: 'Treatment of Acne',
+    use1: 'Acute promyelocytic leukaemia',
+    'Chemical Class': 'Retinoids',
+    'Habit Forming': 'No',
+    'Therapeutic Class': 'DERMA',
+    'Action Class': 'Retinoids- First generation'
+  }, 'MEDICINES_PART_1');
+
+  assert.equal(result.medicineId, 'MEDINFO-682');
+  assert.equal(result.sourceRecordId, '682');
+  assert.equal(result.brandName, 'a-ret 0.025% gel');
+  assert.equal(result.strength, '0.025%');
+  assert.equal(result.dosageForm, 'Gel');
+  assert.deepEqual(result.sideEffects, ['Erythema (skin redness)', 'Skin irritation']);
+  assert.deepEqual(result.uses, ['Treatment of Acne', 'Acute promyelocytic leukaemia']);
+  assert.deepEqual(result.suggestedAlternatives, ['Tronin 0.025% Gel', 'Renol 0.025% Gel']);
+  assert.equal(result.chemicalClass, 'Retinoids');
+  assert.equal(result.habitForming, 'NO');
+  assert.equal(result.therapeuticClass, 'DERMA');
+  assert.equal(result.actionClass, 'Retinoids- First generation');
+  assert.equal(result.composition, '');
+  assert.equal(result.manufacturer, '');
+  assert.equal(result.sourceImageUrl, '');
+  assert.equal(result.dataQualityStatus, 'PARTIAL');
+  assert.equal('price' in result, false);
+  assert.equal('expiryDate' in result, false);
+  assert.equal('manufacturingDate' in result, false);
+});
+
+test('Medicines Part 1 removes placeholder metadata and deduplicates only exact matching rows', () => {
+  const first = {
+    id: '1', name: 'Brand 10mg Tablet', substitute0: 'Brand B Tablet',
+    sideEffect0: 'Nausea', use0: 'Treatment A', 'Chemical Class': 'NA',
+    'Habit Forming': 'No', 'Therapeutic Class': 'CARDIAC', 'Action Class': 'NA'
+  };
+  const duplicate = { ...first, id: '2' };
+  const conflict = { ...first, id: '3', sideEffect0: 'Headache' };
+  const result = consolidate([first, duplicate, conflict].map(item => ({ ...item, __dataset: 'MEDICINES_PART_1' })), 'MEDICINES_PART_1');
+
+  assert.equal(result.records.length, 2);
+  assert.equal(result.duplicatesRemoved, 1);
+  assert.deepEqual(result.records[0].sourceRecordIds, ['1', '2']);
+  assert.equal(result.records[0].chemicalClass, '');
+  assert.equal(result.records[1].sideEffects[0], 'Headache');
 });
 
 test('catalogue import scope is valid without a tenant or branch identity', async () => {
