@@ -41,6 +41,21 @@ This workflow writes only the shared MedicineMaster collection in the Inventory 
 
 The master record retains source datasets, all source record IDs (including IDs folded during exact duplicate cleanup), import batch, data quality state, clinical verification state and source-license verification state. The new 50,000-record source does not supply composition or manufacturer, so those fields remain blank unless another trusted source already provides them. Source licensing/provenance must be cleared before commercial redistribution or customer-facing use. Catalogue consumers should continue to treat unverified clinical/regulatory fields as informational until checked against authoritative sources.
 
+## Intelligent multi-batch reconciliation
+
+Every later upload is reconciled against the already-published shared Medicine Master catalogue, so independently uploaded source datasets can enrich the same canonical medicine record instead of creating a second record when the identity is sufficiently clear.
+
+The matcher uses a FuzzyWuzzy-style token-sort similarity score implemented in the inventory service (no runtime Python dependency). It combines normalized brand-name similarity with composition, strength and dosage-form checks. Exact medicine IDs and exact canonical keys take precedence.
+
+- **Automatic fuzzy merge:** only when both records provide comparable composition, composition similarity is at least 94, brand-name similarity is at least 92, the weighted score is at least 96, and any available generic names agree sufficiently.
+- **Manual review candidate:** plausible name match but insufficient evidence for a safe automatic merge. These records are not automatically merged.
+- **Blocked conflict:** differing known composition, strength or dosage form prevents fuzzy auto-merge.
+- **New record:** no sufficiently similar existing record is found.
+
+The report includes fuzzy auto-merge count, manual-review count, unmatched count, candidate medicine ID, score and warnings. Candidate search is bounded (120 two-character prefixes and 5,000 existing candidates); when that bound is reached the report marks the scan as truncated, so absence of a match is not proof that no duplicate exists.
+
+For an automatic merge, existing master medicine ID is preserved; the incoming medicine ID is retained as a legacy ID and source provenance is accumulated. Empty descriptive fields are enriched and list metadata is deduplicated. Source priority remains in force for conflicting scalar values. Clinical verification, prescription verification and licence status are never promoted by matching or merging. Tenant prices, stock, branch batches, MRP and expiry are outside this workflow.
+
 ## Review, approval and published catalogue management
 
 1. Upload a dataset and inspect the reconciliation report. It is staged and does not change live catalogue records.
