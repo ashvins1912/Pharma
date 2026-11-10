@@ -228,11 +228,11 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         items: checkoutItems
       });
       fulfillmentPlanForCheckout = availability.data;
-      const currentPlanSignature = JSON.stringify((availability.data.lines || []).map(line => ({
+      const currentPlanSignature = JSON.stringify({ branchId: availability.data.branchId, routing: availability.data.routing?.strategy, lines: (availability.data.lines || []).map(line => ({
         productId: line.productId, requested: line.requestedQuantity,
         available: line.fulfilNowQuantity, waiting: line.waitingQuantity, unitPrice: line.unitPrice,
         alternatives: (line.alternatives || []).map(option => ({ id: option.productId, price: option.discountedUnitPrice, listPrice: option.listPrice, requiresPharmacistApproval: option.requiresPharmacistApproval }))
-      })));
+      })) });
       if (availability.data.customerDecisionRequired && (!fulfillmentConfirmed || currentPlanSignature !== fulfillmentPlanSignature)) {
         if (currentPlanSignature !== fulfillmentPlanSignature) setWaitlistKey('');
         setFulfillmentPlan(availability.data);
