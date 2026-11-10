@@ -86,22 +86,25 @@ export default function ModalAccessibilityManager() {
       queued = false;
       const nextDialog = getTopmostDialog();
       if (nextDialog === activeDialog) return;
+      const originalReturnFocus = returnFocusTo;
 
       if (activeDialog) {
         restoreBackground();
         document.body.style.overflow = bodyOverflow;
         document.documentElement.style.overflow = htmlOverflow;
-        const previous = returnFocusTo;
         activeDialog = null;
         returnFocusTo = null;
-        if (!nextDialog && previous?.isConnected && !previous.closest('[inert]')) {
-          previous.focus?.({ preventScroll: true });
+        if (!nextDialog && originalReturnFocus?.isConnected && !originalReturnFocus.closest('[inert]')) {
+          originalReturnFocus.focus?.({ preventScroll: true });
         }
       }
 
       if (!nextDialog) return;
       activeDialog = nextDialog;
-      returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      // Preserve the original opener when dialogs are stacked or replaced.
+      returnFocusTo = originalReturnFocus?.isConnected
+        ? originalReturnFocus
+        : (document.activeElement instanceof HTMLElement ? document.activeElement : null);
       bodyOverflow = document.body.style.overflow;
       htmlOverflow = document.documentElement.style.overflow;
       document.body.style.overflow = 'hidden';
@@ -119,7 +122,20 @@ export default function ModalAccessibilityManager() {
     };
 
     const onKeyDown = event => {
-      if (!activeDialog || !activeDialog.isConnected || event.key !== 'Tab') return;
+      if (!activeDialog || !activeDialog.isConnected) return;
+      if (event.key === 'Escape') {
+        // Existing modal handlers take priority; otherwise activate a safe,
+        // explicitly labelled close/dismiss control when one is available.
+        window.queueMicrotask(() => {
+          if (event.defaultPrevented || !activeDialog?.isConnected) return;
+          const closeControl = activeDialog.querySelector(
+            '[data-modal-close], button[aria-label*="close" i], button[title*="close" i], button[aria-label*="dismiss" i]'
+          ) || getFocusable(activeDialog).find(element => /^(close|dismiss|cancel|×|✕)$/i.test((element.innerText || element.getAttribute('aria-label') || '').trim()));
+          closeControl?.click();
+        });
+        return;
+      }
+      if (event.key !== 'Tab') return;
       const items = getFocusable(activeDialog);
       if (!items.length) {
         event.preventDefault();
