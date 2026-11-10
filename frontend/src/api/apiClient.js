@@ -216,6 +216,7 @@ apiClient.interceptors.request.use(async (config) => {
 
     const isPublicDiscoveryRoute = config.method?.toLowerCase() === 'get' && (
         /\/api\/(?:v1\/)?(?:tenants|tenant|branch|branches|medicines|catalog|surplus-savings)(\/|$)/.test(String(config.url || '')) ||
+        /\/api\/v1\/inventory\/catalogue\/medicines\/match$/.test(String(config.url || '')) ||
         /\/api\/tenants\/nearby/.test(String(config.url || ''))
     );
 
