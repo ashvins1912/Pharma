@@ -258,16 +258,21 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                 {metric('Missing composition', report.missingComposition)}
                 {metric('Missing manufacturer', report.missingManufacturer)}
                 {metric('Need review', report.needsReview)}
+                {metric('Average quality score', `${report.averageQualityScore || 0}%`)}
+                {metric('Excellent quality', report.excellentQualityRecords)}
+                {metric('Good quality', report.goodQualityRecords)}
+                {metric('Partial quality', report.partialQualityRecords)}
+                {metric('Quality needs review', report.needsReviewQualityRecords)}
               </div>
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-950">
-                Clinical uses, side effects, habit-forming flags and suggested alternatives are source-provided and unverified; they are informational, not prescribing guidance. Suggested alternatives are not confirmed therapeutic equivalents. Prescription flags and source licensing remain unverified. Confirm dataset redistribution rights before commercial use. Third-party image URLs are not trusted or served as product images.
+                Quality scores measure supplied-field completeness and consistency, not clinical correctness or regulatory approval. Missing fields are reported rather than invented. Clinical uses, side effects, habit-forming flags and suggested alternatives are source-provided and unverified; they are informational, not prescribing guidance. Suggested alternatives are not confirmed therapeutic equivalents. Prescription flags and source licensing remain unverified. Confirm dataset redistribution rights before commercial use. Third-party image URLs are not trusted or served as product images.
               </div>
               {preview?.sample?.length > 0 && (
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
                   <table className="w-full min-w-[920px] text-left text-xs">
-                    <thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Medicine</th><th className="p-3">Composition</th><th className="p-3">Strength / Form</th><th className="p-3">Therapeutic class</th><th className="p-3">Uses / Side effects</th><th className="p-3">Manufacturer</th><th className="p-3">Quality</th></tr></thead>
+                    <thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Medicine</th><th className="p-3">Composition</th><th className="p-3">Strength / Form</th><th className="p-3">Therapeutic class</th><th className="p-3">Uses / Side effects</th><th className="p-3">Manufacturer</th><th className="p-3">Quality score</th><th className="p-3">Quality issues</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
-                      {preview.sample.map(item => <tr key={item.medicineId}><td className="p-3 font-bold text-slate-800">{item.brandName}</td><td className="p-3 text-slate-600">{item.composition || 'Not supplied'}</td><td className="p-3 text-slate-600">{[item.strength, item.dosageForm, item.packSize].filter(Boolean).join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.therapeuticClass || '—'}</td><td className="p-3 text-slate-600">{[...(item.uses || []).slice(0, 2), ...(item.sideEffects || []).slice(0, 2)].join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.manufacturer || 'Not supplied'}</td><td className="p-3">{item.dataQualityStatus}</td></tr>)}
+                      {preview.sample.map(item => <tr key={item.medicineId}><td className="p-3 font-bold text-slate-800">{item.brandName}</td><td className="p-3 text-slate-600">{item.composition || 'Not supplied'}</td><td className="p-3 text-slate-600">{[item.strength, item.dosageForm, item.packSize].filter(Boolean).join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.therapeuticClass || '—'}</td><td className="p-3 text-slate-600">{[...(item.uses || []).slice(0, 2), ...(item.sideEffects || []).slice(0, 2)].join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.manufacturer || 'Not supplied'}</td><td className="p-3 font-bold tabular-nums">{Number(item.qualityScore || 0)}% · {item.qualityGrade || item.dataQualityStatus}</td><td className="p-3 text-slate-600">{(item.qualityIssues || []).slice(0, 4).join(', ') || 'No detected gaps'}</td></tr>)}
                     </tbody>
                   </table>
                 </div>
