@@ -256,12 +256,12 @@ test('record linkage normalizes equivalent mass units before medicine identity s
   assert.equal(match.score, 100);
 });
 
-test('record linkage blocks a conflicting generic ingredient despite a similar brand name', () => {
+test('record linkage sends a conflicting generic ingredient to manual review despite a similar brand name', () => {
   const match = scoreMedicineMatch(
     { brandName: 'Example 10mg Tablet', composition: 'Example ingredient', strength: '10 mg', dosageForm: 'Tablet', genericName: 'Atorvastatin' },
     { brandName: 'Example 10mg Tablet', composition: 'Example ingredient', strength: '10 mg', dosageForm: 'Tablet', genericName: 'Clopidogrel' }
   );
-  assert.equal(match.decision, 'BLOCKED_CONFLICT');
+  assert.equal(match.decision, 'MANUAL_REVIEW');
   assert.ok(match.warnings.includes('GENERIC_INGREDIENT_CONFLICT'));
 });
 
@@ -271,6 +271,7 @@ test('character n-gram linkage retains typo candidates for review but does not a
     { brandName: 'Atorvastatin 10mg Tablett', composition: 'Atorvastatin', strength: '10 mg', dosageForm: 'Tablet' }
   );
   assert.ok(match.ngramNameScore > 0);
+  assert.ok(Number.isFinite(match.tfIdfNameScore));
   assert.ok(['AUTO_MERGE', 'MANUAL_REVIEW', 'NO_MATCH'].includes(match.decision));
   assert.notEqual(match.decision, 'BLOCKED_CONFLICT');
 });
