@@ -602,35 +602,41 @@ router.post('/imports/merge', asyncHandler(async (req, res) => {
   const allChunks = await CatalogueImportChunk.find({ batchId: { $in: sourceBatchIds } }).sort({ batchId: 1, chunkIndex: 1 }).lean();
   const rawRecords = allChunks.flatMap(chunk => chunk.records || []);
   if (!rawRecords.length) return res.status(409).json({ message: 'Selected batches contain no staged medicine records.' });
-  const mergedByIdentity = new Map();
-  const pending = [];
+  const exactGroups = new Map();
   let exactMerged = 0, fuzzyMerged = 0;
   const reviewCandidates = [];
   for (const record of rawRecords) {
     const identity = record.canonicalKey ? 'KEY:' + record.canonicalKey : 'ID:' + record.medicineId;
-    const existing = mergedByIdentity.get(identity);
-    if (existing) { mergedByIdentity.set(identity, mergeStagedMedicine(existing, record)); exactMerged += 1; continue; }
+    const existing = exactGroups.get(identity);
+    if (existing) { exactGroups.set(identity, mergeStagedMedicine(existing, record)); exactMerged += 1; }
+    else exactGroups.set(identity, record);
+  }
+  const pending = [];
+  const pendingByPrefix = new Map();
+  let fuzzyScanTruncated = false;
+  for (const record of exactGroups.values()) {
     const prefix = key(record.brandName).slice(0, 2);
     let best = null;
     if (prefix.length === 2) {
-      for (const candidate of pending) {
-        if (key(candidate.brandName).slice(0, 2) !== prefix) continue;
+      const candidates = pendingByPrefix.get(prefix) || [];
+      if (candidates.length > 200) fuzzyScanTruncated = true;
+      for (const candidate of candidates.slice(0, 200)) {
         const score = scoreMedicineMatch(record, candidate);
         if (!best || score.score > best.score) best = { candidate, ...score };
       }
     }
     if (best?.decision === 'AUTO_MERGE') {
-      const previousIdentity = best.candidate.canonicalKey ? 'KEY:' + best.candidate.canonicalKey : 'ID:' + best.candidate.medicineId;
-      const combined = mergeStagedMedicine(best.candidate, record);
       const index = pending.indexOf(best.candidate);
-      pending[index] = combined;
-      mergedByIdentity.set(previousIdentity, combined);
-      if (combined.canonicalKey) mergedByIdentity.set('KEY:' + combined.canonicalKey, combined);
+      const combined = mergeStagedMedicine(best.candidate, record);
+      if (index >= 0) pending[index] = combined;
+      const candidates = pendingByPrefix.get(prefix) || [];
+      const candidateIndex = candidates.indexOf(best.candidate);
+      if (candidateIndex >= 0) candidates[candidateIndex] = combined;
       fuzzyMerged += 1;
     } else {
       if (best?.decision === 'MANUAL_REVIEW') reviewCandidates.push({ incomingMedicine: record.brandName, candidateMedicine: best.candidate.brandName, candidateMedicineId: best.candidate.medicineId, score: best.score, warnings: best.warnings });
       pending.push(record);
-      mergedByIdentity.set(identity, record);
+      if (prefix.length === 2) pendingByPrefix.set(prefix, [...(pendingByPrefix.get(prefix) || []), record]);
     }
   }
   const records = pending;
@@ -643,6 +649,7 @@ router.post('/imports/merge', asyncHandler(async (req, res) => {
     unmatchedRecords: Math.max(0, records.length - reviewCandidates.length),
     sourceBatchCount: batches.length, sourceBatchIds,
     fuzzyMatchExamples: reviewCandidates.slice(0, 25).map(item => ({ incomingMedicine: item.incomingMedicine, matchedMedicineId: item.candidateMedicineId, score: item.score, decision: 'MANUAL_REVIEW', warnings: item.warnings })),
+    fuzzyCandidateScanTruncated: fuzzyScanTruncated,
     averageQualityScore: records.length ? Math.round(records.reduce((sum, item) => sum + Number(item.qualityScore || 0), 0) / records.length) : 0
   };
   const reportFingerprint = hash(JSON.stringify(report));
