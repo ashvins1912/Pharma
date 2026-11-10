@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 import { config, validateConfig } from './config.js';
 import routes from './routes.js';
 import stagedImportRoutes from './staged-import-routes.js';
-import medicineCatalogueImportRoutes, { initializeMedicineCatalogueModels } from './medicine-catalogue-import-routes.js';
+import medicineCatalogueImportRoutes, { initializeMedicineCatalogueModels, stopMedicineCatalogueImportWorker } from './medicine-catalogue-import-routes.js';
 import medicineCatalogueRoutes from './medicine-catalogue-routes.js';
 import { StagedImportBatch, StagedImportRow } from './staged-import-models.js';
 import { Audit, ImportBatch, ImportBatchSnapshot, ImportFailure, ImportJob, Inventory, Product, Reservation } from './models.js';
@@ -113,6 +113,7 @@ const server = app.listen(config.port, '0.0.0.0', () => {
 });
 
 const shutdown = async () => {
+  stopMedicineCatalogueImportWorker();
   server.close();
   await mongoose.disconnect();
 };
