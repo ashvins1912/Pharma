@@ -471,6 +471,16 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   return res.status(201).json({ batchId, dataset, status: 'READY', report, reportFingerprint, sample: records.slice(0, 8) });
 }));
 
+router.get('/imports', asyncHandler(async (req, res) => {
+  const page = Math.max(1, Math.min(1000, Number.parseInt(req.query.page || '1', 10) || 1));
+  const limit = Math.max(1, Math.min(50, Number.parseInt(req.query.limit || '10', 10) || 10));
+  const [items, total] = await Promise.all([
+    CatalogueImport.find({}, { batchId: 1, dataset: 1, fileName: 1, status: 1, recordCount: 1, report: 1, publishedCount: 1, approvedAt: 1, approvedBy: 1, errorMessage: 1, createdAt: 1 }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+    CatalogueImport.countDocuments({})
+  ]);
+  return res.json({ items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+}));
+
 router.get('/imports/:batchId', asyncHandler(async (req, res) => {
   const batch = await CatalogueImport.findOne({ batchId: req.params.batchId }).lean();
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
