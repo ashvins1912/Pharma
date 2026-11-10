@@ -25,8 +25,7 @@ export function rankMedicineMasterMatches(product, candidates) {
     genericName: String(product?.genericName || '').trim(),
     composition: String(product?.composition || '').trim(),
     strength: String(product?.strength || '').trim(),
-    dosageForm: String(product?.dosageForm || product?.form || '').trim(),
-    manufacturer: String(product?.manufacturer || '').trim()
+    dosageForm: String(product?.dosageForm || product?.form || '').trim()
   };
 
   if (!incoming.brandName && !incoming.genericName && !incoming.composition) {
@@ -55,9 +54,6 @@ export function rankMedicineMasterMatches(product, candidates) {
     const score = Math.round(
       evidence.score * 0.72
       + (exactBrand ? 18 : exactGeneric ? 10 : 0)
-      + (incoming.manufacturer && candidate.manufacturer
-        ? (normalizeIdentity(incoming.manufacturer) === normalizeIdentity(candidate.manufacturer) ? 4 : -4)
-        : 0)
     );
     return {
       candidate,
