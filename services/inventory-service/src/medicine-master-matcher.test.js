@@ -62,3 +62,75 @@ test('returns no match for an empty store identity', () => {
   assert.equal(result.status, 'NO_MATCH');
   assert.equal(result.candidatesChecked, 0);
 });
+
+test('manufacturer differences do not affect product matching or confidence', () => {
+  const incoming = storeProduct({ manufacturer: 'Different Manufacturer' });
+  const candidate = master({ manufacturer: 'Original Manufacturer' });
+  const result = rankMedicineMasterMatches(incoming, [candidate]);
+  const sameManufacturerResult = rankMedicineMasterMatches(
+    storeProduct({ manufacturer: 'Original Manufacturer' }),
+    [candidate]
+  );
+  assert.equal(result.status, 'EXACT');
+  assert.equal(result.medicine.medicineId, 'master-001');
+  assert.equal(result.confidence, sameManufacturerResult.confidence);
+});
+
+test('missing manufacturer does not prevent an otherwise safe product match', () => {
+  const result = rankMedicineMasterMatches(storeProduct({ manufacturer: '' }), [master()]);
+  assert.equal(result.status, 'EXACT');
+  assert.equal(result.medicine.medicineId, 'master-001');
+});
+
+test('surfaces a shared brand stem as a review candidate without auto-linking suffix variants', () => {
+  const result = rankMedicineMasterMatches(
+    storeProduct({
+      name: 'Aceflam S',
+      brand: 'Aceflam',
+      genericName: '',
+      composition: '',
+      strength: '',
+      dosageForm: ''
+    }),
+    [master({
+      medicineId: 'aceflam-p',
+      brandName: "ACEFLAM P TABLET 10'S",
+      productName: "ACEFLAM P TABLET 10'S",
+      genericName: '',
+      composition: '',
+      strength: '',
+      dosageForm: ''
+    })]
+  );
+
+  assert.equal(result.status, 'NO_CONFIDENT_MATCH');
+  assert.equal(result.medicine, null);
+  assert.equal(result.alternatives[0].brandName, "ACEFLAM P TABLET 10'S");
+  assert.equal(result.alternatives[0].matchReason, 'SHARED_BRAND_STEM_REVIEW_REQUIRED');
+});
+
+test('shared brand stems never override known composition or strength conflicts', () => {
+  const result = rankMedicineMasterMatches(
+    storeProduct({
+      name: 'Aceflam S',
+      brand: 'Aceflam',
+      genericName: 'Diclofenac',
+      composition: 'Diclofenac 50 mg',
+      strength: '50 mg',
+      dosageForm: 'Tablet'
+    }),
+    [master({
+      medicineId: 'aceflam-p',
+      brandName: "ACEFLAM P TABLET 10'S",
+      productName: "ACEFLAM P TABLET 10'S",
+      genericName: 'Aceclofenac + Paracetamol',
+      composition: 'Aceclofenac 100 mg + Paracetamol 325 mg',
+      strength: '100 mg',
+      dosageForm: 'Tablet'
+    })]
+  );
+
+  assert.equal(result.status, 'NO_MATCH');
+  assert.equal(result.medicine, null);
+  assert.equal(result.alternatives, undefined);
+});

@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { matchStoreMedicineToMaster } from '../api/medicineMasterService';
+import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 
 const listFields = [
   ['indications', 'Indications'],
@@ -30,6 +32,8 @@ function DetailSection({ title, values }) {
 
 export default function MedicineDetailsModal({ product, onClose }) {
   const { t } = useLanguage();
+  const { cart, addToCart, updateQuantity } = useApp();
+  const { user } = useAuth();
   const [match, setMatch] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -69,6 +73,10 @@ export default function MedicineDetailsModal({ product, onClose }) {
   if (!product || typeof document === 'undefined') return null;
   const medicine = match?.medicine;
   const stock = Number(product.availableQuantity ?? product.quantity ?? product.stock ?? 0);
+  const cartItem = cart.find(item => String(item._id) === String(product._id));
+  const cartQty = cartItem?.quantity || 0;
+  const maxCartQuantity = stock > 0 && stock <= 5 ? stock + 5 : stock;
+  const canAddToCart = Boolean(user && product._id && stock > 0 && !product.isExpired);
   const price = Number(product.price ?? product.sellingPrice ?? 0);
   const showClinicalWarning = medicine && (
     medicine.clinicalDataVerification !== 'VERIFIED'
@@ -99,10 +107,6 @@ export default function MedicineDetailsModal({ product, onClose }) {
               <p className="text-[10px] font-bold uppercase text-blue-700">{t('priceLabel')}</p>
               <p className="mt-1 text-lg font-black text-blue-950">₹{price.toFixed(2)}</p>
             </div>
-            <div className="rounded-2xl bg-slate-50 p-3">
-              <p className="text-[10px] font-bold uppercase text-slate-500">{t('availability')}</p>
-              <p className="mt-1 text-sm font-extrabold text-slate-900">{stock > 0 ? `${stock} ${t('inStockUnits')}` : t('soldOutBadge')}</p>
-            </div>
             <div className="col-span-2 rounded-2xl bg-slate-50 p-3 sm:col-span-1">
               <p className="text-[10px] font-bold uppercase text-slate-500">{t('manufacturer')}</p>
               <p className="mt-1 break-words text-sm font-extrabold text-slate-900">{medicine?.manufacturer || product.manufacturer || '—'}</p>
@@ -117,9 +121,12 @@ export default function MedicineDetailsModal({ product, onClose }) {
               <h3 className="text-sm font-extrabold text-amber-950">{match?.status === 'AMBIGUOUS' || match?.status === 'NO_CONFIDENT_MATCH' ? t('catalogueMatchNeedsReview') : t('catalogueDetailsNotLinked')}</h3>
               <p className="mt-1 text-xs leading-5 text-amber-900">{t('catalogueMatchSafetyNote')}</p>
               {Array.isArray(match?.alternatives) && match.alternatives.length > 0 && (
+                <>
                 <ul className="mt-3 space-y-2">
-                  {match.alternatives.map((item, index) => <li key={index} className="rounded-xl bg-white/80 p-2 text-xs text-slate-700"><strong>{item.brandName}</strong>{item.genericName ? ` · ${item.genericName}` : ''}{item.strength ? ` · ${item.strength}` : ''}{item.dosageForm ? ` · ${item.dosageForm}` : ''}</li>)}
+                  {match.alternatives.map((item, index) => <li key={index} className="rounded-xl bg-white/80 p-3 text-xs text-slate-700"><div><strong>{item.brandName}</strong>{item.genericName ? ` · ${item.genericName}` : ''}{item.strength ? ` · ${item.strength}` : ''}{item.dosageForm ? ` · ${item.dosageForm}` : ''}</div>{item.matchReason === 'SHARED_BRAND_STEM_REVIEW_REQUIRED' && <p className="mt-1 text-[10px] font-bold text-amber-800">Shared brand stem · manual confirmation required</p>}</li>)}
                 </ul>
+                {canAddToCart && <div className="mt-3 flex justify-end">{cartQty > 0 ? <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-1"><button type="button" onClick={() => updateQuantity(product._id, -1)} aria-label={t('decreaseQuantity')} className="h-9 w-9 rounded-lg font-black text-blue-800 hover:bg-blue-100">−</button><span className="min-w-6 text-center text-sm font-extrabold text-blue-900 tabular-nums">{cartQty}</span><button type="button" onClick={() => updateQuantity(product._id, 1)} disabled={cartQty >= (cartItem?.maxCartQuantity || maxCartQuantity)} aria-label={t('increaseQuantity')} className="h-9 w-9 rounded-lg font-black text-blue-800 hover:bg-blue-100 disabled:opacity-30">+</button></div> : <button type="button" onClick={() => addToCart(product)} className="min-h-10 rounded-xl bg-blue-600 px-4 py-2 text-xs font-extrabold text-white hover:bg-blue-700">+ {t('addToCart')}</button>}</div>}
+                </>
               )}
             </div>
           )}

@@ -8,6 +8,11 @@ const normalizeIdentity = value => String(value ?? '')
   .trim()
   .replace(/\s+/g, ' ');
 
+const getBrandStem = value => {
+  const stem = normalizeIdentity(value).split(' ')[0] || '';
+  return stem.length >= 4 && !/^(tablet|capsule|caplet|syrup|suspension|injection|cream|ointment|drops?)$/.test(stem) ? stem : '';
+};
+
 const CONFLICT_WARNINGS = new Set([
   'STRENGTH_CONFLICT',
   'DOSAGE_FORM_CONFLICT',
@@ -25,8 +30,7 @@ export function rankMedicineMasterMatches(product, candidates) {
     genericName: String(product?.genericName || '').trim(),
     composition: String(product?.composition || '').trim(),
     strength: String(product?.strength || '').trim(),
-    dosageForm: String(product?.dosageForm || product?.form || '').trim(),
-    manufacturer: String(product?.manufacturer || '').trim()
+    dosageForm: String(product?.dosageForm || product?.form || '').trim()
   };
 
   if (!incoming.brandName && !incoming.genericName && !incoming.composition) {
@@ -40,6 +44,9 @@ export function rankMedicineMasterMatches(product, candidates) {
     const candidateNameKeys = [candidate.brandName, candidate.productName]
       .map(normalizeIdentity).filter(Boolean);
     const exactBrand = incomingNameKeys.some(name => candidateNameKeys.includes(name));
+    const incomingStems = [...new Set(incomingNameKeys.map(getBrandStem).filter(Boolean))];
+    const candidateStems = [...new Set(candidateNameKeys.map(getBrandStem).filter(Boolean))];
+    const brandStemMatch = incomingStems.some(stem => candidateStems.includes(stem)) && !exactBrand;
     const exactGeneric = normalizeIdentity(incoming.genericName) !== ''
       && normalizeIdentity(incoming.genericName) === normalizeIdentity(candidate.genericName);
     const packSizeConflict = Boolean(product?.packSize && candidate.packSize
@@ -52,18 +59,20 @@ export function rankMedicineMasterMatches(product, candidates) {
     const formComparable = Boolean(incoming.dosageForm && candidate.dosageForm);
     const strengthExact = !strengthComparable || evidence.warnings.includes('STRENGTH_CONFLICT') === false;
     const formExact = !formComparable || evidence.warnings.includes('DOSAGE_FORM_CONFLICT') === false;
+    // A shared leading brand token is useful candidate-discovery evidence, not proof
+    // of product identity: suffixes (e.g. ACEFLAM S vs ACEFLAM P) can denote
+    // clinically different products and must remain in manual review.
+    const nameScore = brandStemMatch ? Math.max(evidence.nameScore, 88) : evidence.nameScore;
     const score = Math.round(
-      evidence.score * 0.72
-      + (exactBrand ? 18 : exactGeneric ? 10 : 0)
-      + (incoming.manufacturer && candidate.manufacturer
-        ? (normalizeIdentity(incoming.manufacturer) === normalizeIdentity(candidate.manufacturer) ? 4 : -4)
-        : 0)
+      Math.max(evidence.score, brandStemMatch ? 88 : 0) * 0.72
+      + (exactBrand ? 18 : brandStemMatch ? 14 : exactGeneric ? 10 : 0)
     );
     return {
       candidate,
       score: Math.min(100, score),
-      nameScore: evidence.nameScore,
+      nameScore,
       exactBrand,
+      brandStemMatch,
       exactGeneric,
       conflicts,
       strengthExact,
@@ -108,7 +117,8 @@ export function rankMedicineMasterMatches(product, candidates) {
         genericName: item.candidate.genericName,
         strength: item.candidate.strength,
         dosageForm: item.candidate.dosageForm,
-        score: item.score
+        score: item.score,
+        matchReason: item.brandStemMatch ? 'SHARED_BRAND_STEM_REVIEW_REQUIRED' : 'FUZZY_CANDIDATE_REVIEW_REQUIRED'
       }))
     };
   }

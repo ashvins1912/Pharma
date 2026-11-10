@@ -18,5 +18,12 @@ test('keeps different strengths and dosage forms in separate match references', 
 
 test('does not create a match identity for an empty product', () => {
   const result = medicineMatchIdentity({});
-  assert.equal(result.normalizedIdentity, '|||||||');
+  assert.equal(result.normalizedIdentity, '||||||');
+});
+
+test('manufacturer is excluded from the persistent match-reference identity', () => {
+  const first = medicineMatchIdentity({ name: 'Aceflam S', brand: 'Aceflam', manufacturer: 'Manufacturer A' });
+  const second = medicineMatchIdentity({ name: 'Aceflam S', brand: 'Aceflam', manufacturer: 'Manufacturer B' });
+  assert.equal(first.identityHash, second.identityHash);
+  assert.equal(first.normalizedIdentity, second.normalizedIdentity);
 });
