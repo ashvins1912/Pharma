@@ -1,4 +1,4 @@
-import { scoreMedicineMatch } from './medicine-catalogue-import-routes.js';
+import { scoreMedicineMatch } from './medicine-match-scoring.js';
 
 const normalizeIdentity = value => String(value ?? '')
   .normalize('NFKD')
