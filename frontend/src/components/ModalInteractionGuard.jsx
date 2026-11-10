@@ -6,7 +6,7 @@ function getTopmostModal() {
     .filter((element) => {
       const style = window.getComputedStyle(element);
       return style.display !== 'none' && style.visibility !== 'hidden' &&
-        style.pointerEvents !== 'none' && Number(style.opacity || 1) > 0;
+        style.pointerEvents !== 'none' && !element.hasAttribute('hidden');
     })
     .sort((a, b) => {
       const za = Number.parseInt(window.getComputedStyle(a).zIndex, 10) || 0;
