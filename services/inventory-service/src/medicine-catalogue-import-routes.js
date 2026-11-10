@@ -612,6 +612,7 @@ router.post('/imports/merge', asyncHandler(async (req, res) => {
     else exactGroups.set(identity, record);
   }
   const pending = [];
+  const pendingIndexByRecord = new Map();
   const pendingByPrefix = new Map();
   let fuzzyScanTruncated = false;
   for (const record of exactGroups.values()) {
@@ -626,15 +627,16 @@ router.post('/imports/merge', asyncHandler(async (req, res) => {
       }
     }
     if (best?.decision === 'AUTO_MERGE') {
-      const index = pending.indexOf(best.candidate);
+      const index = pendingIndexByRecord.get(best.candidate);
       const combined = mergeStagedMedicine(best.candidate, record);
-      if (index >= 0) pending[index] = combined;
+      if (index !== undefined) { pending[index] = combined; pendingIndexByRecord.delete(best.candidate); pendingIndexByRecord.set(combined, index); }
       const candidates = pendingByPrefix.get(prefix) || [];
       const candidateIndex = candidates.indexOf(best.candidate);
       if (candidateIndex >= 0) candidates[candidateIndex] = combined;
       fuzzyMerged += 1;
     } else {
       if (best?.decision === 'MANUAL_REVIEW') reviewCandidates.push({ incomingMedicine: record.brandName, candidateMedicine: best.candidate.brandName, candidateMedicineId: best.candidate.medicineId, score: best.score, warnings: best.warnings });
+      pendingIndexByRecord.set(record, pending.length);
       pending.push(record);
       if (prefix.length === 2) pendingByPrefix.set(prefix, [...(pendingByPrefix.get(prefix) || []), record]);
     }
