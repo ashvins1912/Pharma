@@ -126,7 +126,7 @@ export function normalizeMedicineRecord(raw, dataset) {
   };
 }
 
-function consolidate(records) {
+function consolidate(records, dataset) {
   const unique = new Map();
   let rejected = 0;
   for (const raw of records) {
@@ -164,7 +164,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   const sourceRows = dataset === 'INDIAN_MEDICINE_DATA' ? payload.drugDetails : payload;
   if (!Array.isArray(sourceRows) || sourceRows.length > 25000) return res.status(413).json({ message: 'Dataset must contain between 1 and 25,000 records.' });
   const tagged = sourceRows.map(record => ({ ...record, __dataset: dataset }));
-  const { records, rejected, duplicatesRemoved } = consolidate(tagged);
+  const { records, rejected, duplicatesRemoved } = consolidate(tagged, dataset);
   const batchId = randomUUID();
   const fileSha256 = hash(req.file.buffer);
   const ids = records.map(record => record.medicineId);
