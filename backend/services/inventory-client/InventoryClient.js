@@ -143,7 +143,8 @@ export const inventoryClient = {
       userId,
       scopes: ['inventory.reserve'],
       data: { orderId, items, tenantId, branchId },
-      idempotencyKey
+      idempotencyKey,
+      timeout: 30_000
     });
   },
 
