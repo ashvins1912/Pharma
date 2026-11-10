@@ -141,7 +141,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                       </td>
                       <td className="py-3.5 px-3">
                         {getStatusBadge(order.orderStatus)}
-                        {order.fulfillmentState === 'PARTIAL' && <p className="mt-1 text-[10px] font-bold text-amber-700">Available items are in this order. Remaining items are on stock watch; no order is placed for them until you confirm when stock returns.</p>}
+                        {order.fulfillmentState === 'PARTIAL' && <p className="mt-1 text-[10px] font-bold text-amber-700">{t('stockPartialOrder')}</p>}
                         {order.fulfillmentState === 'COMPLETE' && <p className="mt-1 text-[10px] font-bold text-emerald-700">All split items fulfilled</p>}
                         {order.fulfillmentState === 'CANCELLED_REMAINDER' && <p className="mt-1 text-[10px] font-bold text-slate-600">Remaining items cancelled at your request</p>}
                         {order.fulfillmentState === 'EXPIRED_REMAINDER' && <p className="mt-1 text-[10px] font-bold text-amber-700">Remaining items expired from the stock wait window</p>}
@@ -189,7 +189,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                     </div>
                     {getStatusBadge(order.orderStatus)}
                   </header>
-                  {order.fulfillmentState === 'PARTIAL' && <p className="text-[10px] font-bold text-amber-700">Available items are in this order. Remaining items are on stock watch; no order is placed for them until you confirm when stock returns.</p>}
+                  {order.fulfillmentState === 'PARTIAL' && <p className="text-[10px] font-bold text-amber-700">{t('stockPartialOrder')}</p>}
                   {order.fulfillmentState === 'COMPLETE' && <p className="text-[10px] font-bold text-emerald-700">All split items fulfilled</p>}
                   {order.fulfillmentState === 'CANCELLED_REMAINDER' && <p className="text-[10px] font-bold text-slate-600">Remaining items cancelled at your request</p>}
                   {order.fulfillmentState === 'EXPIRED_REMAINDER' && <p className="text-[10px] font-bold text-amber-700">Remaining items expired from the stock wait window</p>}
