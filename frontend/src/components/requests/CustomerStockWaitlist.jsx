@@ -172,7 +172,7 @@ export default function CustomerStockWaitlist() {
           <Pagination page={page} totalPages={totalPages} total={items.length} pageSize={pageSize}
             onPageChange={setPage} label="stock watches" />
         </>
-      )}}</>
+      )}</>
 
     </section>
   );
