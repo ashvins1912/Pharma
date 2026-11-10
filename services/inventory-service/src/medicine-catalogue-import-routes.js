@@ -563,7 +563,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
 
 const MERGE_ARRAY_FIELDS = ['ingredientIds','ingredients','ingredientDetails','routes','indications','contraindications','drugInteractions','alternatives','sideEffects','uses','suggestedAlternatives','routeIds','casNumbers','uniiCodes','substanceDescriptions','molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology'];
 const MERGE_TEXT_FIELDS = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType','chemicalClass','therapeuticClass','actionClass'];
-const mergeStagedMedicine = (left, right) => {
+export const mergeStagedMedicine = (left, right) => {
   const primary = Number(left.sourcePriority ?? 99) <= Number(right.sourcePriority ?? 99) ? left : right;
   const secondary = primary === left ? right : left;
   const merged = { ...secondary, ...primary };
@@ -578,6 +578,15 @@ const mergeStagedMedicine = (left, right) => {
   merged.sourceDatasets = [...new Set([...(left.sourceDatasets || []), ...(right.sourceDatasets || []), left.sourceDataset, right.sourceDataset].filter(Boolean))];
   merged.sourceRecordIds = [...new Set([...(left.sourceRecordIds || [left.sourceRecordId]), ...(right.sourceRecordIds || [right.sourceRecordId])].filter(Boolean))];
   merged.legacyMedicineIds = [...new Set([...(left.legacyMedicineIds || []), ...(right.legacyMedicineIds || []), ...(left.medicineId !== merged.medicineId ? [left.medicineId] : []), ...(right.medicineId !== merged.medicineId ? [right.medicineId] : [])].filter(Boolean))];
+  const matchCandidates = [left.reconciliationMatch, right.reconciliationMatch].filter(Boolean);
+  const autoTargets = [...new Set(matchCandidates.filter(match => match.decision === 'AUTO_MERGE' && match.targetMedicineId).map(match => match.targetMedicineId))];
+  if (autoTargets.length > 1) {
+    merged.reconciliationMatch = { decision: 'MANUAL_REVIEW', method: 'CONFLICTING_MASTER_TARGETS', score: Math.max(...matchCandidates.map(match => Number(match.score || 0))), warnings: ['CONFLICTING_EXISTING_MASTER_MATCHES'] };
+  } else if (autoTargets.length === 1) {
+    merged.reconciliationMatch = matchCandidates.find(match => match.decision === 'AUTO_MERGE' && match.targetMedicineId === autoTargets[0]);
+  } else if (matchCandidates.length) {
+    merged.reconciliationMatch = matchCandidates.sort((a, b) => Number(b.score || 0) - Number(a.score || 0))[0];
+  }
   merged.sourcePriority = Math.min(Number(left.sourcePriority ?? 99), Number(right.sourcePriority ?? 99));
   if (!merged.canonicalKey) merged.canonicalKey = left.canonicalKey || right.canonicalKey || '';
   if (merged.requiresPrescription === null || merged.requiresPrescription === undefined) merged.requiresPrescription = secondary.requiresPrescription ?? null;
@@ -598,10 +607,17 @@ router.post('/imports/merge', asyncHandler(async (req, res) => {
   const sourceBatchIds = batches.map(batch => batch.batchId).sort();
   const fileSha256 = hash(sourceBatchIds.join('|'));
   const previous = await CatalogueImport.findOne({ dataset: 'MULTI_SOURCE', fileSha256 }).lean();
-  if (previous && previous.status !== 'SUPERSEDED') return res.json({ batchId: previous.batchId, dataset: previous.dataset, status: previous.status, report: previous.report, reportFingerprint: previous.reportFingerprint, reused: true });
+  if (previous) return res.json({ batchId: previous.batchId, dataset: previous.dataset, status: previous.status, report: previous.report, reportFingerprint: previous.reportFingerprint, reused: true });
   const allChunks = await CatalogueImportChunk.find({ batchId: { $in: sourceBatchIds } }).sort({ batchId: 1, chunkIndex: 1 }).lean();
   const rawRecords = allChunks.flatMap(chunk => chunk.records || []);
   if (!rawRecords.length) return res.status(409).json({ message: 'Selected batches contain no staged medicine records.' });
+  const identifierGroups = new Map();
+  for (const record of rawRecords) identifierGroups.set(record.medicineId, [...(identifierGroups.get(record.medicineId) || []), record]);
+  const identifierConflicts = [...identifierGroups.entries()].filter(([, group]) => group.length > 1 && group.some((record, index) => group.slice(index + 1).some(other => {
+    const score = scoreMedicineMatch(record, other);
+    return score.decision === 'BLOCKED_CONFLICT';
+  })));
+  const blockingConflicts = identifierConflicts.length;
   const exactGroups = new Map();
   let exactMerged = 0, fuzzyMerged = 0;
   const reviewCandidates = [];
@@ -645,10 +661,11 @@ router.post('/imports/merge', asyncHandler(async (req, res) => {
   const batchId = randomUUID();
   const report = {
     sourceRecords: rawRecords.length, normalizedRecords: records.length, rejectedRecords: 0,
-    duplicatesRemoved: exactMerged + fuzzyMerged, newRecords: records.length,
+    duplicatesRemoved: exactMerged + fuzzyMerged, newRecords: Math.max(0, records.length - records.filter(item => item.reconciliationMatch?.decision === 'AUTO_MERGE').length),
     updateCandidates: records.filter(item => item.reconciliationMatch?.decision === 'AUTO_MERGE').length,
-    exactBatchMerges: exactMerged, fuzzyBatchMerges: fuzzyMerged, fuzzyManualReview: reviewCandidates.length,
-    unmatchedRecords: Math.max(0, records.length - reviewCandidates.length),
+    exactBatchMerges: exactMerged, fuzzyBatchMerges: fuzzyMerged, fuzzyManualReview: reviewCandidates.length + records.filter(item => item.reconciliationMatch?.decision === 'MANUAL_REVIEW').length,
+    unmatchedRecords: Math.max(0, records.length - records.filter(item => ['AUTO_MERGE','MANUAL_REVIEW'].includes(item.reconciliationMatch?.decision)).length - reviewCandidates.length),
+    blockingConflicts,
     sourceBatchCount: batches.length, sourceBatchIds,
     fuzzyMatchExamples: reviewCandidates.slice(0, 25).map(item => ({ incomingMedicine: item.incomingMedicine, matchedMedicineId: item.candidateMedicineId, score: item.score, decision: 'MANUAL_REVIEW', warnings: item.warnings })),
     fuzzyCandidateScanTruncated: fuzzyScanTruncated,
@@ -699,6 +716,7 @@ router.post('/imports/:batchId/approve', asyncHandler(async (req, res) => {
   const batch = await CatalogueImport.findOne({ batchId: req.params.batchId });
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
   if (batch.status !== 'READY') return res.status(409).json({ message: 'Only a ready batch can be approved.' });
+  if (Number(batch.report?.blockingConflicts || 0) > 0) return res.status(409).json({ message: 'This combined batch contains conflicting source identifiers with different strength, form or composition. Separate the conflicting source batches before approval.' });
   if (req.body?.confirmReconciliation !== true || req.body?.reportFingerprint !== batch.reportFingerprint) return res.status(400).json({ message: 'Review confirmation does not match this reconciliation report. Refresh the batch and confirm the current report.' });
   batch.approvedBy = req.service.userId || req.service.name;
   batch.approvedAt = new Date();
