@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { enforceBrowserRequestSecurity } from './browserRequestSecurity.js';
 
-const config = { allowedOrigins: ['https://pharma-ui.onrender.com'] };
+const config = { allowedOrigins: ['https://pharma-1-278k.onrender.com'] };
 
 function run(headers = {}, method = 'POST') {
   const req = {
@@ -29,7 +29,7 @@ function run(headers = {}, method = 'POST') {
 
 test('browser security allows same-origin authenticated mutation with valid double-submit token', () => {
   const outcome = run({
-    origin: 'https://pharma-ui.onrender.com',
+    origin: 'https://pharma-1-278k.onrender.com',
     'sec-fetch-site': 'same-origin',
     cookie: 'access_token=opaque-session; XSRF-TOKEN=csrf-123',
     'x-xsrf-token': 'csrf-123'
@@ -40,7 +40,7 @@ test('browser security allows same-origin authenticated mutation with valid doub
 
 test('browser security rejects authenticated mutation without CSRF proof', () => {
   const outcome = run({
-    origin: 'https://pharma-ui.onrender.com',
+    origin: 'https://pharma-1-278k.onrender.com',
     'sec-fetch-site': 'same-origin',
     cookie: 'access_token=opaque-session; XSRF-TOKEN=csrf-123'
   });
@@ -72,7 +72,7 @@ test('browser security blocks login CSRF from an untrusted origin even without a
 
 test('browser security allows anonymous login from the configured application origin', () => {
   const outcome = run({
-    origin: 'https://pharma-ui.onrender.com',
+    origin: 'https://pharma-1-278k.onrender.com',
     'sec-fetch-site': 'same-origin'
   });
   assert.equal(outcome.nextCalled, true);
@@ -81,7 +81,7 @@ test('browser security allows anonymous login from the configured application or
 
 test('browser security allows trusted cross-origin SPA authentication exchange', () => {
   const outcome = run({
-    origin: 'https://pharma-ui.onrender.com',
+    origin: 'https://pharma-1-278k.onrender.com',
     'sec-fetch-site': 'cross-site'
   });
   assert.equal(outcome.nextCalled, true);
@@ -90,7 +90,7 @@ test('browser security allows trusted cross-origin SPA authentication exchange',
 
 test('trusted cross-origin authenticated mutation still requires the CSRF proof', () => {
   const outcome = run({
-    origin: 'https://pharma-ui.onrender.com',
+    origin: 'https://pharma-1-278k.onrender.com',
     'sec-fetch-site': 'cross-site',
     cookie: 'access_token=opaque-session; XSRF-TOKEN=csrf-123',
     'x-xsrf-token': 'csrf-123'
