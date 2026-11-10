@@ -96,7 +96,7 @@ export function loadConfig(environment = process.env) {
   if ((inventoryServiceUrl || medicineMasterServiceUrl || orderServiceUrl || prescriptionServiceUrl) && serviceAuthSecret.length < 32) {
     errors.push('SERVICE_AUTH_SECRET must contain at least 32 characters when a service URL is configured.');
   }
-  if ((inventoryServiceUrl || orderServiceUrl || prescriptionServiceUrl) && gatewayAuthSecret.length < 32) {
+  if ((inventoryServiceUrl || medicineMasterServiceUrl || orderServiceUrl || prescriptionServiceUrl) && gatewayAuthSecret.length < 32) {
     errors.push('GATEWAY_AUTH_SECRET must contain at least 32 characters when a service URL is configured.');
   }
   if (production && pharmaJwtPublicKey && pharmaJwtPublicKey.length < 100) {
