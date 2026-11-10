@@ -185,7 +185,7 @@ export function normalizeMedicineRecord(raw, dataset) {
     const sourceRecordId = text(pick(raw, 'id'));
     if (!brandName || !sourceRecordId) return null;
     const strengthMatch = brandName.match(/\b\d+(?:\.\d+)?\s?(?:mcg|mg|g|ml|iu|%)(?:\b|\/)/i);
-    const strength = strengthMatch ? strengthMatch[0].replace(/\\s+/g, ' ').trim() : '';
+    const strength = strengthMatch ? strengthMatch[0].replace(/\s+/g, ' ').trim() : '';
     const dosageForm = cleanDosageForm(brandName);
     const collect = prefix => Array.from({ length: prefix === 'sideEffect' ? 42 : 5 }, (_, index) => cleanSourceValue(raw[`${prefix}${index}`])).filter(Boolean).filter((value, index, all) => all.findIndex(item => key(item) === key(value)) === index);
     const identity = [key(brandName), key(strength), key(dosageForm)].join('|');
@@ -207,7 +207,7 @@ export function normalizeMedicineRecord(raw, dataset) {
   const productName = cleanRetailProductName(pick(raw, 'Product Name'));
   const composition = text(pick(raw, 'Composition'));
   const packMatch = productName.match(/\b(?:pack of\s*)?\d+(?:\.\d+)?\s?(?:tablets?|tabs?|capsules?|caps?|ml|g|gm|strips?|sachets?|vials?)\b/i);
-  const packSize = packMatch ? packMatch[0].replace(/\\s+/g, ' ').trim() : '';
+  const packSize = packMatch ? packMatch[0].replace(/\s+/g, ' ').trim() : '';
   const medicineType = text(pick(raw, 'Type of Medicine'));
   const dosageForm = cleanDosageForm(medicineType);
   const strengthMatch = (brandName + ' ' + productName + ' ' + composition).match(/\b\d+(?:\.\d+)?\s?(?:mcg|mg|g|ml|iu|%)(?:\b|\/)/i);
@@ -397,7 +397,7 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         const canonicalMatch = item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 ? byKey.get(item.canonicalKey) : null;
         const nameMatch = item.safeNameMatch && incomingNameCounts.get(key(item.brandName)) === 1 ? byName.get(key(item.brandName)) : null;
         const current = byId.get(item.medicineId) || canonicalMatch || nameMatch || null;
-        const targetId = ['INDIAN_MEDICINE_DATA', 'MEDICINES_PART_1'].includes(batch.dataset) ? (current?.medicineId || item.medicineId) : (current?.medicineId || item.medicineId);
+        const targetId = batch.dataset === 'INDIAN_MEDICINE_DATA' ? item.medicineId : (current?.medicineId || item.medicineId);
         const fields = ['brandName','genericName','genericId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType','sourceImageUrl'];
         const set = {
           medicineId: targetId,
