@@ -206,7 +206,6 @@ export function createServiceRouters(gatewayConfig = config) {
     ? next()
     : requireInventoryImportPermission(req, res, next);
   inventoryRouter.post('/adjust', inventoryAdmin, inventory('inventory.adjust'));
-  const catalogueImportAuth = (req, res, next) => req.inventoryServiceUnavailable ? next() : requireSuperAdmin(req, res, next);
   inventoryRouter.post('/imports/preview', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.post('/imports', inventoryImportAuth, inventory('inventory.import'));
   inventoryRouter.get('/imports/batches', inventoryImportAuth, inventory('inventory.import'));
