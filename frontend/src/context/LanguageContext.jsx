@@ -306,7 +306,6 @@ const messages = {
     confirmPrescription: "Please confirm that you have a prescription for this order.",
     uploadPrescription: "Upload a clear prescription image or PDF before placing this order.",
 
-    close: "Close",
     retrying: "Retrying…",
     deleting: "Deleting…",
     createMedicineRequest: "Creating Medicine Request...",
@@ -1082,7 +1081,7 @@ const messages = {
     day: "day",
     days: "days",
     informationSources: "Sources",
-  },
+    close: "Close",
     medicineDetails: "Medicine details",
     matchingMedicineCatalogue: "Matching the Medicine Master Catalogue…",
     availability: "Availability",
@@ -1112,6 +1111,7 @@ const messages = {
     prescriptionStatusUnverified: "Prescription classification has not been verified. Confirm requirements with the pharmacist.",
     catalogueClinicalDisclaimer: "Catalogue information may be incomplete or unverified. This is not a substitute for professional advice. Do not start, stop or change a medicine based on this listing alone.",
     close: "Close",
+  },
 
   hi: {
     rxOnly: "केवल प्रिस्क्रिप्शन",
@@ -1409,7 +1409,6 @@ const messages = {
     confirmPrescription: "कृपया पुष्टि करें कि इस ऑर्डर के लिए आपके पास प्रिस्क्रिप्शन है।",
     uploadPrescription: "ऑर्डर देने से पहले स्पष्ट प्रिस्क्रिप्शन छवि या PDF अपलोड करें।",
 
-    close: "बंद करें",
     retrying: "फिर कोशिश हो रही है…",
     deleting: "हटाया जा रहा है…",
     createMedicineRequest: "दवा अनुरोध बनाया जा रहा है...",
@@ -2185,7 +2184,7 @@ const messages = {
     day: "दिन",
     days: "दिन",
     informationSources: "स्रोत",
-  },
+    close: "बंद करें",
     medicineDetails: "दवा का विवरण",
     matchingMedicineCatalogue: "मेडिसिन मास्टर कैटलॉग से मिलान हो रहा है…",
     availability: "उपलब्धता",
@@ -2215,6 +2214,7 @@ const messages = {
     prescriptionStatusUnverified: "प्रिस्क्रिप्शन वर्गीकरण सत्यापित नहीं है। फ़ार्मासिस्ट से पुष्टि करें।",
     catalogueClinicalDisclaimer: "कैटलॉग की जानकारी अधूरी या असत्यापित हो सकती है। यह पेशेवर सलाह का विकल्प नहीं है। केवल इस सूची के आधार पर दवा शुरू, बंद या बदलें नहीं।",
     close: "बंद करें",
+  },
 
   kn: {
     rxOnly: "ಪ್ರಿಸ್ಕ್ರಿಪ್ಷನ್ ಮಾತ್ರ",
@@ -2512,7 +2512,6 @@ const messages = {
     confirmPrescription: "ಈ ಆರ್ಡರ್‌ಗೆ ನಿಮ್ಮ ಬಳಿ ಔಷಧಿ ಚೀಟಿ ಇದೆ ಎಂದು ದೃಢೀಕರಿಸಿ.",
     uploadPrescription: "ಆರ್ಡರ್ ಮಾಡುವ ಮೊದಲು ಸ್ಪಷ್ಟವಾದ ಔಷಧಿ ಚೀಟಿ ಚಿತ್ರ ಅಥವಾ PDF ಅಪ್‌ಲೋಡ್ ಮಾಡಿ.",
 
-    close: "ಮುಚ್ಚಿ",
     retrying: "ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲಾಗುತ್ತಿದೆ…",
     deleting: "ಅಳಿಸಲಾಗುತ್ತಿದೆ…",
     createMedicineRequest: "ಔಷಧಿ ವಿನಂತಿ ರಚಿಸಲಾಗುತ್ತಿದೆ...",
@@ -3288,7 +3287,7 @@ const messages = {
     day: "ದಿನ",
     days: "ದಿನಗಳು",
     informationSources: "ಮೂಲಗಳು",
-  },
+    close: "ಮುಚ್ಚಿ",
     medicineDetails: "ಔಷಧದ ವಿವರಗಳು",
     matchingMedicineCatalogue: "ಮೆಡಿಸಿನ್ ಮಾಸ್ಟರ್ ಕ್ಯಾಟಲಾಗ್‌ನೊಂದಿಗೆ ಹೊಂದಿಸಲಾಗುತ್ತಿದೆ…",
     availability: "ಲಭ್ಯತೆ",
@@ -3318,6 +3317,7 @@ const messages = {
     prescriptionStatusUnverified: "ಪ್ರಿಸ್ಕ್ರಿಪ್ಷನ್ ವರ್ಗೀಕರಣ ಪರಿಶೀಲಿಸಲ್ಪಟ್ಟಿಲ್ಲ. ಫಾರ್ಮಸಿಸ್ಟ್‌ನೊಂದಿಗೆ ದೃಢೀಕರಿಸಿ.",
     catalogueClinicalDisclaimer: "ಕ್ಯಾಟಲಾಗ್ ಮಾಹಿತಿ ಅಪೂರ್ಣವಾಗಿರಬಹುದು ಅಥವಾ ಪರಿಶೀಲಿಸದಿರಬಹುದು. ಇದು ವೃತ್ತಿಪರ ಸಲಹೆಗೆ ಪರ್ಯಾಯವಲ್ಲ. ಈ ಪಟ್ಟಿಯ ಆಧಾರದ ಮೇಲೆ ಔಷಧವನ್ನು ಪ್ರಾರಂಭಿಸಬೇಡಿ, ನಿಲ್ಲಿಸಬೇಡಿ ಅಥವಾ ಬದಲಿಸಬೇಡಿ.",
     close: "ಮುಚ್ಚಿ",
+  },
 
   bn: {
     rxOnly: "কেবলমাত্র প্রেসক্রিপশন",
@@ -3615,7 +3615,6 @@ const messages = {
     confirmPrescription: "এই অর্ডারের জন্য আপনার প্রেসক্রিপশন আছে কিনা নিশ্চিত করুন।",
     uploadPrescription: "অর্ডার দেওয়ার আগে পরিষ্কার প্রেসক্রিপশনের ছবি বা PDF আপলোড করুন।",
 
-    close: "বন্ধ করুন",
     retrying: "আবার চেষ্টা হচ্ছে…",
     deleting: "মুছে ফেলা হচ্ছে…",
     createMedicineRequest: "ওষুধের অনুরোধ তৈরি হচ্ছে...",
@@ -4391,7 +4390,7 @@ const messages = {
     day: "দিন",
     days: "দিন",
     informationSources: "সূত্র",
-  },
+    close: "বন্ধ করুন",
     medicineDetails: "ওষুধের বিবরণ",
     matchingMedicineCatalogue: "মেডিসিন মাস্টার ক্যাটালগের সঙ্গে মিলিয়ে দেখা হচ্ছে…",
     availability: "প্রাপ্যতা",
@@ -4421,6 +4420,7 @@ const messages = {
     prescriptionStatusUnverified: "প্রেসক্রিপশন শ্রেণিবিভাগ যাচাই করা হয়নি। ফার্মাসিস্টের সঙ্গে নিশ্চিত করুন।",
     catalogueClinicalDisclaimer: "ক্যাটালগের তথ্য অসম্পূর্ণ বা অযাচাইকৃত হতে পারে। এটি পেশাদার পরামর্শের বিকল্প নয়। শুধু এই তালিকার ভিত্তিতে ওষুধ শুরু, বন্ধ বা পরিবর্তন করবেন না।",
     close: "বন্ধ করুন",
+  },
 
   te: {
     rxOnly: "ప్రిస్క్రిప్షన్ మాత్రమే",
@@ -4717,7 +4717,6 @@ const messages = {
     cartEmptyError: "మీ కార్ట్ ఖాళీగా ఉంది.",
     confirmPrescription: "ఈ ఆర్డర్ కోసం మీ వద్ద ప్రిస్క్రిప్షన్ ఉందని నిర్ధారించండి.",
     uploadPrescription: "ఆర్డర్ చేయడానికి ముందు స్పష్టమైన ప్రిస్క్రిప్షన్ చిత్రం లేదా PDF అప్‌లోడ్ చేయండి.",
-    close: "మూసివేయండి",
     retrying: "మళ్లీ ప్రయత్నిస్తోంది…",
     deleting: "తొలగిస్తోంది…",
     createMedicineRequest: "మందుల అభ్యర్థన సృష్టిస్తోంది...",
@@ -5494,6 +5493,8 @@ const messages = {
     day: "రోజు",
     days: "రోజులు",
     informationSources: "మూలాలు",
+
+    close: "మూసివేయండి",
     medicineDetails: "మందుల వివరాలు",
     matchingMedicineCatalogue: "మెడిసిన్ మాస్టర్ క్యాటలాగ్‌తో సరిపోలుస్తోంది…",
     availability: "లభ్యత",
@@ -5523,7 +5524,6 @@ const messages = {
     prescriptionStatusUnverified: "ప్రిస్క్రిప్షన్ వర్గీకరణ ధృవీకరించబడలేదు. ఫార్మసిస్ట్‌తో నిర్ధారించండి.",
     catalogueClinicalDisclaimer: "క్యాటలాగ్ సమాచారం అసంపూర్ణంగా లేదా ధృవీకరించబడనిదిగా ఉండవచ్చు. ఇది వృత్తిపరమైన సలహాకు ప్రత్యామ్నాయం కాదు. ఈ జాబితా ఆధారంగా మాత్రమే మందును ప్రారంభించవద్దు, ఆపవద్దు లేదా మార్చవద్దు.",
     close: "మూసివేయి",
-
   }
 };
 
