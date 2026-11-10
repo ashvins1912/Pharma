@@ -520,13 +520,13 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
   updates = records.filter(item => existingIds.has(item.medicineId) ||
     (item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 && existingKeys.has(item.canonicalKey)) ||
     (item.safeNameMatch && existingNameCounts.get(key(item.brandName)) === 1)).length;
-  const finalUpdates = records.filter(item => item.reconciliationMatch?.decision === 'AUTO_MERGE').length;
   const fuzzyAutoMerge = records.filter(item => item.reconciliationMatch?.method === 'FUZZY_TOKEN_SORT' && item.reconciliationMatch.decision === 'AUTO_MERGE').length;
   const fuzzyManualReview = records.filter(item => item.reconciliationMatch?.decision === 'MANUAL_REVIEW').length;
+  const updateCandidates = records.filter(item => item.reconciliationMatch?.decision === 'AUTO_MERGE').length;
   const report = {
     sourceRecords, normalizedRecords: records.length, rejectedRecords: rejected,
-    duplicatesRemoved, newRecords: Math.max(0, records.length - updates - fuzzyAutoMerge), updateCandidates: updates + fuzzyAutoMerge, fuzzyTargetDuplicatesMerged,
-    fuzzyAutoMerge, fuzzyManualReview, unmatchedRecords: records.length - updates - fuzzyAutoMerge - fuzzyManualReview,
+    duplicatesRemoved, newRecords: Math.max(0, records.length - updateCandidates), updateCandidates, fuzzyTargetDuplicatesMerged,
+    fuzzyAutoMerge, fuzzyManualReview, unmatchedRecords: Math.max(0, records.length - updateCandidates - fuzzyManualReview),
     needsReview: records.filter(item => item.dataQualityStatus === 'NEEDS_REVIEW').length,
     partialRecords: records.filter(item => item.dataQualityStatus === 'PARTIAL').length,
     missingComposition: records.filter(item => !item.composition).length,
