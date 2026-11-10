@@ -5,7 +5,8 @@ import { useToast } from '../../context/ToastContext';
 const DATASETS = [
   { value: '', label: 'Auto-detect JSON format' },
   { value: 'INDIAN_MEDICINE_DATA', label: 'Indian Medicine Dataset (drugDetails)' },
-  { value: 'INDIA_MEDICINES_INFO', label: 'India Medicines and Drug Info (array)' }
+  { value: 'INDIA_MEDICINES_INFO', label: 'India Medicines and Drug Info (retail array)' },
+  { value: 'MEDICINES_PART_1', label: 'Medicines Part 1 (50,000 clinical detail records)' }
 ];
 
 export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
@@ -39,7 +40,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
       if (dataset) body.append('dataset', dataset);
       const response = await apiClient.post('/api/v1/inventory/catalogue/imports/preview', body, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 120000
+        timeout: 600000
       });
       setPreview(response.data);
       addToast('Catalogue dataset analyzed. Review the reconciliation report before publishing.', 'success');
@@ -96,7 +97,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                 </select>
               </label>
               <label className="block text-xs font-bold text-slate-700">
-                JSON file (max 15 MB)
+                JSON file (max 110 MB)
                 <input type="file" accept=".json,application/json" disabled={busy || Boolean(preview)} onChange={event => setFile(event.target.files?.[0] || null)} className="mt-1.5 block w-full rounded-xl border border-slate-300 bg-white p-2 text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-bold file:text-blue-700" />
               </label>
             </div>
@@ -118,6 +119,12 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                 {metric('With composition', report.withComposition)}
                 {metric('With manufacturer', report.withManufacturer)}
                 {metric('With pack size', report.withPackSize)}
+                {metric('With side effects', report.withSideEffects)}
+                {metric('With uses', report.withUses)}
+                {metric('With suggested alternatives', report.withSuggestedAlternatives)}
+                {metric('With therapeutic class', report.withTherapeuticClass)}
+                {metric('With chemical class', report.withChemicalClass)}
+                {metric('Habit-forming metadata', report.withHabitFormingMetadata)}
                 {metric('Need review', report.needsReview)}
               </div>
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-950">
@@ -125,10 +132,10 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
               </div>
               {preview?.sample?.length > 0 && (
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full min-w-[620px] text-left text-xs">
-                    <thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Medicine</th><th className="p-3">Composition</th><th className="p-3">Strength / Form</th><th className="p-3">Manufacturer</th><th className="p-3">Quality</th></tr></thead>
+                  <table className="w-full min-w-[920px] text-left text-xs">
+                    <thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Medicine</th><th className="p-3">Composition</th><th className="p-3">Strength / Form</th><th className="p-3">Therapeutic class</th><th className="p-3">Uses / Side effects</th><th className="p-3">Manufacturer</th><th className="p-3">Quality</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
-                      {preview.sample.map(item => <tr key={item.medicineId}><td className="p-3 font-bold text-slate-800">{item.brandName}</td><td className="p-3 text-slate-600">{item.composition || '—'}</td><td className="p-3 text-slate-600">{[item.strength, item.dosageForm, item.packSize].filter(Boolean).join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.manufacturer || '—'}</td><td className="p-3">{item.dataQualityStatus}</td></tr>)}
+                      {preview.sample.map(item => <tr key={item.medicineId}><td className="p-3 font-bold text-slate-800">{item.brandName}</td><td className="p-3 text-slate-600">{item.composition || 'Not supplied'}</td><td className="p-3 text-slate-600">{[item.strength, item.dosageForm, item.packSize].filter(Boolean).join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.therapeuticClass || '—'}</td><td className="p-3 text-slate-600">{[...(item.uses || []).slice(0, 2), ...(item.sideEffects || []).slice(0, 2)].join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.manufacturer || 'Not supplied'}</td><td className="p-3">{item.dataQualityStatus}</td></tr>)}
                     </tbody>
                   </table>
                 </div>
