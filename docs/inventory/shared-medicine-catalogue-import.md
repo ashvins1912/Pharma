@@ -7,6 +7,7 @@ The Inventory Service supports a platform-admin-only JSON enrichment workflow fo
 All endpoints are routed through API Gateway and require a platform administrator:
 
 - POST /api/v1/inventory/catalogue/imports/preview — multipart upload using field jsonFile; optional dataset is INDIAN_MEDICINE_DATA or INDIA_MEDICINES_INFO. The service can auto-detect either structure.
+- POST /api/v1/inventory/catalogue/imports/merge — combine 2–10 unapproved READY batches into one new staged MULTI_SOURCE batch.
 - GET /api/v1/inventory/catalogue/imports/:batchId — inspect staged batch status and reconciliation report.
 - POST /api/v1/inventory/catalogue/imports/:batchId/publish — explicitly publish the staged records.
 - POST /api/v1/inventory/catalogue/imports/:batchId/approve — record explicit platform-admin approval against the exact report fingerprint before publishing.
@@ -46,7 +47,7 @@ The master record retains source datasets, all source record IDs (including IDs 
 The Medicine Master Catalogue batch history supports selecting 2–10 unapproved batches in READY state and creating one combined staged batch. The source batches are marked SUPERSEDED only after the combined batch and its chunks have been stored successfully; superseded source batches cannot be published independently. The combined batch receives a new report fingerprint and must be reviewed, approved and published separately.
 
 The combine operation:
-- Deduplicates exact canonical identities and exact medicine identifiers.
+- Deduplicates exact canonical identities and exact identifiers where the canonical identity is unavailable.
 - Uses the confidence-gated fuzzy matcher to combine high-confidence records across selected batches.
 - Enriches missing descriptive and clinical metadata, deduplicates arrays, and retains all source dataset names, source record IDs and legacy medicine IDs.
 - Preserves the highest-priority source for conflicting scalar fields.
