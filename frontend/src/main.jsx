@@ -31,6 +31,7 @@ import App from './App.jsx';
 import './index.css';
 import './styles/design-system.css';
 import './styles/responsive-layout.css';
+import './styles/application-polish.css';
 import { AuthProvider } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { ToastProvider } from './context/ToastContext';
