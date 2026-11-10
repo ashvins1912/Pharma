@@ -32,8 +32,11 @@ test('Indian Medicine Dataset preserves brandIdentifier and structured master fi
     productName: 'Paracetamol 500 mg Tablet',
     supplierIdentifier: 'SUP-1',
     supplierName: 'Example Pharma',
-    substanceIdentifier: 'ING-1',
-    substanceName: 'Paracetamol',
+    substanceIdentifier: ['ING-1'], substanceName: ['Paracetamol'],
+    casNumber: ['103-90-2'], unii: ['2G9X7K1TFT'], substanceDescription: ['Analgesic ingredient'],
+    molecularFormula: ['C8H9NO2'], inChl: ['InChI=1S/C8H9NO2'], iupacName: ['N-(4-hydroxyphenyl)acetamide'],
+    molecularWeight: ['151.16'], smile: ['CC(=O)NC1=CC=C(O)C=C1'], toxity: ['Avoid overdose'],
+    drugFormIdentifier: 'FORM-1', routeOfAdministrationIdentifier: ['ROUTE-1'], licenseStatus: 'UNKNOWN',
     doseForm: 'Tablet',
     routeOfAdministrationName: 'Oral',
     alternativeDrugs: ['Brand B'],
@@ -50,9 +53,17 @@ test('Indian Medicine Dataset preserves brandIdentifier and structured master fi
   assert.equal(result.genericName, 'Paracetamol');
   assert.equal(result.manufacturer, 'Example Pharma');
   assert.deepEqual(result.ingredientIds, ['ING-1']);
+  assert.equal(result.ingredientDetails[0].casNumber, '103-90-2');
+  assert.equal(result.ingredientDetails[0].unii, '2G9X7K1TFT');
+  assert.equal(result.ingredientDetails[0].molecularFormula, 'C8H9NO2');
+  assert.equal(result.ingredientDetails[0].molecularWeight, '151.16');
+  assert.equal(result.sourceLicenseStatusValue, 'UNKNOWN');
+  assert.equal(result.drugFormId, 'FORM-1');
+  assert.deepEqual(result.routeIds, ['ROUTE-1']);
+  assert.deepEqual(result.toxicology, ['Avoid overdose']);
   assert.deepEqual(result.ingredients, ['Paracetamol']);
   assert.deepEqual(result.routes, ['Oral']);
-  assert.deepEqual(result.alternatives, ['Brand B']);
+  assert.deepEqual(result.alternatives, [{ medicineId: '', brandName: 'Brand B', source: 'SUGGESTED_NAME', verification: 'UNVERIFIED' }]);
   assert.equal(result.prescriptionVerification, 'UNVERIFIED');
   assert.equal('price' in result, false);
   assert.equal('expiryDate' in result, false);
