@@ -3778,6 +3778,7 @@ export const dataStore = {
         const now = new Date();
         const orderData = {
             _id: orderId,
+            orderNumber: await nextOrderNumber(),
             userId: customerId,
             customerId,
             customerName: request.customerName,
