@@ -1,8 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import ProductCard from './ProductCard';
 import { useApp } from '../context/AppContext';
 import Pagination from './common/Pagination';
 import { useLanguage } from '../context/LanguageContext';
+import MedicineDetailsModal from './MedicineDetailsModal';
 
 export default function ProductGrid() {
   const { t } = useLanguage();
@@ -25,6 +26,7 @@ export default function ProductGrid() {
   } = useApp();
 
   const gridTopRef = useRef(null);
+  const [selectedMedicine, setSelectedMedicine] = useState(null);
 
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages && newPage !== page) {
@@ -155,7 +157,7 @@ export default function ProductGrid() {
       {/* Responsive Product Grid: 2 cols on mobile, 4 on desktop */}
       <div className="pharma-product-grid grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4">
         {medicines.map((med) => (
-          <ProductCard key={med._id} med={med} />
+          <ProductCard key={med._id || med.productId || med.sku} med={med} onSelectMedicine={setSelectedMedicine} />
         ))}
       </div>
 
@@ -196,6 +198,9 @@ export default function ProductGrid() {
           <span>{t('requestAnyMedicine')}</span>
         </button>
       </div>
+      {selectedMedicine && (
+        <MedicineDetailsModal product={selectedMedicine} onClose={() => setSelectedMedicine(null)} />
+      )}
     </div>
   );
 }

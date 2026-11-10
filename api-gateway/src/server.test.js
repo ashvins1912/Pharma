@@ -62,6 +62,15 @@ test('storefront medicine catalog is public and does not require inventory RBAC'
   assert.equal(resolveGatewayCapability('POST', '/api/medicines'), 'inventory.write');
 });
 
+test('sanitized storefront Medicine Master match is public and read-only', () => {
+  const url = '/api/v1/inventory/catalogue/medicines/match?name=Dolo%20650&strength=650%20mg';
+  assert.equal(isGatewayPublicPath('GET', url), true);
+  assert.equal(resolveGatewayCapability('GET', url), null);
+  assert.equal(isGatewayPublicPath('POST', '/api/v1/inventory/catalogue/medicines/match'), false);
+  assert.equal(resolveGatewayCapability('POST', '/api/v1/inventory/catalogue/medicines/match'), null);
+  assert.equal(isGatewayPublicPath('GET', '/api/v1/inventory/catalogue/medicines'), false);
+});
+
 test('storefront branch discovery is public while branch mutations remain protected', () => {
   const url = '/api/v1/branches/all';
   assert.equal(isGatewayPublicPath('GET', url), true);
