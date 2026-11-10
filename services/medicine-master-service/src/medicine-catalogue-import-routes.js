@@ -1144,20 +1144,53 @@ router.get('/imports/:batchId/records', asyncHandler(async (req, res) => {
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
   const page = Math.max(1, Math.min(10000, Number.parseInt(req.query.page || '1', 10) || 1));
   const limit = Math.max(1, Math.min(50, Number.parseInt(req.query.limit || '20', 10) || 20));
-  const search = text(req.query.search).slice(0, 100).toLowerCase();
-  const chunks = await CatalogueImportChunk.find({ batchId }).sort({ chunkIndex: 1 }).lean();
-  const source = chunks.length ? chunks.flatMap(chunk => chunk.records || []) : (await CatalogueImport.findOne({ batchId, isHidden: { $ne: true } }, { records: 1 }).lean())?.records || [];
-  const matches = search ? source.filter(record => [record.brandName, record.genericName, record.composition, record.manufacturer, record.medicineId, record.strength, record.dosageForm].some(value => String(value || '').toLowerCase().includes(search))) : source;
-  const total = matches.length;
-  const items = matches.slice((page - 1) * limit, page * limit).map(record => ({
-    medicineId: record.medicineId, brandName: record.brandName, genericName: record.genericName,
-    composition: record.composition, strength: record.strength, dosageForm: record.dosageForm,
-    manufacturer: record.manufacturer, qualityScore: record.qualityScore, qualityGrade: record.qualityGrade,
-    sourceDataset: record.sourceDataset, sourceRecordId: record.sourceRecordId,
-    sourceDatasets: record.sourceDatasets, sourceRecordIds: record.sourceRecordIds,
-    reconciliationMatch: record.reconciliationMatch, qualityIssues: record.qualityIssues
-  }));
-  return res.json({ items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+  const search = text(req.query.search).slice(0, 100);
+  const escapedSearch = search.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
+  const skip = (page - 1) * limit;
+  const searchMatch = search ? {
+    $or: ['brandName', 'genericName', 'composition', 'manufacturer', 'medicineId', 'strength', 'dosageForm']
+      .map(field => ({ ['record.' + field]: { $regex: escapedSearch, $options: 'i' } }))
+  } : null;
+  const recordProjection = {
+    _id: 0,
+    medicineId: '$record.medicineId',
+    brandName: '$record.brandName',
+    genericName: '$record.genericName',
+    composition: '$record.composition',
+    strength: '$record.strength',
+    dosageForm: '$record.dosageForm',
+    manufacturer: '$record.manufacturer',
+    qualityScore: '$record.qualityScore',
+    qualityGrade: '$record.qualityGrade',
+    sourceDataset: '$record.sourceDataset',
+    sourceRecordId: '$record.sourceRecordId',
+    sourceDatasets: '$record.sourceDatasets',
+    sourceRecordIds: '$record.sourceRecordIds',
+    reconciliationMatch: '$record.reconciliationMatch',
+    qualityIssues: '$record.qualityIssues'
+  };
+  const paginateRecords = async (Model, match, legacy = false) => {
+    const pipeline = [
+      { $match: match },
+      { $unwind: { path: '$records', includeArrayIndex: 'recordIndex' } },
+      { $set: { record: '$records', chunkIndex: legacy ? 0 : '$chunkIndex' } },
+      ...(searchMatch ? [{ $match: searchMatch }] : []),
+      { $sort: { chunkIndex: 1, recordIndex: 1 } },
+      { $facet: {
+        items: [{ $skip: skip }, { $limit: limit }, { $project: recordProjection }],
+        count: [{ $count: 'total' }]
+      } },
+      { $project: { items: 1, total: { $ifNull: [{ $arrayElemAt: ['$count.total', 0] }, 0] } } }
+    ];
+    const [result] = await Model.aggregate(pipeline).allowDiskUse(true);
+    const total = result?.total || 0;
+    return { items: result?.items || [], pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+  };
+  const chunkCount = await CatalogueImportChunk.countDocuments({ batchId });
+  const result = chunkCount
+    ? await paginateRecords(CatalogueImportChunk, { batchId })
+    : await paginateRecords(CatalogueImport, { batchId, isHidden: { $ne: true }, records: { $exists: true, $ne: [] } }, true);
+  return res.json(result);
 }));
 
 router.get('/imports/:batchId', asyncHandler(async (req, res) => {
