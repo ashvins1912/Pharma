@@ -87,6 +87,28 @@ test('staged inventory batch APIs require the explicit inventory.import capabili
   assert.equal(resolveGatewayCapability('DELETE', `${batch}/rows/550e8400-e29b-41d4-a716-446655440000%3A2`), null);
 });
 
+test('shared medicine catalogue import jobs and batch actions are registered with the platform catalogue capability', () => {
+  const jobId = '25a15b46-db97-44ea-a245-915d64698547';
+  const batchId = 'catalogue-batch-123';
+  const protectedRoutes = [
+    ['GET', '/api/v1/inventory/catalogue/imports'],
+    ['POST', '/api/v1/inventory/catalogue/imports/preview'],
+    ['POST', '/api/v1/inventory/catalogue/imports/merge'],
+    ['POST', '/api/v1/inventory/catalogue/imports/remove-selected'],
+    ['GET', `/api/v1/inventory/catalogue/imports/jobs/${jobId}`],
+    ['POST', `/api/v1/inventory/catalogue/imports/jobs/${jobId}/retry`],
+    ['GET', `/api/v1/inventory/catalogue/imports/${batchId}`],
+    ['GET', `/api/v1/inventory/catalogue/imports/${batchId}/records`],
+    ['POST', `/api/v1/inventory/catalogue/imports/${batchId}/approve`],
+    ['POST', `/api/v1/inventory/catalogue/imports/${batchId}/publish`]
+  ];
+  for (const [method, routePath] of protectedRoutes) {
+    assert.equal(resolveGatewayCapability(method, routePath), 'inventory.catalogue.import', `${method} ${routePath}`);
+  }
+  assert.equal(isGatewayPermissionAllowed({ role: 'PLATFORM_SUPER_ADMIN', permissions: ['inventory.catalogue.import'] }, 'inventory.catalogue.import'), true);
+  assert.equal(resolveGatewayCapability('DELETE', `/api/v1/inventory/catalogue/imports/${batchId}`), null);
+});
+
 test('delivery OTP endpoints use least-privilege rider and pharmacy capabilities', () => {
   const orderId = '6accca6691b2129986259f9c';
   assert.equal(resolveGatewayCapability('GET', `/api/orders/${orderId}/reveal-otp`), 'orders.read');

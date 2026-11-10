@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 import { config, validateConfig } from './config.js';
 import routes from './routes.js';
 import stagedImportRoutes from './staged-import-routes.js';
-import medicineCatalogueImportRoutes, { initializeMedicineCatalogueModels, stopMedicineCatalogueImportWorker } from './medicine-catalogue-import-routes.js';
+import medicineCatalogueImportRoutes, { initializeMedicineCatalogueModels, startMedicineCatalogueImportWorker, stopMedicineCatalogueImportWorker } from './medicine-catalogue-import-routes.js';
 import medicineCatalogueRoutes from './medicine-catalogue-routes.js';
 import { StagedImportBatch, StagedImportRow } from './staged-import-models.js';
 import { Audit, ImportBatch, ImportBatchSnapshot, ImportFailure, ImportJob, Inventory, Product, Reservation } from './models.js';
@@ -101,6 +101,9 @@ await Promise.all([
   Audit.init(),
   initializeMedicineCatalogueModels()
 ]);
+// Start the durable catalogue-import worker only after MongoDB and its models are ready.
+// It atomically reclaims expired PROCESSING leases after restarts and resumes QUEUED jobs.
+startMedicineCatalogueImportWorker();
 // Mark abandoned staging requests as failed after a restart; rows remain available for inspection.
 await StagedImportBatch.updateMany({ status: 'STAGING', updatedAt: { $lt: new Date(Date.now() - 10 * 60 * 1000) } }, {
   $set: { status: 'FAILED' }
