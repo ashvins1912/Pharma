@@ -733,7 +733,7 @@ export default function AdminDashboardView() {
                 </tbody>
               </table>
             </div>
-            <div className="md:hidden space-y-3">
+            <div className="md:hidden qm-mobile-record-list">
               {auditLogs.map((log, idx) => (
                 <article key={log._id || log.id || `${log.importId || 'audit'}-${idx}`} className="qm-mobile-record-card qm-mobile-audit-card">
                   <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-extrabold text-slate-900">{log.name || 'Inventory event'}</p><p className="text-[10px] font-mono text-slate-500 break-all">{log.sku || '—'}</p></div><span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${log.eventType === 'DELIVERY' ? 'bg-rose-100 text-rose-800' : 'bg-blue-100 text-blue-800'}`}>{log.eventType === 'DELIVERY' ? 'Delivery' : 'Bulk import'}</span></div>
