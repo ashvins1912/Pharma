@@ -147,7 +147,7 @@ export async function authenticateUser(req, res, next, gatewayConfig = config) {
 
 export function requireSuperAdmin(req, res, next) {
   const role = req.user?.app_metadata?.role || req.user?.role;
-  if (role !== 'SUPER_ADMIN' && role !== 'PLATFORM_SUPER_ADMIN' && role !== 'admin') {
+  if (role !== 'SUPER_ADMIN' && role !== 'PLATFORM_SUPER_ADMIN') {
     return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Platform Super Administrator access is required.' }, requestId: req.requestId });
   }
   return next();
