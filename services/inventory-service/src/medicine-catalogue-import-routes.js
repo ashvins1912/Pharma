@@ -39,13 +39,17 @@ const levenshteinRatio = (left, right) => {
   }
   return Math.round((1 - previous[b.length] / Math.max(a.length, b.length)) * 100);
 };
-const tokenSortRatio = (left, right) => levenshteinRatio(key(left).split(' ').filter(Boolean).sort().join(' '), key(right).split(' ').filter(Boolean).sort().join(' '));
+const similarityText = value => key(value)
+  .replace(/\\b(\\d+(?:\\.\\d+)?)\\s*(mcg|mg|gm|g|ml|iu|%)\\b/g, '$1 $2')
+  .replace(/\\b(tablets|tabs|capsules|caps|sachets|vials)\\b/g, match => ({ tablets: 'tablet', tabs: 'tab', capsules: 'capsule', caps: 'cap', sachets: 'sachet', vials: 'vial' })[match]);
+const tokenSortRatio = (left, right) => levenshteinRatio(similarityText(left).split(' ').filter(Boolean).sort().join(' '), similarityText(right).split(' ').filter(Boolean).sort().join(' '));
+const normalizeStrength = value => key(value).replace(/(\\d)\\s+(mcg|mg|gm|g|ml|iu)\\b/g, '$1$2');
 export function scoreMedicineMatch(incoming, candidate) {
   const nameScore = tokenSortRatio(incoming.brandName, candidate.brandName);
   const aComposition = key(incoming.composition || (incoming.ingredients || []).join(' '));
   const bComposition = key(candidate.composition || (candidate.ingredients || []).join(' '));
   const compositionScore = aComposition && bComposition ? tokenSortRatio(aComposition, bComposition) : null;
-  const aStrength = key(incoming.strength), bStrength = key(candidate.strength);
+  const aStrength = normalizeStrength(incoming.strength), bStrength = normalizeStrength(candidate.strength);
   const aForm = key(incoming.dosageForm), bForm = key(candidate.dosageForm);
   const strengthConflict = Boolean(aStrength && bStrength && aStrength !== bStrength);
   const formConflict = Boolean(aForm && bForm && aForm !== bForm);
