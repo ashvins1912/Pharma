@@ -681,7 +681,7 @@ export default function AdminDashboardView() {
               {t('noInventoryChangesRecorded')}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
