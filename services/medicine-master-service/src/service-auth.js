@@ -14,7 +14,7 @@ export function requireServiceScope(scope) {
         algorithms: ['HS256'], issuer: config.serviceJwtIssuer, audience: config.serviceJwtAudience
       });
       const caller = payload.sub;
-      const grantedScopes = typeof payload.scope === 'string' ? [...new Set(payload.scope.split(/\\s+/).filter(Boolean))] : [];
+      const grantedScopes = typeof payload.scope === 'string' ? [...new Set(payload.scope.split(/\s+/).filter(Boolean))] : [];
       const hasUserContext = typeof payload.userId === 'string' && payload.userId.trim().length > 0
         && typeof payload.userRole === 'string' && payload.userRole.trim().length > 0;
       if (!callerScopes[caller]?.has(scope) || !grantedScopes.includes(scope) || !hasUserContext) {
