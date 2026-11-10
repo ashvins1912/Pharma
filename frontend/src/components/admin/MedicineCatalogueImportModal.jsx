@@ -158,7 +158,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
   const metric = (label, value) => (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 min-w-0">
       <div className="text-[10px] uppercase tracking-wide font-bold text-slate-500">{label}</div>
-      <div className="mt-1 text-xl font-black text-slate-900 tabular-nums">{Number(value || 0).toLocaleString()}</div>
+      <div className="mt-1 text-xl font-black text-slate-900 tabular-nums">{typeof value === 'number' ? value.toLocaleString() : (value ?? 0)}</div>
     </div>
   );
 
@@ -264,6 +264,19 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                 {metric('Partial quality', report.partialQualityRecords)}
                 {metric('Quality needs review', report.needsReviewQualityRecords)}
               </div>
+              {report.qualityIssueCounts && Object.keys(report.qualityIssueCounts).length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                  <h4 className="text-xs font-extrabold text-slate-800">Most common quality gaps</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {Object.entries(report.qualityIssueCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([issue, count]) => (
+                      <div key={issue} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-[11px]">
+                        <span className="min-w-0 break-words text-slate-600">{issue.replace(/_/g, ' ').toLowerCase()}</span>
+                        <strong className="shrink-0 tabular-nums text-slate-900">{Number(count).toLocaleString()}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-950">
                 Quality scores measure supplied-field completeness and consistency, not clinical correctness or regulatory approval. Missing fields are reported rather than invented. Clinical uses, side effects, habit-forming flags and suggested alternatives are source-provided and unverified; they are informational, not prescribing guidance. Suggested alternatives are not confirmed therapeutic equivalents. Prescription flags and source licensing remain unverified. Confirm dataset redistribution rights before commercial use. Third-party image URLs are not trusted or served as product images.
               </div>
