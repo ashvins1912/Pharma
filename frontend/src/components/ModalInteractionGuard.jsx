@@ -19,35 +19,10 @@ function getTopmostModal() {
 export default function ModalInteractionGuard() {
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
-    let locked = false;
-    let previous = null;
 
-    const updateLock = () => {
-      const modal = getTopmostModal();
-      if (modal && !locked) {
-        locked = true;
-        previous = {
-          htmlOverflow: document.documentElement.style.overflow,
-          bodyOverflow: document.body.style.overflow,
-          bodyPaddingRight: document.body.style.paddingRight
-        };
-        const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
-        document.documentElement.style.overflow = 'hidden';
-        document.body.style.overflow = 'hidden';
-        if (scrollbarWidth) document.body.style.paddingRight = `${scrollbarWidth}px`;
-        document.documentElement.classList.add('modal-open');
-        document.body.classList.add('modal-open');
-      } else if (!modal && locked) {
-        locked = false;
-        document.documentElement.style.overflow = previous?.htmlOverflow || '';
-        document.body.style.overflow = previous?.bodyOverflow || '';
-        document.body.style.paddingRight = previous?.bodyPaddingRight || '';
-        document.documentElement.classList.remove('modal-open');
-        document.body.classList.remove('modal-open');
-        previous = null;
-      }
-    };
-
+    // ModalAccessibilityManager owns document scroll locking, focus trapping,
+    // background inerting and focus restoration. This guard only prevents
+    // wheel/touch gestures from leaking through a modal backdrop.
     const canScrollWithin = (target, modal) => {
       let current = target instanceof Element ? target : null;
       while (current && current !== modal.parentElement) {
@@ -68,29 +43,14 @@ export default function ModalInteractionGuard() {
       if (event.cancelable) event.preventDefault();
     };
 
-    const observer = new MutationObserver(updateLock);
-    observer.observe(document.body, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ['class', 'style', 'aria-modal', 'hidden']
-    });
     window.addEventListener('wheel', preventBackgroundScroll, { passive: false });
     window.addEventListener('touchmove', preventBackgroundScroll, { passive: false });
-    updateLock();
 
     return () => {
-      observer.disconnect();
       window.removeEventListener('wheel', preventBackgroundScroll);
       window.removeEventListener('touchmove', preventBackgroundScroll);
-      if (locked && previous) {
-        document.documentElement.style.overflow = previous.htmlOverflow || '';
-        document.body.style.overflow = previous.bodyOverflow || '';
-        document.body.style.paddingRight = previous.bodyPaddingRight || '';
-        document.documentElement.classList.remove('modal-open');
-        document.body.classList.remove('modal-open');
-      }
     };
   }, []);
+
   return null;
 }
