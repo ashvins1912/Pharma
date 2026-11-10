@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mapMedicineMatchBatch, medicineMatchIdentity } from './medicine-match-reference.js';
+import { mapMedicineMatchBatch, medicineMatchIdentity, MedicineMatchReference } from './medicine-match-reference.js';
 
 test('normalizes equivalent product identities to the same stable reference key', () => {
   const first = medicineMatchIdentity({ name: 'Dolo 650', genericName: 'Paracetamol', strength: '650 mg', form: 'Tablet', manufacturer: 'Micro Labs' });
@@ -48,4 +48,14 @@ test('handles empty match batches without invoking the mapper', async () => {
   const results = await mapMedicineMatchBatch([], 8, async () => { called = true; });
   assert.deepEqual(results, []);
   assert.equal(called, false);
+});
+
+
+test('stores admin-approved target and field-level mapping provenance', () => {
+  assert.equal(MedicineMatchReference.schema.path('mappingStatus').defaultValue, 'PENDING');
+  assert.ok(MedicineMatchReference.schema.path('mappedMedicineId'));
+  assert.ok(MedicineMatchReference.schema.path('mappedFields'));
+  assert.ok(MedicineMatchReference.schema.path('mappedBy'));
+  assert.ok(MedicineMatchReference.schema.path('mappedAt'));
+  assert.ok(MedicineMatchReference.schema.path('mappingHistory'));
 });
