@@ -217,6 +217,7 @@ export default function AdminDashboardView() {
       canViewPromotions && 'offerZone',
       canViewPayments && 'payments',
       canViewInventory && 'inventory',
+      canImportMedicineMaster && 'medicineCatalogue',
       canManageRoutes && 'routes',
       canViewAudits && 'audits',
       canManageMembers && 'members',
@@ -232,7 +233,7 @@ export default function AdminDashboardView() {
   }, [
     adminTab, canViewFulfillment, canViewCSquare, canViewAdminRequests,
     canManageRiders, canViewPromotions, canViewSurplusSavings, canViewPayments, canViewInventory,
-    canManageRoutes, canViewAudits, canManageMembers, canViewTenants, canManagePlatformAccess, isSuperAdmin
+    canImportMedicineMaster, canManageRoutes, canViewAudits, canManageMembers, canViewTenants, canManagePlatformAccess, isSuperAdmin
   ]);
 
   // Derived Metrics
@@ -311,7 +312,7 @@ export default function AdminDashboardView() {
               </span>
             ))}
 
-            {isSuperAdmin && (
+            {canImportMedicineMaster && (
               <button type="button" onClick={() => { setAdminTab('medicineCatalogue'); document.getElementById('admin-workspace-content')?.scrollIntoView({ behavior: 'smooth' }); }} className="rounded-xl border border-violet-300 bg-violet-50 px-3.5 py-2.5 text-xs font-extrabold text-violet-800 transition hover:bg-violet-100">
                 <span aria-hidden="true">🧬</span> <span>Medicine Master Import</span>
               </button>
