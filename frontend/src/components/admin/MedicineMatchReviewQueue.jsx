@@ -57,8 +57,8 @@ export default function MedicineMatchReviewQueue() {
     setDiscovering(true);
     try {
       const response = await apiClient.post('/api/v1/inventory/catalogue/matches/discover', {
-        afterId: discoveryCursor || undefined, limit: 500
-      });
+        afterId: discoveryCursor || undefined, limit: 100
+      }, { timeout: 90000 });
       const result = response.data || {};
       setDiscoveryCursor(result.nextCursor || discoveryCursor);
       setDiscoveryComplete(!result.hasMore);
@@ -133,7 +133,7 @@ export default function MedicineMatchReviewQueue() {
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-100 bg-violet-50/70 px-4 py-4">
         <div><h3 className="text-sm font-black text-slate-900">Possible catalogue matches · Admin mapping</h3><p className="mt-1 text-xs text-slate-600">Only pending matches with candidate confidence strictly above 80% are shown. Select a master record and explicitly approve the fields Store may display.</p></div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={discoverExistingProducts} disabled={discovering || discoveryComplete} className="min-h-10 rounded-lg bg-violet-700 px-3 py-2 text-xs font-extrabold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50">{discovering ? 'Scanning products…' : discoveryComplete ? 'Discovery complete' : discoveryCursor ? 'Scan next 500 products' : 'Discover existing Store products'}</button>
+          <button type="button" onClick={discoverExistingProducts} disabled={discovering || discoveryComplete} className="min-h-10 rounded-lg bg-violet-700 px-3 py-2 text-xs font-extrabold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50">{discovering ? 'Scanning products…' : discoveryComplete ? 'Discovery complete' : discoveryCursor ? 'Scan next 100 products' : 'Discover existing Store products'}</button>
           <button type="button" onClick={() => load(pagination.page || 1)} disabled={loading} className="min-h-10 rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-bold text-violet-700 disabled:opacity-50">{loading ? "Refreshing…" : "Refresh queue"}</button>
         </div>
         <div className="rounded-xl border border-violet-200 bg-white px-3 py-2 text-right"><strong className="block text-lg tabular-nums text-violet-800">{Number(pagination.total || 0).toLocaleString()}</strong><span className="text-[10px] font-bold uppercase text-slate-500">Awaiting mapping · confidence &gt;80%</span></div>
