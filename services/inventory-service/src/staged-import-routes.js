@@ -205,7 +205,6 @@ async function publishRows(batch, rows, req) {
         inventoryBaseline.push({ sku: v.sku, batchNumber: v.batchNumber || '', stockQuantity: inventory.stockQuantity, reservedQuantity: inventory.reservedQuantity, price: inventory.price, updatedAt: inventory.updatedAt || null });
         productBaseline = productBaseline.filter(item => item.sku !== v.sku);
         productBaseline.push({ sku: v.sku, version: product.version, updatedAt: product.updatedAt || null });
-        changedProducts.push({ name: product.name, brand: product.brand, genericName: product.genericName, composition: product.composition, strength: product.strength, form: product.form, manufacturer: product.manufacturer, packSize: product.packSize });
         await StagedImportBatch.updateOne({ _id: batch._id }, { $set: { previewInventorySnapshot: inventoryBaseline, previewProductSnapshot: productBaseline } }, { session });
         const sequenceDoc = await StagedImportBatch.findOneAndUpdate({ _id: batch._id }, { $inc: { nextPublicationSequence: 1 } }, { new: true, session });
         const publication = {
@@ -314,6 +313,7 @@ async function unpublishRows(batch, rows, req) {
           productBaseline = productBaseline.filter(item => item.sku !== product.sku);
           productBaseline.push({ sku: product.sku, version: product.version, updatedAt: product.updatedAt || null });
         }
+        changedProducts.push({ name: product.name, brand: product.brand, genericName: product.genericName, composition: product.composition, strength: product.strength, form: product.form, manufacturer: product.manufacturer, packSize: product.packSize });
         await StagedImportBatch.updateOne({ _id: batch._id }, { $set: { previewInventorySnapshot: inventoryBaseline, previewProductSnapshot: productBaseline } }, { session });
         fresh.history.push({ action: 'UNPUBLISH', actor: actor(req), at: new Date(), version: fresh.version });
         fresh.status = 'UNPUBLISHED';
