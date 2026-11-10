@@ -490,11 +490,9 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         const qualityRank = { NEEDS_REVIEW: 1, PARTIAL: 2, GOOD: 3 };
         set.dataQualityStatus = (qualityRank[current?.dataQualityStatus] || 0) >= (qualityRank[item.dataQualityStatus] || 0)
           ? (current?.dataQualityStatus || item.dataQualityStatus) : item.dataQualityStatus;
-        if (!current || Number(item.qualityScore || 0) >= Number(current.qualityScore || 0)) {
-          set.qualityScore = item.qualityScore || 0;
-          set.qualityGrade = item.qualityGrade || 'NEEDS_REVIEW';
-        }
-        set.qualityIssues = [...new Set([...(current?.qualityIssues || []), ...(item.qualityIssues || [])])];
+        const mergedQuality = assessMedicineQuality({ ...current, ...set, sourceDataset: item.sourceDataset, sourceRecordId: item.sourceRecordId });
+        Object.assign(set, mergedQuality);
+        set.dataQualityStatus = mergedQuality.qualityGrade === 'EXCELLENT' || mergedQuality.qualityGrade === 'GOOD' ? 'GOOD' : mergedQuality.qualityGrade === 'NEEDS_REVIEW' ? 'NEEDS_REVIEW' : 'PARTIAL';
         return {
           updateOne: {
             filter: current ? { _id: current._id } : { medicineId: targetId },
