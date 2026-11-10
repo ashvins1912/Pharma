@@ -67,7 +67,8 @@ router.post('/matches/:identityHash/map', async (req, res, next) => {
     const target = await medicineMaster().findOne({ medicineId, isArchived: { $ne: true } }, { _id: 0, medicineId: 1 }).lean();
     if (!target) return res.status(404).json({ message: 'The selected active Medicine Master record was not found.' });
     const row = await MedicineMatchReference.findOneAndUpdate({ identityHash: req.params.identityHash }, {
-      $set: { mappingStatus: 'APPROVED', mappedMedicineId: medicineId, mappedFields: fields, mappedBy: String(req.service?.userId || req.service?.name || ''), mappedAt: new Date() }
+      $set: { mappingStatus: 'APPROVED', mappedMedicineId: medicineId, mappedFields: fields, mappedBy: String(req.service?.userId || req.service?.name || ''), mappedAt: new Date() },
+      $push: { mappingHistory: { medicineId, fields, actorId: String(req.service?.userId || req.service?.name || ''), approvedAt: new Date() } }
     }, { new: true, runValidators: true }).lean();
     if (!row) return res.status(404).json({ message: 'Medicine match review item was not found.' });
     return res.json({ success: true, identityHash: row.identityHash, mappingStatus: row.mappingStatus, mappedMedicineId: row.mappedMedicineId, mappedFields: row.mappedFields, mappedAt: row.mappedAt });
