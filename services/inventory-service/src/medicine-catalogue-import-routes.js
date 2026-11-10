@@ -746,7 +746,7 @@ router.post('/imports/merge', asyncHandler(async (req, res) => {
       if (candidateIndex >= 0) candidates[candidateIndex] = combined;
       fuzzyMerged += 1;
     } else {
-      if (best?.decision === 'MANUAL_REVIEW') reviewCandidates.push({ incomingMedicine: record.brandName, candidateMedicine: best.candidate.brandName, candidateMedicineId: best.candidate.medicineId, score: best.score, warnings: best.warnings });
+      if (best?.decision === 'MANUAL_REVIEW') reviewCandidates.push({ incomingMedicine: record.brandName, candidateMedicine: best.candidate.brandName, candidateMedicineId: best.candidate.medicineId, score: best.score, nameScore: best.nameScore, tokenNameScore: best.tokenNameScore, ngramNameScore: best.ngramNameScore, tfIdfNameScore: best.tfIdfNameScore, compositionScore: best.compositionScore, evidence: best.evidence, warnings: best.warnings });
       pendingIndexByRecord.set(record, pending.length);
       pending.push(record);
       if (prefix.length === 2) pendingByPrefix.set(prefix, [...(pendingByPrefix.get(prefix) || []), record]);
