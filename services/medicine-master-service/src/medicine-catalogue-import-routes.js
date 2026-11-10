@@ -1239,6 +1239,8 @@ router.post('/imports/:batchId/map', asyncHandler(async (req, res) => {
   if (source.storeMapping?.approvedAt) return res.status(409).json({ message: 'This source record has already been mapped. Refresh the queue.' });
   const isCreateNew = !requestedTarget || requestedTarget === 'CREATE_NEW';
   const targetMedicineId = isCreateNew ? sourceMedicineId : requestedTarget;
+  const existingTarget = await MedicineMaster.findOne({ medicineId: targetMedicineId, isArchived: { $ne: true } }).lean();
+  if (!isCreateNew && !existingTarget) return res.status(404).json({ message: 'The selected canonical catalogue record no longer exists. Refresh possible matches.' });
   const update = {};
   for (const field of selectedFields) {
     const value = source[field];
@@ -1255,10 +1257,18 @@ router.post('/imports/:batchId/map', asyncHandler(async (req, res) => {
         ...update, storeApproved: true, storeMappedAt: mappedAt, storeMappedBy: actorId,
         storeMappingSourceBatchId: batchId, storeMappingSourceMedicineId: sourceMedicineId
       },
-      $setOnInsert: { medicineId: targetMedicineId, canonicalKey: source.canonicalKey || '' }
+      ...(isCreateNew ? { $setOnInsert: { medicineId: targetMedicineId, canonicalKey: source.canonicalKey || '' } } : {})
     },
-    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+    { new: true, upsert: isCreateNew, runValidators: true, setDefaultsOnInsert: isCreateNew }
   ).lean();
+  if (mongoose.models.MedicineMasterAudit) {
+    const changedFields = [...new Set([...selectedFields, 'storeApproved'])];
+    await mongoose.models.MedicineMasterAudit.create({
+      medicineId: targetMedicineId, action: 'UPDATE', actorId, changedFields,
+      before: Object.fromEntries(changedFields.map(field => [field, existingTarget?.[field] ?? null])),
+      after: Object.fromEntries(changedFields.map(field => [field, mapped?.[field] ?? (field === 'storeApproved' ? true : null)]))
+    });
+  }
   const mapping = {
     status: 'APPROVED', targetMedicineId, selectedFields, approvedAt: mappedAt,
     approvedBy: actorId, createdNew: isCreateNew
