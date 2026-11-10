@@ -534,7 +534,7 @@ export function assessMedicineQuality(record) {
   return { qualityScore, qualityGrade, qualityIssues: [...new Set(qualityIssues)] };
 }
 
-export async function consolidateInBatches(records, dataset) {
+export async function consolidateInBatches(records, dataset, onProgress = null) {
   const unique = new Map(); let rejected = 0; let sourceRecords = 0;
   for (const raw of records) {
     sourceRecords += 1;
@@ -557,7 +557,10 @@ export async function consolidateInBatches(records, dataset) {
         previous.sourceRecordIds = [...new Set([...(previous.sourceRecordIds || [previous.sourceRecordId]), normalized.sourceRecordId])];
       }
     }
-    if (sourceRecords % CATALOGUE_CHUNK_SIZE === 0) await yieldToEventLoop();
+    if (sourceRecords % CATALOGUE_CHUNK_SIZE === 0) {
+      if (onProgress) await onProgress(sourceRecords);
+      await yieldToEventLoop();
+    }
   }
   const consolidatedRecords = [...unique.values()];
   for (let offset = 0; offset < consolidatedRecords.length; offset += CATALOGUE_CHUNK_SIZE) {
@@ -638,7 +641,9 @@ async function processCatalogueImportPreview(req, res) {
   if (!Array.isArray(sourceRows) && typeof sourceRows?.[Symbol.iterator] !== 'function') return res.status(400).json({ message: 'The uploaded medicine dataset has an invalid record collection.' });
   let normalized;
   try {
-    normalized = req.file.size > LARGE_IMPORT_THRESHOLD_BYTES ? await consolidateInBatches(sourceRows, dataset) : consolidate(sourceRows, dataset);
+    normalized = req.file.size > LARGE_IMPORT_THRESHOLD_BYTES
+      ? await consolidateInBatches(sourceRows, dataset, req.importJob ? count => updateCatalogueImportJob(req.importJob, { stage: 'NORMALIZING', progressPercent: Math.min(30, 5 + Math.round(count / 60000 * 25)), processedRecords: count }) : null)
+      : consolidate(sourceRows, dataset);
   } catch (error) {
     return res.status(error.statusCode || 400).json({ message: error.message });
   }
