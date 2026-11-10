@@ -3,11 +3,72 @@ import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 
 const DATASETS = [
-  { value: '', label: 'Auto-detect JSON format' },
-  { value: 'INDIAN_MEDICINE_DATA', label: 'Indian Medicine Dataset (drugDetails)' },
-  { value: 'INDIA_MEDICINES_INFO', label: 'India Medicines and Drug Info (retail array)' },
-  { value: 'MEDICINES_PART_1', label: 'Medicines Part 1 (50,000 clinical detail records)' }
+  { value: '', label: 'Auto-detect', description: 'Detect the structure from your JSON file.' },
+  { value: 'INDIAN_MEDICINE_DATA', label: 'Indian Medicine Dataset', description: 'Object containing a drugDetails array.' },
+  { value: 'INDIA_MEDICINES_INFO', label: 'India Medicines Info', description: 'Retail product array with Medicine Name and Composition.' },
+  { value: 'MEDICINES_PART_1', label: 'Medicines Part 1', description: 'Clinical detail array with id, name, use0 and sideEffect0 fields.' }
 ];
+
+const DATASET_SAMPLES = {
+  '': `{
+  "drugDetails": [
+    {
+      "brandIdentifier": "BRAND-001",
+      "brandName": "Example 500 Tablet",
+      "genericName": "Example ingredient",
+      "substanceName": "Example ingredient",
+      "doseForm": "Tablet",
+      "indication": "Example source-provided indication"
+    }
+  ],
+  "count": 1
+}`,
+  INDIAN_MEDICINE_DATA: `{
+  "drugDetails": [
+    {
+      "brandIdentifier": "BRAND-001",
+      "brandName": "Example 500 Tablet",
+      "genericIdentifier": "GEN-001",
+      "genericName": "Example ingredient",
+      "supplierIdentifier": "SUP-001",
+      "supplierName": "Example manufacturer",
+      "substanceIdentifier": "SUB-001",
+      "substanceName": "Example ingredient",
+      "doseForm": "Tablet",
+      "routeOfAdministrationName": "Oral",
+      "indication": "Example source-provided indication",
+      "contraIndication": "",
+      "interactionWithDrugs": "",
+      "alternativeDrugs": []
+    }
+  ],
+  "count": 1
+}`,
+  INDIA_MEDICINES_INFO: `[
+  {
+    "Medicine Name": "Example 500 Tablet",
+    "Product Name": "Example 500 Tablet - Pack of 10",
+    "Composition": "Example ingredient 500 mg",
+    "Type of Medicine": "Tablet",
+    "Image URL": "",
+    "Is Prescription Required?": "Yes",
+    "Price": "₹100"
+  }
+]`,
+  MEDICINES_PART_1: `[
+  {
+    "id": "CLINICAL-001",
+    "name": "Example 500 Tablet",
+    "use0": "Example source-provided use",
+    "sideEffect0": "Example source-provided side effect",
+    "substitute0": "Example suggested alternative",
+    "Chemical Class": "Example chemical class",
+    "Habit Forming": "No",
+    "Therapeutic Class": "Example therapeutic class",
+    "Action Class": "Example action class"
+  }
+]`
+};
 
 export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
   const { addToast } = useToast();
@@ -117,12 +178,33 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
           </div>
           {!published && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="block text-xs font-bold text-slate-700">
-                Dataset format
-                <select value={dataset} onChange={event => { setDataset(event.target.value); setPreview(null); }} disabled={busy || Boolean(preview)} className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
-                  {DATASETS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
-                </select>
-              </label>
+              <div className="sm:col-span-2 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-slate-700">Dataset format</span>
+                  <span className="text-[10px] font-medium text-slate-500">Choose the structure matching your file</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="radiogroup" aria-label="Dataset format">
+                  {DATASETS.map(item => (
+                    <button key={item.value} type="button" role="radio" aria-checked={dataset === item.value}
+                      onClick={() => { setDataset(item.value); setPreview(null); }}
+                      disabled={busy || Boolean(preview)}
+                      className={`rounded-xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${dataset === item.value ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100' : 'border-slate-200 bg-white hover:border-blue-300'}`}>
+                      <span className="flex items-center gap-2 text-xs font-extrabold text-slate-800">
+                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${dataset === item.value ? 'border-blue-600' : 'border-slate-400'}`}>{dataset === item.value && <span className="h-2 w-2 rounded-full bg-blue-600" />}</span>
+                        {item.label}
+                      </span>
+                      <span className="mt-1 block pl-6 text-[11px] leading-4 text-slate-500">{item.description}</span>
+                    </button>
+                  ))}
+                </div>
+                <details className="rounded-xl border border-slate-200 bg-slate-50">
+                  <summary className="cursor-pointer px-3 py-2.5 text-xs font-bold text-slate-700">View sample dataset format</summary>
+                  <div className="border-t border-slate-200 p-3">
+                    <p className="mb-2 text-[11px] leading-4 text-slate-500">Illustrative structure only. Replace the example values with your source records. The importer validates the actual JSON structure and required identifiers.</p>
+                    <pre className="max-h-64 overflow-auto rounded-lg bg-slate-950 p-3 text-[10px] leading-4 text-slate-100"><code>{DATASET_SAMPLES[dataset]}</code></pre>
+                  </div>
+                </details>
+              </div>
               <label className="block text-xs font-bold text-slate-700">
                 JSON file (max 110 MB)
                 <input type="file" accept=".json,application/json" disabled={busy || Boolean(preview)} onChange={event => setFile(event.target.files?.[0] || null)} className="mt-1.5 block w-full rounded-xl border border-slate-300 bg-white p-2 text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-bold file:text-blue-700" />
