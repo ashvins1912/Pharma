@@ -611,6 +611,7 @@ router.post('/imports/merge', asyncHandler(async (req, res) => {
   const allChunks = await CatalogueImportChunk.find({ batchId: { $in: sourceBatchIds } }).sort({ batchId: 1, chunkIndex: 1 }).lean();
   const rawRecords = allChunks.flatMap(chunk => chunk.records || []);
   if (!rawRecords.length) return res.status(409).json({ message: 'Selected batches contain no staged medicine records.' });
+  if (rawRecords.length > 60000) return res.status(413).json({ message: 'The selected batches contain more than 60,000 records combined. Merge fewer batches at a time.' });
   const identifierGroups = new Map();
   for (const record of rawRecords) identifierGroups.set(record.medicineId, [...(identifierGroups.get(record.medicineId) || []), record]);
   const identifierConflicts = [...identifierGroups.entries()].filter(([, group]) => group.length > 1 && group.some((record, index) => group.slice(index + 1).some(other => {
