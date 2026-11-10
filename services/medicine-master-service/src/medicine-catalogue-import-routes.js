@@ -1152,6 +1152,7 @@ router.get('/imports/:batchId/records', asyncHandler(async (req, res) => {
       .map(field => ({ ['record.' + field]: { $regex: escapedSearch, $options: 'i' } }))
   } : null;
   const recordProjection = {
+    _id: 0,
     medicineId: '$record.medicineId',
     brandName: '$record.brandName',
     genericName: '$record.genericName',
