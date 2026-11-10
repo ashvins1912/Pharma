@@ -180,6 +180,7 @@ export function createServiceRouters(gatewayConfig = config) {
     target: gatewayConfig.inventoryServiceUrl,
     allowPublic: true
   }, gatewayConfig));
+  inventoryRouter.post('/catalogue/medicines/match/batch', catalogueImportAuth, inventory('inventory.catalogue.import'));
   inventoryRouter.get('/catalogue/medicines', inventory('inventory.catalogue.read'));
   inventoryRouter.get('/catalogue/medicines/:medicineId', inventory('inventory.catalogue.read'));
   inventoryRouter.patch('/catalogue/medicines/:medicineId', catalogueImportAuth, inventory('inventory.catalogue.import'));
