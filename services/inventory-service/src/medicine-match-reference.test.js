@@ -18,5 +18,5 @@ test('keeps different strengths and dosage forms in separate match references', 
 
 test('does not create a match identity for an empty product', () => {
   const result = medicineMatchIdentity({});
-  assert.equal(result.normalizedIdentity, '||||||');
+  assert.equal(result.normalizedIdentity, '|||||||');
 });
