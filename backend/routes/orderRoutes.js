@@ -368,10 +368,13 @@ router.post('/fulfillment/preview', authenticateUser, async (req, res) => {
         const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
         if (!tenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
         const preferredBranchId = await resolveTenantBranchId(tenantId, req.body?.branchId, req.user);
-        const destination = req.body?.coordinates || req.body?.deliveryCoordinates || null;
+        let destination = req.body?.coordinates || req.body?.deliveryCoordinates || null;
+        if (typeof destination === 'string') {
+            try { destination = JSON.parse(destination); } catch { destination = null; }
+        }
         const activeBranches = await TenantBranch.find({
             tenantId, status: 'ACTIVE', ...(destination ? {} : { _id: preferredBranchId })
-        }).select('_id name geolocation serviceRadiusKm deliveryFee').lean();
+        }).select('_id name geolocation serviceRadiusKm deliveryFee').limit(50).lean();
         if (!activeBranches.length) return res.status(409).json({ code: 'NO_ACTIVE_BRANCH', message: 'No active branch is available for this pharmacy.' });
         const routeInventory = await inventoryClient.lookupAcrossBranches({
             productIds: ids, tenantId,
