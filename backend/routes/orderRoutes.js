@@ -378,17 +378,28 @@ router.post('/fulfillment/preview', authenticateUser, async (req, res) => {
             branchIds: activeBranches.map(branch => String(branch._id)),
             userId: req.user.sub
         });
-        const branchCandidates = routeInventory.branches.map(snapshot => {
+        const branchCandidates = await Promise.all(routeInventory.branches.map(async snapshot => {
             const branch = activeBranches.find(item => String(item._id) === String(snapshot.branchId));
             const inventory = snapshot.items || [];
             const compositionKeys = [...new Set([...inventory.map(item => item.composition || item.genericName), ...items.map(item => item.composition || item.genericName)].map(value => String(value || '').trim()).filter(value => value && !['active compound', 'unknown', 'n/a', 'na'].includes(value.toLowerCase())))];
             const strengthKeys = [...new Set([...inventory.map(item => item.strength), ...items.map(item => item.strength)].map(value => String(value || '').trim()).filter(Boolean))];
+            const catalogResults = compositionKeys.length
+                ? await Promise.all(compositionKeys.map(composition => inventoryClient.searchProducts({
+                    tenantId, branchId: String(branch._id), query: composition,
+                    includeOutOfStock: true, limit: 100, userId: req.user.sub
+                })))
+                : [];
+            const catalog = [...new Map(catalogResults.flatMap(result => result.items || [])
+                .filter(product => compositionKeys.some(composition => String(product.genericName || product.composition || '').trim().toLowerCase() === composition.toLowerCase()))
+                .filter(product => strengthKeys.some(strength => String(product.strength || '').trim().toLowerCase() === strength.toLowerCase()))
+                .filter(product => !ids.includes(String(product.productId)))
+                .map(product => [String(product.productId), product])).values()];
             return {
                 branchId: String(branch._id), name: branch.name, geolocation: branch.geolocation,
                 serviceRadiusKm: branch.serviceRadiusKm, deliveryFee: branch.deliveryFee,
-                inventory
+                inventory, catalog
             };
-        });
+        }));
         const plan = buildDynamicFulfillmentRoute({
             requestedItems: items, branchCandidates, destination,
             preferredBranchId, now: new Date()
