@@ -1146,11 +1146,12 @@ router.get('/imports', asyncHandler(async (req, res) => {
 
 const MAPPING_FIELDS = [
   'brandName','productName','productId','genericName','genericId','manufacturer','manufacturerId',
-  'composition','ingredients','ingredientIds','strength','packSize','dosageForm','medicineType',
-  'routes','routeIds','indications','uses','sideEffects','contraindications','drugInteractions',
-  'suggestedAlternatives','alternatives','therapeuticClass','chemicalClass','actionClass',
-  'habitForming','sourceImageUrl','casNumbers','uniiCodes','substanceDescriptions',
-  'molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology'
+  'composition','ingredients','ingredientDetails','ingredientIds','strength','packSize','dosageForm',
+  'medicineType','drugFormId','routes','routeIds','indications','uses','sideEffects',
+  'contraindications','drugInteractions','suggestedAlternatives','alternatives','therapeuticClass',
+  'chemicalClass','actionClass','habitForming','requiresPrescription','sourceImageUrl',
+  'sourceLicenseStatusValue','casNumbers','uniiCodes','substanceDescriptions','molecularFormulas',
+  'inchiValues','iupacNames','molecularWeights','smiles','toxicology'
 ];
 const getStagedMappingPage = async (batchId, page, limit) => {
   const skip = (page - 1) * limit;
