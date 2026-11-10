@@ -37,6 +37,60 @@ router.get('/', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+const MEDICINE_EDITABLE_FIELDS = new Set([
+  'brandName', 'genericName', 'manufacturer', 'composition', 'strength', 'packSize',
+  'dosageForm', 'medicineType', 'therapeuticClass', 'chemicalClass', 'actionClass',
+  'uses', 'sideEffects', 'indications', 'contraindications', 'drugInteractions'
+]);
+const medicineMasterAuditSchema = new mongoose.Schema({
+  medicineId: { type: String, required: true, index: true },
+  action: { type: String, enum: ['UPDATE'], required: true },
+  actorId: { type: String, default: '' },
+  changedFields: { type: [String], default: [] },
+  before: { type: mongoose.Schema.Types.Mixed, default: {} },
+  after: { type: mongoose.Schema.Types.Mixed, default: {} }
+}, { timestamps: true });
+const MedicineMasterAudit = mongoose.models.MedicineMasterAudit || mongoose.model('MedicineMasterAudit', medicineMasterAuditSchema);
+
+router.patch('/:medicineId', requireServiceScope('inventory.catalogue.import'), async (req, res, next) => {
+  try {
+    if (req.service?.isPlatformUser !== true) return res.status(403).json({ message: 'Only a platform super administrator can update the shared medicine master catalogue.' });
+    const input = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+    const update = {};
+    for (const [field, value] of Object.entries(input)) {
+      if (!MEDICINE_EDITABLE_FIELDS.has(field)) continue;
+      if (['uses', 'sideEffects', 'indications', 'contraindications', 'drugInteractions'].includes(field)) {
+        if (!Array.isArray(value)) return res.status(400).json({ message: field + ' must be an array.' });
+        update[field] = [...new Set(value.map(item => String(item ?? '').trim()).filter(Boolean))];
+      } else {
+        if (typeof value !== 'string' || !value.trim()) return res.status(400).json({ message: field + ' must be a non-empty string.' });
+        update[field] = value.trim().slice(0, 2000);
+      }
+    }
+    const changedFields = Object.keys(update);
+    if (!changedFields.length) return res.status(400).json({ message: 'No supported medicine fields were supplied.' });
+    const Model = medicineMaster();
+    const current = await Model.findOne({ medicineId: req.params.medicineId }).lean();
+    if (!current) return res.status(404).json({ message: 'Medicine master record was not found.' });
+    const before = Object.fromEntries(changedFields.map(field => [field, current[field] ?? null]));
+    const updated = await Model.findOneAndUpdate(
+      { _id: current._id },
+      { $set: { ...update, lastManuallyUpdatedBy: String(req.service?.userId || req.service?.sub || ''), lastManuallyUpdatedAt: new Date() } },
+      { new: true, runValidators: true }
+    ).lean();
+    await MedicineMasterAudit.create({ medicineId: current.medicineId, action: 'UPDATE', actorId: String(req.service?.userId || req.service?.sub || ''), changedFields, before, after: Object.fromEntries(changedFields.map(field => [field, updated[field] ?? null])) });
+    return res.json({ medicine: updated, changedFields });
+  } catch (error) { return next(error); }
+});
+
+router.get('/:medicineId/audit', requireServiceScope('inventory.catalogue.import'), async (req, res, next) => {
+  try {
+    if (req.service?.isPlatformUser !== true) return res.status(403).json({ message: 'Only a platform super administrator can inspect medicine master update history.' });
+    const items = await MedicineMasterAudit.find({ medicineId: req.params.medicineId }).sort({ createdAt: -1 }).limit(50).lean();
+    return res.json({ items });
+  } catch (error) { return next(error); }
+});
+
 router.get('/:medicineId', async (req, res, next) => {
   try {
     const item = await medicineMaster().findOne({ medicineId: req.params.medicineId }).lean();
