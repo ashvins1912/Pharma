@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { medicineMatchIdentity } from './medicine-match-reference.js';
+import { mapMedicineMatchBatch, medicineMatchIdentity } from './medicine-match-reference.js';
 
 test('normalizes equivalent product identities to the same stable reference key', () => {
   const first = medicineMatchIdentity({ name: 'Dolo 650', genericName: 'Paracetamol', strength: '650 mg', form: 'Tablet', manufacturer: 'Micro Labs' });
@@ -26,4 +26,26 @@ test('manufacturer is excluded from the persistent match-reference identity', ()
   const second = medicineMatchIdentity({ name: 'Aceflam S', brand: 'Aceflam', manufacturer: 'Manufacturer B' });
   assert.equal(first.identityHash, second.identityHash);
   assert.equal(first.normalizedIdentity, second.normalizedIdentity);
+});
+
+
+test('processes match rows concurrently within the configured bound and preserves result order', async () => {
+  let active = 0;
+  let peak = 0;
+  const results = await mapMedicineMatchBatch([0, 1, 2, 3, 4, 5], 2, async value => {
+    active += 1;
+    peak = Math.max(peak, active);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    active -= 1;
+    return value * 2;
+  });
+  assert.deepEqual(results, [0, 2, 4, 6, 8, 10]);
+  assert.equal(peak, 2);
+});
+
+test('handles empty match batches without invoking the mapper', async () => {
+  let called = false;
+  const results = await mapMedicineMatchBatch([], 8, async () => { called = true; });
+  assert.deepEqual(results, []);
+  assert.equal(called, false);
 });
