@@ -28,7 +28,8 @@ function getTopmostDialog() {
       zIndex: Number.parseInt(window.getComputedStyle(element).zIndex, 10) || 0
     }))
     .sort((a, b) => a.zIndex - b.zIndex || a.index - b.index)
-    .at(-1)?.element || null;
+    .map(item => item.element)
+    .pop() || null;
 }
 
 function getFocusable(dialog) {
