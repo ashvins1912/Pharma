@@ -72,7 +72,7 @@ const medicineMasterSchema = new mongoose.Schema({
   lastImportBatchId: { type: String, default: '' },
   lastVerifiedAt: { type: Date, default: null }
 }, { timestamps: true });
-medicineMasterSchema.index({ brandName: 'text', genericName: 'text', composition: 'text', manufacturer: 'text' });
+medicineMasterSchema.index({ brandName: 'text', genericName: 'text', composition: 'text', manufacturer: 'text', uses: 'text', sideEffects: 'text', therapeuticClass: 'text', chemicalClass: 'text', actionClass: 'text' });
 const catalogueImportSchema = new mongoose.Schema({
   batchId: { type: String, required: true, unique: true },
   dataset: { type: String, enum: ['INDIAN_MEDICINE_DATA', 'INDIA_MEDICINES_INFO', 'MEDICINES_PART_1'], required: true },
