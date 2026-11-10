@@ -670,8 +670,9 @@ export function AppProvider({ children }) {
     const onInventoryChanged = payload => {
       const effectiveTenantId = tenantId || user?.tenantId || user?.app_metadata?.tenantId || null;
       const effectiveBranchId = branchId || user?.branchId || user?.app_metadata?.branchId || null;
-      if (!payload || String(payload.tenantId || '') !== String(effectiveTenantId || '')) return;
-      if (payload.branchId && String(payload.branchId) !== String(effectiveBranchId || '')) return;
+      if (!payload) return;
+      if (effectiveTenantId && String(payload.tenantId || '') !== String(effectiveTenantId)) return;
+      if (effectiveBranchId && payload.branchId && String(payload.branchId) !== String(effectiveBranchId)) return;
       window.dispatchEvent(new CustomEvent('pharma:inventory-updated', { detail: payload }));
     };
     const onOrderStatusChanged = payload => {
@@ -926,8 +927,8 @@ export function AppProvider({ children }) {
     // Reconnect recovery is dispatched by the authenticated Socket.IO client.
     const handleInventoryUpdated = event => {
       const payload = event?.detail;
-      if (payload?.tenantId && String(payload.tenantId) !== String(effectiveTenantId)) return;
-      if (payload?.branchId && String(payload.branchId) !== String(effectiveBranchId)) return;
+      if (effectiveTenantId && payload?.tenantId && String(payload.tenantId) !== String(effectiveTenantId)) return;
+      if (effectiveBranchId && payload?.branchId && String(payload.branchId) !== String(effectiveBranchId)) return;
       void loadInventoryAlerts();
     };
     window.addEventListener('pharma:inventory-updated', handleInventoryUpdated);
