@@ -3,9 +3,17 @@ import test from 'node:test';
 
 process.env.SERVICE_AUTH_SECRET = 'test-service-secret-with-more-than-thirty-two-characters';
 
-const { detectMedicineDataset, normalizeMedicineRecord, consolidate } = await import('./src/medicine-catalogue-import-routes.js');
+const { detectMedicineDataset, normalizeMedicineRecord, consolidate, parseJsonArrayRecords } = await import('./src/medicine-catalogue-import-routes.js');
 const { requireServiceScope } = await import('./src/service-auth.js');
 const jwt = (await import('jsonwebtoken')).default;
+
+test('streams JSON arrays one object at a time and preserves escaped/nested content', () => {
+  const input = Buffer.from('[{\"id\":\"1\",\"name\":\"A \\\"quoted\\\" tablet\",\"nested\":[{\"x\":1}]},{\"id\":\"2\",\"name\":\"B tablet\"}]');
+  const rows = [...parseJsonArrayRecords(input)];
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].name, 'A \"quoted\" tablet');
+  assert.equal(rows[0].nested[0].x, 1);
+});
 
 test('detects all three supported medicine dataset structures', () => {
   assert.equal(detectMedicineDataset({ count: 1, drugDetails: [{ brandIdentifier: 'B-1' }] }), 'INDIAN_MEDICINE_DATA');
