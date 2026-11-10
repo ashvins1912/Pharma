@@ -764,9 +764,9 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
       const operations = chunk.map(item => {
         const canonicalMatch = item.canonicalKey && incomingKeyCounts.get(item.canonicalKey) === 1 ? byKey.get(item.canonicalKey) : null;
         const nameMatch = item.safeNameMatch && incomingNameCounts.get(key(item.brandName)) === 1 ? byName.get(key(item.brandName)) : null;
-        const fuzzyTarget = item.reconciliationMatch?.method === 'FUZZY_TOKEN_SORT' && item.reconciliationMatch.decision === 'AUTO_MERGE'
+        const plannedTarget = item.reconciliationMatch?.decision === 'AUTO_MERGE'
           ? byId.get(item.reconciliationMatch.targetMedicineId) : null;
-        const current = byId.get(item.medicineId) || fuzzyTarget || canonicalMatch || nameMatch || null;
+        const current = byId.get(item.medicineId) || plannedTarget || canonicalMatch || nameMatch || null;
         const targetId = current?.medicineId || item.medicineId;
         const fields = ['brandName','genericName','genericId','sourceLicenseStatusValue','drugFormId','productId','productName','manufacturer','manufacturerId','composition','strength','packSize','dosageForm','medicineType','sourceImageUrl'];
         const set = {
