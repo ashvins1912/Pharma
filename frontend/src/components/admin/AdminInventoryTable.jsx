@@ -316,7 +316,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
       </div>
 
       {/* Grid of Admin Medicines */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+      <div className="qm-inventory-record-grid grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
         {loading && adminMeds.length === 0 ? (
           <div className="col-span-full py-12 text-center text-xs text-slate-400">{t('loadingInventory')}</div>
         ) : loadError ? (
@@ -333,7 +333,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
             const stock = med.stock !== undefined ? med.stock : med.quantity;
             const physicalStock = med.stockQuantity !== undefined ? med.stockQuantity : stock;
             return (
-              <div key={med._id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3 flex flex-col justify-between shadow-xs">
+              <article key={med._id} className="qm-inventory-record-card bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3 flex flex-col justify-between shadow-xs">
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <img
@@ -349,7 +349,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
                       className="w-12 h-12 rounded-xl object-contain p-1 border border-slate-200 bg-white flex-shrink-0"
                     />
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-extrabold text-slate-900 text-xs truncate">{med.name}</h4>
+                      <h4 className="qm-inventory-record-title font-extrabold text-slate-900 text-xs">{med.name}</h4>
                       <p className="text-[11px] text-blue-700 font-bold truncate">Drug: {med.drug || med.activeSalt || 'Standard'}</p>
                       <p className="text-[10px] text-slate-400 truncate">HSN/SAC: {med.hsnSac || '3004'} | SKU: {med.sku || 'N/A'}</p>
                     </div>
@@ -395,7 +395,7 @@ export default function AdminInventoryTable({ onOpenBulkImport, canManage = fals
                     </button>
                   )}
                 </div>
-              </div>
+              </article>
             );
           })
         )}
