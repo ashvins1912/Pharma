@@ -41,6 +41,40 @@ test('matches Inventory Service lookup rows keyed by productId', () => {
   assert.equal(plan.lines[0].waitingQuantity, 0);
 });
 
+test('respects explicit availableQuantity over physicalStock when stock is in waiting', () => {
+  const zeroAvailable = {
+    productId: 'medicine-zero', name: 'Zero Stock Med', composition: 'salt a',
+    strength: '500 mg', form: 'tablet', price: 100,
+    stockQuantity: 5, reservedQuantity: 0, availableQuantity: 0,
+    expiryDate: new Date('2027-12-31T00:00:00.000Z')
+  };
+  const partialAvailable = {
+    productId: 'medicine-partial', name: 'Partial Stock Med', composition: 'salt b',
+    strength: '250 mg', form: 'capsule', price: 50,
+    stockQuantity: 10, reservedQuantity: 0, availableQuantity: 2,
+    expiryDate: new Date('2027-12-31T00:00:00.000Z')
+  };
+  const plan = buildIntelligentFulfillmentPlan({
+    requestedItems: [
+      { medicineId: 'medicine-zero', quantity: 3 },
+      { medicineId: 'medicine-partial', quantity: 5 }
+    ],
+    inventory: [zeroAvailable, partialAvailable],
+    now
+  });
+  const zeroLine = plan.lines.find(l => l.productId === 'medicine-zero');
+  assert.equal(zeroLine.availableQuantity, 0);
+  assert.equal(zeroLine.fulfilNowQuantity, 0);
+  assert.equal(zeroLine.waitingQuantity, 3);
+  assert.equal(zeroLine.availability, 'OUT_OF_STOCK');
+
+  const partialLine = plan.lines.find(l => l.productId === 'medicine-partial');
+  assert.equal(partialLine.availableQuantity, 2);
+  assert.equal(partialLine.fulfilNowQuantity, 2);
+  assert.equal(partialLine.waitingQuantity, 3);
+  assert.equal(partialLine.availability, 'PARTIAL');
+});
+
 test('aggregates duplicate cart lines before calculating availability', () => {
   const plan = buildIntelligentFulfillmentPlan({
     requestedItems: [

@@ -1,6 +1,12 @@
 const physicalStock = medicine => Number(medicine?.stockQuantity ?? medicine?.stock ?? medicine?.quantity ?? 0);
 const reservedStock = medicine => Number(medicine?.reservedQuantity || 0);
-const availableStock = medicine => Math.max(0, physicalStock(medicine) - reservedStock(medicine));
+const availableStock = medicine => {
+  const explicitAvailable = medicine?.availableQuantity ?? medicine?.stockAvailable;
+  if (explicitAvailable != null && Number.isFinite(Number(explicitAvailable))) {
+    return Math.max(0, Number(explicitAvailable));
+  }
+  return Math.max(0, physicalStock(medicine) - reservedStock(medicine));
+};
 const roundMoney = value => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 const normalized = value => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
