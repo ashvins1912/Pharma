@@ -206,7 +206,7 @@ test('dynamic routing selects the branch with the highest safe partial-fill rati
 });
 
 test('dynamic routing excludes branches outside the delivery service radius', () => {
-  const plan = buildDynamicFulfillmentRoute({
+  assert.throws(() => buildDynamicFulfillmentRoute({
     requestedItems: [{ medicineId: 'medicine-1', quantity: 1 }],
     branchCandidates: [
       { branchId: 'outside', geolocation: { latitude: 13.2, longitude: 77.6 }, serviceRadiusKm: 1, inventory: [{ ...medicine(), productId: 'medicine-1' }] }
@@ -214,9 +214,7 @@ test('dynamic routing excludes branches outside the delivery service radius', ()
     destination: { latitude: 12.9716, longitude: 77.5946 },
     preferredBranchId: 'outside',
     now
-  });
-  // A distant branch must not be selected merely because it is the preferred branch.
-  assert.fail('Expected no eligible branch to be selected');
+  }), /No active pharmacy branch serves/);
 });
 
 test('route distance uses the Haversine calculation and rejects missing coordinates', () => {
