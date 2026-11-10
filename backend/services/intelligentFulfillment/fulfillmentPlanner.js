@@ -230,7 +230,7 @@ export function buildDynamicFulfillmentRoute({
     || b.fullyFilledLines - a.fullyFilledLines
     || (a.distanceKm ?? Number.MAX_SAFE_INTEGER) - (b.distanceKm ?? Number.MAX_SAFE_INTEGER)
     || a.deliveryFee - b.deliveryFee
-    || (String(a.branch.branchId) === String(preferredBranchId) ? -1 : 0)
+    || (Number(String(b.branch.branchId) === String(preferredBranchId)) - Number(String(a.branch.branchId) === String(preferredBranchId)))
     || String(a.branch.branchId).localeCompare(String(b.branch.branchId))
   );
   const selected = scored[0];
