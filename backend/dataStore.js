@@ -3,6 +3,7 @@ import { getIsConnected } from './config/db.js';
 import { buildOrderStatusFilter, orderHasStatus } from './utils/orderStatusFilters.js';
 import mongoose from 'mongoose';
 import { createHash } from 'node:crypto';
+import { buildCheckoutIdentity } from './utils/checkoutIdempotency.js';
 import Medicine from './models/Medicine.js';
 import { inventoryClient } from './services/inventory-client/InventoryClient.js';
 import Order from './models/Order.js';
@@ -1033,7 +1034,13 @@ export const dataStore = {
             const quantity = requested.quantity;
             const product = productsById.get(medicineId);
             if (!product) throw inventoryError('The selected pharmacy does not have this medicine in its branch catalogue.', 404);
-            if (Number(product.availableQuantity || 0) < quantity) {
+            // Inventory Service reservation is the atomic stock authority.
+            // Do not reject a replay from this advisory lookup: the first request
+            // may already have reserved the same stock before its order commit or
+            // response was interrupted. The stable reservation idempotency key
+            // below safely replays that reservation; reserve() still rejects a
+            // genuinely unavailable quantity.
+            if (!idempotencyKey && Number(product.availableQuantity || 0) < quantity) {
                 throw inventoryError(`Insufficient available stock for ${product.name}.`, 409);
             }
             const requiresPrescription = Boolean(product.requiresPrescription);
@@ -1068,14 +1075,21 @@ export const dataStore = {
                 stock: Math.max(0, Number(product.availableQuantity || 0) - quantity)
             });
         }
-        const orderId = new mongoose.Types.ObjectId();
+        const checkoutIdentity = idempotencyKey
+            ? buildCheckoutIdentity({ userId: orderData.userId, tenantId: selectedTenantId, idempotencyKey })
+            : null;
+        // The same checkout key must resolve to the same order and inventory
+        // reservation across browser retries and concurrent duplicate requests.
+        const orderId = checkoutIdentity
+            ? new mongoose.Types.ObjectId(checkoutIdentity.orderId)
+            : new mongoose.Types.ObjectId();
         const inventoryReservation = await inventoryClient.reserve({
             orderId: orderId.toString(),
             items: medicineItemsForOrder.map(item => ({ productId: String(item.medicineId), quantity: item.quantity })),
             tenantId: selectedTenantId,
             branchId: selectedBranchId,
             userId: orderData.userId,
-            idempotencyKey: `legacy-order-reservation:${orderId.toString()}`
+            idempotencyKey: checkoutIdentity?.reservationIdempotencyKey || `legacy-order-reservation:${orderId.toString()}`
         });
         if (inventoryReservation.status !== 'RESERVED' || !inventoryReservation.reservationId) {
             throw inventoryError('Inventory could not reserve the requested medicines. Refresh stock and retry.', 409);
@@ -1310,17 +1324,39 @@ export const dataStore = {
                     createdOrder.rewardNotice = redemptionWarning;
                 });
             } catch (error) {
-                try {
-                    await inventoryClient.release(inventoryReservation.reservationId, {
-                        tenantId: selectedTenantId, branchId: selectedBranchId, userId: orderData.userId,
-                        idempotencyKey: `legacy-order-release-after-create-failure:${orderId.toString()}`
-                    });
-                } catch (releaseError) {
-                    console.error('Order creation failed and Inventory reservation release also failed:', {
-                        orderId: orderId.toString(), reservationId: inventoryReservation.reservationId,
-                        error: releaseError.message
-                    });
+                // A concurrent retry can win the unique order/idempotency index.
+                // Return that committed order instead of releasing the reservation
+                // shared by both attempts.
+                if (idempotencyKey && (error.code === 11000 || error.code === 11001)) {
+                    const existingOrder = await Order.findOne({
+                        userId: String(orderData.userId), tenantId: selectedTenantId, idempotencyKey
+                    }).lean();
+                    if (existingOrder) {
+                        if (existingOrder.requestFingerprint !== requestFingerprint) {
+                            throw inventoryError('This Idempotency-Key was already used for a different order.', 409);
+                        }
+                        createdOrder = { ...existingOrder, replayed: true };
+                    }
                 }
+                // Keep the reservation for retryable/ambiguous failures. The
+                // inventory service replays it by the stable key; known client
+                // validation failures release it immediately.
+                const shouldReleaseReservation = !idempotencyKey
+                    || (Number(error.statusCode) > 0 && Number(error.statusCode) < 500);
+                if (!createdOrder && shouldReleaseReservation) {
+                    try {
+                        await inventoryClient.release(inventoryReservation.reservationId, {
+                            tenantId: selectedTenantId, branchId: selectedBranchId, userId: orderData.userId,
+                            idempotencyKey: `legacy-order-release-after-create-failure:${orderId.toString()}`
+                        });
+                    } catch (releaseError) {
+                        console.error('Order creation failed and Inventory reservation release also failed:', {
+                            orderId: orderId.toString(), reservationId: inventoryReservation.reservationId,
+                            error: releaseError.message
+                        });
+                    }
+                }
+                if (createdOrder) return createdOrder;
                 throw error;
             } finally {
                 if (session) await session.endSession();

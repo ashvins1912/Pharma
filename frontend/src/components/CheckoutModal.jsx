@@ -7,7 +7,7 @@ import apiClient from '../api/apiClient';
 import AddressManager from './AddressManager';
 import { useTenant } from '../context/TenantContext';
 import { useLanguage } from '../context/LanguageContext';
-import { buildCheckoutWaitlistRequest, buildFulfillmentQuoteItems, getCheckoutQuoteEffectAction } from '../utils/checkoutFulfillment.js';
+import { buildCheckoutWaitlistRequest, buildFulfillmentQuoteItems, getCheckoutQuoteEffectAction, isCheckoutOutcomeAmbiguous } from '../utils/checkoutFulfillment.js';
 
 export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const { t } = useLanguage();
@@ -110,7 +110,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       try {
         const response = await apiClient.post('/api/orders/checkout/quote', {
           tenantId: tenantId || '',
-          branchId: branchId || activeTenant?.branchId || '',
+          branchId: fulfillmentPlan?.branchId || branchId || activeTenant?.branchId || '',
           items: JSON.parse(cartForQuote),
           pointsToRedeem: usePoints ? Number(pointsRequested) || 0 : 0,
           couponCode: appliedCoupon?.code || ''
@@ -224,14 +224,15 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       const availability = await apiClient.post('/api/orders/fulfillment/preview', {
         tenantId: String(tenantId),
         branchId: String(branchId || activeTenant?.branchId || ''),
+        coordinates: selectedAddress?.coordinates || null,
         items: checkoutItems
       });
       fulfillmentPlanForCheckout = availability.data;
-      const currentPlanSignature = JSON.stringify((availability.data.lines || []).map(line => ({
+      const currentPlanSignature = JSON.stringify({ branchId: availability.data.branchId, routing: availability.data.routing?.strategy, lines: (availability.data.lines || []).map(line => ({
         productId: line.productId, requested: line.requestedQuantity,
         available: line.fulfilNowQuantity, waiting: line.waitingQuantity, unitPrice: line.unitPrice,
         alternatives: (line.alternatives || []).map(option => ({ id: option.productId, price: option.discountedUnitPrice, listPrice: option.listPrice, requiresPharmacistApproval: option.requiresPharmacistApproval }))
-      })));
+      })) });
       if (availability.data.customerDecisionRequired && (!fulfillmentConfirmed || currentPlanSignature !== fulfillmentPlanSignature)) {
         if (currentPlanSignature !== fulfillmentPlanSignature) setWaitlistKey('');
         setFulfillmentPlan(availability.data);
@@ -244,8 +245,8 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         return;
       }
       if (!availability.data.customerDecisionRequired) {
-        setFulfillmentPlan(null);
-        setFulfillmentPlanSignature('');
+        setFulfillmentPlan(availability.data);
+        setFulfillmentPlanSignature(currentPlanSignature);
       }
       if (availability.data.customerDecisionRequired) {
         const selectedItems = [];
@@ -356,7 +357,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       try {
       const checkoutData = {
         tenantId: String(tenantId),
-        branchId: branchId || activeTenant?.branchId || fulfillmentPlanForCheckout?.branchId || null,
+        branchId: fulfillmentPlanForCheckout?.branchId || branchId || activeTenant?.branchId || null,
         fulfillmentCaseId: createdWaitlistCaseId || '',
         fulfillmentState: createdWaitlistCaseId ? 'PARTIAL' : 'FULL',
         items: JSON.stringify(checkoutItems),
@@ -379,7 +380,10 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       const checkoutIdempotencyKey = checkoutKey || (window.crypto?.randomUUID?.() || `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`);
       if (!checkoutKey) setCheckoutKey(checkoutIdempotencyKey);
       const res = await apiClient.post('/api/orders/checkout', formData, {
-        headers: { 'Idempotency-Key': checkoutIdempotencyKey }
+        headers: { 'Idempotency-Key': checkoutIdempotencyKey },
+        // Checkout includes an Inventory Service reservation and a MongoDB
+        // transaction; the shared apiClient default (10s) is too short.
+        timeout: 90_000
       });
       setRestockError('');
       if (createdWaitlistCaseId) {
@@ -392,7 +396,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             prescriptionUrl: res.data.order?.prescriptionUrl || null,
             prescriptionId: res.data.order?.prescriptionId || null,
             patientPuid: patientPuid || null
-          });
+          }, { timeout: 30_000 });
           waitlistLinkedToOrder = true;
         } catch (linkError) {
           waitlistLinkedToOrder = false;
@@ -425,16 +429,24 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       onClose();
       if (onOrderPlaced) onOrderPlaced(res.data.order || { _id: res.data.orderId, finalTotal });
       } catch (err) {
-        if (createdWaitlistCaseId) {
-          await apiClient.post(`/api/orders/fulfillment/waitlist/${createdWaitlistCaseId}/cancel`).catch(() => {});
+        const outcomeAmbiguous = isCheckoutOutcomeAmbiguous(err);
+        if (createdWaitlistCaseId && !outcomeAmbiguous) {
+          // A definite rejection means no order was created; clean up the
+          // pre-created waitlist. Never cancel it after a timeout/network loss:
+          // the server may have committed the order before the response was lost.
+          await apiClient.post(`/api/orders/fulfillment/waitlist/${createdWaitlistCaseId}/cancel`, {}, { timeout: 30_000 }).catch(() => {});
           setWaitlistKey('');
         }
-        setErrorMsg(err.response?.data?.message || err.message || "Checkout failed. Please verify cart items.");
-      if (err.response?.status === 409) {
-        setFulfillmentConfirmed(false);
-        setFulfillmentPlan(null);
-      }
-        addToast(err.message || "Checkout failed", "error");
+        if (!outcomeAmbiguous) setCheckoutKey('');
+        const message = outcomeAmbiguous
+          ? 'The checkout response was interrupted or timed out. Your checkout reference and stock watch are preserved. Retry checkout to safely recover the result; do not create a new order.'
+          : (err.response?.data?.message || err.message || "Checkout failed. Please verify cart items.");
+        setErrorMsg(message);
+        if (err.response?.status === 409) {
+          setFulfillmentConfirmed(false);
+          setFulfillmentPlan(null);
+        }
+        addToast(message, outcomeAmbiguous ? "warning" : "error");
         return null;
       }
     });
@@ -480,7 +492,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       try {
         const response = await apiClient.post('/api/orders/checkout/quote', {
           tenantId: String(tenantId),
-          branchId: String(branchId || activeTenant?.branchId || ''),
+          branchId: String(fulfillmentPlan?.branchId || branchId || activeTenant?.branchId || ''),
           items: selectedItems,
           pointsToRedeem: usePoints ? Number(pointsRequested) || 0 : 0,
           couponCode: appliedCoupon?.code || ''
@@ -718,11 +730,23 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
             </section>
           )}
 
+          {fulfillmentPlan?.routing && (
+            <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
+              <div className="font-bold">Smart route selected: {fulfillmentPlan.routing.selectedBranchName}</div>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                <span>{fulfillmentPlan.routing.fulfillmentPercentage}% of requested quantity available</span>
+                {fulfillmentPlan.routing.distanceKm != null && <span>{fulfillmentPlan.routing.distanceKm} km from delivery address</span>}
+                <span>{fulfillmentPlan.routing.evaluatedBranches} eligible branches compared</span>
+              </div>
+            </section>
+          )}
+
           {fulfillmentPlan?.customerDecisionRequired && (
             <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
               <div>
                 <h3 className="text-sm font-black text-amber-950">Smart stock availability</h3>
-                <p className="mt-1 text-xs text-amber-900">We checked the selected pharmacy. You can receive available items now and choose what to do with the remaining quantity.</p>
+                <p className="mt-1 text-xs text-amber-900">We compared live stock across eligible branches and selected the best fulfilment route. You can receive available items now and choose what to do with the remaining quantity.</p>
+
               </div>
               {fulfillmentPlan.lines.filter(line => line.waitingQuantity > 0).map(line => (
                 <div key={line.productId} className="rounded-xl border border-amber-200 bg-white p-3 space-y-2">

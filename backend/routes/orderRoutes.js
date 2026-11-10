@@ -10,7 +10,7 @@ import Rider from '../models/Rider.js';
 import { inventoryClient } from '../services/inventory-client/InventoryClient.js';
 import FulfillmentCase from '../models/FulfillmentCase.js';
 import MedicineRequest from '../models/MedicineRequest.js';
-import { buildIntelligentFulfillmentPlan, validateWaitWindow } from '../services/intelligentFulfillment/fulfillmentPlanner.js';
+import { buildIntelligentFulfillmentPlan, buildDynamicFulfillmentRoute, validateWaitWindow } from '../services/intelligentFulfillment/fulfillmentPlanner.js';
 import { refreshStockWaitlistCases } from '../services/intelligentFulfillment/waitlistMonitor.js';
 import { authenticateUser, isAdmin } from '../middleware/auth.js';
 import { sendCustomWhatsAppAlert, getNotificationLog } from '../config/whatsapp.js';
@@ -367,25 +367,47 @@ router.post('/fulfillment/preview', authenticateUser, async (req, res) => {
         if (ids.some(id => !mongoose.isValidObjectId(id))) return res.status(400).json({ message: 'One or more cart products are invalid.' });
         const tenant = await Tenant.findOne({ _id: tenantId, status: 'ACTIVE' }).select('_id').lean();
         if (!tenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
-        const branchId = await resolveTenantBranchId(tenantId, req.body?.branchId, req.user);
-        const inventoryResponse = await inventoryClient.lookup({
-            productIds: ids, tenantId, branchId, userId: req.user.sub
+        const preferredBranchId = await resolveTenantBranchId(tenantId, req.body?.branchId, req.user);
+        let destination = req.body?.coordinates || req.body?.deliveryCoordinates || null;
+        if (typeof destination === 'string') {
+            try { destination = JSON.parse(destination); } catch { destination = null; }
+        }
+        const activeBranches = await TenantBranch.find({
+            tenantId, status: 'ACTIVE', ...(destination ? {} : { _id: preferredBranchId })
+        }).select('_id name geolocation serviceRadiusKm deliveryFee').limit(50).lean();
+        if (!activeBranches.length) return res.status(409).json({ code: 'NO_ACTIVE_BRANCH', message: 'No active branch is available for this pharmacy.' });
+        const routeInventory = await inventoryClient.lookupAcrossBranches({
+            productIds: ids, tenantId,
+            branchIds: activeBranches.map(branch => String(branch._id)),
+            userId: req.user.sub
         });
-        const inventory = inventoryResponse.items || [];
-        const compositionKeys = [...new Set([...inventory.map(item => item.composition || item.genericName), ...items.map(item => item.composition || item.genericName)].map(value => String(value || '').trim()).filter(value => value && !['active compound', 'unknown', 'n/a', 'na'].includes(value.toLowerCase())))];
-        const strengthKeys = [...new Set([...inventory.map(item => item.strength), ...items.map(item => item.strength)].map(value => String(value || '').trim()).filter(Boolean))];
-        const catalogResults = compositionKeys.length
-            ? await Promise.all(compositionKeys.map(composition => inventoryClient.searchProducts({
-                tenantId, branchId, query: composition, includeOutOfStock: true, limit: 100, userId: req.user.sub
-            })))
-            : [];
-        const catalog = [...new Map(catalogResults.flatMap(result => result.items || [])
-            .filter(product => compositionKeys.some(composition => String(product.genericName || product.composition || '').trim().toLowerCase() === composition.toLowerCase()))
-            .filter(product => strengthKeys.some(strength => String(product.strength || '').trim().toLowerCase() === strength.toLowerCase()))
-            .filter(product => !ids.includes(String(product.productId)))
-            .map(product => [String(product.productId), product])).values()];
-        const plan = buildIntelligentFulfillmentPlan({ requestedItems: items, inventory, catalog });
-        return res.json({ ...plan, tenantId, branchId: branchId || null });
+        const branchCandidates = await Promise.all(routeInventory.branches.map(async snapshot => {
+            const branch = activeBranches.find(item => String(item._id) === String(snapshot.branchId));
+            const inventory = snapshot.items || [];
+            const compositionKeys = [...new Set([...inventory.map(item => item.composition || item.genericName), ...items.map(item => item.composition || item.genericName)].map(value => String(value || '').trim()).filter(value => value && !['active compound', 'unknown', 'n/a', 'na'].includes(value.toLowerCase())))];
+            const strengthKeys = [...new Set([...inventory.map(item => item.strength), ...items.map(item => item.strength)].map(value => String(value || '').trim()).filter(Boolean))];
+            const catalogResults = compositionKeys.length
+                ? await Promise.all(compositionKeys.map(composition => inventoryClient.searchProducts({
+                    tenantId, branchId: String(branch._id), query: composition,
+                    includeOutOfStock: true, limit: 100, userId: req.user.sub
+                })))
+                : [];
+            const catalog = [...new Map(catalogResults.flatMap(result => result.items || [])
+                .filter(product => compositionKeys.some(composition => String(product.genericName || product.composition || '').trim().toLowerCase() === composition.toLowerCase()))
+                .filter(product => strengthKeys.some(strength => String(product.strength || '').trim().toLowerCase() === strength.toLowerCase()))
+                .filter(product => !ids.includes(String(product.productId)))
+                .map(product => [String(product.productId), product])).values()];
+            return {
+                branchId: String(branch._id), name: branch.name, geolocation: branch.geolocation,
+                serviceRadiusKm: branch.serviceRadiusKm, deliveryFee: branch.deliveryFee,
+                inventory, catalog
+            };
+        }));
+        const plan = buildDynamicFulfillmentRoute({
+            requestedItems: items, branchCandidates, destination,
+            preferredBranchId, now: new Date()
+        });
+        return res.json({ ...plan, tenantId, branchId: plan.branchId });
     } catch (error) {
         return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to calculate fulfilment options.' });
     }
@@ -1107,8 +1129,14 @@ router.post('/checkout', authenticateUser, handlePrescriptionUpload, async (req,
             }
         }
 
-        // Automated messaging trigger
-        await sendCustomWhatsAppAlert(order, 'Placed');
+        // Notifications must never hold the checkout response open. The order
+        // and stock reservation are already committed; dispatch messaging in
+        // the background and avoid duplicate alerts on idempotent replays.
+        if (!order.replayed) {
+            sendCustomWhatsAppAlert(order, 'Placed').catch(alertError => {
+                console.warn('[WhatsApp] Order placed alert warning:', alertError?.message);
+            });
+        }
 
         res.status(201).json({
             message: "🎉 Cash-on-Delivery order registered into dispensary queue!",

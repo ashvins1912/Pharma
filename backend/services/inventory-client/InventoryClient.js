@@ -129,6 +129,14 @@ export const inventoryClient = {
     });
   },
 
+  async lookupAcrossBranches({ productIds = [], tenantId, branchIds = [], userId = 'backend' } = {}) {
+    return request('POST', '/api/v1/inventory/bulk/route-lookup', {
+      userId,
+      data: { productIds, tenantId, branchIds },
+      timeout: 30_000
+    });
+  },
+
   async adjust({ sku, stockQuantity, price, batchNumber, expiryDate, tenantId, branchId, userId = 'backend', operationKey }) {
     return request('POST', '/api/v1/inventory/adjust', {
       userId,
@@ -143,7 +151,8 @@ export const inventoryClient = {
       userId,
       scopes: ['inventory.reserve'],
       data: { orderId, items, tenantId, branchId },
-      idempotencyKey
+      idempotencyKey,
+      timeout: 30_000
     });
   },
 

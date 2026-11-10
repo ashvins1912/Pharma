@@ -20,6 +20,7 @@ import {
   updateProduct,
   archiveProduct,
   lookupInventory,
+  lookupInventoryAcrossBranches,
   searchInventoryProducts,
   getInventoryAlerts,
   getInventoryAlertSummary,
@@ -188,6 +189,16 @@ router.post('/check-availability', requireServiceScope('inventory.read'), asyncH
     };
   });
   return res.json({ available: availability.every(item => item.available), items: availability });
+}));
+
+router.post('/bulk/route-lookup', requireServiceScope('inventory.read'), asyncHandler(async (req, res) => {
+  const { tenantId } = getInventoryScope(req, req.body || {});
+  const result = await lookupInventoryAcrossBranches({
+    productIds: req.body?.productIds || [],
+    tenantId,
+    branchIds: req.body?.branchIds || []
+  });
+  return res.json(result);
 }));
 
 router.post('/reservations', requireServiceScope('inventory.reserve'), asyncHandler(async (req, res) => {

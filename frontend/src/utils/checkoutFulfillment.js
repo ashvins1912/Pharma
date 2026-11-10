@@ -37,3 +37,16 @@ export function buildCheckoutWaitlistRequest(payload, idempotencyKey) {
     config: { headers: { 'Idempotency-Key': key } }
   };
 }
+
+
+/**
+ * A timeout, network failure, abort, gateway timeout, or server error does not
+ * prove checkout failed: the server may have committed before its response was
+ * lost. Preserve idempotency keys and any pre-created waitlist in those cases.
+ */
+export function isCheckoutOutcomeAmbiguous(error) {
+  const status = Number(error?.response?.status || 0);
+  if (status === 408 || status === 425 || status >= 500) return true;
+  if (!error?.response) return true;
+  return ['ECONNABORTED', 'ETIMEDOUT', 'ERR_CANCELED', 'ERR_NETWORK'].includes(String(error?.code || '').toUpperCase());
+}

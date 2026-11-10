@@ -183,3 +183,41 @@ test('rejects invalid cart lines and empty plans', () => {
   assert.throws(() => buildIntelligentFulfillmentPlan({ requestedItems: [], inventory: [] }), /At least one order item/);
   assert.throws(() => buildIntelligentFulfillmentPlan({ requestedItems: [{ medicineId: 'x', quantity: 0 }], inventory: [] }), /positive whole-number/);
 });
+
+
+import { buildDynamicFulfillmentRoute, calculateRouteDistanceKm } from './services/intelligentFulfillment/fulfillmentPlanner.js';
+
+test('dynamic routing selects the branch with the highest safe partial-fill ratio before distance', () => {
+  const requestedItems = [{ medicineId: 'medicine-1', quantity: 10 }];
+  const branchCandidates = [
+    { branchId: 'near', name: 'Near branch', geolocation: { latitude: 12.9716, longitude: 77.5946 }, serviceRadiusKm: 15, inventory: [{ ...medicine(), productId: 'medicine-1', availableQuantity: 4 }] },
+    { branchId: 'best', name: 'Best stock branch', geolocation: { latitude: 12.98, longitude: 77.60 }, serviceRadiusKm: 15, inventory: [{ ...medicine(), productId: 'medicine-1', availableQuantity: 8 }] }
+  ];
+  const plan = buildDynamicFulfillmentRoute({
+    requestedItems, branchCandidates,
+    destination: { latitude: 12.9716, longitude: 77.5946 },
+    preferredBranchId: 'near', now
+  });
+  assert.equal(plan.branchId, 'best');
+  assert.equal(plan.lines[0].fulfilNowQuantity, 8);
+  assert.equal(plan.lines[0].waitingQuantity, 2);
+  assert.equal(plan.routing.strategy, 'MAXIMUM_FILL_THEN_NEAREST_BRANCH');
+  assert.equal(plan.routing.fulfillmentPercentage, 80);
+});
+
+test('dynamic routing excludes branches outside the delivery service radius', () => {
+  assert.throws(() => buildDynamicFulfillmentRoute({
+    requestedItems: [{ medicineId: 'medicine-1', quantity: 1 }],
+    branchCandidates: [
+      { branchId: 'outside', geolocation: { latitude: 13.2, longitude: 77.6 }, serviceRadiusKm: 1, inventory: [{ ...medicine(), productId: 'medicine-1' }] }
+    ],
+    destination: { latitude: 12.9716, longitude: 77.5946 },
+    preferredBranchId: 'outside',
+    now
+  }), /No active pharmacy branch serves/);
+});
+
+test('route distance uses the Haversine calculation and rejects missing coordinates', () => {
+  assert.ok(calculateRouteDistanceKm({ latitude: 12.9716, longitude: 77.5946 }, { latitude: 12.98, longitude: 77.6 }) > 0);
+  assert.equal(calculateRouteDistanceKm(null, { latitude: 12, longitude: 77 }), null);
+});

@@ -83,3 +83,19 @@ test('checkout waitlist request rejects a missing wait window or idempotency key
   assert.throws(() => buildCheckoutWaitlistRequest({ waitDays: undefined }, 'wait-key'), /1 to 5 days/);
   assert.throws(() => buildCheckoutWaitlistRequest({ waitDays: 3 }, ''), /idempotency key/);
 });
+
+
+test('treats timeout, abort, network loss and server errors as ambiguous checkout outcomes', async () => {
+  const { isCheckoutOutcomeAmbiguous } = await import('./checkoutFulfillment.js');
+  assert.equal(isCheckoutOutcomeAmbiguous({ code: 'ECONNABORTED' }), true);
+  assert.equal(isCheckoutOutcomeAmbiguous({ code: 'ERR_CANCELED' }), true);
+  assert.equal(isCheckoutOutcomeAmbiguous({ code: 'ERR_NETWORK' }), true);
+  assert.equal(isCheckoutOutcomeAmbiguous({ response: { status: 504 } }), true);
+  assert.equal(isCheckoutOutcomeAmbiguous({ response: { status: 408 } }), true);
+});
+
+test('treats explicit client validation responses as definite checkout failures', async () => {
+  const { isCheckoutOutcomeAmbiguous } = await import('./checkoutFulfillment.js');
+  assert.equal(isCheckoutOutcomeAmbiguous({ response: { status: 400 } }), false);
+  assert.equal(isCheckoutOutcomeAmbiguous({ response: { status: 409 } }), false);
+});
