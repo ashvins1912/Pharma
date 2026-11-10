@@ -155,6 +155,9 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                 {metric('Clean records', report.normalizedRecords)}
                 {metric('New medicines', report.newRecords)}
                 {metric('Update candidates', report.updateCandidates)}
+                {metric('Fuzzy auto-merges', report.fuzzyAutoMerge)}
+                {metric('Fuzzy matches to review', report.fuzzyManualReview)}
+                {metric('Unmatched records', report.unmatchedRecords)}
                 {metric('Duplicates removed', report.duplicatesRemoved)}
                 {metric('Rejected rows', report.rejectedRecords)}
                 {metric('With composition', report.withComposition)}
@@ -189,6 +192,14 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                 {!batchStatus?.approvedAt && <label className="flex items-start gap-2 text-[11px] font-semibold text-violet-950"><input type="checkbox" checked={reviewConfirmed} onChange={event => setReviewConfirmed(event.target.checked)} className="mt-0.5" />I have reviewed the reconciliation totals, duplicate handling, rejected records and clinical-data warnings, and approve this exact report for publication.</label>}
                 {batchStatus?.approvedAt && <p className="text-[11px] text-emerald-800">Approved by {batchStatus.approvedBy || 'platform administrator'} at {batchStatus.approvedAt ? new Date(batchStatus.approvedAt).toLocaleString() : '—'}.</p>}
               </div>
+              {report.fuzzyMatchExamples?.length > 0 && (
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 space-y-2">
+                  <h4 className="text-xs font-extrabold text-indigo-950">Intelligent reconciliation candidates</h4>
+                  <p className="text-[11px] leading-5 text-indigo-900">High-confidence matches are merged into the existing master record. Ambiguous matches remain separate and are listed for manual review. Strength, dosage-form and composition conflicts are never auto-merged.</p>
+                  <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-[11px]"><thead><tr className="text-indigo-900"><th className="p-2">Incoming medicine</th><th className="p-2">Existing master ID</th><th className="p-2">Score</th><th className="p-2">Decision</th><th className="p-2">Warnings</th></tr></thead><tbody className="divide-y divide-indigo-100">{report.fuzzyMatchExamples.map((match, index) => <tr key={match.matchedMedicineId + '-' + index}><td className="p-2">{match.incomingMedicine}</td><td className="p-2 font-mono">{match.matchedMedicineId}</td><td className="p-2 font-bold">{match.score}%</td><td className="p-2">{match.decision}</td><td className="p-2">{(match.warnings || []).join(', ') || '—'}</td></tr>)}</tbody></table></div>
+                  {report.fuzzyCandidateScanTruncated && <p className="text-[10px] font-semibold text-amber-800">Candidate scan reached its safety cap. Some possible fuzzy matches may require a separate reconciliation pass.</p>}
+                </div>
+              )}
               {report.qualityIssueCounts && Object.keys(report.qualityIssueCounts).length > 0 && (
                 <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
                   <h4 className="text-xs font-extrabold text-slate-800">Most common quality gaps</h4>
@@ -208,9 +219,9 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
               {preview?.sample?.length > 0 && (
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
                   <table className="w-full min-w-[920px] text-left text-xs">
-                    <thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Medicine</th><th className="p-3">Composition</th><th className="p-3">Strength / Form</th><th className="p-3">Therapeutic class</th><th className="p-3">Uses / Side effects</th><th className="p-3">Manufacturer</th><th className="p-3">Quality score</th><th className="p-3">Quality issues</th></tr></thead>
+                    <thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Medicine</th><th className="p-3">Composition</th><th className="p-3">Strength / Form</th><th className="p-3">Therapeutic class</th><th className="p-3">Uses / Side effects</th><th className="p-3">Manufacturer</th><th className="p-3">Quality score</th><th className="p-3">Quality issues</th><th className="p-3">Reconciliation</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
-                      {preview.sample.map(item => <tr key={item.medicineId}><td className="p-3 font-bold text-slate-800">{item.brandName}</td><td className="p-3 text-slate-600">{item.composition || 'Not supplied'}</td><td className="p-3 text-slate-600">{[item.strength, item.dosageForm, item.packSize].filter(Boolean).join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.therapeuticClass || '—'}</td><td className="p-3 text-slate-600">{[...(item.uses || []).slice(0, 2), ...(item.sideEffects || []).slice(0, 2)].join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.manufacturer || 'Not supplied'}</td><td className="p-3 font-bold tabular-nums">{Number(item.qualityScore || 0)}% · {item.qualityGrade || item.dataQualityStatus}</td><td className="p-3 text-slate-600">{(item.qualityIssues || []).slice(0, 4).join(', ') || 'No detected gaps'}</td></tr>)}
+                      {preview.sample.map(item => <tr key={item.medicineId}><td className="p-3 font-bold text-slate-800">{item.brandName}</td><td className="p-3 text-slate-600">{item.composition || 'Not supplied'}</td><td className="p-3 text-slate-600">{[item.strength, item.dosageForm, item.packSize].filter(Boolean).join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.therapeuticClass || '—'}</td><td className="p-3 text-slate-600">{[...(item.uses || []).slice(0, 2), ...(item.sideEffects || []).slice(0, 2)].join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.manufacturer || 'Not supplied'}</td><td className="p-3 font-bold tabular-nums">{Number(item.qualityScore || 0)}% · {item.qualityGrade || item.dataQualityStatus}</td><td className="p-3 text-slate-600">{(item.qualityIssues || []).slice(0, 4).join(', ') || 'No detected gaps'}</td><td className="p-3"><strong>{item.reconciliationMatch?.decision || 'NEW RECORD'}</strong>{item.reconciliationMatch && <span className="block text-slate-500">{item.reconciliationMatch.method} · {item.reconciliationMatch.score}% · {item.reconciliationMatch.targetMedicineId}</span>}</td></tr>)}
                     </tbody>
                   </table>
                 </div>
