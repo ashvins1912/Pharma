@@ -79,7 +79,6 @@ export default function Footer({ onNavigate }) {
           </div>
 
           {SHOW_REGULATORY_CREDENTIALS && (
-            {/* Regulatory & Safety */}
             <div className="app-footer__section">
               <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px] mb-3">{t('footerCompliance')}</h4>
               <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2">
