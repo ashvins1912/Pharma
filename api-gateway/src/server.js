@@ -22,7 +22,7 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
 })) {
   const target = new URL(`${gatewayConfig.backendApiUrl}/ready`);
   const transport = target.protocol === 'https:' ? https : http;
-  const { customerRouter, inventoryRouter, orderRouter, prescriptionRouter, legacyPrescriptionRouter } = createServiceRouters(gatewayConfig);
+  const { customerRouter, inventoryRouter, medicineMasterRouter, orderRouter, prescriptionRouter, legacyPrescriptionRouter } = createServiceRouters(gatewayConfig);
   const app = express();
   app.locals.healthMonitor = healthMonitor;
   app.disable('x-powered-by');
@@ -140,6 +140,7 @@ export function createGatewayApp(gatewayConfig = config, healthMonitor = createH
   });
 
   app.use('/api/v1/customers', customerRouter);
+  app.use('/api/v1/inventory/catalogue', medicineMasterRouter);
   app.use('/api/v1/inventory', inventoryRouter);
   app.use('/api/v1/orders', orderRouter);
   app.use('/api/v1/prescriptions', prescriptionRouter);
