@@ -1,53 +1,49 @@
 import { useEffect, useRef } from 'react';
 
-/**
- * Custom React hook for seamless focus trapping and keyboard navigation (Tab/Shift+Tab and Esc to close)
- * within .pharma-modal-surface dialogs.
- */
+/** Focus management for dialogs: trap Tab, close on Escape, restore focus. */
 export function useFocusTrap(isOpen, onClose) {
   const modalRef = useRef(null);
 
   useEffect(() => {
-    if (!isOpen) return;
+    const modal = modalRef.current;
+    if (!isOpen || !modal) return undefined;
+    const previousFocus = document.activeElement;
+    const selector = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const getFocusable = () => Array.from(modal.querySelectorAll(selector))
+      .filter((element) => element.getAttribute('aria-hidden') !== 'true' && element.getClientRects().length > 0);
 
-    const modalElement = modalRef.current;
-    if (!modalElement) return;
+    if (!modal.hasAttribute('tabindex')) modal.setAttribute('tabindex', '-1');
+    (getFocusable()[0] || modal).focus?.();
 
-    const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-    const focusableElements = modalElement.querySelectorAll(focusableSelectors);
-    const firstElement = focusableElements[0];
-    const lastElement = focusableElements[focusableElements.length - 1];
-
-    if (firstElement && typeof firstElement.focus === 'function') {
-      firstElement.focus();
-    }
-
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && onClose) {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && onClose) {
+        event.preventDefault();
+        event.stopPropagation();
         onClose();
         return;
       }
-
-      if (e.key === 'Tab') {
-        if (focusableElements.length === 0) return;
-
-        if (e.shiftKey) {
-          if (document.activeElement === firstElement) {
-            lastElement?.focus();
-            e.preventDefault();
-          }
-        } else {
-          if (document.activeElement === lastElement) {
-            firstElement?.focus();
-            e.preventDefault();
-          }
-        }
+      if (event.key !== 'Tab') return;
+      const items = getFocusable();
+      if (!items.length) {
+        event.preventDefault();
+        modal.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !modal.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
+    modal.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      modal.removeEventListener('keydown', handleKeyDown);
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
     };
   }, [isOpen, onClose]);
 

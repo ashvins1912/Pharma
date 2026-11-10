@@ -24,7 +24,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden animate-fade-in overscroll-none" aria-modal="true" role="dialog" aria-labelledby="cart-drawer-title">
+    <div className="fixed inset-0 z-[1100] overflow-hidden animate-fade-in overscroll-none" aria-modal="true" role="dialog" aria-labelledby="cart-drawer-title" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); onClose?.(); } }}>
       {/* Backdrop */}
       <div
         onClick={onClose}
@@ -45,7 +45,9 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout, onBro
               </h2>
             </div>
             <button
+              type="button"
               onClick={onClose}
+              aria-label={t("close")}
               className="text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 cursor-pointer transition"
             >
               ✕
