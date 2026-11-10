@@ -188,7 +188,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                       </span>
                     </div>
                     {getStatusBadge(order.orderStatus)}
-                  </div>
+                  </header>
                   {order.fulfillmentState === 'PARTIAL' && <p className="text-[10px] font-bold text-amber-700">Available items are in this order. Remaining items are on stock watch; no order is placed for them until you confirm when stock returns.</p>}
                   {order.fulfillmentState === 'COMPLETE' && <p className="text-[10px] font-bold text-emerald-700">All split items fulfilled</p>}
                   {order.fulfillmentState === 'CANCELLED_REMAINDER' && <p className="text-[10px] font-bold text-slate-600">Remaining items cancelled at your request</p>}
@@ -225,7 +225,7 @@ export default function OrderHistoryView({ onTrackOrder }) {
                         </button>
                       )}
                     </div>
-                  </div>
+                  </footer>
                 </div>
               );
             })}
