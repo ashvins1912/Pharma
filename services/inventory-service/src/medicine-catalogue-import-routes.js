@@ -267,6 +267,7 @@ const catalogueImportSchema = new mongoose.Schema({
   dataset: { type: String, enum: ['INDIAN_MEDICINE_DATA', 'INDIA_MEDICINES_INFO', 'MEDICINES_PART_1', 'MULTI_SOURCE'], required: true },
   fileName: { type: String, required: true },
   fileSha256: { type: String, required: true },
+  processingJobId: { type: String, default: '' },
   uploadedBy: { type: String, required: true },
   status: { type: String, enum: ['STAGING', 'READY', 'PUBLISHING', 'PUBLISHED', 'PARTIALLY_PUBLISHED', 'FAILED', 'SUPERSEDED'], default: 'READY', index: true },
   recordCount: { type: Number, default: 0 },
@@ -658,7 +659,12 @@ async function processCatalogueImportPreview(req, res) {
   if (previousBatch) {
     if (previousBatch.status === 'STAGING') {
       const staleBefore = new Date(Date.now() - 15 * 60 * 1000);
-      if (previousBatch.updatedAt && previousBatch.updatedAt < staleBefore) {
+      const ownerJob = previousBatch.processingJobId && previousBatch.processingJobId !== req.importJob
+        ? await CatalogueImportJob.findOne({ jobId: previousBatch.processingJobId }, { status: 1, leaseExpiresAt: 1 }).lean()
+        : null;
+      const ownerStillActive = ownerJob?.status === 'PROCESSING' && ownerJob.leaseExpiresAt > new Date();
+      const abandoned = previousBatch.processingJobId === req.importJob || (!ownerStillActive && (!previousBatch.updatedAt || previousBatch.updatedAt < staleBefore));
+      if (abandoned) {
         await CatalogueImportChunk.deleteMany({ batchId: previousBatch.batchId });
         await CatalogueImport.deleteOne({ _id: previousBatch._id, status: 'STAGING' });
       } else {
@@ -788,7 +794,7 @@ async function processCatalogueImportPreview(req, res) {
   for (let offset = 0; offset < records.length; offset += CATALOGUE_CHUNK_SIZE) chunks.push({ batchId, chunkIndex: chunks.length, records: records.slice(offset, offset + CATALOGUE_CHUNK_SIZE) });
   await CatalogueImport.create({
     batchId, dataset, fileName: String(req.file.originalname || 'medicine-catalogue.json').slice(0, 180),
-    fileSha256, uploadedBy: req.service.userId || req.service.name,
+    fileSha256, processingJobId: req.importJob || '', uploadedBy: req.service.userId || req.service.name,
     status: 'STAGING', recordCount: records.length, chunkCount: chunks.length, report, reportFingerprint
   });
   try {
