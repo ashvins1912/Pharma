@@ -57,7 +57,7 @@ export default function SearchGroundingInfo({ searchQuery }) {
               <span>{t('realTimeMedicalGrounding')}</span>
             </h4>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Additional information for &ldquo;{searchQuery}&rdquo;
+              {t('medicineInfoFor').replace('{query}', searchQuery)}
             </p>
           </div>
         </div>
@@ -92,7 +92,7 @@ export default function SearchGroundingInfo({ searchQuery }) {
           {Array.isArray(data.sources) && data.sources.length > 0 && (
             <div className="pt-2">
               <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                Sources:
+                {t('informationSources')}:
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {data.sources.map((src, idx) => (
