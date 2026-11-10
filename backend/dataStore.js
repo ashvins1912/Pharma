@@ -96,7 +96,7 @@ const nextOrderNumber = async () => {
     if (!getIsConnected()) return `ORD-${inMemoryOrderSequence++}`;
     const counters = mongoose.connection.db.collection('applicationCounters');
     const [latest] = await Order.aggregate([
-        { $match: { orderNumber: /^ORD-\\d+$/ } },
+        { $match: { orderNumber: /^ORD-[0-9]+$/ } },
         {
             $project: {
                 sequence: {
