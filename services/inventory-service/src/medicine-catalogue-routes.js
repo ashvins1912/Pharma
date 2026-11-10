@@ -7,7 +7,7 @@ const medicineMaster = () => mongoose.models.MedicineMaster;
 const escapeRegex = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 router.use((req, res, next) => requireServiceScope(
-  req.method === 'PATCH' || req.path.endsWith('/audit') ? 'inventory.catalogue.import' : 'inventory.catalogue.read'
+  req.method === 'PATCH' || req.method === 'DELETE' || req.path.endsWith('/audit') ? 'inventory.catalogue.import' : 'inventory.catalogue.read'
 )(req, res, next));
 
 router.get('/', async (req, res, next) => {
@@ -15,7 +15,7 @@ router.get('/', async (req, res, next) => {
     const search = String(req.query.search || '').trim().slice(0, 100);
     const page = Math.max(1, Math.min(10000, Number.parseInt(req.query.page || '1', 10) || 1));
     const limit = Math.max(1, Math.min(50, Number.parseInt(req.query.limit || '20', 10) || 20));
-    const filter = search ? {
+    const filter = { isArchived: { $ne: true }, ...(search ? {
       $or: [
         { brandName: { $regex: escapeRegex(search), $options: 'i' } },
         { genericName: { $regex: escapeRegex(search), $options: 'i' } },
@@ -29,7 +29,7 @@ router.get('/', async (req, res, next) => {
         { actionClass: { $regex: escapeRegex(search), $options: 'i' } },
         { suggestedAlternatives: { $regex: escapeRegex(search), $options: 'i' } }
       ]
-    } : {};
+    } : {}) };
     const Model = medicineMaster();
     const [items, total] = await Promise.all([
       Model.find(filter).sort({ brandName: 1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean(),
@@ -46,7 +46,7 @@ const MEDICINE_EDITABLE_FIELDS = new Set([
 ]);
 const medicineMasterAuditSchema = new mongoose.Schema({
   medicineId: { type: String, required: true, index: true },
-  action: { type: String, enum: ['UPDATE'], required: true },
+  action: { type: String, enum: ['UPDATE', 'ARCHIVE'], required: true },
   actorId: { type: String, default: '' },
   changedFields: { type: [String], default: [] },
   before: { type: mongoose.Schema.Types.Mixed, default: {} },
@@ -73,7 +73,7 @@ router.patch('/:medicineId', requireServiceScope('inventory.catalogue.import'), 
     const changedFields = Object.keys(update);
     if (!changedFields.length) return res.status(400).json({ message: 'No supported medicine fields were supplied.' });
     const Model = medicineMaster();
-    const current = await Model.findOne({ medicineId: req.params.medicineId }).lean();
+    const current = await Model.findOne({ medicineId: req.params.medicineId, isArchived: { $ne: true } }).lean();
     if (!current) return res.status(404).json({ message: 'Medicine master record was not found.' });
     const before = Object.fromEntries(changedFields.map(field => [field, current[field] ?? null]));
     const updated = await Model.findOneAndUpdate(
@@ -83,6 +83,35 @@ router.patch('/:medicineId', requireServiceScope('inventory.catalogue.import'), 
     ).lean();
     await MedicineMasterAudit.create({ medicineId: current.medicineId, action: 'UPDATE', actorId: String(req.service?.userId || req.service?.sub || ''), changedFields, before, after: Object.fromEntries(changedFields.map(field => [field, updated[field] ?? null])) });
     return res.json({ medicine: updated, changedFields });
+  } catch (error) { return next(error); }
+});
+
+
+router.delete('/:medicineId', requireServiceScope('inventory.catalogue.import'), async (req, res, next) => {
+  try {
+    if (req.service?.isPlatformUser !== true) return res.status(403).json({ message: 'Only a platform super administrator can delete shared medicine master records.' });
+    const medicineId = String(req.params.medicineId || '').trim();
+    if (!medicineId) return res.status(400).json({ message: 'A medicine ID is required.' });
+    const Model = medicineMaster();
+    const current = await Model.findOne({ medicineId, isArchived: { $ne: true } }).lean();
+    if (!current) return res.status(404).json({ message: 'Active medicine master record was not found.' });
+    const actorId = String(req.service?.userId || req.service?.sub || '');
+    const archivedAt = new Date();
+    const archived = await Model.findOneAndUpdate(
+      { _id: current._id, isArchived: { $ne: true } },
+      { $set: { isArchived: true, archivedAt, archivedBy: actorId } },
+      { new: true }
+    ).lean();
+    if (!archived) return res.status(409).json({ message: 'This medicine record was already deleted. Refresh the catalogue.' });
+    await MedicineMasterAudit.create({
+      medicineId,
+      action: 'ARCHIVE',
+      actorId,
+      changedFields: ['isArchived'],
+      before: { isArchived: false, brandName: current.brandName, genericName: current.genericName, composition: current.composition, sourceDatasets: current.sourceDatasets, sourceRecordIds: current.sourceRecordIds },
+      after: { isArchived: true, archivedAt, archivedBy: actorId }
+    });
+    return res.json({ success: true, medicineId, archivedAt, message: 'Medicine master record deleted from the active catalogue. Audit and source provenance have been retained.' });
   } catch (error) { return next(error); }
 });
 
