@@ -181,6 +181,7 @@ const CAPABILITIES = [
   ['PUT', /^\/api\/v1\/integrations(?:\/|$)/, 'csquare.manage'],
   ['POST', /^\/api\/v1\/integrations(?:\/|$)/, 'csquare.manage'],
   ['GET', /^\/api\/v1\/notifications(?:\/|$)/, 'profile.read'],
+  ['PATCH', /^\/api\/v1\/notifications\/[^/]+\/read$/, 'profile.write'],
   ['POST', /^\/api\/v1\/notifications(?:\/|$)/, 'profile.write'],
   // Tenant-scoped pharmacy profile reads are explicitly available to that tenant's admins/owners.
   ['GET', /^\/api\/v1\/vendor\/profile(?:\/edit-policy)?$/, 'tenant.profile.read'],
