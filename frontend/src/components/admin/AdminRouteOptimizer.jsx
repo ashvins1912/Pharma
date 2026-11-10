@@ -110,14 +110,7 @@ export default function AdminRouteOptimizer({ onRefresh }) {
               {t('smartDeliveryRouteClubbing')}
             </h3>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1">
-              <span>📍 {t('spatialGeohashIndexing')}</span>
-            </span>
-            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1">
-              <span>⚡ {t('probabilisticBloomFilter')}</span>
-            </span>
-          </div>
+
         </div>
         <p className="text-xs text-slate-500 mt-0.5">
           {t('routeCorridorDesc')}
