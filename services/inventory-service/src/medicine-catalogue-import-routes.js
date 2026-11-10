@@ -629,7 +629,7 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     needsReviewQualityRecords: records.filter(item => item.qualityGrade === 'NEEDS_REVIEW').length,
     averageQualityScore: records.length ? Math.round(records.reduce((sum, item) => sum + item.qualityScore, 0) / records.length) : 0,
     qualityIssueCounts: records.reduce((counts, item) => { for (const issue of item.qualityIssues) counts[issue] = (counts[issue] || 0) + 1; return counts; }, {}),
-    fuzzyMatchExamples: records.filter(item => item.reconciliationMatch?.method === 'FUZZY_TOKEN_SORT').slice(0, 25).map(item => ({
+    fuzzyMatchExamples: records.filter(item => item.reconciliationMatch?.method === 'HYBRID_TFIDF_NGRAM_LINKAGE').slice(0, 25).map(item => ({
       incomingMedicine: item.brandName, matchedMedicineId: item.reconciliationMatch.targetMedicineId,
       score: item.reconciliationMatch.score, nameScore: item.reconciliationMatch.nameScore, tokenNameScore: item.reconciliationMatch.tokenNameScore, ngramNameScore: item.reconciliationMatch.ngramNameScore, tfIdfNameScore: item.reconciliationMatch.tfIdfNameScore, compositionScore: item.reconciliationMatch.compositionScore, evidence: item.reconciliationMatch.evidence, decision: item.reconciliationMatch.decision, warnings: item.reconciliationMatch.warnings
     })),
