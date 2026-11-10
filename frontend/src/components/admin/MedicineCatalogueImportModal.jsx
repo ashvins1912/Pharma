@@ -11,6 +11,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
   const [batchStatus, setBatchStatus] = useState(null);
   const [statusBusy, setStatusBusy] = useState(false);
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
+  const [jobStatus, setJobStatus] = useState(null);
 
   if (!isOpen) return null;
 
@@ -20,6 +21,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     setPublished(null);
     setBatchStatus(null);
     setReviewConfirmed(false);
+    setJobStatus(null);
     setBusy(false);
   };
 
@@ -30,6 +32,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
     setBusy(true);
     setPreview(null);
     setPublished(null);
+    setJobStatus(null);
     setReviewConfirmed(false);
     try {
       const body = new FormData();
@@ -38,22 +41,54 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 600000
       });
-      setPreview(response.data);
-      if (response.data?.batchId) {
-        try {
-          const statusResponse = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(response.data.batchId)}`);
-          setBatchStatus(statusResponse.data);
-          if (statusResponse.data?.status === 'PUBLISHED') setPublished({ status: statusResponse.data.status, publishedCount: statusResponse.data.publishedCount, report: statusResponse.data.report });
-        } catch (statusError) {
-          addToast(statusError.response?.data?.message || 'Preview is ready, but batch status could not be loaded. Use Refresh status before publishing.', 'warning');
-        }
+      const jobId = response.data?.jobId;
+      if (!jobId) throw new Error('The server did not return an import job ID.');
+      let job;
+      while (true) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const statusResponse = await apiClient.get(`/api/v1/inventory/catalogue/imports/jobs/${encodeURIComponent(jobId)}`);
+        job = statusResponse.data;
+        setJobStatus(job);
+        if (job.status === 'READY' || job.status === 'FAILED') break;
       }
-      addToast('Catalogue dataset analyzed. Review the reconciliation report and batch status before publishing.', 'success');
+      if (job.status === 'FAILED') throw new Error(job.errorMessage || 'Catalogue processing failed. The uploaded file remains available for an administrator to retry.');
+      const completedPreview = {
+        batchId: job.batchId, dataset: job.dataset, status: 'READY',
+        report: job.report, reportFingerprint: job.reportFingerprint, sample: job.sample
+      };
+      setPreview(completedPreview);
+      const statusResponse = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(job.batchId)}`);
+      setBatchStatus(statusResponse.data);
+      addToast('Background catalogue processing completed. Review the reconciliation report before publishing.', 'success');
     } catch (error) {
       addToast(error.response?.data?.message || error.response?.data?.error?.message || error.message || 'Could not analyze this JSON dataset.', 'error');
     } finally {
       setBusy(false);
     }
+  };
+
+  const retryFailedJob = async () => {
+    if (!jobStatus?.jobId || jobStatus.status !== 'FAILED') return;
+    setBusy(true);
+    try {
+      await apiClient.post(`/api/v1/inventory/catalogue/imports/jobs/${encodeURIComponent(jobStatus.jobId)}/retry`, {});
+      let job;
+      while (true) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const response = await apiClient.get(`/api/v1/inventory/catalogue/imports/jobs/${encodeURIComponent(jobStatus.jobId)}`);
+        job = response.data;
+        setJobStatus(job);
+        if (job.status === 'READY' || job.status === 'FAILED') break;
+      }
+      if (job.status === 'FAILED') throw new Error(job.errorMessage || 'The retry failed. Check the import job details.');
+      const completedPreview = { batchId: job.batchId, dataset: job.dataset, status: 'READY', report: job.report, reportFingerprint: job.reportFingerprint, sample: job.sample };
+      setPreview(completedPreview);
+      const batch = await apiClient.get(`/api/v1/inventory/catalogue/imports/${encodeURIComponent(job.batchId)}`);
+      setBatchStatus(batch.data);
+      addToast('Catalogue import retry completed. Review the reconciliation report.', 'success');
+    } catch (error) {
+      addToast(error.response?.data?.message || error.message || 'Could not retry this import job.', 'error');
+    } finally { setBusy(false); }
   };
 
   const approveReconciliation = async () => {
@@ -81,7 +116,14 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
       } catch { /* Publish response remains authoritative if status refresh is temporarily unavailable. */ }
       addToast(response.data.status === 'PUBLISHED' ? 'Medicine catalogue published successfully.' : 'Catalogue import completed with a partial result.', response.data.status === 'PUBLISHED' ? 'success' : 'warning');
     } catch (error) {
-      addToast(error.response?.data?.message || error.response?.data?.error?.message || error.message || 'Catalogue publishing failed.', 'error');
+      const payload = error.response?.data;
+      if (error.response?.status === 409 && payload?.status === 'READY' && payload?.reportFingerprint) {
+        setPreview(current => current ? { ...current, report: payload.report || current.report, reportFingerprint: payload.reportFingerprint } : current);
+        setBatchStatus(current => ({ ...(current || {}), batchId: payload.batchId || preview.batchId, status: 'READY', report: payload.report, reportFingerprint: payload.reportFingerprint, approvedAt: null, approvedBy: '', errorMessage: payload.message || 'Live reconciliation requires a fresh review.' }));
+        setPublished(null);
+        setReviewConfirmed(false);
+      }
+      addToast(payload?.message || payload?.error?.message || error.message || 'Catalogue publishing failed.', 'error');
     } finally {
       setBusy(false);
     }
@@ -121,7 +163,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-950">
             Platform-level shared catalogue import. It enriches medicine identity and clinical/product metadata only. Pharmacy selling price, stock, branch, batch, MRP, expiry and manufacturing dates are not imported.
           </div>
-          {!published && (
+          {!published && !preview && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="sm:col-span-2 text-xs text-slate-500">Dataset type is detected automatically from the uploaded JSON structure.</div>
               <label className="block text-xs font-bold text-slate-700">
@@ -130,6 +172,8 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
               </label>
             </div>
           )}
+          {jobStatus && busy && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2"><div className="flex items-center justify-between gap-3 text-xs"><strong className="text-blue-950">Background import: {jobStatus.stage || jobStatus.status}</strong><span className="font-bold tabular-nums text-blue-800">{Number(jobStatus.progressPercent || 0)}%</span></div><div className="h-2 overflow-hidden rounded-full bg-blue-100"><div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${Math.max(0, Math.min(100, Number(jobStatus.progressPercent || 0)))}%` }} /></div><p className="text-[11px] text-blue-900">{jobStatus.fileName} · {jobStatus.processedRecords ? Number(jobStatus.processedRecords).toLocaleString() : 'Preparing'} / {jobStatus.totalRecords ? Number(jobStatus.totalRecords).toLocaleString() : '—'} records · Job {jobStatus.jobId}</p></div>}
+          {jobStatus?.status === 'FAILED' && <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">Processing failed: {jobStatus.errorMessage || 'Unknown processing error'} · Attempt {jobStatus.attempts || 1}</p>}
           {file && !preview && <p className="text-xs text-slate-500 break-all">Selected: <strong>{file.name}</strong> · {(file.size / 1024 / 1024).toFixed(2)} MB</p>}
           {report && (
             <div className="space-y-3">
@@ -186,6 +230,31 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                 {metric('Partial quality', report.partialQualityRecords)}
                 {metric('Quality needs review', report.needsReviewQualityRecords)}
               </div>
+              {report.publishReconciliation && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+                  <h4 className="text-xs font-extrabold text-amber-950">Fresh publish-time reconciliation</h4>
+                  <p className="text-[11px] leading-5 text-amber-900">The live master catalogue changed after preview or contains unresolved candidates. Publishing is blocked until the updated report is reviewed and approved.</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                    <div>Checked: <strong>{Number(report.publishReconciliation.checkedRecords || 0).toLocaleString()}</strong></div>
+                    <div>Updates: <strong>{Number(report.publishReconciliation.matchedUpdates || 0).toLocaleString()}</strong></div>
+                    <div>New inserts: <strong>{Number(report.publishReconciliation.newInserts || 0).toLocaleString()}</strong></div>
+                    <div>Manual review: <strong>{Number(report.publishReconciliation.manualReview || 0).toLocaleString()}</strong></div>
+                    <div>Clinical conflicts: <strong>{Number(report.publishReconciliation.clinicalConflicts || 0).toLocaleString()}</strong></div>
+                    <div>Stale decisions: <strong>{Number(report.publishReconciliation.staleDecisions || 0).toLocaleString()}</strong></div>
+                    <div>Blockers: <strong>{Number(report.publishReconciliation.blockerCount || 0).toLocaleString()}</strong></div>
+                  </div>
+                  {report.publishReconciliation.blockerExamples?.length > 0 && (
+                    <div className="max-h-40 overflow-y-auto space-y-1">
+                      {report.publishReconciliation.blockerExamples.slice(0, 20).map((item, index) => (
+                        <div key={item.medicineId || item.targetMedicineId || item.reason + '-' + index} className="rounded-lg bg-white/80 p-2 text-[10px] text-amber-950">
+                          <strong>{item.brandName || item.targetMedicineId || item.reason}</strong> · {item.reason}
+                          {item.warnings?.length > 0 && <span> · {item.warnings.join(', ')}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-xs text-violet-950">Reconciliation approval</strong><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${batchStatus?.approvedAt ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{batchStatus?.approvedAt ? 'Approved' : 'Review required'}</span></div>
                 <p className="text-[11px] leading-5 text-violet-950">New medicines: {Number(report.newRecords || 0).toLocaleString()} · Existing-record update candidates: {Number(report.updateCandidates || 0).toLocaleString()} · Rejected rows: {Number(report.rejectedRecords || 0).toLocaleString()}. Publishing applies the staged reconciliation to the shared master catalogue; it does not change tenant prices or branch inventory.</p>
@@ -233,7 +302,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
         <footer className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-between sm:px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button type="button" onClick={preview ? () => { setPreview(null); setFile(null); setPublished(null); setBatchStatus(null); setReviewConfirmed(false); } : close} disabled={busy} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 disabled:opacity-50">{preview ? 'Choose another dataset' : 'Close'}</button>
           {!preview ? (
-            <button type="button" onClick={createPreview} disabled={busy || !file} className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-50">{busy ? 'Analyzing JSON…' : 'Analyze & Preview'}</button>
+            <div className="flex flex-col gap-2 sm:flex-row"><button type="button" onClick={createPreview} disabled={busy || !file || jobStatus?.status === 'FAILED'} className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-50">{busy ? (jobStatus ? `Processing… ${jobStatus.progressPercent || 0}%` : 'Uploading securely…') : 'Upload & Analyze'}</button>{jobStatus?.status === 'FAILED' && <button type="button" onClick={retryFailedJob} disabled={busy} className="rounded-xl bg-amber-600 px-5 py-2.5 text-xs font-extrabold text-white disabled:opacity-50">{busy ? 'Retrying…' : 'Retry failed job'}</button>}</div>
           ) : !published && !batchStatus?.approvedAt ? (
             <button type="button" onClick={approveReconciliation} disabled={busy || !reviewConfirmed || !preview?.reportFingerprint} className="rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-violet-700 disabled:opacity-50">{busy ? 'Approving…' : 'Approve reconciliation'}</button>
           ) : !published ? (

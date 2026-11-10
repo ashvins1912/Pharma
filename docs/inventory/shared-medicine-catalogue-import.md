@@ -6,7 +6,10 @@ The Inventory Service supports a platform-admin-only JSON enrichment workflow fo
 
 All endpoints are routed through API Gateway and require a platform administrator:
 
-- POST /api/v1/inventory/catalogue/imports/preview — multipart upload using field jsonFile; optional dataset is INDIAN_MEDICINE_DATA or INDIA_MEDICINES_INFO. The service can auto-detect either structure.
+- POST /api/v1/inventory/catalogue/imports/preview — multipart upload using field `jsonFile`; returns HTTP 202 and a durable `jobId` after the file is streamed into MongoDB GridFS.
+- GET /api/v1/inventory/catalogue/imports/jobs/:jobId — inspect persisted job state, stage, progress, attempts, errors and resulting batch ID.
+- POST /api/v1/inventory/catalogue/imports/jobs/:jobId/retry — requeue a failed job using its retained GridFS upload.
+- Optional dataset form field is validated against the detected structure; the service auto-detects supported formats.
 - POST /api/v1/inventory/catalogue/imports/merge — combine 2–10 unapproved READY batches into one new staged MULTI_SOURCE batch.
 - GET /api/v1/inventory/catalogue/imports/:batchId — inspect staged batch status and reconciliation report.
 - POST /api/v1/inventory/catalogue/imports/:batchId/publish — explicitly publish the staged records.
@@ -16,7 +19,7 @@ All endpoints are routed through API Gateway and require a platform administrato
 - GET /api/v1/inventory/catalogue/medicines?search=&page=1&limit=20 — search the shared master catalogue.
 - GET /api/v1/inventory/catalogue/medicines/:medicineId — fetch full medicine master details.
 
-Uploads are limited to 110 MiB and 60,000 records. Large imports are stored as 500-record staging chunks so a batch never approaches MongoDB's 16 MiB document limit. Preview never writes live medicine master records. Re-uploading the same dataset file is idempotent and returns its existing batch.
+Uploads are limited to 110 MiB and 60,000 records. Multer streams the request body into MongoDB GridFS rather than buffering the upload in the HTTP process. A MongoDB-backed job document is created after upload completion; the API returns immediately with a job ID. The inventory service worker atomically claims queued jobs, renews a processing lease, persists progress and errors, and can recover expired processing leases after a restart. Failed jobs can be retried without uploading the source again. Normalized records are staged in 500-record MongoDB chunks so a batch never approaches MongoDB's 16 MiB document limit. Preview never writes live medicine master records. Re-uploading the same dataset file is idempotent and returns its existing batch.
 
 ## Preview performance and validation
 
@@ -80,3 +83,29 @@ For an automatic merge, existing master medicine ID is preserved; the incoming m
 5. Use the dedicated **Medicine Master Catalogue** workspace to search and inspect published records. Manual updates are limited to approved metadata fields and record before/after values, actor and timestamp in an audit collection.
 
 Manual editing does not verify clinical facts. Immutable medicine identifiers, source provenance, regulatory verification flags, tenant pricing and branch inventory are not editable from this screen.
+
+
+## Durable background import jobs
+
+The raw upload is retained in the Inventory MongoDB database's `medicineCatalogueUploads` GridFS bucket. The job collection stores the GridFS file ID, uploader identity, status, processing stage, percentage, record counters, attempt count, lease expiry, resulting batch ID, report, sample, and error details. The worker claims one job at a time per service process with an atomic MongoDB update; multiple service instances therefore cannot claim the same unexpired lease. A 60-second heartbeat renews the 15-minute lease while a job is active. If a process exits, an expired PROCESSING lease can be claimed again. Stale STAGING batches from interrupted attempts are cleaned up before retrying the same source file.
+
+The Super Admin upload modal polls the job endpoint and displays stage/progress. The reconciliation report and Review/Approve/Publish actions are exposed only after the job reaches READY and its staged batch exists. FAILED jobs expose a retry action; the original GridFS object is retained for that retry.
+
+**Memory boundary:** upload reception is streamed to GridFS, but the current processor downloads the stored file into a worker Buffer before parsing and reconciliation. The worker is single-concurrency and the hard limits remain 110 MiB / 60,000 records, but this is not yet a fully streaming JSON parser or a horizontally scaled dedicated worker service. Size worker memory for the configured upload limit and validate with production-like load tests before raising limits.
+
+### Final live-catalogue reconciliation gate
+
+Immediately before the first publish write, the API reruns reconciliation against the current, non-archived MedicineMaster records. It uses exact medicine ID, unique canonical identity, eligible unique brand-name matching, and the same hybrid token / character n-gram / TF-IDF-inspired scorer used during preview. Strength, dosage-form and composition conflicts remain hard blockers.
+
+The live check compares its target decisions with the approved preview. If a record now resolves to a different target, a new target appears, or the previous target disappears, publishing is stopped, the latest reconciliation summary is attached to the batch report, and the old approval is invalidated. The updated report must be reviewed and approved again. Ambiguous matches, clinical conflicts, multiple incoming rows targeting one master medicine, and a truncated candidate scan also stop publication; these records are never silently inserted as new medicines.
+
+Only a fresh high-confidence match is updated. A fresh no-match record is inserted. The writer re-fetches matched targets by medicine ID immediately before each 250-record write chunk and rejects a target that disappeared. A previously inserted record is recognized by its own medicine ID on a retry, so a partially completed publish can resume idempotently.
+
+**Manual-review limitation:** the current API does not provide per-record adjudication controls. Records marked MANUAL_REVIEW or BLOCKED_CONFLICT therefore keep the batch in READY with publishing blocked; they must be corrected in the source data and re-imported rather than being forced into an insert by batch approval.
+
+### Removing recent enrichment batches
+
+Super Admins can select up to 10 standalone, unapproved READY batches in Recent enrichment batches and remove them from that list. Removal is a soft-hide operation: the batch record, staged chunks, original upload and provenance/audit data are retained. Hidden batches are excluded from history pagination, detail/record inspection, approval, publishing, deduplication reuse and future merge selection.
+
+Approved, published, partially published, failed, actively processing, merged and superseded batches cannot be removed through this action. This protects published catalogue state, merge lineage and recovery evidence. A hidden batch can be re-imported from its original source file; the hidden historical record remains retained.
+
