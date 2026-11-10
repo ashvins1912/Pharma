@@ -3,7 +3,7 @@ import test from 'node:test';
 
 process.env.SERVICE_AUTH_SECRET = 'test-service-secret-with-more-than-thirty-two-characters';
 
-const { detectMedicineDataset, normalizeMedicineRecord, consolidate, parseJsonArrayRecords } = await import('./src/medicine-catalogue-import-routes.js');
+const { detectMedicineDataset, normalizeMedicineRecord, consolidate, assessMedicineQuality, parseJsonArrayRecords } = await import('./src/medicine-catalogue-import-routes.js');
 const { requireServiceScope } = await import('./src/service-auth.js');
 const jwt = (await import('jsonwebtoken')).default;
 
@@ -169,6 +169,41 @@ test('Medicines Part 1 removes placeholder metadata and deduplicates only exact 
   assert.deepEqual(result.records[0].sourceRecordIds, ['1', '2']);
   assert.equal(result.records[0].chemicalClass, '');
   assert.equal(result.records[1].sideEffects[0], 'Headache');
+});
+
+test('quality scoring is transparent, bounded and never upgrades unverified clinical facts', () => {
+  const complete = normalizeMedicineRecord({
+    brandIdentifier: 'B-QUALITY-1', brandName: 'Quality Example 500mg Tablet',
+    genericIdentifier: 'G-QUALITY-1', genericName: 'Example ingredient',
+    supplierIdentifier: 'SUP-1', supplierName: 'Example manufacturer',
+    substanceIdentifier: ['ING-1'], substanceName: ['Example ingredient'],
+    casNumber: ['123-45-6'], doseForm: 'Tablet', strength: '500 mg',
+    routeOfAdministrationName: ['Oral'], indication: 'Source-provided use'
+  }, 'INDIAN_MEDICINE_DATA');
+  const scored = assessMedicineQuality(complete);
+  assert.equal(scored.qualityScore, 100);
+  assert.equal(scored.qualityGrade, 'EXCELLENT');
+  assert.ok(scored.qualityIssues.includes('SOURCE_LICENCE_STATUS_UNVERIFIED') === false);
+  assert.equal(complete.prescriptionVerification, 'UNVERIFIED');
+
+  const sparse = normalizeMedicineRecord({ id: 'sparse-1', name: 'Example medicine' }, 'MEDICINES_PART_1');
+  const sparseScore = assessMedicineQuality(sparse);
+  assert.ok(sparseScore.qualityScore >= 0 && sparseScore.qualityScore <= 100);
+  assert.ok(sparseScore.qualityIssues.includes('MISSING_COMPOSITION'));
+  assert.ok(sparseScore.qualityIssues.includes('MISSING_MANUFACTURER'));
+  assert.equal(sparse.prescriptionVerification, 'UNVERIFIED');
+});
+
+test('consolidation attaches quality grades and scores to every accepted record', () => {
+  const result = consolidate([{
+    brandIdentifier: 'B-QUALITY-2', brandName: 'Example Tablet',
+    genericName: 'Example ingredient', substanceName: ['Example ingredient'],
+    doseForm: 'Tablet', __dataset: 'INDIAN_MEDICINE_DATA'
+  }], 'INDIAN_MEDICINE_DATA');
+  assert.equal(result.records.length, 1);
+  assert.ok(result.records[0].qualityScore >= 0 && result.records[0].qualityScore <= 100);
+  assert.ok(['EXCELLENT', 'GOOD', 'PARTIAL', 'NEEDS_REVIEW'].includes(result.records[0].qualityGrade));
+  assert.ok(Array.isArray(result.records[0].qualityIssues));
 });
 
 test('catalogue import scope is valid without a tenant or branch identity', async () => {

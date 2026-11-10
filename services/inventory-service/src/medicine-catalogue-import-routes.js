@@ -75,6 +75,9 @@ const medicineMasterSchema = new mongoose.Schema({
   clinicalDataVerification: { type: String, enum: ['UNVERIFIED', 'VERIFIED'], default: 'UNVERIFIED' },
   sourceLicenseStatus: { type: String, enum: ['UNVERIFIED', 'CLEARED', 'RESTRICTED'], default: 'UNVERIFIED' },
   dataQualityStatus: { type: String, enum: ['GOOD', 'PARTIAL', 'NEEDS_REVIEW'], default: 'PARTIAL' },
+  qualityScore: { type: Number, min: 0, max: 100, default: 0 },
+  qualityGrade: { type: String, enum: ['EXCELLENT', 'GOOD', 'PARTIAL', 'NEEDS_REVIEW'], default: 'NEEDS_REVIEW' },
+  qualityIssues: { type: [String], default: [] },
   sourcePriority: { type: Number, default: 99 },
   sourceDatasets: { type: [String], default: [] },
   sourceRecordIds: { type: [String], default: [] },
@@ -243,6 +246,31 @@ export function normalizeMedicineRecord(raw, dataset) {
   };
 }
 
+export function assessMedicineQuality(record) {
+  const has = value => Array.isArray(value) ? value.some(item => Boolean(text(typeof item === 'object' ? item?.name || item?.brandName : item))) : Boolean(text(value));
+  const checks = [
+    ['brandName', has(record.brandName), 18],
+    ['medicineId', has(record.medicineId), 12],
+    ['composition', has(record.composition) || has(record.ingredients), 18],
+    ['strength', has(record.strength), 8],
+    ['dosageForm', has(record.dosageForm), 8],
+    ['genericName', has(record.genericName), 8],
+    ['manufacturer', has(record.manufacturer), 5],
+    ['ingredientIdentifiers', has(record.ingredientIds), 5],
+    ['routes', has(record.routes), 4],
+    ['clinicalDetails', has(record.indications) || has(record.uses) || has(record.sideEffects) || has(record.contraindications) || has(record.drugInteractions), 6],
+    ['chemicalIdentifiers', has(record.casNumbers) || has(record.uniiCodes), 4],
+    ['sourceProvenance', has(record.sourceDataset) && has(record.sourceRecordId), 4]
+  ];
+  const qualityIssues = checks.filter(([, present]) => !present).map(([field]) => `MISSING_${field.replace(/[A-Z]/g, letter => `_${letter}`).toUpperCase()}`);
+  if (!has(record.brandName) || !has(record.medicineId)) qualityIssues.push('INVALID_CORE_IDENTITY');
+  if (record.requiresPrescription !== null && record.requiresPrescription !== undefined) qualityIssues.push('PRESCRIPTION_FLAG_UNVERIFIED');
+  if (record.sourceLicenseStatusValue) qualityIssues.push('SOURCE_LICENCE_STATUS_UNVERIFIED');
+  const qualityScore = Math.min(100, checks.reduce((sum, [, present, weight]) => sum + (present ? weight : 0), 0));
+  const qualityGrade = qualityScore >= 90 ? 'EXCELLENT' : qualityScore >= 75 ? 'GOOD' : qualityScore >= 50 ? 'PARTIAL' : 'NEEDS_REVIEW';
+  return { qualityScore, qualityGrade, qualityIssues: [...new Set(qualityIssues)] };
+}
+
 export function consolidate(records, dataset) {
   const unique = new Map();
   let rejected = 0;
@@ -252,6 +280,8 @@ export function consolidate(records, dataset) {
     if (sourceRecords > 60000) throw Object.assign(new Error('Dataset exceeds the 60,000-record import limit.'), { statusCode: 413 });
     const normalized = normalizeMedicineRecord(raw, raw.__dataset);
     if (!normalized) { rejected += 1; continue; }
+    Object.assign(normalized, assessMedicineQuality(normalized));
+    normalized.dataQualityStatus = normalized.qualityGrade === 'EXCELLENT' || normalized.qualityGrade === 'GOOD' ? 'GOOD' : normalized.qualityGrade === 'NEEDS_REVIEW' ? 'NEEDS_REVIEW' : 'PARTIAL';
     const identity = dataset === 'INDIAN_MEDICINE_DATA' ? normalized.medicineId : dataset === 'MEDICINES_PART_1' ? normalized.sourceFingerprint : (normalized.canonicalKey || normalized.medicineId);
     const previous = unique.get(identity);
     if (!previous) unique.set(identity, normalized);
@@ -260,12 +290,21 @@ export function consolidate(records, dataset) {
         if (!previous[field] && normalized[field]) previous[field] = normalized[field];
       }
       for (const field of ['ingredientIds','ingredients','ingredientDetails','routeIds','routes','casNumbers','uniiCodes','substanceDescriptions','molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology','indications','contraindications','drugInteractions']) {
-        previous[field] = [...new Map([...previous[field], ...normalized[field]].map(v => [key(v), v])).values()];
+        const identityOf = value => typeof value === 'object' && value !== null
+          ? (value.ingredientId || key(value.name) || JSON.stringify(value))
+          : key(value);
+        previous[field] = [...new Map([...previous[field], ...normalized[field]].map(value => [identityOf(value), value])).values()];
       }
+      previous.qualityIssues = [...new Set([...(previous.qualityIssues || []), ...(normalized.qualityIssues || [])])];
       previous.sourceRecordIds = [...new Set([...(previous.sourceRecordIds || [previous.sourceRecordId]), normalized.sourceRecordId])];
     }
   }
-  return { records: [...unique.values()], rejected, sourceRecords, duplicatesRemoved: sourceRecords - rejected - unique.size };
+  const consolidatedRecords = [...unique.values()];
+  for (const record of consolidatedRecords) {
+    Object.assign(record, assessMedicineQuality(record));
+    record.dataQualityStatus = record.qualityGrade === 'EXCELLENT' || record.qualityGrade === 'GOOD' ? 'GOOD' : record.qualityGrade === 'NEEDS_REVIEW' ? 'NEEDS_REVIEW' : 'PARTIAL';
+  }
+  return { records: consolidatedRecords, rejected, sourceRecords, duplicatesRemoved: sourceRecords - rejected - unique.size };
 }
 
 router.use(requireServiceScope('inventory.catalogue.import'));
@@ -355,7 +394,13 @@ router.post('/imports/preview', upload.single('jsonFile'), asyncHandler(async (r
     withTherapeuticClass: records.filter(item => item.therapeuticClass).length,
     withChemicalClass: records.filter(item => item.chemicalClass && key(item.chemicalClass) !== 'na').length,
     withHabitFormingMetadata: records.filter(item => item.habitForming !== 'UNKNOWN').length,
-    prescriptionFlagsUnverified: records.filter(item => item.requiresPrescription !== null).length
+    prescriptionFlagsUnverified: records.filter(item => item.requiresPrescription !== null).length,
+    excellentQualityRecords: records.filter(item => item.qualityGrade === 'EXCELLENT').length,
+    goodQualityRecords: records.filter(item => item.qualityGrade === 'GOOD').length,
+    partialQualityRecords: records.filter(item => item.qualityGrade === 'PARTIAL').length,
+    needsReviewQualityRecords: records.filter(item => item.qualityGrade === 'NEEDS_REVIEW').length,
+    averageQualityScore: records.length ? Math.round(records.reduce((sum, item) => sum + item.qualityScore, 0) / records.length) : 0,
+    qualityIssueCounts: records.reduce((counts, item) => { for (const issue of item.qualityIssues) counts[issue] = (counts[issue] || 0) + 1; return counts; }, {})
   };
   const chunks = [];
   for (let offset = 0; offset < records.length; offset += CATALOGUE_CHUNK_SIZE) chunks.push({ batchId, chunkIndex: chunks.length, records: records.slice(offset, offset + CATALOGUE_CHUNK_SIZE) });
@@ -428,9 +473,13 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         for (const field of fields) {
           if (item[field] && (!current?.[field] || item.sourcePriority < Number(current.sourcePriority ?? 99))) set[field] = item[field];
         }
-        for (const field of ['ingredientIds','ingredients','routes','indications','contraindications','drugInteractions','alternatives','sideEffects','uses','suggestedAlternatives']) {
+        for (const field of ['ingredientIds','ingredients','routes','indications','contraindications','drugInteractions','alternatives','sideEffects','uses','suggestedAlternatives','routeIds','casNumbers','uniiCodes','substanceDescriptions','molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology']) {
           const incoming = item[field] || [];
           if (incoming.length) set[field] = [...new Map([...(current?.[field] || []), ...incoming].map(v => [key(typeof v === 'string' ? v : JSON.stringify(v)), v])).values()];
+        }
+        if (item.ingredientDetails?.length) {
+          const ingredientMap = new Map([...(current?.ingredientDetails || []), ...item.ingredientDetails].map(detail => [detail.ingredientId || key(detail.name), detail]));
+          set.ingredientDetails = [...ingredientMap.values()];
         }
         if (current?.requiresPrescription === null || current?.requiresPrescription === undefined) set.requiresPrescription = item.requiresPrescription;
         for (const field of ['chemicalClass','therapeuticClass','actionClass']) if (item[field] && (!current?.[field] || item.sourcePriority < Number(current.sourcePriority ?? 99))) set[field] = item[field];
@@ -441,6 +490,9 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
         const qualityRank = { NEEDS_REVIEW: 1, PARTIAL: 2, GOOD: 3 };
         set.dataQualityStatus = (qualityRank[current?.dataQualityStatus] || 0) >= (qualityRank[item.dataQualityStatus] || 0)
           ? (current?.dataQualityStatus || item.dataQualityStatus) : item.dataQualityStatus;
+        const mergedQuality = assessMedicineQuality({ ...current, ...set, sourceDataset: item.sourceDataset, sourceRecordId: item.sourceRecordId });
+        Object.assign(set, mergedQuality);
+        set.dataQualityStatus = mergedQuality.qualityGrade === 'EXCELLENT' || mergedQuality.qualityGrade === 'GOOD' ? 'GOOD' : mergedQuality.qualityGrade === 'NEEDS_REVIEW' ? 'NEEDS_REVIEW' : 'PARTIAL';
         return {
           updateOne: {
             filter: current ? { _id: current._id } : { medicineId: targetId },

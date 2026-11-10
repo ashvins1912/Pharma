@@ -3,11 +3,72 @@ import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 
 const DATASETS = [
-  { value: '', label: 'Auto-detect JSON format' },
-  { value: 'INDIAN_MEDICINE_DATA', label: 'Indian Medicine Dataset (drugDetails)' },
-  { value: 'INDIA_MEDICINES_INFO', label: 'India Medicines and Drug Info (retail array)' },
-  { value: 'MEDICINES_PART_1', label: 'Medicines Part 1 (50,000 clinical detail records)' }
+  { value: '', label: 'Auto-detect', description: 'Detect the structure from your JSON file.' },
+  { value: 'INDIAN_MEDICINE_DATA', label: 'Indian Medicine Dataset', description: 'Object containing a drugDetails array.' },
+  { value: 'INDIA_MEDICINES_INFO', label: 'India Medicines Info', description: 'Retail product array with Medicine Name and Composition.' },
+  { value: 'MEDICINES_PART_1', label: 'Medicines Part 1', description: 'Clinical detail array with id, name, use0 and sideEffect0 fields.' }
 ];
+
+const DATASET_SAMPLES = {
+  '': `{
+  "drugDetails": [
+    {
+      "brandIdentifier": "BRAND-001",
+      "brandName": "Example 500 Tablet",
+      "genericName": "Example ingredient",
+      "substanceName": "Example ingredient",
+      "doseForm": "Tablet",
+      "indication": "Example source-provided indication"
+    }
+  ],
+  "count": 1
+}`,
+  INDIAN_MEDICINE_DATA: `{
+  "drugDetails": [
+    {
+      "brandIdentifier": "BRAND-001",
+      "brandName": "Example 500 Tablet",
+      "genericIdentifier": "GEN-001",
+      "genericName": "Example ingredient",
+      "supplierIdentifier": "SUP-001",
+      "supplierName": "Example manufacturer",
+      "substanceIdentifier": "SUB-001",
+      "substanceName": "Example ingredient",
+      "doseForm": "Tablet",
+      "routeOfAdministrationName": "Oral",
+      "indication": "Example source-provided indication",
+      "contraIndication": "",
+      "interactionWithDrugs": "",
+      "alternativeDrugs": []
+    }
+  ],
+  "count": 1
+}`,
+  INDIA_MEDICINES_INFO: `[
+  {
+    "Medicine Name": "Example 500 Tablet",
+    "Product Name": "Example 500 Tablet - Pack of 10",
+    "Composition": "Example ingredient 500 mg",
+    "Type of Medicine": "Tablet",
+    "Image URL": "",
+    "Is Prescription Required?": "Yes",
+    "Price": "₹100"
+  }
+]`,
+  MEDICINES_PART_1: `[
+  {
+    "id": "CLINICAL-001",
+    "name": "Example 500 Tablet",
+    "use0": "Example source-provided use",
+    "sideEffect0": "Example source-provided side effect",
+    "substitute0": "Example suggested alternative",
+    "Chemical Class": "Example chemical class",
+    "Habit Forming": "No",
+    "Therapeutic Class": "Example therapeutic class",
+    "Action Class": "Example action class"
+  }
+]`
+};
 
 export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
   const { addToast } = useToast();
@@ -97,7 +158,7 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
   const metric = (label, value) => (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 min-w-0">
       <div className="text-[10px] uppercase tracking-wide font-bold text-slate-500">{label}</div>
-      <div className="mt-1 text-xl font-black text-slate-900 tabular-nums">{Number(value || 0).toLocaleString()}</div>
+      <div className="mt-1 text-xl font-black text-slate-900 tabular-nums">{typeof value === 'number' ? value.toLocaleString() : (value ?? 0)}</div>
     </div>
   );
 
@@ -117,12 +178,33 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
           </div>
           {!published && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="block text-xs font-bold text-slate-700">
-                Dataset format
-                <select value={dataset} onChange={event => { setDataset(event.target.value); setPreview(null); }} disabled={busy || Boolean(preview)} className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
-                  {DATASETS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
-                </select>
-              </label>
+              <div className="sm:col-span-2 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-slate-700">Dataset format</span>
+                  <span className="text-[10px] font-medium text-slate-500">Choose the structure matching your file</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="radiogroup" aria-label="Dataset format">
+                  {DATASETS.map(item => (
+                    <button key={item.value} type="button" role="radio" aria-checked={dataset === item.value}
+                      onClick={() => { setDataset(item.value); setPreview(null); }}
+                      disabled={busy || Boolean(preview)}
+                      className={`rounded-xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${dataset === item.value ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100' : 'border-slate-200 bg-white hover:border-blue-300'}`}>
+                      <span className="flex items-center gap-2 text-xs font-extrabold text-slate-800">
+                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${dataset === item.value ? 'border-blue-600' : 'border-slate-400'}`}>{dataset === item.value && <span className="h-2 w-2 rounded-full bg-blue-600" />}</span>
+                        {item.label}
+                      </span>
+                      <span className="mt-1 block pl-6 text-[11px] leading-4 text-slate-500">{item.description}</span>
+                    </button>
+                  ))}
+                </div>
+                <details className="rounded-xl border border-slate-200 bg-slate-50">
+                  <summary className="cursor-pointer px-3 py-2.5 text-xs font-bold text-slate-700">View sample dataset format</summary>
+                  <div className="border-t border-slate-200 p-3">
+                    <p className="mb-2 text-[11px] leading-4 text-slate-500">Illustrative structure only. Replace the example values with your source records. The importer validates the actual JSON structure and required identifiers.</p>
+                    <pre className="max-h-64 overflow-auto rounded-lg bg-slate-950 p-3 text-[10px] leading-4 text-slate-100"><code>{DATASET_SAMPLES[dataset]}</code></pre>
+                  </div>
+                </details>
+              </div>
               <label className="block text-xs font-bold text-slate-700">
                 JSON file (max 110 MB)
                 <input type="file" accept=".json,application/json" disabled={busy || Boolean(preview)} onChange={event => setFile(event.target.files?.[0] || null)} className="mt-1.5 block w-full rounded-xl border border-slate-300 bg-white p-2 text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-bold file:text-blue-700" />
@@ -176,16 +258,34 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                 {metric('Missing composition', report.missingComposition)}
                 {metric('Missing manufacturer', report.missingManufacturer)}
                 {metric('Need review', report.needsReview)}
+                {metric('Average quality score', `${report.averageQualityScore || 0}%`)}
+                {metric('Excellent quality', report.excellentQualityRecords)}
+                {metric('Good quality', report.goodQualityRecords)}
+                {metric('Partial quality', report.partialQualityRecords)}
+                {metric('Quality needs review', report.needsReviewQualityRecords)}
               </div>
+              {report.qualityIssueCounts && Object.keys(report.qualityIssueCounts).length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                  <h4 className="text-xs font-extrabold text-slate-800">Most common quality gaps</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {Object.entries(report.qualityIssueCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([issue, count]) => (
+                      <div key={issue} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-[11px]">
+                        <span className="min-w-0 break-words text-slate-600">{issue.replace(/_/g, ' ').toLowerCase()}</span>
+                        <strong className="shrink-0 tabular-nums text-slate-900">{Number(count).toLocaleString()}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-950">
-                Clinical uses, side effects, habit-forming flags and suggested alternatives are source-provided and unverified; they are informational, not prescribing guidance. Suggested alternatives are not confirmed therapeutic equivalents. Prescription flags and source licensing remain unverified. Confirm dataset redistribution rights before commercial use. Third-party image URLs are not trusted or served as product images.
+                Quality scores measure supplied-field completeness and consistency, not clinical correctness or regulatory approval. Missing fields are reported rather than invented. Clinical uses, side effects, habit-forming flags and suggested alternatives are source-provided and unverified; they are informational, not prescribing guidance. Suggested alternatives are not confirmed therapeutic equivalents. Prescription flags and source licensing remain unverified. Confirm dataset redistribution rights before commercial use. Third-party image URLs are not trusted or served as product images.
               </div>
               {preview?.sample?.length > 0 && (
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
                   <table className="w-full min-w-[920px] text-left text-xs">
-                    <thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Medicine</th><th className="p-3">Composition</th><th className="p-3">Strength / Form</th><th className="p-3">Therapeutic class</th><th className="p-3">Uses / Side effects</th><th className="p-3">Manufacturer</th><th className="p-3">Quality</th></tr></thead>
+                    <thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Medicine</th><th className="p-3">Composition</th><th className="p-3">Strength / Form</th><th className="p-3">Therapeutic class</th><th className="p-3">Uses / Side effects</th><th className="p-3">Manufacturer</th><th className="p-3">Quality score</th><th className="p-3">Quality issues</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
-                      {preview.sample.map(item => <tr key={item.medicineId}><td className="p-3 font-bold text-slate-800">{item.brandName}</td><td className="p-3 text-slate-600">{item.composition || 'Not supplied'}</td><td className="p-3 text-slate-600">{[item.strength, item.dosageForm, item.packSize].filter(Boolean).join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.therapeuticClass || '—'}</td><td className="p-3 text-slate-600">{[...(item.uses || []).slice(0, 2), ...(item.sideEffects || []).slice(0, 2)].join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.manufacturer || 'Not supplied'}</td><td className="p-3">{item.dataQualityStatus}</td></tr>)}
+                      {preview.sample.map(item => <tr key={item.medicineId}><td className="p-3 font-bold text-slate-800">{item.brandName}</td><td className="p-3 text-slate-600">{item.composition || 'Not supplied'}</td><td className="p-3 text-slate-600">{[item.strength, item.dosageForm, item.packSize].filter(Boolean).join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.therapeuticClass || '—'}</td><td className="p-3 text-slate-600">{[...(item.uses || []).slice(0, 2), ...(item.sideEffects || []).slice(0, 2)].join(' · ') || '—'}</td><td className="p-3 text-slate-600">{item.manufacturer || 'Not supplied'}</td><td className="p-3 font-bold tabular-nums">{Number(item.qualityScore || 0)}% · {item.qualityGrade || item.dataQualityStatus}</td><td className="p-3 text-slate-600">{(item.qualityIssues || []).slice(0, 4).join(', ') || 'No detected gaps'}</td></tr>)}
                     </tbody>
                   </table>
                 </div>
