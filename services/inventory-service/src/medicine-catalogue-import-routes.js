@@ -27,6 +27,8 @@ const cleanDosageForm = value => {
   const forms = ['tablet','capsule','syrup','suspension','injection','cream','ointment','gel','drops','spray','inhaler','powder','solution','lotion','suppository','sachet','granules','patch','vial','ampoule','lozenge','mouthwash'];
   return forms.filter(form => source.includes(form)).map(form => form.charAt(0).toUpperCase() + form.slice(1)).join(', ');
 };
+const isPlaceholder = value => ['na', 'n a', 'n/a', 'not available', 'none', 'null', '-'].includes(key(value));
+const cleanSourceValue = value => isPlaceholder(value) ? '' : text(value);
 const splitList = value => text(value).split(/[,;|+]+/).map(text).filter(Boolean).filter((v, i, a) => a.findIndex(x => key(x) === key(v)) === i);
 
 const medicineMasterSchema = new mongoose.Schema({
@@ -139,19 +141,19 @@ export function normalizeMedicineRecord(raw, dataset) {
     const strengthMatch = brandName.match(/\\b\\d+(?:\\.\\d+)?\\s?(?:mcg|mg|g|ml|iu|%)(?:\\b|\\/)/i);
     const strength = strengthMatch ? strengthMatch[0].replace(/\\s+/g, ' ').trim() : '';
     const dosageForm = cleanDosageForm(brandName);
-    const collect = prefix => Array.from({ length: prefix === 'sideEffect' ? 42 : 5 }, (_, index) => text(raw[`${prefix}${index}`])).filter(Boolean).filter((value, index, all) => all.findIndex(item => key(item) === key(value)) === index);
+    const collect = prefix => Array.from({ length: prefix === 'sideEffect' ? 42 : 5 }, (_, index) => cleanSourceValue(raw[`${prefix}${index}`])).filter(Boolean).filter((value, index, all) => all.findIndex(item => key(item) === key(value)) === index);
     const identity = [key(brandName), key(strength), key(dosageForm)].join('|');
     return {
       medicineId: `MEDINFO-${sourceRecordId}`, canonicalKey: '', brandName, genericName: '', genericId: '',
       productId: '', productName: brandName, manufacturer: '', manufacturerId: '', ingredientIds: [], ingredients: [],
       composition: '', strength, packSize: '', dosageForm, medicineType: dosageForm, routes: [], alternatives: [],
       indications: [], contraindications: [], drugInteractions: [], sideEffects: collect('sideEffect'), uses: collect('use'),
-      suggestedAlternatives: collect('substitute'), chemicalClass: text(pick(raw, 'Chemical Class')),
+      suggestedAlternatives: collect('substitute'), chemicalClass: cleanSourceValue(pick(raw, 'Chemical Class')),
       habitForming: ['yes', 'no'].includes(text(pick(raw, 'Habit Forming')).toLowerCase()) ? text(pick(raw, 'Habit Forming')).toUpperCase() : 'UNKNOWN',
-      therapeuticClass: text(pick(raw, 'Therapeutic Class')), actionClass: text(pick(raw, 'Action Class')),
+      therapeuticClass: cleanSourceValue(pick(raw, 'Therapeutic Class')), actionClass: cleanSourceValue(pick(raw, 'Action Class')),
       sourceImageUrl: '', requiresPrescription: null, prescriptionVerification: 'UNVERIFIED',
       sourcePriority: 3, sourceDataset: dataset, sourceRecordId, dataQualityStatus: 'PARTIAL',
-      sourceFingerprint: hash(JSON.stringify([identity, collect('sideEffect'), collect('use'), collect('substitute'), pick(raw, 'Chemical Class'), pick(raw, 'Therapeutic Class'), pick(raw, 'Action Class')]))
+      sourceFingerprint: hash(JSON.stringify([identity, collect('sideEffect'), collect('use'), collect('substitute'), pick(raw, 'Chemical Class'), pick(raw, 'Habit Forming'), pick(raw, 'Therapeutic Class'), pick(raw, 'Action Class')]))
     };
   }
   const brandName = text(pick(raw, 'Medicine Name')) || text(pick(raw, 'Product Name'));
