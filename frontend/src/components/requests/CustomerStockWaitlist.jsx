@@ -14,7 +14,7 @@ export default function CustomerStockWaitlist() {
   const [busyId, setBusyId] = useState('');
   const [showAll, setShowAll] = useState(false);
   const [page, setPage] = useState(1);
-  const [closed, setClosed] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   const pageSize = 10;
   const visibleItems = showAll ? items.slice((page - 1) * pageSize, page * pageSize) : items.slice(0, 2);
@@ -90,7 +90,7 @@ export default function CustomerStockWaitlist() {
     }
   };
 
-  if (closed || (!loading && !items.length)) return null;
+  if (!loading && !items.length) return null;
   if (loading) return <div className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-500">{t('loadingStockWatch')}</div>;
 
   return (
@@ -100,9 +100,14 @@ export default function CustomerStockWaitlist() {
           <h3 className="text-sm font-black text-slate-900">{t('stockWatchTitle')}</h3>
           <p className="mt-1 text-xs text-slate-500">{t('stockWatchDescription')}</p>
         </div>
-        <button type="button" onClick={() => setClosed(true)} aria-label="Close stock availability watch" title="Close"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-lg font-bold text-slate-400 hover:bg-slate-100 hover:text-slate-700">×</button>
+        <button type="button" onClick={() => setCollapsed(value => !value)}
+          aria-expanded={!collapsed} aria-label={collapsed ? 'Expand stock availability watch' : 'Collapse stock availability watch'}
+          title={collapsed ? 'Expand' : 'Collapse'}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-lg font-bold text-slate-500 hover:bg-slate-100 hover:text-slate-800">
+          {collapsed ? '+' : '−'}
+        </button>
       </div>
+      {!collapsed && <>
       {visibleItems.map(entry => {
         const ready = ['READY_FOR_CONFIRMATION', 'PARTIALLY_FULFILLED'].includes(entry.status);
         const confirming = entry.status === 'CONFIRMING';
@@ -167,7 +172,8 @@ export default function CustomerStockWaitlist() {
           <Pagination page={page} totalPages={totalPages} total={items.length} pageSize={pageSize}
             onPageChange={setPage} label="stock watches" />
         </>
-      )}
+      )}}</>
+
     </section>
   );
 }
