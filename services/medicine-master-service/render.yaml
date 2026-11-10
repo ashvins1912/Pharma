@@ -1,0 +1,27 @@
+services:
+  - type: pserv
+    name: ashvin-pharmacy-medicine-master
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: services/medicine-master-service
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MEDICINE_MASTER_MONGO_URI
+        sync: false
+      - key: MEDICINE_MASTER_DB_NAME
+        value: pharma_inventory
+      - key: SERVICE_AUTH_SECRET
+        sync: false
+      - key: SERVICE_JWT_ISSUER
+        value: ashvin-pharmacy
+      - key: MEDICINE_MASTER_SERVICE_JWT_AUDIENCE
+        value: medicine-master-service
+      - key: MEDICINE_MASTER_IMPORT_MAX_FILE_BYTES
+        value: 115343360
+      - key: LOGGING_ENABLED
+        value: "true"
