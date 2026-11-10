@@ -304,8 +304,8 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
   };
 
   return (
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-        <div className="pharma-medicine-request-modal bg-white rounded-3xl max-w-xl w-full p-5 sm:p-7 shadow-2xl space-y-5 animate-fade-in max-h-[92vh] overflow-y-auto border border-slate-100">
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4" role="presentation">
+        <div role="dialog" aria-modal="true" aria-labelledby="medicine-procurement-request-title" tabIndex={-1} className="pharma-medicine-request-modal bg-white rounded-3xl max-w-xl w-full p-5 sm:p-7 shadow-2xl space-y-5 animate-fade-in max-h-[92vh] overflow-y-auto border border-slate-100">
 
           {/* Modal Header */}
           <div className="flex items-start justify-between border-b border-slate-100 pb-3">
@@ -313,7 +313,7 @@ export default function MedicineRequestModal({ isOpen, onClose }) {
             <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full inline-block mb-1">
               Dispensary Procurement Request
             </span>
-              <h3 className="text-base sm:text-lg font-black text-slate-900">
+              <h3 id="medicine-procurement-request-title" className="text-base sm:text-lg font-black text-slate-900">
                 Request Medicine from {activeTenant?.shopName || activeTenant?.name || 'Selected Pharmacy'}
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
