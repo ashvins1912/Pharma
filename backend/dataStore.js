@@ -91,6 +91,39 @@ const awardDeliveredOrderPoints = async (order, session = null) => {
 };
 
 const roundMoney = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+let inMemoryOrderSequence = 10025;
+const nextOrderNumber = async () => {
+    if (!getIsConnected()) return `ORD-${inMemoryOrderSequence++}`;
+    const counters = mongoose.connection.db.collection('applicationCounters');
+    const [latest] = await Order.aggregate([
+        { $match: { orderNumber: /^ORD-[0-9]+$/ } },
+        {
+            $project: {
+                sequence: {
+                    $convert: {
+                        input: { $arrayElemAt: [{ $split: ['$orderNumber', '-'] }, 1] },
+                        to: 'long', onError: 0, onNull: 0
+                    }
+                }
+            }
+        },
+        { $group: { _id: null, sequence: { $max: '$sequence' } } }
+    ]).exec();
+    const highestExisting = Math.max(10025, Number(latest?.sequence) || 0);
+    try {
+        await counters.updateOne({ _id: 'order' }, { $max: { sequence: highestExisting } }, { upsert: true });
+    } catch (error) {
+        if (error.code !== 11000) throw error;
+        await counters.updateOne({ _id: 'order' }, { $max: { sequence: highestExisting } });
+    }
+    const result = await counters.findOneAndUpdate(
+        { _id: 'order' }, { $inc: { sequence: 1 } }, { returnDocument: 'after' }
+    );
+    const counter = result?.value || result;
+    if (!Number.isSafeInteger(Number(counter?.sequence))) throw new Error('Unable to allocate an order number.');
+    return `ORD-${counter.sequence}`;
+};
+
 
 const calculateCompletedOrderFinance = order => {
     const revenue = Math.max(0, Number(order.finalTotal ?? order.totalAmount ?? 0));
@@ -1265,6 +1298,7 @@ export const dataStore = {
                     }
                     const [order] = await Order.create([{
                         _id: orderId,
+                        orderNumber: await nextOrderNumber(),
                         userId: orderData.userId,
                         customerId: orderData.userId,
                         tenantId: selectedTenantId,
@@ -1453,6 +1487,7 @@ export const dataStore = {
 
             const order = {
                 _id: new mongoose.Types.ObjectId().toString(),
+                orderNumber: await nextOrderNumber(),
                 userId: orderData.userId,
                 customerId: orderData.userId,
                 tenantId: selectedTenantId,
@@ -3743,6 +3778,7 @@ export const dataStore = {
         const now = new Date();
         const orderData = {
             _id: orderId,
+            orderNumber: await nextOrderNumber(),
             userId: customerId,
             customerId,
             customerName: request.customerName,
