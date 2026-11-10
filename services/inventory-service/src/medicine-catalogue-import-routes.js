@@ -64,7 +64,17 @@ const charNgramDice = (left, right) => {
   return Math.round((2 * overlap / Math.max(1, leftTotal + rightTotal)) * 100);
 };
 const fieldSimilarity = (left, right) => Math.round(tokenSortRatio(left, right) * 0.65 + charNgramDice(left, right) * 0.35);
-const normalizeStrength = value => key(value).replace(/(\d)\s+(mcg|mg|gm|g|ml|iu)\b/g, '$1$2');
+const normalizeStrength = value => key(value).replace(/(\d+(?:\.\d+)?)\s*(mcg|mg|gm|g|ml|iu|%)\b/g, (_, amount, unit) => {
+  const numeric = Number(amount);
+  if (unit === 'mcg') return String(Number((numeric / 1000).toFixed(6))) + 'mg';
+  if (unit === 'g' || unit === 'gm') return String(Number((numeric * 1000).toFixed(6))) + 'mg';
+  return String(numeric) + unit;
+});
+const normalizeDosageForm = value => key(value)
+  .replace(/\btablets\b/g, 'tablet').replace(/\bcapsules\b/g, 'capsule')
+  .replace(/\bcaplets\b/g, 'caplet').replace(/\bvials\b/g, 'vial')
+  .replace(/\bampoules\b/g, 'ampoule').replace(/\bsachets\b/g, 'sachet')
+  .replace(/\bdrops\b/g, 'drop').replace(/\bpatches\b/g, 'patch');
 export function scoreMedicineMatch(incoming, candidate) {
   const tokenNameScore = tokenSortRatio(incoming.brandName, candidate.brandName);
   const ngramNameScore = charNgramDice(incoming.brandName, candidate.brandName);
@@ -73,7 +83,7 @@ export function scoreMedicineMatch(incoming, candidate) {
   const bComposition = key(candidate.composition || (candidate.ingredients || []).join(' '));
   const compositionScore = aComposition && bComposition ? fieldSimilarity(aComposition, bComposition) : null;
   const aStrength = normalizeStrength(incoming.strength), bStrength = normalizeStrength(candidate.strength);
-  const aForm = key(incoming.dosageForm), bForm = key(candidate.dosageForm);
+  const aForm = normalizeDosageForm(incoming.dosageForm), bForm = normalizeDosageForm(candidate.dosageForm);
   const strengthConflict = Boolean(aStrength && bStrength && aStrength !== bStrength);
   const formConflict = Boolean(aForm && bForm && aForm !== bForm);
   const compositionConflict = compositionScore !== null && compositionScore < 90;
