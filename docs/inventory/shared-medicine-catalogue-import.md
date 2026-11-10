@@ -92,3 +92,14 @@ The raw upload is retained in the Inventory MongoDB database's `medicineCatalogu
 The Super Admin upload modal polls the job endpoint and displays stage/progress. The reconciliation report and Review/Approve/Publish actions are exposed only after the job reaches READY and its staged batch exists. FAILED jobs expose a retry action; the original GridFS object is retained for that retry.
 
 **Memory boundary:** upload reception is streamed to GridFS, but the current processor downloads the stored file into a worker Buffer before parsing and reconciliation. The worker is single-concurrency and the hard limits remain 110 MiB / 60,000 records, but this is not yet a fully streaming JSON parser or a horizontally scaled dedicated worker service. Size worker memory for the configured upload limit and validate with production-like load tests before raising limits.
+
+### Final live-catalogue reconciliation gate
+
+Immediately before the first publish write, the API reruns reconciliation against the current, non-archived MedicineMaster records. It uses exact medicine ID, unique canonical identity, eligible unique brand-name matching, and the same hybrid token / character n-gram / TF-IDF-inspired scorer used during preview. Strength, dosage-form and composition conflicts remain hard blockers.
+
+The live check compares its target decisions with the approved preview. If a record now resolves to a different target, a new target appears, or the previous target disappears, publishing is stopped, the latest reconciliation summary is attached to the batch report, and the old approval is invalidated. The updated report must be reviewed and approved again. Ambiguous matches, clinical conflicts, multiple incoming rows targeting one master medicine, and a truncated candidate scan also stop publication; these records are never silently inserted as new medicines.
+
+Only a fresh high-confidence match is updated. A fresh no-match record is inserted. The writer re-fetches matched targets by medicine ID immediately before each 250-record write chunk and rejects a target that disappeared. A previously inserted record is recognized by its own medicine ID on a retry, so a partially completed publish can resume idempotently.
+
+**Manual-review limitation:** the current API does not provide per-record adjudication controls. Records marked MANUAL_REVIEW or BLOCKED_CONFLICT therefore keep the batch in READY with publishing blocked; they must be corrected in the source data and re-imported rather than being forced into an insert by batch approval.
+
