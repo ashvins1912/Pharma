@@ -806,6 +806,28 @@ router.get('/imports', asyncHandler(async (req, res) => {
   return res.json({ items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
 }));
 
+router.get('/imports/:batchId/records', asyncHandler(async (req, res) => {
+  const batchId = String(req.params.batchId || '').trim();
+  const batch = await CatalogueImport.findOne({ batchId }, { batchId: 1, status: 1, recordCount: 1 }).lean();
+  if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
+  const page = Math.max(1, Math.min(10000, Number.parseInt(req.query.page || '1', 10) || 1));
+  const limit = Math.max(1, Math.min(50, Number.parseInt(req.query.limit || '20', 10) || 20));
+  const search = text(req.query.search).slice(0, 100).toLowerCase();
+  const chunks = await CatalogueImportChunk.find({ batchId }).sort({ chunkIndex: 1 }, { records: 1 }).lean();
+  const source = chunks.length ? chunks.flatMap(chunk => chunk.records || []) : (await CatalogueImport.findOne({ batchId }, { records: 1 }).lean())?.records || [];
+  const matches = search ? source.filter(record => [record.brandName, record.genericName, record.composition, record.manufacturer, record.medicineId, record.strength, record.dosageForm].some(value => String(value || '').toLowerCase().includes(search))) : source;
+  const total = matches.length;
+  const items = matches.slice((page - 1) * limit, page * limit).map(record => ({
+    medicineId: record.medicineId, brandName: record.brandName, genericName: record.genericName,
+    composition: record.composition, strength: record.strength, dosageForm: record.dosageForm,
+    manufacturer: record.manufacturer, qualityScore: record.qualityScore, qualityGrade: record.qualityGrade,
+    sourceDataset: record.sourceDataset, sourceRecordId: record.sourceRecordId,
+    sourceDatasets: record.sourceDatasets, sourceRecordIds: record.sourceRecordIds,
+    reconciliationMatch: record.reconciliationMatch, qualityIssues: record.qualityIssues
+  }));
+  return res.json({ items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+}));
+
 router.get('/imports/:batchId', asyncHandler(async (req, res) => {
   const batch = await CatalogueImport.findOne({ batchId: req.params.batchId }).lean();
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
