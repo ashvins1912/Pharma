@@ -682,11 +682,13 @@ router.post('/imports/merge', asyncHandler(async (req, res) => {
   });
   try {
     if (chunks.length) await CatalogueImportChunk.insertMany(chunks, { ordered: true });
-    const superseded = await CatalogueImport.updateMany(
-      { batchId: { $in: sourceBatchIds }, status: 'READY', approvedAt: null },
-      { $set: { status: 'SUPERSEDED', supersededByBatchId: batchId } }
-    );
-    if ((superseded.modifiedCount ?? superseded.nModified ?? 0) !== sourceBatchIds.length) throw Object.assign(new Error('One or more source batches changed state during merge. Refresh history and retry.'), { statusCode: 409 });
+    if (blockingConflicts === 0) {
+      const superseded = await CatalogueImport.updateMany(
+        { batchId: { $in: sourceBatchIds }, status: 'READY', approvedAt: null },
+        { $set: { status: 'SUPERSEDED', supersededByBatchId: batchId } }
+      );
+      if ((superseded.modifiedCount ?? superseded.nModified ?? 0) !== sourceBatchIds.length) throw Object.assign(new Error('One or more source batches changed state during merge. Refresh history and retry.'), { statusCode: 409 });
+    }
     await CatalogueImport.updateOne({ batchId }, { $set: { status: 'READY' } });
   } catch (error) {
     await CatalogueImportChunk.deleteMany({ batchId });
