@@ -229,8 +229,9 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
       plan = { decision: 'MANUAL_REVIEW', targetMedicineId: '', method: 'AMBIGUOUS_MASTER_IDENTITY', score: 0, warnings: [ ...(ambiguousCanonical ? ['DUPLICATE_CANONICAL_KEY_IN_MASTER'] : []), ...(ambiguousName ? ['DUPLICATE_NORMALIZED_BRAND_NAME_IN_MASTER'] : []) ] };
     } else if (exact) {
       const evidence = scoreMedicineMatch(item, exact, { nameNgramIdf });
-      if (evidence.decision === 'BLOCKED_CONFLICT') {
-        plan = { decision: 'BLOCKED_CONFLICT', targetMedicineId: exact.medicineId, method: 'EXACT_IDENTITY_WITH_CLINICAL_CONFLICT', score: evidence.score, warnings: evidence.warnings };
+      if (evidence.decision === 'BLOCKED_CONFLICT' || evidence.warnings.includes('GENERIC_INGREDIENT_CONFLICT')) {
+        const decision = evidence.decision === 'BLOCKED_CONFLICT' ? 'BLOCKED_CONFLICT' : 'MANUAL_REVIEW';
+        plan = { decision, targetMedicineId: exact.medicineId, method: 'EXACT_IDENTITY_WITH_CLINICAL_CONFLICT', score: evidence.score, warnings: evidence.warnings };
       } else {
         plan = { decision: 'AUTO_MERGE', targetMedicineId: exact.medicineId, method: 'FRESH_EXACT_OR_CANONICAL', score: 100, warnings: [] };
       }
