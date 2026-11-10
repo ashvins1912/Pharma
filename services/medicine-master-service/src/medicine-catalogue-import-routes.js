@@ -1199,7 +1199,7 @@ const getStagedMappingPage = async (batchId, page, limit) => {
 
 router.get('/imports/:batchId/mapping-queue', asyncHandler(async (req, res) => {
   const batchId = String(req.params.batchId || '').trim();
-  const batch = await CatalogueImport.findOne({ batchId, isHidden: { $ne: true } }, { batchId: 1, status: 1 }).lean();
+  const batch = await CatalogueImport.findOne({ batchId, isHidden: { $ne: true } }, { batchId: 1, status: 1, dataset: 1 }).lean();
   if (!batch) return res.status(404).json({ message: 'Catalogue import batch was not found.' });
   if (batch.status !== 'PUBLISHED') return res.status(409).json({ message: 'Publish the reconciled batch before mapping its records for Store visibility.' });
   const page = Math.max(1, Math.min(10000, Number.parseInt(req.query.page || '1', 10) || 1));
@@ -1208,6 +1208,7 @@ router.get('/imports/:batchId/mapping-queue', asyncHandler(async (req, res) => {
   const prefixes = [...new Set(records.map(record => key(record.brandName).slice(0, 2)).filter(prefix => prefix.length === 2))];
   const candidateRows = prefixes.length ? await MedicineMaster.find({
     isArchived: { $ne: true },
+    lastImportBatchId: { $ne: batchId },
     medicineId: { $nin: records.map(record => record.medicineId) },
     $or: prefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } }))
   }, {
@@ -1426,20 +1427,23 @@ router.post('/imports/:batchId/publish', asyncHandler(async (req, res) => {
           lastImportBatchId: batch.batchId,
           sourcePriority: Math.min(Number(current?.sourcePriority ?? 99), item.sourcePriority)
         };
-        for (const field of fields) {
-          if (item[field] && (!current?.[field] || item.sourcePriority < Number(current.sourcePriority ?? 99))) set[field] = item[field];
+        if (!current?.storeApproved) {
+          for (const field of fields) {
+            if (item[field] && (!current?.[field] || item.sourcePriority < Number(current.sourcePriority ?? 99))) set[field] = item[field];
+          }
+          for (const field of ['ingredientIds','ingredients','routes','indications','contraindications','drugInteractions','alternatives','sideEffects','uses','suggestedAlternatives','routeIds','casNumbers','uniiCodes','substanceDescriptions','molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology']) {
+            const incoming = item[field] || [];
+            if (incoming.length) set[field] = [...new Map([...(current?.[field] || []), ...incoming].map(v => [key(typeof v === 'string' ? v : JSON.stringify(v)), v])).values()];
+          }
+          if (item.ingredientDetails?.length) {
+            const ingredientMap = new Map([...(current?.ingredientDetails || []), ...item.ingredientDetails].map(detail => [detail.ingredientId || key(detail.name), detail]));
+            set.ingredientDetails = [...ingredientMap.values()];
+          }
+          if (current?.requiresPrescription === null || current?.requiresPrescription === undefined) set.requiresPrescription = item.requiresPrescription;
+          for (const field of ['chemicalClass','therapeuticClass','actionClass']) if (item[field] && (!current?.[field] || item.sourcePriority < Number(current.sourcePriority ?? 99))) set[field] = item[field];
+          if (item.habitForming && item.habitForming !== 'UNKNOWN' && (!current?.habitForming || current.habitForming === 'UNKNOWN')) set.habitForming = item.habitForming;
+  
         }
-        for (const field of ['ingredientIds','ingredients','routes','indications','contraindications','drugInteractions','alternatives','sideEffects','uses','suggestedAlternatives','routeIds','casNumbers','uniiCodes','substanceDescriptions','molecularFormulas','inchiValues','iupacNames','molecularWeights','smiles','toxicology']) {
-          const incoming = item[field] || [];
-          if (incoming.length) set[field] = [...new Map([...(current?.[field] || []), ...incoming].map(v => [key(typeof v === 'string' ? v : JSON.stringify(v)), v])).values()];
-        }
-        if (item.ingredientDetails?.length) {
-          const ingredientMap = new Map([...(current?.ingredientDetails || []), ...item.ingredientDetails].map(detail => [detail.ingredientId || key(detail.name), detail]));
-          set.ingredientDetails = [...ingredientMap.values()];
-        }
-        if (current?.requiresPrescription === null || current?.requiresPrescription === undefined) set.requiresPrescription = item.requiresPrescription;
-        for (const field of ['chemicalClass','therapeuticClass','actionClass']) if (item[field] && (!current?.[field] || item.sourcePriority < Number(current.sourcePriority ?? 99))) set[field] = item[field];
-        if (item.habitForming && item.habitForming !== 'UNKNOWN' && (!current?.habitForming || current.habitForming === 'UNKNOWN')) set.habitForming = item.habitForming;
         set.prescriptionVerification = current?.prescriptionVerification || 'UNVERIFIED';
         set.clinicalDataVerification = current?.clinicalDataVerification || 'UNVERIFIED';
         set.sourceLicenseStatus = current?.sourceLicenseStatus || 'UNVERIFIED';
