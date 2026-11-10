@@ -125,6 +125,9 @@ export default function MedicineCatalogueImportModal({ isOpen, onClose }) {
                 {metric('With therapeutic class', report.withTherapeuticClass)}
                 {metric('With chemical class', report.withChemicalClass)}
                 {metric('Habit-forming metadata', report.withHabitFormingMetadata)}
+                {metric('Partial records', report.partialRecords)}
+                {metric('Missing composition', report.missingComposition)}
+                {metric('Missing manufacturer', report.missingManufacturer)}
                 {metric('Need review', report.needsReview)}
               </div>
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-950">
