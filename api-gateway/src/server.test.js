@@ -36,6 +36,14 @@ const testSecrets = {
   service: 'test-service-secret-that-is-longer-than-thirty-two-characters'
 };
 
+test('notification read mutation is registered with profile.write and remains protected', () => {
+  const path = '/api/v1/notifications/notif-d91ed961-a003-4210-96cf-6e7beb1b301a/read';
+  assert.equal(resolveGatewayCapability('PATCH', path), 'profile.write');
+  assert.equal(isGatewayPermissionAllowed({ role: 'customer', permissions: ['profile.write'] }, 'profile.write'), true);
+  assert.equal(isGatewayPermissionAllowed({ role: 'customer', permissions: ['profile.read'] }, 'profile.write'), false);
+  assert.equal(resolveGatewayCapability('PATCH', '/api/v1/notifications/read-all'), null);
+});
+
 test('inventory safety alerts are registered as a protected inventory read capability', () => {
   assert.equal(resolveGatewayCapability('GET', '/api/v1/inventory/alerts'), 'inventory.read');
   assert.equal(resolveGatewayCapability('GET', '/api/medicines/admin/suggest-restock'), 'inventory.read');

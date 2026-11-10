@@ -68,6 +68,14 @@ button:disabled, [aria-disabled="true"] {
   background: var(--qm-canvas);
 }
 
+.qm-site-container {
+  width: 100%;
+  max-width: var(--qm-content-width);
+  margin-inline: auto;
+  padding-inline: var(--qm-page-gutter);
+  box-sizing: border-box;
+}
+
 .pharma-main-content {
   width: 100%;
   max-width: var(--qm-content-width);
@@ -431,7 +439,7 @@ button:disabled, [aria-disabled="true"] {
 
 @media (min-width: 1440px) {
   .pharma-main-content {
-    padding-inline: clamp(1.75rem, 2.2vw, 2.75rem);
+    padding-inline: var(--qm-page-gutter);
   }
 
   .admin-screen {

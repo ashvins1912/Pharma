@@ -390,7 +390,7 @@ function MainApp() {
       />
 
       {/* Main Content Area - Full width layout */}
-      <main className="pharma-main-content min-w-0 min-h-0 flex-[1_0_auto] w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-visible">
+      <main className="qm-site-container pharma-main-content min-w-0 min-h-0 flex-[1_0_auto] py-4 sm:py-6 overflow-visible">
         
         {/* TAB 1: MEDICINE STORE & CATALOG */}
         {activeTab === 'store' && (

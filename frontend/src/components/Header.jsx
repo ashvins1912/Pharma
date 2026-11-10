@@ -124,8 +124,8 @@ export default function Header({
 
   return (
     <header className="quickmeds-header bg-white/95 backdrop-blur-md border-b border-slate-200">
-      <div className="w-full min-w-0 px-2.5 sm:px-6 lg:px-8">
-        <div className="quickmeds-header-inner">
+      <div className="w-full min-w-0">
+        <div className="quickmeds-header-inner qm-site-container">
           
           {/* Left: Logo & Pharmacy Brand */}
           <div
