@@ -177,7 +177,7 @@ async function reconcileCatalogueRecordsAgainstMaster(records) {
     ...(ids.length ? [{ medicineId: { $in: ids } }] : []),
     ...(canonicalKeys.length ? [{ canonicalKey: { $in: canonicalKeys } }] : []),
     ...(names.length ? [{ brandName: { $in: names } }] : []),
-    ...prefixes.map(prefix => ({ brandName: { $regex: '^' + prefix.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\
+    ...prefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } }))
 const fuzzyCandidatePrefixes = records =>'), $options: 'i' } }))
   ];
   const candidates = clauses.length ? await MedicineMaster.find({ $or: clauses, isArchived: { $ne: true } }, {
