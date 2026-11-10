@@ -277,7 +277,7 @@ export default function Header({
                 setMobileMenuOpen(nextState);
                 onToggleMobileMenu?.(nextState);
               }}
-              className="app-header__menu-toggle hidden h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer items-center justify-center shrink-0"
+              className="app-header__menu-toggle h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer items-center justify-center shrink-0"
               aria-label={t('toggleMenu')}
               aria-expanded={mobileMenuOpen}
               aria-controls="quickmeds-mobile-navigation"
