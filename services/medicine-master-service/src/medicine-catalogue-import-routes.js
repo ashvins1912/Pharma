@@ -1205,17 +1205,23 @@ router.get('/imports/:batchId/mapping-queue', asyncHandler(async (req, res) => {
   const page = Math.max(1, Math.min(10000, Number.parseInt(req.query.page || '1', 10) || 1));
   const limit = Math.max(1, Math.min(100, Number.parseInt(req.query.limit || '100', 10) || 100));
   const { records, total } = await getStagedMappingPage(batchId, page, limit);
-  const items = await Promise.all(records.map(async record => {
+  const prefixes = [...new Set(records.map(record => key(record.brandName).slice(0, 2)).filter(prefix => prefix.length === 2))];
+  const candidateRows = prefixes.length ? await MedicineMaster.find({
+    isArchived: { $ne: true },
+    medicineId: { $nin: records.map(record => record.medicineId) },
+    $or: prefixes.map(prefix => ({ brandName: { $regex: '^' + prefix, $options: 'i' } }))
+  }, {
+    medicineId: 1, brandName: 1, productName: 1, genericName: 1, composition: 1,
+    strength: 1, dosageForm: 1, manufacturer: 1, storeApproved: 1
+  }).limit(5000).lean() : [];
+  const candidatesByPrefix = new Map();
+  for (const candidate of candidateRows) {
+    const prefix = key(candidate.brandName).slice(0, 2);
+    candidatesByPrefix.set(prefix, [...(candidatesByPrefix.get(prefix) || []), candidate]);
+  }
+  const items = records.map(record => {
     const prefix = key(record.brandName).slice(0, 2);
-    const candidates = prefix.length === 2
-      ? await MedicineMaster.find({
-          isArchived: { $ne: true }, medicineId: { $ne: record.medicineId },
-          brandName: { $regex: '^' + prefix.replace(/[.*+?^\${}()|[\]\\]/g, '\\router.get('/imports/:batchId/records', asyncHandler(async (req, res) => {'), $options: 'i' }
-        }, {
-          medicineId: 1, brandName: 1, productName: 1, genericName: 1, composition: 1,
-          strength: 1, dosageForm: 1, manufacturer: 1, storeApproved: 1
-        }).limit(40).lean()
-      : [];
+    const candidates = candidatesByPrefix.get(prefix) || [];
     const ranked = candidates.map(candidate => ({ ...candidate, evidence: scoreMedicineMatch(record, candidate) }))
       .sort((left, right) => right.evidence.score - left.evidence.score).slice(0, 5);
     const availableFields = MAPPING_FIELDS.filter(field => {
@@ -1229,7 +1235,7 @@ router.get('/imports/:batchId/mapping-queue', asyncHandler(async (req, res) => {
       sourceRecordId: record.sourceRecordId || '', reconciliationMatch: record.reconciliationMatch || null,
       availableFields, candidates: ranked
     };
-  }));
+  });
   return res.json({ items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }, batchId, batchStatus: batch.status });
 }));
 
