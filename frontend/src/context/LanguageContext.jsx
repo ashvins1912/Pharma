@@ -1188,6 +1188,13 @@ const messages = {
     pharmacyDataSeparate: "Each pharmacy's information stays separate.",
     staffBranchAccess: "Staff can be limited to one branch.",
     inviteStaffToPharmacy: "Invite staff to the right pharmacy.",
+    pharmacyNameField: "Pharmacy name",
+    shortPharmacyNameField: "Short name for the pharmacy link",
+    registeredBusinessNameField: "Registered business name",
+    initialPharmacyManagerEmailField: "Pharmacy manager's email (optional)",
+    pharmacyInviteHelp: "We'll invite this person to manage the pharmacy.",
+    pharmacyInvitationSent: "Invitation sent to {email} for {name}.",
+    invitedOn: "Invited on",
   },
 
   hi: {
@@ -2368,6 +2375,13 @@ const messages = {
     pharmacyDataSeparate: "हर फार्मेसी की जानकारी अलग रखी जाती है।",
     staffBranchAccess: "कर्मचारियों को किसी एक शाखा तक सीमित रख सकते हैं।",
     inviteStaffToPharmacy: "कर्मचारियों को सही फार्मेसी में आमंत्रित करें।",
+    pharmacyNameField: "फार्मेसी का नाम",
+    shortPharmacyNameField: "फार्मेसी लिंक के लिए छोटा नाम",
+    registeredBusinessNameField: "रजिस्टर्ड व्यवसाय का नाम",
+    initialPharmacyManagerEmailField: "फार्मेसी मैनेजर का ईमेल (ज़रूरी नहीं)",
+    pharmacyInviteHelp: "हम इस व्यक्ति को फार्मेसी संभालने का निमंत्रण भेजेंगे।",
+    pharmacyInvitationSent: "{name} के लिए {email} पर निमंत्रण भेजा गया।",
+    invitedOn: "निमंत्रण की तारीख",
   },
 
   kn: {
@@ -3548,6 +3562,13 @@ const messages = {
     pharmacyDataSeparate: "ಪ್ರತಿ ಫಾರ್ಮಸಿಯ ಮಾಹಿತಿಯನ್ನು ಪ್ರತ್ಯೇಕವಾಗಿ ಇಡಲಾಗುತ್ತದೆ.",
     staffBranchAccess: "ಸಿಬ್ಬಂದಿಗೆ ಒಂದು ಶಾಖೆಯ ಪ್ರವೇಶ ಮಾತ್ರ ನೀಡಬಹುದು.",
     inviteStaffToPharmacy: "ಸಿಬ್ಬಂದಿಯನ್ನು ಸರಿಯಾದ ಫಾರ್ಮಸಿಗೆ ಆಹ್ವಾನಿಸಿ.",
+    pharmacyNameField: "ಫಾರ್ಮಸಿ ಹೆಸರು",
+    shortPharmacyNameField: "ಫಾರ್ಮಸಿ ಲಿಂಕ್‌ಗಾಗಿ ಚಿಕ್ಕ ಹೆಸರು",
+    registeredBusinessNameField: "ನೋಂದಾಯಿತ ವ್ಯಾಪಾರದ ಹೆಸರು",
+    initialPharmacyManagerEmailField: "ಫಾರ್ಮಸಿ ವ್ಯವಸ್ಥಾಪಕರ ಇಮೇಲ್ (ಐಚ್ಛಿಕ)",
+    pharmacyInviteHelp: "ಈ ವ್ಯಕ್ತಿಗೆ ಫಾರ್ಮಸಿ ನಿರ್ವಹಿಸಲು ಆಹ್ವಾನ ಕಳುಹಿಸುತ್ತೇವೆ.",
+    pharmacyInvitationSent: "{name}ಗಾಗಿ {email}ಗೆ ಆಹ್ವಾನ ಕಳುಹಿಸಲಾಗಿದೆ.",
+    invitedOn: "ಆಹ್ವಾನಿಸಿದ ದಿನಾಂಕ",
   },
 
   bn: {
@@ -4728,6 +4749,13 @@ const messages = {
     pharmacyDataSeparate: "প্রতিটি ফার্মেসির তথ্য আলাদা রাখা হয়।",
     staffBranchAccess: "কর্মীদের একটি নির্দিষ্ট শাখায় সীমাবদ্ধ রাখা যায়।",
     inviteStaffToPharmacy: "সঠিক ফার্মেসিতে কর্মীদের আমন্ত্রণ জানান।",
+    pharmacyNameField: "ফার্মেসির নাম",
+    shortPharmacyNameField: "ফার্মেসির লিঙ্কের জন্য ছোট নাম",
+    registeredBusinessNameField: "নিবন্ধিত ব্যবসার নাম",
+    initialPharmacyManagerEmailField: "ফার্মেসি ম্যানেজারের ইমেল (ঐচ্ছিক)",
+    pharmacyInviteHelp: "এই ব্যক্তিকে ফার্মেসি পরিচালনার আমন্ত্রণ পাঠানো হবে।",
+    pharmacyInvitationSent: "{name}-এর জন্য {email}-এ আমন্ত্রণ পাঠানো হয়েছে।",
+    invitedOn: "আমন্ত্রণের তারিখ",
   },
 
   te: {
@@ -5909,6 +5937,13 @@ const messages = {
     pharmacyDataSeparate: "ప్రతి ఫార్మసీ సమాచారం వేరుగా ఉంచబడుతుంది.",
     staffBranchAccess: "సిబ్బందికి ఒక శాఖకు మాత్రమే అనుమతి ఇవ్వవచ్చు.",
     inviteStaffToPharmacy: "సిబ్బందిని సరైన ఫార్మసీకి ఆహ్వానించండి.",
+    pharmacyNameField: "ఫార్మసీ పేరు",
+    shortPharmacyNameField: "ఫార్మసీ లింక్ కోసం చిన్న పేరు",
+    registeredBusinessNameField: "నమోదైన వ్యాపార పేరు",
+    initialPharmacyManagerEmailField: "ఫార్మసీ నిర్వాహకుడి ఇమెయిల్ (ఐచ్ఛికం)",
+    pharmacyInviteHelp: "ఈ వ్యక్తికి ఫార్మసీ నిర్వహణ కోసం ఆహ్వానం పంపిస్తాం.",
+    pharmacyInvitationSent: "{name} కోసం {email}కు ఆహ్వానం పంపాం.",
+    invitedOn: "ఆహ్వానించిన తేదీ",
   }
 };
 
