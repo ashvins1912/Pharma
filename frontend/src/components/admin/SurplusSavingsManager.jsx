@@ -6,6 +6,23 @@ import { useToast } from '../../context/ToastContext';
 import { useLanguage } from '../../context/LanguageContext';
 import './SurplusSavingsManager.css';
 
+function SectionPagination({ page, pageSize, total, onPageChange, label = 'records' }) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const start = total ? (page - 1) * pageSize + 1 : 0;
+  const end = Math.min(page * pageSize, total);
+  if (total <= pageSize) return null;
+  return (
+    <nav aria-label={`${label} pagination`} className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+      <p className="text-xs text-slate-500">Showing <strong className="text-slate-700">{start}–{end}</strong> of <strong className="text-slate-700">{total}</strong> {label}</p>
+      <div className="flex items-center gap-1.5">
+        <button type="button" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+        <span className="min-w-16 text-center text-xs font-bold tabular-nums text-slate-600">Page {page} / {pageCount}</span>
+        <button type="button" onClick={() => onPageChange(Math.min(pageCount, page + 1))} disabled={page >= pageCount} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+      </div>
+    </nav>
+  );
+}
+
 const toLocalDateTime = value => {
   const date = value ? new Date(value) : new Date();
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
@@ -25,6 +42,10 @@ export default function SurplusSavingsManager({ canManage = false }) {
   const [error, setError] = useState('');
   const [medicineQuery, setMedicineQuery] = useState('');
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+  const [medicinePage, setMedicinePage] = useState(1);
+  const [campaignPage, setCampaignPage] = useState(1);
+  const MEDICINES_PER_PAGE = 50;
+  const CAMPAIGNS_PER_PAGE = 5;
   const [form, setForm] = useState({
     name: '', description: '', medicineIds: [], discountType: 'percentage',
     discountValue: '15', maxDiscountAmount: '', minOrderAmount: '0',
@@ -59,7 +80,13 @@ export default function SurplusSavingsManager({ canManage = false }) {
     const isSelected = form.medicineIds.includes(String(item._id));
     return matchesQuery && (!showSelectedOnly || isSelected);
   }), [selectableMedicines, medicineQuery, showSelectedOnly, form.medicineIds]);
-  const selectedMedicines = useMemo(() => selectableMedicines.filter(item => form.medicineIds.includes(String(item._id))), [selectableMedicines, form.medicineIds]);
+  const visibleMedicines = useMemo(() => filteredMedicines.slice((medicinePage - 1) * MEDICINES_PER_PAGE, medicinePage * MEDICINES_PER_PAGE), [filteredMedicines, medicinePage]);
+  const visibleCampaigns = useMemo(() => campaigns.slice((campaignPage - 1) * CAMPAIGNS_PER_PAGE, campaignPage * CAMPAIGNS_PER_PAGE), [campaigns, campaignPage]);
+  useEffect(() => { setMedicinePage(1); }, [medicineQuery, showSelectedOnly]);
+  useEffect(() => { setMedicinePage(page => Math.min(page, Math.max(1, Math.ceil(filteredMedicines.length / MEDICINES_PER_PAGE)))); }, [filteredMedicines.length]);
+  useEffect(() => { setCampaignPage(page => Math.min(page, Math.max(1, Math.ceil(campaigns.length / CAMPAIGNS_PER_PAGE)))); }, [campaigns.length]);
+
+  const selectedMedicines = useMemo((() => selectableMedicines.filter(item => form.medicineIds.includes(String(item._id))), [selectableMedicines, form.medicineIds]);
   const summary = useMemo(() => ({
     active: campaigns.filter(item => item.status === 'ACTIVE').length,
     drafts: campaigns.filter(item => item.status === 'DRAFT').length,
@@ -177,7 +204,7 @@ export default function SurplusSavingsManager({ canManage = false }) {
             <div className="surplus-medicine-tools"><label className="surplus-search"><span aria-hidden="true">⌕</span><input type="search" value={medicineQuery} onChange={e => setMedicineQuery(e.target.value)} placeholder="Search medicines by name…" aria-label="Search medicines" /></label><label className="surplus-selected-filter"><input type="checkbox" checked={showSelectedOnly} onChange={e => setShowSelectedOnly(e.target.checked)} /> Selected only</label></div>
             {selectableMedicines.length === 0 ? <p className="surplus-empty-state">{t('noTenantMedicines')}</p> : filteredMedicines.length === 0 ? <p className="surplus-empty-state">No medicines match this filter.</p> : (
               <div className="surplus-medicine-list">
-                {filteredMedicines.map(item => {
+                {visibleMedicines.map(item => {
                   const selected = form.medicineIds.includes(String(item._id));
                   return <label key={item._id} className={`surplus-medicine-option${selected ? ' is-selected' : ''}`}>
                     <input type="checkbox" checked={selected} onChange={() => toggleMedicine(String(item._id))} />
@@ -187,6 +214,7 @@ export default function SurplusSavingsManager({ canManage = false }) {
                 })}
               </div>
             )}
+            <SectionPagination page={medicinePage} pageSize={MEDICINES_PER_PAGE} total={filteredMedicines.length} onPageChange={setMedicinePage} label="medicines"/>
           </section>
 
           <aside className="surplus-offer-preview" aria-live="polite">
@@ -202,7 +230,7 @@ export default function SurplusSavingsManager({ canManage = false }) {
         <div className="surplus-history-heading"><div><span className="surplus-step">02</span><div><h3 id="surplus-history-title">{t('campaignHistory')}</h3><p>Review and manage your savings campaigns.</p></div></div><button type="button" onClick={loadCampaigns} disabled={loading} className="surplus-refresh-button"><span aria-hidden="true">↻</span> {loading ? 'Refreshing…' : t('refreshStatus')}</button></div>
         {loading ? <div className="surplus-loading-state" role="status">Loading campaigns…</div> : campaigns.length === 0 ? <div className="surplus-empty-state"><span aria-hidden="true">✦</span><strong>{t('noCampaignsYet')}</strong><p>Create a savings campaign to start enrolling eligible medicines.</p>{canManage && <a href="#surplus-campaign-form">Create your first campaign</a>}</div> : (
           <div className="surplus-campaign-list">
-            {campaigns.map(campaign => {
+            {visibleCampaigns.map(campaign => {
               const status = String(campaign.status || 'DRAFT').toUpperCase();
               const usageCount = Number(campaign.usageCount || 0);
               const usageLimit = Number(campaign.usageLimit || 0);
@@ -218,6 +246,7 @@ export default function SurplusSavingsManager({ canManage = false }) {
             })}
           </div>
         )}
+        <SectionPagination page={campaignPage} pageSize={CAMPAIGNS_PER_PAGE} total={campaigns.length} onPageChange={setCampaignPage} label="campaigns"/>
       </section>
     </section>
   );
