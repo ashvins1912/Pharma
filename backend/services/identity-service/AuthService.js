@@ -887,7 +887,8 @@ export class AuthService {
                     firstName: user.firstName || '',
                     lastName: user.lastName || '',
                     accountStatus: 'PROFILE_INCOMPLETE',
-                    profileCompleted: false
+                    profileCompleted: false,
+                    onboardingProvider: 'LOCAL'
                 },
                 accessToken: token
             };
@@ -953,7 +954,8 @@ export class AuthService {
                 mobileNumber: user.mobileNumber || user.mobile || '',
                 gender: user.gender || '',
                 accountStatus: 'PROFILE_INCOMPLETE',
-                profileCompleted: false
+                profileCompleted: false,
+                onboardingProvider: 'LOCAL'
             },
             accessToken: token
         };
@@ -1470,7 +1472,8 @@ export class AuthService {
                     dateOfBirth: user.dateOfBirth || null,
                     mobileNumber: user.mobileNumber || user.mobile || '',
                     profileCompleted: false,
-                    accountStatus: 'PROFILE_INCOMPLETE'
+                    accountStatus: 'PROFILE_INCOMPLETE',
+                    onboardingProvider: 'GOOGLE'
                 },
                 accessToken: token
             };
