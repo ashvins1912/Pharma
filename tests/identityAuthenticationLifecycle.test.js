@@ -220,14 +220,55 @@ test('8. Google OAuth: First-time user creates PROFILE_INCOMPLETE and requires o
         firstName: 'Vikram',
         lastName: 'Rathore',
         dateOfBirth: '1993-04-10',
-        mobileNumber: '9876543214'
+        mobileNumber: '9876543214',
+        gender: 'PREFER_NOT_TO_SAY'
     });
 
     assert.strictEqual(onboardRes.user.accountStatus, 'ACTIVE');
     assert.strictEqual(onboardRes.user.profileCompleted, true);
     assert.strictEqual(onboardRes.user.dateOfBirth, '1993-04-10');
+    assert.strictEqual(onboardRes.user.mobileNumber, '+919876543214');
+    assert.strictEqual(onboardRes.user.gender, 'PREFER_NOT_TO_SAY');
     assert.ok(onboardRes.user.age > 0, 'Age dynamically computed');
     assert.ok(onboardRes.accessToken, 'Session access token granted');
+
+    const persistedUser = await authService.findUser({ userId: googleAuthRes.user.userId });
+    assert.strictEqual(persistedUser.profileCompleted, true, 'Completed profile must be persisted');
+    assert.strictEqual(persistedUser.accountStatus, 'ACTIVE', 'Persisted account must be active');
+    assert.strictEqual(persistedUser.mobileNumber, '+919876543214');
+    assert.strictEqual(persistedUser.gender, 'PREFER_NOT_TO_SAY');
+});
+
+test('8b. Google OAuth: Profile completion can add email/password sign-in', async () => {
+    const email = `google.password.${Date.now()}@gmail.com`;
+    const googleAuthRes = await authService.authenticateGoogle({
+        providerUserId: `googlesub_password_${Date.now()}`,
+        email,
+        emailVerified: true,
+        firstName: 'Asha',
+        lastName: 'Mehta'
+    });
+
+    await authService.completeProfile({
+        userId: googleAuthRes.user.userId,
+        firstName: 'Asha',
+        lastName: 'Mehta',
+        dateOfBirth: '1994-02-12',
+        mobileNumber: '9876543216',
+        gender: 'FEMALE',
+        password: 'GoogleLinked@2026',
+        confirmPassword: 'GoogleLinked@2026'
+    });
+
+    const localIdentity = await authService.findIdentity('LOCAL', email);
+    assert.ok(localIdentity?.passwordHash, 'Optional local credential must be linked to the Google account');
+    assert.strictEqual(localIdentity.userId, googleAuthRes.user.userId);
+
+    const login = await authService.authenticateCredentials({
+        email,
+        password: 'GoogleLinked@2026'
+    });
+    assert.ok(login.accessToken, 'Linked email/password login must work');
 });
 
 test('9. Google OAuth: Account Linking to existing verified local account', async () => {
