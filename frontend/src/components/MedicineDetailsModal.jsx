@@ -70,7 +70,7 @@ export default function MedicineDetailsModal({ product, onClose }) {
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = previousOverflow;
+      document.body.style.overflow = previousOverflow === 'hidden' ? '' : previousOverflow;
       if (previousFocus && typeof previousFocus.focus === 'function') previousFocus.focus();
     };
   }, [product, onClose]);

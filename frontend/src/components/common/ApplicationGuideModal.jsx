@@ -456,7 +456,7 @@ const GUIDE_DATA = {
           title: "1. ఆర్డర్ ప్రాసెసింగ్ మరియు డిస్పాచ్",
           icon: "📊",
           steps: [
-            "ఆర్డర్ల స్థాయిలను మార్చండి మరియు రైడర్లను కేటాయించండి."
+            "ఆర్డర్ స్థాయిలను మార్చండి మరియు రైడర్లను కేటాయించండి."
           ]
         }
       ],
@@ -505,7 +505,7 @@ export default function ApplicationGuideModal({ isOpen, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-[1200] flex items-center justify-center p-3 sm:p-5 modal-overlay animate-fade-in overscroll-none"
+      className="fixed inset-0 z-[1200] flex items-center justify-center p-2 sm:p-5 modal-overlay animate-fade-in overscroll-none"
       onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); onClose?.(); } }}
       aria-modal="true"
       role="dialog"
@@ -513,67 +513,66 @@ export default function ApplicationGuideModal({ isOpen, onClose }) {
     >
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm touch-none"
+        className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm touch-none"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      <div className="pharma-modal-surface relative z-10 m-auto flex h-[88dvh] max-h-[88dvh] min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl overscroll-contain">
+      <div className="pharma-modal-surface relative z-10 m-auto flex h-[96dvh] sm:h-[88dvh] max-h-[96dvh] sm:max-h-[88dvh] min-h-0 w-[96vw] sm:w-full max-w-3xl flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl overscroll-contain">
         
-        {/* Modal Header */}
-        <div className="shrink-0 border-b border-slate-100 bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 p-5 sm:p-6 text-white space-y-3">
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">📖</span>
-                <h2 id="app-guide-title" className="text-lg sm:text-xl font-black tracking-tight text-white">
-                  {currentGuide.title}
-                </h2>
-              </div>
-              <p className="text-xs text-slate-300 font-medium leading-relaxed max-w-xl">
-                {currentGuide.subtitle}
-              </p>
+        {/* Compact Responsive Modal Header */}
+        <div className="shrink-0 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 p-3.5 sm:p-5 text-white space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-lg sm:text-xl shrink-0">📖</span>
+              <h2 id="app-guide-title" className="text-sm sm:text-lg font-black tracking-tight text-white truncate">
+                {currentGuide.title}
+              </h2>
             </div>
 
             <button
               type="button"
               onClick={onClose}
               aria-label={t('close')}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition cursor-pointer text-sm font-bold"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition cursor-pointer text-sm font-bold min-h-[32px]"
             >
               ✕
             </button>
           </div>
 
-          {/* Language Switcher Ribbon */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/10">
-            <span className="text-[11px] font-bold text-blue-200 flex items-center gap-1">
-              🌐 Select Guide Language:
+          <p className="hidden sm:block text-xs text-slate-300 font-medium leading-relaxed max-w-xl">
+            {currentGuide.subtitle}
+          </p>
+
+          {/* Compact Single-Row Language Ribbon */}
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/10">
+            <span className="text-[10px] sm:text-[11px] font-bold text-blue-200 shrink-0">
+              🌐 Language:
             </span>
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 max-w-full">
               {languages.map((lang) => (
                 <button
                   key={lang.code}
                   type="button"
                   onClick={() => setLanguage(lang.code)}
-                  className={`px-3 py-1 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-2.5 py-0.5 sm:py-1 rounded-lg text-[10px] sm:text-xs font-black whitespace-nowrap transition cursor-pointer flex items-center gap-1 ${
                     language === lang.code
-                      ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30 ring-2 ring-blue-300'
+                      ? 'bg-blue-600 text-white shadow-xs ring-1 ring-blue-300'
                       : 'bg-white/10 hover:bg-white/20 text-slate-200'
                   }`}
                 >
                   <span>{lang.nativeLabel}</span>
-                  {language === lang.code && <span className="text-[10px]">✓</span>}
+                  {language === lang.code && <span className="text-[9px]">✓</span>}
                 </button>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Tab & Search Bar */}
-        <div className="shrink-0 bg-slate-50 p-3 sm:p-4 border-b border-slate-200 space-y-3">
-          {/* Persona Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+        {/* Compact Tab & Search Header Bar */}
+        <div className="shrink-0 bg-slate-50 dark:bg-slate-800/60 p-2.5 sm:p-3 border-b border-slate-200 dark:border-slate-800 space-y-2">
+          {/* Persona Tabs - Responsive Scroll Container */}
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
             {Object.entries(currentGuide.tabs).map(([tabKey, label]) => (
               <button
                 key={tabKey}
@@ -582,10 +581,10 @@ export default function ApplicationGuideModal({ isOpen, onClose }) {
                   setActiveTab(tabKey);
                   setSearchQuery('');
                 }}
-                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-extrabold whitespace-nowrap transition cursor-pointer min-h-[34px] ${
                   activeTab === tabKey
-                    ? 'bg-white text-blue-700 shadow-xs border border-blue-200/80 ring-1 ring-blue-500/20'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-2xs border border-blue-200/80 dark:border-blue-800'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/50'
                 }`}
               >
                 {label}
@@ -600,14 +599,14 @@ export default function ApplicationGuideModal({ isOpen, onClose }) {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={currentGuide.searchPlaceholder}
-              className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 pl-9 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 pl-8 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <span className="absolute left-3 top-2.5 text-xs text-slate-400">🔍</span>
+            <span className="absolute left-2.5 top-2 text-xs text-slate-400">🔍</span>
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-2 text-xs font-bold text-slate-400 hover:text-slate-600"
+                className="absolute right-2.5 top-1.5 text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
                 ✕
               </button>
@@ -615,16 +614,16 @@ export default function ApplicationGuideModal({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* Scrollable Content Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 overscroll-contain">
+        {/* Maximized Scrollable Content Body */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-3 sm:space-y-4 overscroll-contain">
           {filteredSections.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 space-y-2">
-              <span className="text-3xl">🔍</span>
-              <p className="text-xs font-bold text-slate-700">No guide topics match your search.</p>
+            <div className="py-8 text-center text-slate-400 space-y-2">
+              <span className="text-2xl block">🔍</span>
+              <p className="text-xs font-bold text-slate-700 dark:text-slate-300">No guide topics match your search.</p>
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="text-xs font-bold text-blue-600 hover:underline"
+                className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
               >
                 Clear Search
               </button>
@@ -633,21 +632,21 @@ export default function ApplicationGuideModal({ isOpen, onClose }) {
             filteredSections.map((sec, idx) => (
               <div
                 key={idx}
-                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-3 transition hover:border-blue-200"
+                className="rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 sm:p-4 shadow-2xs space-y-2.5 transition hover:border-blue-300 dark:hover:border-blue-700"
               >
-                <div className="flex items-center gap-2.5 border-b border-slate-100 pb-2.5">
-                  <span className="text-xl p-2 rounded-xl bg-blue-50 text-blue-700 border border-blue-100 shrink-0">
+                <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+                  <span className="text-base sm:text-lg p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-900 shrink-0">
                     {sec.icon}
                   </span>
-                  <h3 className="text-sm font-black text-slate-900">
+                  <h3 className="text-xs sm:text-sm font-black text-slate-900 dark:text-slate-100 leading-snug">
                     {sec.title}
                   </h3>
                 </div>
 
-                <ul className="space-y-2 text-xs text-slate-700 font-medium">
+                <ul className="space-y-1.5 text-xs text-slate-700 dark:text-slate-300 font-medium">
                   {sec.steps.map((step, sIdx) => (
                     <li key={sIdx} className="flex items-start gap-2 leading-relaxed">
-                      <span className="text-blue-600 font-bold shrink-0">•</span>
+                      <span className="text-blue-600 dark:text-blue-400 font-bold shrink-0">•</span>
                       <span>{step}</span>
                     </li>
                   ))}
@@ -657,15 +656,15 @@ export default function ApplicationGuideModal({ isOpen, onClose }) {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="shrink-0 border-t border-slate-100 bg-slate-50 p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-          <span className="text-slate-500 font-semibold text-[11px] text-center sm:text-left">
-            💡 QuickMeds Rx Multi-Tenant Healthcare & Pharmacy Management System
+        {/* Compact Docked Footer */}
+        <div className="shrink-0 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-2.5 sm:p-4 flex items-center justify-between gap-2 text-xs">
+          <span className="text-slate-500 dark:text-slate-400 font-medium text-[10px] sm:text-[11px] truncate">
+            💡 QuickMeds Rx Guide • {languages.find(l => l.code === language)?.nativeLabel || 'English'}
           </span>
           <button
             type="button"
             onClick={onClose}
-            className="w-full sm:w-auto px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition cursor-pointer"
+            className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition cursor-pointer min-h-[40px] shrink-0"
           >
             {t('close')}
           </button>

@@ -56,11 +56,19 @@ export default function ModalAccessibilityManager() {
     const restoreBackground = () => {
       restoreNodes.forEach(({ inert, ariaHidden }, node) => {
         if (!node.isConnected) return;
-        node.inert = inert;
-        if (ariaHidden === null) node.removeAttribute('aria-hidden');
+        node.inert = Boolean(inert);
+        if (ariaHidden === null || ariaHidden === undefined) node.removeAttribute('aria-hidden');
         else node.setAttribute('aria-hidden', ariaHidden);
       });
       restoreNodes.clear();
+
+      // Ensure root container is never left in an inert state
+      const root = document.getElementById('root');
+      if (root) {
+        root.inert = false;
+        root.removeAttribute('inert');
+        root.removeAttribute('aria-hidden');
+      }
     };
 
     const isolateBackground = dialog => {
@@ -97,8 +105,10 @@ export default function ModalAccessibilityManager() {
 
       if (activeDialog) {
         restoreBackground();
-        document.body.style.overflow = bodyOverflow;
-        document.documentElement.style.overflow = htmlOverflow;
+        document.body.style.overflow = bodyOverflow === 'hidden' ? '' : (bodyOverflow || '');
+        document.documentElement.style.overflow = htmlOverflow === 'hidden' ? '' : (htmlOverflow || '');
+        document.documentElement.classList.remove('modal-open');
+        document.body.classList.remove('modal-open');
         activeDialog = null;
         returnFocusTo = null;
         if (!nextDialog && originalReturnFocus?.isConnected && !originalReturnFocus.closest('[inert]')) {
@@ -106,14 +116,26 @@ export default function ModalAccessibilityManager() {
         }
       }
 
-      if (!nextDialog) return;
+      if (!nextDialog) {
+        restoreBackground();
+        document.body.style.overflow = '';
+        document.documentElement.style.overflow = '';
+        document.documentElement.classList.remove('modal-open');
+        document.body.classList.remove('modal-open');
+        return;
+      }
+
       activeDialog = nextDialog;
       // Preserve the original opener when dialogs are stacked or replaced.
       returnFocusTo = originalReturnFocus?.isConnected
         ? originalReturnFocus
         : (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-      bodyOverflow = document.body.style.overflow;
-      htmlOverflow = document.documentElement.style.overflow;
+      
+      const rawBody = document.body.style.overflow;
+      const rawHtml = document.documentElement.style.overflow;
+      bodyOverflow = rawBody === 'hidden' ? '' : rawBody;
+      htmlOverflow = rawHtml === 'hidden' ? '' : rawHtml;
+
       document.body.style.overflow = 'hidden';
       document.documentElement.style.overflow = 'hidden';
       isolateBackground(nextDialog);
@@ -131,8 +153,6 @@ export default function ModalAccessibilityManager() {
     const onKeyDown = event => {
       if (!activeDialog || !activeDialog.isConnected) return;
       if (event.key === 'Escape') {
-        // Existing modal handlers take priority; otherwise activate a safe,
-        // explicitly labelled close/dismiss control when one is available.
         window.queueMicrotask(() => {
           if (event.defaultPrevented || !activeDialog?.isConnected) return;
           const closeControl = activeDialog.querySelector(
@@ -180,10 +200,10 @@ export default function ModalAccessibilityManager() {
       document.removeEventListener('keydown', onKeyDown, true);
       document.removeEventListener('focusin', onFocusIn, true);
       restoreBackground();
-      if (activeDialog) {
-        document.body.style.overflow = bodyOverflow;
-        document.documentElement.style.overflow = htmlOverflow;
-      }
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+      document.documentElement.classList.remove('modal-open');
+      document.body.classList.remove('modal-open');
       if (returnFocusTo?.isConnected) returnFocusTo.focus?.({ preventScroll: true });
     };
   }, []);

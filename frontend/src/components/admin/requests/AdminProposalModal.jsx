@@ -102,8 +102,8 @@ export default function AdminProposalModal({ request, isOpen, onClose, onRefresh
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-      if (appRoot) appRoot.inert = previousInert;
+      document.body.style.overflow = previousOverflow === 'hidden' ? '' : previousOverflow;
+      if (appRoot) { appRoot.inert = Boolean(previousInert); }
       if (previousActiveElement instanceof HTMLElement) previousActiveElement.focus();
     };
   }, [isOpen]);

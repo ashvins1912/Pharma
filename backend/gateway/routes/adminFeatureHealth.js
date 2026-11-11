@@ -352,6 +352,56 @@ router.post('/run-audit', async (req, res, next) => {
   }
 });
 
+/**
+ * POST /api/v1/admin/feature-health/run-e2e-automation
+ * Triggers the full 6-workflow End-to-End User Automation Test Suite from the UI Super Admin Operations Dashboard
+ */
+router.post('/run-e2e-automation', async (req, res, next) => {
+  try {
+    const startTime = Date.now();
+    const { exec } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const execAsync = promisify(exec);
+
+    let output = '';
+    let success = true;
+    try {
+      const { stdout, stderr } = await execAsync('node --test tests/endToEndUserWorkflowAutomation.test.js', {
+        cwd: process.cwd(),
+        timeout: 30000
+      });
+      output = stdout || stderr;
+    } catch (execErr) {
+      success = false;
+      output = execErr.stdout || execErr.stderr || execErr.message;
+    }
+
+    const durationMs = Date.now() - startTime;
+
+    const workflows = [
+      { id: 'WF1', name: 'Workflow 1: Customer Profile & Registration', passed: output.includes('ok 1 -') || success },
+      { id: 'WF2', name: 'Workflow 2: Storefront Search & Cart Pricing', passed: output.includes('ok 2 -') || success },
+      { id: 'WF3', name: 'Workflow 3: Medicine Procurement & Proposals', passed: output.includes('ok 3 -') || success },
+      { id: 'WF4', name: 'Workflow 4: Order Dispatch & 4-Digit OTP', passed: output.includes('ok 4 -') || success },
+      { id: 'WF5', name: 'Workflow 5: Pharmacy Branch & Inventory Controls', passed: output.includes('ok 5 -') || success },
+      { id: 'WF6', name: 'Workflow 6: Multi-Tenant Isolation & RBAC Suite', passed: output.includes('ok 6 -') || success }
+    ];
+
+    res.json({
+      success: true,
+      e2ePassed: success,
+      durationMs,
+      totalWorkflows: 6,
+      passedWorkflows: workflows.filter(w => w.passed).length,
+      failedWorkflows: workflows.filter(w => !w.passed).length,
+      workflows,
+      rawOutput: output
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 
 /**
  * GET/POST /api/v1/admin/feature-health/probe-service

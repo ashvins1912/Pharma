@@ -254,6 +254,25 @@ function MainApp() {
     };
   }, []);
 
+  // Guarantee scroll restoration and inert cleanup after login/auth transitions when no modal is open
+  useEffect(() => {
+    const activeDialogs = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"], [aria-modal="true"]'))
+      .filter((el) => el.isConnected && window.getComputedStyle(el).display !== 'none' && window.getComputedStyle(el).visibility !== 'hidden');
+    if (activeDialogs.length === 0) {
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+      document.body.style.paddingRight = '';
+      document.documentElement.classList.remove('modal-open');
+      document.body.classList.remove('modal-open');
+      const root = document.getElementById('root');
+      if (root) {
+        root.inert = false;
+        root.removeAttribute('inert');
+        root.removeAttribute('aria-hidden');
+      }
+    }
+  }, [user, authOpen, authLoading, authTransitionLoading]);
+
   useEffect(() => {
     if (!user) {
       if (ratingPromptOrder) setRatingPromptOrder(null);

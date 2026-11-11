@@ -33,9 +33,11 @@ export default function ModalInteractionGuard() {
       const modal = getTopmostModal();
       if (modal && !locked) {
         locked = true;
+        const rawHtmlOverflow = document.documentElement.style.overflow;
+        const rawBodyOverflow = document.body.style.overflow;
         previous = {
-          htmlOverflow: document.documentElement.style.overflow,
-          bodyOverflow: document.body.style.overflow,
+          htmlOverflow: rawHtmlOverflow === 'hidden' ? '' : rawHtmlOverflow,
+          bodyOverflow: rawBodyOverflow === 'hidden' ? '' : rawBodyOverflow,
           bodyPaddingRight: document.body.style.paddingRight
         };
         const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
@@ -44,14 +46,24 @@ export default function ModalInteractionGuard() {
         if (scrollbarWidth) document.body.style.paddingRight = `${scrollbarWidth}px`;
         document.documentElement.classList.add('modal-open');
         document.body.classList.add('modal-open');
-      } else if (!modal && locked) {
+      } else if (!modal) {
         locked = false;
-        document.documentElement.style.overflow = previous?.htmlOverflow || '';
-        document.body.style.overflow = previous?.bodyOverflow || '';
-        document.body.style.paddingRight = previous?.bodyPaddingRight || '';
+        const restoreHtml = previous?.htmlOverflow === 'hidden' ? '' : (previous?.htmlOverflow || '');
+        const restoreBody = previous?.bodyOverflow === 'hidden' ? '' : (previous?.bodyOverflow || '');
+        document.documentElement.style.overflow = restoreHtml;
+        document.body.style.overflow = restoreBody;
+        document.body.style.paddingRight = '';
         document.documentElement.classList.remove('modal-open');
         document.body.classList.remove('modal-open');
         previous = null;
+
+        // Safety check: ensure inert is cleared from root container when no modal exists
+        const root = document.getElementById('root');
+        if (root && root.inert) {
+          root.inert = false;
+          root.removeAttribute('inert');
+          root.removeAttribute('aria-hidden');
+        }
       }
     };
 
@@ -66,15 +78,18 @@ export default function ModalInteractionGuard() {
 
     return () => {
       observer.disconnect();
-      if (locked) {
-        document.documentElement.style.overflow = previous?.htmlOverflow || '';
-        document.body.style.overflow = previous?.bodyOverflow || '';
-        document.body.style.paddingRight = previous?.bodyPaddingRight || '';
-        document.documentElement.classList.remove('modal-open');
-        document.body.classList.remove('modal-open');
+      document.documentElement.style.overflow = '';
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+      document.documentElement.classList.remove('modal-open');
+      document.body.classList.remove('modal-open');
+      const root = document.getElementById('root');
+      if (root) {
+        root.inert = false;
+        root.removeAttribute('inert');
+        root.removeAttribute('aria-hidden');
       }
     };
   }, []);
   return null;
 }
-

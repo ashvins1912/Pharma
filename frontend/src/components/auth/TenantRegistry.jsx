@@ -53,7 +53,7 @@ export default function TenantRegistry({ tenantId: selectedTenantId } = {}) {
     if (!modalOpen) return undefined;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = previousOverflow; };
+    return () => { document.body.style.overflow = previousOverflow === 'hidden' ? '' : previousOverflow; };
   }, [modalOpen]);
 
   const openCreate = () => {

@@ -109,26 +109,26 @@ export default function AdminMedicineRequestsView() {
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-6 shadow-sm space-y-5">
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 sm:p-6 shadow-sm space-y-5 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-slate-100">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xl">📑</span>
-            <h3 className="text-base sm:text-lg font-black text-slate-900">
-              Customer Medicine Requests & Procurement Proposals
+            <span className="text-xl">🩺</span>
+            <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100">
+              Dispensary Command Center • Medicine Requests
             </h3>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Formulate official pharmacy quotes with custom pricing tiers, delivery slots, and stock availability.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Formulate official pharmacy quotes with custom pricing tiers, delivery slots, and verified stock allocation.
           </p>
         </div>
         <button
           onClick={loadAllRequests}
           disabled={loading}
-          className="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition cursor-pointer min-h-[44px]"
+          className="text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-4 py-2 rounded-xl transition cursor-pointer min-h-[44px] flex items-center gap-1.5"
         >
-          {loading ? 'Refreshing...' : '🔄 Refresh Queue'}
+          <span>{loading ? 'Refreshing Queue...' : '🔄 Refresh Queue'}</span>
         </button>
       </div>
 
@@ -138,16 +138,16 @@ export default function AdminMedicineRequestsView() {
           Loading requests queue...
         </div>
       ) : requests.length === 0 ? (
-        <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-          <p className="text-xs font-bold text-slate-600">{t('noActiveCustomerRequests')}</p>
+        <div className="text-center py-12 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+          <p className="text-xs font-bold text-slate-600 dark:text-slate-400">{t('noActiveCustomerRequests')}</p>
         </div>
       ) : (
         <>
-          {/* Desktop Table View: Customer | Medicine | Prescription | Proposal | Actions */}
+          {/* Desktop Table View */}
           <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-200 text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 text-[10px] font-extrabold uppercase tracking-wider">
                   <th className="py-3 px-3">{t('customer')}</th>
                   <th className="py-3 px-3">{t('medicineRequested')}</th>
                   <th className="py-3 px-3">{t('urgency')}</th>
@@ -156,31 +156,33 @@ export default function AdminMedicineRequestsView() {
                   <th className="py-3 px-3 text-right">{t('actions')}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                 {requests.map((req) => (
-                  <tr key={req._id} className="hover:bg-slate-50/70 transition">
+                  <tr key={req._id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition">
                     {/* Customer */}
                     <td className="py-3.5 px-3">
-                      <span className="font-extrabold text-slate-900 block">{req.customerName}</span>
-                      <span className="text-[10px] text-slate-400">{req.customerMobile || t('noPhone')}</span>
+                      <span className="font-extrabold text-slate-900 dark:text-slate-100 block">{req.customerName}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">{req.customerMobile || t('noPhone')}</span>
                     </td>
 
                     {/* Medicine */}
                     <td className="py-3.5 px-3">
-                      <span className="font-bold text-slate-900 block leading-tight">{req.medicineName}</span>
-                      <span className="text-[10px] text-slate-500">Qty: {req.quantity} {req.saltComposition && `• Salt: ${req.saltComposition}`}</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100 block leading-tight">{req.medicineName}</span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                        Qty: {req.quantity} {req.saltComposition && `· Salt: ${req.saltComposition}`}
+                      </span>
                     </td>
 
                     {/* Urgency */}
                     <td className="py-3.5 px-3">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        req.urgency.includes('Critical')
-                          ? 'bg-rose-100 text-rose-800'
-                          : req.urgency.includes('Urgent')
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-slate-100 text-slate-700'
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                        req.urgency?.includes('Critical')
+                          ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200'
+                          : req.urgency?.includes('Urgent')
+                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+                          : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
                       }`}>
-                        {req.urgency}
+                        {req.urgency || 'Standard'}
                       </span>
                     </td>
 
@@ -190,14 +192,14 @@ export default function AdminMedicineRequestsView() {
                     </td>
 
                     {/* Proposal Details */}
-                    <td className="py-3.5 px-3">
+                    <td className="py-3.5 px-3 font-mono">
                       {req.proposal ? (
                         <div>
-                          <span className="font-black text-emerald-700">₹{req.proposal.price * req.proposal.quantity}</span>
-                          <span className="text-[10px] text-slate-500 block">{req.proposal.deliverySlot}</span>
+                          <span className="font-black text-emerald-700 dark:text-emerald-400">₹{req.proposal.price * req.proposal.quantity}</span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-sans">{req.proposal.deliverySlot}</span>
                         </div>
                       ) : (
-                        <span className="text-slate-400 italic text-[11px]">{t('noProposal')}</span>
+                        <span className="text-slate-400 italic text-[11px] font-sans">{t('noProposal')}</span>
                       )}
                     </td>
 

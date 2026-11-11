@@ -22,9 +22,13 @@
     "admin:promote": "npm --workspace backend run admin:promote",
     "admin:bootstrap": "node scripts/bootstrap-super-admin.mjs",
     "tenant:create": "node scripts/create-tenant.mjs",
-    "test:tenant-isolation": "node --test tests/tenantDeliveryIsolation.test.js tests/tenantOwnedRiders.test.js tests/tenantOrderIsolation.test.js tests/orderAssignmentTenantIsolation.test.js tests/surplusSavingsPricing.test.js tests/endToEndUserWorkflowAutomation.test.js backend/modules/delivery/use-cases/RiderLifecycle.test.js"
+    "test:tenant-isolation": "node --test tests/tenantDeliveryIsolation.test.js tests/tenantOwnedRiders.test.js tests/tenantOrderIsolation.test.js tests/orderAssignmentTenantIsolation.test.js tests/surplusSavingsPricing.test.js tests/endToEndUserWorkflowAutomation.test.js backend/modules/delivery/use-cases/RiderLifecycle.test.js",
+    "test:e2e": "bash scripts/run-playwright-ci.sh"
   },
   "dependencies": {
     "recharts": "^3.10.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0"
   }
 }

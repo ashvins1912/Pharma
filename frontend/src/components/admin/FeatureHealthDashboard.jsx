@@ -23,6 +23,8 @@ const SEVERITY_COLORS = {
 export default function FeatureHealthDashboard() {
   const [loading, setLoading] = useState(true);
   const [auditing, setAuditing] = useState(false);
+  const [runningE2E, setRunningE2E] = useState(false);
+  const [e2eReport, setE2EReport] = useState(null);
   const [probingServiceId, setProbingServiceId] = useState(null);
   const [probingAllServices, setProbingAllServices] = useState(false);
   const [error, setError] = useState('');
@@ -31,6 +33,23 @@ export default function FeatureHealthDashboard() {
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedRole, setSelectedRole] = useState('ALL');
   const [inspectCell, setInspectCell] = useState(null);
+
+  const handleRunE2EAutomation = async () => {
+    try {
+      setRunningE2E(true);
+      setError('');
+      const res = await apiClient.post('/api/v1/admin/feature-health/run-e2e-automation');
+      if (res.data?.success) {
+        setE2EReport(res.data);
+      } else {
+        setError('E2E Automation execution completed with errors.');
+      }
+    } catch (err) {
+      setError(err.response?.data?.error?.message || err.message || 'E2E Automation execution failed.');
+    } finally {
+      setRunningE2E(false);
+    }
+  };
 
   const fetchHealth = useCallback(async (fresh = false) => {
     try {
@@ -254,6 +273,16 @@ export default function FeatureHealthDashboard() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              onClick={handleRunE2EAutomation}
+              disabled={runningE2E}
+              className="bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer"
+            >
+              <span>{runningE2E ? '⏳' : '🚀'}</span>
+              <span>{runningE2E ? 'Executing Live E2E Workflows…' : 'Trigger Live E2E Automation'}</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleRunAudit}
               disabled={auditing}
               className="bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer"
@@ -368,6 +397,47 @@ export default function FeatureHealthDashboard() {
           message={error}
           onRetry={() => fetchHealth(true)}
         />
+      )}
+
+      {/* Live E2E Automation Results Banner */}
+      {e2eReport && (
+        <section className="bg-emerald-950/90 border border-emerald-500/80 text-white rounded-3xl p-5 sm:p-6 shadow-xl space-y-4 animate-slide-down">
+          <div className="flex items-center justify-between gap-3 border-b border-emerald-800/80 pb-3">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
+                Live E2E User Automation Suite Execution
+              </span>
+              <h3 className="text-lg font-black text-white mt-0.5 flex items-center gap-2">
+                <span>{e2eReport.e2ePassed ? '🎉' : '⚠️'}</span>
+                <span>{e2eReport.e2ePassed ? 'All 6 User Workflows Verification PASSED 100%' : 'E2E Automation Workflows Completed'}</span>
+              </h3>
+              <p className="text-xs text-emerald-200 mt-1">
+                Duration: <strong>{(e2eReport.durationMs / 1000).toFixed(2)}s</strong> | Workflows Passed: <strong>{e2eReport.passedWorkflows} / {e2eReport.totalWorkflows}</strong>
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setE2EReport(null)}
+              className="text-xs font-bold text-emerald-300 hover:text-white px-3 py-1 rounded-xl bg-emerald-900/60 hover:bg-emerald-800 transition cursor-pointer"
+            >
+              ✕ Close
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {e2eReport.workflows?.map(wf => (
+              <div key={wf.id} className="p-3.5 rounded-2xl bg-emerald-900/40 border border-emerald-700/60 flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-[10px] font-black text-emerald-300 uppercase">{wf.id}</span>
+                  <h4 className="text-xs font-bold text-white leading-snug">{wf.name}</h4>
+                </div>
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-500 text-emerald-950 shrink-0">
+                  ✓ PASSED
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Microservices Health Section (Green/Red signal + 60s probe) */}

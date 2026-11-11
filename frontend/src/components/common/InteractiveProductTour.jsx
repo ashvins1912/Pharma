@@ -205,7 +205,7 @@ export default function InteractiveProductTour({ isOpen, onClose }) {
       />
 
       {/* Tour Dialog Card */}
-      <div className="relative z-10 m-auto w-full max-w-md overflow-hidden rounded-3xl border border-blue-200 bg-white p-6 shadow-2xl space-y-4 animate-slide-up">
+      <div className="relative z-10 m-auto w-[94vw] max-w-md overflow-hidden rounded-2xl sm:rounded-3xl border border-blue-200 dark:border-blue-900 bg-white dark:bg-slate-900 p-4 sm:p-6 shadow-2xl space-y-3.5 animate-slide-up">
         
         {/* Step Progress Bar */}
         <div className="space-y-1.5">

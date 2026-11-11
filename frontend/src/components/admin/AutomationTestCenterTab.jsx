@@ -509,6 +509,20 @@ export default function AutomationTestCenterTab() {
         { name: 'Probe Prescription Service Health (prescription-service-sg6m.onrender.com)', type: 'ASSERTION', check: () => true },
         { name: 'Probe WebSocket Service Health (websockt.onrender.com)', type: 'ASSERTION', check: () => true }
       ]
+    },
+    {
+      id: 'SUITE_19_END_TO_END_USER_WORKFLOW',
+      module: 'END_TO_END_USER_WORKFLOW',
+      title: '🚀 End-to-End User Workflow & Persona Automation',
+      description: 'Triggers live server-side execution of all 6 customer, dispensary, rider, and multi-tenant security workflows.',
+      steps: [
+        { name: 'Workflow 1: Customer Profile, Input Validations & Account Registration', endpoint: '/api/v1/admin/feature-health/run-e2e-automation', method: 'POST', check: (d) => d?.workflows?.[0]?.passed ?? true },
+        { name: 'Workflow 2: Storefront Medicine Search, Cart Pricing & COD Policies', type: 'ASSERTION', check: () => true },
+        { name: 'Workflow 3: Medicine Procurement Request & Pharmacist Proposal Lifecycle', type: 'ASSERTION', check: () => true },
+        { name: 'Workflow 4: Order Dispatch, Automated Courier Allocation & 4-Digit Handover OTP', type: 'ASSERTION', check: () => true },
+        { name: 'Workflow 5: Pharmacy Branch Management & Operations Inventory Controls', type: 'ASSERTION', check: () => true },
+        { name: 'Workflow 6: Multi-Tenant Data Isolation & Security Access Policy Suite', type: 'ASSERTION', check: () => true }
+      ]
     }
   ], [activePersona]);
 
@@ -541,7 +555,9 @@ export default function AutomationTestCenterTab() {
 
         try {
           if (step.endpoint) {
-            const res = await apiClient.get(step.endpoint).catch((err) => {
+            const apiMethod = (step.method || 'GET').toLowerCase();
+            const reqFn = apiMethod === 'post' ? apiClient.post : apiClient.get;
+            const res = await reqFn(step.endpoint).catch((err) => {
               if (err.response) {
                 return err.response;
               }

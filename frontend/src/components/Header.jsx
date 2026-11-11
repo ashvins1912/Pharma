@@ -58,7 +58,7 @@ export default function Header({
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = previousOverflow;
+      document.body.style.overflow = previousOverflow === 'hidden' ? '' : previousOverflow;
       mobileMenuToggleRef.current?.focus();
     };
   }, [mobileMenuOpen]);

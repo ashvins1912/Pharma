@@ -271,34 +271,41 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
         </div>
       </section>
 
-      <section id="admin-medicine-requests-list" className="request-center-queue" aria-label="Medicine procurement requests">
-        <div className="request-center-queue-heading">
+      <section className="request-center-queue" aria-label="Medicine procurement requests">
+        <div className="request-center-queue-heading flex justify-between items-center pb-3 border-b border-slate-200 dark:border-slate-800">
           <div>
-            <h3>{t('medicineProcurementRequests')}</h3>
-            <p>{loading ? 'Updating request queue…' : `${pagination.total || requests.length} requests · Page ${pagination.page || 1} of ${pagination.totalPages || 1}`}</p>
+            <h3 className="text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <span>🩺</span> {t('medicineProcurementRequests')}
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              {loading ? 'Updating request queue…' : `${pagination.total || requests.length} requests · Page ${pagination.page || 1} of ${pagination.totalPages || 1}`}
+            </p>
           </div>
-          <span className="request-center-queue-icon" aria-hidden="true">▤</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-slate-400 dark:text-slate-500">QUEUE LIVE</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          </div>
         </div>
 
         {loadError && (
-          <div role="alert" className="request-center-error">
+          <div role="alert" className="request-center-error my-3 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-xs text-rose-800 dark:text-rose-200 flex items-center justify-between">
             <span>{loadError}</span>
-            <button type="button" onClick={() => loadRequests(pagination.page || 1)}>Retry</button>
+            <button type="button" onClick={() => loadRequests(pagination.page || 1)} className="px-3 py-1 bg-rose-600 text-white font-bold rounded-lg hover:bg-rose-700">Retry</button>
           </div>
         )}
         {loading && requests.length === 0 && (
-          <div role="status" className="request-center-skeletons" aria-label="Loading medicine requests">
-            {[1,2,3].map(row => <div key={row} className="request-center-skeleton" />)}
+          <div role="status" className="request-center-skeletons grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 py-4" aria-label="Loading medicine requests">
+            {[1,2,3].map(row => <div key={row} className="request-center-skeleton h-56 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse" />)}
           </div>
         )}
         {!loading && !loadError && requests.length === 0 ? (
-          <div className="request-center-empty">
-            <span aria-hidden="true">⌕</span>
-            <h4>{t('noMedicineRequestsFound')}</h4>
-            <p>{t('noMedicineRequestsHelp')}</p>
+          <div className="request-center-empty text-center py-12 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 my-4">
+            <span className="text-2xl block mb-2" aria-hidden="true">📋</span>
+            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">{t('noMedicineRequestsFound')}</h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('noMedicineRequestsHelp')}</p>
           </div>
         ) : !loadError && requests.length > 0 ? (
-          <div className="request-center-card-grid">
+          <div className="request-center-card-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-4">
             {requests.map(req => {
               const items = Array.isArray(req.requestedItems) ? req.requestedItems : [];
               const visibleItems = items.slice(0, 3);
@@ -306,57 +313,102 @@ export default function AdminMedicineRequestsTab({ initialData = null, initialLo
               const price = proposal?.finalPrice ?? proposal?.totalPrice ?? proposal?.approximatePrice;
               const terminal = ['CUSTOMER_APPROVED','CONVERTED_TO_ORDER','CUSTOMER_REJECTED','PHARMACY_REJECTED','EXPIRED'].includes(req.status);
               return (
-                <article key={req._id} className="request-center-card">
-                  <div className="request-center-card-top">
-                    <div className="request-center-request-id">
-                      <span>REQUEST</span>
-                      <strong>#{req.requestNumber}</strong>
-                      <small>{req.createdAt ? new Date(req.createdAt).toLocaleDateString() : '—'}</small>
+                <article key={req._id} className="request-center-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs hover:shadow-md transition flex flex-col justify-between space-y-3">
+                  <div className="space-y-3">
+                    <div className="request-center-card-top flex justify-between items-start gap-2 border-b border-slate-100 dark:border-slate-800/60 pb-2.5">
+                      <div className="request-center-request-id">
+                        <span className="text-[10px] font-mono text-slate-400 block uppercase">REQ #{req.requestNumber}</span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                          {req.createdAt ? new Date(req.createdAt).toLocaleDateString() : '—'}
+                        </span>
+                      </div>
+                      <div className="request-center-card-status">{getStatusBadge(req.status)}</div>
                     </div>
-                    <div className="request-center-card-status">{getStatusBadge(req.status)}</div>
-                  </div>
 
-                  <div className="request-center-card-customer">
-                    <span className="request-center-avatar" aria-hidden="true">{String(req.customerName || 'C').trim().charAt(0).toUpperCase()}</span>
-                    <div className="request-center-customer-details">
-                      <strong>{req.customerName || 'Customer'}</strong>
-                      <span>{req.customerPhone || 'Phone unavailable'}</span>
+                    <div className="request-center-card-customer flex items-center gap-2.5 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 font-black text-xs flex items-center justify-center shrink-0">
+                        {String(req.customerName || 'C').trim().charAt(0).toUpperCase()}
+                      </div>
+                      <div className="request-center-customer-details min-w-0 flex-1">
+                        <strong className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate block">{req.customerName || 'Customer'}</strong>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block">{req.customerPhone || 'Phone unavailable'}</span>
+                      </div>
+                      {req.deliveryAddress && (
+                        <span className="request-center-location text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-[120px]" title={req.deliveryAddress}>
+                          📍 {req.deliveryAddress}
+                        </span>
+                      )}
                     </div>
-                    {req.deliveryAddress && <span className="request-center-location" title={req.deliveryAddress}>⌖ {req.deliveryAddress}</span>}
-                  </div>
 
-                  <div className="request-center-medicines">
-                    <div className="request-center-section-label"><span>Requested medicines</span><b>{items.length} {items.length === 1 ? 'item' : 'items'}</b></div>
-                    {visibleItems.map((item,index) => (
-                      <div className="request-center-medicine" key={`${item.requestedName || 'medicine'}-${index}`}>
-                        <div className="request-center-medicine-symbol" aria-hidden="true">✚</div>
-                        <div className="request-center-medicine-details">
-                          <strong>{item.requestedName || 'Medicine'}</strong>
-                          <span>{[item.strength,item.dosageForm].filter(Boolean).join(' · ') || 'Details not provided'}</span>
+                    <div className="request-center-medicines space-y-1.5">
+                      <div className="request-center-section-label flex justify-between items-center text-[10px] text-slate-400 dark:text-slate-500 font-semibold uppercase">
+                        <span>Requested items</span>
+                        <b className="tabular-nums font-mono">{items.length} {items.length === 1 ? 'item' : 'items'}</b>
+                      </div>
+                      {visibleItems.map((item, index) => (
+                        <div className="request-center-medicine flex items-center justify-between text-xs p-2 bg-slate-50/60 dark:bg-slate-800/30 rounded-lg border border-slate-100 dark:border-slate-800/40" key={`${item.requestedName || 'medicine'}-${index}`}>
+                          <div className="min-w-0 flex-1 pr-2">
+                            <strong className="font-bold text-slate-900 dark:text-slate-100 block truncate">{item.requestedName || 'Medicine'}</strong>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">
+                              {[item.strength, item.dosageForm].filter(Boolean).join(' · ') || 'Details not provided'}
+                            </span>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300 block">Qty {item.quantity || 1}</span>
+                            {item.originalAvailabilityStatus === 'OUT_OF_STOCK' && (
+                              <span className="text-[9px] text-rose-600 dark:text-rose-400 font-bold">Out of stock</span>
+                            )}
+                          </div>
                         </div>
-                        <span className="request-center-quantity">Qty {item.quantity || 1}</span>
-                        {item.originalAvailabilityStatus === 'OUT_OF_STOCK' && <span className="request-center-stock-tag">Out of stock</span>}
+                      ))}
+                      {items.length > 3 && (
+                        <p className="request-center-more-items text-[10px] text-slate-400 italic">+{items.length - 3} more items</p>
+                      )}
+                    </div>
+
+                    {(req.customerNote || req.prescriptionUrl || req.productImageUrl || proposal) && (
+                      <div className="request-center-card-details space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                        {req.customerNote && (
+                          <p className="request-center-customer-note text-[11px] bg-amber-50/70 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 p-2 rounded-lg border border-amber-200/50">
+                            <span className="font-bold block text-[10px] text-amber-800 dark:text-amber-300">Customer Note:</span>
+                            "{req.customerNote}"
+                          </p>
+                        )}
+                        <div className="request-center-detail-actions flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex gap-1.5">
+                            {req.prescriptionUrl && (
+                              <button type="button" onClick={() => openPrescription(req.prescriptionUrl)} disabled={prescriptionLoading} className="px-2 py-1 text-[10px] font-bold bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded-md border border-blue-200 dark:border-blue-800 hover:bg-blue-100">
+                                📄 Rx
+                              </button>
+                            )}
+                            {req.productImageUrl && (
+                              <a href={req.productImageUrl} target="_blank" rel="noreferrer" className="px-2 py-1 text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200">
+                                📷 Photo
+                              </a>
+                            )}
+                          </div>
+                          {proposal && (
+                            <div className="request-center-proposal-price text-right">
+                              <span className="text-[9px] text-slate-400 uppercase block">{proposal.priceType === 'APPROXIMATE' ? 'Estimate' : 'Quote Total'}</span>
+                              <strong className="text-xs font-black font-mono text-emerald-600 dark:text-emerald-400">₹{price ?? '—'}</strong>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    ))}
-                    {items.length > 3 && <p className="request-center-more-items">+{items.length - 3} more medicine items</p>}
+                    )}
                   </div>
 
-                  {(req.customerNote || req.prescriptionUrl || req.productImageUrl || proposal) && (
-                    <div className="request-center-card-details">
-                      {req.customerNote && <p className="request-center-customer-note"><span>Customer note</span>{req.customerNote}</p>}
-                      <div className="request-center-detail-actions">
-                        {req.prescriptionUrl && <button type="button" onClick={() => openPrescription(req.prescriptionUrl)} disabled={prescriptionLoading}>▤ Prescription</button>}
-                        {req.productImageUrl && <a href={req.productImageUrl} target="_blank" rel="noreferrer">▧ Product photo</a>}
-                        {proposal && <div className="request-center-proposal-price"><span>{proposal.priceType === 'APPROXIMATE' ? 'Estimate' : 'Proposed total'}</span><strong>₹{price ?? '—'}</strong></div>}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="request-center-card-footer">
-                    <span>{req.status === 'PROPOSAL_SENT' ? 'Waiting for customer approval' : terminal ? 'Request activity' : 'Action required'}</span>
+                  <div className="request-center-card-footer pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                      {req.status === 'PROPOSAL_SENT' ? 'Awaiting approval' : terminal ? 'Completed' : 'Action required'}
+                    </span>
                     <button type="button" onClick={() => { setActiveRequest(req); setProposalModalOpen(true); }}
-                      className={terminal ? 'request-center-action request-center-action--secondary' : 'request-center-action'}>
-                      {req.status === 'PROPOSAL_SENT' ? 'View proposal' : terminal ? 'View details' : 'Review & propose'}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1 ${
+                        terminal 
+                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200' 
+                          : 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+                      }`}>
+                      <span>{req.status === 'PROPOSAL_SENT' ? 'View proposal' : terminal ? 'View details' : 'Review & propose'}</span>
                       <span aria-hidden="true">→</span>
                     </button>
                   </div>
