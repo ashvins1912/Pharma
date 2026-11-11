@@ -17,6 +17,7 @@ export default function Header({
   onOpenProfile,
   onOpenAdminAlerts,
   onOpenGuide,
+  onStartTour,
   onToggleMobileMenu
 }) {
   const {
@@ -272,6 +273,17 @@ export default function Header({
 
           {/* Right: Actions Bar */}
           <div className="quickmeds-actions-group app-header__actions">
+
+            {/* Product Tour Button */}
+            <button
+              type="button"
+              onClick={onStartTour}
+              className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-[11px] sm:text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 border border-blue-200/60 shadow-xs"
+              title="Start Interactive Guided Tour"
+            >
+              <span>✨</span>
+              <span className="hidden sm:inline font-black">Tour</span>
+            </button>
 
             {/* App Guide Button */}
             <button

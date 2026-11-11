@@ -20,6 +20,8 @@ import AddressManager from './components/AddressManager';
 import AuthModal from './components/AuthModal';
 import UserProfileModal from './components/UserProfileModal';
 import ApplicationGuideModal from './components/common/ApplicationGuideModal';
+import InteractiveProductTour from './components/common/InteractiveProductTour';
+import ContextualHelpBanner from './components/common/ContextualHelpBanner';
 const AdminDashboardView = React.lazy(() => import('./components/admin/AdminDashboardView'));
 import WhatsAppConnectModal from './components/admin/WhatsAppConnectModal';
 import AdminNewStockModal from './components/admin/AdminNewStockModal';
@@ -111,6 +113,7 @@ function MainApp() {
   const [authOpen, setAuthOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [appGuideOpen, setAppGuideOpen] = useState(false);
+  const [productTourOpen, setProductTourOpen] = useState(false);
   const [placedOrder, setPlacedOrder] = useState(null);
   const [ratingPromptOrder, setRatingPromptOrder] = useState(null);
   const [dismissedRatingOrderIds, setDismissedRatingOrderIds] = useState([]);
@@ -388,6 +391,7 @@ function MainApp() {
           if (canAccessOperations) setActiveTab('admin');
         }}
         onOpenGuide={() => setAppGuideOpen(true)}
+        onStartTour={() => setProductTourOpen(true)}
         onToggleMobileMenu={(isOpen) => {
           if (isOpen) setAuthOpen(false);
         }}
@@ -400,6 +404,9 @@ function MainApp() {
         {activeTab === 'store' && (
           <div className="pharma-storefront space-y-6">
             
+            {/* Contextual Help Guidance Banner */}
+            <ContextualHelpBanner topic="storefront" />
+
             {/* Friendly Hero Banner */}
             <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl sm:rounded-3xl p-4 sm:p-8 text-white shadow-lg shadow-blue-600/15 relative overflow-hidden">
               <div className="relative z-10 max-w-xl space-y-2 sm:space-y-3">
@@ -512,6 +519,7 @@ function MainApp() {
         {activeTab === 'requests' && (
           user && hasPermission('medicine_requests.read') && (!canAccessOperations || isSuperAdmin) ? (
             <div className="max-w-4xl mx-auto space-y-6">
+              <ContextualHelpBanner topic="requests" />
               <CustomerRequestsView
                 onOpenProposal={(req) => openProposalModal(req)}
                 onTrackOrder={(order) => {
@@ -602,6 +610,12 @@ function MainApp() {
       <ApplicationGuideModal
         isOpen={appGuideOpen}
         onClose={() => setAppGuideOpen(false)}
+      />
+
+      {/* Interactive Guided Product Tour */}
+      <InteractiveProductTour
+        isOpen={productTourOpen}
+        onClose={() => setProductTourOpen(false)}
       />
 
       {/* Slide-over Cart Drawer */}

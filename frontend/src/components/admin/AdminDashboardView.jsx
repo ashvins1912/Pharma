@@ -18,6 +18,7 @@ import CustomerPromotionsView from './CustomerPromotionsView';
 import SurplusSavingsManager from './SurplusSavingsManager';
 import AdminOfferZoneManager from './AdminOfferZoneManager';
 import PlatformTenantsView from './PlatformTenantsView';
+import ContextualHelpBanner from '../common/ContextualHelpBanner';
 import PlatformAccessControl from './PlatformAccessControl';
 import LiveTelemetryTab from './LiveTelemetryTab';
 import RoleFeatureMatrixTab from './RoleFeatureMatrixTab';
@@ -415,6 +416,9 @@ export default function AdminDashboardView() {
           </div>)}
         </div>
       </div>
+
+      {/* Operations Contextual Help Guidance Banner */}
+      <ContextualHelpBanner topic="admin" className="mt-4" />
 
       {/* WhatsApp Disconnection Warning Banner */}
       {!whatsappStatus.isConnected && (
