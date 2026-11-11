@@ -228,25 +228,25 @@ export default function FeatureHealthDashboard() {
   return (
     <div className="space-y-6">
       {/* Top Banner & Control Strip */}
-      <div className="bg-slate-900 text-white rounded-3xl p-5 sm:p-6 shadow-md space-y-4 border border-slate-800">
+      <div className="bg-gradient-to-br from-indigo-50/90 via-slate-50 to-blue-50/90 border border-slate-200/90 text-slate-900 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-blue-400">
+              <span className="text-[11px] font-black uppercase tracking-wider text-indigo-700">
                 Super Admin Governance Engine
               </span>
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wide ${
                 systemStatus === 'HEALTHY'
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                  : (systemStatus === 'DEGRADED' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30')
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  : (systemStatus === 'DEGRADED' ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-rose-100 text-rose-800 border border-rose-300')
               }`}>
                 ● {systemStatus}
               </span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-black tracking-tight mt-1">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1">
               RBAC, Feature Availability &amp; Blocker Intelligence
             </h2>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-600 font-medium mt-1">
               Multi-role continuous verification, microservice telemetry signals, and tenant boundary isolation diagnostics.
             </p>
           </div>
@@ -256,7 +256,7 @@ export default function FeatureHealthDashboard() {
               type="button"
               onClick={handleRunAudit}
               disabled={auditing}
-              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer"
+              className="bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer"
             >
               <span>{auditing ? '⏳' : '⚡'}</span>
               <span>{auditing ? 'Running Full RBAC Audit…' : 'Trigger Live RBAC Audit'}</span>
@@ -266,7 +266,7 @@ export default function FeatureHealthDashboard() {
               type="button"
               onClick={handleProbeAllServices}
               disabled={probingAllServices}
-              className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer"
+              className="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer"
             >
               <span>{probingAllServices ? '⏳' : '🌐'}</span>
               <span>{probingAllServices ? 'Probing Services (up to 15s)…' : 'Probe All Services'}</span>
@@ -275,7 +275,7 @@ export default function FeatureHealthDashboard() {
             <button
               type="button"
               onClick={() => fetchHealth(true)}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-3.5 py-2.5 rounded-xl border border-slate-700 transition cursor-pointer"
+              className="bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs px-3.5 py-2.5 rounded-xl border border-slate-300 shadow-xs transition cursor-pointer"
               title="Refresh Health Report"
             >
               ↻ Refresh
@@ -707,7 +707,7 @@ export default function FeatureHealthDashboard() {
               <button
                 type="button"
                 onClick={() => setInspectCell(null)}
-                className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl cursor-pointer hover:bg-slate-800 transition"
+                className="px-4 py-2 bg-indigo-700 text-white text-xs font-bold rounded-xl cursor-pointer hover:bg-indigo-800 transition shadow-xs"
               >
                 Close
               </button>

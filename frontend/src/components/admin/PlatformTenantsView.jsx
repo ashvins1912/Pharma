@@ -399,18 +399,18 @@ export default function PlatformTenantsView() {
     <div className="platform-tenants-view w-full min-w-0 max-w-full space-y-6 animate-fade-in text-slate-800 overflow-x-hidden">
       
       {/* Platform Control Header Card */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-4 sm:p-6 shadow-md space-y-4 overflow-hidden">
+      <div className="bg-gradient-to-br from-indigo-50/90 via-slate-50 to-blue-50/90 border border-slate-200/90 text-slate-900 rounded-3xl p-4 sm:p-6 shadow-sm space-y-4 overflow-hidden">
         <div className="platform-directory-header flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 min-w-0">
           <div className="platform-directory-heading min-w-0">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-black uppercase tracking-wider text-blue-400">
-              <span>{t('platformVendorName')}</span>
-              <span aria-hidden="true">·</span>
-              <span className="text-emerald-400">{t('platformScope')}</span>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-black uppercase tracking-wider">
+              <span className="text-indigo-700">{t('platformVendorName')}</span>
+              <span aria-hidden="true" className="text-slate-400">·</span>
+              <span className="text-emerald-700">{t('platformScope')}</span>
             </div>
-            <h2 className="platform-directory-title text-xl sm:text-2xl font-black tracking-tight mt-1">
+            <h2 className="platform-directory-title text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1">
               Multi-Tenant Pharmacy Directory & Access Governance
             </h2>
-            <p className="platform-directory-description text-xs text-slate-300 mt-0.5 max-w-2xl">
+            <p className="platform-directory-description text-xs text-slate-600 font-medium mt-0.5 max-w-2xl leading-relaxed">
               Super Admin authority to provision regional pharmacy tenants, configure isolation boundaries, govern operational lifecycle states, and issue cryptographically bound tenant administrator credentials.
             </p>
           </div>
@@ -423,7 +423,7 @@ export default function PlatformTenantsView() {
                 setInvitedVendorResult(null);
                 setVendorModalOpen(true);
               }}
-              className="bg-teal-600 hover:bg-teal-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-sm shrink-0"
+              className="bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-sm shrink-0"
             >
               <span>✉️</span>
               <span>{t('inviteVendorPartner')}</span>
@@ -435,7 +435,7 @@ export default function PlatformTenantsView() {
                 setOnboardError('');
                 setOnboardModalOpen(true);
               }}
-              className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-sm shrink-0"
+              className="bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-2 shadow-sm shrink-0"
             >
               <span>➕</span>
               <span>{t('onboardPharmacyTenant')}</span>
@@ -445,43 +445,43 @@ export default function PlatformTenantsView() {
 
         {/* 4 Clean Metric Blocks */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-slate-800 pt-2">
-          <div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+          <div className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs">
+            <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider block">
               Total Tenants
             </span>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-black text-slate-900">{totalCount}</span>
-              <span className="text-[11px] font-semibold text-slate-500">registered</span>
+              <span className="text-[11px] font-bold text-slate-600">registered</span>
             </div>
           </div>
 
-          <div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+          <div className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs">
+            <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider block">
               Active Pharmacies
             </span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-black text-emerald-600">{activeCount}</span>
-              <span className="text-[11px] font-semibold text-emerald-600">online</span>
+              <span className="text-2xl font-black text-emerald-700">{activeCount}</span>
+              <span className="text-[11px] font-bold text-emerald-700">online</span>
             </div>
           </div>
 
-          <div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+          <div className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs">
+            <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider block">
               Suspended
             </span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-black text-rose-600">{suspendedCount}</span>
-              <span className="text-[11px] font-semibold text-rose-500">isolated</span>
+              <span className="text-2xl font-black text-rose-700">{suspendedCount}</span>
+              <span className="text-[11px] font-bold text-rose-700">isolated</span>
             </div>
           </div>
 
-          <div className="bg-white/95 rounded-2xl p-3.5 backdrop-blur-sm shadow-sm">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+          <div className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs">
+            <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider block">
               Pending Onboarding
             </span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-black text-amber-600">{pendingCount}</span>
-              <span className="text-[11px] font-semibold text-amber-600">review</span>
+              <span className="text-2xl font-black text-amber-700">{pendingCount}</span>
+              <span className="text-[11px] font-bold text-amber-700">review</span>
             </div>
           </div>
         </div>
@@ -1439,7 +1439,7 @@ export default function PlatformTenantsView() {
                         setInvitedVendorResult(null);
                         setVendorModalOpen(false);
                       }}
-                      className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                      className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-xs"
                     >
                       Done
                     </button>
