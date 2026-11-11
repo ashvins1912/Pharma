@@ -1149,6 +1149,12 @@ const messages = {
     signupPasswordStrength: "Include an uppercase letter, a lowercase letter and a number.",
     signupConfirmPassword: "Please confirm your password.",
     signupPasswordMismatch: "Your passwords do not match.",
+    importRowsNeedFixing: "{count} rows need fixing. See the report for details.",
+    showValidPreview: "Show rows without errors",
+    viewErrors: "View rows with errors",
+    deliveryHandlingNotesPlaceholder: "Add delivery or storage notes (optional).",
+    stageView: "By order stage",
+    allOrdersView: "All orders",
   },
 
   hi: {
@@ -2290,6 +2296,12 @@ const messages = {
     signupPasswordStrength: "पासवर्ड में एक बड़ा अक्षर, एक छोटा अक्षर और एक अंक रखें।",
     signupConfirmPassword: "कृपया पासवर्ड की पुष्टि करें।",
     signupPasswordMismatch: "दोनों पासवर्ड एक जैसे नहीं हैं।",
+    importRowsNeedFixing: "{count} पंक्तियों में सुधार ज़रूरी है। जानकारी रिपोर्ट में देखें।",
+    showValidPreview: "सही पंक्तियाँ दिखाएँ",
+    viewErrors: "गलत पंक्तियाँ देखें",
+    deliveryHandlingNotesPlaceholder: "डिलीवरी या रखरखाव के बारे में जानकारी लिखें (ज़रूरी नहीं)।",
+    stageView: "ऑर्डर के चरण के अनुसार",
+    allOrdersView: "सभी ऑर्डर",
   },
 
   kn: {
@@ -3431,6 +3443,12 @@ const messages = {
     signupPasswordStrength: "ದೊಡ್ಡ ಅಕ್ಷರ, ಸಣ್ಣ ಅಕ್ಷರ ಮತ್ತು ಒಂದು ಸಂಖ್ಯೆ ಸೇರಿಸಿ.",
     signupConfirmPassword: "ದಯವಿಟ್ಟು ಪಾಸ್‌ವರ್ಡ್ ದೃಢೀಕರಿಸಿ.",
     signupPasswordMismatch: "ಎರಡೂ ಪಾಸ್‌ವರ್ಡ್‌ಗಳು ಒಂದೇ ಆಗಿಲ್ಲ.",
+    importRowsNeedFixing: "{count} ಸಾಲುಗಳಲ್ಲಿ ತಿದ್ದುಪಡಿ ಬೇಕಿದೆ. ವಿವರಗಳನ್ನು ವರದಿಯಲ್ಲಿ ನೋಡಿ.",
+    showValidPreview: "ತಪ್ಪಿಲ್ಲದ ಸಾಲುಗಳನ್ನು ತೋರಿಸಿ",
+    viewErrors: "ತಪ್ಪಿರುವ ಸಾಲುಗಳನ್ನು ನೋಡಿ",
+    deliveryHandlingNotesPlaceholder: "ವಿತರಣೆ ಅಥವಾ ಸಂಗ್ರಹಣೆಯ ಬಗ್ಗೆ ಟಿಪ್ಪಣಿ ಬರೆಯಿರಿ (ಐಚ್ಛಿಕ).",
+    stageView: "ಆರ್ಡರ್ ಹಂತದ ಪ್ರಕಾರ",
+    allOrdersView: "ಎಲ್ಲಾ ಆರ್ಡರ್‌ಗಳು",
   },
 
   bn: {
@@ -4572,6 +4590,12 @@ const messages = {
     signupPasswordStrength: "একটি বড় হাতের অক্ষর, একটি ছোট হাতের অক্ষর ও একটি সংখ্যা দিন।",
     signupConfirmPassword: "অনুগ্রহ করে পাসওয়ার্ড নিশ্চিত করুন।",
     signupPasswordMismatch: "দুটি পাসওয়ার্ড মেলেনি।",
+    importRowsNeedFixing: "{count}টি সারি ঠিক করতে হবে। বিস্তারিত রিপোর্টে দেখুন।",
+    showValidPreview: "যে সারিগুলিতে ভুল নেই সেগুলি দেখুন",
+    viewErrors: "যে সারিগুলিতে ভুল আছে সেগুলি দেখুন",
+    deliveryHandlingNotesPlaceholder: "ডেলিভারি বা সংরক্ষণ সম্পর্কে নোট লিখুন (ঐচ্ছিক)।",
+    stageView: "অর্ডারের ধাপ অনুযায়ী",
+    allOrdersView: "সব অর্ডার",
   },
 
   te: {
@@ -5714,6 +5738,12 @@ const messages = {
     signupPasswordStrength: "ఒక పెద్ద అక్షరం, ఒక చిన్న అక్షరం మరియు ఒక సంఖ్య చేర్చండి.",
     signupConfirmPassword: "దయచేసి పాస్‌వర్డ్‌ను నిర్ధారించండి.",
     signupPasswordMismatch: "రెండు పాస్‌వర్డ్‌లు సరిపోలలేదు.",
+    importRowsNeedFixing: "{count} వరుసల్లో మార్పులు చేయాలి. వివరాలను నివేదికలో చూడండి.",
+    showValidPreview: "తప్పులు లేని వరుసలను చూపండి",
+    viewErrors: "తప్పులున్న వరుసలను చూడండి",
+    deliveryHandlingNotesPlaceholder: "డెలివరీ లేదా నిల్వ గురించి గమనిక రాయండి (ఐచ్ఛికం).",
+    stageView: "ఆర్డర్ దశ ప్రకారం",
+    allOrdersView: "అన్ని ఆర్డర్లు",
   }
 };
 
