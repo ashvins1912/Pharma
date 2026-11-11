@@ -19,22 +19,29 @@ node -v
 npm -v
 
 # 2. Check if servers are running or start dev server if needed
-if curl -s http://localhost:3000 > /dev/null 2>&1; then
+if curl -fsS http://localhost:3000 > /dev/null 2>&1; then
   echo "✅ Active dev server detected on http://localhost:3000"
 else
   echo "⚡ Starting background server on port 3000 for CI execution..."
   npm run dev &
   DEV_PID=$!
-  trap 'kill $DEV_PID 2>/dev/null || true' EXIT
+  trap 'kill "$DEV_PID" 2>/dev/null || true' EXIT
 
   echo "⏳ Waiting for http://localhost:3000 to become responsive..."
+  SERVER_READY=0
   for i in {1..30}; do
-    if curl -s http://localhost:3000 > /dev/null 2>&1; then
+    if curl -fsS http://localhost:3000 > /dev/null 2>&1; then
+      SERVER_READY=1
       echo "✅ Web application server is ready!"
       break
     fi
     sleep 2
   done
+
+  if [ "$SERVER_READY" -ne 1 ]; then
+    echo "❌ Error: Web application server did not become responsive on port 3000 within 60 seconds."
+    exit 1
+  fi
 fi
 
 # 3. Ensure Playwright browser binaries are present
@@ -52,9 +59,7 @@ echo "   - Inventory Stock Adjustment Workflow (inventoryStockAdjustment.spec.js
 echo "   - Complete Pharmacy Application Flows (pharmacyAppFlows.spec.js)"
 
 cd frontend
-npx playwright test --config=playwright.config.js || {
-  echo "⚠️ Note: Playwright browser execution reported test results."
-}
+npx playwright test --config=playwright.config.js
 
 echo "📊 Playwright HTML Report generated at: frontend/playwright-report/index.html"
 echo "🎉 [CI Pipeline Setup] Playwright E2E Test Pipeline execution completed successfully."
