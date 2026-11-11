@@ -94,6 +94,23 @@ function MainApp() {
   const { activeTenant, tenantId } = useTenant();
   const { t, language, setLanguage } = useLanguage();
 
+  // Last-resort storefront release: auth bootstrap is allowed to fail closed,
+  // but it must never keep the entire public application behind a spinner.
+  // AuthContext normally resolves this in 3 seconds; this independent UI guard
+  // also protects against a stale/failed bootstrap implementation in a deploy.
+  const [authBootstrapFailsafeElapsed, setAuthBootstrapFailsafeElapsed] = useState(false);
+  useEffect(() => {
+    if (!authLoading) {
+      setAuthBootstrapFailsafeElapsed(false);
+      return undefined;
+    }
+    const failsafeId = window.setTimeout(() => {
+      console.error('[Auth] Bootstrap exceeded the UI loading limit; releasing the storefront.');
+      setAuthBootstrapFailsafeElapsed(true);
+    }, 4500);
+    return () => window.clearTimeout(failsafeId);
+  }, [authLoading]);
+
   useEffect(() => {
     const preferredLanguage = user?.preferredLanguage;
     if (['en', 'hi', 'kn', 'bn', 'te'].includes(preferredLanguage) && preferredLanguage !== language) {
@@ -385,8 +402,8 @@ function MainApp() {
 
   // Keep the loader after every hook has been evaluated so React hook order
   // remains stable across authentication state transitions.
-  if (authLoading || authTransitionLoading) {
-    return <AuthTransitionScreen initialLoad={authLoading} />;
+  if ((authLoading && !authBootstrapFailsafeElapsed) || authTransitionLoading) {
+    return <AuthTransitionScreen initialLoad={authLoading && !authBootstrapFailsafeElapsed} />;
   }
 
   return (
