@@ -68,7 +68,7 @@ services:
     name: ashvin-pharma-frontend
     env: static
     plan: free
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: cd frontend && npm install --include=dev --workspaces=false && npm run build
     staticPublishPath: ./frontend/dist
     envVars:
       - key: VITE_API_URL
