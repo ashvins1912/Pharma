@@ -210,8 +210,8 @@ export default function InteractiveProductTour({ isOpen, onClose }) {
         {/* Step Progress Bar */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-blue-600">
-            <span>✨ Guided Product Tour</span>
-            <span>Step {currentStepIndex + 1} of {totalSteps}</span>
+            <span>✨ {t('interactiveProductTour')}</span>
+            <span>{t('tourStep').replace('{current}', currentStepIndex + 1).replace('{total}', totalSteps)}</span>
           </div>
           <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
             <div
@@ -234,9 +234,9 @@ export default function InteractiveProductTour({ isOpen, onClose }) {
         {/* Multi-language indication pill */}
         <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px] text-slate-400 font-semibold">
           <span className="flex items-center gap-1 text-slate-500">
-            🌐 Active Language: <strong className="text-slate-800 uppercase">{language}</strong>
+            🌐 {t('language')}: <strong className="text-slate-800 uppercase">{language}</strong>
           </span>
-          <span>Press Esc or click backdrop to exit</span>
+          <span>Esc</span>
         </div>
 
         {/* Control Action Buttons */}
@@ -246,7 +246,7 @@ export default function InteractiveProductTour({ isOpen, onClose }) {
             onClick={onClose}
             className="px-3.5 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 transition cursor-pointer"
           >
-            Skip Tour
+            {t('skipTour')}
           </button>
 
           <div className="flex items-center gap-2">
@@ -256,7 +256,7 @@ export default function InteractiveProductTour({ isOpen, onClose }) {
                 onClick={handleBack}
                 className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold rounded-xl transition cursor-pointer"
               >
-                Back
+                {t('previousStep')}
               </button>
             )}
 
@@ -265,7 +265,7 @@ export default function InteractiveProductTour({ isOpen, onClose }) {
               onClick={handleNext}
               className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl shadow-md shadow-blue-500/20 transition cursor-pointer"
             >
-              {currentStepIndex === totalSteps - 1 ? 'Finish Tour 🎉' : 'Next Step ➔'}
+              {currentStepIndex === totalSteps - 1 ? t('finishTour') : t('nextStep')}
             </button>
           </div>
         </div>

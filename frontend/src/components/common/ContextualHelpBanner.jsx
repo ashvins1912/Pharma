@@ -316,7 +316,7 @@ export default function ContextualHelpBanner({ topic = 'storefront', className =
             onClick={() => setCollapsed(!collapsed)}
             className="text-[11px] font-bold text-blue-700 hover:text-blue-900 px-2 py-0.5 rounded-lg bg-blue-100/60 hover:bg-blue-100 transition cursor-pointer"
           >
-            {collapsed ? 'Show Tips ▾' : 'Hide Tips ▴'}
+            {collapsed ? `${t('show')} ▾` : `${t('hide')} ▴`}
           </button>
           <button
             type="button"
