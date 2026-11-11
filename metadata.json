@@ -1,0 +1,8 @@
+{
+  "name": "QuickMeds Rx",
+  "description": "Digital pharmacy platform for medicine catalog browsing, prescription ordering, delivery tracking, and inventory management.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

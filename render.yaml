@@ -1,0 +1,125 @@
+services:
+  - type: web
+    name: ashvin-pharma-api
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install && npm --workspace backend install
+    startCommand: node backend/server-entry.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://pharma-1-278k.onrender.com
+      - key: MONGO_URI
+        sync: false
+      # Preserve the current value: it decrypts existing AES-GCM fields.
+      - key: ENCRYPTION_SECRET_KEY
+        sync: false
+      - key: CACHE_SERVICE_URL
+        value: https://caching-v0et.onrender.com
+      - key: CACHE_SERVICE_TOKEN
+        sync: false
+
+  - type: web
+    name: ashvin-pharma-websocket
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: npm install
+    startCommand: npm --workspace services/websocket-service start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://pharma-1-278k.onrender.com
+      - key: WS_HEARTBEAT_INTERVAL_MS
+        value: 25000
+      - key: WS_PING_INTERVAL_MS
+        value: 25000
+      - key: WS_PING_TIMEOUT_MS
+        value: 20000
+      - key: CACHE_SERVICE_URL
+        value: https://caching-v0et.onrender.com
+      - key: CACHE_SERVICE_TOKEN
+        sync: false
+      - key: PHARMA_JWT_PUBLIC_KEY
+        sync: false
+      - key: PHARMA_JWT_ISSUER
+        value: pharma-auth
+      - key: PHARMA_JWT_AUDIENCE
+        value: pharma-api
+
+  - type: web
+    name: ashvin-pharma-prescription
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install
+    startCommand: node backend/services/prescription-verification/PrescriptionVerificationService.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+
+  - type: web
+    name: ashvin-pharma-frontend
+    env: static
+    plan: free
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        value: /api
+      - key: VITE_API_GATEWAY_URL
+        value: https://pharma-api-gateway.onrender.com
+      - key: VITE_WS_URL
+        value: https://websockt.onrender.com
+
+    headers:
+      # HTML must revalidate on every navigation so it never points at a
+      # previous deployment's fingerprinted lazy chunks.
+      - path: /
+        name: Cache-Control
+        value: no-cache, no-store, must-revalidate
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache, no-store, must-revalidate
+      # Vite assets are content-hashed and safe to cache for their full lifetime.
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=31536000
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(self), geolocation=(self), microphone=()
+      - path: /*
+        name: Content-Security-Policy
+        value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+    routes:
+      # Route API traffic through the API Gateway before the SPA fallback.
+      - type: rewrite
+        source: /api/v1/auth/*
+        destination: https://pharma-api-gateway.onrender.com/api/v1/auth/*
+      - type: rewrite
+        source: /api/v1/inventory/*
+        destination: https://pharma-api-gateway.onrender.com/api/v1/inventory/*
+      - type: rewrite
+        source: /api/*
+        destination: https://pharma-api-gateway.onrender.com/api/*
+      - type: rewrite
+        source: /*
+        destination: /index.html

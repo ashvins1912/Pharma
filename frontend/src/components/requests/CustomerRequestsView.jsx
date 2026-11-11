@@ -1,0 +1,491 @@
+import React, { useEffect, useState } from 'react';
+import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { replaceMedicineRequestPrescription } from '../../api/medicineRequestService';
+import { useActionLoading, LOADING_ACTIONS } from '../../context/LoadingContext';
+import Pagination from '../common/Pagination';
+import { useLanguage } from '../../context/LanguageContext';
+import apiClient from '../../api/apiClient';
+import CustomerStockWaitlist from './CustomerStockWaitlist';
+
+const DEFAULT_PAGINATION = { page: 1, pageSize: 10, limit: 10, total: 0, totalPages: 0, hasNextPage: false };
+
+export default function CustomerRequestsView({ onOpenProposal, onTrackOrder }) {
+  const { t } = useLanguage();
+  const { user } = useAuth();
+  const {
+    medicineRequests,
+    medicineRequestsError,
+    loadingMedicineRequests,
+    loadUserMedicineRequests,
+    medicineRequestsPagination,
+    openRequestModal,
+    orders
+  } = useApp();
+  const { addToast } = useToast();
+  const { runAction, isActionLoading } = useActionLoading();
+  const pagination = medicineRequestsPagination || DEFAULT_PAGINATION;
+  const [updatingPrescriptionId, setUpdatingPrescriptionId] = useState(null);
+  const [waitDaysByRequest, setWaitDaysByRequest] = useState({});
+  const [waitingRequestId, setWaitingRequestId] = useState('');
+
+  useEffect(() => {
+    void loadUserMedicineRequests({ page: 1, statusGroup: 'ALL' });
+  }, [loadUserMedicineRequests]);
+
+  const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // AppContext refreshes this list on authenticated medicine_request_updated
+  // events; avoid a second polling loop while fulfilment is processing.
+  const filteredRequests = medicineRequests.filter(r => {
+    if (statusFilter === 'ALL') return true;
+    if (statusFilter === 'ACTIVE') {
+      return ['REQUESTED', 'UNDER_REVIEW', 'FULFILLMENT_PROCESSING', 'PROPOSAL_SENT', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION'].includes(r.status);
+    }
+    if (statusFilter === 'COMPLETED') {
+      return ['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'].includes(r.status);
+    }
+    return r.status === statusFilter;
+  });
+
+  const handleWaitForStock = async request => {
+    if (waitingRequestId) return;
+    setWaitingRequestId(String(request._id));
+    try {
+      const key = window.crypto?.randomUUID?.() || `request-wait-${request._id}-${Date.now()}`;
+      await apiClient.post(`/api/orders/fulfillment/from-medicine-request/${request._id}`, {
+        waitDays: Number(waitDaysByRequest[request._id] || 3)
+      }, { headers: { 'Idempotency-Key': key } });
+      addToast('We will monitor stock for your selected wait period and notify you when it is available.', 'success');
+      await loadUserMedicineRequests({ page: 1, statusGroup: statusFilter });
+      window.dispatchEvent(new Event('stock-waitlist-updated'));
+    } catch (error) {
+      addToast(error.response?.data?.message || 'Could not add this medicine request to the stock waitlist.', 'error');
+    } finally {
+      setWaitingRequestId('');
+    }
+  };
+
+  const handlePrescriptionReplacement = async (request, file) => {
+    if (!file || updatingPrescriptionId) return;
+    if (file.size > 5 * 1024 * 1024) {
+      addToast(t('prescriptionFileTooLarge'), 'warning');
+      return;
+    }
+    await runAction(LOADING_ACTIONS.UPLOAD_PRESCRIPTION, async () => {
+      setUpdatingPrescriptionId(request._id);
+      try {
+        const result = await replaceMedicineRequestPrescription(request._id, file);
+        addToast(result.message || t('prescriptionUpdated'), 'success');
+        await loadUserMedicineRequests({ page: 1, statusGroup: statusFilter });
+      } catch (error) {
+        addToast(error.message || t('prescriptionUpdateFailed'), 'error');
+      } finally {
+        setUpdatingPrescriptionId(null);
+      }
+    });
+  };
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'REQUESTED':
+        return (
+          <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+            <span>⏳</span> Submitted & Pending
+          </span>
+        );
+      case 'UNDER_REVIEW':
+        return (
+          <span className="bg-blue-100 text-blue-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+            <span>🔬</span> Pharmacist Reviewing
+          </span>
+        );
+      case 'FULFILLMENT_PROCESSING':
+        return <span className="bg-indigo-100 text-indigo-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">⚙️ Preparing split fulfilment</span>;
+      case 'WAITING_FOR_STOCK':
+        return <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">⏳ Waiting for stock</span>;
+      case 'READY_FOR_CONFIRMATION':
+        return <span className="bg-emerald-100 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">✓ Stock available — confirm order</span>;
+      case 'PROPOSAL_SENT':
+        return (
+          <span className="bg-blue-100 text-blue-900 text-[10px] font-black px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 shadow-xs animate-pulse">
+            <span>💊</span> Proposal Ready
+          </span>
+        );
+      case 'CUSTOMER_APPROVED':
+      case 'CONVERTED_TO_ORDER':
+        return (
+          <span className="bg-emerald-100 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+            <span>✓</span> Converted to Order
+          </span>
+        );
+      case 'CUSTOMER_REJECTED':
+        return (
+          <span className="bg-slate-100 text-slate-700 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+            <span>✕</span> Declined by You
+          </span>
+        );
+      case 'PHARMACY_REJECTED':
+        return (
+          <span className="bg-rose-100 text-rose-800 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+            <span>✕</span> Unavailable from Supplier
+          </span>
+        );
+      case 'EXPIRED':
+        return (
+          <span className="bg-slate-100 text-slate-500 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+            <span>⏱️</span> Proposal Expired
+          </span>
+        );
+      default:
+        return (
+          <span className="bg-slate-100 text-slate-700 text-[10px] font-black px-2 py-0.5 rounded-full">
+            {status}
+          </span>
+        );
+    }
+  };
+
+  const findConvertedOrder = (convertedOrderId) => {
+    if (!convertedOrderId || !orders) return null;
+    return orders.find(o => String(o._id) === String(convertedOrderId)) || null;
+  };
+
+  return (
+    <>
+      <CustomerStockWaitlist />
+      <div className="pharma-customer-requests bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
+      
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-xl">📋</span>
+            <h3 className="text-base sm:text-lg font-black text-slate-900">
+              {t('myMedicineRequests')}
+            </h3>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {t('myMedicineRequestsDesc')}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => loadUserMedicineRequests()}
+            disabled={loadingMedicineRequests}
+            className="text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl cursor-pointer transition disabled:opacity-50"
+          >
+            {loadingMedicineRequests ? 'Refreshing...' : '🔄 Refresh'}
+          </button>
+
+          <button
+            onClick={() => openRequestModal()}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition cursor-pointer shadow-xs flex items-center gap-1.5"
+          >
+            <span>+</span>
+            <span>{t('newRequest')}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 text-xs">
+        {[
+          { id: 'ALL', label: 'All' },
+          { id: 'ACTIVE', label: t('inProgressProposals') },
+          { id: 'COMPLETED', label: t('convertedToOrders') }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => {
+              setStatusFilter(tab.id);
+              void loadUserMedicineRequests({ page: 1, statusGroup: tab.id });
+            }}
+            className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer whitespace-nowrap ${
+              statusFilter === tab.id
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Requests List */}
+      {medicineRequestsError ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
+          <p>{medicineRequestsError}</p>
+          <button
+            type="button"
+            onClick={() => loadUserMedicineRequests()}
+            disabled={loadingMedicineRequests}
+            className="mt-2 font-bold underline underline-offset-2 disabled:opacity-50"
+          >
+            Try again
+          </button>
+        </div>
+      ) : loadingMedicineRequests && medicineRequests.length === 0 ? (
+        <div className="space-y-3 py-6 animate-pulse">
+          {[1, 2, 3].map(n => (
+            <div key={n} className="h-24 bg-slate-100 dark:bg-slate-800 rounded-2xl w-full"></div>
+          ))}
+        </div>
+      ) : filteredRequests.length === 0 ? (
+        <div className="py-16 text-center text-slate-400 space-y-3">
+          <p className="text-4xl">💊</p>
+          <div className="max-w-sm mx-auto space-y-1">
+            <p className="text-xs font-bold text-slate-700">{t('noMedicineRequests')}</p>
+            <p className="text-[11px] text-slate-400">
+              {statusFilter === 'ALL'
+                ? "Can't find a medicine in our store? Ask QuickMeds Rx to procure it for you."
+                : t('noRequestsFilter')}
+            </p>
+          </div>
+          <button
+            onClick={() => openRequestModal()}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer shadow-sm"
+          >
+            Request a Medicine Now
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredRequests.map((req) => {
+            const firstItem = req.requestedItems?.[0] || {};
+            const proposal = req.pharmacyProposal;
+            const convertedOrder = findConvertedOrder(req.convertedOrderId);
+            const isOwner = String(req.customerId) === String(user?.id || user?.sub);
+
+            return (
+              <div
+                key={req._id}
+                className="bg-slate-50/70 hover:bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 transition space-y-3"
+              >
+                {/* Row Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/70 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-sm text-slate-900 font-mono">
+                      #{req.requestNumber}
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      • {new Date(req.createdAt).toLocaleDateString()}
+                    </span>
+                    {firstItem.originalAvailabilityStatus === 'OUT_OF_STOCK' && (
+                      <span className="text-[9px] font-bold uppercase bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded">
+                        Out of Stock Arrangement
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    {getStatusBadge(req.status)}
+                  </div>
+                </div>
+
+                {/* Requested Item Info */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                      Requested Medicine
+                    </span>
+                    <ul className="space-y-1">
+                      {(req.requestedItems || []).map((item, index) => (
+                        <li key={`${item.requestedName}-${index}`}>
+                          <p className="font-extrabold text-slate-900 text-sm">
+                            {item.requestedName || t('medicine')}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {item.dosageForm && `${item.dosageForm} • `}
+                            {item.strength && `${item.strength} • `}
+                            Qty: {item.quantity || 1}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                      Delivery Window
+                    </span>
+                    <p className="font-bold text-slate-800 text-xs">
+                      {proposal?.deliverySlot?.label
+                        ? proposal.deliverySlot.label
+                        : `Preference: ${req.preferredDeliveryPreference || 'Flexible'}`}
+                    </p>
+                    <p className="text-[11px] text-slate-500 truncate max-w-xs">
+                      📍 {req.deliveryAddress}
+                    </p>
+                  </div>
+
+                  <div className="space-y-0.5 sm:text-right">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                      {proposal?.priceType === 'APPROXIMATE' ? t('approximatePrice') : t('priceProposal')}
+                    </span>
+                    {proposal ? (
+                      <div>
+                        <span className="text-base font-black text-emerald-600">
+                          ₹{proposal.finalPrice ?? proposal.totalPrice ?? proposal.approximatePrice}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block">
+                          ({proposal.priceType === 'APPROXIMATE' ? t('approximate') : t('guaranteedFinalPrice')})
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-400 text-xs font-semibold">
+                        Awaiting Pharmacist Quote
+                      </span>
+                    )}
+                  </div>
+
+                </div>
+
+                {req.prescriptionVerification?.medicines?.length > 0 && (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-emerald-900">
+                          Prescription Medicines Extracted
+                        </p>
+                        <p className="text-[11px] text-emerald-800">{req.prescriptionVerification.status || 'PROCESSING'}</p>
+                      </div>
+                      {req.prescriptionVerification.overallConfidence > 0 && (
+                        <span className="rounded-lg bg-white px-2 py-1 text-[10px] font-bold text-emerald-700">
+                          {Math.round(req.prescriptionVerification.overallConfidence * 100)}% confidence
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2 space-y-1.5">
+                      {req.prescriptionVerification.medicines.map((medicine, index) => (
+                        <div key={`${medicine.rawName || medicine.normalizedName || index}-${index}`} className="rounded-xl bg-white border border-emerald-100 p-2.5">
+                          <p className="text-xs font-black text-slate-900">{medicine.normalizedName || medicine.rawName || 'Medicine'}</p>
+                          <p className="mt-0.5 text-[10px] text-slate-600">
+                            Strength: {medicine.strength?.value != null ? `${medicine.strength.value} ${medicine.strength.unit || ''}` : medicine.strength || '—'}
+                            {' • '}Dose: {medicine.dose?.value != null ? `${medicine.dose.value} ${medicine.dose.unit || ''}` : medicine.dose || '—'}
+                            {' • '}Frequency: {medicine.frequency?.normalized || medicine.frequency?.raw || medicine.frequency || '—'}
+                          </p>
+                          <p className="text-[10px] text-slate-500">
+                            Duration/Course: {medicine.duration?.value != null ? `${medicine.duration.value} ${medicine.duration.unit || ''}` : medicine.duration || '—'}
+                            {medicine.course?.value != null ? ` • Qty ${medicine.course.value}` : ''}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                    {req.prescriptionVerification.issues?.length > 0 && (
+                      <p className="mt-2 text-[10px] font-semibold text-amber-800">
+                        {req.prescriptionVerification.issues.join(' ')}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {req.prescriptionId && !['CONVERTED_TO_ORDER', 'CUSTOMER_APPROVED', 'CANCELLED', 'CUSTOMER_REJECTED', 'PHARMACY_REJECTED'].includes(req.status) && (
+                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-3">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-blue-900">{t('prescriptionDocument')}</p>
+                      <p className="text-[11px] text-blue-800">
+                        {req.prescriptionVerification?.status === 'PROCESSING'
+                          ? 'Processing the latest prescription…'
+                          : 'Need to correct or replace the prescription?'}
+                      </p>
+                    </div>
+                    <label className="cursor-pointer rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-black text-white hover:bg-blue-700">
+                      {isActionLoading(LOADING_ACTIONS.UPLOAD_PRESCRIPTION) && updatingPrescriptionId === req._id ? t('uploading') : t('updatePrescription')}
+                      <input
+                        type="file"
+                        accept="application/pdf,image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        disabled={updatingPrescriptionId === req._id}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = '';
+                          void handlePrescriptionReplacement(req, file);
+                        }}
+                      />
+                    </label>
+                  </div>
+                )}
+
+                {/* Proposal Callout Card / Action Bar */}
+                {isOwner && req.status === 'PROPOSAL_SENT' && (
+                  <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                    <div className="space-y-0.5">
+                      <p className="font-extrabold text-purple-950">
+                        🎉 QuickMeds Rx sent a proposal for #{req.requestNumber}!
+                      </p>
+                      <p className="text-[11px] text-blue-800">
+                        {proposal?.deliverySlot?.label || 'Scheduled delivery slot available'}. Review pricing and medicine formulation.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => onOpenProposal(req)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl shadow-xs transition cursor-pointer flex-shrink-0"
+                    >
+                      View & Confirm Proposal →
+                    </button>
+                  </div>
+                )}
+
+                {isOwner && ['REQUESTED', 'UNDER_REVIEW', 'FULFILLMENT_PROCESSING'].includes(req.status) && !req.fulfillmentCaseId && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <div>
+                      <p className="text-xs font-extrabold text-amber-950">Prefer to wait for this medicine?</p>
+                      <p className="text-[10px] text-amber-800">We will check stock and alert you when it becomes available.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <select aria-label="Stock wait period" value={waitDaysByRequest[req._id] || 3} onChange={event => setWaitDaysByRequest(current => ({ ...current, [req._id]: Number(event.target.value) }))} className="rounded-lg border border-amber-300 bg-white px-2 py-2 text-xs">
+                        {[1,2,3,4,5].map(days => <option key={days} value={days}>{days} day{days > 1 ? 's' : ''}</option>)}
+                      </select>
+                      <button type="button" disabled={waitingRequestId === String(req._id)} onClick={() => handleWaitForStock(req)} className="rounded-lg bg-amber-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50">
+                        {waitingRequestId === String(req._id) ? 'Saving…' : 'Wait for stock'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Linked Order Action */}
+                {req.convertedOrderId && (
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 text-xs">
+                    <span className="text-emerald-700 font-bold flex items-center gap-1.5">
+                      <span>✓</span>
+                      <span>Order #{String(req.convertedOrderId).slice(-6).toUpperCase()} created</span>
+                    </span>
+                    {onTrackOrder && (
+                      <button
+                        onClick={() => {
+                          const order = convertedOrder || { _id: req.convertedOrderId, orderStatus: 'Processing Order' };
+                          onTrackOrder(order);
+                        }}
+                        className="text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
+                      >
+                        Track Order Delivery →
+                      </button>
+                    )}
+                  </div>
+                )}
+
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {pagination.total > 0 && (
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          total={pagination.total}
+          pageSize={10}
+          onPageChange={(nextPage) => loadUserMedicineRequests({ page: nextPage, statusGroup: statusFilter })}
+          loading={loadingMedicineRequests}
+          label="medicine requests"
+        />
+      )}
+
+    </div>
+      </>
+  );
+}

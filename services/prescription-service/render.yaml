@@ -1,0 +1,23 @@
+services:
+  - type: pserv
+    name: prescription-service-api
+    runtime: python
+    rootDir: services/prescription-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SERVICE_AUTH_SECRET
+        sync: false
+      - key: SERVICE_JWT_ISSUER
+        value: ashvin-pharmacy
+      - key: PRESCRIPTION_SERVICE_JWT_AUDIENCE
+        value: prescription-service
+  - type: worker
+    name: prescription-service-worker
+    runtime: python
+    rootDir: services/prescription-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.workers

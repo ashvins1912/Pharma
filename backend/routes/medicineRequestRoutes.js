@@ -1,0 +1,1373 @@
+import express from 'express';
+import { createHash, randomUUID } from 'node:crypto';
+import multer from 'multer';
+import mongoose from 'mongoose';
+import dataStore from '../dataStore.js';
+import { authenticateUser, requirePermission } from '../middleware/auth.js';
+import { getPrescription, savePrescription } from '../config/prescriptionStorage.js';
+import { getIsConnected } from '../config/db.js';
+import MedicineRequest from '../models/MedicineRequest.js';
+import { inventoryClient } from '../services/inventory-client/InventoryClient.js';
+import Order from '../models/Order.js';
+import UserAddress from '../models/UserAddress.js';
+import Tenant from '../models/Tenant.js';
+import TenantBranch from '../models/TenantBranch.js';
+import FulfillmentCase from '../models/FulfillmentCase.js';
+import { validateWaitWindow } from '../services/intelligentFulfillment/fulfillmentPlanner.js';
+import { recoverStaleMedicineRequestConfirmations } from '../services/intelligentFulfillment/waitlistMonitor.js';
+import { cacheService } from '../services/cache/CacheService.js';
+import { customerService } from '../services/customer-service/CustomerService.js';
+import prescriptionClient from '../services/prescription-service-client/PrescriptionClient.js';
+
+const router = express.Router();
+
+const publishMedicineRequestUpdated = (request, reason) => {
+    const tenantId = String(request?.tenantId || '').trim();
+    if (!tenantId) return;
+    const customerId = String(request?.customerId || request?.userId || '').trim();
+    const payload = {
+        eventId: randomUUID(),
+        tenantId,
+        branchId: request?.branchId ? String(request.branchId) : null,
+        ...(customerId ? { userId: customerId } : {}),
+        medicineRequestId: String(request?._id || request?.id || ''),
+        eventType: 'MEDICINE_REQUEST_UPDATED',
+        reason: String(reason || 'request.updated').slice(0, 80),
+        occurredAt: new Date().toISOString()
+    };
+    void cacheService.publishEvent('medicine_request_updated', payload, {
+        userId: customerId || null,
+        tenantId
+    }).catch(error => console.warn('[MedicineRequestRealtime] Event publish failed:', error?.message || error));
+};
+
+const resolveRequestBranchId = async (tenantId, requestedBranchId, user = {}) => {
+    const branchId = String(requestedBranchId || user?.branchId || user?.app_metadata?.branchId || '').trim();
+    if (branchId) {
+        const branch = await TenantBranch.findOne({ _id: branchId, tenantId: String(tenantId), status: 'ACTIVE' }).select('_id').lean();
+        if (!branch) throw Object.assign(new Error('The selected pharmacy branch is no longer active.'), { statusCode: 404 });
+        return String(branch._id);
+    }
+    const defaultBranch = await TenantBranch.findOne({ tenantId: String(tenantId), status: 'ACTIVE' })
+        .sort({ isDefault: -1, createdAt: 1 }).select('_id').lean();
+    return defaultBranch ? String(defaultBranch._id) : null;
+};
+
+const loadInventoryFulfillmentData = async ({ tenantId, branchId, productIds = [], requestedItems = [], userId }) => {
+    if (!tenantId || !branchId) throw Object.assign(new Error('Select an active pharmacy branch to check medicine availability.'), { statusCode: 400 });
+    const inventoryResponse = productIds.length
+        ? await inventoryClient.lookup({ productIds, tenantId, branchId, userId })
+        : { items: [] };
+    const inventory = inventoryResponse.items || [];
+    const compositionKeys = [...new Set(requestedItems.map(item => String(item.composition || item.genericName || '').trim()).filter(Boolean))];
+    const strengthKeys = [...new Set(requestedItems.map(item => String(item.strength || '').trim()).filter(Boolean))];
+    const catalogResults = compositionKeys.length
+        ? await Promise.all(compositionKeys.map(composition => inventoryClient.searchProducts({
+            tenantId, branchId, query: composition, includeOutOfStock: true, limit: 100, userId
+        })))
+        : [];
+    const excluded = new Set(productIds.map(String));
+    const catalog = [...new Map(catalogResults.flatMap(result => result.items || [])
+        .filter(product => compositionKeys.some(composition => String(product.genericName || product.composition || '').trim().toLowerCase() === composition.toLowerCase()))
+        .filter(product => strengthKeys.some(strength => String(product.strength || '').trim().toLowerCase() === strength.toLowerCase()))
+        .filter(product => !excluded.has(String(product.productId)))
+        .map(product => [String(product.productId), product])).values()];
+    return { inventory, catalog };
+};
+
+const requireDatabase = (res) => {
+    if (getIsConnected()) return true;
+    res.status(503).json({ message: 'Medicine requests require an active database connection.' });
+    return false;
+};
+
+const isStaff = (user) => [
+    'ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN', 'PHARMACY',
+    'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF',
+    'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'
+].includes(String(user?.app_metadata?.role || user?.role || '').toUpperCase());
+
+const requireCustomer = (req, res, next) => {
+    const role = req.user?.app_metadata?.role || req.user?.role || 'customer';
+    if (!['customer', 'authenticated'].includes(role)) {
+        return res.status(403).json({ message: 'This action is available to customers only.' });
+    }
+    return next();
+};
+
+const authorizeCustomerAction = (req, res, next) => {
+    if (req.baseUrl.startsWith('/api/admin/')) {
+        return res.status(403).json({ message: 'Customer decisions must use the customer medicine request API.' });
+    }
+    return requireCustomer(req, res, next);
+};
+
+const authorizeRequestList = (req, res, next) => {
+    if (req.baseUrl.startsWith('/api/admin/')) {
+        return requirePermission('medicine_requests.read')(req, res, next);
+    }
+    return requireCustomer(req, res, next);
+};
+
+const getRequestActorTenantId = req => req.user?.tenantId || req.user?.app_metadata?.tenantId || null;
+const isPlatformRequestAdmin = req => ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN']
+    .includes(String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase());
+
+const authorizeRequestDetails = async (req, res, next) => {
+    if (req.params.fileId) return next(); // Attachment ownership is checked against file metadata in its handler.
+    if (req.baseUrl.startsWith('/api/admin/') && !isStaff(req.user)) {
+        return res.status(403).json({ message: 'You are not authorized to view this medicine request.' });
+    }
+    if (!requireDatabase(res)) return;
+    try {
+        const request = await dataStore.getMedicineRequestById(req.params.id, req.user);
+        if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
+        req.authorizedMedicineRequest = request;
+        return next();
+    } catch (error) {
+        return res.status(error.statusCode || 503).json({ message: 'Unable to authorize medicine request access.' });
+    }
+};
+
+const allowedMimeTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024, files: 2 },
+    fileFilter: (req, file, callback) => {
+        if (!allowedMimeTypes.has(file.mimetype)) {
+            return callback(new Error('Uploaded file must be a PDF, JPEG, PNG, or WebP file.'));
+        }
+        callback(null, true);
+    }
+});
+
+const validateFileSignature = (file) => {
+    if (!file || !file.buffer) return true;
+
+    const buffer = file.buffer;
+    const len = buffer.length;
+
+    // Helper functions for common buffer checks
+    const matchString = (start, end, str) => len >= end && buffer.subarray(start, end).toString('utf8') === str;
+    const matchBytes = (bytes) => len >= bytes.length && bytes.every((b, i) => buffer[i] === b);
+
+    // 1. PDF
+    if (file.mimetype === 'application/pdf') {
+        return matchString(0, 5, '%PDF-');
+    }
+
+    // 2. JPEG (Safe check requires only the first 2 marker bytes)
+    if (file.mimetype === 'image/jpeg') {
+        return matchBytes([0xFF, 0xD8]);
+    }
+
+    // 3. PNG
+    if (file.mimetype === 'image/png') {
+        return matchBytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+    }
+
+    // 4. WEBP
+    if (file.mimetype === 'image/webp') {
+        return matchString(0, 4, 'RIFF') && matchString(8, 12, 'WEBP');
+    }
+
+    // 5. GIF
+    if (file.mimetype === 'image/gif') {
+        return matchString(0, 3, 'GIF');
+    }
+
+    // 6. BMP
+    if (file.mimetype === 'image/bmp' || file.mimetype === 'image/x-ms-bmp') {
+        return matchString(0, 2, 'BM');
+    }
+
+    // 7. TIFF
+    if (file.mimetype === 'image/tiff') {
+        return matchBytes([0x49, 0x49, 0x2A, 0x00]) || matchBytes([0x4D, 0x4D, 0x00, 0x2A]);
+    }
+
+    // 8. HEIC / HEIF (Robust check for container major/compatible brands)
+    if (file.mimetype === 'image/heic' || file.mimetype === 'image/heif') {
+        if (!matchString(4, 8, 'ftyp')) return false;
+        const brand = len >= 12 ? buffer.subarray(8, 12).toString('utf8') : '';
+        return ['heic', 'heix', 'hevc', 'heim', 'mif1', 'msf1'].includes(brand);
+    }
+
+    // 9. AVIF (Robust check for container major/compatible brands)
+    if (file.mimetype === 'image/avif') {
+        if (!matchString(4, 8, 'ftyp')) return false;
+        const brand = len >= 12 ? buffer.subarray(8, 12).toString('utf8') : '';
+        return ['avif', 'avis'].includes(brand);
+    }
+
+    // 10. SVG (Safely inspect XML tags while stripping non-printable padding)
+    if (file.mimetype === 'image/svg+xml') {
+        const sample = buffer.subarray(0, Math.min(len, 512)).toString('utf8').trim().toLowerCase();
+        return sample.includes('<svg') || sample.includes('<?xml');
+    }
+
+    return false;
+};
+
+
+const normalizePrescriptionVerification = prescription => ({
+    status: prescription?.status === 'APPROVED'
+        ? 'MATCHED'
+        : prescription?.status === 'REVIEW_REQUIRED'
+            ? 'REVIEW_REQUIRED'
+            : prescription?.status === 'REJECTED'
+                ? 'REJECTED'
+                : prescription?.status === 'INACTIVE'
+                    ? 'INACTIVE'
+                    : 'PROCESSING',
+    prescriptionId: prescription?.prescriptionId || null,
+    patientPuid: prescription?.patientPuid || null,
+    overallConfidence: Number(prescription?.quality?.overallConfidence || prescription?.extraction?.overallConfidence || 0),
+    lastCheckedAt: new Date(),
+    source: 'PYTHON_PRESCRIPTION_SERVICE',
+    medicines: (prescription?.medicines || prescription?.extraction?.medicines || []).map((medicine, index) => ({
+        rawName: medicine.rawName || '',
+        normalizedName: medicine.normalizedName || medicine.rawName || '',
+        strength: medicine.strength || null,
+        dose: medicine.dose || null,
+        frequency: medicine.frequency || null,
+        duration: medicine.duration || null,
+        course: medicine.course || null,
+        instructions: medicine.instructions || null,
+        confidence: Number(medicine.confidence || 0),
+        validationStatus: medicine.medicineValidation?.status || 'EXTRACTED',
+        productId: medicine.medicineValidation?.productId || null,
+        prescriptionMedicineIndex: index
+    })),
+    issues: prescription?.status === 'REVIEW_REQUIRED'
+        ? ['Prescription requires pharmacist verification.']
+        : prescription?.status === 'REJECTED'
+            ? ['Prescription was rejected.']
+            : []
+});
+
+const syncPrescriptionVerification = async request => {
+    if (!request?.prescriptionId || !prescriptionClient.isConfigured()) return request;
+    const currentStatus = request.prescriptionVerification?.status;
+    if (currentStatus && currentStatus !== 'PROCESSING') return request;
+    try {
+        const prescription = await prescriptionClient.get(request.prescriptionId, {
+            userId: request.customerId,
+            tenantId: request.tenantId || null,
+            branchId: request.branchId || null,
+            role: 'customer'
+        });
+        const verification = normalizePrescriptionVerification(prescription);
+        const updated = await MedicineRequest.findOneAndUpdate(
+            { _id: request._id },
+            { $set: { prescriptionVerification: verification } },
+            { new: true }
+        ).lean();
+        return updated || { ...request, prescriptionVerification: verification };
+    } catch {
+        return request;
+    }
+};
+
+const handleAttachments = (req, res, next) => {
+    upload.fields([
+        { name: 'prescription', maxCount: 1 },
+        { name: 'productImage', maxCount: 1 }
+    ])(req, res, (err) => {
+        if (err) return res.status(400).json({ message: err.message || 'File upload error.' });
+        const presFile = req.files?.prescription?.[0];
+        const imgFile = req.files?.productImage?.[0];
+        if (presFile && !validateFileSignature(presFile)) {
+            return res.status(400).json({ message: 'The uploaded prescription file format is invalid.' });
+        }
+        if (imgFile && !validateFileSignature(imgFile)) {
+            return res.status(400).json({ message: 'The uploaded product image file format is invalid.' });
+        }
+        next();
+    });
+};
+
+// -------------------------------------------------------------
+// CUSTOMER APIS
+// -------------------------------------------------------------
+
+// Replace/re-upload the prescription for an existing customer medicine request.
+router.put('/:id/prescription', authenticateUser, requirePermission('medicine_requests.create'), authorizeCustomerAction, handleAttachments, async (req, res) => {
+    try {
+        if (!requireDatabase(res)) return;
+        const customerId = req.user.sub;
+        const request = await MedicineRequest.findOne({ _id: req.params.id, customerId });
+        if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
+
+        if (['CONVERTED_TO_ORDER', 'CUSTOMER_APPROVED', 'CANCELLED', 'CUSTOMER_REJECTED', 'PHARMACY_REJECTED'].includes(request.status)) {
+            return res.status(409).json({ message: 'This medicine request cannot accept a prescription update in its current state.' });
+        }
+        const presFile = req.files?.prescription?.[0];
+        if (!presFile) return res.status(400).json({ message: 'A replacement prescription file is required.' });
+        const oldUrl = request.prescriptionUrl || null;
+        const newUrl = await savePrescription(presFile, customerId, request.tenantId || null);
+        try {
+            let prescriptionId = request.prescriptionId;
+            let result = null;
+            if (!prescriptionId) {
+                result = await prescriptionClient.upload({
+                    buffer: presFile.buffer,
+                    filename: presFile.originalname,
+                    contentType: presFile.mimetype,
+                    idempotencyKey: req.get('idempotency-key') || `medicine-request-upload:${request._id}:${Date.now()}`,
+                    userId: customerId,
+                    tenantId: request.tenantId || req.user.tenantId || null,
+                    branchId: request.branchId || req.user.branchId || null,
+                    role: req.user.app_metadata?.role || req.user.role || 'customer',
+                    patientPuid: request.patientPuid || null
+                });
+                prescriptionId = result?.prescriptionId || null;
+            } else {
+                result = await prescriptionClient.replace(prescriptionId, {
+                    buffer: presFile.buffer,
+                    filename: presFile.originalname,
+                    contentType: presFile.mimetype,
+                    idempotencyKey: req.get('idempotency-key') || `medicine-request-replace:${request._id}:${Date.now()}`,
+                    userId: customerId,
+                    tenantId: request.tenantId || req.user.tenantId || null,
+                    branchId: request.branchId || req.user.branchId || null,
+                    role: req.user.app_metadata?.role || req.user.role || 'customer'
+                });
+            }
+            const verification = {
+                status: 'PROCESSING',
+                prescriptionId,
+                patientPuid: request.patientPuid || null,
+                overallConfidence: 0,
+                lastCheckedAt: new Date(),
+                source: 'PYTHON_PRESCRIPTION_SERVICE',
+                medicines: [],
+                issues: [],
+                documentVersion: result?.documentVersion || null
+            };
+            const updated = await MedicineRequest.findOneAndUpdate(
+                { _id: request._id, customerId },
+                {
+                    $set: { prescriptionUrl: newUrl, prescriptionId, prescriptionVerification: verification },
+                    $push: {
+                        auditTrail: {
+                            action: 'PRESCRIPTION_UPDATED',
+                            actorId: customerId,
+                            role: 'Customer',
+                            timestamp: new Date(),
+                            notes: 'Customer uploaded or replaced the prescription document; previous extraction is no longer authoritative.'
+                        }
+                    }
+                },
+                { new: true }
+            ).lean();
+            if (oldUrl && oldUrl !== newUrl) {
+                try { await (await import('../config/prescriptionStorage.js')).removePrescription(oldUrl); } catch {}
+            }
+            if (updated) publishMedicineRequestUpdated(updated, 'prescription.updated');
+            return res.json({
+                success: true,
+                request: updated,
+                prescription: result,
+                message: 'Prescription updated. It has been queued for reprocessing and re-verification.'
+            });
+        } catch (error) {
+            try { await (await import('../config/prescriptionStorage.js')).removePrescription(newUrl); } catch {}
+            return res.status(error.statusCode || 503).json({
+                code: error.code || 'PRESCRIPTION_UPDATE_FAILED',
+                message: error.message || 'Prescription update could not be processed.'
+            });
+        }
+    } catch (error) {
+        console.error('Prescription replacement failed:', error);
+        return res.status(500).json({ message: 'Unable to update prescription.' });
+    }
+});
+
+// Create a new medicine request
+router.post('/', authenticateUser, requirePermission('medicine_requests.create'), authorizeCustomerAction, handleAttachments, async (req, res) => {
+    try {
+        if (!requireDatabase(res)) return;
+
+        const customerId = req.user.sub;
+        const customer = await customerService.ensureCustomerForUser(customerId, {
+            name: req.user.user_metadata?.name,
+            email: req.user.email,
+            phone: req.user.user_metadata?.mobile
+        });
+        const patientPuid = String(req.body.patientPuid || customer.selfPuid || '').trim() || null;
+        if (patientPuid) {
+            try {
+                await customerService.assertUserCanAccessPuid(customerId, patientPuid);
+            } catch (error) {
+                return res.status(error.statusCode || 403).json({
+                    code: 'PUID_ACCESS_DENIED',
+                    message: 'You are not authorized to use this patient profile for the prescription.'
+                });
+            }
+        }
+        const addressId = String(req.body.addressId || '').trim();
+        if (!addressId) {
+            return res.status(400).json({
+                code: 'ADDRESS_REQUIRED',
+                message: 'Select a saved delivery address before submitting this medicine request.'
+            });
+        }
+        let selectedAddress = null;
+        if (mongoose.isValidObjectId(addressId)) {
+            selectedAddress = await UserAddress.findOne({
+                _id: addressId,
+                userId: customerId
+            }).lean();
+        }
+        if (!selectedAddress) {
+            selectedAddress = await dataStore.getUserAddress(customerId, addressId);
+        }
+        if (!selectedAddress) {
+            return res.status(404).json({ message: 'The selected saved address was not found.' });
+        }
+
+        let requestedItems = req.body.requestedItems;
+        if (typeof requestedItems === 'string') {
+            try {
+                requestedItems = JSON.parse(requestedItems);
+            } catch {
+                requestedItems = [];
+            }
+        }
+        if (!requestedItems || !requestedItems.length) {
+            // Single-item shorthand support from form fields
+            requestedItems = [
+                {
+                    requestedName: req.body.requestedName || req.body.medicineName || '',
+                    strength: req.body.strength || '',
+                    dosageForm: req.body.dosageForm || '',
+                    manufacturer: req.body.manufacturer || '',
+                    quantity: Number(req.body.quantity) || 1,
+                    originalAvailabilityStatus: req.body.originalAvailabilityStatus || 'NOT_IN_CATALOG'
+                }
+            ];
+        }
+
+        let prescriptionUrl = req.body.prescriptionUrl || null;
+        let prescriptionId = req.body.prescriptionId || null;
+        let productImageUrl = req.body.productImageUrl || null;
+        let prescriptionVerification = null;
+        let savedPrescriptionUrl = null;
+
+        const selectedTenantId = String(req.body.tenantId || req.body.selectedTenantId || '').trim();
+        if (!selectedTenantId) {
+            return res.status(400).json({ message: 'Select a pharmacy before submitting a medicine procurement request.' });
+        }
+        const selectedTenant = await Tenant.findOne({ _id: selectedTenantId, status: 'ACTIVE' }).select('_id').lean();
+        if (!selectedTenant) return res.status(404).json({ message: 'Selected pharmacy is unavailable.' });
+
+        const presFile = req.files?.prescription?.[0];
+        if (presFile) {
+            savedPrescriptionUrl = await savePrescription(presFile, req.user.sub, selectedTenantId);
+            prescriptionUrl = savedPrescriptionUrl;
+
+            if (!prescriptionClient.isConfigured()) {
+                prescriptionVerification = {
+                    status: 'PROCESSING',
+                    prescriptionId: null,
+                    patientPuid,
+                    overallConfidence: 0,
+                    lastCheckedAt: new Date(),
+                    source: 'PRESCRIPTION_SERVICE_PENDING',
+                    medicines: [],
+                    issues: ['Prescription processing service is temporarily unavailable; pharmacy review is required before dispensing.']
+                };
+            } else try {
+                const result = await prescriptionClient.upload({
+                    buffer: presFile.buffer,
+                    filename: presFile.originalname,
+                    contentType: presFile.mimetype,
+                    idempotencyKey: req.get('idempotency-key') || `medicine-request:${customerId}:${Date.now()}`,
+                    userId: customerId,
+                    tenantId: selectedTenantId,
+                    branchId: req.body.branchId || req.user.branchId || req.user.app_metadata?.branchId || null,
+                    role: req.user.app_metadata?.role || req.user.role || 'customer',
+                    patientPuid
+                });
+                prescriptionId = result?.prescriptionId || null;
+                prescriptionVerification = {
+                    status: 'PROCESSING',
+                    prescriptionId,
+                    patientPuid,
+                    overallConfidence: 0,
+                    lastCheckedAt: new Date(),
+                    source: 'PYTHON_PRESCRIPTION_SERVICE',
+                    medicines: [],
+                    issues: []
+                };
+            } catch (error) {
+                prescriptionVerification = {
+                    status: 'PROCESSING',
+                    prescriptionId: null,
+                    patientPuid,
+                    overallConfidence: 0,
+                    lastCheckedAt: new Date(),
+                    source: 'PYTHON_PRESCRIPTION_SERVICE',
+                    medicines: [],
+                    issues: [error.message || 'Prescription processing could not be started; pharmacy review is required.']
+                };
+            }
+        } else if (prescriptionId) {
+            prescriptionVerification = {
+                status: 'PROCESSING',
+                prescriptionId,
+                patientPuid,
+                overallConfidence: 0,
+                lastCheckedAt: new Date(),
+                source: 'PYTHON_PRESCRIPTION_SERVICE',
+                medicines: [],
+                issues: []
+            };
+        }
+
+        const imgFile = req.files?.productImage?.[0];
+        if (imgFile) {
+            productImageUrl = await savePrescription(imgFile, req.user.sub, selectedTenantId);
+        }
+
+        const addressDetails = {
+            addressId: String(selectedAddress._id),
+            label: selectedAddress.label,
+            fullName: selectedAddress.fullName,
+            mobile: selectedAddress.mobile,
+            addressLine1: selectedAddress.addressLine1,
+            addressLine2: selectedAddress.addressLine2,
+            city: selectedAddress.city,
+            state: selectedAddress.state,
+            postalCode: selectedAddress.postalCode || selectedAddress.pincode || '',
+            pincode: selectedAddress.pincode,
+            landmark: selectedAddress.landmark,
+            country: selectedAddress.country,
+            coordinates: selectedAddress.coordinates
+        };
+        const deliveryAddress = selectedAddress.addressLine
+            || [selectedAddress.addressLine1, selectedAddress.addressLine2, selectedAddress.city, selectedAddress.state, selectedAddress.pincode]
+                .filter(Boolean)
+                .join(', ');
+
+        const requestDoc = await dataStore.createMedicineRequest({
+            tenantId: selectedTenantId,
+            branchId: req.user.branchId || req.user.app_metadata?.branchId || null,
+            urgencyLevel: req.body.urgencyLevel || 'Normal',
+            requestedItems,
+            prescriptionUrl,
+            prescriptionId,
+            patientPuid,
+            prescriptionVerification,
+            productImageUrl,
+            customerNote: req.body.customerNote || '',
+            addressId: String(selectedAddress._id),
+            deliveryAddress,
+            addressDetails,
+            coordinates: selectedAddress.coordinates,
+            preferredDeliveryPreference: req.body.preferredDeliveryPreference || 'Flexible',
+            customerPhone: req.body.customerPhone || ''
+        }, req.user);
+
+        res.status(201).json({
+            message: `Medicine request #${requestDoc.requestNumber} registered successfully. Our pharmacy team will review it.`,
+            request: requestDoc
+        });
+    } catch (err) {
+        console.error('Failed to create medicine request:', err);
+        const isDuplicate = err.code === 11000;
+        res.status(err.statusCode || (isDuplicate ? 409 : 400)).json({
+            message: isDuplicate
+                ? 'A duplicate request number was detected. Please retry your request.'
+                : err.message || 'Failed to submit medicine request.'
+        });
+    }
+});
+
+// Active pipeline excludes requests that have already produced a proposal.
+router.get('/active', authenticateUser, authorizeRequestList, async (req, res) => {
+    if (!getIsConnected()) {
+        return res.status(503).json({ message: 'Medicine requests are temporarily unavailable.' });
+    }
+
+    const staff = isStaff(req.user);
+
+    try {
+        const query = { status: { $nin: ['converted', 'CONVERTED_TO_ORDER'] } };
+        if (!staff) {
+            query.customerId = req.user.sub;
+        } else if (!isPlatformRequestAdmin(req)) {
+            const tenantId = getRequestActorTenantId(req);
+            if (!tenantId) return res.status(403).json({ message: 'An active pharmacy tenant is required.' });
+            query.tenantId = String(tenantId);
+            if (req.query.customerId) query.customerId = String(req.query.customerId);
+        } else if (req.query.tenantId) {
+            query.tenantId = String(req.query.tenantId);
+        }
+        const requests = await MedicineRequest.find(query).sort({ createdAt: -1 }).lean();
+        res.json({ requests });
+    } catch (error) {
+        console.error('Active medicine request retrieval failed:', error);
+        res.status(500).json({ message: 'Failed to fetch active medicine requests.' });
+    }
+});
+
+// Admin request queue. This explicit route is kept separate from the customer GET / route
+// so /api/medicine-requests/admin/all can never be interpreted as a customer request.
+const getAdminMedicineRequests = async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+        const pageSize = Math.min(50, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 8));
+        const result = await dataStore.getMedicineRequestsPage(req.query, req.user, page, pageSize);
+        let requests = result.requests || [];
+        if (prescriptionClient.isConfigured()) {
+            requests = await Promise.all(requests.map(request => syncPrescriptionVerification(request)));
+        }
+        return res.json({ requests, items: requests, pagination: result.pagination });
+    } catch (err) {
+        console.error('Failed to fetch admin medicine requests:', err);
+        return res.status(err.statusCode || 500).json({ message: err.message || 'Failed to fetch medicine requests.' });
+    }
+};
+
+// Legacy/admin UI contract. Must remain before /:id.
+router.get('/admin/all', authenticateUser, requirePermission('medicine_requests.read'), getAdminMedicineRequests);
+
+// Get customer's medicine requests
+router.get('/', authenticateUser, authorizeRequestList, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 3));
+        const staff = isStaff(req.user);
+        const platformAdmin = isPlatformRequestAdmin(req);
+        const actorTenantId = getRequestActorTenantId(req);
+        const expiryScope = platformAdmin
+            ? {}
+            : staff
+                ? (actorTenantId ? { tenantId: String(actorTenantId) } : { tenantId: '__NO_TENANT_ACCESS__' })
+                : { customerId: req.user.sub };
+        await MedicineRequest.updateMany(
+            { ...expiryScope, status: 'converted', pharmacyProposal: { $ne: null } },
+            { $set: { status: 'PROPOSAL_SENT' } }
+        );
+        await MedicineRequest.updateMany(
+            { ...expiryScope, status: 'PROPOSAL_SENT', expiresAt: { $lt: new Date() } },
+            { $set: { status: 'EXPIRED' } }
+        );
+        if (req.baseUrl.startsWith('/api/admin/') || staff) {
+            return getAdminMedicineRequests(req, res);
+        }
+
+        // Customer request-list refresh is also the recovery trigger for an
+        // interrupted intelligent confirmation. Without this, an abandoned
+        // FULFILLMENT_PROCESSING state could remain visible indefinitely when
+        // the customer has no stock-waitlist card to open.
+        await recoverStaleMedicineRequestConfirmations({ customerId: String(req.user.sub) });
+        const query = { customerId: req.user.sub };
+
+        const statusGroup = String(req.query.statusGroup || '').toUpperCase();
+        if (statusGroup === 'ACTIVE') {
+            query.status = { $in: ['REQUESTED', 'UNDER_REVIEW', 'FULFILLMENT_PROCESSING', 'PROPOSAL_SENT', 'WAITING_FOR_STOCK', 'READY_FOR_CONFIRMATION'] };
+        } else if (statusGroup === 'COMPLETED') {
+            query.status = { $in: ['CUSTOMER_APPROVED', 'CONVERTED_TO_ORDER'] };
+        } else if (req.query.status && req.query.status !== 'ALL') {
+            query.status = String(req.query.status);
+        }
+        if (req.query.search && String(req.query.search).trim()) {
+            const search = String(req.query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            query.$or = [
+                { requestNumber: { $regex: search, $options: 'i' } },
+                { customerName: { $regex: search, $options: 'i' } },
+                { 'requestedItems.requestedName': { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        const total = await MedicineRequest.countDocuments(query);
+        const totalPages = Math.ceil(total / limit);
+        const currentPage = Math.min(page, Math.max(totalPages, 1));
+        let requests = await MedicineRequest.find(query)
+            .sort({ createdAt: -1, _id: -1 })
+            .skip((currentPage - 1) * limit)
+            .limit(limit)
+            .lean();
+        if (prescriptionClient.isConfigured()) {
+            requests = await Promise.all(requests.map(request => syncPrescriptionVerification(request)));
+        }
+        res.json({
+            requests,
+            items: requests,
+            pagination: {
+                page: currentPage,
+                pageSize: limit,
+                limit,
+                total,
+                totalPages,
+                hasNextPage: currentPage < totalPages,
+                hasPreviousPage: currentPage > 1
+            }
+        });
+    } catch (err) {
+        console.error('Failed to fetch medicine requests:', err);
+        res.status(500).json({ message: 'Failed to fetch your medicine requests.' });
+    }
+});
+
+// Admin/pharmacy pending-work count; count is always queried from persisted request statuses.
+router.get('/pending-count', authenticateUser, requirePermission('medicine_requests.pending_count'), async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const tenantId = isPlatformRequestAdmin(req) ? (req.query.tenantId || null) : getRequestActorTenantId(req);
+        if (!isPlatformRequestAdmin(req) && !tenantId) return res.status(403).json({ message: 'An active pharmacy tenant is required.' });
+        const count = await dataStore.getPendingMedicineRequestCount(tenantId);
+        res.json({ count });
+    } catch (error) {
+        console.error('Pending medicine request count retrieval failed:', error);
+        res.status(500).json({ message: 'Failed to fetch pending medicine request count.' });
+    }
+});
+
+// View attachment securely
+router.get('/attachments/:fileId', authenticateUser, authorizeRequestDetails, async (req, res) => {
+    try {
+        const file = await getPrescription(req.params.fileId);
+        if (!file) return res.status(404).json({ message: 'Attachment file not found.' });
+
+        const role = String(req.user?.app_metadata?.role || req.user?.role || '').toUpperCase();
+        const platformAdmin = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(role);
+        const actorTenantId = getRequestActorTenantId(req);
+        const tenantStaff = ['PHARMACY', 'TENANT_ADMIN', 'TENANT_OWNER', 'PHARMACIST', 'PHARMACY_STAFF', 'ORDER_MANAGER', 'INVENTORY_MANAGER', 'DISPATCHER', 'BRANCH_ADMIN'].includes(role);
+        const ownerAccess = String(file.ownerId || '') === String(req.user.sub);
+        const tenantAccess = tenantStaff && actorTenantId && file.tenantId
+            && String(actorTenantId) === String(file.tenantId);
+        if (!ownerAccess && !tenantAccess && !platformAdmin) {
+            return res.status(404).json({ message: 'Attachment file not found.' });
+        }
+
+        res.set('Content-Type', file.contentType || 'application/octet-stream');
+        res.set('Content-Disposition', 'inline; filename="attachment"');
+        res.set('X-Content-Type-Options', 'nosniff');
+        res.set('Cache-Control', 'private, no-store');
+
+        if (file.stream) {
+            file.stream.on('error', error => {
+                console.error('Attachment streaming failed:', error);
+                if (!res.headersSent) res.status(500).end();
+            });
+            file.stream.pipe(res);
+        } else {
+            res.send(file.buffer);
+        }
+    } catch (err) {
+        console.error('Attachment retrieval failed:', err);
+        res.status(500).json({ message: 'Failed to retrieve attachment.' });
+    }
+});
+
+// Get specific request details
+router.get('/:id', authenticateUser, authorizeRequestDetails, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const request = await dataStore.getMedicineRequestById(req.params.id, req.user);
+        if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
+        res.json({ request });
+    } catch (err) {
+        res.status(err.statusCode || 500).json({ message: err.message || 'Failed to fetch medicine request.' });
+    }
+});
+
+// Return the real Python Prescription Service extraction/verification result.
+router.get('/:id/scan-prescription', authenticateUser, authorizeRequestDetails, async (req, res) => {
+    try {
+        const request = await dataStore.getMedicineRequestById(req.params.id, req.user);
+        if (!request) return res.status(404).json({ success: false, message: 'Medicine request not found.' });
+        if (!request.prescriptionId) {
+            return res.status(409).json({
+                success: false,
+                code: 'PRESCRIPTION_NOT_LINKED',
+                message: 'This request does not have a linked Prescription Service record.'
+            });
+        }
+        if (!prescriptionClient.isConfigured()) {
+            return res.status(503).json({ success: false, code: 'PRESCRIPTION_SERVICE_UNAVAILABLE', message: 'Prescription processing service is unavailable.' });
+        }
+
+        const prescription = await prescriptionClient.get(request.prescriptionId, {
+            userId: req.user.sub,
+            tenantId: req.user.tenantId || req.user.app_metadata?.tenantId || request.tenantId || null,
+            branchId: req.user.branchId || req.user.app_metadata?.branchId || request.branchId || null,
+            role: req.user.app_metadata?.role || req.user.role || 'admin',
+            isAdmin: isStaff(req.user)
+        });
+        const verification = normalizePrescriptionVerification(prescription);
+        const updated = await MedicineRequest.findByIdAndUpdate(
+            request._id,
+            { $set: { prescriptionVerification: verification } },
+            { new: true }
+        ).lean();
+
+        return res.json({
+            success: true,
+            prescriptionId: request.prescriptionId,
+            verified: prescription.status === 'APPROVED',
+            status: prescription.status,
+            confidence: verification.overallConfidence,
+            scannedMedicines: verification.medicines,
+            issues: verification.issues,
+            rawText: prescription.extraction?.rawText || null,
+            ocrModel: prescription.extraction?.ocrVersion || null,
+            verifiedAt: verification.lastCheckedAt,
+            request: updated || request
+        });
+    } catch (error) {
+        console.error('Prescription scan failed:', error);
+        res.status(error.statusCode || 503).json({
+            success: false,
+            message: error.message || 'Failed to read prescription processing result.'
+        });
+    }
+});
+
+
+
+
+router.get('/:id/fulfillment-options', authenticateUser, requirePermission('medicine_requests.read'), authorizeRequestDetails, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    if (!isStaff(req.user)) return res.status(403).json({ message: 'Pharmacy staff access is required.' });
+    try {
+        const request = req.authorizedMedicineRequest;
+        if (!request?.tenantId) return res.status(409).json({ message: 'This request is not linked to an active pharmacy.' });
+        const results = [];
+        for (let index = 0; index < (request.requestedItems || []).length; index += 1) {
+            const item = request.requestedItems[index];
+            if (!item.composition || !item.strength || !item.dosageForm) {
+                results.push({ itemIndex: index, requestedName: item.requestedName, options: [], reason: 'Composition, strength and dosage form are required before safe alternatives can be suggested.' });
+                continue;
+            }
+            const branchId = await resolveRequestBranchId(request.tenantId, request.branchId, req.user);
+            const result = await inventoryClient.searchProducts({
+                tenantId: String(request.tenantId), branchId,
+                query: String(item.composition).trim(), includeOutOfStock: true, limit: 100,
+                userId: req.user.sub
+            });
+            const products = (result.items || []).filter(product =>
+                String(product.genericName || product.composition || '').trim().toLowerCase() === String(item.composition).trim().toLowerCase()
+                && String(product.strength || '').trim().toLowerCase() === String(item.strength).trim().toLowerCase()
+                && String(product.dosageForm || product.form || '').trim().toLowerCase() === String(item.dosageForm).trim().toLowerCase()
+            );
+            const options = products.map(product => {
+                const unitPrice = Number(product.price || 0);
+                const discountPercentage = Math.min(100, Math.max(0, Number(product.discountPercentage || 0)));
+                const discountedUnitPrice = Math.round(unitPrice * (1 - discountPercentage / 100) * 100) / 100;
+                return {
+                    productId: String(product.productId), medicineName: product.name,
+                    manufacturer: product.manufacturer || product.brand || '',
+                    composition: product.composition || product.genericName || '', strength: product.strength || '',
+                    dosageForm: product.dosageForm || product.form || '',
+                    unitPrice, listPrice: unitPrice, discountPercentage,
+                    discountedUnitPrice,
+                    availableQuantity: Number(product.availableQuantity || 0),
+                    requiresPrescription: Boolean(product.requiresPrescription),
+                    requiresPharmacistApproval: Boolean(item.source === 'PRESCRIPTION_EXTRACTED' || request.prescriptionId || request.prescriptionUrl),
+                    customerConsentRequired: true
+                };
+            }).filter(option => option.availableQuantity > 0 && option.unitPrice >= 0)
+              .sort((a, b) => a.discountedUnitPrice - b.discountedUnitPrice);
+            results.push({ itemIndex: index, requestedName: item.requestedName, requestedQuantity: item.quantity, options });
+        }
+        return res.json({ requestId: String(request._id), tenantId: String(request.tenantId), items: results });
+    } catch (error) {
+        return res.status(error.statusCode || 503).json({ message: 'Unable to calculate safe fulfilment options.' });
+    }
+});
+
+router.post('/:id/waitlist', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, authorizeRequestDetails, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    let requestFingerprint = null;
+    try {
+        const request = req.authorizedMedicineRequest;
+        if (!request?.tenantId) return res.status(409).json({ message: 'Select a pharmacy before waiting for stock.' });
+        if (['CONVERTED_TO_ORDER', 'CUSTOMER_APPROVED', 'CANCELLED', 'CUSTOMER_REJECTED', 'PHARMACY_REJECTED', 'EXPIRED'].includes(request.status)) {
+            return res.status(409).json({ message: 'This medicine request cannot be placed on a stock waitlist in its current state.' });
+        }
+        const idempotencyKey = String(req.get('Idempotency-Key') || '').trim();
+        if (!idempotencyKey || idempotencyKey.length > 128) return res.status(400).json({ message: 'A valid Idempotency-Key header is required.' });
+        const { waitDays, waitUntil } = validateWaitWindow(req.body?.waitDays);
+        requestFingerprint = createHash('sha256').update(JSON.stringify({ sourceId: String(request._id), waitDays, requestedItems: (request.requestedItems || []).map(item => ({ name: item.requestedName, composition: item.composition, strength: item.strength, dosageForm: item.dosageForm, quantity: item.quantity })) })).digest('hex');
+        const existing = await FulfillmentCase.findOne({ customerId: String(req.user.sub), tenantId: String(request.tenantId), idempotencyKey }).lean();
+        if (existing) {
+            if (existing.requestFingerprint !== requestFingerprint) return res.status(409).json({ message: 'This idempotency key was already used for a different request.' });
+            return res.json({ case: existing, alreadyCreated: true });
+        }
+        const requestedItems = Array.isArray(request.requestedItems) ? request.requestedItems : [];
+        if (!requestedItems.length) return res.status(400).json({ message: 'No medicine line items are available to wait for.' });
+        const lines = requestedItems.map((item, index) => ({
+            productId: mongoose.isValidObjectId(item.productId) ? String(item.productId) : (mongoose.isValidObjectId(item.medicineId) ? String(item.medicineId) : null),
+            name: item.requestedName || item.name || `Requested medicine ${index + 1}`,
+            composition: item.composition || '',
+            strength: item.strength || '',
+            dosageForm: item.dosageForm || '',
+            manufacturer: item.manufacturer || '',
+            requestedQuantity: Number(item.quantity || 1),
+            allocatedQuantity: 0,
+            waitingQuantity: Number(item.quantity || 1),
+            customerDecision: 'ACCEPTED_ORIGINAL',
+            prescriptionRequired: Boolean(request.prescriptionId || request.prescriptionUrl)
+        }));
+        const caseNumber = 'FUL-' + randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase();
+        const created = await FulfillmentCase.create({
+            caseNumber, customerId: String(request.customerId), tenantId: String(request.tenantId),
+            branchId: request.branchId || null, sourceType: 'MEDICINE_REQUEST', sourceId: String(request._id),
+            addressId: request.addressId || null, deliveryAddress: request.deliveryAddress || '',
+            addressDetails: request.addressDetails || {}, coordinates: request.coordinates || null,
+            prescriptionUrl: request.prescriptionUrl || null, prescriptionId: request.prescriptionId || null,
+            patientPuid: request.patientPuid || null,
+            status: 'WAITING_FOR_STOCK', lines, waitDays, waitUntil, idempotencyKey, requestFingerprint,
+            auditTrail: [{ action: 'MEDICINE_REQUEST_WAITLISTED', actorId: String(req.user.sub), at: new Date(), waitDays, waitUntil }]
+        });
+        const updatedRequest = await MedicineRequest.findOneAndUpdate(
+            { _id: request._id, customerId: String(req.user.sub), status: request.status },
+            { $set: { status: 'WAITING_FOR_STOCK', fulfillmentCaseId: String(created._id), waitDays, waitUntil },
+              $push: { auditTrail: { action: 'WAITING_FOR_STOCK', actorId: String(req.user.sub), role: 'Customer', timestamp: new Date(), notes: `Customer requested a ${waitDays}-day stock wait window.` } } },
+            { new: true }
+        ).lean();
+        if (!updatedRequest) {
+            await FulfillmentCase.deleteOne({ _id: created._id, customerId: String(req.user.sub) });
+            return res.status(409).json({ message: 'Medicine request changed. Refresh and try again.' });
+        }
+        publishMedicineRequestUpdated(updatedRequest, 'request.waitlisted');
+        return res.status(201).json({ case: created.toObject(), request: updatedRequest, message: 'We will monitor availability for the selected wait period.' });
+    } catch (error) {
+        if (error.code === 11000) {
+            const existing = await FulfillmentCase.findOne({ customerId: String(req.user.sub), tenantId: String(req.authorizedMedicineRequest?.tenantId || ''), idempotencyKey: String(req.get('Idempotency-Key') || '') }).lean();
+            if (existing && existing.requestFingerprint === requestFingerprint) return res.status(200).json({ case: existing, alreadyCreated: true });
+            if (existing) return res.status(409).json({ message: 'This idempotency key was already used for a different request.' });
+        }
+        return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to create medicine stock waitlist.' });
+    }
+});
+
+// Customer availability preview for every line in a multi-item medicine request.
+router.get('/:id/fulfillment/preview', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const request = await MedicineRequest.findOne({ _id: req.params.id, customerId: String(req.user.sub) }).lean();
+        if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
+        if (!request.tenantId) return res.status(409).json({ message: 'This request is not linked to a pharmacy. Select a pharmacy and submit a new request.' });
+        const descriptors = (request.requestedItems || []).map(item => ({
+            medicineId: item.productId || (mongoose.isValidObjectId(item.medicineId) ? item.medicineId : undefined),
+            requestedName: item.requestedName, quantity: item.quantity,
+            composition: item.composition, strength: item.strength, dosageForm: item.dosageForm,
+            manufacturer: item.manufacturer,
+            requiresPrescription: Boolean(request.prescriptionId || request.prescriptionUrl)
+        }));
+        const ids = [...new Set(descriptors.map(item => String(item.medicineId || '')).filter(id => mongoose.isValidObjectId(id)))];
+        const branchId = await resolveRequestBranchId(request.tenantId, request.branchId, req.user);
+        const { inventory, catalog } = await loadInventoryFulfillmentData({
+            productIds: ids, tenantId: String(request.tenantId), branchId, requestedItems: descriptors, userId: req.user.sub
+        });
+        const plan = buildIntelligentFulfillmentPlan({ requestedItems: descriptors, inventory, catalog });
+
+        return res.json({ requestId: String(request._id), requestNumber: request.requestNumber, tenantId: request.tenantId, branchId, ...plan });
+    } catch (error) {
+        return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to check medicine request availability.' });
+    }
+});
+
+// Customer confirms a stock-aware split for a medicine request.
+router.post('/:id/fulfillment/confirm', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    let waitlistCase = null;
+    let createdOrder = null;
+    let claimed = false;
+    try {
+        const requestId = req.params.id;
+        const customerId = String(req.user.sub);
+        let request = await MedicineRequest.findOne({ _id: requestId, customerId }).lean();
+        if (!request) return res.status(404).json({ message: 'Medicine request not found.' });
+        if (request.status === 'FULFILLMENT_PROCESSING') {
+            const existingOrder = await Order.findOne({
+                medicineRequestId: String(request._id), userId: customerId, tenantId: String(request.tenantId || '')
+            }).sort({ createdAt: -1 }).lean();
+            if (existingOrder) {
+                const recovered = await MedicineRequest.findOneAndUpdate(
+                    { _id: request._id, customerId, status: 'FULFILLMENT_PROCESSING' },
+                    { $set: { status: 'CONVERTED_TO_ORDER', convertedOrderId: String(existingOrder._id), fulfillmentProcessingAt: null } },
+                    { new: true }
+                ).lean();
+                if (recovered) publishMedicineRequestUpdated(recovered, 'fulfillment.reconciled');
+                return res.status(200).json({ success: true, order: existingOrder, request: recovered || request, alreadyProcessed: true, recoveryRequired: !recovered, message: 'Your order was already created and has been reconciled.' });
+            }
+            const processingAge = request.fulfillmentProcessingAt ? Date.now() - new Date(request.fulfillmentProcessingAt).getTime() : Number.POSITIVE_INFINITY;
+            if (processingAge < 10 * 60 * 1000) {
+                return res.status(409).json({ message: 'This medicine request is already being processed. Please wait a moment and refresh.' });
+            }
+            const released = await MedicineRequest.findOneAndUpdate(
+                { _id: request._id, customerId, status: 'FULFILLMENT_PROCESSING', fulfillmentProcessingAt: request.fulfillmentProcessingAt || null },
+                { $set: { status: 'PROPOSAL_SENT', fulfillmentProcessingAt: null } },
+                { new: true }
+            ).lean();
+            if (!released) return res.status(409).json({ message: 'This medicine request is being updated. Refresh and try again.' });
+            request = released;
+        }
+        if (request.status === 'CONVERTED_TO_ORDER' || request.status === 'WAITING_FOR_STOCK') {
+            return res.status(200).json({ request, alreadyProcessed: true, message: 'This medicine request already has a fulfilment plan.' });
+        }
+        if (request.status !== 'PROPOSAL_SENT') return res.status(409).json({ message: 'A current pharmacy proposal is required before confirming fulfilment choices.' });
+        if (request.expiresAt && new Date(request.expiresAt) <= new Date()) return res.status(409).json({ message: 'This pharmacy proposal has expired. Ask the pharmacy to refresh it.' });
+        if (!request.tenantId) return res.status(409).json({ message: 'This medicine request is not linked to an active pharmacy.' });
+
+        const tenantId = String(request.tenantId);
+        const branchId = await resolveRequestBranchId(tenantId, request.branchId, req.user);
+        const scope = { tenantId, branchId: branchId || null };
+        const requestedItems = (request.requestedItems?.length ? request.requestedItems : [{
+            requestedName: request.pharmacyProposal?.medicineName || 'Requested medicine',
+            productId: request.pharmacyProposal?.productId || null,
+            strength: request.pharmacyProposal?.strength || '',
+            dosageForm: request.pharmacyProposal?.dosageForm || '',
+            composition: '',
+            quantity: request.pharmacyProposal?.quantity || 1
+        }]).map(item => ({
+            medicineId: item.productId || (mongoose.isValidObjectId(item.medicineId) ? item.medicineId : undefined),
+            requestedName: item.requestedName,
+            composition: item.composition,
+            strength: item.strength,
+            dosageForm: item.dosageForm,
+            quantity: Number(item.quantity),
+            requiresPrescription: Boolean(request.prescriptionId || request.prescriptionUrl)
+        }));
+        const ids = [...new Set(requestedItems.map(item => String(item.medicineId || '')).filter(id => mongoose.isValidObjectId(id)))];
+        const { inventory, catalog } = await loadInventoryFulfillmentData({
+            productIds: ids, tenantId, branchId, requestedItems, userId: customerId
+        });
+        const plan = buildIntelligentFulfillmentPlan({ requestedItems, inventory, catalog });
+
+        const decisions = req.body?.decisions && typeof req.body.decisions === 'object' ? req.body.decisions : {};
+        const orderItems = [];
+        const waitingItems = [];
+        const requestCoordinates = request.coordinates || request.addressDetails?.coordinates || null;
+        for (const line of plan.lines) {
+            if (line.fulfilNowQuantity > 0) orderItems.push({ medicineId: line.productId, quantity: line.fulfilNowQuantity });
+            if (line.waitingQuantity <= 0) continue;
+            const decision = decisions[line.productId] || {};
+            const alternativeId = String(decision.alternativeProductId || '');
+            if (alternativeId) {
+                if (request.prescriptionId || request.prescriptionUrl) {
+                    throw Object.assign(new Error('Prescription medicines cannot be substituted through automatic customer selection. Ask the pharmacist to review the alternative.'), { statusCode: 409 });
+                }
+                const alternative = line.alternatives.find(item => item.productId === alternativeId);
+                if (!alternative || alternative.availableQuantity < line.waitingQuantity) {
+                    throw Object.assign(new Error('The selected alternative is no longer available in the requested quantity. Refresh availability and choose again.'), { statusCode: 409 });
+                }
+                orderItems.push({ medicineId: alternative.productId, quantity: line.waitingQuantity, unitPrice: alternative.discountedUnitPrice });
+            } else {
+                waitingItems.push({
+                    productId: line.isListed ? line.productId : null,
+                    requestedName: line.name || line.productId,
+                    composition: line.composition || '',
+                    strength: line.strength || '',
+                    dosageForm: line.dosageForm || '',
+                    requestedQuantity: line.waitingQuantity
+                });
+            }
+        }
+        if (waitingItems.length) {
+            if (!request.addressId || !request.deliveryAddress?.trim() || !hasValidCoordinates(requestCoordinates)) {
+                throw Object.assign(new Error('Add a verified delivery address with a map pin before placing a stock waitlist.'), { statusCode: 409 });
+            }
+            const waitDays = Number(req.body?.waitDays);
+            if (!Number.isInteger(waitDays) || waitDays < 1 || waitDays > 5) {
+                return res.status(400).json({ message: 'Choose a stock wait period between 1 and 5 days.' });
+            }
+        }
+        if (waitingItems.length) {
+            const waitlistCoordinates = request.coordinates || request.addressDetails?.coordinates;
+            const waitlistAddress = String(request.deliveryAddress || request.addressDetails?.addressLine || '').trim();
+            if (!request.addressId || !waitlistAddress || !waitlistCoordinates
+                || !Number.isFinite(Number(waitlistCoordinates.lat)) || !Number.isFinite(Number(waitlistCoordinates.lng))) {
+                return res.status(409).json({ message: 'Add and verify a delivery address with a map pin before waiting for stock.' });
+            }
+        }
+
+        const claim = await MedicineRequest.findOneAndUpdate(
+            { _id: request._id, customerId, status: 'PROPOSAL_SENT' },
+            { $set: { status: 'FULFILLMENT_PROCESSING', fulfillmentProcessingAt: new Date() } },
+            { new: true }
+        ).lean();
+        if (!claim) return res.status(409).json({ message: 'This request is already being processed. Refresh your requests.' });
+        claimed = true;
+
+        if (waitingItems.length) {
+            const now = new Date();
+            waitlistCase = await FulfillmentCase.create({
+                caseNumber: 'FUL-' + new mongoose.Types.ObjectId().toString().slice(-10).toUpperCase(),
+                customerId, tenantId, branchId,
+                sourceType: 'MEDICINE_REQUEST',
+                sourceId: String(request._id),
+                addressId: request.addressId || null,
+                deliveryAddress: request.deliveryAddress || '',
+                addressDetails: request.addressDetails || {},
+                coordinates: requestCoordinates,
+                customerMobile: request.customerPhone || '',
+                orderedForName: request.customerName || 'Customer',
+                prescriptionRequired: Boolean(request.prescriptionId || request.prescriptionUrl),
+                prescriptionUrl: request.prescriptionUrl || null,
+                prescriptionId: request.prescriptionId || null,
+                patientPuid: request.patientPuid || null,
+                status: 'WAITING_FOR_STOCK',
+                lines: waitingItems.map(item => ({
+                    productId: item.productId,
+                    name: item.requestedName,
+                    requestedName: item.requestedName,
+                    composition: item.composition,
+                    strength: item.strength,
+                    dosageForm: item.dosageForm,
+                    requestedQuantity: item.requestedQuantity,
+                    waitingQuantity: item.requestedQuantity,
+                    customerDecision: 'ACCEPTED_ORIGINAL'
+                })),
+                waitDays: Number(req.body.waitDays),
+                waitUntil: new Date(now.getTime() + Number(req.body.waitDays) * 86400000),
+                idempotencyKey: 'medicine-request:' + String(request._id) + ':' + new mongoose.Types.ObjectId().toString(),
+                requestFingerprint: 'medicine-request:' + String(request._id) + ':' + new mongoose.Types.ObjectId().toString(),
+                auditTrail: [{ action: 'MEDICINE_REQUEST_WAITLISTED', actorId: customerId, at: now, waitDays: Number(req.body.waitDays) }]
+            });
+        }
+
+        if (orderItems.length) {
+            const coordinates = requestCoordinates;
+            if (!coordinates || !Number.isFinite(Number(coordinates.lat)) || !Number.isFinite(Number(coordinates.lng))) {
+                throw Object.assign(new Error('A verified delivery map pin is required before ordering available medicines. Please update your delivery address.'), { statusCode: 409 });
+            }
+            createdOrder = await dataStore.reserveOrder({
+                userId: customerId,
+                tenantId,
+                branchId,
+                branchScopeExplicit: true,
+                addressId: request.addressId || null,
+                customerName: request.customerName || 'Customer',
+                customerMobile: request.customerPhone || '',
+                items: orderItems,
+                pointsToRedeem: 0,
+                couponCode: '',
+                prescriptionUrl: request.prescriptionUrl || null,
+                prescriptionId: request.prescriptionId || null,
+                patientPuid: request.patientPuid || null,
+                orderedForName: request.customerName || 'Customer',
+                deliveryAddress: request.deliveryAddress,
+                addressDetails: request.addressDetails || {},
+                coordinates,
+                paymentMethod: 'Cash on Delivery (COD)',
+                source: 'MEDICINE_REQUEST',
+                medicineRequestId: String(request._id),
+                fulfillmentCaseId: waitlistCase?._id ? String(waitlistCase._id) : null,
+                fulfillmentState: waitlistCase ? 'PARTIAL' : 'FULL'
+            }, 'Customer medicine request fulfilment');
+        }
+        if (waitlistCase && createdOrder?._id) {
+            await FulfillmentCase.updateOne({ _id: waitlistCase._id }, { $set: { parentOrderId: String(createdOrder._id) } });
+            await Order.updateOne({ _id: createdOrder._id, userId: customerId, tenantId }, { $set: { fulfillmentCaseId: String(waitlistCase._id), fulfillmentState: 'PARTIAL' } });
+        }
+        const finalStatus = createdOrder ? 'CONVERTED_TO_ORDER' : 'WAITING_FOR_STOCK';
+        const updatedRequest = await MedicineRequest.findOneAndUpdate(
+            { _id: request._id, customerId, status: 'FULFILLMENT_PROCESSING' },
+            {
+                $set: {
+                    status: finalStatus,
+                    fulfillmentProcessingAt: null,
+                    convertedOrderId: createdOrder?._id ? String(createdOrder._id) : null,
+                    fulfillmentCaseId: waitlistCase?._id || null,
+                    approvedAt: new Date(),
+                    customerResponse: { respondedAt: new Date(), responseNote: 'Customer confirmed intelligent fulfilment options.' }
+                },
+                $push: { auditTrail: { action: createdOrder ? 'SPLIT_FULFILLMENT_ORDER_CREATED' : 'MEDICINE_REQUEST_WAITLISTED', actorId: customerId, role: 'Customer', timestamp: new Date(), notes: 'Customer confirmed available stock and waitlist choices.' } }
+            },
+            { new: true }
+        ).lean();
+        if (updatedRequest) publishMedicineRequestUpdated(updatedRequest, 'fulfillment.confirmed');
+        return res.status(201).json({
+            success: true, order: createdOrder, request: updatedRequest, waitlist: waitlistCase,
+            planSummary: plan.summary,
+            message: createdOrder && waitlistCase ? 'Available medicines were ordered and the remaining quantity was added to your stock waitlist.'
+                : createdOrder ? 'Available medicines were ordered successfully.'
+                : 'Your medicine request is now waiting for stock.'
+        });
+    } catch (error) {
+        if (createdOrder?._id) {
+            // The stock reservation/order transaction has committed. Reconcile linked
+            // records, but never reopen the proposal and risk a duplicate order.
+            const linkResults = waitlistCase?._id ? await Promise.allSettled([
+                FulfillmentCase.updateOne({ _id: waitlistCase._id, customerId, tenantId }, { $set: { parentOrderId: String(createdOrder._id) } }),
+                Order.updateOne({ _id: createdOrder._id, userId: customerId, tenantId }, { $set: { fulfillmentCaseId: String(waitlistCase._id), fulfillmentState: 'PARTIAL' } })
+            ]) : [];
+            const recovered = await MedicineRequest.findOneAndUpdate(
+                { _id: req.params.id, customerId: String(req.user.sub), status: 'FULFILLMENT_PROCESSING' },
+                { $set: { status: 'CONVERTED_TO_ORDER', convertedOrderId: String(createdOrder._id), fulfillmentCaseId: waitlistCase?._id || null, fulfillmentProcessingAt: null } },
+                { new: true }
+            ).lean().catch(() => null);
+            const linkRecoveryRequired = linkResults.some(result => result.status === 'rejected');
+            if (recovered) publishMedicineRequestUpdated(recovered, 'fulfillment.reconciled');
+            return res.status(202).json({
+                success: true, order: createdOrder, request: recovered,
+                waitlist: waitlistCase, recoveryRequired: !recovered || linkRecoveryRequired,
+                message: 'Your available medicines were reserved and an order was created. Refresh your requests to see the latest fulfilment status.'
+            });
+        }
+        if (waitlistCase) {
+            await FulfillmentCase.updateOne({ _id: waitlistCase._id }, { $set: { status: 'CANCELLED' } }).catch(() => {});
+        }
+        if (claimed) {
+            await MedicineRequest.updateOne({ _id: req.params.id, customerId: String(req.user.sub), status: 'FULFILLMENT_PROCESSING' }, { $set: { status: 'PROPOSAL_SENT', fulfillmentProcessingAt: null } }).catch(() => {});
+        }
+        return res.status(error.statusCode || 500).json({ message: error.message || 'Unable to confirm medicine request fulfilment.' });
+    }
+});
+
+// Customer approves proposal -> triggers idempotent order conversion
+router.post('/:id/approve', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const result = await dataStore.approveMedicineProposalAndConvertToOrder(
+            req.params.id,
+            req.body.approvalNote || '',
+            req.user,
+            req.body.selectedProductId || null
+        );
+        res.json(result);
+    } catch (err) {
+        console.error('Proposal approval failed:', err);
+        res.status(err.statusCode || 400).json({ message: err.message || 'Failed to approve proposal.' });
+    }
+});
+
+// Customer rejects proposal
+router.post('/:id/reject', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const request = await dataStore.rejectMedicineProposalByCustomer(
+            req.params.id,
+            req.body.reason || '',
+            req.user
+        );
+        res.json({ message: 'Proposal declined.', request });
+    } catch (err) {
+        console.error('Proposal rejection failed:', err);
+        res.status(err.statusCode || 400).json({ message: err.message || 'Failed to reject proposal.' });
+    }
+});
+
+// Customer cancels medicine request
+router.post('/:id/cancel', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const request = await dataStore.cancelMedicineRequestByCustomer(
+            req.params.id,
+            req.body.reason || '',
+            req.user
+        );
+        res.json({ message: 'Medicine request cancelled successfully.', request });
+    } catch (err) {
+        console.error('Medicine request cancellation failed:', err);
+        res.status(err.statusCode || 400).json({ message: err.message || 'Failed to cancel medicine request.' });
+    }
+});
+
+router.delete('/:id', authenticateUser, requirePermission('medicine_requests.decide'), authorizeCustomerAction, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const request = await dataStore.cancelMedicineRequestByCustomer(
+            req.params.id,
+            req.body.reason || req.query.reason || '',
+            req.user
+        );
+        res.json({ message: 'Medicine request cancelled successfully.', request });
+    } catch (err) {
+        console.error('Medicine request cancellation failed:', err);
+        res.status(err.statusCode || 400).json({ message: err.message || 'Failed to cancel medicine request.' });
+    }
+});
+
+// -------------------------------------------------------------
+// PHARMACY / ADMIN APIS
+// -------------------------------------------------------------
+
+// Metrics
+router.get('/metrics/overview', authenticateUser, requirePermission('medicine_requests.read'), async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const tenantId = isPlatformRequestAdmin(req) ? null : getRequestActorTenantId(req);
+        if (!isPlatformRequestAdmin(req) && !tenantId) return res.status(403).json({ message: 'An active pharmacy tenant is required.' });
+        const metrics = await dataStore.getMedicineRequestMetrics(req.user, { startDate: req.query.startDate, endDate: req.query.endDate });
+        res.json(metrics);
+    } catch (err) {
+        console.error('Failed to get medicine request metrics:', err);
+        res.status(500).json({ message: 'Failed to compute request metrics.' });
+    }
+});
+
+// Review request
+router.put('/:id/review', authenticateUser, requirePermission('medicine_requests.manage'), authorizeRequestDetails, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
+        const actorRole = req.user.app_metadata?.role || req.user.role || 'Pharmacist';
+        const request = await dataStore.reviewMedicineRequest(req.params.id, actorName, actorRole);
+        publishMedicineRequestUpdated(request, 'request.reviewed');
+        res.json({ message: 'Medicine request is now under review.', request });
+    } catch (err) {
+        res.status(err.statusCode || 400).json({ message: err.message || 'Failed to update review status.' });
+    }
+});
+
+// Create/Send proposal
+router.post('/:id/proposal', authenticateUser, requirePermission('medicine_requests.proposal'), authorizeRequestDetails, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
+        const actorRole = req.user.app_metadata?.role || req.user.role || 'Pharmacist';
+        const request = await dataStore.createOrUpdateProposal(req.params.id, req.body, actorName, actorRole);
+        res.json({ message: 'Proposal dispatched to customer.', request });
+    } catch (err) {
+        console.error('Proposal creation failed:', err);
+        res.status(err.statusCode || 400).json({ message: err.message || 'Failed to create proposal.' });
+    }
+});
+
+// Update proposal
+router.put('/:id/proposal', authenticateUser, requirePermission('medicine_requests.proposal'), authorizeRequestDetails, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
+        const actorRole = req.user.app_metadata?.role || req.user.role || 'Pharmacist';
+        const request = await dataStore.createOrUpdateProposal(req.params.id, req.body, actorName, actorRole);
+        res.json({ message: 'Proposal updated and re-sent to customer.', request });
+    } catch (err) {
+        console.error('Proposal update failed:', err);
+        res.status(err.statusCode || 400).json({ message: err.message || 'Failed to update proposal.' });
+    }
+});
+
+// Pharmacy rejects request
+router.post('/:id/reject-request', authenticateUser, requirePermission('medicine_requests.manage'), authorizeRequestDetails, async (req, res) => {
+    if (!requireDatabase(res)) return;
+    try {
+        const actorName = req.user.user_metadata?.name || req.user.email || 'Pharmacist';
+        const actorRole = req.user.app_metadata?.role || req.user.role || 'Pharmacist';
+        const request = await dataStore.rejectMedicineRequestByPharmacy(
+            req.params.id,
+            req.body.reason || '',
+            actorName,
+            actorRole
+        );
+        publishMedicineRequestUpdated(request, 'request.rejected_by_pharmacy');
+        res.json({ message: 'Medicine request declined by pharmacy.', request });
+    } catch (err) {
+        console.error('Pharmacy rejection failed:', err);
+        res.status(err.statusCode || 400).json({ message: err.message || 'Failed to reject request.' });
+    }
+});
+
+export default router;

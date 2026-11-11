@@ -1,0 +1,16 @@
+{
+  "name": "@pharma/service-kernel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./container": "./src/container/ServiceContainer.js",
+    "./errors": "./src/errors/AppError.js",
+    "./result": "./src/result/Result.js",
+    "./use-case": "./src/application/UseCase.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}
