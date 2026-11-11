@@ -533,11 +533,11 @@ export default function PlatformTenantsView() {
       <section className="platform-governance-strip" aria-label="Access governance review">
         <div className="platform-governance-intro">
           <span className="platform-governance-icon" aria-hidden="true">🛡️</span>
-          <div><h3>Access governance overview</h3><p>Review the scope boundaries used by platform and tenant administration.</p></div>
+          <div><h3>{t('accessOverviewTitle')}</h3><p>{t('accessOverviewDesc')}</p></div>
         </div>
-        <div className="platform-governance-check"><span className="platform-governance-checkmark">01</span><div><strong>Tenant boundary</strong><span>Server-side tenant context</span></div></div>
-        <div className="platform-governance-check"><span className="platform-governance-checkmark">02</span><div><strong>Branch scope</strong><span>Memberships can be branch-bound</span></div></div>
-        <div className="platform-governance-check"><span className="platform-governance-checkmark">03</span><div><strong>Admin delegation</strong><span>Tenant-scoped admin invitations</span></div></div>
+        <div className="platform-governance-check"><span className="platform-governance-checkmark">01</span><div><strong>{t('pharmacyAccessLabel')}</strong><span>Each pharmacy's information stays separate.</span></div></div>
+        <div className="platform-governance-check"><span className="platform-governance-checkmark">02</span><div><strong>{t('branchAccessLabel')}</strong><span>Staff can be limited to one branch.</span></div></div>
+        <div className="platform-governance-check"><span className="platform-governance-checkmark">03</span><div><strong>{t('staffInvitationsLabel')}</strong><span>Invite staff to the right pharmacy.</span></div></div>
       </section>
 
       {platformTab === 'profile' ? (
@@ -553,14 +553,14 @@ export default function PlatformTenantsView() {
                 onChange={event => { setWorkspaceTenantQuery(event.target.value); setWorkspaceTenantId(''); setWorkspaceTenantSuggestionsOpen(true); }}
                 onFocus={() => setWorkspaceTenantSuggestionsOpen(true)}
                 onKeyDown={handleWorkspaceTenantSearchKeyDown}
-                placeholder="Type pharmacy name, slug, email or tenant ID; press Enter"
+                placeholder={t('searchPharmacyAccounts')}
                 className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-900"
                 aria-controls="platform-profile-tenant-suggestions"
                 aria-expanded={workspaceTenantSuggestionsOpen}
               />
               {workspaceTenantSuggestionsOpen && (
                 <div id="platform-profile-tenant-suggestions" role="listbox" className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
-                  {workspaceTenantSearchLoading ? <p className="px-3 py-3 text-xs text-slate-500">Searching tenants…</p> : workspaceTenantSuggestions.length ? workspaceTenantSuggestions.map(tenant => {
+                  {workspaceTenantSearchLoading ? <p className="px-3 py-3 text-xs text-slate-500">{t('searchingPharmacies')}</p> : workspaceTenantSuggestions.length ? workspaceTenantSuggestions.map(tenant => {
                     const id = String(tenant.id || tenant._id);
                     return (
                       <button key={id} type="button" role="option" aria-selected={workspaceTenantId === id} onClick={() => selectWorkspaceTenant(tenant)} className="flex w-full flex-col items-start rounded-lg px-3 py-2 text-left hover:bg-blue-50">
@@ -570,14 +570,14 @@ export default function PlatformTenantsView() {
                       </button>
                     );
                   }) : <p className="px-3 py-3 text-xs text-slate-500">{workspaceTenantQuery.trim().length >= 2 ? 'No matching tenants. Try another name or ID.' : 'No recent tenants found.'}</p>}
-                  <div className="border-t border-slate-100 px-3 py-2 text-[10px] text-slate-400">Showing the 5 newest tenants initially. Enter at least 2 characters and press Enter to search.</div>
+                  <div className="border-t border-slate-100 px-3 py-2 text-[10px] text-slate-400">{t('showingLatestPharmacies')}</div>
                 </div>
               )}
             </div>
-            {workspaceTenantId && <p className="mt-2 break-all text-xs text-slate-600">Selected Tenant ID: <code className="font-mono font-bold text-slate-900">{workspaceTenantId}</code></p>}
-            <p className="mt-2 text-xs text-slate-500">Manage the selected tenant's persisted profile, edit policy, geolocation, personnel and branch registry in this workspace.</p>
+            {workspaceTenantId && <p className="mt-2 break-all text-xs text-slate-600">{t('selectedPharmacyAccount')}:  <code className="font-mono font-bold text-slate-900">{workspaceTenantId}</code></p>}
+            <p className="mt-2 text-xs text-slate-500">{t('manageSelectedPharmacy')}</p>
           </div>
-          {workspaceTenantId ? <TenantProfileDashboard key={workspaceTenantId} tenantId={workspaceTenantId} showTenantSelector={false} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Select a tenant to open its profile and branches.</div>}
+          {workspaceTenantId ? <TenantProfileDashboard key={workspaceTenantId} tenantId={workspaceTenantId} showTenantSelector={false} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">{t('selectPharmacyToOpen')}</div>}
         </section>
       ) : platformTab === 'compare' ? (
         <section className="space-y-4">
@@ -1297,7 +1297,7 @@ export default function PlatformTenantsView() {
                               </div>
                             </div>
                             <div className="text-right text-[11px] text-slate-600 font-mono">
-                              <div>Radius: {b.serviceRadiusKm} km</div>
+                              <div>{t('deliveryAreaLabel')}: {b.serviceRadiusKm} km</div>
                               <div className="text-slate-400">Min: ₹{b.minimumOrderValue}</div>
                             </div>
                           </div>
@@ -1311,7 +1311,7 @@ export default function PlatformTenantsView() {
                   {/* Memberships Section */}
                   <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50 space-y-2">
                     <span className="font-extrabold text-slate-800 block">
-                      Administrative Staff & Delegated Memberships ({tenantDetails.memberships?.length || 0})
+                      {t('pharmacyStaffAccess')} ({tenantDetails.memberships?.length || 0})
                     </span>
                     {tenantDetails.memberships && tenantDetails.memberships.length > 0 ? (
                       <div className="space-y-2">
