@@ -619,3 +619,97 @@ html.dark .quickmeds-header .qm-select-shell { background: #172033 !important; b
 html.dark .quickmeds-header .qm-select-shell:hover { background: #202d43 !important; }
 html.dark .quickmeds-header .qm-select-control { color: #f8fafc; }
 html.dark .quickmeds-header .qm-select-control option { background: #0f172a; color: #f8fafc; }
+
+
+/* Responsive brand identity: preserve the complete QuickMeds Rx name.
+   Earlier compact-header rules ellipsized the brand at tablet/mobile widths. */
+.quickmeds-header .quickmeds-header-inner {
+  min-width: 0;
+}
+.quickmeds-header .app-header__brand {
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+}
+.quickmeds-header .quickmeds-brand-mark {
+  flex: 0 0 clamp(1.9rem, 3.1vw, 2.75rem);
+  width: clamp(1.9rem, 3.1vw, 2.75rem);
+  height: clamp(1.9rem, 3.1vw, 2.75rem);
+  border-radius: clamp(.65rem, 1vw, .9rem);
+}
+.quickmeds-header .app-header__brand-copy {
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+}
+.quickmeds-header .quickmeds-brand-badge-container {
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+}
+.quickmeds-header .quickmeds-brand-name {
+  display: inline-block;
+  flex: 0 1 auto;
+  width: auto;
+  max-width: none !important;
+  min-width: 0;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+  word-break: keep-all;
+  font-size: clamp(.76rem, 1.15vw, 1.08rem);
+  letter-spacing: -.035em;
+  line-height: 1.05;
+}
+@media (max-width: 1023px) {
+  .quickmeds-header .app-header__brand {
+    gap: clamp(.3rem, .8vw, .55rem);
+  }
+  .quickmeds-header .quickmeds-brand-name {
+    font-size: clamp(.74rem, 1.45vw, .98rem);
+  }
+  .quickmeds-header .quickmeds-role-chip,
+  .quickmeds-header .quickmeds-brand-badge-container > button:not(.app-header__menu-toggle) {
+    display: none !important;
+  }
+}
+@media (max-width: 639px) {
+  .quickmeds-header .quickmeds-header-inner {
+    grid-template-columns: minmax(0, 1fr) max-content !important;
+  }
+  .quickmeds-header .app-header__brand {
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow: visible;
+  }
+  .quickmeds-header .quickmeds-brand-mark {
+    flex-basis: clamp(1.85rem, 8vw, 2.15rem);
+    width: clamp(1.85rem, 8vw, 2.15rem);
+    height: clamp(1.85rem, 8vw, 2.15rem);
+  }
+  .quickmeds-header .quickmeds-brand-copy,
+  .quickmeds-header .app-header__brand-copy {
+    min-width: 0;
+    max-width: 100%;
+    overflow: visible;
+  }
+  .quickmeds-header .quickmeds-brand-name {
+    font-size: clamp(.76rem, 3.2vw, .94rem);
+    letter-spacing: -.04em;
+  }
+  .quickmeds-header .quickmeds-brand-badge-container {
+    overflow: visible;
+  }
+}
+@media (max-width: 379px) {
+  .quickmeds-header .quickmeds-brand-mark {
+    flex-basis: 1.8rem;
+    width: 1.8rem;
+    height: 1.8rem;
+  }
+  .quickmeds-header .quickmeds-brand-name {
+    font-size: clamp(.7rem, 3.4vw, .8rem);
+    letter-spacing: -.045em;
+  }
+}
