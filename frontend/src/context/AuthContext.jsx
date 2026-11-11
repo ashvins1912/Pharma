@@ -148,7 +148,11 @@ export function AuthProvider({ children }) {
         let response;
         let responseBody = null;
         try {
-          response = await fetch('/api/v1/auth/me', {
+          const gatewayBaseUrl = String(env.VITE_API_GATEWAY_URL || '').replace(/\/+$/, '');
+          const sessionProbeUrl = gatewayBaseUrl
+            ? `${gatewayBaseUrl}/api/v1/auth/me`
+            : '/api/v1/auth/me';
+          response = await fetch(sessionProbeUrl, {
             method: 'GET',
             credentials: 'include',
             headers: { 'X-Pharma-Client': 'web' },
