@@ -732,7 +732,7 @@ export default function AddressManager({
               </label>
               <input
                 type="text"
-                placeholder={t("address")}
+                placeholder={t("areaOrColony")}
                 value={addressLine2}
                 onChange={(e) => setAddressLine2(e.target.value)}
                 className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500"
