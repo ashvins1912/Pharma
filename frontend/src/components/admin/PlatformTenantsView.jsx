@@ -940,7 +940,7 @@ export default function PlatformTenantsView() {
                             </span>
                           </td>
                           <td className="py-3 px-4 text-[11px] text-slate-500">
-                            <div>Invited: {v.createdAt ? new Date(v.createdAt).toLocaleDateString() : '—'}</div>
+                            <div>{t('invitedOn')}: {v.createdAt ? new Date(v.createdAt).toLocaleDateString() : '—'}</div>
                             {isCompleted && v.onboardingCompletedAt && (
                               <div className="text-emerald-600 font-semibold">
                                 Completed: {new Date(v.onboardingCompletedAt).toLocaleDateString()}
@@ -1008,12 +1008,12 @@ export default function PlatformTenantsView() {
 
                 <div>
                   <label className="block text-slate-700 font-bold mb-1">
-                    Pharmacy Brand Name <span className="text-rose-500">*</span>
+                    {t('pharmacyNameField')} <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Apollo Life Care"
+                    placeholder={t("pharmacyNameField")}
                     value={onboardForm.name}
                     onChange={(e) => {
                       const name = e.target.value;
@@ -1031,11 +1031,11 @@ export default function PlatformTenantsView() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-slate-700 font-bold mb-1">
-                      Unique Tenant Slug
+                      {t('shortPharmacyNameField')}
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. apollo-life-care"
+                      placeholder={t("shortPharmacyNameField")}
                       value={onboardForm.slug}
                       onChange={(e) => setOnboardForm(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-[11px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
@@ -1044,11 +1044,11 @@ export default function PlatformTenantsView() {
 
                   <div>
                     <label className="block text-slate-700 font-bold mb-1">
-                      Legal Entity Name
+                      {t('registeredBusinessNameField')}
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Apollo Healthcare LLP"
+                      placeholder={t("registeredBusinessNameField")}
                       value={onboardForm.legalName}
                       onChange={(e) => setOnboardForm(prev => ({ ...prev, legalName: e.target.value }))}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
@@ -1059,11 +1059,11 @@ export default function PlatformTenantsView() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-slate-700 font-bold mb-1">
-                      Contact Email
+                      {t('emailAddress')}
                     </label>
                     <input
                       type="email"
-                      placeholder="care@tenant.example.com"
+                      placeholder="care@pharmacy.com"
                       value={onboardForm.contactEmail}
                       onChange={(e) => setOnboardForm(prev => ({ ...prev, contactEmail: e.target.value }))}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
@@ -1072,7 +1072,7 @@ export default function PlatformTenantsView() {
 
                   <div>
                     <label className="block text-slate-700 font-bold mb-1">
-                      Contact Phone
+                      {t('mobileNumber')}
                     </label>
                     <input
                       type="tel"
@@ -1086,17 +1086,17 @@ export default function PlatformTenantsView() {
 
                 <div>
                   <label className="block text-slate-700 font-bold mb-1">
-                    Initial Tenant Administrator Email (Optional)
+                    {t('initialPharmacyManagerEmailField')}
                   </label>
                   <input
                     type="email"
-                    placeholder="owner@tenant.example.com"
+                    placeholder="owner@pharmacy.com"
                     value={onboardForm.initialAdminEmail}
                     onChange={(e) => setOnboardForm(prev => ({ ...prev, initialAdminEmail: e.target.value }))}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                   />
                   <span className="text-[10px] text-slate-500 mt-1 block">
-                    If provided, an invitation token and Tenant Admin membership will be provisioned immediately.
+                    {t('pharmacyInviteHelp')}
                   </span>
                 </div>
               </div>
@@ -1159,7 +1159,7 @@ export default function PlatformTenantsView() {
                     <span>{t('invitationIssued')}</span>
                   </div>
                   <p className="text-[11px] text-emerald-700">
-                    An administrator record has been registered for <strong>{issuedInvitation.email}</strong> under <strong>{selectedTenant.name}</strong>.
+                    {t('pharmacyInvitationSent').replace('{email}', issuedInvitation.email).replace('{name}', selectedTenant.name)}
                   </p>
                   <div className="bg-white p-2.5 rounded-xl border border-emerald-200 font-mono text-[10px] break-all select-all text-slate-800">
                     Token: {issuedInvitation.invitationToken}
