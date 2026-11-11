@@ -86,7 +86,10 @@ export default function SurplusSavingsManager({ canManage = false }) {
   useEffect(() => { setMedicinePage(page => Math.min(page, Math.max(1, Math.ceil(filteredMedicines.length / MEDICINES_PER_PAGE)))); }, [filteredMedicines.length]);
   useEffect(() => { setCampaignPage(page => Math.min(page, Math.max(1, Math.ceil(campaigns.length / CAMPAIGNS_PER_PAGE)))); }, [campaigns.length]);
 
-  const selectedMedicines = useMemo((() => selectableMedicines.filter(item => form.medicineIds.includes(String(item._id))), [selectableMedicines, form.medicineIds]);
+  const selectedMedicines = useMemo(
+    () => selectableMedicines.filter(item => form.medicineIds.includes(String(item._id))),
+    [selectableMedicines, form.medicineIds]
+  );
   const summary = useMemo(() => ({
     active: campaigns.filter(item => item.status === 'ACTIVE').length,
     drafts: campaigns.filter(item => item.status === 'DRAFT').length,
