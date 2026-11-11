@@ -69,7 +69,20 @@ export function proxyRequest(
   }, upstreamResponse => {
     res.statusCode = upstreamResponse.statusCode || 502;
     for (const [name, value] of Object.entries(upstreamResponse.headers)) {
-      if (value !== undefined && !hopByHopHeaders.has(name.toLowerCase())) res.setHeader(name, value);
+      const normalizedName = name.toLowerCase();
+      // CORS belongs to the public gateway origin, not the upstream backend.
+      // Do not let backend headers replace the gateway's allow-origin/credentials
+      // headers: doing so makes the browser reject otherwise valid 200/401 replies.
+      if (normalizedName.startsWith('access-control-')) continue;
+      if (normalizedName === 'vary') {
+        // Preserve the gateway's `Vary: Origin` while retaining upstream vary keys.
+        const existing = String(res.getHeader('Vary') || '').split(',').map(value => value.trim()).filter(Boolean);
+        const incoming = String(value).split(',').map(value => value.trim()).filter(Boolean);
+        const merged = [...new Set([...existing, ...incoming])];
+        if (merged.length) res.setHeader('Vary', merged.join(', '));
+        continue;
+      }
+      if (value !== undefined && !hopByHopHeaders.has(normalizedName)) res.setHeader(name, value);
     }
     upstreamResponse.on('error', error => {
       console.error(`API Gateway ${upstreamName} response failed:`, { requestId, code: error.code || error.name });
