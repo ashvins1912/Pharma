@@ -1202,6 +1202,8 @@ const messages = {
     selectTwoPharmacies: "Choose at least two pharmacies to compare their details, branches and staff.",
     pharmacyAsMainBranch: "Pharmacy is the main branch",
     pharmacyDetailsUnavailable: "Pharmacy details are unavailable. Refresh and try again.",
+    clearAllNotifications: "Clear all notifications",
+    clearingNotifications: "Clearing notifications...",
   },
 
   hi: {
@@ -2396,6 +2398,8 @@ const messages = {
     selectTwoPharmacies: "कम से कम दो फार्मेसियाँ चुनें और उनके विवरण, शाखाओं व कर्मचारियों की तुलना करें।",
     pharmacyAsMainBranch: "फार्मेसी ही मुख्य शाखा है",
     pharmacyDetailsUnavailable: "फार्मेसी का विवरण उपलब्ध नहीं है। फिर से खोलें और कोशिश करें।",
+    clearAllNotifications: "सभी सूचनाएँ हटाएँ",
+    clearingNotifications: "सूचनाएँ हटाई जा रही हैं...",
   },
 
   kn: {
@@ -3590,6 +3594,8 @@ const messages = {
     selectTwoPharmacies: "ಕನಿಷ್ಠ ಎರಡು ಫಾರ್ಮಸಿಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ. ಅವುಗಳ ವಿವರ, ಶಾಖೆ ಮತ್ತು ಸಿಬ್ಬಂದಿಯನ್ನು ಹೋಲಿಸಿ.",
     pharmacyAsMainBranch: "ಫಾರ್ಮಸಿಯೇ ಮುಖ್ಯ ಶಾಖೆ",
     pharmacyDetailsUnavailable: "ಫಾರ್ಮಸಿ ವಿವರಗಳು ಲಭ್ಯವಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    clearAllNotifications: "ಎಲ್ಲಾ ಅಧಿಸೂಚನೆಗಳನ್ನು ತೆರವುಗೊಳಿಸಿ",
+    clearingNotifications: "ಅಧಿಸೂಚನೆಗಳನ್ನು ತೆರವುಗೊಳಿಸಲಾಗುತ್ತಿದೆ...",
   },
 
   bn: {
@@ -4784,6 +4790,8 @@ const messages = {
     selectTwoPharmacies: "অন্তত দুটি ফার্মেসি বেছে তাদের বিবরণ, শাখা ও কর্মীদের তুলনা করুন।",
     pharmacyAsMainBranch: "ফার্মেসিটিই প্রধান শাখা",
     pharmacyDetailsUnavailable: "ফার্মেসির বিবরণ পাওয়া যাচ্ছে না। আবার চেষ্টা করুন।",
+    clearAllNotifications: "সব বিজ্ঞপ্তি মুছুন",
+    clearingNotifications: "বিজ্ঞপ্তি মুছে ফেলা হচ্ছে...",
   },
 
   te: {
@@ -5979,6 +5987,8 @@ const messages = {
     selectTwoPharmacies: "కనీసం రెండు ఫార్మసీలను ఎంచుకుని వాటి వివరాలు, శాఖలు మరియు సిబ్బందిని పోల్చండి.",
     pharmacyAsMainBranch: "ఫార్మసీ ప్రధాన శాఖగా ఉంది",
     pharmacyDetailsUnavailable: "ఫార్మసీ వివరాలు అందుబాటులో లేవు. మళ్లీ ప్రయత్నించండి.",
+    clearAllNotifications: "అన్ని నోటిఫికేషన్‌లను తొలగించండి",
+    clearingNotifications: "నోటిఫికేషన్‌లను తొలగిస్తున్నాం...",
   }
 };
 
